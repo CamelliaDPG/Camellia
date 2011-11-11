@@ -11,7 +11,6 @@ SCons has been added as an alternative build system. To build with SCons, you fi
 ******* Other Notes *******
 - If you cd into the /build directory and run scons, you will just build the library. 
 - You may want to modify the SConstruct build file you're using (either the build/SConstruct or Drivers/*/SConstruct file) to use different build options. The default is to set the C++ compiler to "c++" with optimization -O3. In your trilinos build folder, there should be a file Makefile.export.Trilinos_install. There are recommended compiler options, optimization values, and so on for your system (configured by Cmake when building Trilinos), which you may want to set in your own SConstruct environment. We will hopefully have a python script that will just read in these variables automatically in the future. 
-- 
 
 
 
