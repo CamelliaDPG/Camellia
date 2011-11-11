@@ -1,0 +1,39 @@
+Import('*')
+
+Poisson_dir = "../Poisson"
+Poisson_files = Split("""
+PoissonBCCubic.cpp
+PoissonBCLinear.cpp
+PoissonBCQuadratic.cpp
+PoissonBCQuartic.cpp
+PoissonBilinearForm.cpp
+PoissonExactSolution.cpp
+PoissonExactSolutionCubic.cpp
+PoissonExactSolutionLinear.cpp
+PoissonExactSolutionQuadratic.cpp
+PoissonExactSolutionQuartic.cpp
+PoissonRHSCubic.cpp
+PoissonRHSLinear.cpp
+PoissonRHSQuadratic.cpp
+PoissonRHSQuartic.cpp
+""")
+
+Confusion_dir = "../Confusion"
+Confusion_files = Split("""
+ConfusionBilinearForm.cpp
+ConfusionManufacturedSolution.cpp
+""")
+
+for i in range(len(Confusion_files)):
+    Confusion_files[i]=Confusion_dir+"/"+Confusion_files[i]
+
+for i in range(len(Poisson_files)):
+    Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
+
+print Confusion_files
+    
+
+
+src_obj = env.Object(['MeshTestSuite.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp')])
+
+env.Program('exec/DPGTests',['DPGTests.cpp',src_obj])
