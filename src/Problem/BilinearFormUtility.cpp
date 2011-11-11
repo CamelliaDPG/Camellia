@@ -383,7 +383,9 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
       bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
       vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
+      int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
+        operatorIndex++;
         EOperatorExtended trialOperator = *trialOpIt;
         EOperatorExtended testOperator = *testOpIt;
         
@@ -409,8 +411,8 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
           FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
           FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
           FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-          bilinearForm.applyBilinearFormData(trialID,testID,materialDataAppliedToTrialValues,
-                                             materialDataAppliedToTestValues,physicalCubaturePoints);
+          bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
+                                             trialID,testID,operatorIndex,physicalCubaturePoints);
           
           //integrate:
           FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
@@ -483,8 +485,9 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
            
             FieldContainer<double> cubPointsSidePhysical = basisCache.getPhysicalCubaturePointsForSide(sideOrdinal);
             FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-            bilinearForm.applyBilinearFormData(trialID,testID,materialDataAppliedToTrialValues,
-                                               materialDataAppliedToTestValues,cubPointsSidePhysical);
+            bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
+                                               trialID,testID,operatorIndex,cubPointsSidePhysical);
+            
             
             //cout << "sideOrdinal: " << sideOrdinal << "; cubPointsSidePhysical" << endl << cubPointsSidePhysical;
             
@@ -600,9 +603,11 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
         bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
         vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
         testOpIt = testOperators.begin();
+        int operatorIndex = -1;
         for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
           EOperatorExtended trialOperator = *trialOpIt;
           EOperatorExtended testOperator = *testOpIt;
+          operatorIndex++;
           
           if (testOperator==OPERATOR_TIMES_NORMAL) {
             TEST_FOR_EXCEPTION(true,std::invalid_argument,"OPERATOR_TIMES_NORMAL not supported for tests.  Use for trial only");
@@ -623,8 +628,8 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
             FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
             FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
             FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-            bilinearForm.applyBilinearFormData(trialID,testID,materialDataAppliedToTrialValues,
-                                               materialDataAppliedToTestValues, physicalCubaturePoints);
+            bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues, 
+                                               trialID,testID,operatorIndex,physicalCubaturePoints);
               
             int testDofOffset = testOrdering->getDofIndex(testID,0);
             // note that weightCellBasisValues does depend on contiguous test basis dofs...
@@ -692,8 +697,8 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
               
               FieldContainer<double> cubPointsSidePhysical = basisCache.getPhysicalCubaturePointsForSide(sideOrdinal);
               FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-              bilinearForm.applyBilinearFormData(trialID,testID,materialDataAppliedToTrialValues,
-                                                 materialDataAppliedToTestValues, cubPointsSidePhysical);              
+              bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
+                                                 trialID,testID,operatorIndex,cubPointsSidePhysical);              
               
               int testDofOffset = testOrdering->getDofIndex(testID,0,0);
               weightCellBasisValues(materialDataAppliedToTestValues, weights, testDofOffset);
