@@ -183,6 +183,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
     vector< pair<pair<OpOpIndexPair,OpOpIndexPair>, int> >::iterator entryIt;
     pair<pair<OpOpIndexPair,OpOpIndexPair>, int> entry = _testCombos[key][operatorIndex];
     int trialID = entry.second;
+    pair<OpOpIndexPair,OpOpIndexPair> opOpPair = entry.first;
     
     if (! _bilinearForm->isFluxOrTrace(trialID)) {
       // if it's a flux or trace, then we operate on the volume, not the boundary, so we can't use
@@ -196,7 +197,11 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
       FieldContainer<double> trialValues(numCells,numFields1,numPoints);
       trialValues.initialize(1.0);
       
-      _bilinearForm->applyBilinearFormData(trialID, testID1, trialValues, testValues1, physicalPoints);
+      int opIndex1 = opOpPair.first.second;
+      _bilinearForm->applyBilinearFormData(trialValues,testValues1,
+                                           trialID, testID1, opIndex1, physicalPoints);
+      
+      // _bilinearForm->applyBilinearFormData(trialID, testID1, trialValues, testValues1, physicalPoints);
       // weight testValues with anything that's been placed in trialValues:
       if (trialValues.size() == testValues1.size() ) {
         for (int i=0; i<trialValues.size(); i++) {
@@ -218,7 +223,10 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
       trialValues.resize(numCells,numFields2,numPoints);
       trialValues.initialize(1.0);
       
-      _bilinearForm->applyBilinearFormData(trialID, testID2, trialValues, testValues2, physicalPoints);
+      int opIndex2 = opOpPair.second.second;
+      _bilinearForm->applyBilinearFormData(trialValues,testValues2, 
+                                           trialID, testID2, opIndex2, physicalPoints);
+      //_bilinearForm->applyBilinearFormData(trialID, testID2, trialValues, testValues2, physicalPoints);
       
       // weight testValues with anything that's been placed in trialValues:
       if (trialValues.size() == testValues2.size() ) {
