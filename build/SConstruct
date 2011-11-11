@@ -1,0 +1,5 @@
+env = Environment(CXX='c++',CXXFLAGS = '-O3')
+
+src_lib = SConscript('SConscript',exports = 'env') # runs SConscript in current top dir. from here, will build library. from drivers, will build library, and then driver SCons will take care of the rest.
+
+print "Built library ", src_lib

@@ -1,0 +1,186 @@
+#
+# This makefile compiles a program that has dependencies
+# on Trilinos packages.
+#
+
+# 
+# Trilinos directory
+
+ifndef BUILD_TYPE
+BUILD_TYPE = serial-debug
+endif
+
+#TRILINOS_DIR = /Users/nroberts/Documents/Sandia/Trilinos/build/$(BUILD_TYPE)
+TRILINOS_DIR = /workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/$(BUILD_TYPE)
+SRCS_DIR = ../../src
+DRIVERS_DIR = ../../Drivers
+
+# include makefile export files for Trilinos
+include $(TRILINOS_DIR)/Makefile.export.Trilinos_install
+
+# Set compiler to Trilinos compilers
+CXX = $(Trilinos_CXX_COMPILER)
+CPP = $(Trilinos_C_COMPILER)
+
+# Set flags
+CPPFLAGS = $(Trilinos_C_COMPILER_FLAGS) 
+CXXFLAGS = $(Trilinos_CXX_COMPILER_FLAGS) 
+
+#OBJ_DIR = $(BUILD_TYPE)
+OBJ_DIR = .
+
+# List sources for compilation
+OBJ_NAMES = DofOrdering \
+       BilinearForm \
+       PoissonBilinearForm \
+       BilinearFormUtility \
+       BasisFactory \
+       ConfusionBilinearForm \
+       ConfusionManufacturedSolution \
+       MathInnerProduct \
+       Element \
+       ElementTypeFactory \
+       Mesh \
+       Boundary \
+       PoissonBCLinear \
+       PoissonRHSLinear \
+       MeshTestSuite \
+       MultiBasis \
+       PatchBasis \
+       Solution \
+       DPGInnerProduct \
+       ExactSolution \
+       MultiOrderStudy \
+       PoissonExactSolutionLinear \
+       PoissonBCQuartic \
+       PoissonRHSQuartic \
+       PoissonExactSolutionQuartic \
+       PoissonBCQuadratic \
+       PoissonRHSQuadratic \
+       PoissonExactSolutionQuadratic \
+       PoissonBCCubic \
+       PoissonRHSCubic \
+       PoissonExactSolutionCubic \
+       PoissonExactSolution \
+       DofOrderingFactory \
+       BasisValueCache \
+       BasisEvaluation \
+       RefinementPattern \
+			 StokesBilinearForm \
+			 StokesVVPBilinearForm \
+			 StokesManufacturedSolution \
+			 HConvergenceStudy \
+			 OptimalInnerProduct
+
+OBJS = $(addsuffix .o, $(OBJ_NAMES))
+# put all the object files in OBJ_DIR:
+#OBJS_IN_PLACE = $(OBJ_DIR)/$(OBJS,W $(OBJ_DIR)\/)
+OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
+
+INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy $(Trilinos_INCLUDE_DIRS)
+
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest
+ECHOES = 
+
+default: all
+
+all: $(ECHOES) $(EXES)
+
+MovedObjs:
+	@echo OBJS_IN_PLACE: $(OBJS_IN_PLACE)
+
+DPGTests: DPGTests.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+DPGTests.o: $(DRIVERS_DIR)/DPGTests/DPGTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+PoissonEnergyErrorTest: PoissonEnergyErrorTest.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonEnergyErrorTest.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+StokesStudy: StokesStudy.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+StokesStudyHybridMesh: StokesStudyHybridMesh.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudyHybridMesh.o -o StokesStudyHybridMesh $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+ConfusionStudy: ConfusionStudy.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfusionStudy.o -o ConfusionStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+PoissonSolver: PoissonSolver.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonSolver.o -o PoissonSolver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+PoissonStudy: PoissonStudy.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonStudy.o -o PoissonStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+MultiOrderStudy.o: $(DRIVERS_DIR)/MultiOrderStudy/MultiOrderStudy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+MeshTestSuite.o: $(DRIVERS_DIR)/DPGTests/MeshTestSuite.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
+
+ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+AdaptiveConfusion.o: $(DRIVERS_DIR)/Confusion/AdaptiveConfusion.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+PoissonSolver.o: $(DRIVERS_DIR)/DemoDrivers/PoissonSolver.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Poisson%.o: $(DRIVERS_DIR)/Poisson/Poisson%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Stokes%.o: $(DRIVERS_DIR)/Stokes/Stokes%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Basis%.o: $(SRCS_DIR)/Basis/Basis%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+%Basis.o: $(SRCS_DIR)/Basis/%Basis.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+%InnerProduct.o: $(SRCS_DIR)/InnerProduct/%InnerProduct.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Bilinear%.o: $(SRCS_DIR)/Problem/Bilinear%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+%olution.o: $(SRCS_DIR)/Solution/%olution.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Elem%.o: $(SRCS_DIR)/Mesh/Elem%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Mesh.o: $(SRCS_DIR)/Mesh/Mesh.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+RefinementPattern.o: $(SRCS_DIR)/Mesh/RefinementPattern.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Boundary.o: $(SRCS_DIR)/Mesh/Boundary.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+%ConvergenceStudy.o: $(SRCS_DIR)/ConvergenceStudy/%ConvergenceStudy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+PoissonEnergyErrorTest.o: $(DRIVERS_DIR)/DPGTests/PoissonEnergyErrorTest.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+%.o: $(SRCS_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+clean:
+	$(RM) $(OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(EXES)

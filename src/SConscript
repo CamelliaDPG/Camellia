@@ -1,0 +1,11 @@
+Import('env')
+
+src_obj = env.Object(Glob('*/*.cpp')) #option to build everything
+
+#TODO - build serial debug/release libraries?
+lib_name = '../build/lib/Camellia.a' 
+
+src_lib = env.Library(lib_name,src_obj)
+print "src_lib: ", src_lib
+
+Return('src_lib')

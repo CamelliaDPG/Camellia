@@ -1,0 +1,21 @@
+Import('env')
+
+#TrilinosIncludes = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/include')]
+#TrilinosLibDir = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/lib')]
+
+TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
+TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
+
+includePaths = [Dir('../src/include')]
+
+env.Append(CPPPATH=includePaths)
+env.Append(CPPPATH=TrilinosIncludes)
+
+src_lib = SConscript('../src/SConscript',exports = ['env'])
+
+# note - Camellia must be linked first on most linux machines. 
+linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'simpi', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
+
+libPaths = [TrilinosLibDir,Dir('lib')] 
+
+env.Append(LIBS=linkedLibs,LIBPATH=libPaths)
