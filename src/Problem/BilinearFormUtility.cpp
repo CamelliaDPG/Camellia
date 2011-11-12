@@ -383,6 +383,8 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
       bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
       vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
+      TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
+                         "trialOperators and testOperators must be the same length");
       int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
         operatorIndex++;
@@ -603,6 +605,8 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
         bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
         vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
         testOpIt = testOperators.begin();
+        TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
+                           "trialOperators and testOperators must be the same length");
         int operatorIndex = -1;
         for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
           EOperatorExtended trialOperator = *trialOpIt;
