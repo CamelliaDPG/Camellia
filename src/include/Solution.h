@@ -67,10 +67,11 @@ private:
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
 protected:
-  map< ElementType*, FieldContainer<double> > & solutionForElementTypeMap();
+  map< ElementType*, FieldContainer<double> > solutionForElementTypeMap() const;
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
+  Solution(const Solution &soln);
   bool equals(Solution& otherSolution, double tol=0.0);
   void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
   virtual void solutionValues(FieldContainer<double> &values, 
@@ -102,10 +103,10 @@ public:
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
   
-  Teuchos::RCP<Mesh> mesh();
-  Teuchos::RCP<BC> bc();
-  Teuchos::RCP<RHS> rhs();
-  Teuchos::RCP<DPGInnerProduct> ip();
+  Teuchos::RCP<Mesh> mesh() const;
+  Teuchos::RCP<BC> bc() const;
+  Teuchos::RCP<RHS> rhs() const;
+  Teuchos::RCP<DPGInnerProduct> ip() const;
   
   // Jesse's additions:
   void writeFieldsToFile(int trialID, const string &filePath);

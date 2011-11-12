@@ -84,6 +84,17 @@ typedef Teuchos::RCP< Element > ElementPtr;
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 2; // overrides the above, if it results in too-small batches
 
+// copy constructor:
+Solution::Solution(const Solution &soln) {
+  _mesh = soln.mesh();
+  _bc = soln.bc();
+  _rhs = soln.rhs();
+  _ip = soln.ip();
+  _solutionForElementType = soln.solutionForElementTypeMap();
+  initialize();
+  
+}
+
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
   _mesh = mesh;
   _bc = bc;
@@ -389,18 +400,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
 
-Teuchos::RCP<Mesh> Solution::mesh() {
+Teuchos::RCP<Mesh> Solution::mesh() const {
   return _mesh;
 }
 
-Teuchos::RCP<BC> Solution::bc() {
+Teuchos::RCP<BC> Solution::bc() const {
   return _bc;
 }
-Teuchos::RCP<RHS> Solution::rhs() {
+Teuchos::RCP<RHS> Solution::rhs() const {
   return _rhs;
 }
 
-Teuchos::RCP<DPGInnerProduct> Solution::ip() { 
+Teuchos::RCP<DPGInnerProduct> Solution::ip() const { 
   return _ip;
 }
 
@@ -1392,7 +1403,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
 
 
 // protected method; used for solution comparison...
-map< ElementType*, FieldContainer<double> > & Solution::solutionForElementTypeMap() {
+map< ElementType*, FieldContainer<double> > Solution::solutionForElementTypeMap() const {
   return _solutionForElementType;
 }
 
