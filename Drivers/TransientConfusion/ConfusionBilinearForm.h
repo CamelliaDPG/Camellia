@@ -5,7 +5,7 @@
 
 class ConfusionBilinearForm : public BilinearForm {
 private:
-  double _epsilon, _beta_x, _beta_y, _dt;
+  double _epsilon, _beta_x, _beta_y, _dt, _T;
   vector<EOperatorExtended> _uvTestOperators;
 public:
   ConfusionBilinearForm(double epsilon, double beta_x, double beta_y, double dt);
@@ -21,6 +21,12 @@ public:
   void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
 						    int trialID, int testID, int operatorIndex,
 						    FieldContainer<double> &points);
+
+  void set_dt(double new_dt);
+  double get_dt();
+  double increment_T();
+  double get_T();
+  int get_transient_trialID();
   
   virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);

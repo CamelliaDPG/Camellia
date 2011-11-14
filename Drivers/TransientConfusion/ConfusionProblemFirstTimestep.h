@@ -1,5 +1,5 @@
-#ifndef DPG_CONFUSION_PROBLEM
-#define DPG_CONFUSION_PROBLEM
+#ifndef DPG_CONFUSION_PROBLEM_FIRST_TIMESTEP
+#define DPG_CONFUSION_PROBLEM_FIRST_TIMESTEP
 
 #include "BC.h"
 #include "RHS.h"
@@ -7,20 +7,14 @@
 #include "ConfusionBilinearForm.h"
 #include "Solution.h"
 
-class ConfusionProblem : public RHS, public BC {
+class ConfusionProblemFirstTimestep : public RHS, public BC {
  private:
   Teuchos::RCP< ConfusionBilinearForm > _cbf;
-  Teuchos::RCP< Solution > _previousTimeSolution;
  public:
- ConfusionProblem(Teuchos::RCP< ConfusionBilinearForm > cbf, Teuchos::RCP< Solution > previousTimeSolution ) : RHS(), BC() {    
+ ConfusionProblemFirstTimestep(Teuchos::RCP< ConfusionBilinearForm > cbf) : RHS(), BC() {    
     _cbf = cbf;
-    _previousTimeSolution = previousTimeSolution;
   }
-
-  void set_previousTimeSolution(Teuchos::RCP<Solution> previousTimeSolution){
-    _previousTimeSolution = previousTimeSolution;
-  }
-  
+ 
   // RHS:
   bool nonZeroRHS(int testVarID) {
     return testVarID == ConfusionBilinearForm::V;
@@ -31,16 +25,15 @@ class ConfusionProblem : public RHS, public BC {
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     values.resize(numCells,numPoints);
-   
-    double T = _cbf->get_T();
-
-    int trialID = _cbf->get_transient_trialID();
-    Teuchos::RCP<Mesh> myMesh = _previousTimeSolution->mesh();
-    _previousTimeSolution->solutionValues(values,myMesh->elements()[0]->elementType(),trialID,physicalPoints);
-    values.initialize(0.0);
-    double dt = _cbf->get_dt(); 
-    _cbf->multiplyFCByWeight(values,1.0/dt);
-    values.initialize(0.0);
+    //    values.initialize(0.0);
+    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+      for (int pointIndex=0;pointIndex<numPoints;pointIndex++){
+	double x = physicalPoints(cellIndex,pointIndex,0);
+	double y = physicalPoints(cellIndex,pointIndex,1);
+	double dt = _cbf->get_dt();
+	values(cellIndex,pointIndex) = x*(1-x)*y*(1-y)/dt;
+      }
+    }
   }
   
   // BC

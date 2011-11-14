@@ -2,6 +2,9 @@
 #include <vector>
 using namespace std;
 
+// Teuchos includes
+#include "Teuchos_RCP.hpp"
+
 // trial variable names:
 static const string & S_SIGMA_1 = "\\sigma_1";
 static const string & S_SIGMA_2 = "\\sigma_2";
@@ -20,6 +23,7 @@ ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, doub
   _beta_x = beta_x;
   _beta_y = beta_y;
   _dt     = dt;
+  _T      = 0.0;
   
   _testIDs.push_back(TAU);
   _testIDs.push_back(V);
@@ -109,6 +113,7 @@ void ConfusionBilinearForm::trialTestOperators(int trialID, int testID,
     case U:
       returnValue = true;
       testOperators = _uvTestOperators;
+      trialOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE); // add one more to trial
       break;
     case SIGMA_1:
       returnValue = true;
@@ -166,33 +171,38 @@ void ConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialV
       // (sigma, grad v)_K - (sigma_hat_n, v)_dK - (u, beta dot grad v) + (u_hat * n dot beta, v)_dK
     case U:
       // have grad v -- want grad_v dot beta
-      if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD)
       { // block off to avoid compiler complaints about adding new variables inside switch/case
 	// dimensions of testTrialValuesAtPoints should be (C,F,P,D)
 	int numCells = testValues.dimension(0);
 	int basisCardinality = testValues.dimension(1);
 	int numPoints = testValues.dimension(2);
-	int spaceDim = testValues.dimension(3);
+
 	// because we change dimensions of the values, by dotting with beta, 
 	// we'll need to copy the values and resize the original container
 	FieldContainer<double> testValuesCopy = testValues;
 	testValues.resize(numCells,basisCardinality,numPoints);
-	TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			   "ConfusionBilinearForm only supports 2 dimensions right now.");
-	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	      testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		+ -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+
+	if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD){
+	  int spaceDim = testValues.dimension(3);
+	  cout << "Space dim = " << spaceDim << endl;
+	  cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
+	  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+			     "ConfusionBilinearForm only supports 2 dimensions right now.");	  
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+		testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+		  + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+	      }
 	    }
 	  }
+	}else if(_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE){       // also now have a reaction term. 
+	  multiplyFCByWeight(testValues,1.0/get_dt());
+	  cout << "dt = "<<get_dt()<<endl;
 	}
-      }
-      else if(_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE){       // also now have a reaction term. 
-	multiplyFCByWeight(testValues,_dt);
-      }
-      else{
-	cout << "Getting an unexpected operator for transient confusion!" << endl;
+	else{
+	  cout << "Getting an unexpected operator for transient confusion!" << endl;
+	}
       }
       break;
     case SIGMA_1:
@@ -262,4 +272,23 @@ bool ConfusionBilinearForm::isFluxOrTrace(int trialID) {
   } else {
     return false;
   }
+}
+
+double ConfusionBilinearForm::get_dt(){
+  return _dt;
+}
+void ConfusionBilinearForm::set_dt(double new_dt){
+  _dt = new_dt;
+}
+double ConfusionBilinearForm::increment_T(){
+  _T += get_dt();
+  cout << "Time T = " << _T<<endl;
+  return _T;
+}
+
+double ConfusionBilinearForm::get_T(){
+  return _T;
+}
+int ConfusionBilinearForm::get_transient_trialID(){
+  return U; // sigma doesn't show up in the time derivative
 }
