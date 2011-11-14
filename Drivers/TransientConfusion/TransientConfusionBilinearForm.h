@@ -1,14 +1,14 @@
-#ifndef DPG_CONFUSION_BILINEAR_FORM
-#define DPG_CONFUSION_BILINEAR_FORM
+#ifndef DPG_TRANSIENT_CONFUSION_BILINEAR_FORM
+#define DPG_TRANSIENT_CONFUSION_BILINEAR_FORM
 
 #include "BilinearForm.h"
 
-class ConfusionBilinearForm : public BilinearForm {
+class TransientConfusionBilinearForm : public BilinearForm {
 private:
   double _epsilon, _beta_x, _beta_y, _dt, _T;
   vector<EOperatorExtended> _uvTestOperators;
 public:
-  ConfusionBilinearForm(double epsilon, double beta_x, double beta_y, double dt);
+  TransientConfusionBilinearForm(double epsilon, double beta_x, double beta_y, double dt);
   
   // implement the virtual methods declared in super:
   const string & testName(int testID);

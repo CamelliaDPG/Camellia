@@ -1,4 +1,4 @@
-#include "ConfusionBilinearForm.h"
+#include "TransientConfusionBilinearForm.h"
 #include <vector>
 using namespace std;
 
@@ -18,7 +18,7 @@ static const string & S_TAU = "\\tau";
 static const string & S_V = "v";
 static const string & S_DEFAULT_TEST = "invalid test";
 
-ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, double beta_y, double dt) {
+TransientConfusionBilinearForm::TransientConfusionBilinearForm(double epsilon, double beta_x, double beta_y, double dt) {
   _epsilon = epsilon;
   _beta_x = beta_x;
   _beta_y = beta_y;
@@ -39,7 +39,7 @@ ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, doub
   _uvTestOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
 }
 
-const string & ConfusionBilinearForm::testName(int testID) {
+const string & TransientConfusionBilinearForm::testName(int testID) {
   switch (testID) {
   case TAU:
     return S_TAU;
@@ -52,7 +52,7 @@ const string & ConfusionBilinearForm::testName(int testID) {
   }
 }
 
-const string & ConfusionBilinearForm::trialName(int trialID) {
+const string & TransientConfusionBilinearForm::trialName(int trialID) {
   switch(trialID) {
   case U:
     return S_U;
@@ -74,7 +74,7 @@ const string & ConfusionBilinearForm::trialName(int trialID) {
   }
 }
 
-void ConfusionBilinearForm::trialTestOperators(int trialID, int testID, 
+void TransientConfusionBilinearForm::trialTestOperators(int trialID, int testID, 
 					       vector<EOperatorExtended> &trialOperators,
 					       vector<EOperatorExtended> &testOperators){
 
@@ -138,12 +138,12 @@ void ConfusionBilinearForm::trialTestOperators(int trialID, int testID,
   //  return returnValue;    
 }
 
-//void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID, 
+//void TransientConfusionBilinearForm::applyBilinearFormData(int trialID, int testID, 
 //						  FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
 //						  FieldContainer<double> &points) {
 
 // now use the operator-indexed one (for multiple operators)
-void ConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
+void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
 						  int trialID, int testID, int operatorIndex,
 						  FieldContainer<double> &points) {
 
@@ -187,7 +187,7 @@ void ConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialV
 	  cout << "Space dim = " << spaceDim << endl;
 	  cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
 	  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			     "ConfusionBilinearForm only supports 2 dimensions right now.");	  
+			     "TransientConfusionBilinearForm only supports 2 dimensions right now.");	  
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
 	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
 	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -224,7 +224,7 @@ void ConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialV
 	FieldContainer<double> valuesCopy = trialValues;
 	trialValues.resize(numCells,basisCardinality,numPoints);
 	TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			   "ConfusionBilinearForm only supports 2 dimensions right now.");
+			   "TransientConfusionBilinearForm only supports 2 dimensions right now.");
 	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
 	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
 	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -244,7 +244,7 @@ void ConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialV
   }
 }
 
-EFunctionSpaceExtended ConfusionBilinearForm::functionSpaceForTest(int testID) {
+EFunctionSpaceExtended TransientConfusionBilinearForm::functionSpaceForTest(int testID) {
   switch (testID) {
   case TAU:
     return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
@@ -257,7 +257,7 @@ EFunctionSpaceExtended ConfusionBilinearForm::functionSpaceForTest(int testID) {
   }
 }
 
-EFunctionSpaceExtended ConfusionBilinearForm::functionSpaceForTrial(int trialID) {
+EFunctionSpaceExtended TransientConfusionBilinearForm::functionSpaceForTrial(int trialID) {
   // Field variables and fluxes are all L2.
   if (trialID != U_HAT) {
     return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
@@ -266,7 +266,7 @@ EFunctionSpaceExtended ConfusionBilinearForm::functionSpaceForTrial(int trialID)
   }
 }
 
-bool ConfusionBilinearForm::isFluxOrTrace(int trialID) {
+bool TransientConfusionBilinearForm::isFluxOrTrace(int trialID) {
   if ((U_HAT==trialID) || (BETA_N_U_MINUS_SIGMA_HAT==trialID)) {
     return true;
   } else {
@@ -274,21 +274,21 @@ bool ConfusionBilinearForm::isFluxOrTrace(int trialID) {
   }
 }
 
-double ConfusionBilinearForm::get_dt(){
+double TransientConfusionBilinearForm::get_dt(){
   return _dt;
 }
-void ConfusionBilinearForm::set_dt(double new_dt){
+void TransientConfusionBilinearForm::set_dt(double new_dt){
   _dt = new_dt;
 }
-double ConfusionBilinearForm::increment_T(){
+double TransientConfusionBilinearForm::increment_T(){
   _T += get_dt();
   cout << "Time T = " << _T<<endl;
   return _T;
 }
 
-double ConfusionBilinearForm::get_T(){
+double TransientConfusionBilinearForm::get_T(){
   return _T;
 }
-int ConfusionBilinearForm::get_transient_trialID(){
+int TransientConfusionBilinearForm::get_transient_trialID(){
   return U; // sigma doesn't show up in the time derivative
 }

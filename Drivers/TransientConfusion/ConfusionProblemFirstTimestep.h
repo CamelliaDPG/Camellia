@@ -4,20 +4,20 @@
 #include "BC.h"
 #include "RHS.h"
 
-#include "ConfusionBilinearForm.h"
+#include "TransientConfusionBilinearForm.h"
 #include "Solution.h"
 
 class ConfusionProblemFirstTimestep : public RHS, public BC {
  private:
-  Teuchos::RCP< ConfusionBilinearForm > _cbf;
+  Teuchos::RCP< TransientConfusionBilinearForm > _cbf;
  public:
- ConfusionProblemFirstTimestep(Teuchos::RCP< ConfusionBilinearForm > cbf) : RHS(), BC() {    
+ ConfusionProblemFirstTimestep(Teuchos::RCP< TransientConfusionBilinearForm > cbf) : RHS(), BC() {    
     _cbf = cbf;
   }
  
   // RHS:
   bool nonZeroRHS(int testVarID) {
-    return testVarID == ConfusionBilinearForm::V;
+    return testVarID == TransientConfusionBilinearForm::V;
   }
   
   void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -38,7 +38,7 @@ class ConfusionProblemFirstTimestep : public RHS, public BC {
   
   // BC
   bool bcsImposed(int varID) {
-    return varID == ConfusionBilinearForm::U_HAT;
+    return varID == TransientConfusionBilinearForm::U_HAT;
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 

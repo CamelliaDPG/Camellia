@@ -1,6 +1,5 @@
-#include "ConfusionManufacturedSolution.h"
-#include "ConfusionBilinearForm.h"
-#include "ConfusionProblem.h"
+#include "TransientConfusionBilinearForm.h"
+#include "TransientConfusionProblem.h"
 #include "ConfusionProblemFirstTimestep.h"
 #include "MathInnerProduct.h"
 #include "OptimalInnerProduct.h"
@@ -21,7 +20,7 @@ int main(int argc, char *argv[]) {
   double beta_x = 1.0, beta_y = 2.0;
   double dt = .1; 
   bool useTriangles = false;
-  Teuchos::RCP<ConfusionBilinearForm> bilinearForm = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y,dt));
+  Teuchos::RCP<TransientConfusionBilinearForm> bilinearForm = Teuchos::rcp(new TransientConfusionBilinearForm(epsilon,beta_x,beta_y,dt));
   
   // define our inner product:
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bilinearForm ) );
@@ -50,12 +49,12 @@ int main(int argc, char *argv[]) {
   // solve first timestep
   double T;  
   previousTimeSolution->solve(); 
-  previousTimeSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_t0.dat");
+  previousTimeSolution->writeFluxesToFile(TransientConfusionBilinearForm::U_HAT, "Confusion_u_t0.dat");
   T = bilinearForm->increment_T();
   cout << "time is T = " << T << endl;
 
   // solve additional timesteps
-  Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem(bilinearForm,previousTimeSolution));
+  Teuchos::RCP<TransientConfusionProblem> problem = Teuchos::rcp( new TransientConfusionProblem(bilinearForm,previousTimeSolution));
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));    
 
   double Tend = 0*dt;
@@ -66,9 +65,9 @@ int main(int argc, char *argv[]) {
   }
 
   // save a data file for plotting in MATLAB
-  solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u.dat");
-  solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat.dat");
-  solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "Confusion_beta_n_hat.dat");
+  solution->writeToFile(TransientConfusionBilinearForm::U, "Confusion_u.dat");
+  solution->writeFluxesToFile(TransientConfusionBilinearForm::U_HAT, "Confusion_u_hat.dat");
+  solution->writeFluxesToFile(TransientConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "Confusion_beta_n_hat.dat");
 
   cout << "Done solving and writing" << endl;
 

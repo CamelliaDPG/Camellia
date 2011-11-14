@@ -1,18 +1,18 @@
-#ifndef DPG_CONFUSION_PROBLEM
-#define DPG_CONFUSION_PROBLEM
+#ifndef DPG_TRANSIENT_CONFUSION_PROBLEM
+#define DPG_TRANSIENT_CONFUSION_PROBLEM
 
 #include "BC.h"
 #include "RHS.h"
 
-#include "ConfusionBilinearForm.h"
+#include "TransientConfusionBilinearForm.h"
 #include "Solution.h"
 
-class ConfusionProblem : public RHS, public BC {
+class TransientConfusionProblem : public RHS, public BC {
  private:
-  Teuchos::RCP< ConfusionBilinearForm > _cbf;
+  Teuchos::RCP< TransientConfusionBilinearForm > _cbf;
   Teuchos::RCP< Solution > _previousTimeSolution;
  public:
- ConfusionProblem(Teuchos::RCP< ConfusionBilinearForm > cbf, Teuchos::RCP< Solution > previousTimeSolution ) : RHS(), BC() {    
+ TransientConfusionProblem(Teuchos::RCP< TransientConfusionBilinearForm > cbf, Teuchos::RCP< Solution > previousTimeSolution ) : RHS(), BC() {    
     _cbf = cbf;
     _previousTimeSolution = previousTimeSolution;
   }
@@ -23,7 +23,7 @@ class ConfusionProblem : public RHS, public BC {
   
   // RHS:
   bool nonZeroRHS(int testVarID) {
-    return testVarID == ConfusionBilinearForm::V;
+    return testVarID == TransientConfusionBilinearForm::V;
   }
   
   void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -45,7 +45,7 @@ class ConfusionProblem : public RHS, public BC {
   
   // BC
   bool bcsImposed(int varID) {
-    return varID == ConfusionBilinearForm::U_HAT;
+    return varID == TransientConfusionBilinearForm::U_HAT;
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
