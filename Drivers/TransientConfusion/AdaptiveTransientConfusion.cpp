@@ -22,6 +22,8 @@ int main(int argc, char *argv[]) {
   bool useTriangles = false;
   Teuchos::RCP<TransientConfusionBilinearForm> bilinearForm = Teuchos::rcp(new TransientConfusionBilinearForm(epsilon,beta_x,beta_y,dt));
   
+  bilinearForm->printTrialTestInteractions();
+  
   // define our inner product:
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bilinearForm ) );
   //Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bilinearForm ) );

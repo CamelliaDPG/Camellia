@@ -10,8 +10,8 @@ ifndef BUILD_TYPE
 BUILD_TYPE = serial-debug
 endif
 
-#TRILINOS_DIR = /Users/nroberts/Documents/Sandia/Trilinos/build/$(BUILD_TYPE)
-TRILINOS_DIR = /workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/$(BUILD_TYPE)
+TRILINOS_DIR = /Users/nroberts/Documents/Sandia/Trilinos/build/$(BUILD_TYPE)
+#TRILINOS_DIR = /workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/$(BUILD_TYPE)
 SRCS_DIR = ../../src
 DRIVERS_DIR = ../../Drivers
 
@@ -69,6 +69,7 @@ OBJ_NAMES = DofOrdering \
 			 StokesBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
+			 TransientConfusionBilinearForm \
 			 HConvergenceStudy \
 			 OptimalInnerProduct
 
@@ -77,9 +78,9 @@ OBJS = $(addsuffix .o, $(OBJ_NAMES))
 #OBJS_IN_PLACE = $(OBJ_DIR)/$(OBJS,W $(OBJ_DIR)\/)
 OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
-INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy $(Trilinos_INCLUDE_DIRS)
+INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest AdaptiveTransientConfusion
 ECHOES = 
 
 default: all
@@ -110,6 +111,9 @@ ConfusionStudy: ConfusionStudy.o $(OBJS)
 AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
+AdaptiveTransientConfusion: AdaptiveTransientConfusion.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveTransientConfusion.o -o AdaptiveTransientConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
 PoissonSolver: PoissonSolver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonSolver.o -o PoissonSolver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
@@ -125,6 +129,9 @@ MeshTestSuite.o: $(DRIVERS_DIR)/DPGTests/MeshTestSuite.cpp
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
+TransientConfusionBilinearForm.o: $(DRIVERS_DIR)/TransientConfusion/TransientConfusionBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
 ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
@@ -132,6 +139,9 @@ ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 AdaptiveConfusion.o: $(DRIVERS_DIR)/Confusion/AdaptiveConfusion.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+AdaptiveTransientConfusion.o: $(DRIVERS_DIR)/TransientConfusion/AdaptiveTransientConfusion.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 PoissonSolver.o: $(DRIVERS_DIR)/DemoDrivers/PoissonSolver.cpp

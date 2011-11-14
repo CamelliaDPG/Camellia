@@ -2,4 +2,4 @@ Import('*')
 
 src_obj = env.Object(['TransientConfusionBilinearForm.cpp'])
 
-env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])
+env.Program('exec/AdaptiveTransientConfusion',['AdaptiveTransientConfusion.cpp',src_obj])
