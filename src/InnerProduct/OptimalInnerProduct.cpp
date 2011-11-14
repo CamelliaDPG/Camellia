@@ -222,7 +222,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
       int numFields2 = testValues2.dimension(1);
       trialValues.resize(numCells,numFields2,numPoints);
       trialValues.initialize(1.0);
-      
+    
       int opIndex2 = opOpPair.second.second;
       _bilinearForm->applyBilinearFormData(trialValues,testValues2, 
                                            trialID, testID2, opIndex2, physicalPoints);

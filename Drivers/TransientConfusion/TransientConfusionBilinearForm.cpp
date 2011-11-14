@@ -177,14 +177,15 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
 	int basisCardinality = testValues.dimension(1);
 	int numPoints = testValues.dimension(2);
 
-	// because we change dimensions of the values, by dotting with beta, 
-	// we'll need to copy the values and resize the original container
-	FieldContainer<double> testValuesCopy = testValues;
-	testValues.resize(numCells,basisCardinality,numPoints);
-
 	if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD){
 	  int spaceDim = testValues.dimension(3);
 	  cout << "Space dim = " << spaceDim << endl;
+    
+    // because we change dimensions of the values, by dotting with beta, 
+    // we'll need to copy the values and resize the original container
+    FieldContainer<double> testValuesCopy = testValues;
+    testValues.resize(numCells,basisCardinality,numPoints);
+    
 	  cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
 	  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
 			     "TransientConfusionBilinearForm only supports 2 dimensions right now.");	  
