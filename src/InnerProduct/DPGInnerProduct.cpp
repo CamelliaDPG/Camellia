@@ -108,6 +108,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
         FieldContainer<double> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
         FieldContainer<double> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
 
+        //cout << "rank of test2ValuesTransformed: " << test2ValuesTransformed->rank() << endl;
         applyInnerProductData(innerProductDataAppliedToTest1, innerProductDataAppliedToTest2, 
                               testID1, testID2, operatorIndex, physicalCubaturePoints);
 

@@ -58,6 +58,9 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGI
       bf->trialTestOperators(trialID, testID, trialOperators, testOperators);
       vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
+      // NVR moved next two lines outside the for loop below 11/14/11
+      vector<IntrepidExtendedTypes::EOperatorExtended> testOps;
+      myTestIDs.push_back(testID);
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
         EOperatorExtended op1 = *trialOpIt;
         EOperatorExtended op2 = *testOpIt;
@@ -71,16 +74,14 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGI
                              std::invalid_argument,
                              "OptimalInnerProduct assumes OPERATOR_VALUE for trialIDs.")
         }
-        myTestIDs.push_back(testID);
-        vector<IntrepidExtendedTypes::EOperatorExtended> testOps;
         if ( _bilinearForm->isFluxOrTrace(trialID) ) {
           // boundary value: push inside the element (take L2 norm there)
           op2 = IntrepidExtendedTypes::OPERATOR_VALUE;
         }
         testOps.push_back(op2);
-        ops.push_back(testOps);
         testOpIt++;
       }
+      ops.push_back(testOps); // Nate moved this line 11-14-11 (from within above for loop)
     }
 
     bool first = true; // for printing debug code out...
@@ -177,7 +178,6 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
                                                 int testID1, int testID2, int operatorIndex,
                                                 FieldContainer<double>& physicalPoints) {
   pair<int, int> key = make_pair(testID1,testID2);
-  IntrepidExtendedTypes::EOperatorExtended trialOp, dummyOp;
   if ( _testCombos.find(key) != _testCombos.end() ) {
     vector< pair<pair<OpOpIndexPair,OpOpIndexPair>, int> > entries = _testCombos[key];
     vector< pair<pair<OpOpIndexPair,OpOpIndexPair>, int> >::iterator entryIt;
@@ -245,7 +245,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
       }
     } else if (_bilinearForm->isFluxOrTrace(trialID)) {
       // then weight by _beta
-      BilinearForm::multiplyFCByWeight(testValues1, _beta); // TODO: determine whether it should be beta or beta^2 to be consistent with hpDPG code...
+      BilinearForm::multiplyFCByWeight(testValues2, _beta); // TODO: determine whether it should be beta or beta^2 to be consistent with hpDPG code...
     }
     // when bilinear form gets vectors of operators, we'll consult 
     // opOpPair.first.second (where opOpPair = entry.first is as above) for the operatorIndex for testID1, i.e.:
