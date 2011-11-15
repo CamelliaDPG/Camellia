@@ -80,7 +80,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest AdaptiveTransientConfusion
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest AdaptiveTransientConfusion simpleSFC
 ECHOES = 
 
 default: all
@@ -114,6 +114,9 @@ AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
 AdaptiveTransientConfusion: AdaptiveTransientConfusion.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveTransientConfusion.o -o AdaptiveTransientConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
+simpleSFC: simpleSFC.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/simpleSFC.o -o simpleSFC $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
 PoissonSolver: PoissonSolver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonSolver.o -o PoissonSolver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
@@ -142,6 +145,9 @@ AdaptiveConfusion.o: $(DRIVERS_DIR)/Confusion/AdaptiveConfusion.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 AdaptiveTransientConfusion.o: $(DRIVERS_DIR)/TransientConfusion/AdaptiveTransientConfusion.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+simpleSFC.o: $(DRIVERS_DIR)/ZoltanExperiment/simpleSFC.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 PoissonSolver.o: $(DRIVERS_DIR)/DemoDrivers/PoissonSolver.cpp
