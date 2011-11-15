@@ -1,0 +1,11 @@
+# include everything in this directory. 
+#env = Environment(CXX='c++',CC='gcc',CXXFLAGS = ['-O3','-g','-rdynamic'])
+env = Environment(CXX='c++',CC='gcc',CXXFLAGS = ['-O3'])
+
+# run the Camellia library builder if it's not built already
+SConscript('../../build/SConscript',exports = 'env')
+
+env.Append(CPPPATH=[Dir('.')])
+
+# run current SCons script to build driver program
+SConscript('SConscript', exports=['env'])

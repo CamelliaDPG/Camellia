@@ -1,0 +1,5 @@
+Import('*')
+
+src_obj = env.Object(['TransientConfusionBilinearForm.cpp'])
+
+env.Program('exec/simpleSFC',['simpleSFC.c',src_obj])
