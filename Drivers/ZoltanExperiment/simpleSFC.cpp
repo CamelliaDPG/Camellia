@@ -75,8 +75,11 @@ int main(int argc, char *argv[])
   ******************************************************************/
 
   MPI_Init(&argc, &argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
-  MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
+  int err = MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+  if (err != MPI_SUCCESS) {
+    cout << "Error while invoking MPI_Comm_rank" << endl;
+  }
+  err = MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
 
   rc = Zoltan_Initialize(argc, argv, &ver);
 
@@ -90,6 +93,7 @@ int main(int argc, char *argv[])
   ** Read graph from input file and distribute it 
   ******************************************************************/
 
+  cout << "myRank: " << myRank << " of " << numProcs << endl;
   read_input_file(myRank, numProcs, filename);
 
 //  /******************************************************************
@@ -193,7 +197,7 @@ int main(int argc, char *argv[])
 //  ** all done ***********
 //  **********************/
 //
-//  MPI_Finalize();
+  MPI_Finalize();
 //
 //  if (myGraph.numMyVertices > 0){
 //    free(myGraph.vertexGID);
