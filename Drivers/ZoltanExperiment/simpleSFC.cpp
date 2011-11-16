@@ -11,9 +11,11 @@
 #include <fstream>
 #include <iostream>
 
+using namespace std;
+
 /* Name of file containing graph to be partitioned */
 
-static char *fname="mesh.txt";
+static const string filename="mesh.txt";
 
 /* Structure to hold graph data 
    ZOLTAN_ID_TYPE is defined when Zoltan is compiled.  It's size can
@@ -51,7 +53,7 @@ static int get_next_line(FILE *fp, char *buf, int bufsize);
 static int get_line_ints(char *buf, int bufsize, int *vals);
 static void input_file_error(int numProcs, int tag, int startProc);
 static void showGraphPartitions(int myProc, int numIDs, ZOLTAN_ID_TYPE *GIDs, int *parts, int nparts);
-static void read_input_file(int myRank, int numProcs, char *fname);
+static void read_input_file(int myRank, int numProcs, const string &filename);
 static unsigned int simple_hash(unsigned int *key, unsigned int n);
 
 
@@ -88,127 +90,119 @@ int main(int argc, char *argv[])
   ** Read graph from input file and distribute it 
   ******************************************************************/
 
-  fp = fopen(fname, "r");
-  if (!fp){
-    if (myRank == 0) fprintf(stderr,"ERROR: Can not open %s\n",fname);
-    MPI_Finalize();
-    exit(1);
-  }
-  fclose(fp);
+  read_input_file(myRank, numProcs, filename);
 
-  read_input_file(myRank, numProcs, fname);
-
-  /******************************************************************
-  ** Create a Zoltan library structure for this instance of load
-  ** balancing.  Set the parameters and query functions that will
-  ** govern the library's calculation.  See the Zoltan User's
-  ** Guide for the definition of these and many other parameters.
-  ******************************************************************/
-
-  zz = Zoltan_Create(MPI_COMM_WORLD);
-
-  /* General parameters */
-
-  Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
-  Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
-  Zoltan_Set_Param(zz, "LB_APPROACH", "PARTITION");
-  Zoltan_Set_Param(zz, "NUM_GID_ENTRIES", "1"); 
-  Zoltan_Set_Param(zz, "NUM_LID_ENTRIES", "1");
-  Zoltan_Set_Param(zz, "RETURN_LISTS", "ALL");
-
-  /* Graph parameters */
-
-  Zoltan_Set_Param(zz, "CHECK_GRAPH", "2"); 
-  Zoltan_Set_Param(zz, "PHG_EDGE_SIZE_THRESHOLD", ".35");  /* 0-remove all, 1-remove none */
-
-  /* Query functions - defined in simpleQueries.h */
-
-  Zoltan_Set_Num_Obj_Fn(zz, get_number_of_vertices, &myGraph);
-  Zoltan_Set_Obj_List_Fn(zz, get_vertex_list, &myGraph);
-  Zoltan_Set_Num_Edges_Multi_Fn(zz, get_num_edges_list, &myGraph);
-  Zoltan_Set_Edge_List_Multi_Fn(zz, get_edge_list, &myGraph);
-
-  /******************************************************************
-  ** Zoltan can now partition the simple graph.
-  ** In this simple example, we assume the number of partitions is
-  ** equal to the number of processes.  Process rank 0 will own
-  ** partition 0, process rank 1 will own partition 1, and so on.
-  ******************************************************************/
-
-  rc = Zoltan_LB_Partition(zz, /* input (all remaining fields are output) */
-        &changes,        /* 1 if partitioning was changed, 0 otherwise */ 
-        &numGidEntries,  /* Number of integers used for a global ID */
-        &numLidEntries,  /* Number of integers used for a local ID */
-        &numImport,      /* Number of vertices to be sent to me */
-        &importGlobalGids,  /* Global IDs of vertices to be sent to me */
-        &importLocalGids,   /* Local IDs of vertices to be sent to me */
-        &importProcs,    /* Process rank for source of each incoming vertex */
-        &importToPart,   /* New partition for each incoming vertex */
-        &numExport,      /* Number of vertices I must send to other processes*/
-        &exportGlobalGids,  /* Global IDs of the vertices I must send */
-        &exportLocalGids,   /* Local IDs of the vertices I must send */
-        &exportProcs,    /* Process to which I send each of the vertices */
-        &exportToPart);  /* Partition to which each vertex will belong */
-
-  if (rc != ZOLTAN_OK){
-    printf("sorry...\n");
-    MPI_Finalize();
-    Zoltan_Destroy(&zz);
-    exit(0);
-  }
-
-  /******************************************************************
-  ** Visualize the graph partitioning before and after calling Zoltan.
-  ******************************************************************/
-
-  parts = (int *)malloc(sizeof(int) * myGraph.numMyVertices);
-
-  for (i=0; i < myGraph.numMyVertices; i++){
-    parts[i] = myRank;
-  }
-
-  if (myRank== 0){
-    printf("\nGraph partition before calling Zoltan\n");
-  }
-
-  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
-
-  for (i=0; i < numExport; i++){
-    parts[exportLocalGids[i]] = exportToPart[i];
-  }
-
-  if (myRank == 0){
-    printf("Graph partition after calling Zoltan\n");
-  }
-
-  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
-
-  /******************************************************************
-  ** Free the arrays allocated by Zoltan_LB_Partition, and free
-  ** the storage allocated for the Zoltan structure.
-  ******************************************************************/
-
-  Zoltan_LB_Free_Part(&importGlobalGids, &importLocalGids, 
-                      &importProcs, &importToPart);
-  Zoltan_LB_Free_Part(&exportGlobalGids, &exportLocalGids, 
-                      &exportProcs, &exportToPart);
-
-  Zoltan_Destroy(&zz);
-
-  /**********************
-  ** all done ***********
-  **********************/
-
-  MPI_Finalize();
-
-  if (myGraph.numMyVertices > 0){
-    free(myGraph.vertexGID);
-    free(myGraph.nborIndex);
-    if (myGraph.numAllNbors > 0){
-      free(myGraph.nborGID);
-      free(myGraph.nborProc);
-    }
-  }
+//  /******************************************************************
+//  ** Create a Zoltan library structure for this instance of load
+//  ** balancing.  Set the parameters and query functions that will
+//  ** govern the library's calculation.  See the Zoltan User's
+//  ** Guide for the definition of these and many other parameters.
+//  ******************************************************************/
+//
+//  zz = Zoltan_Create(MPI_COMM_WORLD);
+//
+//  /* General parameters */
+//
+//  Zoltan_Set_Param(zz, "DEBUG_LEVEL", "0");
+//  Zoltan_Set_Param(zz, "LB_METHOD", "GRAPH");
+//  Zoltan_Set_Param(zz, "LB_APPROACH", "PARTITION");
+//  Zoltan_Set_Param(zz, "NUM_GID_ENTRIES", "1"); 
+//  Zoltan_Set_Param(zz, "NUM_LID_ENTRIES", "1");
+//  Zoltan_Set_Param(zz, "RETURN_LISTS", "ALL");
+//
+//  /* Graph parameters */
+//
+//  Zoltan_Set_Param(zz, "CHECK_GRAPH", "2"); 
+//  Zoltan_Set_Param(zz, "PHG_EDGE_SIZE_THRESHOLD", ".35");  /* 0-remove all, 1-remove none */
+//
+//  /* Query functions - defined in simpleQueries.h */
+//
+//  Zoltan_Set_Num_Obj_Fn(zz, get_number_of_vertices, &myGraph);
+//  Zoltan_Set_Obj_List_Fn(zz, get_vertex_list, &myGraph);
+//  Zoltan_Set_Num_Edges_Multi_Fn(zz, get_num_edges_list, &myGraph);
+//  Zoltan_Set_Edge_List_Multi_Fn(zz, get_edge_list, &myGraph);
+//
+//  /******************************************************************
+//  ** Zoltan can now partition the simple graph.
+//  ** In this simple example, we assume the number of partitions is
+//  ** equal to the number of processes.  Process rank 0 will own
+//  ** partition 0, process rank 1 will own partition 1, and so on.
+//  ******************************************************************/
+//
+//  rc = Zoltan_LB_Partition(zz, /* input (all remaining fields are output) */
+//        &changes,        /* 1 if partitioning was changed, 0 otherwise */ 
+//        &numGidEntries,  /* Number of integers used for a global ID */
+//        &numLidEntries,  /* Number of integers used for a local ID */
+//        &numImport,      /* Number of vertices to be sent to me */
+//        &importGlobalGids,  /* Global IDs of vertices to be sent to me */
+//        &importLocalGids,   /* Local IDs of vertices to be sent to me */
+//        &importProcs,    /* Process rank for source of each incoming vertex */
+//        &importToPart,   /* New partition for each incoming vertex */
+//        &numExport,      /* Number of vertices I must send to other processes*/
+//        &exportGlobalGids,  /* Global IDs of the vertices I must send */
+//        &exportLocalGids,   /* Local IDs of the vertices I must send */
+//        &exportProcs,    /* Process to which I send each of the vertices */
+//        &exportToPart);  /* Partition to which each vertex will belong */
+//
+//  if (rc != ZOLTAN_OK){
+//    printf("sorry...\n");
+//    MPI_Finalize();
+//    Zoltan_Destroy(&zz);
+//    exit(0);
+//  }
+//
+//  /******************************************************************
+//  ** Visualize the graph partitioning before and after calling Zoltan.
+//  ******************************************************************/
+//
+//  parts = (int *)malloc(sizeof(int) * myGraph.numMyVertices);
+//
+//  for (i=0; i < myGraph.numMyVertices; i++){
+//    parts[i] = myRank;
+//  }
+//
+//  if (myRank== 0){
+//    printf("\nGraph partition before calling Zoltan\n");
+//  }
+//
+//  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
+//
+//  for (i=0; i < numExport; i++){
+//    parts[exportLocalGids[i]] = exportToPart[i];
+//  }
+//
+//  if (myRank == 0){
+//    printf("Graph partition after calling Zoltan\n");
+//  }
+//
+//  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
+//
+//  /******************************************************************
+//  ** Free the arrays allocated by Zoltan_LB_Partition, and free
+//  ** the storage allocated for the Zoltan structure.
+//  ******************************************************************/
+//
+//  Zoltan_LB_Free_Part(&importGlobalGids, &importLocalGids, 
+//                      &importProcs, &importToPart);
+//  Zoltan_LB_Free_Part(&exportGlobalGids, &exportLocalGids, 
+//                      &exportProcs, &exportToPart);
+//
+//  Zoltan_Destroy(&zz);
+//
+//  /**********************
+//  ** all done ***********
+//  **********************/
+//
+//  MPI_Finalize();
+//
+//  if (myGraph.numMyVertices > 0){
+//    free(myGraph.vertexGID);
+//    free(myGraph.nborIndex);
+//    if (myGraph.numAllNbors > 0){
+//      free(myGraph.nborGID);
+//      free(myGraph.nborProc);
+//    }
+//  }
 
   return 0;
 }
@@ -474,12 +468,12 @@ int *partCount;
  * Read the graph in the input file and distribute the vertices.
  */
 
-void read_input_file(int myRank, int numProcs, char *fname)
+void read_input_file(int myRank, int numProcs, const string &filename)
 {
-int numCoarseMeshElements;
+  int numCoarseMeshElements;
   unsigned int **vertices;
   if (myRank == 0){
-    std::ifstream fin(fname);
+    std::ifstream fin(filename.c_str());
 
     fin >> numCoarseMeshElements;
     
@@ -488,7 +482,11 @@ int numCoarseMeshElements;
       vertices[i] = new unsigned int[4]; // quads
       fin >> vertices[i][0] >> vertices[i][1] >> vertices[i][2] >> vertices[i][3];
     }
+    fin.close();
     
+    for (int i=0; i<numCoarseMeshElements; i++) {
+      cout << "Element " << i << ": " << vertices[i][0] << " " << vertices[i][1]<< " "  << vertices[i][2]<< " "  << vertices[i][3] << endl;
+    }
   }
 }
 
