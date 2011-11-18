@@ -16,6 +16,7 @@ using namespace std;
 /* Name of file containing graph to be partitioned */
 
 static const string filename="mesh.txt";
+static const int NUM_DIMENSIONS = 2;
 
 /* Structure to hold graph data 
    ZOLTAN_ID_TYPE is defined when Zoltan is compiled.  Its size can
@@ -23,13 +24,13 @@ static const string filename="mesh.txt";
 */
 
 typedef struct{
-  int numMyElements; /* total vertices in in my partition */
+  int numMyElements; /* total number of elements in in my partition */
   int numAllNbors;   /* total number of neighbors of my vertices */
-  ZOLTAN_ID_TYPE *vertexGID;    /* global ID of each of my vertices */
+  ZOLTAN_ID_TYPE *elementGID;    /* global ID of each of my elements */
   int *nborIndex;    /* nborIndex[i] is location of start of neighbors for vertex i */
   ZOLTAN_ID_TYPE *nborGID;      /* nborGIDs[nborIndex[i]] is first neighbor of vertex i */
   int *nborProc;     /* process owning each nbor in nborGID */
-} GRAPH_DATA;
+} ELEMENT_DATA;
 
 /* Application defined query functions */
 
@@ -54,19 +55,19 @@ static void get_child_weight(void *data, int num_gid_entries, int num_lid_entrie
 static int get_number_of_dimensions(void *data, int *ierr);
 static void get_vertex_coordinates (void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr); 
 
-
-static void get_vertex_list(void *data, int sizeGID, int sizeLID,
-            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-                  int wgt_dim, float *obj_wgts, int *ierr);
-static void get_num_edges_list(void *data, int sizeGID, int sizeLID,
-                      int num_obj,
-             ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-             int *numEdges, int *ierr);
-static void get_edge_list(void *data, int sizeGID, int sizeLID,
-        int num_obj, ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-        int *num_edges,
-        ZOLTAN_ID_PTR nborGID, int *nborProc,
-        int wgt_dim, float *ewgts, int *ierr);
+//
+//static void get_vertex_list(void *data, int sizeGID, int sizeLID,
+//            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//                  int wgt_dim, float *obj_wgts, int *ierr);
+//static void get_num_edges_list(void *data, int sizeGID, int sizeLID,
+//                      int num_obj,
+//             ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//             int *numEdges, int *ierr);
+//static void get_edge_list(void *data, int sizeGID, int sizeLID,
+//        int num_obj, ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//        int *num_edges,
+//        ZOLTAN_ID_PTR nborGID, int *nborProc,
+//        int wgt_dim, float *ewgts, int *ierr);
 
 /* Functions to read graph in from file, distribute it, view it, handle errors */
 
@@ -74,7 +75,7 @@ static int get_next_line(FILE *fp, char *buf, int bufsize);
 static int get_line_ints(char *buf, int bufsize, int *vals);
 static void input_file_error(int numProcs, int tag, int startProc);
 static void showGraphPartitions(int myProc, int numIDs, ZOLTAN_ID_TYPE *GIDs, int *parts, int nparts);
-static void read_input_file(int myRank, int numProcs, const string &filename, GRAPH_DATA *myData);
+static void read_input_file(int myRank, int numProcs, const string &filename, ELEMENT_DATA *myData);
 static unsigned int simple_hash(unsigned int *key, unsigned int n);
 
 
@@ -89,7 +90,7 @@ int main(int argc, char *argv[])
   int *importProcs, *importToPart, *exportProcs, *exportToPart;
   int *parts;
   FILE *fp;
-  GRAPH_DATA myGraph;
+  ELEMENT_DATA myElements;
 
   /******************************************************************
   ** Initialize MPI and Zoltan
@@ -118,7 +119,7 @@ int main(int argc, char *argv[])
   ******************************************************************/
 
   cout << "myRank: " << myRank << " of " << numProcs << endl;
-  read_input_file(myRank, numProcs, filename, &myGraph);
+  read_input_file(myRank, numProcs, filename, &myElements);
 
 //  /******************************************************************
 //  ** Create a Zoltan library structure for this instance of load
@@ -147,23 +148,23 @@ int main(int argc, char *argv[])
    */
 
   // ZOLTAN_NUM_COARSE_OBJ_FN:
-  Zoltan_Set_Num_Coarse_Obj_Fn(zz, get_number_of_coarse_elements, &myGraph);
+  Zoltan_Set_Num_Coarse_Obj_Fn(zz, get_number_of_coarse_elements, &myElements);
 
   // ZOLTAN_COARSE_OBJ_LIST_FN or ZOLTAN_FIRST_COARSE_OBJ_FN/ZOLTAN_NEXT_COARSE_OBJ_FN pair
-  Zoltan_Set_Coarse_Obj_List_Fn(zz, get_coarse_element_list, &myGraph); 
+  Zoltan_Set_Coarse_Obj_List_Fn(zz, get_coarse_element_list, &myElements); 
   
   // ZOLTAN_NUM_CHILD_FN
-  Zoltan_Set_Num_Child_Fn(zz, get_number_of_children, &myGraph);
+  Zoltan_Set_Num_Child_Fn(zz, get_number_of_children, &myElements);
   
   // ZOLTAN_CHILD_WEIGHT_FN
-  Zoltan_Set_Child_Weight_Fn(zz, get_child_weight, &myGraph);
+  Zoltan_Set_Child_Weight_Fn(zz, get_child_weight, &myElements);
   
 //  The next two functions are needed only if the order of the initial elements will be determined by a space filling curve method:
   // ZOLTAN_NUM_GEOM_FN
-  Zoltan_Set_Num_Geom_Fn(zz, get_number_of_dimensions, &myGraph);
+  Zoltan_Set_Num_Geom_Fn(zz, get_number_of_dimensions, &myElements);
   
   // ZOLTAN_GEOM_MULTI_FN
-  Zoltan_Set_Geom_Multi_Fn(zz, get_vertex_coordinates, &myGraph);
+  Zoltan_Set_Geom_Multi_Fn(zz, get_vertex_coordinates, &myElements);
   
 //
 //  /* Graph parameters */
@@ -173,10 +174,10 @@ int main(int argc, char *argv[])
 //
 //  /* Query functions - defined in simpleQueries.h */
 //
-//  Zoltan_Set_Num_Obj_Fn(zz, get_number_of_vertices, &myGraph);
-//  Zoltan_Set_Obj_List_Fn(zz, get_vertex_list, &myGraph);
-//  Zoltan_Set_Num_Edges_Multi_Fn(zz, get_num_edges_list, &myGraph);
-//  Zoltan_Set_Edge_List_Multi_Fn(zz, get_edge_list, &myGraph);
+//  Zoltan_Set_Num_Obj_Fn(zz, get_number_of_vertices, &myElements);
+//  Zoltan_Set_Obj_List_Fn(zz, get_vertex_list, &myElements);
+//  Zoltan_Set_Num_Edges_Multi_Fn(zz, get_num_edges_list, &myElements);
+//  Zoltan_Set_Edge_List_Multi_Fn(zz, get_edge_list, &myElements);
 //
 //  /******************************************************************
 //  ** Zoltan can now partition the simple graph.
@@ -211,9 +212,9 @@ int main(int argc, char *argv[])
 //  ** Visualize the graph partitioning before and after calling Zoltan.
 //  ******************************************************************/
 //
-//  parts = (int *)malloc(sizeof(int) * myGraph.numMyVertices);
+//  parts = (int *)malloc(sizeof(int) * myElements.numMyVertices);
 //
-//  for (i=0; i < myGraph.numMyVertices; i++){
+//  for (i=0; i < myElements.numMyVertices; i++){
 //    parts[i] = myRank;
 //  }
 //
@@ -221,7 +222,7 @@ int main(int argc, char *argv[])
 //    printf("\nGraph partition before calling Zoltan\n");
 //  }
 //
-//  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
+//  showGraphPartitions(myRank, myElements.numMyVertices, myElements.vertexGID, parts, numProcs);
 //
 //  for (i=0; i < numExport; i++){
 //    parts[exportLocalGids[i]] = exportToPart[i];
@@ -231,7 +232,7 @@ int main(int argc, char *argv[])
 //    printf("Graph partition after calling Zoltan\n");
 //  }
 //
-//  showGraphPartitions(myRank, myGraph.numMyVertices, myGraph.vertexGID, parts, numProcs);
+//  showGraphPartitions(myRank, myElements.numMyVertices, myElements.vertexGID, parts, numProcs);
 //
 //  /******************************************************************
 //  ** Free the arrays allocated by Zoltan_LB_Partition, and free
@@ -251,12 +252,12 @@ int main(int argc, char *argv[])
 //
   MPI_Finalize();
 //
-//  if (myGraph.numMyVertices > 0){
-//    free(myGraph.vertexGID);
-//    free(myGraph.nborIndex);
-//    if (myGraph.numAllNbors > 0){
-//      free(myGraph.nborGID);
-//      free(myGraph.nborProc);
+//  if (myElements.numMyVertices > 0){
+//    free(myElements.vertexGID);
+//    free(myElements.nborIndex);
+//    if (myElements.numAllNbors > 0){
+//      free(myElements.nborGID);
+//      free(myElements.nborProc);
 //    }
 //  }
 
@@ -267,29 +268,29 @@ int main(int argc, char *argv[])
 
 static int get_number_of_coarse_elements(void *data, int *ierr)
 {
-  GRAPH_DATA *graph = (GRAPH_DATA *)data;
+  ELEMENT_DATA *graph = (ELEMENT_DATA *)data;
   *ierr = ZOLTAN_OK;
   return graph->numMyElements;
 }
 
-static void get_vertex_list(void *data, int sizeGID, int sizeLID,
-            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-                  int wgt_dim, float *obj_wgts, int *ierr)
-{
-int i;
-
-  GRAPH_DATA *graph = (GRAPH_DATA *)data;
-  *ierr = ZOLTAN_OK;
-
-  /* In this example, return the IDs of our vertices, but no weights.
-   * Zoltan will assume equally weighted vertices.
-   */
-
-  for (i=0; i<graph->numMyElements; i++){
-    globalID[i] = graph->vertexGID[i];
-    localID[i] = i;
-  }
-}
+//static void get_vertex_list(void *data, int sizeGID, int sizeLID,
+//            ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//                  int wgt_dim, float *obj_wgts, int *ierr)
+//{
+//int i;
+//
+//  ELEMENT_DATA *graph = (ELEMENT_DATA *)data;
+//  *ierr = ZOLTAN_OK;
+//
+//  /* In this example, return the IDs of our vertices, but no weights.
+//   * Zoltan will assume equally weighted vertices.
+//   */
+//
+//  for (i=0; i<graph->numMyElements; i++){
+//    globalID[i] = graph->vertexGID[i];
+//    localID[i] = i;
+//  }
+//}
 
 // ZOLTAN_COARSE_OBJ_LIST_FN
 static void get_coarse_element_list(void *data, int num_gid_entries, int num_lid_entries,
@@ -299,11 +300,14 @@ static void get_coarse_element_list(void *data, int num_gid_entries, int num_lid
                                     ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex,
                                     int *ierr) {
   // TODO: implement this.
+  ELEMENT_DATA *myElements = (ELEMENT_DATA*)data;
+  
 }
 
 // ZOLTAN_NUM_CHILD_FN
 static int get_number_of_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr) {
   // TODO: Implement this
+  ELEMENT_DATA *myElements = (ELEMENT_DATA*)data;
   return 0;
 }
 
@@ -327,7 +331,7 @@ static void get_child_weight(void *data, int num_gid_entries, int num_lid_entrie
 
 // ZOLTAN_NUM_GEOM_FN
 static int get_number_of_dimensions(void *data, int *ierr) {
-  return 2;
+  return NUM_DIMENSIONS;
 }
 
 // ZOLTAN_GEOM_MULTI_FN
@@ -335,74 +339,74 @@ static void get_vertex_coordinates (void *data, int num_gid_entries, int num_lid
   // TODO: implement this.
 }
                                 
-static void get_num_edges_list(void *data, int sizeGID, int sizeLID,
-                      int num_obj,
-             ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-             int *numEdges, int *ierr)
-{
-int i, idx;
-
-  GRAPH_DATA *graph = (GRAPH_DATA *)data;
-
-  if ( (sizeGID != 1) || (sizeLID != 1) || (num_obj != graph->numMyElements)){
-    *ierr = ZOLTAN_FATAL;
-    return;
-  }
-
-  for (i=0;  i < num_obj ; i++){
-    idx = localID[i];
-    numEdges[i] = graph->nborIndex[idx+1] - graph->nborIndex[idx];
-  }
-
-  *ierr = ZOLTAN_OK;
-  return;
-}
-
-static void get_edge_list(void *data, int sizeGID, int sizeLID,
-        int num_obj, ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-        int *num_edges,
-        ZOLTAN_ID_PTR nborGID, int *nborProc,
-        int wgt_dim, float *ewgts, int *ierr)
-{
-int i, j, from, to;
-int *nextProc;
-ZOLTAN_ID_TYPE *nextNbor;
-
-  GRAPH_DATA *graph = (GRAPH_DATA *)data;
-  *ierr = ZOLTAN_OK;
-
-  if ( (sizeGID != 1) || (sizeLID != 1) || 
-       (num_obj != graph->numMyElements)||
-       (wgt_dim != 0)){
-    *ierr = ZOLTAN_FATAL;
-    return;
-  }
-
-  nextNbor = nborGID;
-  nextProc = nborProc;
-
-  for (i=0; i < num_obj; i++){
-
-    /*
-     * In this example, we are not setting edge weights.  Zoltan will
-     * set each edge to weight 1.0.
-     */
-
-    to = graph->nborIndex[localID[i]+1];
-    from = graph->nborIndex[localID[i]];
-    if ((to - from) != num_edges[i]){
-      *ierr = ZOLTAN_FATAL;
-      return;
-    }
-
-    for (j=from; j < to; j++){
-
-      *nextNbor++ = graph->nborGID[j];
-      *nextProc++ = graph->nborProc[j];
-    }
-  }
-  return;
-}
+//static void get_num_edges_list(void *data, int sizeGID, int sizeLID,
+//                      int num_obj,
+//             ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//             int *numEdges, int *ierr)
+//{
+//int i, idx;
+//
+//  ELEMENT_DATA *graph = (ELEMENT_DATA *)data;
+//
+//  if ( (sizeGID != 1) || (sizeLID != 1) || (num_obj != graph->numMyElements)){
+//    *ierr = ZOLTAN_FATAL;
+//    return;
+//  }
+//
+//  for (i=0;  i < num_obj ; i++){
+//    idx = localID[i];
+//    numEdges[i] = graph->nborIndex[idx+1] - graph->nborIndex[idx];
+//  }
+//
+//  *ierr = ZOLTAN_OK;
+//  return;
+//}
+//
+//static void get_edge_list(void *data, int sizeGID, int sizeLID,
+//        int num_obj, ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+//        int *num_edges,
+//        ZOLTAN_ID_PTR nborGID, int *nborProc,
+//        int wgt_dim, float *ewgts, int *ierr)
+//{
+//int i, j, from, to;
+//int *nextProc;
+//ZOLTAN_ID_TYPE *nextNbor;
+//
+//  ELEMENT_DATA *graph = (ELEMENT_DATA *)data;
+//  *ierr = ZOLTAN_OK;
+//
+//  if ( (sizeGID != 1) || (sizeLID != 1) || 
+//       (num_obj != graph->numMyElements)||
+//       (wgt_dim != 0)){
+//    *ierr = ZOLTAN_FATAL;
+//    return;
+//  }
+//
+//  nextNbor = nborGID;
+//  nextProc = nborProc;
+//
+//  for (i=0; i < num_obj; i++){
+//
+//    /*
+//     * In this example, we are not setting edge weights.  Zoltan will
+//     * set each edge to weight 1.0.
+//     */
+//
+//    to = graph->nborIndex[localID[i]+1];
+//    from = graph->nborIndex[localID[i]];
+//    if ((to - from) != num_edges[i]){
+//      *ierr = ZOLTAN_FATAL;
+//      return;
+//    }
+//
+//    for (j=from; j < to; j++){
+//
+//      *nextNbor++ = graph->nborGID[j];
+//      *nextProc++ = graph->nborProc[j];
+//    }
+//  }
+//  return;
+//}
 
 /* Function to find next line of information in input file */
  
@@ -568,13 +572,29 @@ int *partCount;
  * Read the graph in the input file and distribute the vertices.
  */
 
-void read_input_file(int myRank, int numProcs, const string &filename, GRAPH_DATA *myData)
+void read_input_file(int myRank, int numProcs, const string &filename, ELEMENT_DATA *myData)
 {
   int numCoarseMeshElements;
+  int numVertices;
   unsigned int **vertices;
+  double *vertexCoords;
   if (myRank == 0){
     std::ifstream fin(filename.c_str());
 
+    fin >> numVertices;
+    vertexCoords = new double[numVertices*NUM_DIMENSIONS];
+    for (int i=0; i<numVertices; i++) {
+      int vertexID;
+      fin >> vertexID;
+      if (vertexID < numVertices) {
+        for (int d=0; d<NUM_DIMENSIONS; d++) {
+          fin >> vertexCoords[vertexID*NUM_DIMENSIONS + d];
+        }
+      } else {
+        cout << "ERROR: vertexID " << vertexID << " out of bounds in mesh.txt\n";
+      }
+    }
+    
     fin >> numCoarseMeshElements;
     
     vertices = new unsigned int*[numCoarseMeshElements];
@@ -584,9 +604,22 @@ void read_input_file(int myRank, int numProcs, const string &filename, GRAPH_DAT
     }
     fin.close();
     
+    // print what we've read out, as a sanity check:
     for (int i=0; i<numCoarseMeshElements; i++) {
       cout << "Element " << i << ": " << vertices[i][0] << " " << vertices[i][1]<< " "  << vertices[i][2]<< " "  << vertices[i][3] << endl;
     }
+    cout << endl;
+    cout << "Vertices:\n";
+    for (int i=0; i<numVertices; i++) {
+      cout << i << "\t";
+      for (int d=0; d<NUM_DIMENSIONS; d++) {
+        cout << vertexCoords[i*NUM_DIMENSIONS+d] << "\t";
+      }
+      cout << endl;
+    }
+    
+    delete vertices;
+    delete vertexCoords;
   }
 }
 
