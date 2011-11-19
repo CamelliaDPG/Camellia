@@ -55,6 +55,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest) : _dofOrderingFactory(bilinearForm) {
   _vertices = vertices;
   _usePatchBasis = false;
+  _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
 
   int spaceDim = 2;
   vector<float> vertexCoords(spaceDim);

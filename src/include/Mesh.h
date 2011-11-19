@@ -48,6 +48,7 @@
 #include "BilinearForm.h"
 #include "DofOrderingFactory.h"
 #include "RefinementPattern.h"
+#include "MeshPartitionPolicy.h"
 
 class Mesh {
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
@@ -60,6 +61,7 @@ class Mesh {
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
   Teuchos::RCP< BilinearForm > _bilinearForm;
+  Teuchos::RCP< MeshPartitionPolicy > _partitionPolicy;
   vector< ElementPtr > _elements;
   vector< ElementPtr > _activeElements;
   vector< vector<int> > _verticesForCellID;

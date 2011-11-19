@@ -130,10 +130,10 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int rank=0;
   
 #ifdef HAVE_MPI
-//  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-//  rank=mpiSession.getRank();
-//  numProcs=mpiSession.getNProc();
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif

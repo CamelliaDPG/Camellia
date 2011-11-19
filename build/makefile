@@ -41,6 +41,7 @@ OBJ_NAMES = DofOrdering \
        Element \
        ElementTypeFactory \
        Mesh \
+       MeshPartitionPolicy \
        Boundary \
        PoissonBCLinear \
        PoissonRHSLinear \
@@ -178,6 +179,9 @@ Elem%.o: $(SRCS_DIR)/Mesh/Elem%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Mesh.o: $(SRCS_DIR)/Mesh/Mesh.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+MeshPartitionPolicy.o: $(SRCS_DIR)/Mesh/MeshPartitionPolicy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 RefinementPattern.o: $(SRCS_DIR)/Mesh/RefinementPattern.cpp
