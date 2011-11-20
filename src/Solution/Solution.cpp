@@ -141,6 +141,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
   
+  // TODO: add partitionNumber argument (defaulting to 0) to mesh->elementTypes()
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
   // will want a CrsMatrix here in just a moment...
@@ -174,6 +175,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     cout << "maxCellBatch: " << maxCellBatch << endl;
     
+    // TODO: add partitionNumber argument to Mesh::physicalCellNodes, Mesh::cellSideParities
     FieldContainer<double> allPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
     FieldContainer<double> allCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = allPhysicalCellNodesForType.dimension(0);

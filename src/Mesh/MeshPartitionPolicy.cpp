@@ -11,6 +11,9 @@
 #include "MeshPartitionPolicy.h"
 
 void MeshPartitionPolicy::partitionMesh(Mesh &mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells) {
+  // TODO: make the default just a single partition (i.e. amounts to a "serial" partition),
+  //       and split the current partition policy into a new class, MeshContiguousCellOrderingPartitionPolicy
+  //       (On second thought, I'm not sure of this.  We can achieve the serial partition by simply setting numPartitions=1.)
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
   TEST_FOR_EXCEPTION(numPartitions != partitionedActiveCells.dimension(0), std::invalid_argument,
                      "numPartitions must match the first dimension of partitionedActiveCells");
