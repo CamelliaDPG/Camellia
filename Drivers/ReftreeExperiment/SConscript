@@ -2,4 +2,5 @@ Import('*')
 
 #src_obj = env.Object([''])
 
-env.Program('exec/simpleSFC',['simpleSFC.cpp'])
+#env.Program('exec/simpleReftree',['simpleReftree.cpp'])
+env.Program('exec/exampleBLOCK',['exampleBLOCK.cpp'])
