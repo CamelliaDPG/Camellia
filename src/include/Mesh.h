@@ -62,8 +62,10 @@ class Mesh {
   ElementTypeFactory _elementTypeFactory;
   Teuchos::RCP< BilinearForm > _bilinearForm;
   Teuchos::RCP< MeshPartitionPolicy > _partitionPolicy;
+  int _numPartitions;
   vector< ElementPtr > _elements;
   vector< ElementPtr > _activeElements;
+  vector< vector< ElementPtr > > _partitions;
   vector< vector<int> > _verticesForCellID;
   vector< FieldContainer<double> > _vertices;
   map < vector<float>, vector<int> > _verticesMap; // key: coordinates; value: index to _vertices
@@ -144,6 +146,10 @@ public:
   int numElements();
   
   int numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
+  
+  void repartition();
+  void setNumPartitions(int numPartitions);
+  void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
 
   vector< Teuchos::RCP< Element > > & activeElements();
   vector< Teuchos::RCP< Element > > & elements();

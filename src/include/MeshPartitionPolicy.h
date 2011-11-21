@@ -17,7 +17,8 @@ using namespace Intrepid;
 class Mesh; // avoid circular dependency by doing forward declaration
 
 class MeshPartitionPolicy {
-  virtual void partitionMesh(Mesh &mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells);
+public:
+  virtual void partitionMesh(Mesh *mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells);
 };
 
 #include "Mesh.h"

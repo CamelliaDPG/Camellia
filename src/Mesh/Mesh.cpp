@@ -56,6 +56,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   _vertices = vertices;
   _usePatchBasis = false;
   _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+  _numPartitions = 1;
 
   int spaceDim = 2;
   vector<float> vertexCoords(spaceDim);
@@ -805,6 +806,17 @@ void Mesh::determineActiveElements() {
       _activeElements.push_back(elemPtr);
     }
   }
+  _partitions.clear();
+  FieldContainer<int> partitionedMesh(_numPartitions,_activeElements.size());
+  _partitionPolicy->partitionMesh(this,_numPartitions,partitionedMesh);
+  for (int i=0; i<_numPartitions; i++) {
+    vector<ElementPtr> partition;
+    for (int j=0; j<_activeElements.size(); j++) {
+      if (partitionedMesh(i,j) < 0) break; // no more elements in this partition
+      partition.push_back( _elements[partitionedMesh(i,j)] );
+    }
+    _partitions.push_back( partition );
+  }
 }
 
 vector< Teuchos::RCP< Element > > & Mesh::elements() { 
@@ -1244,6 +1256,10 @@ void Mesh::refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRef
   rebuildLookups();
 }
 
+void Mesh::repartition() {
+  rebuildLookups();
+}
+
 int Mesh::rowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
@@ -1293,6 +1309,14 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
 //  cout << "set cellID " << elemPtr->cellID() << "'s neighbor for side ";
 //  cout << elemSide << " to cellID " << neighborPtr->cellID();
 //  cout << " (neighbor's sideIndex: " << neighborSide << ")" << endl;
+}
+
+void Mesh::setNumPartitions(int numPartitions) {
+  _numPartitions = numPartitions;
+}
+
+void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
+  _partitionPolicy = partitionPolicy;
 }
 
 void Mesh::verticesForCell(FieldContainer<double>& vertices, int cellID) {
