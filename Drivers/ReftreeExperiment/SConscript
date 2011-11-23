@@ -3,4 +3,7 @@ Import('*')
 #src_obj = env.Object([''])
 
 #env.Program('exec/simpleReftree',['simpleReftree.cpp'])
-env.Program('exec/exampleBLOCK',['exampleBLOCK.cpp'])
+#env.Program('exec/exampleBLOCK',['exampleBLOCK.cpp'])
+#env.Program('exec/exampleReftree',['exampleReftree.cpp'])
+env.Program('exec/exampleMesh',['exampleMesh.cpp'])
+env.Program('exec/mpiTest',['mpiTest.cpp'])
