@@ -40,6 +40,14 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
+// Epetra includes
+#include <Epetra_Map.h>
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 #include "Mesh.h"
 #include "ElementType.h"
 #include "DPGInnerProduct.h"
@@ -66,6 +74,11 @@ private:
   void initialize();
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
+#ifdef HAVE_MPI
+  Epetra_Map getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm );
+#else
+  Epetra_Map getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm );
+#endif
 protected:
   map< ElementType*, FieldContainer<double> > solutionForElementTypeMap() const;
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);

@@ -82,8 +82,12 @@ class Mesh {
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
   
   // call buildTypeLookups to rebuild the elementType data structures:
-  map< ElementType*, vector<int> > _cellIDsForElementType;
+  vector< map< ElementType*, vector<int> > > _cellIDsForElementType;
+  map< ElementType*, map<int, int> > _globalCellIndexToCellID;
+  vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypes;
+  vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
+  vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   map< ElementType*, FieldContainer<double> > _cellSideParitiesForElementType; // for uniform mesh, just a single entry..
   
@@ -115,8 +119,8 @@ public:
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
   
-  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType );
-  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
+  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType, int partitionNumber = -1 );
+  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber = -1 );
 
   void refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRefinements);
   
@@ -124,11 +128,13 @@ public:
   
   BilinearForm & bilinearForm();
   
-  vector< Teuchos::RCP< ElementType > > elementTypes();
+  vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
   
   int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex);
   
   int globalDofIndex(int cellID, int localDofIndex);
+  
+  set<int> globalDofIndicesForPartition(int partitionNumber);
   
   Boundary &boundary();
   

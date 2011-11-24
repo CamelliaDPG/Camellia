@@ -37,10 +37,11 @@
 #include "Element.h"
 
 // constructor:
-Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIndex) {
+Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int globalCellIndex) {
   _cellID = cellID;
   _numSides = elemTypePtr->cellTopoPtr->getSideCount();
   _cellIndex = cellIndex;
+  _globalCellIndex = globalCellIndex;
   _neighbors = new pair< Element* , int >[_numSides];
   for (int i=0; i<_numSides; i++) {
     Element* nullNeighbor = NULL;

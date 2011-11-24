@@ -92,7 +92,6 @@ Solution::Solution(const Solution &soln) {
   _ip = soln.ip();
   _solutionForElementType = soln.solutionForElementTypeMap();
   initialize();
-  
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
@@ -122,6 +121,42 @@ void Solution::initialize() {
   _residualsComputed = false;
 }
 
+#ifdef HAVE_MPI
+Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
+#else
+Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
+#endif
+  // determine the local dofs we have, and what their global indices are:
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  int localDofsSize;
+  if (rank == 0) {
+    localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
+  } else {
+    localDofsSize = myGlobalIndicesSet.size();
+  }
+  int *myGlobalIndices = new int[ localDofsSize ];
+
+  // copy from set object into the allocated array
+  int offset = 0;
+  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
+       indexIt != myGlobalIndicesSet.end();
+       indexIt++ ){
+    myGlobalIndices[offset++] = *indexIt;
+  }
+  if ( rank == 0 ) {
+    // set up the zmcs, which come at the end...
+    for (int i=0; i<zeroMeanConstraintsSize; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs;
+    }
+  }
+  
+  int indexBase = 0;
+  Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
+  
+  delete myGlobalIndices;
+  return localMap;
+}
+
 void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();
@@ -133,7 +168,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   rank     = Teuchos::GlobalMPISession::getRank();
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
+  cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -141,8 +176,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
   
-  // TODO: add partitionNumber argument (defaulting to 0) to mesh->elementTypes()
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
   // will want a CrsMatrix here in just a moment...
   
@@ -156,12 +190,13 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     }
   }
   int numGlobalDofs = _mesh->numGlobalDofs();
-  Epetra_Map   globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
+  Epetra_Map localMap = getLocalMap(rank,numGlobalDofs,zeroMeanConstraints.size(),Comm);
+  //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   cout << "max row size for mesh: " << maxRowSize << endl;
-  Epetra_FECrsMatrix globalStiffMatrix(Copy, globalMapG, globalMapG, maxRowSize);
-  Epetra_FEVector rhsVector(globalMapG);
+  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, localMap, maxRowSize);
+  Epetra_FEVector rhsVector(localMap);
   
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
@@ -175,14 +210,13 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     cout << "maxCellBatch: " << maxCellBatch << endl;
     
-    // TODO: add partitionNumber argument to Mesh::physicalCellNodes, Mesh::cellSideParities
-    FieldContainer<double> allPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
-    FieldContainer<double> allCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
-    int totalCellsForType = allPhysicalCellNodesForType.dimension(0);
+    FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr, rank);
+    FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr, rank);
+    int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
     Teuchos::Array<int> nodeDimensions, parityDimensions;
-    allPhysicalCellNodesForType.dimensions(nodeDimensions);
-    allCellSideParitiesForType.dimensions(parityDimensions);
+    myPhysicalCellNodesForType.dimensions(nodeDimensions);
+    myCellSideParitiesForType.dimensions(parityDimensions);
     while (startCellIndexForBatch < totalCellsForType) {
       int cellsLeft = totalCellsForType - startCellIndexForBatch;
       int numCells = min(maxCellBatch,cellsLeft);
@@ -190,8 +224,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       //cout << "trialDofOrdering: " << *trialOrderingPtr;
       nodeDimensions[0] = numCells;
       parityDimensions[0] = numCells;
-      FieldContainer<double> physicalCellNodes(nodeDimensions,&allPhysicalCellNodesForType(startCellIndexForBatch,0,0));
-      FieldContainer<double> cellSideParities(parityDimensions,&allCellSideParitiesForType(startCellIndexForBatch,0));
+      FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
+      FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
       
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -317,88 +351,92 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     cout << "WARNING: globalStiffnessMatrix is not symmetric!!" << endl;
   }*/
   
+  if (rank == 0) {
   // borrowed from the STK Poisson example
-  // Vector for use in applying BCs
-  Epetra_MultiVector v(globalMapG,true);
-  v.PutScalar(0.0);
-  // Loop over boundary nodes
-  for (int i = 0; i < numBCs; i++) {    
-    v[0][bcGlobalIndices(i)]=bcGlobalValues(i);
-  }
-  
-  Epetra_MultiVector rhsDirichlet(globalMapG,true);
-  globalStiffMatrix.Apply(v,rhsDirichlet);
-  
-  // Update right-hand side
-  rhsVector.Update(-1.0,rhsDirichlet,1.0);  
-  
-  if (numBCs == 0) {
-    cout << "Solution: Warning: Imposing no BCs." << endl;
-  } else {
-    rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
-  }
-  
-  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-  //  and add one to diagonal.
-  cout << "numBCs: " << numBCs << endl;
-  ML_Epetra::Apply_OAZToMatrix(&bcGlobalIndices(0), numBCs, globalStiffMatrix);
-  
-  //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
-  
-  // Dump matrices to disk
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_before_bcs.dat",globalStiffMatrix);
-  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-  
-  cout << "Finished imposing BCs." << endl;
-  
-  //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
-  
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  
-  // solve the global matrix system...
-  
-  Epetra_FEVector lhsVector(globalMapG);
-  
-  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
-  
-  if ( !useMumps ) {
-    Amesos_Klu klu(problem);
+    // Vector for use in applying BCs
+    Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
+    Epetra_MultiVector v(globalMapG,true);
+    v.PutScalar(0.0);
+    // Loop over boundary nodes
+    for (int i = 0; i < numBCs; i++) {    
+      v[0][bcGlobalIndices(i)]=bcGlobalValues(i);
+    }
     
-    cout << "About to call klu.Solve()." << endl;
-    int solveSuccess = klu.Solve();
-    cout << "klu.Solve() completed." << endl;
-    Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
-    if (solveSuccess != 0 ) {
-      cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
+    Epetra_MultiVector rhsDirichlet(globalMapG,true);
+    globalStiffMatrix.Apply(v,rhsDirichlet);
+    
+    // Update right-hand side
+    rhsVector.Update(-1.0,rhsDirichlet,1.0);  
+    
+    if (numBCs == 0) {
+      cout << "Solution: Warning: Imposing no BCs." << endl;
+    } else {
+      rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
     }
-  } else {
-    cout << "not yet building with MUMPS support." << endl;
-/*    Amesos_Mumps mumps(problem);
-    mumps.SymbolicFactorization();
-    mumps.NumericFactorization();
-    mumps.Solve();*/
-  }
-  
-  // copy the dof coefficients into our data structure
-  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
-  vector< Teuchos::RCP< Element > >::iterator elemIt;
-  
-  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-    ElementPtr elemPtr = *(elemIt);
-    int cellID = elemPtr->cellID();
-    int cellIndex = elemPtr->cellIndex();
-    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
-    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVector[0][globalIndex];
+    
+    // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
+    //  and add one to diagonal.
+    cout << "numBCs: " << numBCs << endl;
+    ML_Epetra::Apply_OAZToMatrix(&bcGlobalIndices(0), numBCs, globalStiffMatrix);
+    
+    //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
+    
+    // Dump matrices to disk
+    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_before_bcs.dat",globalStiffMatrix);
+    //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+    
+    cout << "Finished imposing BCs." << endl;
+    
+    //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
+    
+    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+    
+    // solve the global matrix system...
+    
+    Epetra_FEVector lhsVector(globalMapG);
+    
+    Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
+    
+    if ( !useMumps ) {
+      Amesos_Klu klu(problem);
+      
+      cout << "About to call klu.Solve()." << endl;
+      int solveSuccess = klu.Solve();
+      cout << "klu.Solve() completed." << endl;
+      Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
+      if (solveSuccess != 0 ) {
+        cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
+      }
+    } else {
+      cout << "not yet building with MUMPS support." << endl;
+  /*    Amesos_Mumps mumps(problem);
+      mumps.SymbolicFactorization();
+      mumps.NumericFactorization();
+      mumps.Solve();*/
     }
+    
+    // copy the dof coefficients into our data structure
+    vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
+    vector< Teuchos::RCP< Element > >::iterator elemIt;
+    
+    for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+      ElementPtr elemPtr = *(elemIt);
+      int cellID = elemPtr->cellID();
+      int cellIndex = elemPtr->globalCellIndex();
+      int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
+      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+        int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+        _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVector[0][globalIndex];
+      }
+    }
+    // DEBUGGING: print out solution coefficients
+    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+      ElementTypePtr elemTypePtr = *(elemTypeIt);
+      //cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
+    }
+    
+    // TODO: communicate solution information to other MPI nodes....
   }
-  // DEBUGGING: print out solution coefficients
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    //cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
-  }
-  
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
 
@@ -816,7 +854,7 @@ void Solution::energyError(FieldContainer<double> &energyError) {
   computeErrorRepresentation();
   for (int activeCellIndex=0; activeCellIndex<numActiveElements; activeCellIndex++) {
     ElementPtr elemPtr = _mesh->activeElements()[activeCellIndex];
-    int cellIndex = elemPtr->cellIndex();
+    int cellIndex = elemPtr->globalCellIndex();
     ElementTypePtr elemTypePtr = elemPtr->elementType();
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
     FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
@@ -916,6 +954,9 @@ void Solution::computeResiduals() {
     int numTestDofs  = testOrdering->totalDofs();
     int numCells = physicalCellNodes.dimension(0);
     
+    TEST_FOR_EXCEPTION( ( numCells!=solution.dimension(0) ) || ( numTrialDofs != solution.dimension(1) ),
+                       std::invalid_argument, "solution values incorrectly dimensioned.");
+    
     // set up diagonal testWeights matrices so we can reuse the existing computeRHS
     FieldContainer<double> testWeights(numCells,numTestDofs,numTestDofs);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -950,6 +991,9 @@ void Solution::computeResiduals() {
           BasisPtr testBasis = testOrdering->getBasis(testID);
           for (int i=0; i<testBasis->getCardinality(); i++) {
             for (int j=0; j<trialBasis->getCardinality(); j++) {
+              double solValue = solution(cellIndex,j);
+              double stiffValue = preStiffness(cellIndex,i,j);
+              double resValue = residuals(cellIndex,i);
               residuals(cellIndex,i) -= solution(cellIndex,j) * preStiffness(cellIndex,i,j);
             }
           }
@@ -1372,7 +1416,7 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
 
 
 void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex) {
-  int cellIndex = _mesh->elements()[cellID]->cellIndex();
+  int cellIndex = _mesh->elements()[cellID]->globalCellIndex();
   ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
   
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
@@ -1389,7 +1433,7 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
-  int cellIndex = _mesh->elements()[cellID]->cellIndex();
+  int cellIndex = _mesh->elements()[cellID]->globalCellIndex();
   ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
   
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;

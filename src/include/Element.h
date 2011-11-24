@@ -47,7 +47,8 @@ class Element {
 private:
   int _cellID; // unique ID, also the index for the Mesh into the Elements vector
   Teuchos::RCP< ElementType > _elemTypePtr;
-  int _cellIndex; // index into the Mesh's Elements vector for ElementType
+  int _cellIndex; // index into the Mesh's Elements vector for ElementType for a given partition
+  int _globalCellIndex; // index into a vector of *all* elements of a given type across partitions...
   int _numSides;
   pair< Element* , int > * _neighbors; // the int is a sideIndex in neighbor (i.e. which of neighbor's sides are we?)
   //int * _subSideIndicesInNeighbors;    // for neighbors that have hanging nodes that we are part of...
@@ -57,12 +58,14 @@ private:
   map<int, int> _parentSideLookupTable; // childSideIndex --> shared parentSideIndex
 public:
 //constructor:
-  Element(int cellID, Teuchos::RCP< ElementType > elemType, int cellIndex);
+  Element(int cellID, Teuchos::RCP< ElementType > elemType, int cellIndex, int globalCellIndex=-1);
   Teuchos::RCP< ElementType > elementType() { return _elemTypePtr; }
   void setElementType( Teuchos::RCP< ElementType > newElementType) { _elemTypePtr = newElementType; }
   int cellID() { return _cellID; }
   int cellIndex() { return _cellIndex; }
   void setCellIndex(int newCellIndex) { _cellIndex = newCellIndex; }
+  int globalCellIndex() { return _globalCellIndex; }
+  void setGlobalCellIndex(int globalCellIndex) { _globalCellIndex = globalCellIndex; }
   int numSides() { return _numSides; }
   void getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
   int getNeighborCellID(int sideIndex);

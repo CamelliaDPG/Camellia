@@ -632,51 +632,116 @@ void Mesh::buildLocalToGlobalMap() {
 
 void Mesh::buildTypeLookups() {
   _elementTypes.clear();
+  _elementTypesForPartition.clear();
   _cellIDsForElementType.clear();
+  _globalCellIndexToCellID.clear();
+  _partitionedCellSideParitiesForElementType.clear();
+  _partitionedPhysicalCellNodesForElementType.clear();
   
-  vector< ElementPtr >::iterator elemIterator;
-  for (elemIterator=_activeElements.begin(); elemIterator != _activeElements.end(); elemIterator++) {
-    ElementPtr elem = *elemIterator;
-    ElementTypePtr elemTypePtr = elem->elementType();
-    if ( _cellIDsForElementType.find( elemTypePtr.get() ) == _cellIDsForElementType.end() ) {
-      _elementTypes.push_back(elemTypePtr);
+  set< ElementType* > elementTypeSet; // keep track of which ones we've seen globally (avoid duplicates in _elementTypes)
+  map< ElementType*, int > globalCellIndices;
+  
+  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+    _cellIDsForElementType.push_back( map< ElementType*, vector<int> >() );
+    _elementTypesForPartition.push_back( vector< ElementTypePtr >() );
+    _partitionedPhysicalCellNodesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
+    _partitionedCellSideParitiesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
+    vector< ElementPtr >::iterator elemIterator;
+
+    // this should loop over the elements in the partition instead
+    for (elemIterator=_partitions[partitionNumber].begin(); 
+         elemIterator != _partitions[partitionNumber].end(); elemIterator++) {
+      ElementPtr elem = *elemIterator;
+      ElementTypePtr elemTypePtr = elem->elementType();
+      if ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) == _cellIDsForElementType[partitionNumber].end() ) {
+        _elementTypesForPartition[partitionNumber].push_back(elemTypePtr);
+      }
+      if (elementTypeSet.find( elemTypePtr.get() ) == elementTypeSet.end() ) {
+        elementTypeSet.insert( elemTypePtr.get() );
+        _elementTypes.push_back( elemTypePtr );
+      }
+      _cellIDsForElementType[partitionNumber][elemTypePtr.get()].push_back(elem->cellID());
     }
-    _cellIDsForElementType[elemTypePtr.get()].push_back(elem->cellID());
+    
+    // now, build cellSideParities and physicalCellNodes lookups
+    vector< ElementTypePtr >::iterator elemTypeIt;
+    for (elemTypeIt=_elementTypesForPartition[partitionNumber].begin(); elemTypeIt != _elementTypesForPartition[partitionNumber].end(); elemTypeIt++) {
+      //ElementTypePtr elemType = _elementTypeFactory.getElementType((*elemTypeIt)->trialOrderPtr,
+  //                                                                 (*elemTypeIt)->testOrderPtr,
+  //                                                                 (*elemTypeIt)->cellTopoPtr);
+      ElementTypePtr elemType = *elemTypeIt; // don't enforce uniquing here (if we wanted to, we
+                                             //   would also need to call elem.setElementType for 
+                                             //   affected elements...)
+      int spaceDim = elemType->cellTopoPtr->getDimension();
+      int numSides = elemType->cellTopoPtr->getSideCount();
+      vector<int> cellIDs = _cellIDsForElementType[partitionNumber][elemType.get()];
+      int numCells = cellIDs.size();
+      FieldContainer<double> physicalCellNodes( numCells, numSides, spaceDim ) ;
+      FieldContainer<double> cellSideParities( numCells, numSides );
+      vector<int>::iterator cellIt;
+      int cellIndex = 0;
+      for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+        int cellID = *cellIt;
+        ElementPtr elem = _elements[cellID];
+        ElementTypePtr oldElemType;
+        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+          for (int i=0; i<spaceDim; i++) {
+            physicalCellNodes(cellIndex,sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
+          }
+          cellSideParities(cellIndex,sideIndex) = _cellSideParitiesForCellID[cellID][sideIndex];
+        }
+        elem->setCellIndex(cellIndex++);
+        elem->setGlobalCellIndex(globalCellIndices[elemType.get()]++);
+        _globalCellIndexToCellID[elemType.get()][elem->globalCellIndex()] = cellID;
+        TEST_FOR_EXCEPTION( elem->cellID() != _globalCellIndexToCellID[elemType.get()][elem->globalCellIndex()],
+                           std::invalid_argument, "globalCellIndex -> cellID inconsistency detected" );
+      }
+      _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType.get()] = physicalCellNodes;
+      _partitionedCellSideParitiesForElementType[partitionNumber][elemType.get()] = cellSideParities;
+    }
   }
-  
-  // now, build cellSideParities and physicalCellNodes lookups
-  vector< ElementTypePtr >::iterator elemTypeIt;
-  for (elemTypeIt=_elementTypes.begin(); elemTypeIt != _elementTypes.end(); elemTypeIt++) {
-    //ElementTypePtr elemType = _elementTypeFactory.getElementType((*elemTypeIt)->trialOrderPtr,
-//                                                                 (*elemTypeIt)->testOrderPtr,
-//                                                                 (*elemTypeIt)->cellTopoPtr);
-    ElementTypePtr elemType = *elemTypeIt; // don't enforce uniquing here (if we wanted to, we
-                                           //   would also need to call elem.setElementType for 
-                                           //   affected elements...)
+  // finally, build _physicalCellNodesForElementType and _cellSideParitiesForElementType:
+  _physicalCellNodesForElementType.clear();
+  _cellSideParitiesForElementType.clear();
+  for (vector< ElementTypePtr >::iterator elemTypeIt = _elementTypes.begin();
+       elemTypeIt != _elementTypes.end(); elemTypeIt++) {
+    ElementType* elemType = elemTypeIt->get();
+    int numCells = globalCellIndices[elemType];
     int spaceDim = elemType->cellTopoPtr->getDimension();
     int numSides = elemType->cellTopoPtr->getSideCount();
-    vector<int> cellIDs = _cellIDsForElementType[elemType.get()];
-    int numCells = cellIDs.size();
-    FieldContainer<double> physicalCellNodes( numCells, numSides, spaceDim ) ;
-    FieldContainer<double> cellSideParities( numCells, numSides );
-    vector<int>::iterator cellIt;
-    int cellIndex = 0;
-    for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-      int cellID = *cellIt;
-      ElementPtr elem = _elements[cellID];
-      ElementTypePtr oldElemType;
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        for (int i=0; i<spaceDim; i++) {
-          physicalCellNodes(cellIndex,sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
+    _physicalCellNodesForElementType[elemType] = FieldContainer<double>(numCells,numSides,spaceDim);
+    _cellSideParitiesForElementType[elemType]  = FieldContainer<double>(numCells,numSides);
+  }
+  // copy from the local (per-partition) FieldContainers to the global ones
+  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+    vector< ElementTypePtr >::iterator elemTypeIt;
+    for (elemTypeIt  = _elementTypesForPartition[partitionNumber].begin(); 
+         elemTypeIt != _elementTypesForPartition[partitionNumber].end(); elemTypeIt++) {
+      ElementType* elemType = elemTypeIt->get();
+      FieldContainer<double> partitionedPhysicalCellNodes = _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType];
+      FieldContainer<double> partitionedCellSideParities = _partitionedCellSideParitiesForElementType[partitionNumber][elemType];
+      
+      int numCells = partitionedPhysicalCellNodes.dimension(0);
+      int numSides = partitionedPhysicalCellNodes.dimension(1);
+      int spaceDim = partitionedPhysicalCellNodes.dimension(2);
+      
+      // this copying can be made more efficient by copying a whole FieldContainer at a time
+      // (but it's probably not worth it, for now)
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        int cellID = _cellIDsForElementType[partitionNumber][elemType][cellIndex];
+        int globalCellIndex = _elements[cellID]->globalCellIndex();
+        TEST_FOR_EXCEPTION( cellID != _globalCellIndexToCellID[elemType][globalCellIndex],
+                           std::invalid_argument, "globalCellIndex -> cellID inconsistency detected" );
+        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+          _cellSideParitiesForElementType[elemType](globalCellIndex,sideIndex) = partitionedCellSideParities(cellIndex,sideIndex);
+          for (int dim=0; dim<spaceDim; dim++) {
+            _physicalCellNodesForElementType[elemType](globalCellIndex,sideIndex,dim) 
+              = partitionedPhysicalCellNodes(cellIndex,sideIndex,dim);
+          }
         }
-        cellSideParities(cellIndex,sideIndex) = _cellSideParitiesForCellID[cellID][sideIndex];
       }
-      elem->setCellIndex(cellIndex);
-      cellIndex++;
     }
-    _physicalCellNodesForElementType[elemType.get()] = physicalCellNodes;
-    _cellSideParitiesForElementType[elemType.get()] = cellSideParities;
-  }  
+  }
 }
 
 void Mesh::determineDofPairings() {
@@ -788,12 +853,25 @@ Boundary & Mesh::boundary() {
   return _boundary; 
 }
 
-int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex) {
-  return _cellIDsForElementType[elemTypePtr.get()][cellIndex];
+int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int globalCellIndex) {
+  if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() ) 
+      && 
+      ( _globalCellIndexToCellID[elemTypePtr.get()].find( globalCellIndex )
+       !=
+        _globalCellIndexToCellID[elemTypePtr.get()].end()
+       )
+      )
+    return _globalCellIndexToCellID[elemTypePtr.get()][globalCellIndex];
+  else
+    return -1;
 }
 
-FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
-  return _cellSideParitiesForElementType[ elemTypePtr.get() ];  
+FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber ) {
+  if (partitionNumber >= 0) {
+    return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+  } else {
+    return _cellSideParitiesForElementType[ elemTypePtr.get() ];
+  }
 }
 
 void Mesh::determineActiveElements() {
@@ -819,12 +897,45 @@ void Mesh::determineActiveElements() {
   }
 }
 
+set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
+  set<int> dofIndices;
+  if ((partitionNumber < 0) || (partitionNumber >= _numPartitions) ) {
+    return dofIndices;
+  }
+  vector< ElementPtr >::iterator elemIterator;
+  for (elemIterator =  _partitions[partitionNumber].begin(); 
+       elemIterator != _partitions[partitionNumber].end(); 
+       elemIterator++
+       ) {
+    ElementPtr elem = *elemIterator;
+    ElementTypePtr elemTypePtr = elem->elementType();
+    int numLocalDofs = elemTypePtr->trialOrderPtr->totalDofs();
+    int cellID = elem->cellID();
+    for (int localDofIndex=0; localDofIndex < numLocalDofs; localDofIndex++) {
+      pair<int,int> key = make_pair(cellID, localDofIndex);
+      map< pair<int,int>, int >::iterator mapEntryIt = _localToGlobalMap.find(key);
+      if ( mapEntryIt == _localToGlobalMap.end() ) {
+        TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+      }
+      dofIndices.insert((*mapEntryIt).second);
+    }
+  }
+  return dofIndices;
+}
+
 vector< Teuchos::RCP< Element > > & Mesh::elements() { 
   return _elements; 
 }
 
-vector< Teuchos::RCP< ElementType > > Mesh::elementTypes() {
-  return _elementTypes;
+vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
+  if ((partitionNumber >= 0) && (partitionNumber < _numPartitions)) {
+    return _elementTypesForPartition[partitionNumber];
+  } else if (partitionNumber < 0) {
+    return _elementTypes;
+  } else {
+    vector< Teuchos::RCP< ElementType > > noElementTypes;
+    return noElementTypes;
+  }
 }
 
 DofOrderingFactory & Mesh::getDofOrderingFactory() {
@@ -1121,7 +1232,14 @@ int Mesh::numElements() {
 }
 
 int Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
-  return _physicalCellNodesForElementType[ elemTypePtr.get() ].dimension(0);
+  int numElements = 0;
+  for (int partitionNumber=0; partitionNumber<_numPartitions; partitionNumber++) {
+    if (   _partitionedPhysicalCellNodesForElementType[partitionNumber].find( elemTypePtr.get() )
+        != _partitionedPhysicalCellNodesForElementType[partitionNumber].end() ) {
+      numElements += _partitionedPhysicalCellNodesForElementType[partitionNumber][ elemTypePtr.get() ].dimension(0);
+    }
+  }
+  return numElements;
 }
 
 int Mesh::numGlobalDofs() {
@@ -1137,16 +1255,21 @@ int Mesh::parityForSide(int cellID, int sideIndex) {
   }
   // if we get here, then we have an active element...
   ElementTypePtr elemType = elem->elementType();
-  int cellIndex = elem->cellIndex();
-  int parity = _cellSideParitiesForElementType[elemType.get()](cellIndex,sideIndex);
+  int globalCellIndex = elem->globalCellIndex();
+  int parity = _cellSideParitiesForElementType[elemType.get()](globalCellIndex,sideIndex);
+  
   if (_cellSideParitiesForCellID[cellID][sideIndex] != parity ) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "parity lookups don't match");
   }
   return parity;
 }
 
-FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr ) {
-  return _physicalCellNodesForElementType[ elemTypePtr.get() ];
+FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, int partitionNumber ) {
+  if (partitionNumber >= 0) {
+    return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+  } else {
+    return _physicalCellNodesForElementType[ elemTypePtr.get() ];
+  }
 }
 
 void Mesh::rebuildLookups() {
@@ -1264,23 +1387,26 @@ int Mesh::rowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
   int maxRowSize = 0;
-  for (elemTypeIt = _elementTypes.begin(); elemTypeIt != _elementTypes.end();
-       elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *elemTypeIt;
-    int numSides = elemTypePtr->cellTopoPtr->getSideCount();
-    vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
-    vector< int >::iterator fluxIDIt;
-    int numFluxDofs = 0;
-    for (fluxIDIt = fluxIDs.begin(); fluxIDIt != fluxIDs.end(); fluxIDIt++) {
-      int fluxID = *fluxIDIt;
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideIndex);
-        numFluxDofs += numDofs;
+  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+    for (elemTypeIt = _elementTypesForPartition[partitionNumber].begin(); 
+         elemTypeIt != _elementTypesForPartition[partitionNumber].end();
+         elemTypeIt++) {
+      ElementTypePtr elemTypePtr = *elemTypeIt;
+      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
+      vector< int >::iterator fluxIDIt;
+      int numFluxDofs = 0;
+      for (fluxIDIt = fluxIDs.begin(); fluxIDIt != fluxIDs.end(); fluxIDIt++) {
+        int fluxID = *fluxIDIt;
+        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideIndex);
+          numFluxDofs += numDofs;
+        }
       }
+      int numFieldDofs = elemTypePtr->trialOrderPtr->totalDofs() - numFluxDofs;
+      int maxPossible = numFluxDofs * 2 + numSides*fluxIDs.size() + numFieldDofs;  // a side can be shared by 2 elements, and vertices can be shared
+      maxRowSize = max(maxPossible, maxRowSize);
     }
-    int numFieldDofs = elemTypePtr->trialOrderPtr->totalDofs() - numFluxDofs;
-    int maxPossible = numFluxDofs * 2 + numSides*fluxIDs.size() + numFieldDofs;  // a side can be shared by 2 elements, and vertices can be shared
-    maxRowSize = max(maxPossible, maxRowSize);
   }
   return maxRowSize;
 }
