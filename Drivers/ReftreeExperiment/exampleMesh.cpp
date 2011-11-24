@@ -37,6 +37,9 @@ public:
   void setParent(int parentID){
     _parentID = parentID;
   }
+  int numVertices(){
+    return _vertices.size();
+  }
   vector<int> vertices(){
     return _vertices;
   }
@@ -51,10 +54,11 @@ private:
   int *_globalIDs;
   vector<element> _elements;  
   vector<int> _myPartitionGlobalIDs;  //vector of global IDs for this given partition
-  
+  int _thisNode;
 public: 
   //constructor
-  exampleSquareMesh(){
+  exampleSquareMesh(int nodeID){
+    _thisNode = nodeID;
     _numCoarseElements = 4;
     _numElements = _numCoarseElements; 
     _numVertices = 9;
@@ -109,7 +113,7 @@ public:
     */
     for (int i=0;i<4;i++){
       
-      int newElemID = _numElements+1; // new element ID = next element number
+      int newElemID = _numElements; // new element ID = next element number
       //      cout << "adding " << newElemID << " child to elemID = " << elemID << endl;
       _elements[elemID].addChild(newElemID);
 
@@ -221,12 +225,27 @@ public:
     return _myPartitionGlobalIDs[index];
   }
 
+  int isInPartition(int ID){
+    for (int j = 0;j<numPartitionGlobalIDs();j++){
+      if (getPartitionGlobalID(j)==ID){
+	return 1;
+      }
+    }
+    return 0; //no match
+
+  }
+
   void printPartitionIDs(){
     cout << "Partition IDs are: " << endl;
     for (unsigned int i = 0;i<_myPartitionGlobalIDs.size();i++){
       cout << _myPartitionGlobalIDs[i] << endl;
     }
     return;
+  }
+  
+  // returns back the node associated with this copy of the mesh
+  int thisNode(){
+    return _thisNode;
   }
  
   //------------------------- zoltan interface functions --------------------------------------------
@@ -270,14 +289,20 @@ public:
 
     exampleSquareMesh *mesh = (exampleSquareMesh *)data;   
     *ierr = ZOLTAN_OK;
-    
-    // In this example, return the IDs of our objects, but no weights.
-    // Zoltan will assume equally weighted objects.
-    
+      
+    // assumes that the n initial mesh elements are ordered 1:n. 
+    int count = 0;
     for (int i=0; i<mesh->numCoarseElems(); i++){
       global_ids[i] = i;
       local_ids[i] = i;
-      in_order[i] = 0;
+      in_order[i] = 0; // let zoltan figure out ordering
+      num_vert[i] = mesh->_elements[global_ids[i]].numVertices();
+      // warning - assumes num_gid_entries = 1!!!
+      for (int j=0;j<num_vert[i];j++){
+	vertices[count] = mesh->_elements[global_ids[i]].vertices()[j];
+	count++;
+      }
+      assigned[i] = mesh->isInPartition(i);      
     }
     return;	   
   }    
@@ -288,7 +313,7 @@ public:
     
     int parentID = *global_id;
     element parentElem = mesh->_elements[parentID];
-    
+    cout << "----num children for elem " << parentID << " are: " << parentElem.numChildren() << endl;
     return parentElem.numChildren();
   }
 
@@ -303,15 +328,23 @@ public:
     int vertexInd = 0;
     for (int i = 0; i<parentElem.numChildren();i++){
       child_gids[i] = childIDs[i];
-      num_vert[i] = 4;
+      assigned[i] = mesh->isInPartition(child_gids[i]);
+      num_vert[i] = mesh->_elements[child_gids[i]].numVertices();
       vector<int> childVertices = mesh->_elements[childIDs[i]].vertices();
       for (int j = 0; j<num_vert[i];j++){       	
-	vertices[vertexInd++] = childVertices[j];	
+	vertices[vertexInd] = childVertices[j];	
+	vertexInd++;
       }
       ref_type[i] = ZOLTAN_IN_ORDER;
-    }
-    
+      cout << "---Children of " << parentID << " are: " << childIDs[i] << " and assigned = "<< mesh->isInPartition(child_gids[i])<< " and have " << num_vert[i] << " vertices"<<endl;
+    }    
+  }
 
+  static void get_child_weight(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int wgt_dim, float *obj_wgt, int *ierr){
+    if (wgt_dim>0){
+      obj_wgt[0]=1;
+    }
+    return;
   }
 
   
@@ -372,21 +405,24 @@ int main(int argc, char *argv[]){
   int numNodes = size;
   int masterNode = 0; // designate first node as master node
 
-
-  exampleSquareMesh mesh = exampleSquareMesh();
+  exampleSquareMesh mesh = exampleSquareMesh(myNode);
   mesh.refineElement(1);
   mesh.refineElement(2);
+  cout << "Mesh has node: " << mesh.thisNode() << endl;
 
   // in master node, distribute element IDs to other nodes
   if (myNode==masterNode){
     mesh.printElements();      
     cout << "Number of active elements = " << mesh.numActiveElems()<<endl;
 
-    // make global IDs list
+    // make global IDs list - is it for active elems, or everything?
     int totalObj = mesh.numActiveElems();
+    // int totalObj = mesh.numElems();
+    //    int totalObj = mesh.numCoarseElems();
     int objList[totalObj];
     for (int i=0;i<totalObj;i++){
       objList[i] = mesh.getActiveElemGlobalIndex(i);
+      //objList[i] = i;
     }
 
     // divide up total objects to pass around
@@ -432,12 +468,9 @@ int main(int argc, char *argv[]){
     }
   }
   
-  cout << "For node: " << myNode << " ";
-  mesh.printPartitionIDs(); 
-
-  delete zz;
-  MPIExit();
-  return 0;
+  cout << " for node: " << myNode << endl;
+  mesh.printPartitionIDs();
+  
 
   ///////////////////////////////////////////////////////////////////
   // Set the Zoltan parameters, and the names of the query functions
@@ -445,15 +478,21 @@ int main(int argc, char *argv[]){
  
   // General parameters 
 
-  zz->Set_Param( "LB_METHOD", "RANDOM");    /* Zoltan method: "BLOCK" */
+  zz->Set_Param( "LB_METHOD", "REFTREE");    /* Zoltan method */
   zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
   zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
   zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   /* we omit object weights */
-
+  zz->Set_Param( "DEBUG_LEVEL", "10");   /* no output */
+  zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse mesh
   // Query functions 
   
-  zz->Set_Num_Obj_Fn(exampleSquareMesh::get_number_of_objects, &mesh);
-  zz->Set_Obj_List_Fn(exampleSquareMesh::get_object_list, &mesh);
+  //  zz->Set_Num_Obj_Fn(exampleSquareMesh::get_number_of_objects, &mesh);
+  //  zz->Set_Obj_List_Fn(exampleSquareMesh::get_object_list, &mesh);
+  zz->Set_Num_Coarse_Obj_Fn(exampleSquareMesh::get_num_coarse_elem, &mesh);
+  zz->Set_Coarse_Obj_List_Fn(exampleSquareMesh::get_coarse_elem_list, &mesh);
+  zz->Set_Num_Child_Fn(exampleSquareMesh::get_num_children, &mesh);
+  zz->Set_Child_List_Fn(exampleSquareMesh::get_children, &mesh);
+  zz->Set_Child_Weight_Fn(exampleSquareMesh::get_child_weight, &mesh);
 
   ////////////////////////////////////////////////////////////////
   // Zoltan can now partition the objects in this collection.
@@ -462,7 +501,6 @@ int main(int argc, char *argv[]){
   // partition 0, process rank 1 will own partition 1, and so on.
   ////////////////////////////////////////////////////////////////
 
- 
   int changes;
   int numGidEntries;
   int numLidEntries;
@@ -487,6 +525,17 @@ int main(int argc, char *argv[]){
     delete zz;
     exit(0);
   }
+  cout << "For node: " << myNode << ", original globalIDs are " << endl;
+  for (int i=0;i<numExport;i++){
+    cout << exportGlobalIds[i] << endl;
+  }
+
+
+  cout << "For node: " << myNode << ", new globalIDs should be " << endl;
+  for (int i=0;i<numImport;i++){
+    cout << importGlobalIds[i] << endl;
+  }
+
   
   delete zz;
   MPIExit();
