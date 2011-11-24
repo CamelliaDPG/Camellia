@@ -121,44 +121,6 @@ void Solution::initialize() {
   _residualsComputed = false;
 }
 
-#ifdef HAVE_MPI
-Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
-#else
-Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
-#endif
-  // determine the local dofs we have, and what their global indices are:
-  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  int localDofsSize;
-  if (rank == 0) {
-    localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
-  } else {
-    localDofsSize = myGlobalIndicesSet.size();
-  }
-  int *myGlobalIndices = new int[ localDofsSize ];
-
-  // copy from set object into the allocated array
-  int offset = 0;
-  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
-       indexIt != myGlobalIndicesSet.end();
-       indexIt++ ){
-    myGlobalIndices[offset++] = *indexIt;
-  }
-  if ( rank == 0 ) {
-    // set up the zmcs, which come at the end...
-    for (int i=0; i<zeroMeanConstraintsSize; i++) {
-      myGlobalIndices[offset++] = i + numGlobalDofs;
-    }
-  }
-  
-  int indexBase = 0;
-  cout << "process " << rank << " about to construct localMap.\n";
-  Epetra_Map localMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-//  Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
-  
-  delete myGlobalIndices;
-  return localMap;
-}
-
 void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();
@@ -299,6 +261,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
         }
         //cout << "globalDofIndices:" << endl << globalDofIndices;
         
+//        int errCode = globalStiffMatrix.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+//        if (errCode > 0) {
+//          cout << "could not SumIntoGlobalValues for globalDofIndices starting at " << globalDofIndices(0) << endl;
+//          globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+//        }
         globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
         rhsVector.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
       }
@@ -338,11 +305,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   rhsVector.GlobalAssemble();
   
-  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
+  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
   
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
 /*  // DEBUG code: check symmetry of globalStiffMatrix
   double tol = 1e-12;
@@ -1583,3 +1550,41 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
   }
   fout.close();
 }
+
+#ifdef HAVE_MPI
+Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
+#else
+  Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
+#endif
+    // determine the local dofs we have, and what their global indices are:
+    set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+    int localDofsSize;
+    if (rank == 0) {
+      localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
+    } else {
+      localDofsSize = myGlobalIndicesSet.size();
+    }
+    int *myGlobalIndices = new int[ localDofsSize ];
+    
+    // copy from set object into the allocated array
+    int offset = 0;
+    for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
+         indexIt != myGlobalIndicesSet.end();
+         indexIt++ ){
+      myGlobalIndices[offset++] = *indexIt;
+    }
+    if ( rank == 0 ) {
+      // set up the zmcs, which come at the end...
+      for (int i=0; i<zeroMeanConstraintsSize; i++) {
+        myGlobalIndices[offset++] = i + numGlobalDofs;
+      }
+    }
+    
+    int indexBase = 0;
+    cout << "process " << rank << " about to construct localMap.\n";
+    //Epetra_Map localMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+    Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
+    
+    delete myGlobalIndices;
+    return localMap;
+  }

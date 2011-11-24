@@ -902,6 +902,26 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
   if ((partitionNumber < 0) || (partitionNumber >= _numPartitions) ) {
     return dofIndices;
   }
+  set<int> previouslyClaimedDofIndices;
+  for (int i=0; i<partitionNumber; i++) {
+    vector< ElementPtr >::iterator elemIterator;
+    for (elemIterator =  _partitions[i].begin(); elemIterator != _partitions[i].end(); elemIterator++) {
+      ElementPtr elem = *elemIterator;
+      ElementTypePtr elemTypePtr = elem->elementType();
+      int numLocalDofs = elemTypePtr->trialOrderPtr->totalDofs();
+      int cellID = elem->cellID();
+      for (int localDofIndex=0; localDofIndex < numLocalDofs; localDofIndex++) {
+        pair<int,int> key = make_pair(cellID, localDofIndex);
+        map< pair<int,int>, int >::iterator mapEntryIt = _localToGlobalMap.find(key);
+        if ( mapEntryIt == _localToGlobalMap.end() ) {
+          TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+        }
+        int dofIndex = (*mapEntryIt).second;
+        cout << "previouslyClaimedDofIndices: dofIndex: " << dofIndex << endl;
+        previouslyClaimedDofIndices.insert(dofIndex);
+      }
+    }
+  }
   vector< ElementPtr >::iterator elemIterator;
   for (elemIterator =  _partitions[partitionNumber].begin(); 
        elemIterator != _partitions[partitionNumber].end(); 
@@ -917,7 +937,11 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
       if ( mapEntryIt == _localToGlobalMap.end() ) {
         TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
       }
-      dofIndices.insert((*mapEntryIt).second);
+      int dofIndex = (*mapEntryIt).second;
+      if ( previouslyClaimedDofIndices.find(dofIndex) == previouslyClaimedDofIndices.end() ) {
+        dofIndices.insert(dofIndex);
+        cout << "inserted dofIndex: " << dofIndex << endl;
+      }
     }
   }
   return dofIndices;
