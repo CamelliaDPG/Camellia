@@ -22,9 +22,11 @@ int main(int argc, char *argv[]) {
   int rank=mpiSession.getRank();
   int numProcs=mpiSession.getNProc();
 #else
+  int rank = 0;
+  int numProcs = 1;
 #endif
-  int polyOrder = 3;
-  int pToAdd = 2; // for tests
+  int polyOrder = 1;
+  int pToAdd = 0; // for tests
   
   // define our manufactured solution:
   double epsilon = 1e-2;
@@ -48,7 +50,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 16, verticalCells = 16;
+  int horizontalCells = 2, verticalCells = 1;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
 
@@ -63,14 +65,18 @@ int main(int argc, char *argv[]) {
   // solve
   solution->solve(); 
 
-  // save a data file for plotting in MATLAB
-  solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
-  solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
-  solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "Confusion_beta_n_hat_adaptive.dat");
+  cout << "Processor " << rank << " returned from solve()." << endl;
+  
+  if (rank == 0) {
+    // save a data file for plotting in MATLAB
+    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
+    solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "Confusion_beta_n_hat_adaptive.dat");
 
-  cout << "Done solving and writing" << endl;
-
-  int numRefinements = 0;
+    cout << "Done solving and writing" << endl;
+  }
+    
+  /*int numRefinements = 0;
   double thresholdFactor = 0.20;
   
   double totalEnergyErrorSquared;
@@ -110,5 +116,5 @@ int main(int argc, char *argv[]) {
   // save a data file for plotting in MATLAB
   solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
   solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
-  
+  */
 }
