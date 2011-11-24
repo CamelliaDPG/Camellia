@@ -305,11 +305,15 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   rhsVector.GlobalAssemble();
   
-  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
+  if (rank==0) {
+    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
+  }
   
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
-  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  if (rank==0) {
+    EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  }
   
 /*  // DEBUG code: check symmetry of globalStiffMatrix
   double tol = 1e-12;
@@ -331,6 +335,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   if (rank == 0) {
   // borrowed from the STK Poisson example
     // Vector for use in applying BCs
+    
+    // !!!!!
+    // TODO: fix this: we hang here waiting for the other processors in Comm to get here, which of course they don't.
+    // !!!!!
+    
     Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
     Epetra_MultiVector v(globalMapG,true);
     v.PutScalar(0.0);
