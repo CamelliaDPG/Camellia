@@ -9,9 +9,20 @@
 // Trilinos includes
 #include "Intrepid_FieldContainer.hpp"
 
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
+#ifdef HAVE_MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  int rank=mpiSession.getRank();
+  int numProcs=mpiSession.getNProc();
+#else
+#endif
   int polyOrder = 3;
   int pToAdd = 2; // for tests
   
