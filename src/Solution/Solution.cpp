@@ -151,7 +151,9 @@ Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstr
   }
   
   int indexBase = 0;
-  Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
+  cout << "process " << rank << " about to construct localMap.\n";
+  Epetra_Map localMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+//  Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
   
   delete myGlobalIndices;
   return localMap;
@@ -169,12 +171,16 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   cout << "rank: " << rank << " of " << numProcs << endl;
+  _mesh->setNumPartitions(numProcs);
+  _mesh->repartition();
 #else
   Epetra_SerialComm Comm;
 #endif
   
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
+  
+  cout << "process " << rank << " about to get elementTypes.\n";
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -190,14 +196,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     }
   }
   int numGlobalDofs = _mesh->numGlobalDofs();
+  
+  cout << "process " << rank << " about to call getLocalMap().\n";
   Epetra_Map localMap = getLocalMap(rank,numGlobalDofs,zeroMeanConstraints.size(),Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   cout << "max row size for mesh: " << maxRowSize << endl;
+  cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
   Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, localMap, maxRowSize);
   Epetra_FEVector rhsVector(localMap);
   
+  cout << "process " << rank << " about to loop over elementTypes.\n";
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
