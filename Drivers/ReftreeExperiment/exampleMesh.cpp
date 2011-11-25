@@ -43,6 +43,10 @@ public:
   vector<int> vertices(){
     return _vertices;
   }
+  void addVertex(int vertexID){
+    _vertices.push_back(vertexID);
+    return;
+  }
 };
 
 // every processor owns the entire mesh, but is only responsible for the elements in _myPartitionGlobalIDs
@@ -122,26 +126,26 @@ public:
       switch(i){
       case 0:
 	newVertices.push_back(oldVertices[0]);
-	newVertices.push_back(_numVertices+1);
-	newVertices.push_back(_numVertices+5);
+	newVertices.push_back(_numVertices+0);
 	newVertices.push_back(_numVertices+4);
+	newVertices.push_back(_numVertices+3);
 	break;
       case 1:
-	newVertices.push_back(_numVertices+1);
+	newVertices.push_back(_numVertices+0);
 	newVertices.push_back(oldVertices[1]);
-	newVertices.push_back(_numVertices+2);
-	newVertices.push_back(_numVertices+5);
+	newVertices.push_back(_numVertices+1);
+	newVertices.push_back(_numVertices+4);
 	break;
       case 2:
-	newVertices.push_back(_numVertices+5);
-	newVertices.push_back(_numVertices+2);
+	newVertices.push_back(_numVertices+4);
+	newVertices.push_back(_numVertices+1);
 	newVertices.push_back(oldVertices[2]);
-	newVertices.push_back(_numVertices+3);
+	newVertices.push_back(_numVertices+2);
 	break;
       case 3:
-	newVertices.push_back(_numVertices+4);
-	newVertices.push_back(_numVertices+4);
 	newVertices.push_back(_numVertices+3);
+	newVertices.push_back(_numVertices+4);
+	newVertices.push_back(_numVertices+2);
 	newVertices.push_back(oldVertices[3]);
 	break;
       };
@@ -152,6 +156,13 @@ public:
       _numElements += 1;
     }
     //    cout << "New number of elements: " << _numElements << endl;       
+  }
+  void addVertex(int elementID, int vertexID){
+    _elements[elementID].addVertex(vertexID);
+    return;
+  }
+  vector<int> getVertices(int elementID){
+    return _elements[elementID].vertices();
   }
 
   void printElements(){
@@ -248,7 +259,7 @@ public:
     return _thisNode;
   }
  
-  //------------------------- zoltan interface functions --------------------------------------------
+  //---------------------- zoltan interface functions ----------------------------------------
 
   static int get_number_of_objects(void *data, int *ierr){
 
@@ -271,7 +282,7 @@ public:
 
     for (int i=0; i<mesh->numPartitionGlobalIDs(); i++){
       globalID[i] = mesh->getPartitionGlobalID(i);
-      localID[i] = i;
+      //      localID[i] = i;
     }
     return;
   }
@@ -292,6 +303,7 @@ public:
       
     // assumes that the n initial mesh elements are ordered 1:n. 
     int count = 0;
+    int num_assigned = 0;
     for (int i=0; i<mesh->numCoarseElems(); i++){
       global_ids[i] = i;
       local_ids[i] = i;
@@ -302,8 +314,13 @@ public:
 	vertices[count] = mesh->_elements[global_ids[i]].vertices()[j];
 	count++;
       }
-      assigned[i] = mesh->isInPartition(i);      
-    }
+      assigned[i] = mesh->isInPartition(i);            
+      if (assigned[i]==1){
+	num_assigned++;
+      }
+    }    
+    cout<< "num assigned: "<<num_assigned<<endl;
+  
     return;	   
   }    
 
@@ -323,11 +340,13 @@ public:
     *ierr = ZOLTAN_OK;
     
     int parentID = *parent_gid;
+
     element parentElem = mesh->_elements[parentID];
     vector<int> childIDs = parentElem.children();    
     int vertexInd = 0;
     for (int i = 0; i<parentElem.numChildren();i++){
       child_gids[i] = childIDs[i];
+      child_lids[i] = i;
       assigned[i] = mesh->isInPartition(child_gids[i]);
       num_vert[i] = mesh->_elements[child_gids[i]].numVertices();
       vector<int> childVertices = mesh->_elements[childIDs[i]].vertices();
@@ -406,8 +425,19 @@ int main(int argc, char *argv[]){
   int masterNode = 0; // designate first node as master node
 
   exampleSquareMesh mesh = exampleSquareMesh(myNode);
+
+  //manually add in extra vertices on neighbors - HARD CODED
+  /*
   mesh.refineElement(1);
+  int newVertex;
+  newVertex = mesh.getVertices(8)[0];
+  mesh.addVertex(0,newVertex);
+
   mesh.refineElement(2);
+  newVertex = mesh.getVertices(10)[0];
+  mesh.addVertex(3,newVertex);
+  */
+
   cout << "Mesh has node: " << mesh.thisNode() << endl;
 
   // in master node, distribute element IDs to other nodes
@@ -415,14 +445,14 @@ int main(int argc, char *argv[]){
     mesh.printElements();      
     cout << "Number of active elements = " << mesh.numActiveElems()<<endl;
 
-    // make global IDs list - is it for active elems, or everything?
+    // make global IDs list - is it for active elems, coarse elems, or everything both active/inactive?
     int totalObj = mesh.numActiveElems();
-    // int totalObj = mesh.numElems();
+    //        int totalObj = mesh.numElems();
     //    int totalObj = mesh.numCoarseElems();
     int objList[totalObj];
     for (int i=0;i<totalObj;i++){
       objList[i] = mesh.getActiveElemGlobalIndex(i);
-      //objList[i] = i;
+      //        objList[i] = i;
     }
 
     // divide up total objects to pass around
@@ -525,17 +555,18 @@ int main(int argc, char *argv[]){
     delete zz;
     exit(0);
   }
+
+  cout << "For node: " << myNode << ", num exported gids: " << numExport << endl;
   cout << "For node: " << myNode << ", original globalIDs are " << endl;
   for (int i=0;i<numExport;i++){
     cout << exportGlobalIds[i] << endl;
   }
 
-
   cout << "For node: " << myNode << ", new globalIDs should be " << endl;
+  cout << "For node: " << myNode << ", num imported gids: " << numImport << endl;
   for (int i=0;i<numImport;i++){
     cout << importGlobalIds[i] << endl;
   }
-
   
   delete zz;
   MPIExit();
