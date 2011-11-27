@@ -853,17 +853,25 @@ Boundary & Mesh::boundary() {
   return _boundary; 
 }
 
-int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int globalCellIndex) {
-  if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() ) 
-      && 
-      ( _globalCellIndexToCellID[elemTypePtr.get()].find( globalCellIndex )
-       !=
-        _globalCellIndexToCellID[elemTypePtr.get()].end()
-       )
-      )
-    return _globalCellIndexToCellID[elemTypePtr.get()][globalCellIndex];
-  else
-    return -1;
+int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber) {
+  if (partitionNumber == -1){ 
+    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() )
+        && 
+        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex )
+         !=
+          _globalCellIndexToCellID[elemTypePtr.get()].end()
+         )
+        )
+      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
+    else
+      return -1;
+  } else {
+    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
+        &&
+         (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
+           return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
+    } else return -1;
+  }
 }
 
 FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber ) {
@@ -940,7 +948,7 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
       int dofIndex = (*mapEntryIt).second;
       if ( previouslyClaimedDofIndices.find(dofIndex) == previouslyClaimedDofIndices.end() ) {
         dofIndices.insert(dofIndex);
-        cout << "inserted dofIndex: " << dofIndex << endl;
+//        cout << "inserted dofIndex: " << dofIndex << endl;
       }
     }
   }

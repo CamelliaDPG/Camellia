@@ -160,13 +160,15 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int numGlobalDofs = _mesh->numGlobalDofs();
   
   cout << "process " << rank << " about to call getLocalMap().\n";
-  Epetra_Map localMap = getLocalMap(rank,numGlobalDofs,zeroMeanConstraints.size(),Comm);
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  Epetra_Map localMap = getLocalMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   cout << "max row size for mesh: " << maxRowSize << endl;
   cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
-  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, localMap, maxRowSize);
+  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, maxRowSize);
+//  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, localMap, maxRowSize);
   Epetra_FEVector rhsVector(localMap);
   
   cout << "process " << rank << " about to loop over elementTypes.\n";
@@ -254,7 +256,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       //cout << "finalStiffness: " << endl << finalStiffness;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        int cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch);
+        int cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
         // we have the same local-to-global map for both rows and columns
         for (int i=0; i<numTrialDofs; i++) {
           globalDofIndices(i) = _mesh->globalDofIndex(cellID,i);
@@ -295,25 +297,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     zmcIndex++;
   }
   
-  // determine and impose BCs
-  FieldContainer<int> bcGlobalIndices;
-  FieldContainer<double> bcGlobalValues;
-  
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()));
-  int numBCs = bcGlobalIndices.size();
-  //cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-  
   rhsVector.GlobalAssemble();
   
-  if (rank==0) {
-    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
-  }
+  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
   
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
-  if (rank==0) {
-    EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  }
+  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  
+//  if (true) {
+//    cout << "Exiting early--debugging...\n";
+//    return;
+//  }
   
 /*  // DEBUG code: check symmetry of globalStiffMatrix
   double tol = 1e-12;
@@ -331,10 +326,77 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   } else {
     cout << "WARNING: globalStiffnessMatrix is not symmetric!!" << endl;
   }*/
-  
+
+  // TODO: this line should go away for the true MPI solution--added in for debugging
+  // TODO: similarly, the commented-out section wants to replace the section that follows it, up to the solve itself.
   if (rank == 0) {
   // borrowed from the STK Poisson example
     // Vector for use in applying BCs
+
+//  // determine and impose BCs
+//  FieldContainer<int> bcGlobalIndices;
+//  FieldContainer<double> bcGlobalValues;
+//  
+//  //_mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()));
+//  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()),myGlobalIndicesSet);
+//  int numBCs = bcGlobalIndices.size();
+//  //cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+//  
+//  //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
+//  Epetra_MultiVector v(localMap,true);
+//  v.PutScalar(0.0);
+//  // Loop over boundary nodes
+//  for (int i = 0; i < numBCs; i++) {
+//    int globalIndex = bcGlobalIndices(i);
+//    v[0][globalIndex] = globalIndex;
+//  }
+//  
+//  Epetra_MultiVector rhsDirichlet(localMap,true);
+//
+//  globalStiffMatrix.Apply(v,rhsDirichlet);
+//  
+//  // Update right-hand side
+//  rhsVector.Update(-1.0,rhsDirichlet,1.0);  
+//  
+//  if (numBCs == 0) {
+//    cout << "Solution: Warning: Imposing no BCs." << endl;
+//  } else {
+//    rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
+//  }
+//  
+//  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
+//  //  and add one to diagonal.
+//  cout << "numBCs: " << numBCs << endl;
+//  ML_Epetra::Apply_OAZToMatrix(&bcGlobalIndices(0), numBCs, globalStiffMatrix);
+//  
+//  //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
+//  
+//  // Dump matrices to disk
+//  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_before_bcs.dat",globalStiffMatrix);
+//  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+//  
+//  cout << "Finished imposing BCs." << endl;
+//  
+//  //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
+//  
+//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+//  
+//  // solve the global matrix system...
+//  
+//  Epetra_FEVector lhsVector(localMap);
+//  
+//  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
+//    
+//  if (rank == 0) {
+    
+    // determine and impose BCs
+    FieldContainer<int> bcGlobalIndices;
+    FieldContainer<double> bcGlobalValues;
+    
+    _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()));
+    int numBCs = bcGlobalIndices.size();
+    //cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+
     
     // !!!!!
     // TODO: fix this: we hang here waiting for the other processors in Comm to get here, which of course they don't.
@@ -422,6 +484,16 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     }
     
     // TODO: communicate solution information to other MPI nodes....
+    // (CODE below copied from trilinoscouplings/example/scaling/example_Poisson_stk.cpp)
+//#ifdef HAVE_MPI
+//    // Import solution onto current processor
+//    // FIXME
+//    int numNodesGlobal = globalMapG.NumGlobalElements();
+//    Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
+//    Epetra_Import  solnImporter(solnMap, globalMapG);
+//    Epetra_Vector  uCoeff(solnMap);
+//    uCoeff.Import(femCoefficients, solnImporter, Insert);
+//#endif
   }
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
@@ -1561,12 +1633,11 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
 }
 
 #ifdef HAVE_MPI
-Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
+Epetra_Map Solution::getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
 #else
-  Epetra_Map Solution::getLocalMap(int rank, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
+  Epetra_Map Solution::getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
 #endif
     // determine the local dofs we have, and what their global indices are:
-    set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
     int localDofsSize;
     if (rank == 0) {
       localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;

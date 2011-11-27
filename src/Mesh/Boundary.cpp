@@ -88,6 +88,34 @@ vector< pair< int, int > > Boundary::boundaryElements(Teuchos::RCP< ElementType 
   return _boundaryElementsByType[elemTypePtr.get()];
 }
 
+void Boundary::bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc, 
+                           set<int> &globalIndexFilter) {
+  // there's a more efficient way to do this--but it's probably not worth it just yet
+  FieldContainer<int> allGlobalIndices;
+  FieldContainer<double> allGlobalValues;
+  this->bcsToImpose(allGlobalIndices,allGlobalValues,bc);
+  set<int> matchingFCIndices;
+  int i;
+  for (i=0; i<allGlobalIndices.size(); i++) {
+    int globalIndex = allGlobalIndices(i);
+    if (globalIndexFilter.find(globalIndex) != globalIndexFilter.end() ) {
+      matchingFCIndices.insert(i);
+    }
+  }
+  int numIndices = matchingFCIndices.size();
+  globalIndices.resize(numIndices);
+  globalValues.resize(numIndices);
+  
+  i=-1;
+  for (set<int>::iterator setIt = matchingFCIndices.begin();
+       setIt != matchingFCIndices.end(); setIt++) {
+    int matchingFCIndex = *setIt;
+    i++;
+    globalIndices(i) = allGlobalIndices(matchingFCIndex);
+    globalValues(i)  =  allGlobalValues(matchingFCIndex);
+  }
+}
+
 void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
                            FieldContainer<double> &globalValues, BC &bc) {
   
@@ -147,7 +175,8 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
   //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
-void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &bc, Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
+void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &bc, 
+                           Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
   globalDofIndicesAndValues.clear();
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;

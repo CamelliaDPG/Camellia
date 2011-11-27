@@ -63,6 +63,7 @@ public:
   void deleteElement( int cellID, int sideIndex ); // sideIndex: which of this element's sides is the boundary
   bool boundaryElement( int cellID, int sideIndex );
   vector< pair<int, int > > boundaryElements(Teuchos::RCP< ElementType > elemTypePtr);
+  void bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<int>& globalIndexFilter);
   void bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc);
   void bcsToImpose( map< int, double > &globalDofIndicesAndValues, BC &bc, Teuchos::RCP< ElementType > elemTypePtr,
                    map <int, bool> &isSingleton);

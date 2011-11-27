@@ -130,7 +130,7 @@ public:
   
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
   
-  int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex);
+  int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
   
   int globalDofIndex(int cellID, int localDofIndex);
   
