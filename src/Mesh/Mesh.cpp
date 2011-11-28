@@ -1477,6 +1477,14 @@ void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPol
   _partitionPolicy = partitionPolicy;
 }
 
+vector<int> Mesh::vertexIndicesForCell(int cellID) {
+  return _verticesForCellID[cellID];
+}
+
+FieldContainer<double> Mesh::vertexCoordinates(int vertexIndex) {
+  return _vertices[vertexIndex];
+}
+
 void Mesh::verticesForCell(FieldContainer<double>& vertices, int cellID) {
   vector<int> vertexIndices = _verticesForCellID[cellID];
   ElementTypePtr elemType = _elements[cellID]->elementType();

@@ -168,6 +168,9 @@ public:
   DofOrderingFactory & getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();
 
+  vector<int> vertexIndicesForCell(int cellID);
+  FieldContainer<double> vertexCoordinates(int vertexIndex);
+  
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
