@@ -4,12 +4,13 @@
 //
 //  Copyright 2011 Nathan Roberts. All rights reserved.
 //
-//#ifdef HAVE_MPI
-#include <Teuchos_GlobalMPISession.hpp>
-//#endif
 
 #include <iostream>
 #include "ZoltanMeshPartitionPolicy.h"
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#endif
 
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName){
   _ZoltanPartitioner = partitionerName;  
