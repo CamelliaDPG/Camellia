@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <stdlib.h> 
+#include <vector>
 
 #include "ZoltanMeshPartitionPolicy.h"
 
@@ -67,10 +68,10 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   zz->Set_Param( "LB_METHOD", "BLOCK");    /* Zoltan method */
   //  zz->Set_Param( "LB_METHOD", "HSFC");    /* Zoltan method */
   //  zz->Set_Param( "LB_METHOD", "REFTREE");    /* Zoltan method */  
-  zz->Set_Param( "RANDOM_MOVE_FRACTION", ".5");    /* Zoltan "random" partition param */
+  zz->Set_Param( "RANDOM_MOVE_FRACTION", "1.0");    /* Zoltan "random" partition param */
   zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
   zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
-  zz->Set_Param( "OBJ_WEIGHT_DIM", "1");   
+  zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   
   zz->Set_Param( "DEBUG_LEVEL", "10");
   zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse mesh
   
@@ -80,7 +81,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   
   // General query functions
   zz->Set_Num_Obj_Fn(&get_number_of_objects, &myData);
-  //  zz->Set_Obj_List_Fn(&ZoltanMeshPartitionPolicy::get_object_list, &myData);
+  zz->Set_Obj_List_Fn(&ZoltanMeshPartitionPolicy::get_object_list, &myData);
 
   /*
   // HSFC query functions   
@@ -116,16 +117,51 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   if (rc != ZOLTAN_OK){
     printf("Partitioning failed on process %d\n",myNode);
     delete zz;
-    MPI::Finalize();
     exit(0);
+  }
+  
+  vector<int> globalIDs = getListOfActiveGlobalIDs(partitionedActiveCells);
+  cout << "Global IDs for node " << myNode << " are " << endl;
+  for (unsigned int i=0;i<globalIDs.size();i++){
+    cout << globalIDs[i] << ", ";
+  }
+  cout <<endl;
+
+  cout << "For node: " << myNode << ", num exported gids: " << numExport << endl;
+  cout << "For node: " << myNode << ", exported globalIDs are " << endl;
+  for (int i=0;i<numExport;i++){
+    cout << exportGlobalIds[i] << ", "<< endl;
+  } 
+
+  cout << "For node: " << myNode << ", num imported gids: " << numImport << endl;
+  cout << "For node: " << myNode << ", imported globalIDs should be " << endl;
+  for (int i=0;i<numImport;i++){
+    cout << importGlobalIds[i] << ", " << endl;
   }
 
   delete zz;
-  MPI::Finalize();
 
 }    
 
-int getNextActiveIndex(FieldContainer<int> &partitionedActiveCells){
+// for current node, get active globalIDs
+vector<int> ZoltanMeshPartitionPolicy::getListOfActiveGlobalIDs(FieldContainer<int> partitionedActiveCells){
+  int myNode = 0;
+  int numNodes = 1;
+#ifdef HAVE_MPI
+  myNode   = Teuchos::GlobalMPISession::getRank();
+  numNodes = Teuchos::GlobalMPISession::getNProc();
+#endif 
+  vector<int> globalIDs;
+  int maxPartitionSize = partitionedActiveCells.dimension(1);
+  for (int i=0;i<maxPartitionSize;i++){
+    if (partitionedActiveCells(myNode,i)!=-1){
+      globalIDs.push_back(partitionedActiveCells(myNode,i));
+    }
+  }  
+  return globalIDs;
+}
+
+int ZoltanMeshPartitionPolicy::getNextActiveIndex(FieldContainer<int> &partitionedActiveCells){
   int myNode = 0;
   int numNodes = 1;
 #ifdef HAVE_MPI
@@ -139,7 +175,8 @@ int getNextActiveIndex(FieldContainer<int> &partitionedActiveCells){
     }
   } 
 }
-int getIndexOfGID(FieldContainer<int> &partitionedActiveCells,int globalID){
+
+int ZoltanMeshPartitionPolicy::getIndexOfGID(FieldContainer<int> &partitionedActiveCells,int globalID){
   int myNode = 0;
   int numNodes = 1;
 #ifdef HAVE_MPI
@@ -157,7 +194,7 @@ int getIndexOfGID(FieldContainer<int> &partitionedActiveCells,int globalID){
 }
 
 // get number of active elements
-static int get_number_of_objects(void *data, int *ierr){
+int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
   int myNode = 0;
   int numNodes = 1;
 #ifdef HAVE_MPI
@@ -175,10 +212,11 @@ static int get_number_of_objects(void *data, int *ierr){
       numActiveCellsInPartition++;
     }
   }  
+  cout << "Num active cells in node " << myNode << " is " << numActiveCellsInPartition << endl;
   return numActiveCellsInPartition;//mesh->numElements();
 }
 
-static void get_object_list(void *data, int sizeGID, int sizeLID,ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,int wgt_dim, float *obj_wgts, int *ierr){
+void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int sizeLID,ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,int wgt_dim, float *obj_wgts, int *ierr){
   int myNode = 0;
   int numNodes = 1;
 #ifdef HAVE_MPI
@@ -195,8 +233,7 @@ static void get_object_list(void *data, int sizeGID, int sizeLID,ZOLTAN_ID_PTR g
     globalID[i]= partitionedActiveCells(myNode,i);
     localID[i] = i;
   }
-  return;
-  
+  return; 
 }
 
 static int get_num_geom(void *data, int *ierr){
