@@ -64,15 +64,15 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   }
   
   /* Calling Zoltan Load-balancing routine */
-  //  zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
-  zz->Set_Param( "LB_METHOD", "BLOCK");    /* Zoltan method */
+  zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
+  //  zz->Set_Param( "LB_METHOD", "BLOCK");    /* Zoltan method */
   //  zz->Set_Param( "LB_METHOD", "HSFC");    /* Zoltan method */
   //  zz->Set_Param( "LB_METHOD", "REFTREE");    /* Zoltan method */  
   zz->Set_Param( "RANDOM_MOVE_FRACTION", "1.0");    /* Zoltan "random" partition param */
   zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
   zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
   zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   
-  zz->Set_Param( "DEBUG_LEVEL", "10");
+  zz->Set_Param( "DEBUG_LEVEL", "1");
   zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse mesh
   
   pair< Mesh *, FieldContainer<int> * > myData;
@@ -81,21 +81,20 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   
   // General query functions
   zz->Set_Num_Obj_Fn(&get_number_of_objects, &myData);
-  zz->Set_Obj_List_Fn(&ZoltanMeshPartitionPolicy::get_object_list, &myData);
+  zz->Set_Obj_List_Fn(&get_object_list, &myData);
+  
+  // HSFC query functions   
+  zz->Set_Num_Geom_Fn(get_num_geom, &myData);
+  zz->Set_Geom_Multi_Fn(get_geom_list, &myData);
 
   /*
-  // HSFC query functions   
-  zz->Set_Num_Geom_Fn(get_num_geom, mesh);
-  zz->Set_Geom_Multi_Fn(get_geom_list, mesh);
-
   // reftree query functions
   zz->Set_Num_Coarse_Obj_Fn(get_num_coarse_elem, mesh);
   zz->Set_Coarse_Obj_List_Fn(get_coarse_elem_list,mesh);
   zz->Set_Num_Child_Fn(get_num_children, mesh);
   zz->Set_Child_List_Fn(get_children, mesh);
-  zz->Set_Child_Weight_Fn(get_child_weight, mesh);
+  zz->Set_Child_Weight_Fn(get_child_weight, mesh);  
   */
-
   int changes;
   int numGidEntries;
   int numLidEntries;
@@ -193,6 +192,8 @@ int ZoltanMeshPartitionPolicy::getIndexOfGID(FieldContainer<int> &partitionedAct
   return -1;    
 }
 
+/*-------------------------ZOLTAN QUERY FUNCTIONS -------------------*/
+
 // get number of active elements
 int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
   int myNode = 0;
@@ -213,6 +214,7 @@ int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
     }
   }  
   cout << "Num active cells in node " << myNode << " is " << numActiveCellsInPartition << endl;
+  ierr = ZOLTAN_OK;
   return numActiveCellsInPartition;//mesh->numElements();
 }
 
@@ -233,10 +235,11 @@ void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int siz
     globalID[i]= partitionedActiveCells(myNode,i);
     localID[i] = i;
   }
+  ierr = ZOLTAN_OK;
   return; 
 }
 
-static int get_num_geom(void *data, int *ierr){
+int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr){
   int myNode = 0;
   int numNodes = 1;
 #ifdef HAVE_MPI
@@ -246,30 +249,77 @@ static int get_num_geom(void *data, int *ierr){
   pair< Mesh *, FieldContainer<int> * > *myData = (pair< Mesh *, FieldContainer<int> * > *)data;
   Mesh *mesh = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
+  ierr = ZOLTAN_OK;
   return mesh->vertexCoordinates(0).dimension(0); // spatial dimension
 }
 
-static void get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr){  
+// get a single coordinate identifying an element
+void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr){  
+  int myNode = 0;
+  int numNodes = 1;
+#ifdef HAVE_MPI
+  myNode   = Teuchos::GlobalMPISession::getRank();
+  numNodes = Teuchos::GlobalMPISession::getNProc();
+#endif 
+  pair< Mesh *, FieldContainer<int> * > *myData = (pair< Mesh *, FieldContainer<int> * > *)data;
+  Mesh *mesh = myData->first;
+  FieldContainer<int> partitionedActiveCells = *(myData->second);
+
+  // loop thru all objects
+  for (int i=0;i<num_obj;i++){
+    FieldContainer<double> vertices; // gets resized inside verticesForCell
+    mesh->verticesForCell(vertices, global_ids[i]);    
+    //average vertex positions together to get a centroid (avoids using vertex in case local enumeration overlaps)
+    int numVertices = vertices.dimension(0);
+    vector<double> coords(num_dim,0.0);
+    cout << "Centroid for GID " << global_ids[i] << " is at ";
+    for (int k=0;k<num_dim;k++){
+      for (int j=0;j<numVertices;j++){
+	coords[k] += vertices(j,k);
+      }
+      coords[k] = coords[k]/((double)(numVertices));
+      cout << coords[k] << ", ";
+    }
+    cout << endl;
+    
+    // store vertex centroid
+    for (int k=0;k<num_dim;k++){
+      geom_vec[k*num_dim+k] = coords[k];
+    }
+  }
+  ierr = ZOLTAN_OK;
+  return;
 }
 
-static void get_geom_fn(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, double *geom_vec, int *ierr){
+/* ------------------------REFTREE query functions -------------------*/
+
+// num elems in initial mesh
+int ZoltanMeshPartitionPolicy::get_num_coarse_elem(void *data, int *ierr){   
+  int myNode = 0;
+  int numNodes = 1;
+#ifdef HAVE_MPI
+  myNode   = Teuchos::GlobalMPISession::getRank();
+  numNodes = Teuchos::GlobalMPISession::getNProc();
+#endif 
+  pair< Mesh *, FieldContainer<int> * > *myData = (pair< Mesh *, FieldContainer<int> * > *)data;
+  Mesh *mesh = myData->first;
+  FieldContainer<int> partitionedActiveCells = *(myData->second);
+  return mesh->numInitialElements();
 }
 
-static int get_num_coarse_elem(void *data, int *ierr){   
-}
-
-static void get_coarse_elem_list(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, int *in_order, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
+void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, int *in_order, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
+  
   
 }
 
-static int get_num_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr){
+int ZoltanMeshPartitionPolicy::get_num_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr){
   return -1;
 }
 
-static void get_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR parent_gid, ZOLTAN_ID_PTR parent_lid, ZOLTAN_ID_PTR child_gids, ZOLTAN_ID_PTR child_lids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, ZOLTAN_REF_TYPE *ref_type, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
+void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR parent_gid, ZOLTAN_ID_PTR parent_lid, ZOLTAN_ID_PTR child_gids, ZOLTAN_ID_PTR child_lids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, ZOLTAN_REF_TYPE *ref_type, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
   
 }
 
-static void get_child_weight(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int wgt_dim, float *obj_wgt, int *ierr){
+void ZoltanMeshPartitionPolicy::get_child_weight(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int wgt_dim, float *obj_wgt, int *ierr){
   
 }
