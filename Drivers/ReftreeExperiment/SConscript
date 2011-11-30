@@ -1,9 +1,10 @@
 Import('*')
 
-#src_obj = env.Object([''])
+env.Append(CPPPATH = '../Confusion/')
 
-#env.Program('exec/simpleReftree',['simpleReftree.cpp'])
-#env.Program('exec/exampleBLOCK',['exampleBLOCK.cpp'])
-#env.Program('exec/exampleReftree',['exampleReftree.cpp'])
-env.Program('exec/exampleMesh',['exampleMesh.cpp'])
-env.Program('exec/mpiTest',['mpiTest.cpp'])
+#src_obj = env.Object([''])
+src_obj = env.Object(['../Confusion/ConfusionBilinearForm.cpp','../Confusion/ConfusionManufacturedSolution.cpp'])
+
+env.Program('exec/ZoltanConfusion',['ZoltanConfusionTest.cpp',src_obj])
+#env.Program('exec/exampleMesh',['exampleMesh.cpp'])
+#env.Program('exec/mpiTest',['mpiTest.cpp'])

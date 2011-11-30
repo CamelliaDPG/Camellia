@@ -13,6 +13,24 @@
 using namespace std;
 
 // Class representing collection of objects to be partitioned.
+class vertex{
+private:
+  int _vertexID;
+  vector<double> _coords;
+public:
+  vertex(int vertexID, double x, double y){
+    _vertexID = vertexID;
+    _coords.push_back(x);
+    _coords.push_back(y);
+  }
+  int ID(){
+    return _vertexID;
+  }
+  vector<double> coords(){
+    return _coords;
+  }
+};
+
 class element{
 private: 
   vector<int> _vertices;
@@ -59,6 +77,7 @@ private:
   vector<element> _elements;  
   vector<int> _myPartitionGlobalIDs;  //vector of global IDs for this given partition
   int _thisNode;
+  vector<vertex> _vertexList;
 public: 
   //constructor
   exampleSquareMesh(int nodeID){
@@ -67,6 +86,16 @@ public:
     _numElements = _numCoarseElements; 
     _numVertices = 9;
     vector<int> vertexIDs;
+
+    addVertexCoord(0,0.0,0.0);
+    addVertexCoord(1,0.5,0.0);
+    addVertexCoord(2,1.0,0.0);
+    addVertexCoord(3,0.0,0.5);
+    addVertexCoord(4,0.5,0.5);
+    addVertexCoord(5,1.0,0.5);
+    addVertexCoord(6,0.0,1.0);
+    addVertexCoord(7,0.5,1.0);
+    addVertexCoord(8,1.0,1.0);
 
     // first element
     vertexIDs.push_back(0);
@@ -91,7 +120,6 @@ public:
     vertexIDs.push_back(7);       
     _elements.push_back(element(vertexIDs));
     vertexIDs.clear();
-
 
     // fourth element
     vertexIDs.push_back(3);
@@ -152,18 +180,115 @@ public:
       element newElem = element(newVertices);
       _elements.push_back(newElem);
       newVertices.clear();
-      _numVertices+=5; // add 5 new vertices in an isotropic refinement
+      
+      vector<vector<double> > vertCoordVec = getVertexCoords(elemID);
+      
+      // set new vertice positions as averages of other vertexes
+      vector<double> xp(2,0.0);
+      for (int j = 0;j<4;j++){
+	for (int i = 0;i<2;i++){
+	  xp[i] = (vertCoordVec[j][i]+vertCoordVec[j+1][i])/2.0;
+	}	  
+	addVertexCoord(_numVertices+j,xp[0],xp[1]);
+      }
+      // last vertex in middle
+      xp = getElementCentroid(elemID);
+      if (1==1){
+	// or try just a vertex coordinate
+	xp[0] = vertCoordVec[0][0];
+	xp[1] = vertCoordVec[0][1];
+      }
+      addVertexCoord(_numVertices+4,xp[0],xp[1]);
+
+
       _numElements += 1;
     }
+    _numVertices+=5; // add 5 new vertices in an isotropic refinement
     //    cout << "New number of elements: " << _numElements << endl;       
+  }
+  int numVertices(int elementID){
+    return _elements[elementID].vertices().size();
   }
   void addVertex(int elementID, int vertexID){
     _elements[elementID].addVertex(vertexID);
     return;
   }
+
+  void addVertexCoord(int vertexID, double x, double y){
+    _vertexList.push_back(vertex(vertexID,x,y));
+  }
+
   vector<int> getVertices(int elementID){
     return _elements[elementID].vertices();
   }
+  
+  vector<vertex> getElemVertices(int elementID){
+    vector<int> vertices =  getVertices(elementID);
+    vector<vertex> elemVertices;
+    for (unsigned int i=0;i<vertices.size();i++){
+      cout << "Vertex ID for element " << elementID << " is: " << vertices[i] << endl;
+      elemVertices.push_back(getVertex(i));
+    }
+    return elemVertices;
+  }
+
+  vertex getVertex(int vertexID){
+    bool returned = false;
+    for (int i=0;i<_vertexList.size();i++){
+      if (_vertexList[i].ID()==vertexID){
+	returned = true;
+	return _vertexList[i];
+      }
+    }
+    if (~returned){
+      cout << "Did not find vertex, returning empty vertex" << endl;
+      return vertex(-1,0.0,0.0);
+    }
+  }
+
+  vector<vector<double> > getVertexCoords(int elementID){
+    vector<vector<double> > vertCoordVec;
+    vector<int> vertIDs = getVertices(elementID);
+    for (int i=0;i<numVertices(elementID);i++){
+      cout << "Vertex coords for " << elementID << ": ";      
+      vector<double> vertCoords = getVertex(vertIDs[i]).coords();
+      for (int j = 0;j<2;j++){
+	vertCoordVec.push_back(vertCoords);
+      }
+    }
+    return vertCoordVec;
+  }
+
+  void printVertexCoords(int elementID){
+    vector<int> vertIDs = getVertices(elementID);
+    for (int i=0;i<numVertices(elementID);i++){
+      cout << "Vertex coords for " << elementID << ": ";      
+      vector<double> vertCoords = getVertex(vertIDs[i]).coords();
+      for (int j = 0;j<2;j++){
+	cout << vertCoords[j] << " ";
+      }
+      cout << endl;
+    }
+    return;
+  }
+
+  //averages vertex coordinates
+  vector<double> getElementCentroid(int elementID){
+    vector<int> vertIDs = getVertices(elementID);
+    vector<double> vertSum(2,0.0);
+    for (int i=0;i<numVertices(elementID);i++){
+ 
+      vector<double> vertCoords = getVertex(vertIDs[i]).coords();      
+      for (int j = 0;j<2;j++){
+	vertSum[j]+=vertCoords[j];
+      }
+    }
+    for (int i=0;i<2;i++){
+      vertSum[i] = vertSum[i]/numVertices(elementID);
+    }
+    return vertSum;
+  }
+
 
   void printElements(){
     for (int i = 0;i < _numElements; i++){
@@ -243,7 +368,6 @@ public:
       }
     }
     return 0; //no match
-
   }
 
   void printPartitionIDs(){
@@ -252,6 +376,22 @@ public:
       cout << _myPartitionGlobalIDs[i] << endl;
     }
     return;
+  }
+  
+  void removePartitionIDs(vector<double> exportIDs){
+    for (unsigned int i = 0;i<_myPartitionGlobalIDs.size();i++){
+      for (unsigned int j = 0;j<exportIDs.size();j++){
+	if (_myPartitionGlobalIDs[i]==exportIDs[j]){
+	  _myPartitionGlobalIDs.erase(_myPartitionGlobalIDs.begin() + i);
+	}
+      }
+    }
+  }
+  
+  void addPartitionIDs(vector<double> importIDs){    
+    for (unsigned int j = 0;j<importIDs.size();j++){
+      _myPartitionGlobalIDs.push_back(importIDs[j]);
+    }
   }
   
   // returns back the node associated with this copy of the mesh
@@ -287,7 +427,41 @@ public:
     return;
   }
 
-  // ----------------BELOW FUNCTIONS: interface functions for reftree, not working --------------
+  static int get_num_geom(void *data, int *ierr){
+    exampleSquareMesh *mesh = (exampleSquareMesh *)data;
+    *ierr = ZOLTAN_OK;
+    return 2; // it's always 2d here
+  }
+
+  static void get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr){
+    exampleSquareMesh *mesh = (exampleSquareMesh *)data;
+    *ierr = ZOLTAN_OK;
+    cout << "Num objects is " << num_obj << endl;
+    cout << "Num dim is " << num_dim << endl;
+    for (int i=0;i<num_obj;i++){      
+      cout << "Global ids are " << global_ids[i] << endl;
+      vector<double> coords = mesh->getElementCentroid(global_ids[i]);
+      for (int j = 0;j<num_dim;j++){
+	geom_vec[i*num_dim+j] = coords[j];
+	cout << "Centroid is " << coords[j] << endl;
+      }
+    }       
+  }
+
+  static void get_geom_fn(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, double *geom_vec, int *ierr){
+    exampleSquareMesh *mesh = (exampleSquareMesh *)data;
+    *ierr = ZOLTAN_OK;
+    vector<double> coords = mesh->getElementCentroid(*global_id);
+    int num_dim = 2;
+    for (int j = 0;j<num_dim;j++){
+      geom_vec[j] = coords[j];
+      cout << "Centroid is " << coords[j] << endl;
+    }
+    
+
+  } 
+
+  // ----------------BELOW FUNCTIONS: interface functions for reftree --------------
 
 
   static int get_num_coarse_elem(void *data, int *ierr){
@@ -425,18 +599,53 @@ int main(int argc, char *argv[]){
   int masterNode = 0; // designate first node as master node
 
   exampleSquareMesh mesh = exampleSquareMesh(myNode);
+  vector<double> center =  mesh.getElementCentroid(0);
+  /*
+  cout << "Centroid: " << center[0] << "," << center[1] << endl;
+  center =  mesh.getElementCentroid(1);
+  cout << "Centroid: " << center[0] << "," << center[1] << endl;
+  center =  mesh.getElementCentroid(2);
+  cout << "Centroid: " << center[0] << "," << center[1] << endl;
+  center =  mesh.getElementCentroid(3);
+  cout << "Centroid: " << center[0] << "," << center[1] << endl;
+
+  */
+
 
   //manually add in extra vertices on neighbors - HARD CODED
-  /*
-  mesh.refineElement(1);
-  int newVertex;
-  newVertex = mesh.getVertices(8)[0];
-  mesh.addVertex(0,newVertex);
+  bool refine = true;
+  if (refine==true){
+    int newVertex;
+    mesh.refineElement(1);
+    newVertex = mesh.getVertices(7)[0];
+    mesh.addVertex(0,newVertex);
+    
+    mesh.refineElement(2);
+    newVertex = mesh.getVertices(11)[0];
+    mesh.addVertex(3,newVertex);
+    
+    /*
+    mesh.refineElement(9);
+    newVertex = mesh.getVertices(15)[0];
+    mesh.addVertex(8,newVertex);
 
-  mesh.refineElement(2);
-  newVertex = mesh.getVertices(10)[0];
-  mesh.addVertex(3,newVertex);
-  */
+    mesh.refineElement(10);
+    newVertex = mesh.getVertices(19)[0];
+    mesh.addVertex(11,newVertex);
+    */
+    
+  }
+
+  for (int i = 0;i<mesh.numActiveElems();i++){
+    int elemID = mesh.getActiveElemGlobalIndex(i);
+    cout << "element " << elemID << " has vertices ";
+    vector<int> verts = mesh.getVertices(elemID);
+    for (int j = 0;j<verts.size();j++){
+      cout << verts[j] << ", ";
+    }
+    cout << endl;
+  }
+
 
   cout << "Mesh has node: " << mesh.thisNode() << endl;
 
@@ -453,49 +662,15 @@ int main(int argc, char *argv[]){
     for (int i=0;i<totalObj;i++){
       objList[i] = mesh.getActiveElemGlobalIndex(i);
       //        objList[i] = i;
-    }
-
-    // divide up total objects to pass around
-    int objPerNode[numNodes];
-    for (int i = 0;i<numNodes;i++){
-      objPerNode[i] = totalObj/numNodes;
-    }    
-    // add remainder cyclically
-    int remainder = totalObj%numNodes;
-    for (int i = 0;i<remainder;i++){
-      objPerNode[i]++;
-    }    
+    }   
 
     // store object IDs for master node 
-    for (int i = 0;i<objPerNode[0];i++){
+    for (int i = 0;i<totalObj;i++){
       mesh.addPartitionGlobalID(objList[i]);
     }
 
-    // send out the actual objects to each other node
-    int listIndex = objPerNode[0]; //start at offset from objects for first node
-    for (int node = 1;node<numNodes;node++){
-      MPI::COMM_WORLD.Send(&objPerNode[node],1,MPI::INT,node,tag);
 
-      // build list of objects to send out
-      int objListPart[objPerNode[node]];
-      for (int i = 0;i<objPerNode[node];i++){
-	objListPart[i] = objList[listIndex];
-	listIndex++;
-      }
-      MPI::COMM_WORLD.Send(&(objListPart[0]),objPerNode[node],MPI::INT,node,tag);
-
-    }
-
-  }else{ // if you're another node, receive input
-    
-    int recvObjPerNode;
-    MPI::COMM_WORLD.Recv(&recvObjPerNode,1,MPI::INT,masterNode,tag,status);    
-    
-    int objPart[recvObjPerNode];
-    MPI::COMM_WORLD.Recv(&(objPart[0]),recvObjPerNode,MPI::INT,masterNode,tag,status);    
-    for (int i = 0;i<recvObjPerNode;i++){
-      mesh.addPartitionGlobalID(objPart[i]);
-    }
+  }else{ // if you're another node, store nothing
   }
   
   cout << " for node: " << myNode << endl;
@@ -509,6 +684,7 @@ int main(int argc, char *argv[]){
   // General parameters 
 
   zz->Set_Param( "LB_METHOD", "REFTREE");    /* Zoltan method */
+  zz->Set_Param( "RANDOM_MOVE_FRACTION", ".5");    /* Zoltan "random" partition param */
   zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
   zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
   zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   /* we omit object weights */
@@ -516,8 +692,13 @@ int main(int argc, char *argv[]){
   zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse mesh
   // Query functions 
   
-  //  zz->Set_Num_Obj_Fn(exampleSquareMesh::get_number_of_objects, &mesh);
-  //  zz->Set_Obj_List_Fn(exampleSquareMesh::get_object_list, &mesh);
+  zz->Set_Num_Obj_Fn(exampleSquareMesh::get_number_of_objects, &mesh);
+  zz->Set_Obj_List_Fn(exampleSquareMesh::get_object_list, &mesh);
+  zz->Set_Num_Geom_Fn(exampleSquareMesh::get_num_geom, &mesh);
+  zz->Set_Geom_Multi_Fn(exampleSquareMesh::get_geom_list, &mesh);
+  //  zz->Set_Geom_Fn(exampleSquareMesh::get_geom_fn, &mesh);
+
+
   zz->Set_Num_Coarse_Obj_Fn(exampleSquareMesh::get_num_coarse_elem, &mesh);
   zz->Set_Coarse_Obj_List_Fn(exampleSquareMesh::get_coarse_elem_list, &mesh);
   zz->Set_Num_Child_Fn(exampleSquareMesh::get_num_children, &mesh);
@@ -557,16 +738,27 @@ int main(int argc, char *argv[]){
   }
 
   cout << "For node: " << myNode << ", num exported gids: " << numExport << endl;
-  cout << "For node: " << myNode << ", original globalIDs are " << endl;
+  cout << "For node: " << myNode << ", exported globalIDs are " << endl;
+  vector<double> exportGlobalIDvector;
   for (int i=0;i<numExport;i++){
     cout << exportGlobalIds[i] << endl;
+    exportGlobalIDvector.push_back(exportGlobalIds[i]);
   }
 
-  cout << "For node: " << myNode << ", new globalIDs should be " << endl;
   cout << "For node: " << myNode << ", num imported gids: " << numImport << endl;
+  cout << "For node: " << myNode << ", imported globalIDs should be " << endl;
+  vector<double> importGlobalIDvector;
   for (int i=0;i<numImport;i++){
     cout << importGlobalIds[i] << endl;
+    importGlobalIDvector.push_back(importGlobalIds[i]);
   }
+
+  mesh.printPartitionIDs();
+  mesh.removePartitionIDs(exportGlobalIDvector);
+  mesh.addPartitionIDs(importGlobalIDvector);  
+  cout << "After import/exports: " << endl;
+  mesh.printPartitionIDs();
+
   
   delete zz;
   MPIExit();
