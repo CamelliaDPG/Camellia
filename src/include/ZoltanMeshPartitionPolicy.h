@@ -19,10 +19,11 @@ using namespace std;
 class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
  private: 
   string _ZoltanPartitioner; // default to block
+  string _debug_level;
 
   //helper functions for query functions
   int getNextActiveIndex(FieldContainer<int> &partitionedActiveCells);
-  int getIndexOfGID(FieldContainer<int> &partitionedActiveCells,int globalID);
+  static int getIndexOfGID(int myNode, FieldContainer<int> &partitionedActiveCells,int globalID);
   vector<int> getListOfActiveGlobalIDs(FieldContainer<int> partitionedActiveCells);
 
   //Zoltan query functions

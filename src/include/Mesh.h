@@ -63,6 +63,7 @@ class Mesh {
   Teuchos::RCP< BilinearForm > _bilinearForm;
   Teuchos::RCP< MeshPartitionPolicy > _partitionPolicy;
   int _numPartitions;
+  int _numInitialElements;
   vector< ElementPtr > _elements;
   vector< ElementPtr > _activeElements;
   vector< vector< ElementPtr > > _partitions;
@@ -106,6 +107,8 @@ class Mesh {
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest);
+
+  int numInitialElements();
   
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,

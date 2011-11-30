@@ -98,6 +98,11 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
     }
   }
   rebuildLookups();
+  _numInitialElements = numElements();
+}
+
+int Mesh::numInitialElements(){
+  return _numInitialElements;
 }
 
 vector< Teuchos::RCP< Element > > & Mesh::activeElements() {
