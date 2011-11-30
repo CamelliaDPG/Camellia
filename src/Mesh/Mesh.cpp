@@ -930,7 +930,7 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
           TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
         }
         int dofIndex = (*mapEntryIt).second;
-        cout << "previouslyClaimedDofIndices: dofIndex: " << dofIndex << endl;
+//        cout << "previouslyClaimedDofIndices: dofIndex: " << dofIndex << endl;
         previouslyClaimedDofIndices.insert(dofIndex);
       }
     }

@@ -57,6 +57,7 @@
 #endif
 #include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
+#include "Epetra_LocalMap.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
@@ -124,7 +125,7 @@ void Solution::initialize() {
 void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();
-
+  
   int numProcs=1;
   int rank=0;
   
@@ -159,17 +160,16 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   }
   int numGlobalDofs = _mesh->numGlobalDofs();
   
-  cout << "process " << rank << " about to call getLocalMap().\n";
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  Epetra_Map localMap = getLocalMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),Comm);
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
   cout << "max row size for mesh: " << maxRowSize << endl;
   cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
-  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, maxRowSize);
-//  Epetra_FECrsMatrix globalStiffMatrix(Copy, localMap, localMap, maxRowSize);
-  Epetra_FEVector rhsVector(localMap);
+  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, maxRowSize);
+  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
+  Epetra_FEVector rhsVector(partMap);
   
   cout << "process " << rank << " about to loop over elementTypes.\n";
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
@@ -206,10 +206,10 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       { // this block is not necessary for the solution.  Here just to produce debugging output
         FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-         
-         BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-                                                     trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()), 
-                                                     physicalCellNodes, cellSideParities);
+        
+        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
+                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()), 
+                                                    physicalCellNodes, cellSideParities);
         FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
         BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
         //cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
@@ -221,7 +221,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
       
       //cout << "inner product matrix" << endl << ipMatrix;
-       
+      
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
       int optSuccess = BilinearFormUtility::computeOptimalTest(optTestCoeffs, ipMatrix, _mesh->bilinearForm(),
@@ -263,11 +263,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
         }
         //cout << "globalDofIndices:" << endl << globalDofIndices;
         
-//        int errCode = globalStiffMatrix.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
-//        if (errCode > 0) {
-//          cout << "could not SumIntoGlobalValues for globalDofIndices starting at " << globalDofIndices(0) << endl;
-//          globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
-//        }
+        //        int errCode = globalStiffMatrix.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+        //        if (errCode > 0) {
+        //          cout << "could not SumIntoGlobalValues for globalDofIndices starting at " << globalDofIndices(0) << endl;
+        //          globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+        //        }
         globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
         rhsVector.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
       }
@@ -305,112 +305,55 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
-//  if (true) {
-//    cout << "Exiting early--debugging...\n";
-//    return;
-//  }
+  //  if (true) {
+  //    cout << "Exiting early--debugging...\n";
+  //    return;
+  //  }
   
-/*  // DEBUG code: check symmetry of globalStiffMatrix
-  double tol = 1e-12;
-  bool symmetric = true;
-  for (int i=0; i<numGlobalDofs; i++) {
-    for (int j=i; j<numGlobalDofs; j++) {
-      double diff = abs(globalStiffMatrix[i][j] - globalStiffMatrix[j][i]);
-      if (diff > tol) {
-        symmetric = false;
-      }
-    }
-  }
-  if (symmetric) {
-    cout << "globalStiffnessMatrix is symmetric" << endl;
-  } else {
-    cout << "WARNING: globalStiffnessMatrix is not symmetric!!" << endl;
-  }*/
+  /*  // DEBUG code: check symmetry of globalStiffMatrix
+   double tol = 1e-12;
+   bool symmetric = true;
+   for (int i=0; i<numGlobalDofs; i++) {
+   for (int j=i; j<numGlobalDofs; j++) {
+   double diff = abs(globalStiffMatrix[i][j] - globalStiffMatrix[j][i]);
+   if (diff > tol) {
+   symmetric = false;
+   }
+   }
+   }
+   if (symmetric) {
+   cout << "globalStiffnessMatrix is symmetric" << endl;
+   } else {
+   cout << "WARNING: globalStiffnessMatrix is not symmetric!!" << endl;
+   }*/
+  
+ 
+  // determine and impose BCs
+    Epetra_LocalMap localMap(numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
 
-  // TODO: this line should go away for the true MPI solution--added in for debugging
-  // TODO: similarly, the commented-out section wants to replace the section that follows it, up to the solve itself.
-  if (rank == 0) {
-  // borrowed from the STK Poisson example
-    // Vector for use in applying BCs
-
-//  // determine and impose BCs
-//  FieldContainer<int> bcGlobalIndices;
-//  FieldContainer<double> bcGlobalValues;
-//  
-//  //_mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()));
-//  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()),myGlobalIndicesSet);
-//  int numBCs = bcGlobalIndices.size();
-//  //cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-//  
-//  //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
-//  Epetra_MultiVector v(localMap,true);
-//  v.PutScalar(0.0);
-//  // Loop over boundary nodes
-//  for (int i = 0; i < numBCs; i++) {
-//    int globalIndex = bcGlobalIndices(i);
-//    v[0][globalIndex] = globalIndex;
-//  }
-//  
-//  Epetra_MultiVector rhsDirichlet(localMap,true);
-//
-//  globalStiffMatrix.Apply(v,rhsDirichlet);
-//  
-//  // Update right-hand side
-//  rhsVector.Update(-1.0,rhsDirichlet,1.0);  
-//  
-//  if (numBCs == 0) {
-//    cout << "Solution: Warning: Imposing no BCs." << endl;
-//  } else {
-//    rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
-//  }
-//  
-//  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-//  //  and add one to diagonal.
-//  cout << "numBCs: " << numBCs << endl;
-//  ML_Epetra::Apply_OAZToMatrix(&bcGlobalIndices(0), numBCs, globalStiffMatrix);
-//  
-//  //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
-//  
-//  // Dump matrices to disk
-//  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_before_bcs.dat",globalStiffMatrix);
-//  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-//  
-//  cout << "Finished imposing BCs." << endl;
-//  
-//  //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
-//  
-//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-//  
-//  // solve the global matrix system...
-//  
-//  Epetra_FEVector lhsVector(localMap);
-//  
-//  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
-//    
-//  if (rank == 0) {
-    
-    // determine and impose BCs
     FieldContainer<int> bcGlobalIndices;
     FieldContainer<double> bcGlobalValues;
     
-    _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()));
+    _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
     int numBCs = bcGlobalIndices.size();
-    //cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-
-    
-    // !!!!!
-    // TODO: fix this: we hang here waiting for the other processors in Comm to get here, which of course they don't.
-    // !!!!!
-    
-    Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
-    Epetra_MultiVector v(globalMapG,true);
+//    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+//    cout << "bcGlobalValues:" << endl << bcGlobalValues;
+  
+    Epetra_MultiVector v(partMap,1);
     v.PutScalar(0.0);
     // Loop over boundary nodes
-    for (int i = 0; i < numBCs; i++) {    
-      v[0][bcGlobalIndices(i)]=bcGlobalValues(i);
+//    for (int i = 0; i < numBCs; i++) {
+//      cout << "i: " << i << endl;
+//      cout << "bcGlobalIndices(i): " << bcGlobalIndices(i) << endl;
+//      cout << "bcGlobalValues(i): " << bcGlobalValues(i) << endl;
+//    }  
+    for (int i = 0; i < numBCs; i++) {
+      // THIS LINE IS BROKEN FOR MULTIPLE PROCESSORS--the second index is wrong...
+      //v[0][bcGlobalIndicesues(i)]=bcGlobalValues(i);
+      v.ReplaceGlobalValue(bcGlobalIndices(i), 0, bcGlobalValues(i));
     }
     
-    Epetra_MultiVector rhsDirichlet(globalMapG,true);
+    Epetra_MultiVector rhsDirichlet(partMap,1);
     globalStiffMatrix.Apply(v,rhsDirichlet);
     
     // Update right-hand side
@@ -424,9 +367,16 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
     //  and add one to diagonal.
-    cout << "numBCs: " << numBCs << endl;
-    ML_Epetra::Apply_OAZToMatrix(&bcGlobalIndices(0), numBCs, globalStiffMatrix);
+    cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
+//    cout << "applying OAZ for globalIndices: " << endl << bcGlobalIndices;
+  
+    FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
+    for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
+      bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
+    }
     
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+  
     //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
     
     // Dump matrices to disk
@@ -439,12 +389,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
     
-    // solve the global matrix system...
-    
-    Epetra_FEVector lhsVector(globalMapG);
+    // solve the global matrix system..
+  
+    Epetra_FEVector lhsVector(partMap, true);
     
     Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
     
+    rhsVector.GlobalAssemble();
+    lhsVector.GlobalAssemble();
+  
+//    EpetraExt::RowMatrixToMatlabFile("stiff_matrix_post_bcs.dat",globalStiffMatrix);
+//    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_post_bcs.dat",rhsVector,0,0,false);
+  
     if ( !useMumps ) {
       Amesos_Klu klu(problem);
       
@@ -457,10 +413,10 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       }
     } else {
       cout << "not yet building with MUMPS support." << endl;
-  /*    Amesos_Mumps mumps(problem);
-      mumps.SymbolicFactorization();
-      mumps.NumericFactorization();
-      mumps.Solve();*/
+      /*    Amesos_Mumps mumps(problem);
+       mumps.SymbolicFactorization();
+       mumps.NumericFactorization();
+       mumps.Solve();*/
     }
     
     // copy the dof coefficients into our data structure
@@ -482,19 +438,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       ElementTypePtr elemTypePtr = *(elemTypeIt);
       //cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
     }
-    
-    // TODO: communicate solution information to other MPI nodes....
-    // (CODE below copied from trilinoscouplings/example/scaling/example_Poisson_stk.cpp)
-//#ifdef HAVE_MPI
-//    // Import solution onto current processor
-//    // FIXME
-//    int numNodesGlobal = globalMapG.NumGlobalElements();
-//    Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
-//    Epetra_Import  solnImporter(solnMap, globalMapG);
-//    Epetra_Vector  uCoeff(solnMap);
-//    uCoeff.Import(femCoefficients, solnImporter, Insert);
-//#endif
-  }
+  
+  // TODO: communicate solution information to other MPI nodes....
+  // (CODE below copied from trilinoscouplings/example/scaling/example_Poisson_stk.cpp)
+  //#ifdef HAVE_MPI
+  //    // Import solution onto current processor
+  //    // FIXME
+  //    int numNodesGlobal = globalMapG.NumGlobalElements();
+  //    Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
+  //    Epetra_Import  solnImporter(solnMap, globalMapG);
+  //    Epetra_Vector  uCoeff(solnMap);
+  //    uCoeff.Import(femCoefficients, solnImporter, Insert);
+  //#endif
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
 
@@ -603,7 +558,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-
+  
   int cubDegree = trialBasis->getDegree();
   
   BasisValueCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
@@ -859,9 +814,9 @@ void Solution::solutionValues(FieldContainer<double> &values,
   shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
   int sideDim = spaceDim-1;                              
   FieldContainer<double> cubPointsSideRefCell(numPoints, spaceDim); // cubPointsSide from the pov of the ref cell
-
-    // compute geometric cell information
-    //cout << "computing geometric cell info for boundary integral." << endl;
+  
+  // compute geometric cell information
+  //cout << "computing geometric cell info for boundary integral." << endl;
   CellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
   CellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
   CellTools::setJacobianDet(cellJacobDet, cellJacobian );
@@ -895,13 +850,13 @@ void Solution::solutionValues(FieldContainer<double> &values,
         }
       }
       /*if (basisRank == 0) {
-        cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-        cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-      } else {
-        cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-        cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-        cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-      }*/
+       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
+       } else {
+       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
+       cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
+       }*/
     }
   }  
 }
@@ -955,8 +910,8 @@ void Solution::computeErrorRepresentation() {
                                          ipMatrix.dimension(2),ipMatrix.dimension(1));
       
       Epetra_SerialDenseMatrix rhs(Copy, & (_residualForElementType[elemTypePtr.get()](cellIndex,0)),
-                                            _residualForElementType[elemTypePtr.get()].dimension(1), // stride
-                                            _residualForElementType[elemTypePtr.get()].dimension(1), 1);
+                                   _residualForElementType[elemTypePtr.get()].dimension(1), // stride
+                                   _residualForElementType[elemTypePtr.get()].dimension(1), 1);
       
       Epetra_SerialDenseMatrix errorRepresentationMatrix(numTestDofs,1);
       
@@ -1007,7 +962,7 @@ void Solution::computeResiduals() {
     FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr);
     FieldContainer<double> solution = _solutionForElementType[elemTypePtr.get()];
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-
+    
     int numTrialDofs = trialOrdering->totalDofs();
     int numTestDofs  = testOrdering->totalDofs();
     int numCells = physicalCellNodes.dimension(0);
@@ -1027,7 +982,7 @@ void Solution::computeResiduals() {
     FieldContainer<double> residuals(numCells,numTestDofs);
     BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
                                     testWeights, testOrdering, cellTopo, physicalCellNodes);
-
+    
     // compute b(u, v):
     FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
     BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
@@ -1094,9 +1049,9 @@ void Solution::solutionValues(FieldContainer<double> &values,
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,physicalCellNodes,cellTopo);
   
-//  cout << "physicalCellNodes: " << endl << physicalCellNodes;
-//  cout << "physicalPoints: " << endl << physicalPoints;
-//  cout << "refElemPoints: " << endl << refElemPoints;
+  //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
+  //  cout << "physicalPoints: " << endl << physicalPoints;
+  //  cout << "refElemPoints: " << endl << refElemPoints;
   
   // Containers for Jacobian
   FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
@@ -1145,7 +1100,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
   
   values.initialize(0.0);
- 
+  
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     thisRefElemPoints.setValues(&refElemPoints(cellIndex,0,0),numPoints*spaceDim);
     thisCellJacobian.setValues(&cellJacobian(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
@@ -1156,14 +1111,14 @@ void Solution::solutionValues(FieldContainer<double> &values,
                                                               thisRefElemPoints, thisCellJacobian, 
                                                               thisCellJacobInv, thisCellJacobDet);
     
-//    cout << "cellIndex " << cellIndex << " thisRefElemPoints: " << thisRefElemPoints;
-//    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
+    //    cout << "cellIndex " << cellIndex << " thisRefElemPoints: " << thisRefElemPoints;
+    //    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
     
     // now, apply coefficient weights:
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
       for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
         int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-//        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
+        //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
           values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(cellIndex,localDofIndex);
         } else {
@@ -1173,13 +1128,13 @@ void Solution::solutionValues(FieldContainer<double> &values,
         }
       }
       /*if (basisRank == 0) {
-        cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-        cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-      } else {
-        cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-        cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-        cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-      }*/
+       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
+       } else {
+       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
+       cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
+       }*/
     }
   }
 }
@@ -1223,8 +1178,8 @@ void Solution::writeToFile(int trialID, const string &filePath) {
     int numPatchesPerCell = 1;
     
     if (numVertices == 4) { // only quads supported by the multi-patch cell stuff below...
-    //if (   ( elemTypePtr->cellTopoPtr->getKey() == shards::Quadrilateral<4>::key )
-    //    || (elemTypePtr->cellTopoPtr->getKey() == shards::Triangle<3>::key ) ) {
+      //if (   ( elemTypePtr->cellTopoPtr->getKey() == shards::Quadrilateral<4>::key )
+      //    || (elemTypePtr->cellTopoPtr->getKey() == shards::Triangle<3>::key ) ) {
       
       numPatchesPerCell = numDivisionsPerEdge*numDivisionsPerEdge;
       
@@ -1235,38 +1190,38 @@ void Solution::writeToFile(int trialID, const string &filePath) {
       
       if (numVertices == 4) {     
         double yWeights[numVertices], xWeights[numVertices];
-          for (int i=0; i<numDivisionsPerEdge; i++) {
-            for (int j=0; j<numDivisionsPerEdge; j++) {
-              //cout << "weights: " << xWeights[0]*yWeights[0] << " " << xWeights[1]*yWeights[1] << " " << xWeights[2]*yWeights[2] << " " << xWeights[3]*yWeights[3] << "\n";
-              int patchIndex = (i*numDivisionsPerEdge + j);
-              
-              for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-                for (int patchVertexIndex=0; patchVertexIndex < numVertices; patchVertexIndex++) {
-                  int xOffset = ((patchVertexIndex==0) || (patchVertexIndex==3)) ? 0 : 1;
-                  int yOffset = ((patchVertexIndex==0) || (patchVertexIndex==1)) ? 0 : 1;
-                  determineQuadEdgeWeights(xWeights,i+xOffset,numDivisionsPerEdge,true);
-                  determineQuadEdgeWeights(yWeights,j+yOffset,numDivisionsPerEdge,false);
-
+        for (int i=0; i<numDivisionsPerEdge; i++) {
+          for (int j=0; j<numDivisionsPerEdge; j++) {
+            //cout << "weights: " << xWeights[0]*yWeights[0] << " " << xWeights[1]*yWeights[1] << " " << xWeights[2]*yWeights[2] << " " << xWeights[3]*yWeights[3] << "\n";
+            int patchIndex = (i*numDivisionsPerEdge + j);
+            
+            for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+              for (int patchVertexIndex=0; patchVertexIndex < numVertices; patchVertexIndex++) {
+                int xOffset = ((patchVertexIndex==0) || (patchVertexIndex==3)) ? 0 : 1;
+                int yOffset = ((patchVertexIndex==0) || (patchVertexIndex==1)) ? 0 : 1;
+                determineQuadEdgeWeights(xWeights,i+xOffset,numDivisionsPerEdge,true);
+                determineQuadEdgeWeights(yWeights,j+yOffset,numDivisionsPerEdge,false);
+                
+                for (int dim=0; dim<spaceDim; dim++) {
+                  physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) = 0.0;
+                }
+                for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+                  double weight = xWeights[vertexIndex] * yWeights[vertexIndex];
+                  //cout << "weight for vertex " << vertexIndex << ": " << weight << endl;
                   for (int dim=0; dim<spaceDim; dim++) {
-                    physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) = 0.0;
+                    physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += 
+                    weight*vertexPoints(cellIndex, vertexIndex, dim);
                   }
-                  for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
-                    double weight = xWeights[vertexIndex] * yWeights[vertexIndex];
-                    //cout << "weight for vertex " << vertexIndex << ": " << weight << endl;
-                    for (int dim=0; dim<spaceDim; dim++) {
-                      physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += 
-                      weight*vertexPoints(cellIndex, vertexIndex, dim);
-                    }
-                  }
-                  for (int dim=0; dim<spaceDim; dim++) {
-                    //cout << "physPoints(cellIndex, " << patchIndex*numVertices << " + " << patchVertexIndex << "," << dim << "): ";
-                    //cout << physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) << "\n";
-                  }
+                }
+                for (int dim=0; dim<spaceDim; dim++) {
+                  //cout << "physPoints(cellIndex, " << patchIndex*numVertices << " + " << patchVertexIndex << "," << dim << "): ";
+                  //cout << physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) << "\n";
                 }
               }
             }
           }
         }
+      }
       
     } else {
       physPoints = vertexPoints;
@@ -1381,96 +1336,96 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
 } 
 
 /*void Solution::integrate(FieldContainer<double> &valuePerCell, int trialID) {
-  int numCells = _mesh->elements.size();
-  if ( (valuePerCell.dimension(0) != numCells) || (valuePerCell.rank() != 1) ) {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "valuePerCell should have dimension numCells." );
-  }
-
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
-  
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-    //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int trialDegreeMax = 0;
-    int numSidesForTrial = elemTypePtr->dofOrderingPtr->getNumSidesForVarID(trialID);
-    for (int sideIndex=0; sideIndex<numSidesForTrial; sideIndex++) {
-      trialDegreeMax = max(trialDegreeMax, elemTypePtr->dofOrderingPtr->getBasisCardinality(trialID,sideIndex));
-    }
-    cubDegree = trialDegreeMax*2;
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
-    BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), cubDegree, 
-                               numSidesForTrial != 1); // create side caches if trialID is on side...
-    
-  }
-}*/
+ int numCells = _mesh->elements.size();
+ if ( (valuePerCell.dimension(0) != numCells) || (valuePerCell.rank() != 1) ) {
+ TEST_FOR_EXCEPTION( true, std::invalid_argument, "valuePerCell should have dimension numCells." );
+ }
+ 
+ vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+ vector< ElementTypePtr >::iterator elemTypeIt;
+ 
+ for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+ //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
+ ElementTypePtr elemTypePtr = *(elemTypeIt);
+ int trialDegreeMax = 0;
+ int numSidesForTrial = elemTypePtr->dofOrderingPtr->getNumSidesForVarID(trialID);
+ for (int sideIndex=0; sideIndex<numSidesForTrial; sideIndex++) {
+ trialDegreeMax = max(trialDegreeMax, elemTypePtr->dofOrderingPtr->getBasisCardinality(trialID,sideIndex));
+ }
+ cubDegree = trialDegreeMax*2;
+ FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+ BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), cubDegree, 
+ numSidesForTrial != 1); // create side caches if trialID is on side...
+ 
+ }
+ }*/
 
 // the following was an attempt to rewrite writeToFile more sensibly, just with
 // some arbitrary points for each cell.  But I don't know how to get MATLAB to
 // build a surface from arbitrary points (if indeed there is any way to do so)
 /*void Solution::writeToFile(int trialID, const string &filePath) {
-  // writes out rows of the format: "cellID x y solnValue"
-  ofstream fout(filePath.c_str());
-  fout << setprecision(15);
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
-  int spaceDim = 2; // TODO: generalize to 3D...
-  
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-    int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
-    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    // 0. Set up Cubature
-    // Get numerical integration points--these will be the points we compute the solution values for...
-    DefaultCubatureFactory<double>  cubFactory;                                   
-    int cubDegree = 2*basisDegree;
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree); 
-    
-    int cubDim       = cellTopoCub->getDimension();
-    int numCubPoints = cellTopoCub->getNumPoints();
-    
-    FieldContainer<double> cubPoints(numCubPoints, cubDim);
-    FieldContainer<double> cubWeights(numCubPoints);
-    
-    cellTopoCub->getCubature(cubPoints, cubWeights);
-    
-    typedef CellTools<double>  CellTools;
-    
-    int cellTopoDim = cellTopoPtr->getDimension();
-    int numVertices = cellTopoPtr->getVertexCount(cellTopoDim,0);
-    FieldContainer<double> refPoints(numCubPoints+numVertices, cubDim);
-    FieldContainer<double> refVertices(numVertices,cellTopoDim);
-    CellTools::getReferenceSubcellVertices(refVertices,cellTopoDim,0,*(cellTopoPtr.get()));
-    for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
-      for (int i=0; i<cellTopoDim; i++) {
-        refPoints(ptIndex,i) = refVertices(ptIndex,i);
-      }
-    }
-    for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
-      for (int i=0; i<cubDim; i++) {
-        refPoints(numVertices+ptIndex,i) = cubPoints(ptIndex,i);
-      }
-    }
-    
-    // compute physicalCubaturePoints, the transformed cubature points on each cell:
-    FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints+numVertices, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints,refPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
-    
-    FieldContainer<double> values(numCellsOfType, numCubPoints+numVertices);
-    solutionValues(values,elemTypePtr,trialID,physCubPoints);
-
-    for (int cellIndex=0; cellIndex < numCellsOfType; cellIndex++) {
-      for (int ptIndex=0; ptIndex< numCubPoints + numVertices; ptIndex++) {
-        double x = physCubPoints(cellIndex,ptIndex,0);
-        double y = physCubPoints(cellIndex,ptIndex,1);
-        double z = values(cellIndex,ptIndex);
-        fout << _mesh->cellID(elemTypePtr,cellIndex) << " " << x << " " << y << " " << z << endl;
-      }
-    }
-  }
-  fout.close();
-}*/
+ // writes out rows of the format: "cellID x y solnValue"
+ ofstream fout(filePath.c_str());
+ fout << setprecision(15);
+ vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+ vector< ElementTypePtr >::iterator elemTypeIt;
+ int spaceDim = 2; // TODO: generalize to 3D...
+ 
+ for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+ ElementTypePtr elemTypePtr = *(elemTypeIt);
+ int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
+ int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
+ Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+ // 0. Set up Cubature
+ // Get numerical integration points--these will be the points we compute the solution values for...
+ DefaultCubatureFactory<double>  cubFactory;                                   
+ int cubDegree = 2*basisDegree;
+ Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree); 
+ 
+ int cubDim       = cellTopoCub->getDimension();
+ int numCubPoints = cellTopoCub->getNumPoints();
+ 
+ FieldContainer<double> cubPoints(numCubPoints, cubDim);
+ FieldContainer<double> cubWeights(numCubPoints);
+ 
+ cellTopoCub->getCubature(cubPoints, cubWeights);
+ 
+ typedef CellTools<double>  CellTools;
+ 
+ int cellTopoDim = cellTopoPtr->getDimension();
+ int numVertices = cellTopoPtr->getVertexCount(cellTopoDim,0);
+ FieldContainer<double> refPoints(numCubPoints+numVertices, cubDim);
+ FieldContainer<double> refVertices(numVertices,cellTopoDim);
+ CellTools::getReferenceSubcellVertices(refVertices,cellTopoDim,0,*(cellTopoPtr.get()));
+ for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
+ for (int i=0; i<cellTopoDim; i++) {
+ refPoints(ptIndex,i) = refVertices(ptIndex,i);
+ }
+ }
+ for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
+ for (int i=0; i<cubDim; i++) {
+ refPoints(numVertices+ptIndex,i) = cubPoints(ptIndex,i);
+ }
+ }
+ 
+ // compute physicalCubaturePoints, the transformed cubature points on each cell:
+ FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints+numVertices, spaceDim);
+ CellTools::mapToPhysicalFrame(physCubPoints,refPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
+ 
+ FieldContainer<double> values(numCellsOfType, numCubPoints+numVertices);
+ solutionValues(values,elemTypePtr,trialID,physCubPoints);
+ 
+ for (int cellIndex=0; cellIndex < numCellsOfType; cellIndex++) {
+ for (int ptIndex=0; ptIndex< numCubPoints + numVertices; ptIndex++) {
+ double x = physCubPoints(cellIndex,ptIndex,0);
+ double y = physCubPoints(cellIndex,ptIndex,1);
+ double z = values(cellIndex,ptIndex);
+ fout << _mesh->cellID(elemTypePtr,cellIndex) << " " << x << " " << y << " " << z << endl;
+ }
+ }
+ }
+ fout.close();
+ }*/
 
 
 void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex) {
@@ -1633,9 +1588,9 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
 }
 
 #ifdef HAVE_MPI
-Epetra_Map Solution::getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
+Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
 #else
-  Epetra_Map Solution::getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
+  Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
 #endif
     // determine the local dofs we have, and what their global indices are:
     int localDofsSize;
@@ -1661,10 +1616,10 @@ Epetra_Map Solution::getLocalMap(int rank, set<int> & myGlobalIndicesSet, int nu
     }
     
     int indexBase = 0;
-    cout << "process " << rank << " about to construct localMap.\n";
-    //Epetra_Map localMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-    Epetra_Map localMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
+    cout << "process " << rank << " about to construct partMap.\n";
+    //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+    Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
     
     delete myGlobalIndices;
-    return localMap;
+    return partMap;
   }

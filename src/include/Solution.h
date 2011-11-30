@@ -75,9 +75,9 @@ private:
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
 #ifdef HAVE_MPI
-  Epetra_Map getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm );
+  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm );
 #else
-  Epetra_Map getLocalMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm );
+  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm );
 #endif
 protected:
   map< ElementType*, FieldContainer<double> > solutionForElementTypeMap() const;

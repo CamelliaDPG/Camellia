@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
     cout << "Done solving and writing" << endl;
   }
-    
+  
   /*int numRefinements = 0;
   double thresholdFactor = 0.20;
   
