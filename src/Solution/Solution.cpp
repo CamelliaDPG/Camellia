@@ -172,6 +172,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_FEVector rhsVector(partMap);
   
   cout << "process " << rank << " about to loop over elementTypes.\n";
+  int indexBase = 0;
+  Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
@@ -183,7 +185,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     int maxCellBatch = MAX_BATCH_SIZE_IN_BYTES / 8 / (numTestDofs*numTestDofs + numTestDofs*numTrialDofs + numTrialDofs*numTrialDofs);
     maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
-    cout << "maxCellBatch: " << maxCellBatch << endl;
+    //cout << "maxCellBatch: " << maxCellBatch << endl;
     
     FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr, rank);
     FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr, rank);
@@ -277,6 +279,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   }
   double timeLocalStiffness = timer.ElapsedTime();
   
+  Epetra_Vector timeLocalStiffnessVector(timeMap);
+  timeLocalStiffnessVector[0] = timeLocalStiffness;
+  
   // impose zero mean constraints:
   int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
   for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
@@ -309,6 +314,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
   double timeGlobalAssembly = timer.ElapsedTime();
+  Epetra_Vector timeGlobalAssemblyVector(timeMap);
+  timeGlobalAssemblyVector[0] = timeGlobalAssembly;
   
   //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
@@ -385,6 +392,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
   
     double timeBCImposition = timer.ElapsedTime();
+    Epetra_Vector timeBCImpositionVector(timeMap);
+    timeBCImpositionVector[0] = timeBCImposition;
   
     cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
     
@@ -404,13 +413,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
     
-  // TODO: delete this line...
     rhsVector.GlobalAssemble();
   
 //    EpetraExt::RowMatrixToMatlabFile("stiff_matrix_post_bcs.dat",globalStiffMatrix);
 //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_post_bcs.dat",rhsVector,0,0,false);
   
-    
     timer.ResetStartTime();
     if ( !useMumps ) {
       Amesos_Klu klu(problem);
@@ -431,6 +438,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
        mumps.Solve();*/
     }
     double timeSolve = timer.ElapsedTime();
+    Epetra_Vector timeSolveVector(timeMap);
+    timeSolveVector[0] = timeSolve;
     
     // TODO: figure out the all-to-all communication for lhsVector data
     timer.ResetStartTime();
@@ -456,6 +465,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     delete lhsVectorCopy;
   
     double timeDistributeSolution = timer.ElapsedTime();
+    Epetra_Vector timeDistributeSolutionVector(timeMap);
+    timeDistributeSolutionVector[0] = timeDistributeSolution;
+  
     // DEBUGGING: print out solution coefficients
 //    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
 //      ElementTypePtr elemTypePtr = *(elemTypeIt);
@@ -474,12 +486,44 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   //    uCoeff.Import(femCoefficients, solnImporter, Insert);
   //#endif
   
-  cout << "****** TIMING REPORT FOR RANK " << rank << " ******\n";
-  cout << "localStiffness: " << timeLocalStiffness << " sec." << endl;
-  cout << "globalAssembly: " << timeGlobalAssembly << " sec." << endl;
-  cout << "impose BCs:     " << timeBCImposition << " sec." << endl;
-  cout << "solve:          " << timeSolve << " sec." << endl;
-  cout << "dist. solution: " << timeDistributeSolution << " sec." << endl;
+//  cout << "****** TIMING REPORT FOR RANK " << rank << " ******\n";
+//  cout << "localStiffness: " << timeLocalStiffness << " sec." << endl;
+//  cout << "globalAssembly: " << timeGlobalAssembly << " sec." << endl;
+//  cout << "impose BCs:     " << timeBCImposition << " sec." << endl;
+//  cout << "solve:          " << timeSolve << " sec." << endl;
+//  cout << "dist. solution: " << timeDistributeSolution << " sec." << endl;
+  
+  double totalTimeLocalStiffness,totalTimeGlobalAssembly,totalTimeBCImposition,totalTimeSolve,totalTimeDistributeSolution;
+  int err = timeLocalStiffnessVector.Norm1( &totalTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.Norm1( &totalTimeGlobalAssembly );
+  err = timeBCImpositionVector.Norm1( &totalTimeBCImposition );
+  err = timeSolveVector.Norm1( &totalTimeSolve );
+  err = timeDistributeSolutionVector.Norm1( &totalTimeDistributeSolution );
+  
+  if (rank == 0) {
+    cout << "****** SUM OF TIMING REPORTS ******\n";
+    cout << "localStiffness: " << totalTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << totalTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << totalTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << totalTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << totalTimeDistributeSolution << " sec." << endl;    
+  }
+  
+  double meanTimeLocalStiffness,meanTimeGlobalAssembly,meanTimeBCImposition,meanTimeSolve,meanTimeDistributeSolution;
+  err = timeLocalStiffnessVector.MeanValue( &meanTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MeanValue( &meanTimeGlobalAssembly );
+  err = timeBCImpositionVector.MeanValue( &meanTimeBCImposition );
+  err = timeSolveVector.MeanValue( &meanTimeSolve );
+  err = timeDistributeSolutionVector.MeanValue( &meanTimeDistributeSolution );
+  
+  if (rank == 0) {
+    cout << "****** MEAN OF TIMING REPORTS ******\n";
+    cout << "localStiffness: " << meanTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << meanTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << meanTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << meanTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << meanTimeDistributeSolution << " sec." << endl;    
+  }
   
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
