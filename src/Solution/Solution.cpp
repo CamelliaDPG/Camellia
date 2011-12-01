@@ -57,7 +57,7 @@
 #endif
 #include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
-#include "Epetra_LocalMap.h"
+#include "Epetra_Time.h"
 
 // EpetraExt includes
 #include "EpetraExt_RowMatrixOut.h"
@@ -172,6 +172,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_FEVector rhsVector(partMap);
   
   cout << "process " << rank << " about to loop over elementTypes.\n";
+  Epetra_Time timer(Comm);
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
@@ -274,6 +275,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       startCellIndexForBatch += numCells;
     }
   }
+  double timeLocalStiffness = timer.ElapsedTime();
+  
   // impose zero mean constraints:
   int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
   for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
@@ -297,11 +300,15 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     zmcIndex++;
   }
   
+  timer.ResetStartTime();
+  
   rhsVector.GlobalAssemble();
   
   //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
   
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
+  
+  double timeGlobalAssembly = timer.ElapsedTime();
   
   //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
@@ -329,8 +336,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
  
   // determine and impose BCs
-    Epetra_LocalMap localMap(numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
 
+    timer.ResetStartTime();
+  
     FieldContainer<int> bcGlobalIndices;
     FieldContainer<double> bcGlobalValues;
     
@@ -367,7 +375,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
     //  and add one to diagonal.
-    cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
 //    cout << "applying OAZ for globalIndices: " << endl << bcGlobalIndices;
   
     FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
@@ -377,10 +384,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
   
-    //cout << "globalStiffMatrix before BCs: " << globalStiffMatrix;
+    double timeBCImposition = timer.ElapsedTime();
+  
+    cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
     
     // Dump matrices to disk
-    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_before_bcs.dat",globalStiffMatrix);
+    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_after_bcs.dat",globalStiffMatrix);
     //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
     
     cout << "Finished imposing BCs." << endl;
@@ -395,18 +404,21 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     
     Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
     
+  // TODO: delete this line...
     rhsVector.GlobalAssemble();
-    lhsVector.GlobalAssemble();
   
 //    EpetraExt::RowMatrixToMatlabFile("stiff_matrix_post_bcs.dat",globalStiffMatrix);
 //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_post_bcs.dat",rhsVector,0,0,false);
   
+    
+    timer.ResetStartTime();
     if ( !useMumps ) {
       Amesos_Klu klu(problem);
       
-      cout << "About to call klu.Solve()." << endl;
+      //cout << "About to call klu.Solve()." << endl;
       int solveSuccess = klu.Solve();
-      cout << "klu.Solve() completed." << endl;
+      
+      //cout << "klu.Solve() completed." << endl;
       Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
       if (solveSuccess != 0 ) {
         cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
@@ -418,7 +430,14 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
        mumps.NumericFactorization();
        mumps.Solve();*/
     }
+    double timeSolve = timer.ElapsedTime();
     
+    // TODO: figure out the all-to-all communication for lhsVector data
+    timer.ResetStartTime();
+    lhsVector.GlobalAssemble();
+    double *lhsVectorCopy = new double[lhsVector.GlobalLength()];
+    lhsVector.ExtractCopy(&lhsVectorCopy); 
+  
     // copy the dof coefficients into our data structure
     vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator elemIt;
@@ -430,14 +449,18 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
       for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
         int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-        _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVector[0][globalIndex];
+        _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorCopy[globalIndex];
       }
     }
+  
+    delete lhsVectorCopy;
+  
+    double timeDistributeSolution = timer.ElapsedTime();
     // DEBUGGING: print out solution coefficients
-    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemTypePtr = *(elemTypeIt);
-      //cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
-    }
+//    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+//      ElementTypePtr elemTypePtr = *(elemTypeIt);
+//      cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
+//    }
   
   // TODO: communicate solution information to other MPI nodes....
   // (CODE below copied from trilinoscouplings/example/scaling/example_Poisson_stk.cpp)
@@ -450,6 +473,14 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   //    Epetra_Vector  uCoeff(solnMap);
   //    uCoeff.Import(femCoefficients, solnImporter, Insert);
   //#endif
+  
+  cout << "****** TIMING REPORT FOR RANK " << rank << " ******\n";
+  cout << "localStiffness: " << timeLocalStiffness << " sec." << endl;
+  cout << "globalAssembly: " << timeGlobalAssembly << " sec." << endl;
+  cout << "impose BCs:     " << timeBCImposition << " sec." << endl;
+  cout << "solve:          " << timeSolve << " sec." << endl;
+  cout << "dist. solution: " << timeDistributeSolution << " sec." << endl;
+  
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
 }
 

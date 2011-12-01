@@ -47,8 +47,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   float version;
   //these arguments are ignored by Zoltan initialize if MPI_init is called
   int argc = 0;
-  char **argv;
-  Zoltan_Initialize(argc, argv, &version);
+
+  Zoltan_Initialize(argc, NULL, &version);
   
   Zoltan *zz = new Zoltan(MPI::COMM_WORLD);
   if (zz == NULL){
