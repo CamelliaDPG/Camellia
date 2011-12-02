@@ -493,36 +493,61 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 //  cout << "solve:          " << timeSolve << " sec." << endl;
 //  cout << "dist. solution: " << timeDistributeSolution << " sec." << endl;
   
-  double totalTimeLocalStiffness,totalTimeGlobalAssembly,totalTimeBCImposition,totalTimeSolve,totalTimeDistributeSolution;
-  int err = timeLocalStiffnessVector.Norm1( &totalTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.Norm1( &totalTimeGlobalAssembly );
-  err = timeBCImpositionVector.Norm1( &totalTimeBCImposition );
-  err = timeSolveVector.Norm1( &totalTimeSolve );
-  err = timeDistributeSolutionVector.Norm1( &totalTimeDistributeSolution );
+  int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
+  err = timeBCImpositionVector.Norm1( &_totalTimeBCImposition );
+  err = timeSolveVector.Norm1( &_totalTimeSolve );
+  err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
+  
+  err = timeLocalStiffnessVector.MeanValue( &_meanTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MeanValue( &_meanTimeGlobalAssembly );
+  err = timeBCImpositionVector.MeanValue( &_meanTimeBCImposition );
+  err = timeSolveVector.MeanValue( &_meanTimeSolve );
+  err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
+  
+  err = timeLocalStiffnessVector.MinValue( &_minTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MinValue( &_minTimeGlobalAssembly );
+  err = timeBCImpositionVector.MinValue( &_minTimeBCImposition );
+  err = timeSolveVector.MinValue( &_minTimeSolve );
+  err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
+  
+  err = timeLocalStiffnessVector.MaxValue( &_maxTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MaxValue( &_maxTimeGlobalAssembly );
+  err = timeBCImpositionVector.MaxValue( &_maxTimeBCImposition );
+  err = timeSolveVector.MaxValue( &_maxTimeSolve );
+  err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
   
   if (rank == 0) {
     cout << "****** SUM OF TIMING REPORTS ******\n";
-    cout << "localStiffness: " << totalTimeLocalStiffness << " sec." << endl;
-    cout << "globalAssembly: " << totalTimeGlobalAssembly << " sec." << endl;
-    cout << "impose BCs:     " << totalTimeBCImposition << " sec." << endl;
-    cout << "solve:          " << totalTimeSolve << " sec." << endl;
-    cout << "dist. solution: " << totalTimeDistributeSolution << " sec." << endl;    
+    cout << "localStiffness: " << _totalTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << _totalTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << _totalTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << _totalTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << _totalTimeDistributeSolution << " sec." << endl << endl;    
+    
+    cout << "****** MEAN OF TIMING REPORTS ******\n";
+    cout << "localStiffness: " << _meanTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << _meanTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << _meanTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << _meanTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << _meanTimeDistributeSolution << " sec." << endl << endl;    
+    
+    cout << "****** MAX OF TIMING REPORTS ******\n";
+    cout << "localStiffness: " << _maxTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << _maxTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << _maxTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << _maxTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << _maxTimeDistributeSolution << " sec." << endl << endl;    
+    
+    cout << "****** MIN OF TIMING REPORTS ******\n";
+    cout << "localStiffness: " << _minTimeLocalStiffness << " sec." << endl;
+    cout << "globalAssembly: " << _minTimeGlobalAssembly << " sec." << endl;
+    cout << "impose BCs:     " << _minTimeBCImposition << " sec." << endl;
+    cout << "solve:          " << _minTimeSolve << " sec." << endl;
+    cout << "dist. solution: " << _minTimeDistributeSolution << " sec." << endl;   
   }
   
-  double meanTimeLocalStiffness,meanTimeGlobalAssembly,meanTimeBCImposition,meanTimeSolve,meanTimeDistributeSolution;
-  err = timeLocalStiffnessVector.MeanValue( &meanTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MeanValue( &meanTimeGlobalAssembly );
-  err = timeBCImpositionVector.MeanValue( &meanTimeBCImposition );
-  err = timeSolveVector.MeanValue( &meanTimeSolve );
-  err = timeDistributeSolutionVector.MeanValue( &meanTimeDistributeSolution );
-  
-  if (rank == 0) {
-    cout << "****** MEAN OF TIMING REPORTS ******\n";
-    cout << "localStiffness: " << meanTimeLocalStiffness << " sec." << endl;
-    cout << "globalAssembly: " << meanTimeGlobalAssembly << " sec." << endl;
-    cout << "impose BCs:     " << meanTimeBCImposition << " sec." << endl;
-    cout << "solve:          " << meanTimeSolve << " sec." << endl;
-    cout << "dist. solution: " << meanTimeDistributeSolution << " sec." << endl;    
+  if (rank == 0) { 
   }
   
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
@@ -1228,6 +1253,18 @@ double determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numD
   }
 }
 
+void Solution::writeStatsToFile(const string &filePath) {
+  // writes out rows of the format: "cellID patchID x y solnValue"
+  ofstream fout(filePath.c_str());
+  fout << setprecision(15);
+  fout << "stat.\tmean\tmin\tmax\ttotal\n";
+  fout << "localStiffness\t" << _meanTimeLocalStiffness << "\t" <<_minTimeLocalStiffness << "\t" <<_maxTimeLocalStiffness << "\t" << _totalTimeLocalStiffness << endl;
+  fout << "globalAssembly\t" <<  _meanTimeGlobalAssembly << "\t" <<_minTimeGlobalAssembly << "\t" <<_maxTimeGlobalAssembly << "\t" << _totalTimeGlobalAssembly << endl;
+  fout << "impose BCs\t" <<  _meanTimeBCImposition << "\t" <<_minTimeBCImposition << "\t" <<_maxTimeBCImposition << "\t" << _totalTimeBCImposition << endl;
+  fout << "solve\t" << _meanTimeSolve << "\t" <<_minTimeSolve << "\t" <<_maxTimeSolve << "\t" << _totalTimeSolve << endl;
+  fout << "dist. solution\t" <<  _meanTimeDistributeSolution << "\t" << _minTimeDistributeSolution << "\t" <<_maxTimeDistributeSolution << "\t" << _totalTimeDistributeSolution << endl;
+}
+
 void Solution::writeToFile(int trialID, const string &filePath) {
   // writes out rows of the format: "cellID patchID x y solnValue"
   ofstream fout(filePath.c_str());
@@ -1660,6 +1697,86 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
     }
   }
   fout.close();
+}
+
+double Solution::totalTimeLocalStiffness() {
+  return _totalTimeLocalStiffness;
+}
+
+double Solution::totalTimeGlobalAssembly() {
+  return _totalTimeGlobalAssembly;
+}
+
+double Solution::totalTimeBCImposition() {
+  return _totalTimeBCImposition;
+}
+
+double Solution::totalTimeSolve() {
+  return _totalTimeSolve;
+}
+
+double Solution::totalTimeDistributeSolution() {
+  return _totalTimeDistributeSolution;
+}
+
+double Solution::meanTimeLocalStiffness() {
+  return _meanTimeLocalStiffness;
+}
+
+double Solution::meanTimeGlobalAssembly() {
+  return _meanTimeGlobalAssembly;
+}
+
+double Solution::meanTimeBCImposition() {
+  return _meanTimeBCImposition;
+}
+
+double Solution::meanTimeSolve() {
+  return _meanTimeSolve;
+}
+
+double Solution::meanTimeDistributeSolution() {
+  return _meanTimeDistributeSolution;
+}
+
+double Solution::maxTimeLocalStiffness() {
+  return _maxTimeLocalStiffness;
+}
+
+double Solution::maxTimeGlobalAssembly() {
+  return _maxTimeGlobalAssembly;
+}
+
+double Solution::maxTimeBCImposition() {
+  return _maxTimeBCImposition;
+}
+
+double Solution::maxTimeSolve() {
+  return _maxTimeSolve;
+}
+
+double Solution::maxTimeDistributeSolution() {
+  return _maxTimeDistributeSolution;
+}
+
+double Solution::minTimeLocalStiffness() {
+  return _minTimeLocalStiffness;
+}
+
+double Solution::minTimeGlobalAssembly() {
+  return _minTimeGlobalAssembly;
+}
+
+double Solution::minTimeBCImposition() {
+  return _minTimeBCImposition;
+}
+
+double Solution::minTimeSolve() {
+  return _minTimeSolve;
+}
+
+double Solution::minTimeDistributeSolution() {
+  return _minTimeDistributeSolution;
 }
 
 #ifdef HAVE_MPI

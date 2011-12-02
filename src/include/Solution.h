@@ -74,6 +74,12 @@ private:
   void initialize();
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
+  
+  // statistics for the last solve:
+  double _totalTimeLocalStiffness, _totalTimeGlobalAssembly, _totalTimeBCImposition, _totalTimeSolve, _totalTimeDistributeSolution;
+  double _meanTimeLocalStiffness, _meanTimeGlobalAssembly, _meanTimeBCImposition, _meanTimeSolve, _meanTimeDistributeSolution;
+  double _maxTimeLocalStiffness, _maxTimeGlobalAssembly, _maxTimeBCImposition, _maxTimeSolve, _maxTimeDistributeSolution;
+  double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
 #ifdef HAVE_MPI
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm );
 #else
@@ -124,6 +130,33 @@ public:
   // Jesse's additions:
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
+  
+  // statistics accessors:
+  double totalTimeLocalStiffness();
+  double totalTimeGlobalAssembly();
+  double totalTimeBCImposition();
+  double totalTimeSolve();
+  double totalTimeDistributeSolution();
+  
+  double meanTimeLocalStiffness();
+  double meanTimeGlobalAssembly();
+  double meanTimeBCImposition();
+  double meanTimeSolve();
+  double meanTimeDistributeSolution();
+  
+  double maxTimeLocalStiffness();
+  double maxTimeGlobalAssembly();
+  double maxTimeBCImposition();
+  double maxTimeSolve();
+  double maxTimeDistributeSolution();
+  
+  double minTimeLocalStiffness();
+  double minTimeGlobalAssembly();
+  double minTimeBCImposition();
+  double minTimeSolve();
+  double minTimeDistributeSolution();
+  
+  void writeStatsToFile(const string &filePath);
 };
 
 #endif
