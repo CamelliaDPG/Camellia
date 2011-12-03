@@ -82,7 +82,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   if (useLocalIDs){
     zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
   }else{
-    zz->Set_Param( "NUM_LID_ENTRIES", "0");  /* local ID is null */
+    zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is null */
   }
   zz->Set_Param( "OBJ_WEIGHT_DIM", "0");   
   zz->Set_Param( "DEBUG_LEVEL", "0");
@@ -180,7 +180,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
       }
     }   
     // compute total number of IDs for this proc
-    int numIDsForThisNode = 0;
+    int numIDsForThisNode = 0;    
     for (int j = 0;j<maxPartitionSize;j++){
       if (partitionedActiveCells(myNode,j)!=-1){
 	numIDsForThisNode++;
@@ -195,6 +195,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
       for (int i=0;i<maxPartitionSize;i++){
 	sendbuf[i] = partitionedActiveCells(myNode,i);
       }
+      /*
       cout << "for this node, partitioned cells = " ;      
       for (int i=0;i<maxPartitionSize;i++){
 	if (partitionedActiveCells(myNode,i)!=-1){
@@ -202,16 +203,21 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
 	}
       }	
       cout << endl;
-
-      MPI::COMM_WORLD.Allgather(sendbuf,maxPartitionSize, MPI::INT,recvbuf, maxPartitionSize ,MPI::INT);
+      */
+      MPI::COMM_WORLD.Allgather(sendbuf,maxPartitionSize, MPI::INT,recvbuf, maxPartitionSize , MPI::INT);      
       
       for (int node=0;node<numNodes;node++){
+	vector<int> activeCellVec(maxPartitionSize);
 	for (int i=0;i<maxPartitionSize;i++){
-	  partitionedActiveCells(node,i) = recvbuf[node][i];
+	  activeCellVec[i] = recvbuf[node][i];
 	}	
-      }     
-      
+	sort(activeCellVec.begin(), activeCellVec.end(), greater<int>());
+	for (int i=0;i<maxPartitionSize;i++){
+	  partitionedActiveCells(node,i)=activeCellVec[i];
+	}	       
+      }           
     }
+    /*
     for (int node=0;node<numNodes;node++){
       cout << "ids for node " << node << " are: ";
       for (int i = 0;i<maxPartitionSize;i++){
@@ -221,7 +227,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
       }
       cout << endl;
     }  
-
+    */
+    
   }//end else
 
   delete zz;
