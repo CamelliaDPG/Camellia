@@ -98,7 +98,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
     }
   }
   rebuildLookups();
-  _numInitialElements = numElements();
+  _numInitialElements = (int)numElements();
 }
 
 int Mesh::numInitialElements(){
@@ -1530,4 +1530,49 @@ void Mesh::verticesForSide(FieldContainer<double>& vertices, int cellID, int sid
       vertices(vertexIndex,i) = _vertices[_verticesForCellID[cellID][(sideIndex+vertexIndex)%numSides]](i);
     }
   }
+}
+
+void Mesh::writeMeshPartitionsToFile(){
+  ofstream myFile;
+  myFile.open("MeshPartitions.m");
+  myFile << "numPartitions="<<_numPartitions<<";"<<endl;
+
+  int maxNumVertices=0;
+  int maxNumElems=0;
+  int spaceDim = 3;
+
+  //initialize verts
+  for (int i=0;i<_numPartitions;i++){
+    vector< ElementPtr > elemsInPartition = _partitions[i];
+    for (int l=0;l<spaceDim;l++){
+      myFile << "verts{"<< i+1 <<","<< l+1 << "} = zeros(" << maxNumVertices << ","<< maxNumElems << ");"<< endl;
+      for (int j=0;j<elemsInPartition.size();j++){
+	FieldContainer<double> verts; // gets resized inside verticesForCell
+	verticesForCell(verts, elemsInPartition[j]->cellID());  //verts(numVertsForCell,dim)
+	maxNumVertices = max(maxNumVertices,verts.dimension(0));
+	maxNumElems = max(maxNumElems,(int)elemsInPartition.size());
+	spaceDim = verts.dimension(1);
+      }
+    }
+  }  
+  cout << "max number of elems = " << maxNumElems << endl;
+
+  for (int i=0;i<_numPartitions;i++){
+    vector< ElementPtr > elemsInPartition = _partitions[i];
+    for (int l=0;l<spaceDim;l++){
+
+      for (int j=0;j<elemsInPartition.size();j++){
+	FieldContainer<double> vertices; // gets resized inside verticesForCell
+	verticesForCell(vertices, elemsInPartition[j]->cellID());  //vertices(numVertsForCell,dim)
+	int numVertices = vertices.dimension(0);
+	
+	// write vertex coordinates to file	
+	for (int k=0;k<numVertices;k++){	  
+	  myFile << "verts{"<< i+1 <<","<< l+1 <<"}("<< k+1 <<","<< j+1 <<") = "<< vertices(k,l) << ";"<<endl; // verts{numPartitions,spaceDim}
+	}
+      }
+      
+    }
+  }
+  myFile.close();
 }

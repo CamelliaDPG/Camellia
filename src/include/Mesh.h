@@ -181,6 +181,8 @@ public:
   int parityForSide(int cellID, int sideIndex);
   
   void rebuildLookups();
+
+  void writeMeshPartitionsToFile();
 };
 
 #endif
