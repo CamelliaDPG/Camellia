@@ -53,34 +53,54 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 1, verticalCells = 1;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
 
   // set partitioner
-  string partitionType = "HSFC";
+  string partitionType = "RANDOM";
   Teuchos::RCP< ZoltanMeshPartitionPolicy > ZoltanPartitionPolicy = Teuchos::rcp(new ZoltanMeshPartitionPolicy(partitionType));
 
   mesh->setNumPartitions(numProcs);
   mesh->setPartitionPolicy(ZoltanPartitionPolicy);
 
   cout << "refining cells---" << endl;
-  vector<int>cellsToRefine;
-  cellsToRefine.push_back(3);
-  cellsToRefine.push_back(1);
-  cellsToRefine.push_back(2);
-  mesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  vector<int> cellsToRefine;
   cellsToRefine.clear();
+
+  // repeatedly refine the first element along the side shared with cellID 1
+  int numRefinements = 4;
+  for (int i=0; i<numRefinements; i++) {
+    vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
+    int numDescendents = descendents.size();
+    cellsToRefine.clear();
+    for (int j=0; j<numDescendents; j++ ) {
+      int cellID = descendents[j].first;
+      cellsToRefine.push_back(cellID);
+    }
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    // same thing for north side
+    descendents = mesh->elements()[0]->getDescendentsForSide(2);
+    numDescendents = descendents.size();
+    cellsToRefine.clear();
+    for (int j=0; j<numDescendents; j++ ) {
+      int cellID = descendents[j].first;
+      cellsToRefine.push_back(cellID);
+    }
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  }
   
   //  FieldContainer<int> partitionedMesh(numProcs,mesh->numElements()); 
   //  ZoltanPartitionPolicy->partitionMesh(&(*mesh),numProcs,partitionedMesh);
 
   //  cout << "--- repartitioning" << endl;
-  mesh->repartition();
+  //  mesh->repartition();
 
   if (rank==0){
     mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
   }
+  return 0;
 
   //////////////////////////////////////////////////////////////////////////////////////
 

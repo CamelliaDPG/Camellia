@@ -478,10 +478,10 @@ public:
     // assumes that the n initial mesh elements are ordered 1:n. 
     int count = 0;
     int num_assigned = 0;
+    *in_order = 0; // let zoltan figure out ordering
     for (int i=0; i<mesh->numCoarseElems(); i++){
       global_ids[i] = i;
       local_ids[i] = i;
-      in_order[i] = 0; // let zoltan figure out ordering
       num_vert[i] = mesh->_elements[global_ids[i]].numVertices();
       // warning - assumes num_gid_entries = 1!!!
       for (int j=0;j<num_vert[i];j++){
