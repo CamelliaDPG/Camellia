@@ -53,26 +53,34 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 3;
+  int horizontalCells = 2, verticalCells = 2;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
-  string partitionType = "REFTREE";
+
+  // set partitioner
+  string partitionType = "HSFC";
   Teuchos::RCP< ZoltanMeshPartitionPolicy > ZoltanPartitionPolicy = Teuchos::rcp(new ZoltanMeshPartitionPolicy(partitionType));
 
-  //  Teuchos::RCP< ZoltanMeshPartitionPolicy > ZoltanPartitionPolicy = Teuchos::rcp(new ZoltanMeshPartitionPolicy());
-
   mesh->setNumPartitions(numProcs);
-  //  mesh->setPartitionPolicy(ZoltanPartitionPolicy);
+  mesh->setPartitionPolicy(ZoltanPartitionPolicy);
 
+  cout << "refining cells---" << endl;
   vector<int>cellsToRefine;
-  cellsToRefine.push_back(0);
   cellsToRefine.push_back(3);
-  //  mesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  cellsToRefine.push_back(1);
+  cellsToRefine.push_back(2);
+  mesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  cellsToRefine.clear();
+  
+  //  FieldContainer<int> partitionedMesh(numProcs,mesh->numElements()); 
+  //  ZoltanPartitionPolicy->partitionMesh(&(*mesh),numProcs,partitionedMesh);
 
-  FieldContainer<int> partitionedMesh(numProcs,mesh->numElements()); 
-  ZoltanPartitionPolicy->partitionMesh(&(*mesh),numProcs,partitionedMesh);
+  //  cout << "--- repartitioning" << endl;
+  mesh->repartition();
 
-  return 0;
+  if (rank==0){
+    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////
 
@@ -99,6 +107,9 @@ int main(int argc, char *argv[]) {
     cout << "Done solving and writing" << endl;
   }
 
+  mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+
+  return 0;
     
   /*int numRefinements = 0;
   double thresholdFactor = 0.20;
