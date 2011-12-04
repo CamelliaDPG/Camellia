@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 1;
-  int pToAdd = 0; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution:
   double epsilon = 1e-2;
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
   // solve
-  solution->solve(); 
+  solution->solve(true); 
 
   cout << "Processor " << rank << " returned from solve()." << endl;
   

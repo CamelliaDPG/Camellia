@@ -33,6 +33,8 @@ template <typename T> const T ConfusionManufacturedSolution::u(T &x, T &y) {
 double ConfusionManufacturedSolution::solutionValue(int trialID,
                                                     FieldContainer<double> &physicalPoint) {
   
+  cout << "entered ConfusionManufacturedSolution::solutionValue" << endl;
+  
   double x = physicalPoint(0);
   double y = physicalPoint(1);
   F2 sx(2,0,x), sy(2,1,y), su; // s for Sacado 

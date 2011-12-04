@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
   
   // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
-  solution.solve();
+  solution.solve(true);
   cout << "Processor " << rank << " returned from solve()." << endl;
 
   //double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
