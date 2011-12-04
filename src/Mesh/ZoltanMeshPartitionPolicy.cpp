@@ -49,7 +49,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   int argc = 0;
   Zoltan_Initialize(argc, NULL, &version);
 
-  
+#ifdef HAVE_MPI
   Zoltan *zz = new Zoltan(MPI::COMM_WORLD);
   if (zz == NULL){
     MPI::Finalize();
@@ -233,6 +233,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
 
   delete zz;
   
+#endif
 }    
 
 int ZoltanMeshPartitionPolicy::getIndexOfGID(int myNode,FieldContainer<int> &partitionedActiveCells,int globalID){

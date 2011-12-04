@@ -78,7 +78,7 @@ void Boundary::buildLookupTables() {
     Teuchos::RCP< Element > elemPtr = _mesh->elements()[cellID]; 
     int sideIndex = (*entryIt).second;
     ElementTypePtr elemTypePtr = elemPtr->elementType();
-    _boundaryElementsByType[elemTypePtr.get()].push_back( make_pair( elemPtr->cellIndex(), sideIndex ) );
+    _boundaryElementsByType[elemTypePtr.get()].push_back( make_pair( elemPtr->globalCellIndex(), sideIndex ) );
     _boundaryCellIDs[elemTypePtr.get()].push_back( elemPtr->cellID() );
     //cout << "cellID:\t" << elemPtr->cellID() << "\t sideIndex:\t" << sideIndex << endl;
   }
@@ -113,6 +113,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<do
     i++;
     globalIndices(i) = allGlobalIndices(matchingFCIndex);
     globalValues(i)  =  allGlobalValues(matchingFCIndex);
+    //cout << "BC: " << globalIndices(i) << " = " << globalValues(i) << endl;
   }
 }
 
@@ -153,6 +154,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
       double value = (*bcIt).second;
       globalIndices(currentIndex) = index;
       globalValues(currentIndex) = value;
+      //cout << "BC: " << globalIndices(currentIndex) << " = " << globalValues(currentIndex) << endl;
       currentIndex++;
       if (index < 0) {
         TEST_FOR_EXCEPTION( true,
@@ -286,6 +288,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 double value = dirichletValues(localCellIndex,dofOrdinal);
                 int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
                 int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
+//                cout << "BC: " << globalDofIndex << " = " << value << " @ (" << dofPointsSidePhysical(localCellIndex,localDofIndex,0) << ", " << dofPointsSidePhysical(localCellIndex,localDofIndex,1) << ")\n";
                 if (globalDofIndex < 0) {
                   TEST_FOR_EXCEPTION( true,
                                      std::invalid_argument,

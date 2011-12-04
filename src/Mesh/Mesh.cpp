@@ -910,13 +910,14 @@ void Mesh::determineActiveElements() {
   }
 }
 
-set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
+void Mesh::determinePartitionDofIndices() {
+  _partitionedGlobalDofIndices.clear();
+  _partitionForGlobalDofIndex.clear();
+  _partitionLocalIndexForGlobalDofIndex.clear();
   set<int> dofIndices;
-  if ((partitionNumber < 0) || (partitionNumber >= _numPartitions) ) {
-    return dofIndices;
-  }
   set<int> previouslyClaimedDofIndices;
-  for (int i=0; i<partitionNumber; i++) {
+  for (int i=0; i<_numPartitions; i++) {
+    dofIndices.clear();
     vector< ElementPtr >::iterator elemIterator;
     for (elemIterator =  _partitions[i].begin(); elemIterator != _partitions[i].end(); elemIterator++) {
       ElementPtr elem = *elemIterator;
@@ -930,34 +931,25 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
           TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
         }
         int dofIndex = (*mapEntryIt).second;
-//        cout << "previouslyClaimedDofIndices: dofIndex: " << dofIndex << endl;
-        previouslyClaimedDofIndices.insert(dofIndex);
+        if ( previouslyClaimedDofIndices.find( dofIndex ) == previouslyClaimedDofIndices.end() ) {
+          dofIndices.insert( dofIndex );
+          _partitionForGlobalDofIndex[ dofIndex ] = i;
+          previouslyClaimedDofIndices.insert(dofIndex);
+        }
       }
     }
-  }
-  vector< ElementPtr >::iterator elemIterator;
-  for (elemIterator =  _partitions[partitionNumber].begin(); 
-       elemIterator != _partitions[partitionNumber].end(); 
-       elemIterator++
-       ) {
-    ElementPtr elem = *elemIterator;
-    ElementTypePtr elemTypePtr = elem->elementType();
-    int numLocalDofs = elemTypePtr->trialOrderPtr->totalDofs();
-    int cellID = elem->cellID();
-    for (int localDofIndex=0; localDofIndex < numLocalDofs; localDofIndex++) {
-      pair<int,int> key = make_pair(cellID, localDofIndex);
-      map< pair<int,int>, int >::iterator mapEntryIt = _localToGlobalMap.find(key);
-      if ( mapEntryIt == _localToGlobalMap.end() ) {
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
-      }
-      int dofIndex = (*mapEntryIt).second;
-      if ( previouslyClaimedDofIndices.find(dofIndex) == previouslyClaimedDofIndices.end() ) {
-        dofIndices.insert(dofIndex);
-//        cout << "inserted dofIndex: " << dofIndex << endl;
-      }
+    _partitionedGlobalDofIndices.push_back( dofIndices );
+    int partitionDofIndex = 0;
+    for (set<int>::iterator dofIndexIt = dofIndices.begin();
+         dofIndexIt != dofIndices.end(); dofIndexIt++) {
+      int globalDofIndex = *dofIndexIt;
+      _partitionLocalIndexForGlobalDofIndex[globalDofIndex] = partitionDofIndex++;
     }
   }
-  return dofIndices;
+}
+
+set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
+  return _partitionedGlobalDofIndices[partitionNumber];
 }
 
 vector< Teuchos::RCP< Element > > & Mesh::elements() { 
@@ -1301,6 +1293,17 @@ int Mesh::parityForSide(int cellID, int sideIndex) {
   return parity;
 }
 
+int Mesh::partitionForGlobalDofIndex( int globalDofIndex ) {
+  if ( _partitionForGlobalDofIndex.find( globalDofIndex ) == _partitionForGlobalDofIndex.end() ) {
+    return -1;
+  }
+  return _partitionForGlobalDofIndex[ globalDofIndex ];
+}
+
+int Mesh::partitionLocalIndexForGlobalDofIndex( int globalDofIndex ) {
+  return _partitionLocalIndexForGlobalDofIndex[ globalDofIndex ];
+}
+
 FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, int partitionNumber ) {
   if (partitionNumber >= 0) {
     return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
@@ -1313,6 +1316,7 @@ void Mesh::rebuildLookups() {
   determineActiveElements();
   buildTypeLookups(); // build data structures for efficient lookup by element type
   buildLocalToGlobalMap();
+  determinePartitionDofIndices();
   _boundary.buildLookupTables();
   cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }

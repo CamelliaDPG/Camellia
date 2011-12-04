@@ -87,16 +87,21 @@ class Mesh {
   map< ElementType*, map<int, int> > _globalCellIndexToCellID;
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypes;
+  map<int, int> _partitionLocalIndexForGlobalDofIndex;
+  map<int, int> _partitionForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   map< ElementType*, FieldContainer<double> > _cellSideParitiesForElementType; // for uniform mesh, just a single entry..
+  
+  vector< set<int> > _partitionedGlobalDofIndices;
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
   void determineDofPairings();
+  void determinePartitionDofIndices();
   void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
   int _numGlobalDofs;
   ElementPtr _nullPtr;
@@ -179,6 +184,8 @@ public:
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
   
   int parityForSide(int cellID, int sideIndex);
+  int partitionForGlobalDofIndex( int globalDofIndex );
+  int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
   
   void rebuildLookups();
 

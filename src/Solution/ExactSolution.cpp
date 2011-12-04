@@ -265,7 +265,8 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
-      values(cellIndex,ptIndex) = solutionValue(trialID, point);
+      double value = solutionValue(trialID, point);
+      values(cellIndex,ptIndex) = value;
     }
   }
 }

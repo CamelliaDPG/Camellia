@@ -940,10 +940,10 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
       cout << "cellID for element doesn't match its index in mesh.elements() --";
       cout <<  elem->cellID() << " != " << cellID << endl;
     }
-    if ( cellID != mesh.cellID(elem->elementType(), elem->cellIndex()) ) {
+    if ( cellID != mesh.cellID(elem->elementType(), elem->globalCellIndex()) ) {
       success = false;
       cout << "cellID index in mesh.elements() doesn't match what's reported by mesh.cellID(elemType,cellIndex) --";
-      cout <<  cellID << " != " << mesh.cellID(elem->elementType(), elem->cellIndex()) << endl;
+      cout <<  cellID << " != " << mesh.cellID(elem->elementType(), elem->globalCellIndex()) << endl;
     }
     // check that the vertices are lined up correctly
     int numSides = elem->numSides();

@@ -319,154 +319,179 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
-  //  if (true) {
-  //    cout << "Exiting early--debugging...\n";
-  //    return;
-  //  }
-  
-  /*  // DEBUG code: check symmetry of globalStiffMatrix
-   double tol = 1e-12;
-   bool symmetric = true;
-   for (int i=0; i<numGlobalDofs; i++) {
-   for (int j=i; j<numGlobalDofs; j++) {
-   double diff = abs(globalStiffMatrix[i][j] - globalStiffMatrix[j][i]);
-   if (diff > tol) {
-   symmetric = false;
-   }
-   }
-   }
-   if (symmetric) {
-   cout << "globalStiffnessMatrix is symmetric" << endl;
-   } else {
-   cout << "WARNING: globalStiffnessMatrix is not symmetric!!" << endl;
-   }*/
-  
- 
   // determine and impose BCs
 
-    timer.ResetStartTime();
+  timer.ResetStartTime();
+
+  FieldContainer<int> bcGlobalIndices;
+  FieldContainer<double> bcGlobalValues;
   
-    FieldContainer<int> bcGlobalIndices;
-    FieldContainer<double> bcGlobalValues;
-    
-    _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
-    int numBCs = bcGlobalIndices.size();
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
+  int numBCs = bcGlobalIndices.size();
 //    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
 //    cout << "bcGlobalValues:" << endl << bcGlobalValues;
+
+  Epetra_MultiVector v(partMap,1);
+  v.PutScalar(0.0);
+  for (int i = 0; i < numBCs; i++) {
+    v.ReplaceGlobalValue(bcGlobalIndices(i), 0, bcGlobalValues(i));
+  }
   
-    Epetra_MultiVector v(partMap,1);
-    v.PutScalar(0.0);
-    // Loop over boundary nodes
-//    for (int i = 0; i < numBCs; i++) {
-//      cout << "i: " << i << endl;
-//      cout << "bcGlobalIndices(i): " << bcGlobalIndices(i) << endl;
-//      cout << "bcGlobalValues(i): " << bcGlobalValues(i) << endl;
-//    }  
-    for (int i = 0; i < numBCs; i++) {
-      // THIS LINE IS BROKEN FOR MULTIPLE PROCESSORS--the second index is wrong...
-      //v[0][bcGlobalIndicesues(i)]=bcGlobalValues(i);
-      v.ReplaceGlobalValue(bcGlobalIndices(i), 0, bcGlobalValues(i));
+  Epetra_MultiVector rhsDirichlet(partMap,1);
+  globalStiffMatrix.Apply(v,rhsDirichlet);
+  
+  // Update right-hand side
+  rhsVector.Update(-1.0,rhsDirichlet,1.0);
+  
+  if (numBCs == 0) {
+    cout << "Solution: Warning: Imposing no BCs." << endl;
+  } else {
+    int err = rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
+    if (err != 0) {
+      cout << "rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
-    
-    Epetra_MultiVector rhsDirichlet(partMap,1);
-    globalStiffMatrix.Apply(v,rhsDirichlet);
-    
-    // Update right-hand side
-    rhsVector.Update(-1.0,rhsDirichlet,1.0);  
-    
-    if (numBCs == 0) {
-      cout << "Solution: Warning: Imposing no BCs." << endl;
-    } else {
-      rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
-    }
-    
-    // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-    //  and add one to diagonal.
+  }
+  
+  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
+  //  and add one to diagonal.
 //    cout << "applying OAZ for globalIndices: " << endl << bcGlobalIndices;
+
+  FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
+  for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
+    bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
+  }
   
-    FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
-    for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-      bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
+  ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+
+  double timeBCImposition = timer.ElapsedTime();
+  Epetra_Vector timeBCImpositionVector(timeMap);
+  timeBCImpositionVector[0] = timeBCImposition;
+
+  cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
+  
+  // Dump matrices to disk
+  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_after_bcs.dat",globalStiffMatrix);
+  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+  
+  cout << "Finished imposing BCs." << endl;
+  
+  //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
+  
+  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  
+  // solve the global matrix system..
+
+  Epetra_FEVector lhsVector(partMap, true);
+  
+  // debug: check the consistency of the mesh's global -> partitionLocal index map
+  for (int localIndex = partMap.MinLID(); localIndex < partMap.MaxLID(); localIndex++) {
+    int globalIndex = partMap.GID(localIndex);
+    int meshPartitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex(globalIndex);
+    if (meshPartitionLocalIndex != localIndex) {
+      cout << "meshPartitionLocalIndex != localIndex (" << meshPartitionLocalIndex << " != " << localIndex << ")\n";
+      TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
     }
-    
-    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+    int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
+    if (partition != rank) {
+      cout << "partition != rank (" << partition << " != " << rank << ")\n";
+      TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+    }
+  }
   
-    double timeBCImposition = timer.ElapsedTime();
-    Epetra_Vector timeBCImpositionVector(timeMap);
-    timeBCImpositionVector[0] = timeBCImposition;
+  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
   
-    cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
-    
-    // Dump matrices to disk
-    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_after_bcs.dat",globalStiffMatrix);
-    //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-    
-    cout << "Finished imposing BCs." << endl;
-    
-    //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
-    
-    //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-    
-    // solve the global matrix system..
-  
-    Epetra_FEVector lhsVector(partMap, true);
-    
-    Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
-    
-    rhsVector.GlobalAssemble();
-  
+  rhsVector.GlobalAssemble();
+
 //    EpetraExt::RowMatrixToMatlabFile("stiff_matrix_post_bcs.dat",globalStiffMatrix);
 //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_post_bcs.dat",rhsVector,0,0,false);
-  
-    timer.ResetStartTime();
-    if ( !useMumps ) {
-      Amesos_Klu klu(problem);
-      
-      //cout << "About to call klu.Solve()." << endl;
-      int solveSuccess = klu.Solve();
-      
-      //cout << "klu.Solve() completed." << endl;
-      Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
-      if (solveSuccess != 0 ) {
-        cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
-      }
-    } else {
-      cout << "not yet building with MUMPS support." << endl;
-      /*    Amesos_Mumps mumps(problem);
-       mumps.SymbolicFactorization();
-       mumps.NumericFactorization();
-       mumps.Solve();*/
-    }
-    double timeSolve = timer.ElapsedTime();
-    Epetra_Vector timeSolveVector(timeMap);
-    timeSolveVector[0] = timeSolve;
+
+  timer.ResetStartTime();
+  if ( !useMumps ) {
+    Amesos_Klu klu(problem);
     
-    // TODO: figure out the all-to-all communication for lhsVector data
-    timer.ResetStartTime();
-    lhsVector.GlobalAssemble();
-    double *lhsVectorCopy = new double[lhsVector.GlobalLength()];
-    lhsVector.ExtractCopy(&lhsVectorCopy); 
-  
-    // copy the dof coefficients into our data structure
-    vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
-    vector< Teuchos::RCP< Element > >::iterator elemIt;
+    //cout << "About to call klu.Solve()." << endl;
+    int solveSuccess = klu.Solve();
     
-    for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-      ElementPtr elemPtr = *(elemIt);
-      int cellID = elemPtr->cellID();
-      int cellIndex = elemPtr->globalCellIndex();
-      int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
-      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-        int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-        _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorCopy[globalIndex];
-      }
+    //cout << "klu.Solve() completed." << endl;
+    // Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
+    if (solveSuccess != 0 ) {
+      cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
     }
+  } else {
+    cout << "not yet building with MUMPS support." << endl;
+//    Amesos_Mumps mumps(problem);
+//    mumps.SymbolicFactorization();
+//    mumps.NumericFactorization();
+//    mumps.Solve();
+  }
+  double timeSolve = timer.ElapsedTime();
+  Epetra_Vector timeSolveVector(timeMap);
+  timeSolveVector[0] = timeSolve;
   
-    delete lhsVectorCopy;
+  // TODO: figure out the all-to-all communication for lhsVector data
+  timer.ResetStartTime();
+  int maxLhsLength = 0;
+  for (int i=0; i<numProcs; i++) {
+    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
+  }
+  lhsVector.GlobalAssemble();
+  double lhsVectorGathered[numProcs][maxLhsLength];
+  double *lhsVectorLocal = new double[ maxLhsLength ];
+  // debugging: clear the vector first:
+  for (int i=0; i<maxLhsLength; i++ ) {
+    lhsVectorLocal[i] = 0.0;
+  }
   
-    double timeDistributeSolution = timer.ElapsedTime();
-    Epetra_Vector timeDistributeSolutionVector(timeMap);
-    timeDistributeSolutionVector[0] = timeDistributeSolution;
+  lhsVector.ExtractCopy( &lhsVectorLocal ); 
+  
+//  //debugging output:
+//  cout << "rank " << rank << " lhsVectorLocal:\t";
+//  cout << setprecision(3);
+//  // debugging: clear the vector first:
+//  for (int i=0; i< maxLhsLength; i++ ) {
+//    cout << lhsVectorLocal[i] << "\t";
+//  }
+//  cout << endl;
+
+  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
+
+//  //debugging output:
+//  if (rank == 0) {
+//    cout << "lhsVectorGathered:\n";
+//    // debugging: clear the vector first:
+//    for (int j=0; j< numProcs; j++) {
+//      cout << "rank " << j << ":\t";
+//      for (int i=0; i< maxLhsLength; i++ ) {
+//        cout << lhsVectorGathered[j][i] << "\t";
+//      }
+//      cout << endl;
+//    }
+//  }
+//  cout << setprecision(5);
+  
+  // copy the dof coefficients into our data structure
+  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
+  vector< Teuchos::RCP< Element > >::iterator elemIt;
+  
+  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+    ElementPtr elemPtr = *(elemIt);
+    int cellID = elemPtr->cellID();
+    int cellIndex = elemPtr->globalCellIndex();
+    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
+    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
+      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
+      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
+      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
+    }
+  }
+
+  delete lhsVectorLocal;
+
+  double timeDistributeSolution = timer.ElapsedTime();
+  Epetra_Vector timeDistributeSolutionVector(timeMap);
+  timeDistributeSolutionVector[0] = timeDistributeSolution;
   
     // DEBUGGING: print out solution coefficients
 //    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
@@ -485,13 +510,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   //    Epetra_Vector  uCoeff(solnMap);
   //    uCoeff.Import(femCoefficients, solnImporter, Insert);
   //#endif
-  
-//  cout << "****** TIMING REPORT FOR RANK " << rank << " ******\n";
-//  cout << "localStiffness: " << timeLocalStiffness << " sec." << endl;
-//  cout << "globalAssembly: " << timeGlobalAssembly << " sec." << endl;
-//  cout << "impose BCs:     " << timeBCImposition << " sec." << endl;
-//  cout << "solve:          " << timeSolve << " sec." << endl;
-//  cout << "dist. solution: " << timeDistributeSolution << " sec." << endl;
   
   int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
   err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
@@ -545,9 +563,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     cout << "impose BCs:     " << _minTimeBCImposition << " sec." << endl;
     cout << "solve:          " << _minTimeSolve << " sec." << endl;
     cout << "dist. solution: " << _minTimeDistributeSolution << " sec." << endl;   
-  }
-  
-  if (rank == 0) { 
   }
   
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
