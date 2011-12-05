@@ -26,12 +26,12 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 1;
-  int pToAdd = 0; // for tests
+  int polyOrder = 2;
+  int pToAdd = 3; // for tests
   
   // define our manufactured solution:
   double epsilon = 1e-2;
-  double beta_x = 1.0, beta_y = 2.0;
+  double beta_x = 1.0, beta_y = 1.5;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
@@ -58,7 +58,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
 
   // set partitioner
-  string partitionType = "RANDOM";
+  string partitionType = "REFTREE";
+  //string partitionType = "BLOCK";
   Teuchos::RCP< ZoltanMeshPartitionPolicy > ZoltanPartitionPolicy = Teuchos::rcp(new ZoltanMeshPartitionPolicy(partitionType));
 
   mesh->setNumPartitions(numProcs);
@@ -69,7 +70,7 @@ int main(int argc, char *argv[]) {
   cellsToRefine.clear();
 
   // repeatedly refine the first element along the side shared with cellID 1
-  int numRefinements = 4;
+  int numRefinements = 2;
   for (int i=0; i<numRefinements; i++) {
     vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
     int numDescendents = descendents.size();
@@ -91,28 +92,21 @@ int main(int argc, char *argv[]) {
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
   
-  //  FieldContainer<int> partitionedMesh(numProcs,mesh->numElements()); 
-  //  ZoltanPartitionPolicy->partitionMesh(&(*mesh),numProcs,partitionedMesh);
-
-  //  cout << "--- repartitioning" << endl;
-  //  mesh->repartition();
-
-  if (rank==0){
-    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+  int numUnifRefinements = 1;
+  for (int i=0;i<numUnifRefinements;i++){
+    cellsToRefine.clear();
+    vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+    for (int j = 0;j< activeElements.size();j++){
+	cellsToRefine.push_back(activeElements[j]->cellID());
+    }
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
-  return 0;
-
-  //////////////////////////////////////////////////////////////////////////////////////
-
-
+      
   // create a solution object
   Teuchos::RCP<Solution> solution;
-  if (useEggerSchoeberl)
-    solution = Teuchos::rcp(new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip));
-  else {
-    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
-    solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
-  }
+  Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
+  solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
+
   // solve
   solution->solve(); 
 
@@ -126,8 +120,12 @@ int main(int argc, char *argv[]) {
 
     cout << "Done solving and writing" << endl;
   }
-
-  mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+  if (rank==0){
+    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+    solution->writeStatsToFile("scaling_stats.dat");
+    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat.dat");
+  }
 
   return 0;
     
