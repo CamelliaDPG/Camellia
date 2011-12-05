@@ -377,7 +377,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
   
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
   // solve the global matrix system..
 
@@ -435,6 +435,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
   }
   lhsVector.GlobalAssemble();
+  
+  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  
   double lhsVectorGathered[numProcs][maxLhsLength];
   double *lhsVectorLocal = new double[ maxLhsLength ];
   // debugging: clear the vector first:
