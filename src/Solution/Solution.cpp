@@ -351,17 +351,17 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       cout << "rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
   }
-  
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
   //  and add one to diagonal.
-//    cout << "applying OAZ for globalIndices: " << endl << bcGlobalIndices;
-
   FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
     bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
   }
-  
-  ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+  if (numBCs == 0) {
+    ML_Epetra::Apply_OAZToMatrix(NULL, 0, globalStiffMatrix);
+  } else {
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+  }
 
   double timeBCImposition = timer.ElapsedTime();
   Epetra_Vector timeBCImpositionVector(timeMap);
