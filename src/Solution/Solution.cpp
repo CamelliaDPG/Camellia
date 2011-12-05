@@ -241,22 +241,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
       
-      //BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffness, optTestCoeffs,
-      //                                                   _mesh->bilinearForm(), trialOrderingPtr, testOrderingPtr,
-      //                                                   *(cellTopoPtr.get()), physicalCellNodes, cellSideParities);
-      
-      //cout << "finalStiffness\n" << finalStiffness;
-      
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),
                                       optTestCoeffs, testOrderingPtr,
                                       *(cellTopoPtr.get()), physicalCellNodes);
       
-      //cout << "localRHSVector\n" << localRHSVector;
-      
       FieldContainer<int> globalDofIndices(numTrialDofs);
-      
-      //cout << "finalStiffness: " << endl << finalStiffness;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         int cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
@@ -264,13 +254,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
         for (int i=0; i<numTrialDofs; i++) {
           globalDofIndices(i) = _mesh->globalDofIndex(cellID,i);
         }
-        //cout << "globalDofIndices:" << endl << globalDofIndices;
-        
-        //        int errCode = globalStiffMatrix.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
-        //        if (errCode > 0) {
-        //          cout << "could not SumIntoGlobalValues for globalDofIndices starting at " << globalDofIndices(0) << endl;
-        //          globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
-        //        }
         globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
         rhsVector.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
       }
@@ -369,16 +352,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 
   cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
   
-  // Dump matrices to disk
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix_after_bcs.dat",globalStiffMatrix);
-  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-  
-  cout << "Finished imposing BCs." << endl;
-  
-  //cout << "globalStiffMatrix after BCs: " << globalStiffMatrix;
-  
-  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  
   // solve the global matrix system..
 
   Epetra_FEVector lhsVector(partMap, true);
@@ -401,9 +374,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
   
   rhsVector.GlobalAssemble();
-
-//    EpetraExt::RowMatrixToMatlabFile("stiff_matrix_post_bcs.dat",globalStiffMatrix);
-//    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_post_bcs.dat",rhsVector,0,0,false);
 
   timer.ResetStartTime();
   if ( !useMumps ) {
@@ -436,46 +406,25 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   }
   lhsVector.GlobalAssemble();
   
-  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  // Dump matrices to disk
+  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  //EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   
-  double lhsVectorGathered[numProcs][maxLhsLength];
-  double *lhsVectorLocal = new double[ maxLhsLength ];
-  // debugging: clear the vector first:
-  for (int i=0; i<maxLhsLength; i++ ) {
-    lhsVectorLocal[i] = 0.0;
-  }
-  
-  lhsVector.ExtractCopy( &lhsVectorLocal ); 
-  
-//  //debugging output:
-//  cout << "rank " << rank << " lhsVectorLocal:\t";
-//  cout << setprecision(3);
-//  // debugging: clear the vector first:
-//  for (int i=0; i< maxLhsLength; i++ ) {
-//    cout << lhsVectorLocal[i] << "\t";
-//  }
-//  cout << endl;
-
-  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
-
-//  //debugging output:
-//  if (rank == 0) {
-//    cout << "lhsVectorGathered:\n";
-//    // debugging: clear the vector first:
-//    for (int j=0; j< numProcs; j++) {
-//      cout << "rank " << j << ":\t";
-//      for (int i=0; i< maxLhsLength; i++ ) {
-//        cout << lhsVectorGathered[j][i] << "\t";
-//      }
-//      cout << endl;
-//    }
-//  }
-//  cout << setprecision(5);
+#ifdef HAVE_MPI
+    // Import solution onto current processor
+  int numNodesGlobal = partMap.NumGlobalElements();
+  Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
+  Epetra_Import  solnImporter(solnMap, partMap);
+  Epetra_Vector  solnCoeff(solnMap);
+  solnCoeff.Import(lhsVector, solnImporter, Insert);
+#else
+  Epetra_FEVector solnCoeff = lhsVector;
+#endif
   
   // copy the dof coefficients into our data structure
   vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator elemIt;
-  
   for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
     ElementPtr elemPtr = *(elemIt);
     int cellID = elemPtr->cellID();
@@ -483,14 +432,63 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
     for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
       int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
-      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
-      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
-      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
+      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = solnCoeff[globalIndex];
     }
   }
-
-  delete lhsVectorLocal;
+  
+//  double lhsVectorGathered[numProcs][maxLhsLength];
+//  double *lhsVectorLocal = new double[ maxLhsLength ];
+//  // debugging: clear the vector first:
+//  for (int i=0; i<maxLhsLength; i++ ) {
+//    lhsVectorLocal[i] = 0.0;
+//  }
+//  
+//  lhsVector.ExtractCopy( &lhsVectorLocal ); 
+//  
+////  //debugging output:
+////  cout << "rank " << rank << " lhsVectorLocal:\t";
+////  cout << setprecision(3);
+////  // debugging: clear the vector first:
+////  for (int i=0; i< maxLhsLength; i++ ) {
+////    cout << lhsVectorLocal[i] << "\t";
+////  }
+////  cout << endl;
+//
+//  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
+//
+////  //debugging output:
+////  if (rank == 0) {
+////    cout << "lhsVectorGathered:\n";
+////    // debugging: clear the vector first:
+////    for (int j=0; j< numProcs; j++) {
+////      cout << "rank " << j << ":\t";
+////      for (int i=0; i< maxLhsLength; i++ ) {
+////        cout << lhsVectorGathered[j][i] << "\t";
+////      }
+////      cout << endl;
+////    }
+////  }
+////  cout << setprecision(5);
+//  
+//  // copy the dof coefficients into our data structure
+//  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
+//  vector< Teuchos::RCP< Element > >::iterator elemIt;
+//  
+//  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+//    ElementPtr elemPtr = *(elemIt);
+//    int cellID = elemPtr->cellID();
+//    int cellIndex = elemPtr->globalCellIndex();
+//    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
+//    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+//      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+//      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
+//      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
+//      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
+//      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
+//    }
+//  }
+//
+//  delete lhsVectorLocal;
 
   double timeDistributeSolution = timer.ElapsedTime();
   Epetra_Vector timeDistributeSolutionVector(timeMap);
