@@ -5,9 +5,15 @@
 #include "OptimalInnerProduct.h"
 #include "Mesh.h"
 #include "Solution.h"
+#include "Epetra_Time.h"
 
 // Trilinos includes
 #include "Intrepid_FieldContainer.hpp"
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -19,13 +25,18 @@ using namespace std;
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
   int rank=mpiSession.getRank();
   int numProcs=mpiSession.getNProc();
 #else
+  Epetra_SerialComm Comm;
   int rank = 0;
   int numProcs = 1;
 #endif
   // first, build a simple mesh
+  
+  Epetra_Time timer(Comm);
+  double wallTimeStart = timer.WallTime();
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -82,6 +93,8 @@ int main(int argc, char *argv[]) {
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
 
+  double wallTimeForMeshConstruction = timer.WallTime() - wallTimeStart;
+  if (rank==0) cout << "time to construct mesh: " << wallTimeForMeshConstruction << endl;
   if (rank==0) cout << "Mesh globalDofs: " << mesh->numGlobalDofs() << endl;
   
   // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
@@ -96,4 +109,7 @@ int main(int argc, char *argv[]) {
   
   if (rank==0)
     solution.writeStatsToFile("scaling_stats.dat");
+  
+  double wallTimeTotal = timer.WallTime() - wallTimeStart;
+  if (rank==0) cout << "total wall time: " << wallTimeTotal << " seconds.\n";
 }
