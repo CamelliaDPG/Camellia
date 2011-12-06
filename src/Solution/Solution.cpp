@@ -133,7 +133,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   rank     = Teuchos::GlobalMPISession::getRank();
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  cout << "rank: " << rank << " of " << numProcs << endl;
+  //cout << "rank: " << rank << " of " << numProcs << endl;
   _mesh->setNumPartitions(numProcs);
   _mesh->repartition();
 #else
@@ -143,7 +143,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
   
-  cout << "process " << rank << " about to get elementTypes.\n";
+  //cout << "process " << rank << " about to get elementTypes.\n";
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -165,13 +165,13 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
-  cout << "max row size for mesh: " << maxRowSize << endl;
-  cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
+  //cout << "max row size for mesh: " << maxRowSize << endl;
+  //cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
   Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, maxRowSize);
   //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
   Epetra_FEVector rhsVector(partMap);
   
-  cout << "process " << rank << " about to loop over elementTypes.\n";
+  //cout << "process " << rank << " about to loop over elementTypes.\n";
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
@@ -269,7 +269,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
   for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
     int trialID = *trialIt;
-    cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
+    //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
     FieldContainer<double> basisIntegrals;
     FieldContainer<int> globalIndices;
     integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
@@ -327,11 +327,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   rhsVector.Update(-1.0,rhsDirichlet,1.0);
   
   if (numBCs == 0) {
-    cout << "Solution: Warning: Imposing no BCs." << endl;
+    //cout << "Solution: Warning: Imposing no BCs." << endl;
   } else {
     int err = rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
     if (err != 0) {
-      cout << "rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
+      cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
   }
   // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
@@ -350,7 +350,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_Vector timeBCImpositionVector(timeMap);
   timeBCImpositionVector[0] = timeBCImposition;
 
-  cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
+  //cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
   
   // solve the global matrix system..
 
@@ -388,7 +388,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
     }
   } else {
-    cout << "not yet building with MUMPS support." << endl;
+    cout << "ERROR: not yet building with MUMPS support." << endl;
 //    Amesos_Mumps mumps(problem);
 //    mumps.SymbolicFactorization();
 //    mumps.NumericFactorization();
@@ -499,18 +499,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 //      ElementTypePtr elemTypePtr = *(elemTypeIt);
 //      cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
 //    }
-  
-  // TODO: communicate solution information to other MPI nodes....
-  // (CODE below copied from trilinoscouplings/example/scaling/example_Poisson_stk.cpp)
-  //#ifdef HAVE_MPI
-  //    // Import solution onto current processor
-  //    // FIXME
-  //    int numNodesGlobal = globalMapG.NumGlobalElements();
-  //    Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
-  //    Epetra_Import  solnImporter(solnMap, globalMapG);
-  //    Epetra_Vector  uCoeff(solnMap);
-  //    uCoeff.Import(femCoefficients, solnImporter, Insert);
-  //#endif
   
   int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
   err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
