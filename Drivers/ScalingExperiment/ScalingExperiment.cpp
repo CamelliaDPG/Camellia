@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
   
   // repeatedly refine the first element along the side shared with cellID 1
-  int numRefinements = 8;
+  int numRefinements = 1;
   for (int i=0; i<numRefinements; i++) {
     vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
     int numDescendents = descendents.size();
@@ -83,13 +83,13 @@ int main(int argc, char *argv[]) {
   
   // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
-  solution.solve(true);
+  solution.solve(false);
   cout << "Processor " << rank << " returned from solve()." << endl;
 
-  //double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+  double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
   
-//  if (rank==0)
-//    cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
+  if (rank==0)
+    cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   
   if (rank==0)
     solution.writeStatsToFile("scaling_stats.dat");
