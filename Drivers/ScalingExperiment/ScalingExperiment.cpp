@@ -45,7 +45,8 @@ int main(int argc, char *argv[]) {
   double beta_x = 1.0, beta_y = 1.0;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); // 0 doesn't mean constant, but a particular solution...
   
-  int H1Order = 3;
+  int pOrder = 3;
+  int H1Order = pOrder+1; int pToAdd = 2;
   int horizontalCells = 1; int verticalCells = 1;
   
   // before we hRefine, compute a solution for comparison after refinement
@@ -56,10 +57,10 @@ int main(int argc, char *argv[]) {
   
   // start with a fresh 2x1 mesh:
   horizontalCells = 1; verticalCells = 1;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
   
   // repeatedly refine the first element along the side shared with cellID 1
-  int numRefinements = 1;
+  int numRefinements = 9;
   for (int i=0; i<numRefinements; i++) {
     vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
     int numDescendents = descendents.size();
@@ -80,11 +81,13 @@ int main(int argc, char *argv[]) {
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
+
+  if (rank==0) cout << "Mesh globalDofs: " << mesh->numGlobalDofs() << endl;
   
   // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   solution.solve(false);
-  cout << "Processor " << rank << " returned from solve()." << endl;
+  //cout << "Processor " << rank << " returned from solve()." << endl;
 
   double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
   
