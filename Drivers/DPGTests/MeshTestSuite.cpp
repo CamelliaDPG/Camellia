@@ -283,7 +283,7 @@ bool MeshTestSuite::testFluxNorm() {
 }
 
 bool MeshTestSuite::testSacadoExactSolution() {
-  double tol = 1.5e-9; // had to increase for triangles, and again for single-point imposition.
+  double tol = 1.6e-9; // had to increase for triangles, and again for single-point imposition.
   bool success = true;
   
   FieldContainer<double> quadPoints(4,2);
@@ -1251,7 +1251,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
 bool MeshTestSuite::testPRefinement() {
   bool success = true;
   
-  double tol = 2e-11;
+  double tol = 2.5e-11;
   
   FieldContainer<double> quadPoints(4,2);
   
