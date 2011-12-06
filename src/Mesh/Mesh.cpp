@@ -1318,7 +1318,7 @@ void Mesh::rebuildLookups() {
   buildLocalToGlobalMap();
   determinePartitionDofIndices();
   _boundary.buildLookupTables();
-  cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
+  //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
 // the following is not at all meant to be efficient; we do a lot of rebuilding of

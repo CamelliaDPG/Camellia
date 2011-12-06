@@ -1812,7 +1812,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
     }
     
     int indexBase = 0;
-    cout << "process " << rank << " about to construct partMap.\n";
+    //cout << "process " << rank << " about to construct partMap.\n";
     //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
     Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
     

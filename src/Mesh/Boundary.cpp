@@ -296,7 +296,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 }
                 globalDofIndicesAndValues[globalDofIndex] = value;
                 if ( ! impositionReported ) {
-                  cout << "imposed BC values for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
+                  //cout << "imposed BC values for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
                   impositionReported = true;
                 }
               }
