@@ -1,12 +1,12 @@
 #!/bin/bash	 
 #$ -V	#Inherit the submission environment
 #$ -cwd	# Start job in submission directory
-#$ -N SEnp64	# Job Name
+#$ -N SEnp256	# Job Name
 #$ -j y	# Combine stderr and stdout
 #$ -o $JOB_NAME.o$JOB_ID	# Name of the output file (eg. myMPI.oJobID)
-#$ -pe 1way 768	# Requests 4 tasks/node, 64*12 cores total
+#$ -pe 1way 3072	# Requests 4 tasks/node, 256*12 cores total
 #$ -q normal	# Queue name normal
-#$ -l h_rt=00:10:00	# Run time (hh:mm:ss) - 0.5 hours
+#$ -l h_rt=00:10:00	# Run time (hh:mm:ss) - 10 minutes
 #$ -M nate@nateroberts.com	# Use email notification address
 #$ -m be	# Email at Begin and End of job
 set -x	# Echo commands, use set echo with csh
