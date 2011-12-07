@@ -127,7 +127,7 @@ int main(int argc, char *argv[]) {
   }
   if (rank==0){
     solution->writeStatsToFile("scaling_stats.dat");
-    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+    mesh->writeMeshPartitionsToFile("MeshPartitions.m"); //visualize mesh partitions
     solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u.dat");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat.dat");
   }

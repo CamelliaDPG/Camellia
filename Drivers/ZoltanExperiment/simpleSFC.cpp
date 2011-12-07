@@ -25,9 +25,9 @@ static const int NUM_DIMENSIONS = 2;
 
 typedef struct{
   int numMyElements; /* total number of elements in in my partition */
-  int numAllNbors;   /* total number of neighbors of my vertices */
+  //int numAllNbors;   /* total number of neighbors of my vertices */
   ZOLTAN_ID_TYPE *elementGID;    /* global ID of each of my elements */
-  int *nborIndex;    /* nborIndex[i] is location of start of neighbors for vertex i */
+  //int *nborIndex;    /* nborIndex[i] is location of start of neighbors for vertex i */
   ZOLTAN_ID_TYPE *nborGID;      /* nborGIDs[nborIndex[i]] is first neighbor of vertex i */
   int *nborProc;     /* process owning each nbor in nborGID */
 } ELEMENT_DATA;

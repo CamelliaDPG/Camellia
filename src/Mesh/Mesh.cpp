@@ -1536,9 +1536,9 @@ void Mesh::verticesForSide(FieldContainer<double>& vertices, int cellID, int sid
   }
 }
 
-void Mesh::writeMeshPartitionsToFile(){
+void Mesh::writeMeshPartitionsToFile(const string & fileName){
   ofstream myFile;
-  myFile.open("MeshPartitions.m");
+  myFile.open(fileName.c_str());
   myFile << "numPartitions="<<_numPartitions<<";"<<endl;
 
   int maxNumVertices=0;

@@ -189,7 +189,7 @@ public:
   
   void rebuildLookups();
 
-  void writeMeshPartitionsToFile();
+  void writeMeshPartitionsToFile(const string & fileName);
 };
 
 #endif

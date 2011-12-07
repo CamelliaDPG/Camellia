@@ -132,6 +132,12 @@ int main(int argc, char *argv[]) {
       fout << "total wall time for " << numInitialRefinements << "initial refinements (";
       fout << mesh->numGlobalDofs() << " total dofs): ";
       fout << wallTimeTotal << " seconds.\n";
+      fileName.str("");
+      fileName << "mesh_partitions_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
+      if (numInitialRefinements==0) {
+        // write mesh partitions to file
+        mesh->writeMeshPartitionsToFile(fileName.str());
+      }
     }
   }
 }

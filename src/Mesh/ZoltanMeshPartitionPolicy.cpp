@@ -76,7 +76,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   bool useLocalIDs = false;
 
   /* Calling Zoltan Load-balancing routine */
-  cout << "Setting zoltan params" << endl;
+  //cout << "Setting zoltan params" << endl;
   zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
   zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
   if (useLocalIDs){
@@ -97,7 +97,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
   myCoarseData.first = mesh;
   myCoarseData.second = &partitionedInitialCells;
   
-  cout << "Setting zoltan query functions" << endl;
+  //cout << "Setting zoltan query functions" << endl;
 
   // Testing query functions
   zz->Set_Num_Obj_Fn(&get_number_of_objects, &myData);

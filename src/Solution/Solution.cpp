@@ -1172,7 +1172,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
-  cout << "num Cells = " << numCells << endl;
+  //cout << "num Cells = " << numCells << endl;
   TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
                      std::invalid_argument,
                      "for scalar values, values container should be dimensioned(numCells,numPoints).");
