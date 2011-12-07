@@ -12,7 +12,9 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "Epetra_MpiComm.h"
 #else
+#include "Epetra_SerialComm.h"
 #endif
 
 using namespace std;
@@ -25,7 +27,9 @@ int main(int argc, char *argv[]) {
 #else
   int rank = 0;
   int numProcs = 1;
-#endif
+#endif  
+  cout << "using processor " << rank << " out of " << numProcs << "processors" << endl;
+
   int polyOrder = 2;
   int pToAdd = 3; // for tests
   
@@ -108,7 +112,8 @@ int main(int argc, char *argv[]) {
   solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
 
   // solve
-  solution->solve(); 
+  cout << "SOLVING" << endl;
+  solution->solve(false); // don't use mumps
 
   cout << "Processor " << rank << " returned from solve()." << endl;
   
@@ -121,9 +126,9 @@ int main(int argc, char *argv[]) {
     cout << "Done solving and writing" << endl;
   }
   if (rank==0){
-    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
     solution->writeStatsToFile("scaling_stats.dat");
-    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    mesh->writeMeshPartitionsToFile(); //visualize mesh partitions
+    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u.dat");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat.dat");
   }
 
