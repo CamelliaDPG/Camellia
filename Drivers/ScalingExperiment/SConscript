@@ -1,0 +1,10 @@
+Import('*')
+
+env.Append(CPPPATH = '../Confusion/')
+
+#src_obj = env.Object([''])
+src_obj = env.Object(['../Confusion/ConfusionBilinearForm.cpp','../Confusion/ConfusionManufacturedSolution.cpp'])
+
+env.Program('exec/ScalingExperiment',['ScalingExperiment.cpp',src_obj])
+#env.Program('exec/exampleMesh',['exampleMesh.cpp'])
+#env.Program('exec/mpiTest',['mpiTest.cpp'])
