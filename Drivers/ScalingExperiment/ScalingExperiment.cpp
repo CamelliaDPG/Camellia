@@ -73,6 +73,7 @@ int main(int argc, char *argv[]) {
     horizontalCells = 1; verticalCells = 1;
     Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
     mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+    mesh->setNumPartitions(numProcs);
     
     for (int i=0; i<numInitialRefinements; i++) {
       cellsToRefine.clear();
@@ -124,7 +125,7 @@ int main(int argc, char *argv[]) {
       fileName << "scaling_stats_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       solution.writeStatsToFile(fileName.str());
       // record total wall time
-      fileName.clear();
+      fileName.str("");
       fileName << "wall_time_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       ofstream fout(fileName.str().c_str());
       fout << setprecision(4);
