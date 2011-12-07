@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
       fileName << "wall_time_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       ofstream fout(fileName.str().c_str());
       fout << setprecision(4);
-      fout << "total wall time for " << numInitialRefinements << "initial refinements (";
+      fout << "total wall time for " << numInitialRefinements << " initial refinements (";
       fout << mesh->numGlobalDofs() << " total dofs): ";
       fout << wallTimeTotal << " seconds.\n";
       fileName.str("");
