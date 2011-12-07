@@ -1172,7 +1172,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
-  
+  cout << "num Cells = " << numCells << endl;
   TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
                      std::invalid_argument,
                      "for scalar values, values container should be dimensioned(numCells,numPoints).");
@@ -1795,7 +1795,12 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
     } else {
       localDofsSize = myGlobalIndicesSet.size();
     }
-    int *myGlobalIndices = new int[ localDofsSize ];
+    int *myGlobalIndices;
+    if (localDofsSize!=0){
+      myGlobalIndices = new int[ localDofsSize ];      
+    }else{
+      myGlobalIndices = NULL;
+    }
     
     // copy from set object into the allocated array
     int offset = 0;
@@ -1815,7 +1820,9 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
     //cout << "process " << rank << " about to construct partMap.\n";
     //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
     Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
-    
-    delete myGlobalIndices;
+
+    if (localDofsSize!=0){
+      delete myGlobalIndices;
+    }
     return partMap;
   }
