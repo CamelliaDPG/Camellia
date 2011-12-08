@@ -1,4 +1,4 @@
-\begin{thebibliography}{1}
+\begin{thebibliography}{10}
 
 \bibitem{DPGElas}
 {A}ntti H.~{N}iemi, {J}amie {A}.~{B}ramwell, and {L}eszek {F}.~{D}emkowicz.
@@ -39,12 +39,26 @@ Karen Devine, Erik Boman, Robert Heaphy, Bruce Hendrickson, and Courtenay
 \newblock {Zoltan} data management services for parallel dynamic applications.
 \newblock {\em Computing in Science and Engineering}, 4(2):90--97, 2002.
 
+\bibitem{Trilinos-Overview}
+Michael Heroux, Roscoe Bartlett, Vicki Howle~Robert Hoekstra, Jonathan Hu,
+  Tamara Kolda, Richard Lehoucq, Kevin Long, Roger Pawlowski, Eric Phipps,
+  Andrew Salinger, Heidi Thornquist, Ray Tuminaro, James Willenbring, and Alan
+  Williams.
+\newblock {An Overview of Trilinos}.
+\newblock Technical Report SAND2003-2927, Sandia National Laboratories, 2003.
+
 \bibitem{REFTREE}
 W.F. Mitchell.
 \newblock A refinement-tree based partitioning method for dynamic load
   balancing with adaptively refined grids.
 \newblock {\em Journal of Parallel and Distributed Computing}, 67:417--429,
   2007.
+
+\bibitem{Camellia}
+Nathan~V. Roberts, Denis Ridzal, Pavel~B. Bochev, and Leszek~D. Demkowicz.
+\newblock {A Toolbox for a Class of Discontinuous Petrov-Galerkin Methods Using
+  Trilinos}.
+\newblock Technical Report SAND2011-6678, Sandia National Laboratories, 2011.
 
 \bibitem{DPG4}
 J.~Zitelli, I.~Muga, L.~Demkowicz, J.~Gopalakrishnan, D.~Pardo, and V.~Calo.

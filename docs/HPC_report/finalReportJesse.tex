@@ -1,7 +1,7 @@
 \documentclass{article}
 \include{jessePreamble} % contains commonly used packages/defined functions
 \date{}
-\author{Jesse Chan and Nate Roberts}
+\author{Jesse Chan and Nathan V. Roberts}
 \title{Extending Camellia for Distributed Stiffness Matrix Determination in DPG}
 
 \begin{document}
@@ -18,9 +18,9 @@ a prototype for shock and boundary layer problem when $\epsilon \ll 1$, using hi
  
 DPG is a \emph{discontinuous} Galerkin (DG) method, which means that the solution is allowed to be discontinuous across inter-element boundaries, with continuity weakly enforced through numerical fluxes defined on element boundaries. DPG is also a \emph{Petrov}-Galerkin method, a finite element method in which the test and trial spaces are allowed to differ. Petrov-Galerkin methods allow selection of test functions that improve the behavior of the finite element. The Streamline Upwind Petrov-Galerkin method of Hughes and Brooks \cite{SUPG} is an example of such a method; it aims to eliminate the unstable oscillations in the convection-dominated diffusion problem for Continuous Galerkin (CG) methods.
 
-DPG has also been successfully applied to problems in wave propagation and linear elasticity \cite{DPG4,DPGElas} using the serial Fortran code \verb+hpDPG+.  Roberts has recently developed Camellia \cite{Camellia}, a toolbox for solving problems using DPG built atop the Trilinos library of packages.  Prior to the present work, Camellia supported only serial execution.  The present work extends Camellia to allow distributed stiffness matrix computation, using the convection-dominated diffusion problem as a testbed. 
+DPG has also been successfully applied to problems in wave propagation and linear elasticity \cite{DPG4,DPGElas} using the serial Fortran code \verb+hpDPG+.  Roberts has recently developed Camellia \cite{Camellia}, a toolbox for solving problems using DPG built atop Sandia's Trilinos Project \cite{Trilinos-Overview}.  Prior to the present work, Camellia supported only serial execution.  The present work extends Camellia to allow distributed stiffness matrix computation, using the convection-dominated diffusion problem as a testbed. 
 
-This report is organized as follows.  In Section \ref{sec:DPGIntro}, we provide the technical details of DPG that are important to understand the present work.  In Section \ref{sec:Implementation}, we discuss our extensions to Camellia to support distributed stiffness matrix determination.  We describe some numerical experiments to examine how well Camellia scales to multiple processors in Section \ref{sec:NumericalExperiments}.  Finally, in \ref{sec:FutureWork}, we discuss future work that we hope to do in the future to improve Camellia's scalability further.
+This report is organized as follows.  In Section \ref{sec:DPGIntro}, we provide the technical details of DPG that are important to understand the present work.  In Section \ref{sec:Implementation}, we discuss our extensions to Camellia to support distributed stiffness matrix determination.  We describe some numerical experiments to examine how well Camellia scales to multiple processors in Section \ref{sec:NumericalExperiments}.  Finally, in Section \ref{sec:FutureWork}, we discuss work that we hope to do in the future to improve Camellia's scalability further.
 
 \section{Introduction to DPG}\label{sec:DPGIntro}
 \subsection{Optimal Test Functions}
