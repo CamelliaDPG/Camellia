@@ -156,7 +156,7 @@ public:
   double minTimeSolve();
   double minTimeDistributeSolution();
   
-  void writeStatsToFile(const string &filePath);
+  void writeStatsToFile(const string &filePath, int precision=4);
 };
 
 #endif

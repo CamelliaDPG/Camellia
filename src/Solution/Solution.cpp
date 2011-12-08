@@ -1257,10 +1257,10 @@ double determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numD
   }
 }
 
-void Solution::writeStatsToFile(const string &filePath) {
+void Solution::writeStatsToFile(const string &filePath, int precision) {
   // writes out rows of the format: "cellID patchID x y solnValue"
   ofstream fout(filePath.c_str());
-  fout << setprecision(15);
+  fout << setprecision(precision);
   fout << "stat.\tmean\tmin\tmax\ttotal\n";
   fout << "localStiffness\t" << _meanTimeLocalStiffness << "\t" <<_minTimeLocalStiffness << "\t" <<_maxTimeLocalStiffness << "\t" << _totalTimeLocalStiffness << endl;
   fout << "globalAssembly\t" <<  _meanTimeGlobalAssembly << "\t" <<_minTimeGlobalAssembly << "\t" <<_maxTimeGlobalAssembly << "\t" << _totalTimeGlobalAssembly << endl;
