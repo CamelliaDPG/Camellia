@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   // first, build a simple mesh
-  for (int numFinalUniformRefinements=0; numFinalUniformRefinements<5; numFinalUniformRefinements++) {
+  for (int numFinalUniformRefinements=0; numFinalUniformRefinements<4; numFinalUniformRefinements++) {
     Epetra_Time timer(Comm);
     double wallTimeStart = timer.WallTime();
     
