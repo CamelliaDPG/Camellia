@@ -33,7 +33,7 @@ With DPG, given any basis $\{u_i\}$ for the trial space, we can compute the $i$t
 \[
 (v_i, \delta v)_V = b(u_i,\delta v), \quad \forall \delta v\in V
 \]
-where $V$ is the space of admissible test functions (with proper regularity) on the element. For a trial function whose support spans multiple elements, the optimal test function is solved for independently over each element, then set as the union of the test functions over each element the trial function spans. In practice, we solve this problem approximately by taking $V$ to be the space of admissible test functions of order $p+\Delta p$, where $p$ is the order of the trial space. This results in a fairly small local system 
+where $V$ is the space of admissible test functions (with proper regularity) on the element. For a trial function whose support spans multiple elements, the optimal test function is solved for independently over each element, then set as the union of the test functions over each element the trial function spans. In practice, we solve this problem approximately by taking $V$ to be the space of admissible test functions of order $p+\Delta p$, where $p$ is the order of the trial space. This results in a fairly small local system to be solved over each element, for each degree of freedom on that element. $\Delta p$ is taken to be 2 in this report. 
 
 \subsection{Hybridized DG formulation}
 
