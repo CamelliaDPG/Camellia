@@ -123,13 +123,14 @@ int main(int argc, char *argv[]) {
       cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
       ostringstream fileName;
       fileName << "scaling_stats_" << numFinalUniformRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
-      solution.writeStatsToFile(fileName.str());
+      solution.writeStatsToFile(fileName.str(), 4);
       // record total wall time
       fileName.str("");
       fileName << "wall_time_" << numFinalUniformRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       ofstream fout(fileName.str().c_str());
       fout << setprecision(4);
-      fout << "total wall time for " << numFinalUniformRefinements << " initial refinements (";
+      fout << "total wall time for " << numRefinements << " north/east refinements and ";
+      fout << numFinalUniformRefinements << " uniform refinements (";
       fout << mesh->numGlobalDofs() << " total dofs): ";
       fout << wallTimeTotal << " seconds.\n";
       fileName.str("");
