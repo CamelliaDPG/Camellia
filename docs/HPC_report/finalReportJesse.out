@@ -1,0 +1,8 @@
+\BOOKMARK [1][-]{section.1}{Introduction to DPG}{}
+\BOOKMARK [2][-]{subsection.1.1}{Optimal Test Functions}{section.1}
+\BOOKMARK [2][-]{subsection.1.2}{Hybridized DG formulation}{section.1}
+\BOOKMARK [1][-]{section.2}{Implementation}{}
+\BOOKMARK [2][-]{subsection.2.1}{Camellia/Trilinos implementation}{section.2}
+\BOOKMARK [2][-]{subsection.2.2}{Partitioning}{section.2}
+\BOOKMARK [1][-]{section.3}{Scaling tests}{}
+\BOOKMARK [1][-]{section.4}{Future work}{}
