@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   // first, build a simple mesh
-  for (int numFinalUniformRefinements=0; numFinalUniformRefinements<4; numFinalUniformRefinements++) {
+  for (int numFinalUniformRefinements=0; numFinalUniformRefinements<5; numFinalUniformRefinements++) {
     Epetra_Time timer(Comm);
     double wallTimeStart = timer.WallTime();
     
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     mesh->setNumPartitions(numProcs);
     
     // repeatedly refine the first element along the side shared with cellID 1
-    int numRefinements = 7;
+    int numRefinements = 4;
     for (int i=0; i<numRefinements; i++) {
       vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
       int numDescendents = descendents.size();
