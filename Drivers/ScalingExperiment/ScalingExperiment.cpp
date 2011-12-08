@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   // first, build a simple mesh
-  for (int numInitialRefinements=0; numInitialRefinements<4; numInitialRefinements++) {
+  for (int numFinalUniformRefinements=0; numFinalUniformRefinements<5; numFinalUniformRefinements++) {
     Epetra_Time timer(Comm);
     double wallTimeStart = timer.WallTime();
     
@@ -75,15 +75,6 @@ int main(int argc, char *argv[]) {
     mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
     mesh->setNumPartitions(numProcs);
     
-    for (int i=0; i<numInitialRefinements; i++) {
-      cellsToRefine.clear();
-      int numActiveElements = mesh->activeElements().size();
-      for (int j=0; j<numActiveElements; j++) {
-        cellsToRefine.push_back(mesh->activeElements()[j]->cellID());
-      }
-      mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-    }
-    
     // repeatedly refine the first element along the side shared with cellID 1
     int numRefinements = 7;
     for (int i=0; i<numRefinements; i++) {
@@ -106,6 +97,15 @@ int main(int argc, char *argv[]) {
       }
       mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     }
+    
+    for (int i=0; i<numFinalUniformRefinements; i++) {
+      cellsToRefine.clear();
+      int numActiveElements = mesh->activeElements().size();
+      for (int j=0; j<numActiveElements; j++) {
+        cellsToRefine.push_back(mesh->activeElements()[j]->cellID());
+      }
+      mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    }
 
     double wallTimeForMeshConstruction = timer.WallTime() - wallTimeStart;
     if (rank==0) cout << "time to construct mesh: " << wallTimeForMeshConstruction << endl;
@@ -122,19 +122,19 @@ int main(int argc, char *argv[]) {
     if (rank==0) {
       cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
       ostringstream fileName;
-      fileName << "scaling_stats_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
+      fileName << "scaling_stats_" << numFinalUniformRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       solution.writeStatsToFile(fileName.str());
       // record total wall time
       fileName.str("");
-      fileName << "wall_time_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
+      fileName << "wall_time_" << numFinalUniformRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
       ofstream fout(fileName.str().c_str());
       fout << setprecision(4);
-      fout << "total wall time for " << numInitialRefinements << " initial refinements (";
+      fout << "total wall time for " << numFinalUniformRefinements << " initial refinements (";
       fout << mesh->numGlobalDofs() << " total dofs): ";
       fout << wallTimeTotal << " seconds.\n";
       fileName.str("");
-      fileName << "mesh_partitions_" << numInitialRefinements << "_ref_" << numProcs << "_mpi_nodes.dat" ;
-      if (numInitialRefinements==0) {
+      fileName << "mesh_partitions_" << numFinalUniformRefinements << "_ref_" << numProcs << "_mpi_nodes.m" ;
+      if (numFinalUniformRefinements==0) {
         // write mesh partitions to file
         mesh->writeMeshPartitionsToFile(fileName.str());
       }
