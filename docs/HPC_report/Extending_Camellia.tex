@@ -1,5 +1,5 @@
 \documentclass{article}
-\newcommand{\oneFig}{.5}
+\newcommand{\oneFig}{.45}
 \newcommand{\twoFig}{.42}
 \newcommand{\fourFig}{.42}
 
@@ -86,8 +86,8 @@ We tested the scalability of our code on the Lonestar machine at the Texas Advan
 
 \begin{figure}
 \centering
-\includegraphics[scale=\oneFig]{figs/Solution3232nomesh.png}
-\caption{Computed convection-diffusion solution for $\epsilon=1e-2$ using a refined mesh.  $L^2$ error is $O(1e-4)$.}
+\includegraphics[scale=\oneFig]{figs/Solution12928nomesh.png}
+\caption{Computed solution for $\epsilon=1e-2$ using a refined mesh.  $L^2$ error is $O(1e-5)$.}
 \end{figure}
 
 We set up our computational experiments by first refining all cells that share an edge with the North and East sides, and repeating this process four times.   We then construct three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solve on Longhorn, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extract strong and weak scaling statistics.  
@@ -158,6 +158,7 @@ Both localized and non-localized local stiffness computation display weak scalab
 \subsection{$hp$-meshes}
 \subsection{Parallel solvers}
 \subsubsection{MUMPS}
+
 \subsubsection{Conjugate gradients/static condensation}
 
 One benefit of DPG is that the global stiffness matrices it produces are guaranteed to be symmetric positive-definite, allowing for iterative methods like CG to be used. 
@@ -184,7 +185,7 @@ where $A$ is block diagonal. Noting that $u = A^{-1}(F-Bf)$, we can substitute t
 \[
 (C-B^TA^{-1}B)f = G-B^TA^{-1}F
 \]
-Since $A$ is easy to invert, and $B$ is a much smaller system, this \emph{static condensation} would reduce the cost of the solve.
+Since $A$ is easy to invert, and $B$ is a much smaller system, this static condensation would reduce the cost of the solve.
 
 \bibliographystyle{plain}
 \bibliography{finalReport}
