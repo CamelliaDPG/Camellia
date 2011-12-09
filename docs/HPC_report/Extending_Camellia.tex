@@ -20,7 +20,7 @@ The Discontinuous Petrov-Galerkin (DPG) methodology is a class of finite element
 \]
 a prototype for shock and boundary layer problem when $\epsilon \ll 1$, using higher order adaptive meshes in \cite{DPG2} and \cite{DPG3}. For standard finite element methods, the convection-dominated diffusion problem suffers from large oscillations that grow in amplitude with $\frac{1}{\epsilon}$. This behavior illustrates an example of the \emph{instability} of standard finite element methods when it comes to problems with small parameters.
  
-DPG is a \emph{discontinuous} Galerkin (DG) method, which means that the solution is allowed to be discontinuous across inter-element boundaries, with continuity weakly enforced through numerical fluxes defined on element boundaries. DPG is also a \emph{Petrov}-Galerkin method, a finite element method in which the test and trial spaces are allowed to differ. Petrov-Galerkin methods allow selection of test functions that improve the behavior of the finite element. The Streamline Upwind Petrov-Galerkin method of Hughes and Brooks \cite{SUPG} is an example of such a method; it aims to eliminate the unstable oscillations in the convection-dominated diffusion problem for Continuous Galerkin (CG) methods.  DPG computes test functions on the fly which are\emph{optimal} in that they deliver the best available approximation to the solution, as measured in an energy norm defined by the problem and a test space which may be chosen by the analyst.
+DPG is a \emph{discontinuous} Galerkin (DG) method, which means that the solution is allowed to be discontinuous across inter-element boundaries, with continuity weakly enforced through numerical fluxes defined on element boundaries. DPG is also a \emph{Petrov}-Galerkin method, a finite element method in which the test and trial spaces are allowed to differ. Petrov-Galerkin methods allow selection of test functions that improve the behavior of the finite element. The Streamline Upwind Petrov-Galerkin method of Hughes and Brooks \cite{SUPG} is an example of such a method; it aims to eliminate the unstable oscillations in the convection-dominated diffusion problem for Continuous Galerkin (CG) methods.  DPG computes test functions on the fly which are \emph{optimal} in that they deliver the best available approximation to the solution, as measured in an energy norm defined by the problem and a test space which may be chosen by the analyst.
 
 DPG has also been successfully applied to problems in wave propagation and linear elasticity \cite{DPG4,DPGElas} using the serial Fortran code \verb+hpDPG+.  Roberts has recently developed Camellia \cite{Camellia}, a toolbox for solving problems using DPG built atop Sandia's Trilinos Project \cite{Trilinos-Overview}.  Prior to the present work, Camellia supported only serial execution.  The present work extends Camellia to allow distributed stiffness matrix computation, using the convection-dominated diffusion problem as a testbed. 
 
@@ -37,7 +37,7 @@ With DPG, given any basis $\{u_i\}$ for the trial space, we can compute the $i$t
 \[
 (v_i, \delta v)_V = b(u_i,\delta v), \quad \forall \delta v\in V
 \]
-where $V$ is the space of admissible test functions (with proper regularity) on the element. For a trial function whose support spans multiple elements, the optimal test function is solved for independently over each element, then set as the union of the test functions over each element the trial function spans. In practice, we solve this problem approximately by taking $V$ to be the space of admissible test functions of order $p+\Delta p$, where $p$ is the order of the trial space. This results in a small element-local system which is solved to determine a test function corresponding to each degree of freedom on the element. $\Delta p$ is taken to be 2 in this report. 
+where $V$ is the space of admissible test functions (with proper regularity) on the element, and $(v_i,\delta v)_V$ is some inner product on $V$ (choices for this inner product are discussed in \cite{DPG2}, \cite{DPG4}). For a trial function whose support spans multiple elements, the optimal test function is solved for independently over each element, then set as the union of the test functions over each element the trial function spans. In practice, we solve this problem approximately by taking $V$ to be the space of admissible test functions of order $p+\Delta p$, where $p$ is the order of the trial space. This results in a small local system on each element which is solved to determine a test function corresponding to each degree of freedom on the element. $\Delta p$ is taken to be 2 in this report. 
 
 \subsection{Hybridized DG formulation}
 
@@ -84,7 +84,7 @@ Currently, Reftree has been implemented and tested on local clusters. However, R
 
 We tested the scalability of our code on the Lonestar machine at the Texas Advanced Computing Center (TACC), verifying whether or not we observe strong/weak scaling for various parts of the program.  We solve the convection-diffusion equation on a square mesh, with boundary conditions such that the solution develops a boundary layer (sharp gradient) near the North and East edges of the square.  
 
-\begin{figure}
+\begin{figure}[h!]
 \centering
 \includegraphics[scale=\oneFig]{figs/Solution12928nomesh.png}
 \caption{Computed solution for $\epsilon=1e-2$ using a refined mesh.  $L^2$ error is $O(1e-5)$.}
@@ -94,11 +94,22 @@ We set up our computational experiments by first refining all cells that share a
 
 We experimented also with both a localized and non-localized partitioning of each mesh in order to analyze the communication costs in global stiffness matrix assembly.  For these runs, we created localized partitions of the mesh using a HSFC partitioner.  For a non-localized partitioner, we chose to use the Zoltan cyclic partitioner, which loops through the list of active elements, sending the first element to the first processor, the next to the next processor, and so on.  After reaching the last processor, the cyclic partitioner cycles back to the first processor and repeats this process \footnote{Due to the nature of our refinements in this test, a blocked algorithm (equally partitioning the ordered list of active elements by element number) still maintained fairly good locality.}.  This partitioning is, in some sense, a ``worst case" scenario that maximizes communication between processors.  
 
+\begin{figure}[h!]
+\centering
+\subfigure[HSFC partitioning]{
+\includegraphics[scale = \twoFig]{figs/hsfc.pdf}
+}
+\subfigure[Cyclic partitioning]{
+\includegraphics[scale = \twoFig]{figs/cyclic.pdf}
+}
+\caption{Localized and non-localized partitions of the mesh.}
+\end{figure}
+
 It's worth noting that the runtimes reported here do not represent Camellia running at peak efficiency.  A single Longhorn node contains 12 cores.  Our experiments here request only one core per node; utilizing all 12 cores on a node would decrease communication costs, as well as allow us to more fully take advantage of the multi-threaded linear algebra libraries used by Trilinos.  Additionally, there is a parameter within Camellia that controls the batch size for the Trilinos Intrepid batching routines.  Tuning this parameter based on machine-specific cache sizes should further optimize performance.
 
 \subsection{Weak scaling}
 
-\begin{figure}
+\begin{figure}[h!]
 \centering
 \subfigure[Global stiffness assembly]{
 \includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingAssembly.pdf}
@@ -112,7 +123,7 @@ It's worth noting that the runtimes reported here do not represent Camellia runn
 Both localized and non-localized local stiffness computation display weak scalability by maintaining a constant runtime as both the problem size and number of processors are increased.  Unlike the localized case, non-localized assembly of the global stiffness matrix does not scale weakly. It's worth noting, however, that though communication costs grow much faster with a poor partitioning of the mesh, the maximum amount of time spent on assembly is still only a fraction of the time spent on computation of local stiffness matrices.  
 
 \subsection{Strong scaling}
-\begin{figure}
+\begin{figure}[h!]
 \centering
 \subfigure[Global stiffness assembly]{
 \includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingAssembly.pdf}
@@ -123,7 +134,7 @@ Both localized and non-localized local stiffness computation display weak scalab
 \caption{Strong scaling statistics for a HSFC (localized) partitioning of the mesh.}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[h!]
 \centering
 \subfigure[Global stiffness assembly]{
 \includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingAssembly.pdf}
@@ -136,7 +147,7 @@ Both localized and non-localized local stiffness computation display weak scalab
 
 \subsection{Breakdown of time spent}
 
-\begin{figure}
+\begin{figure}[h!]
 \centering
 \subfigure[202 elements, 13343 dofs]{
 \includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref0.pdf}
