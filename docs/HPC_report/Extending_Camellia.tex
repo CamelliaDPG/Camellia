@@ -156,6 +156,9 @@ Both localized and non-localized local stiffness computation display weak scalab
 \section{Future work}\label{sec:FutureWork}
 
 \subsection{$hp$-meshes}
+
+The Zoltan partitioner supports a weighted partitioning of a set of objects.  At the moment, every element is treated with equal weight, under the assumption that each contributes an equal number of degrees of freedom.  We would like to extend the partitioning to $hp$-adaptive meshes (where the polynomial order $p$ is allowed to vary element by element) by weighting each element by the number of internal degrees of freedom that it holds.  
+
 \subsection{Parallel solvers}
 \subsubsection{MUMPS}
 
