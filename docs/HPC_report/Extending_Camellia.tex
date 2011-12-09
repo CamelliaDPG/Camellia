@@ -111,16 +111,18 @@ It's worth noting that the runtimes reported here do not represent Camellia runn
 
 \begin{figure}[h!]
 \centering
-\subfigure[Global stiffness assembly]{
-\includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingAssembly.pdf}
-}
 \subfigure[Local stiffness computation]{
+\label{fig:weakScalingStiffness}
 \includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingLocal.pdf}
+}
+\subfigure[Global stiffness assembly]{
+\label{fig:weakScalingAssembly}
+\includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingAssembly.pdf}
 }
 \caption{Weak scaling results for computation of local stiffness matrices and global stiffness matrix assembly.  For each run, both the number of MPI nodes and number of elements are increased by a factor of four.}
 \end{figure}
 
-Both localized and non-localized local stiffness computation display weak scalability by maintaining a constant runtime as both the problem size and number of processors are increased.  Unlike the localized case, non-localized assembly of the global stiffness matrix does not scale weakly. It's worth noting, however, that though communication costs grow much faster with a poor partitioning of the mesh, the maximum amount of time spent on assembly is still only a fraction of the time spent on computation of local stiffness matrices.  
+The local stiffness computation for both partition types maintain a constant runtime as the problem size and number of processors increase---that is, both achieve weak scalability for this part of the computation, as can be seen in Figure \ref{fig:weakScalingStiffness}.  Assembly of the global stiffness matrix achieves weak scalability only for the contiguous case, as can be seen in Figure \ref{fig:weakScalingAssembly}. It's worth noting, however, that though communication costs grow much faster with a poor partitioning of the mesh, the maximum amount of time spent on assembly is still only a fraction of the time spent on computation of local stiffness matrices.  
 
 \subsection{Strong scaling}
 \begin{figure}[h!]
