@@ -1,4 +1,8 @@
 \documentclass{article}
+\newcommand{\oneFig}{.65}
+\newcommand{\twoFig}{.42}
+\newcommand{\fourFig}{.42}
+
 \include{jessePreamble} % contains commonly used packages/defined functions
 \date{}
 \author{Jesse Chan and Nathan V. Roberts}
@@ -57,7 +61,7 @@ To facilitate experiments with multiple partitioning strategies (and to maintain
 
 The MeshPartitionPolicy partitions the mesh into sets of elements assigned to an MPI node; for the interface to Epetra, we need a partition of rows of the global stiffness matrix (each of which corresponds to a degree of freedom).  Degrees of freedom corresponding to numerical fluxes are shared by the elements along whose boundaries they lie.  We adopt a simple greedy policy for this---shared d.o.f.s are assigned to the element with the smallest global identifier.  This means that even if the element partitioning were perfectly balanced, some MPI nodes might still have more d.o.f.s assigned to them than others.  This will not affect the amount of work involved in local stiffness matrix computations, but it may affect MPI communication costs during global assembly.
 
-\subsubsection{Design Limitations: Where Amdahl's Law Might Come to Haunt Us}
+\subsubsection{Design Limitations: where Amdahl's law might come to haunt us}
 Here, we note a few features of the present design that may become bottlenecks as we scale up to larger problems and larger numbers of MPI nodes.
 
 At present, our global solve is implemented using the KLU implementation provided by the Amesos package within Trilinos.  This is a direct solve, executed in serial.  Amesos gathers the global stiffness matrix to rank 0, solves, and then scatters the solution according to the partition we have defined.  For our serial computations prior to the present work, the cost of the global solve has been dominated by the cost of the local optimal test function determination; however, now that the latter cost has been distributed using MPI and the former has not, we expect the global solve to become a bottleneck, both in terms of overall execution time and in terms of the sizes of problems that can be solved, since the KLU solve must fit into a single node's memory to be practical.
@@ -77,6 +81,71 @@ The Reftree algorithm \cite{REFTREE} adds complexity in that each processor must
 Currently, Reftree has been implemented and tested on local clusters. However, Reftree currently crashes during runs on Lonestar, our HPC architecture for this report. We use the HSFC partitioner for the scaling tests in this report, and hope to fix issues with Reftree in the near future. 
 
 \section{Scaling tests}\label{sec:NumericalExperiments}
+
+Describe experimental setup
+\begin{figure}
+\centering
+\subfigure[Cyclic]{
+\includegraphics[scale = \twoFig]{figs/cyclic.pdf}
+}
+\subfigure[HSFC]{
+\includegraphics[scale = \twoFig]{figs/hsfc.pdf}
+}
+\end{figure}
+
+\subsection{Weak scaling}
+
+\begin{figure}
+\centering
+\subfigure[Global stiffness assembly]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingAssembly.pdf}
+}
+\subfigure[Local stiffness computation]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingLocal.pdf}
+}
+\end{figure}
+
+\subsection{Strong scaling}
+\begin{figure}
+\centering
+\subfigure[Global stiffness assembly]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingAssembly.pdf}
+}
+\subfigure[Local stiffness computation]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingLocal.pdf}
+}
+\caption{Strong scaling statistics for a HSFC (localized) partitioning of the mesh.}
+\end{figure}
+
+\begin{figure}
+\centering
+\subfigure[Global stiffness assembly]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingAssembly.pdf}
+}
+\subfigure[Local stiffness computation]{
+\includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingLocal.pdf}
+}
+\caption{Strong scaling statistics for a cyclic (non-localized) partitioning of the mesh.}
+\end{figure}
+
+\subsection{Breakdown of time spent}
+\begin{figure}
+\centering
+\subfigure[202 elements, 13343 dofs]{
+\includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref0.pdf}
+}
+\subfigure[808 elements, 52137 dofs ]{
+\includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref1.pdf}
+}
+\subfigure[3232 elements, 206081 dofs]{
+\includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref2.pdf}
+}
+\subfigure[12928 elements, 819393 dofs]{
+\includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref3.pdf}
+}
+\caption{Strong scaling statistics for a cyclic (non-localized) partitioning of the mesh.}
+\end{figure}
+
 
 Handicaps
 - Batch cache size 
