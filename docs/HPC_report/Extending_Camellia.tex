@@ -82,7 +82,16 @@ Currently, Reftree has been implemented and tested on local clusters. However, R
 
 \section{Scaling tests}\label{sec:NumericalExperiments}
 
-Describe experimental setup
+\begin{itemize}
+\item Describe experimental setup
+
+\item Handicaps - batch cache size, using all 12 cores on a single node
+
+\item 
+
+\end{itemize}
+
+
 \begin{figure}
 \centering
 \subfigure[Cyclic]{
@@ -129,6 +138,7 @@ Describe experimental setup
 \end{figure}
 
 \subsection{Breakdown of time spent}
+
 \begin{figure}
 \centering
 \subfigure[202 elements, 13343 dofs]{
@@ -143,13 +153,8 @@ Describe experimental setup
 \subfigure[12928 elements, 819393 dofs]{
 \includegraphics[scale = \fourFig]{figs/scalingFigs/bar_ref3.pdf}
 }
-\caption{Strong scaling statistics for a cyclic (non-localized) partitioning of the mesh.}
+\caption{Breakdown of time spent in a solve for a series of HSFC-partitioned meshes.}
 \end{figure}
-
-
-Handicaps
-- Batch cache size 
-- Using all 12 cores on a single node
 
 \section{Future work}\label{sec:FutureWork}
 
@@ -160,7 +165,29 @@ Handicaps
 
 One benefit of DPG is that the global stiffness matrices it produces are guaranteed to be symmetric positive-definite, allowing for iterative methods like CG to be used. 
 
-Another benefit of the hybridized DG formulation is that the global solve can be statically condensed down to a solve involving only the flux degrees of freedom. 
+Another benefit of the hybridized DG formulation is that the global solve can be reduced down to a solve involving only the flux degrees of freedom. Since the interior degrees of freedom are completely decoupled from each other, the system can be reordered to yield 
+\[
+\left(\begin{array}{cc}
+A &B\\
+B^T &C
+\end{array}
+\right)
+\left(\begin{array}{c}
+u\\
+f
+\end{array}
+\right) = 
+\left(\begin{array}{c}
+F\\
+G
+\end{array}
+\right)
+\]
+where $A$ is block diagonal. Noting that $u = A^{-1}(F-Bf)$, we can substitute this into the second solution to obtain a problem purely in terms of the flux degrees of freedom
+\[
+(C-B^TA^{-1}B)f = G-B^TA^{-1}F
+\]
+Since $A$ is easy to invert, and $B$ is a much smaller system, this \emph{static condensation} would reduce the cost of the solve.
 
 \bibliographystyle{plain}
 \bibliography{finalReport}
