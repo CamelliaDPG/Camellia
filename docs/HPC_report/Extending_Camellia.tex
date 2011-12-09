@@ -90,7 +90,7 @@ We tested the scalability of our code on the Lonestar machine at the Texas Advan
 \caption{Computed solution for $\epsilon=10^{-2}$ using a refined mesh.  $L^2$ error is $O(10^{-5})$.}
 \end{figure}
 
-We set up our computational experiments by first refining all cells that share an edge with the north and east sides, and repeating this process four times.   We then construct three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solve on Longhorn, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extract strong and weak scaling statistics.  
+We set up our computational experiments by first refining all cells that share an edge with the north and east sides, and repeating this process four times.   We then constructed three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solved on Lonestar, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extracted strong and weak scaling statistics.  
 
 We also used contiguous and discontiguous partitions of each mesh to measure the effect of partition quality on the communication costs in global stiffness matrix assembly.  We created contiguous partitions of the mesh using a HSFC partitioner.  To create the discontiguous partitioning, we chose to use the Zoltan cyclic partitioner, which loops through the list of active elements, sending the first element to the first processor, the next to the next processor, and so on.  After reaching the last processor, the cyclic partitioner cycles back to the first processor and repeats this process.\footnote{Due to the nature of our refinements in this test, a blocked partitioner (equally partitioning the ordered list of active elements by element number) happened to produce nearly-contiguous partitions.  We therefore have omitted this partitioner from our analysis, since we do not believe that its performance here represents its performance in general.}  The cyclic partitioning is a ``worst case" scenario in the sense that each of the current MPI node's elements' neighbors are owned by some other MPI node.
 
@@ -98,16 +98,17 @@ It's worth noting that the runtimes reported here do not represent Camellia runn
 
 \begin{figure}[h!]
 \centering
-\subfigure[HSFC partitioning]{
-\includegraphics[scale = \twoFig]{figs/hsfc.pdf}
-}
 \subfigure[Cyclic partitioning]{
 \includegraphics[scale = \twoFig]{figs/cyclic.pdf}
+}
+\subfigure[HSFC partitioning]{
+\includegraphics[scale = \twoFig]{figs/hsfc.pdf}
 }
 \caption{Contiguous and discontiguous partitions of the mesh.}
 \end{figure}
 
 \subsection{Weak scaling}
+In our weak scaling tests, we aimed to fix the size of the problem \emph{per MPI node}, and examined the runtime of various portions of the execution---we hope to see a constant runtime as the problem size and number of processors increase, and this is what we mean by achieving weak scalability.
 
 \begin{figure}[h!]
 \centering
@@ -119,32 +120,35 @@ It's worth noting that the runtimes reported here do not represent Camellia runn
 \label{fig:weakScalingAssembly}
 \includegraphics[scale = \twoFig]{figs/scalingFigs/weakScalingAssembly.pdf}
 }
-\caption{Weak scaling results for computation of local stiffness matrices and global stiffness matrix assembly.  For each run, both the number of MPI nodes and number of elements are increased by a factor of four.}
+\caption{Weak scaling results for computation of local stiffness matrices and global stiffness matrix assembly.  For each run, both the number of MPI nodes and the number of elements increased by a factor of four.}
 \end{figure}
 
-The local stiffness computation for both partition types maintain a constant runtime as the problem size and number of processors increase---that is, both achieve weak scalability for this part of the computation, as can be seen in Figure \ref{fig:weakScalingStiffness}.  Assembly of the global stiffness matrix achieves weak scalability only for the contiguous case, as can be seen in Figure \ref{fig:weakScalingAssembly}. It's worth noting, however, that though communication costs grow much faster with a poor partitioning of the mesh, the maximum amount of time spent on assembly is still only a fraction of the time spent on computation of local stiffness matrices.  
+Both partition types achieve weak scalability in the local stiffness matrix computation, as can be seen in Figure \ref{fig:weakScalingStiffness}.  In fact, we see the total runtime \emph{decrease} slightly as the total workload and number of MPI nodes increase---we are unsure of the reason for this. Similarly, although we would expect the partitioning not to affect this portion of the computation at all (since no inter-node communication occurs at this stage), for some reason the HSFC partitioning slightly outperforms the cyclic on each of the multi-node runs.
+
+Assembly of the global stiffness matrix achieves weak scalability only for the contiguous case, as can be seen in Figure \ref{fig:weakScalingAssembly}. It's worth noting, however, that though the poor mesh partitioning imposes much higher communication costs than the HSFC partitioning, the maximum amount of time spent on assembly is still only a small fraction of the time spent on computation of local stiffness matrices.
 
 \subsection{Strong scaling}
+In our strong scaling tests, we considered problems of fixed size, distributing the workload for each among increasing numbers of MPI nodes.  Here, we hope to see runtimes that decrease linearly in the number of MPI nodes---this is what we mean by achieving strong scalability.
 \begin{figure}[h!]
 \centering
-\subfigure[Global stiffness assembly]{
-\includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingAssembly.pdf}
-}
-\subfigure[Local stiffness computation]{
+\subfigure[Local stiffness computation]{\label{fig:strongScalingLocalStiffnessHSFC}
 \includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingLocal.pdf}
 }
-\caption{Strong scaling statistics for a HSFC (localized) partitioning of the mesh.}
+\subfigure[Global stiffness assembly]{\label{fig:strongScalingAssemblyHSFC}
+\includegraphics[scale = \twoFig]{figs/scalingFigs/hsfcStrongScalingAssembly.pdf}
+}
+\caption{Strong scaling statistics for a HSFC (contiguous) partitioning of the mesh.}
 \end{figure}
 
 \begin{figure}[h!]
 \centering
-\subfigure[Global stiffness assembly]{
-\includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingAssembly.pdf}
-}
-\subfigure[Local stiffness computation]{
+\subfigure[Local stiffness computation]{\label{fig:strongScalingLocalStiffnessCyclic}
 \includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingLocal.pdf}
 }
-\caption{Strong scaling statistics for a cyclic (non-localized) partitioning of the mesh.}
+\subfigure[Global stiffness assembly]{\label{fig:strongScalingAssemblyCyclic}
+\includegraphics[scale = \twoFig]{figs/scalingFigs/cyclicStrongScalingAssembly.pdf}
+}
+\caption{Strong scaling statistics for a cyclic (discontiguous) partitioning of the mesh.}
 \end{figure}
 
 \subsection{Breakdown of time spent}
