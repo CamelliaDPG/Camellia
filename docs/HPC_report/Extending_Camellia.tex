@@ -82,17 +82,19 @@ Currently, Reftree has been implemented and tested on local clusters. However, R
 
 \section{Scaling tests}\label{sec:NumericalExperiments}
 
-We tested the scalability of our code on the Lonestar machine at the Texas Advanced Computing Center (TACC), verifying whether or not we observe strong/weak scaling for various parts of the program.  We solve the convection-diffusion equation on a square mesh, with boundary conditions such that the solution develops a boundary layer (sharp gradient) near the North and East edges of the square.  
+We tested the scalability of our code on the Lonestar machine at the Texas Advanced Computing Center (TACC), verifying whether or not we observe strong/weak scaling for various parts of the program.  We solve the convection-diffusion equation on a square mesh, with boundary conditions such that the solution develops a boundary layer (sharp gradient) near the north and east edges of the square.  
 
 \begin{figure}[h!]
 \centering
 \includegraphics[scale=\oneFig]{figs/Solution12928nomesh.png}
-\caption{Computed solution for $\epsilon=1e-2$ using a refined mesh.  $L^2$ error is $O(1e-5)$.}
+\caption{Computed solution for $\epsilon=10^{-2}$ using a refined mesh.  $L^2$ error is $O(10^{-5})$.}
 \end{figure}
 
-We set up our computational experiments by first refining all cells that share an edge with the North and East sides, and repeating this process four times.   We then construct three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solve on Longhorn, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extract strong and weak scaling statistics.  
+We set up our computational experiments by first refining all cells that share an edge with the north and east sides, and repeating this process four times.   We then construct three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solve on Longhorn, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extract strong and weak scaling statistics.  
 
-We experimented also with both a localized and non-localized partitioning of each mesh in order to analyze the communication costs in global stiffness matrix assembly.  For these runs, we created localized partitions of the mesh using a HSFC partitioner.  For a non-localized partitioner, we chose to use the Zoltan cyclic partitioner, which loops through the list of active elements, sending the first element to the first processor, the next to the next processor, and so on.  After reaching the last processor, the cyclic partitioner cycles back to the first processor and repeats this process \footnote{Due to the nature of our refinements in this test, a blocked algorithm (equally partitioning the ordered list of active elements by element number) still maintained fairly good locality.}.  This partitioning is, in some sense, a ``worst case" scenario that maximizes communication between processors.  
+We also used contiguous and discontiguous partitions of each mesh to measure the effect of partition quality on the communication costs in global stiffness matrix assembly.  We created contiguous partitions of the mesh using a HSFC partitioner.  To create the discontiguous partitioning, we chose to use the Zoltan cyclic partitioner, which loops through the list of active elements, sending the first element to the first processor, the next to the next processor, and so on.  After reaching the last processor, the cyclic partitioner cycles back to the first processor and repeats this process.\footnote{Due to the nature of our refinements in this test, a blocked partitioner (equally partitioning the ordered list of active elements by element number) happened to produce nearly-contiguous partitions.  We therefore have omitted this partitioner from our analysis, since we do not believe that its performance here represents its performance in general.}  The cyclic partitioning is a ``worst case" scenario in the sense that each of the current MPI node's elements' neighbors are owned by some other MPI node.
+
+It's worth noting that the runtimes reported here do not represent Camellia running at peak efficiency.  A single Lonestar node contains 12 cores.  Because MPI communication has much higher bandwidth intra-node than inter-node, and for analysis we wanted approximately equal bandwidth between MPI processes, we use only one core per node.  Utilizing all 12 cores on a node would decrease communication costs.  Additionally, there is a parameter within Camellia that controls the batch size for the Trilinos Intrepid batching routines.  Tuning this parameter based on machine-specific cache sizes should further improve performance.
 
 \begin{figure}[h!]
 \centering
@@ -102,10 +104,8 @@ We experimented also with both a localized and non-localized partitioning of eac
 \subfigure[Cyclic partitioning]{
 \includegraphics[scale = \twoFig]{figs/cyclic.pdf}
 }
-\caption{Localized and non-localized partitions of the mesh.}
+\caption{Contiguous and discontiguous partitions of the mesh.}
 \end{figure}
-
-It's worth noting that the runtimes reported here do not represent Camellia running at peak efficiency.  A single Longhorn node contains 12 cores.  Our experiments here request only one core per node; utilizing all 12 cores on a node would decrease communication costs, as well as allow us to more fully take advantage of the multi-threaded linear algebra libraries used by Trilinos.  Additionally, there is a parameter within Camellia that controls the batch size for the Trilinos Intrepid batching routines.  Tuning this parameter based on machine-specific cache sizes should further optimize performance.
 
 \subsection{Weak scaling}
 
