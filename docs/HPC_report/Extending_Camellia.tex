@@ -78,29 +78,13 @@ The Hilbert space-filling curve (HSFC) algorithm works by drawing a curve throug
 
 The Reftree algorithm \cite{REFTREE} adds complexity in that each processor must store information not only about the active nodes, but the ancestors as well. Additionally, Reftree requires that, if you store an ancestor, you must store all its children as well, increasing the amount of redundancy between distributed refinement trees. However, due to Reftree being more agnostic towards element types (quad vs triangle, tetrahedron vs cube), the same algorithm performs similarly for many different types of refined meshes (as opposed to HSFC, which works best for quadrilateral grids, but not for triangular grids).  Additionally, Reftree's algorithm guarantees connected partitions for tetrahedral and triangular grids, and generally performs more robustly on other types of grids as well.  
 
-Currently, Reftree has been implemented and tested on local clusters. However, Reftree currently crashes during runs on Lonestar, our HPC architecture for this report. We use the HSFC partitioner for the scaling tests in this report, and hope to fix issues with Reftree in the near future. 
+Currently, Reftree has been implemented and tested on local clusters. However, Reftree currently crashes during runs on our HPC architecture for this report. We use the HSFC partitioner for the scaling tests in this report, and hope to fix issues with Reftree in the near future. 
 
 \section{Scaling tests}\label{sec:NumericalExperiments}
 
-\begin{itemize}
-\item Describe experimental setup
+We tested the scalability of our code on the Lonestar machine at the Texas Advanced Computing Center (TACC), verifying whether or not we observe strong/weak scaling for various parts of the program.  We solve the convection-diffusion equation on a square mesh, with boundary conditions such that the solution develops a boundary layer (sharp gradient) near the North and East edges of the square.  We set up our computational experiments by first refining all cells that share an edge with the North and East sides, and repeating this process four times.   We then construct three additional meshes, by uniformly refining every element in the mesh (quadrupling the number of elements each time).  For each of these meshes, we solve on Longhorn, using 1, 4, 16, and 64 nodes, tracking the timing of various portions of the code.  From this data, we extract strong and weak scaling statistics.
 
-\item Handicaps - batch cache size, using all 12 cores on a single node
-
-\item 
-
-\end{itemize}
-
-
-\begin{figure}
-\centering
-\subfigure[Cyclic]{
-\includegraphics[scale = \twoFig]{figs/cyclic.pdf}
-}
-\subfigure[HSFC]{
-\includegraphics[scale = \twoFig]{figs/hsfc.pdf}
-}
-\end{figure}
+It's worth noting that the runtimes reported here do not represent Camellia running at peak efficiency.  A single Longhorn node contains 12 cores.  Our experiments here request only one core per node; utilizing all 12 cores on a node would decrease communication costs, as well as allow us to more fully take advantage of the multi-threaded linear algebra libraries used by Trilinos.  Additionally, there is a parameter within Camellia that controls the batch size for the Trilinos Intrepid batching routines.  Tuning this parameter based on machine-specific cache sizes should further optimize performance.
 
 \subsection{Weak scaling}
 
