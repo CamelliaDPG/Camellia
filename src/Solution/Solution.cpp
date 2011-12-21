@@ -432,7 +432,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
     for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
       int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+#ifdef HAVE_MPI
       _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = solnCoeff[globalIndex];
+#else
+      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = *(solnCoeff[globalIndex]);
+#endif
     }
   }
   
