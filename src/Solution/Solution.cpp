@@ -970,6 +970,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
 }
 
 void Solution::energyError(FieldContainer<double> &energyError) {
+  int numNonzeroResiduals=0;
   int numActiveElements = _mesh->activeElements().size();
   energyError.resize( numActiveElements );
   computeErrorRepresentation();
@@ -983,10 +984,16 @@ void Solution::energyError(FieldContainer<double> &energyError) {
     int numTestDofs = residuals.dimension(1);
     double errorSquared = 0.0;
     for (int i=0; i<numTestDofs; i++) {
+
+//        cout << "For cell " << cellIndex << " and test fxn " << i << ", residual = " << residuals(cellIndex,i) << endl;
+//        if (abs(residuals(cellIndex,i))>1e-11) {
+//        numNonzeroResiduals++;
+//      }
       errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
     }
     energyError(activeCellIndex) = sqrt(errorSquared);
   }
+//  cout << "Number of large-enough residuals = " << numNonzeroResiduals <<endl;
 }
 
 void Solution::computeErrorRepresentation() {
@@ -1082,7 +1089,7 @@ void Solution::computeResiduals() {
     FieldContainer<double> testWeights(numCells,numTestDofs,numTestDofs);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int i=0; i<numTestDofs; i++) {
-        testWeights(cellIndex,i,i) = 1.0;
+        testWeights(cellIndex,i,i) = 1.0; 
       }
     }
     
@@ -1096,32 +1103,16 @@ void Solution::computeResiduals() {
     BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
                                                 trialOrdering, testOrdering, cellTopo, 
                                                 physicalCellNodes, cellSideParities);
+
     // now, weight the entries in b(u,v) by the solution coefficients to compute:
-    // l(v) - b(u_h,v)
-    vector<int> testIDs = _mesh->bilinearForm().testIDs();
-    vector<int>::iterator testIterator;
-    
-    vector<int> trialIDs = _mesh->bilinearForm().trialIDs();
-    vector<int>::iterator trialIterator;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (testIterator=testIDs.begin(); testIterator!=testIDs.end(); testIterator++) {
-        int testID = *testIterator;
-        for (trialIterator=trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
-          int trialID = *trialIterator;
-          BasisPtr trialBasis = trialOrdering->getBasis(trialID);
-          BasisPtr testBasis = testOrdering->getBasis(testID);
-          for (int i=0; i<testBasis->getCardinality(); i++) {
-            for (int j=0; j<trialBasis->getCardinality(); j++) {
-              double solValue = solution(cellIndex,j);
-              double stiffValue = preStiffness(cellIndex,i,j);
-              double resValue = residuals(cellIndex,i);
-              residuals(cellIndex,i) -= solution(cellIndex,j) * preStiffness(cellIndex,i,j);
-            }
-          }
-        }
+    // l(v) - b(u_h,v)    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {          
+      for (int i=0; i<numTestDofs; i++) {
+        for (int j=0; j<numTrialDofs; j++) {
+          residuals(cellIndex,i) -= solution(cellIndex,j) * preStiffness(cellIndex,i,j);                
+        }         
       }
-    }
-    
+    }    
     _residualForElementType[elemTypePtr.get()] = residuals;
   }
   _residualsComputed = true;
