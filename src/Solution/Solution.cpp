@@ -161,7 +161,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int numGlobalDofs = _mesh->numGlobalDofs();
   
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),Comm);
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),&Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
@@ -1778,11 +1778,7 @@ double Solution::minTimeDistributeSolution() {
   return _minTimeDistributeSolution;
 }
 
-#ifdef HAVE_MPI
-Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_MpiComm &Comm ) {
-#else
-  Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_SerialComm &Comm ) {
-#endif
+Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
     // determine the local dofs we have, and what their global indices are:
     int localDofsSize;
     if (rank == 0) {
@@ -1814,7 +1810,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
     int indexBase = 0;
     //cout << "process " << rank << " about to construct partMap.\n";
     //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-    Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, Comm);
+    Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, *Comm);
 
     if (localDofsSize!=0){
       delete myGlobalIndices;
