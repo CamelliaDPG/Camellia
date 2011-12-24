@@ -41,6 +41,14 @@
 // Intrepid includes
 #include "Intrepid_FieldContainer.hpp"
 
+// Epetra includes
+#include <Epetra_Map.h>
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 #include "ElementType.h"
 #include "ElementTypeFactory.h"
 #include "Element.h"
@@ -186,6 +194,8 @@ public:
   int parityForSide(int cellID, int sideIndex);
   int partitionForGlobalDofIndex( int globalDofIndex );
   int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
+  
+  Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
   void rebuildLookups();
 

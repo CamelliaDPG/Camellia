@@ -43,6 +43,9 @@
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#endif
 
 using namespace Intrepid;
 
@@ -973,6 +976,55 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
 
 ElementTypeFactory & Mesh::getElementTypeFactory() {
   return _elementTypeFactory;
+}
+
+Epetra_Map Mesh::getPartitionMap() {
+  int rank = 0;
+  int numProcs = 1;
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  // TODO: consider eliminating these calls, or guarding them by a flag to detect whether they're needed
+  setNumPartitions(numProcs);
+  repartition();
+  
+  // returns map for current processor's local-to-global dof indices
+  // determine the local dofs we have, and what their global indices are:
+  int localDofsSize;
+
+  set<int> myGlobalIndicesSet = globalDofIndicesForPartition(rank);
+  
+  localDofsSize = myGlobalIndicesSet.size();
+  
+  int *myGlobalIndices;
+  if (localDofsSize!=0){
+    myGlobalIndices = new int[ localDofsSize ];      
+  }else{
+    myGlobalIndices = NULL;
+  }
+  
+  // copy from set object into the allocated array
+  int offset = 0;
+  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
+       indexIt != myGlobalIndicesSet.end();
+       indexIt++ ){
+    myGlobalIndices[offset++] = *indexIt;
+  }
+  
+  int numGlobalDofs = this->numGlobalDofs();
+  int indexBase = 0;
+  //cout << "process " << rank << " about to construct partMap.\n";
+  //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+  Epetra_Map partMap(numGlobalDofs, localDofsSize, myGlobalIndices, indexBase, Comm);
+  
+  if (localDofsSize!=0){
+    delete myGlobalIndices;
+  }
+  return partMap;
 }
 
 int Mesh::globalDofIndex(int cellID, int localDofIndex) {
