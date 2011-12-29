@@ -6,6 +6,22 @@
 #include "Mesh.h"
 #include "Solution.h"
 
+#include "ZoltanMeshPartitionPolicy.h"
+
+// Trilinos includes
+#include "Epetra_Time.h"
+#include "Intrepid_FieldContainer.hpp"
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
 // Trilinos includes
 #include "Intrepid_FieldContainer.hpp"
 
@@ -25,11 +41,11 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 1;
+  int polyOrder = 2;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution:
-  double epsilon = 1e-2;
+  double epsilon = 5e-2;
   double beta_x = 1.0, beta_y = 2.0;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
@@ -50,9 +66,11 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 1;
+  int horizontalCells = 2, verticalCells = 2;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setNumPartitions(numProcs);
 
   // create a solution object
   Teuchos::RCP<Solution> solution;
@@ -62,8 +80,12 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
+//  vector<int> cellsToRef;
+//  cellsToRef.push_back(0);
+//  mesh->hRefine(cellsToRef,RefinementPattern::regularRefinementPatternQuad());
+
   // solve
-  solution->solve(true); 
+  solution->solve(false); 
 
   cout << "Processor " << rank << " returned from solve()." << endl;
   
@@ -75,8 +97,9 @@ int main(int argc, char *argv[]) {
 
     cout << "Done solving and writing" << endl;
   }
-  
-  /*int numRefinements = 0;
+
+
+  int numRefinements = 2;
   double thresholdFactor = 0.20;
   
   double totalEnergyErrorSquared;
@@ -88,22 +111,28 @@ int main(int argc, char *argv[]) {
     double maxError = 0.0;
     totalEnergyErrorSquared = 0.0;
     for (int activeCellIndex=0; activeCellIndex<numActiveCells; activeCellIndex++) {
+      cout << "energy error for global cell index " << mesh->activeElements()[activeCellIndex]->globalCellIndex() << " is " << energyError(activeCellIndex) << endl;
       maxError = max(energyError(activeCellIndex),maxError);
       totalEnergyErrorSquared += energyError(activeCellIndex) * energyError(activeCellIndex);
     }
-    cout << "Energy error: " << sqrt(totalEnergyErrorSquared) << endl;
+
     for (int activeCellIndex=0; activeCellIndex<numActiveCells; activeCellIndex++) {
       if (energyError(activeCellIndex) >= thresholdFactor * maxError ) {
         int cellID = mesh->activeElements()[activeCellIndex]->cellID();
         cellsToRefine.push_back(cellID);
+        cout << "refining cell ID " << cellID << " on proc " << rank << endl;
       }
     }
+
     if (useTriangles) {
       mesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
     } else {
       mesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
     }
-    solution->solve();
+    cout << "Solving..." << endl;    
+    solution->solve(false);
+    cout << "Solved..." << endl;    
+
   }
   
   if (useEggerSchoeberl) {
@@ -111,10 +140,9 @@ int main(int argc, char *argv[]) {
     double l2error = exactSolution.L2NormOfError(*solution, ConfusionBilinearForm::U);
     cout << "L2 error: " << l2error << endl;
   }
-  cout << "Energy error: " << sqrt(totalEnergyErrorSquared) << endl;
 
   // save a data file for plotting in MATLAB
-  solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
-  solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
-  */
+//  solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+//  solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
+  
 }
