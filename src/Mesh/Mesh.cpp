@@ -882,6 +882,30 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+Epetra_Map Mesh::getCellIDPartitionMap(int rank, Epetra_Comm* Comm){
+  int indexBase = 0; // 0 for cpp, 1 for fortran
+  int numActiveElements = activeElements().size();
+  
+  // determine cell IDs for this partition
+  vector< ElementPtr > elemsInPartition = elementsInPartition(rank);
+  int numElemsInPartition = elemsInPartition.size();
+  int *partitionLocalElems;
+  if (numElemsInPartition!=0){
+    partitionLocalElems = new int[numElemsInPartition];
+  }else{
+    partitionLocalElems = NULL;
+  }  
+  
+  // set partition-local cell IDs
+  for (int activeCellIndex=0; activeCellIndex<numElemsInPartition; activeCellIndex++) {
+    ElementPtr elemPtr = elemsInPartition[activeCellIndex];
+    int cellIndex = elemPtr->globalCellIndex();
+    partitionLocalElems[activeCellIndex] = cellIndex;
+  }
+  Epetra_Map partMap(numActiveElements, numElemsInPartition, partitionLocalElems, indexBase, *Comm);
+}
+
+
 FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber ) {
   if (partitionNumber >= 0) {
     return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
@@ -957,6 +981,10 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 
 vector< Teuchos::RCP< Element > > & Mesh::elements() { 
   return _elements; 
+}
+
+vector< ElementPtr > Mesh::elementsInPartition(int partitionNumber){
+  return _partitions[partitionNumber];
 }
 
 vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {

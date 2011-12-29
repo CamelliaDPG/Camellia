@@ -148,6 +148,8 @@ public:
   
   int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
   
+  Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
+  
   int globalDofIndex(int cellID, int localDofIndex);
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
@@ -175,6 +177,7 @@ public:
 
   vector< Teuchos::RCP< Element > > & activeElements();
   vector< Teuchos::RCP< Element > > & elements();
+  vector< ElementPtr > elementsInPartition(int partitionNumber);
 
   map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
