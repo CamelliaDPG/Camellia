@@ -987,6 +987,17 @@ vector< ElementPtr > Mesh::elementsInPartition(int partitionNumber){
   return _partitions[partitionNumber];
 }
 
+vector< ElementPtr > Mesh::elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
+  // returns the elements for a given partition and element type
+  vector< ElementPtr > elementsOfType;
+  vector<int> cellIDs = _cellIDsForElementType[partitionNumber][elemTypePtr.get()];
+  int numCells = cellIDs.size();
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    elementsOfType.push_back(_elements[cellIDs[cellIndex]]);
+  }
+  return elementsOfType;
+}
+
 vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
   if ((partitionNumber >= 0) && (partitionNumber < _numPartitions)) {
     return _elementTypesForPartition[partitionNumber];

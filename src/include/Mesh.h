@@ -177,6 +177,8 @@ public:
 
   vector< Teuchos::RCP< Element > > & activeElements();
   vector< Teuchos::RCP< Element > > & elements();
+  vector< Teuchos::RCP< Element > > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  
   vector< ElementPtr > elementsInPartition(int partitionNumber);
 
   map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
