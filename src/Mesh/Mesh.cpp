@@ -691,7 +691,6 @@ void Mesh::buildTypeLookups() {
       for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
         int cellID = *cellIt;
         ElementPtr elem = _elements[cellID];
-        ElementTypePtr oldElemType;
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           for (int i=0; i<spaceDim; i++) {
             physicalCellNodes(cellIndex,sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
