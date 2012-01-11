@@ -70,6 +70,7 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+//  mesh->setPartitionPolicy(Teuchos::rcp(new MeshPartitionPolicy()));
   mesh->setNumPartitions(numProcs);
 
   // create a solution object
@@ -99,7 +100,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  int numRefinements = 2;
+  int numRefinements = 1;
   double thresholdFactor = 0.20;
   
   double totalEnergyErrorSquared;
@@ -107,11 +108,12 @@ int main(int argc, char *argv[]) {
     vector<int> cellsToRefine;
     FieldContainer<double> energyError;
     solution->energyError(energyError);
+/*
     int numActiveCells = energyError.dimension(0);
     double maxError = 0.0;
     totalEnergyErrorSquared = 0.0;
     for (int activeCellIndex=0; activeCellIndex<numActiveCells; activeCellIndex++) {
-      cout << "energy error for global cell index " << mesh->activeElements()[activeCellIndex]->globalCellIndex() << " is " << energyError(activeCellIndex) << endl;
+      cout << "energy error for cellID " << mesh->activeElements()[activeCellIndex]->cellID() << " is " << energyError(activeCellIndex) << endl;
       maxError = max(energyError(activeCellIndex),maxError);
       totalEnergyErrorSquared += energyError(activeCellIndex) * energyError(activeCellIndex);
     }
@@ -132,6 +134,7 @@ int main(int argc, char *argv[]) {
     cout << "Solving..." << endl;    
     solution->solve(false);
     cout << "Solved..." << endl;    
+ */
 
   }
   

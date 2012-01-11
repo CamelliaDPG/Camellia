@@ -995,69 +995,72 @@ void Solution::energyError(FieldContainer<double> &energyError) {
   int numActiveElements = _mesh->activeElements().size();
   energyError.resize( numActiveElements );
   
-  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
-  int numElemsInPartition = elemsInPartition.size();
+//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
+//  int numElemsInPartition = elemsInPartition.size();
 
-  computeErrorRepresentation();
-//  cout << "Error rep computed on proc " << rank << endl;
-  
-  // initialize error array to -1 (cannot have negative index...)
-  
-  int localIndArray[numActiveElements];
+  computeErrorRepresentation();  
+
+  // initialize error array to -1 (cannot have negative index...) 
+  int localCellIDArray[numActiveElements];
   double localErrArray[numActiveElements];  
-  for (int cellIndex=0;cellIndex<numActiveElements;cellIndex++){
-    localIndArray[cellIndex] = -1;    
-    localErrArray[cellIndex] = -1.0;        
+  for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
+    localCellIDArray[globalCellIndex] = -1;    
+    localErrArray[globalCellIndex] = -1.0;        
   }  
-
   
-  for (int activeCellIndex=0; activeCellIndex<numElemsInPartition; activeCellIndex++) {
-//    ElementPtr elemPtr = _mesh->activeElements()[activeCellIndex];
-    ElementPtr elemPtr = elemsInPartition[activeCellIndex];
-    int globalCellIndex = elemPtr->globalCellIndex();
-    ElementTypePtr elemTypePtr = elemPtr->elementType();
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);   
+  vector<ElementTypePtr>::iterator elemTypeIt;  
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);    
+    
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    
     
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
     FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
     FieldContainer<double> errorReps = _errorRepresentationForElementType[elemTypePtr.get()];
-    int numTestDofs = residuals.dimension(1);
+    int numTestDofs = residuals.dimension(1);    
+    int numCells = residuals.dimension(0);    
+    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
 
     double errorSquared = 0.0;
-    for (int i=0; i<numTestDofs; i++) {      
-      errorSquared += residuals(activeCellIndex,i) * errorReps(activeCellIndex,i);
-//      errorSquared += residuals(activeCellIndex,i) * residuals(activeCellIndex,i); // TODO: remove, this is for testing, to get consistency on 2 procs                                                            
-    }
-//    cout << "Energy error is " << sqrt(errorSquared) << " for cell " << globalCellIndex << endl;
-    localErrArray[activeCellIndex] = sqrt(errorSquared);
-    localIndArray[activeCellIndex] = globalCellIndex;    
-//    energyError(globalCellIndex) = sqrt(errorSquared);
-  }
-  
-  double errArray[numProcs][numActiveElements];  
-  int indArray[numProcs][numActiveElements];    
-  if (numProcs>1){
-//    cout << "sending MPI call for inds on proc " << rank << endl;    
-    MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);      
-    MPI::COMM_WORLD.Allgather(localIndArray,numActiveElements, MPI::INT, indArray, numActiveElements , MPI::INT);        
-//    cout << "done sending MPI call" << endl;
-  }else{
-    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
-      indArray[0][globalCellIndex] = localIndArray[globalCellIndex];
-      errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
-    }
-  }
-  
-  // copy back to energyError field container 
-  for (int procIndex=0;procIndex<numProcs;procIndex++){
-    for (int cellIndex=0;cellIndex<numActiveElements;cellIndex++){
-      if (indArray[procIndex][cellIndex]!=-1){
-        cout << "Setting energy error for cellIndex " << cellIndex << " and glob index " << indArray[procIndex][cellIndex] << endl;
-        energyError(indArray[procIndex][cellIndex]) = errArray[procIndex][cellIndex];
+    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+      for (int i=0; i<numTestDofs; i++) {      
+//        errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
+        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
+//        errorSquared += residuals(cellIndex,i) * residuals(cellIndex,i);
+      }
+      localErrArray[cellIndex] = sqrt(errorSquared);
+      int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
+      localCellIDArray[cellIndex] = cellID; 
+      cout << "energy error for cellID " << cellID << " is " << sqrt(errorSquared) << endl;
+    }       
+
+/*
+    double errArray[numProcs][numActiveElements];  
+    int cellIDArray[numProcs][numActiveElements];    
+    if (numProcs>1){
+      //    cout << "sending MPI call for inds on proc " << rank << endl;    
+      MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);      
+      MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
+      //    cout << "done sending MPI call" << endl;
+    }else{
+      for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
+        cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
+        errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
       }
     }
-  }  
-  
-
+    
+    // copy back to energyError field container 
+    for (int procIndex=0;procIndex<numProcs;procIndex++){
+      for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
+        if (cellIDArray[procIndex][globalCellIndex]!=-1){
+          energyError(cellIDArray[procIndex][globalCellIndex]) = errArray[procIndex][globalCellIndex];
+        }
+      }
+    }  
+ */
+    
+  }    
 }
 
 void Solution::computeErrorRepresentation() {
@@ -1078,7 +1081,7 @@ void Solution::computeErrorRepresentation() {
   if (!_residualsComputed) {
     computeResiduals();
   }
-  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);  
+//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);  
   
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
@@ -1088,9 +1091,11 @@ void Solution::computeErrorRepresentation() {
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr,rank);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    
+    
     int numCells = physicalCellNodes.dimension(0);
     int numTestDofs = testOrdering->totalDofs();
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartition.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");    
+    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");    
     FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, physicalCellNodes);
@@ -1099,6 +1104,7 @@ void Solution::computeErrorRepresentation() {
     Epetra_SerialDenseSolver solver;
     
     for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
+      
 //      cout << "In compute error rep local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
       // changed to Copy from View for debugging...
       Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
@@ -1162,14 +1168,16 @@ void Solution::computeResiduals() {
 #else
   Epetra_SerialComm Comm;
 #endif
-  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);    
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
-  
+//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);    
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);  
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
+
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
+    
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr,rank);
     FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr,rank);
     FieldContainer<double> solution = _solutionForElementType[elemTypePtr.get()];
@@ -1180,11 +1188,9 @@ void Solution::computeResiduals() {
     int numCells = physicalCellNodes.dimension(0); // partition-local cells
 
     cout << "Num sets of phys cell nodes in partition " << rank << " is " << numCells << endl;
-    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
+//    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
     
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartition.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");
-
-    
+    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
     /*
     cout << "Num trial/test dofs " << rank << " is " << numTrialDofs << ", " << numTestDofs << endl;
     cout << "solution dim on " << rank << " is " << solution.dimension(0) << ", " << solution.dimension(1) << endl;
@@ -1207,15 +1213,15 @@ void Solution::computeResiduals() {
     FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
     BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
                                                 trialOrdering, testOrdering, cellTopo, 
-                                                physicalCellNodes, cellSideParities);
+                                                physicalCellNodes, cellSideParities);    
 
     // now, weight the entries in b(u,v) by the solution coefficients to compute:
     // l(v) - b(u_h,v)    
-    for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {          
-//      cout << "local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
+    for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {                
+      int globalCellIndex = elemsInPartitionOfType[localCellIndex]->globalCellIndex();
+      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;        
       for (int i=0; i<numTestDofs; i++) {
         for (int j=0; j<numTrialDofs; j++) {
-          int globalCellIndex = elemsInPartition[localCellIndex]->globalCellIndex(); // get global index into active elems for soln
           residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);                
         }         
       }
