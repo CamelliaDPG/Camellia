@@ -122,6 +122,8 @@ public:
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest);
 
   int numInitialElements();
+
+  vector<double> getCellCentroid(int cellID);
   
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
@@ -148,6 +150,8 @@ public:
   
   int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
   
+  void enforceOneIrregularity();
+
   Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
   
   int globalDofIndex(int cellID, int localDofIndex);

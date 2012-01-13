@@ -645,7 +645,6 @@ void Mesh::buildTypeLookups() {
   _globalCellIndexToCellID.clear();
   _partitionedCellSideParitiesForElementType.clear();
   _partitionedPhysicalCellNodesForElementType.clear();
-  
   set< ElementType* > elementTypeSet; // keep track of which ones we've seen globally (avoid duplicates in _elementTypes)
   map< ElementType*, int > globalCellIndices;
   
@@ -881,6 +880,57 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+void Mesh::enforceOneIrregularity(){
+#ifdef HAVE_MPI
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  bool meshIsNotRegular = true; // assume it's not regular and check elements
+  while (meshIsNotRegular){
+    vector <int> irregularTriangleCells;
+    vector <int> irregularQuadCells;
+    vector< Teuchos::RCP< Element > > newActiveElements = activeElements();
+    vector< Teuchos::RCP< Element > >::iterator newElemIt;
+    
+    for (newElemIt = newActiveElements.begin();newElemIt != newActiveElements.end(); newElemIt++){
+      Teuchos::RCP< Element > current_element = *(newElemIt);
+      bool isIrregular = false;
+      for (int sideIndex=0; sideIndex<current_element->numSides(); sideIndex++) {
+	int mySideIndexInNeighbor;
+	Element* neighbor; // may be a parent
+	current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
+	int numNeighborsOnSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor).size();
+	if (numNeighborsOnSide > 2) isIrregular=true;
+      }
+      
+      if (isIrregular){
+	if (current_element->numSides()==3){
+	  irregularQuadCells.push_back(current_element->cellID());
+	}
+	else if (current_element->numSides()==4){
+	  irregularQuadCells.push_back(current_element->cellID());
+	}
+	if (rank==0){
+	  cout << "cell " << current_element->cellID() << " is refined to maintain regularity" << endl;
+	}
+      }
+    }
+    
+    if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)){
+      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle());
+      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
+      irregularTriangleCells.clear();
+      irregularQuadCells.clear();
+    }else{
+      meshIsNotRegular=false;
+    }
+  }
+}
+
 Epetra_Map Mesh::getCellIDPartitionMap(int rank, Epetra_Comm* Comm){
   int indexBase = 0; // 0 for cpp, 1 for fortran
   int numActiveElements = activeElements().size();
@@ -913,6 +963,23 @@ FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr, int
   }
 }
 
+vector<double> Mesh::getCellCentroid(int cellID){
+
+  FieldContainer<double> verts; // gets resized inside verticesForCell
+  verticesForCell(verts, cellID);    
+  //average vertex positions together to get a centroid (avoids using vertex in case local enumeration overlaps)
+  int numVertices = verts.dimension(0);
+  int num_dim = verts.dimension(1);//_elements[cellID]->elementType()->cellTopoPtr->getDimension();
+  vector<double> coords(num_dim,0.0);
+  for (int k=0;k<num_dim;k++){
+    for (int j=0;j<numVertices;j++){
+      coords[k] += verts(j,k);
+    }
+    coords[k] = coords[k]/((double)(numVertices));
+  }
+  return coords;
+}
+
 void Mesh::determineActiveElements() {
   _activeElements.clear();
   vector<ElementPtr>::iterator elemIterator;
@@ -930,7 +997,9 @@ void Mesh::determineActiveElements() {
     vector<ElementPtr> partition;
     for (int j=0; j<_activeElements.size(); j++) {
       if (partitionedMesh(i,j) < 0) break; // no more elements in this partition
+      //      if (partitionedMesh(i,j)>-1){ 
       partition.push_back( _elements[partitionedMesh(i,j)] );
+      //      }
     }
     _partitions.push_back( partition );
   }
