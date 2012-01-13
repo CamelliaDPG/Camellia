@@ -1,5 +1,26 @@
 Import('*')
 
-src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp'])
+Poisson_dir = "../Poisson"
+Poisson_files = Split("""
+PoissonBCCubic.cpp
+PoissonBCLinear.cpp
+PoissonBCQuadratic.cpp
+PoissonBCQuartic.cpp
+PoissonBilinearForm.cpp
+PoissonExactSolution.cpp
+PoissonExactSolutionCubic.cpp
+PoissonExactSolutionLinear.cpp
+PoissonExactSolutionQuadratic.cpp
+PoissonExactSolutionQuartic.cpp
+PoissonRHSCubic.cpp
+PoissonRHSLinear.cpp
+PoissonRHSQuadratic.cpp
+PoissonRHSQuartic.cpp
+""")
+
+for i in range(len(Poisson_files)):
+    Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
+
+src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp',Poisson_files,'../DPGTests/MeshTestSuite.cpp'])
 
 env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])
