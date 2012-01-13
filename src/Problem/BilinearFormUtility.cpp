@@ -752,6 +752,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
   unsigned numCells = physicalCellNodes.dimension(0);
   unsigned numNodesPerElem = physicalCellNodes.dimension(1);
   unsigned spaceDim = physicalCellNodes.dimension(2);
+  //  cout << "num cells in utility: " << numCells << endl;
 
   // Check that cellTopo and physicalCellNodes agree
   TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
@@ -809,7 +810,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
         FieldContainer<double> testValuesTransformedWeightedWeighted = *testValuesTransformedWeighted;
         weightCellBasisValues(testValuesTransformedWeightedWeighted, weights, testDofOffset);
 
-        FieldContainer<double> rhsPointValues; // the rhs method will resize....
+        FieldContainer<double> rhsPointValues; // the rhs method will resize...	
         rhs.rhs(testID,physCubPoints,rhsPointValues);
         
         //cout << "rhsPointValues for testID " << testID << ":" << endl << rhsPointValues;
