@@ -113,7 +113,8 @@ public:
   
   void computeResiduals();
   void computeErrorRepresentation();
-  void energyError(FieldContainer<double> &energyError);
+  //  void energyError(FieldContainer<double> &energyError);
+  void energyError(map<int, double> &energyError);
   
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);

@@ -969,7 +969,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   }  
 }
 
-void Solution::energyError(FieldContainer<double> &energyError) {
+void Solution::energyError(map<int,double> &energyError){ //FieldContainer<double> &energyError) {
   int numProcs=1;
   int rank=0;
   
@@ -993,7 +993,7 @@ void Solution::energyError(FieldContainer<double> &energyError) {
   cout << "Done initing mvs" << endl;
  */ 
   int numActiveElements = _mesh->activeElements().size();
-  energyError.resize( numActiveElements );
+  //  energyError.resize( numActiveElements );
   
 //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
 //  int numElemsInPartition = elemsInPartition.size();
@@ -1010,6 +1010,7 @@ void Solution::energyError(FieldContainer<double> &energyError) {
   
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);   
   vector<ElementTypePtr>::iterator elemTypeIt;  
+  int cellIndStart = 0;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
@@ -1021,46 +1022,46 @@ void Solution::energyError(FieldContainer<double> &energyError) {
     int numTestDofs = residuals.dimension(1);    
     int numCells = residuals.dimension(0);    
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
-
-    double errorSquared = 0.0;
-    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+    
+    for (int cellIndex=cellIndStart;cellIndex<numCells;cellIndex++){
+      double errorSquared = 0.0;
       for (int i=0; i<numTestDofs; i++) {      
-//        errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
-        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
+        errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
+//        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
 //        errorSquared += residuals(cellIndex,i) * residuals(cellIndex,i);
       }
       localErrArray[cellIndex] = sqrt(errorSquared);
       int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
       localCellIDArray[cellIndex] = cellID; 
-      cout << "energy error for cellID " << cellID << " is " << sqrt(errorSquared) << endl;
-    }       
+      //      cout << "energy error for cellID " << cellID << " is " << sqrt(errorSquared) << endl;
+    }   
+    cellIndStart += numCells; // increment to go to the next set of element types
+  } // end of loop thru element types
 
-/*
-    double errArray[numProcs][numActiveElements];  
-    int cellIDArray[numProcs][numActiveElements];    
-    if (numProcs>1){
-      //    cout << "sending MPI call for inds on proc " << rank << endl;    
-      MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);      
-      MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
-      //    cout << "done sending MPI call" << endl;
-    }else{
-      for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
-        cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
-        errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
+  // mpi communicate all energy errors
+  double errArray[numProcs][numActiveElements];  
+  int cellIDArray[numProcs][numActiveElements];    
+  if (numProcs>1){
+    //    cout << "sending MPI call for inds on proc " << rank << endl;    
+    MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);      
+    MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
+    //    cout << "done sending MPI call" << endl;
+  }else{
+    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
+      cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
+      errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
+    }
+  }
+  
+  // copy back to energyError field container 
+  for (int procIndex=0;procIndex<numProcs;procIndex++){
+    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
+      if (cellIDArray[procIndex][globalCellIndex]!=-1){
+	energyError[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
       }
     }
-    
-    // copy back to energyError field container 
-    for (int procIndex=0;procIndex<numProcs;procIndex++){
-      for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-        if (cellIDArray[procIndex][globalCellIndex]!=-1){
-          energyError(cellIDArray[procIndex][globalCellIndex]) = errArray[procIndex][globalCellIndex];
-        }
-      }
-    }  
- */
-    
-  }    
+  }      
+
 }
 
 void Solution::computeErrorRepresentation() {
@@ -1187,7 +1188,6 @@ void Solution::computeResiduals() {
     int numTestDofs  = testOrdering->totalDofs();
     int numCells = physicalCellNodes.dimension(0); // partition-local cells
 
-    cout << "Num sets of phys cell nodes in partition " << rank << " is " << numCells << endl;
 //    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
     
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
@@ -1219,9 +1219,9 @@ void Solution::computeResiduals() {
     // l(v) - b(u_h,v)    
     for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {                
       int globalCellIndex = elemsInPartitionOfType[localCellIndex]->globalCellIndex();
-      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;        
+      //      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;          
       for (int i=0; i<numTestDofs; i++) {
-        for (int j=0; j<numTrialDofs; j++) {
+	for (int j=0; j<numTrialDofs; j++) {      
           residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);                
         }         
       }
