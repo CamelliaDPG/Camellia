@@ -18,6 +18,11 @@ PoissonRHSQuadratic.cpp
 PoissonRHSQuartic.cpp
 """)
 
+
+for i in range(len(Poisson_files)):
+    Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
+
+
 Confusion_dir = "../Confusion"
 Confusion_files = Split("""
 ConfusionBilinearForm.cpp
@@ -25,15 +30,8 @@ ConfusionManufacturedSolution.cpp
 """)
 
 for i in range(len(Confusion_files)):
-    Confusion_files[i]=Confusion_dir+"/"+Confusion_files[i]
-
-for i in range(len(Poisson_files)):
-    Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
-
-print Confusion_files
+    Confusion_files[i]=Confusion_dir+"/"+Confusion_files[i]print Confusion_files
     
-
-
 src_obj = env.Object(['MeshTestSuite.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp')])
 
 env.Program('exec/DPGTests',['DPGTests.cpp',src_obj])

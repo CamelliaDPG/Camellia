@@ -43,11 +43,11 @@ class Mesh;
 class MeshTestSuite {
 private:
   static bool checkMeshDofConnectivities(Mesh &mesh);
-  static bool checkMeshConsistency(Mesh &mesh);
   static bool checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOrdering); 
   static bool vectorPairsEqual( vector< pair<int,int> > &first, vector< pair<int,int> > &second);
   // checkDofOrderingHasNoOverlap returns true if no two (varID,basisOrdinal,sideIndex) tuples map to same dofIndex
 public:
+  static bool checkMeshConsistency(Mesh &mesh);
   static void runTests(int &numTestsRun, int &numTestsPassed);
   static bool testBuildMesh();
   static bool testMeshSolvePointwise();

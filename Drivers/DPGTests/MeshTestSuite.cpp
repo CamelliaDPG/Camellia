@@ -964,6 +964,10 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
         if (neighborParity != -myParity) {
           success = false;
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != -neighborParity on boundary; sideIndex = " << sideIndex << endl;
+	  cout << "neighbor parity = " << neighborParity << " and myparity = " << myParity << endl;
+	  cout << "side index in neighbor is " << mySideIndexInNeighbor << endl;
+	  vector<double> centroid = mesh.getCellCentroid(cellID);
+	  cout << "element centroid for cellID " << cellID << " is " << centroid[0] << "," << centroid[1] << endl;
         }
         // this check needs to be modified for 3D
         // TODO: modify for 3D
@@ -1860,7 +1864,7 @@ bool MeshTestSuite::testEnergyError() {
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   
   FieldContainer<double> energyError;
-  solution.energyError(energyError);
+  //  solution.energyError(energyError);
   
   int numActiveCells = horizontalCells * verticalCells;
   for (int cellIndex = 0; cellIndex < numActiveCells; cellIndex++ ) {
