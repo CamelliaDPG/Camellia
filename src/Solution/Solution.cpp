@@ -983,23 +983,23 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
 #else
   Epetra_SerialComm Comm;
 #endif  
-
-/*
- // ready multivector for storage of energy errors
-  cout << "Initializing multivectors/maps" << endl;
-  Epetra_Map cellIDPartitionMap = _mesh->getCellIDPartitionMap(rank, &Comm); // TODO FIX - should be cellIndex not cellID
-  cout << "Done initing maps" << endl;
-  Epetra_MultiVector energyErrMV(cellIDPartitionMap,1);
-  cout << "Done initing mvs" << endl;
- */ 
+  
+  /*
+   // ready multivector for storage of energy errors
+   cout << "Initializing multivectors/maps" << endl;
+   Epetra_Map cellIDPartitionMap = _mesh->getCellIDPartitionMap(rank, &Comm); // TODO FIX - should be cellIndex not cellID
+   cout << "Done initing maps" << endl;
+   Epetra_MultiVector energyErrMV(cellIDPartitionMap,1);
+   cout << "Done initing mvs" << endl;
+   */ 
   int numActiveElements = _mesh->activeElements().size();
   //  energyError.resize( numActiveElements );
   
-//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
-//  int numElemsInPartition = elemsInPartition.size();
-
+  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
+  //  int numElemsInPartition = elemsInPartition.size();
+  
   computeErrorRepresentation();  
-
+  
   // initialize error array to -1 (cannot have negative index...) 
   int localCellIDArray[numActiveElements];
   double localErrArray[numActiveElements];  
@@ -1027,8 +1027,8 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
       double errorSquared = 0.0;
       for (int i=0; i<numTestDofs; i++) {      
         errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
-//        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
-//        errorSquared += residuals(cellIndex,i) * residuals(cellIndex,i);
+        //        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
+        //        errorSquared += residuals(cellIndex,i) * residuals(cellIndex,i);
       }
       localErrArray[cellIndex] = sqrt(errorSquared);
       int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
@@ -1037,7 +1037,7 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
     }   
     cellIndStart += numCells; // increment to go to the next set of element types
   } // end of loop thru element types
-
+  
   // mpi communicate all energy errors
   double errArray[numProcs][numActiveElements];  
   int cellIDArray[numProcs][numActiveElements];    
@@ -1057,7 +1057,7 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
   for (int procIndex=0;procIndex<numProcs;procIndex++){
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
       if (cellIDArray[procIndex][globalCellIndex]!=-1){
-	energyError[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
+        energyError[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
       }
     }
   }      
