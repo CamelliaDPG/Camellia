@@ -76,12 +76,14 @@ int main(int argc, char *argv[]) {
   //cout << horizontalCells << "x" << verticalCells << " " << meshType << " mesh, psiHat_n error: " << psiHatError << endl;
 
   double totalEnergyErrorSq;  
-  FieldContainer<double> energyErr;  
+  map<int,double> energyErr;  
   solution->energyError(energyErr);
-  int numActiveCell = energyErr.dimension(0);
+  int numActiveCell = energyErr.size();
   totalEnergyErrorSq = 0.0;
-  for (int activeCellInd=0; activeCellInd<numActiveCell; activeCellInd++) {
-    totalEnergyErrorSq += energyErr(activeCellInd) * energyErr(activeCellInd);
+  map<int,double>::iterator energyErrIt;
+  for (energyErrIt = energyErr.begin(); energyErrIt != energyErr.end(); energyErrIt++) {
+    double err = energyErrIt->second;
+    totalEnergyErrorSq += err * err;
   }
   cout << "Energy error: " << sqrt(totalEnergyErrorSq) << endl;  
 
