@@ -880,7 +880,7 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
-void Mesh::enforceOneIrregularity(){
+void Mesh::enforceOneIrregularity() {
 #ifdef HAVE_MPI
   int rank     = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -888,7 +888,7 @@ void Mesh::enforceOneIrregularity(){
 #else
   Epetra_SerialComm Comm;
 #endif
-
+  
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   while (meshIsNotRegular){
     vector <int> irregularTriangleCells;
@@ -900,23 +900,23 @@ void Mesh::enforceOneIrregularity(){
       Teuchos::RCP< Element > current_element = *(newElemIt);
       bool isIrregular = false;
       for (int sideIndex=0; sideIndex<current_element->numSides(); sideIndex++) {
-	int mySideIndexInNeighbor;
-	Element* neighbor; // may be a parent
-	current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
-	int numNeighborsOnSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor).size();
-	if (numNeighborsOnSide > 2) isIrregular=true;
+        int mySideIndexInNeighbor;
+        Element* neighbor; // may be a parent
+        current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
+        int numNeighborsOnSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor).size();
+        if (numNeighborsOnSide > 2) isIrregular=true;
       }
       
       if (isIrregular){
-	if (current_element->numSides()==3){
-	  irregularQuadCells.push_back(current_element->cellID());
-	}
-	else if (current_element->numSides()==4){
-	  irregularQuadCells.push_back(current_element->cellID());
-	}
-	if (rank==0){
-	  cout << "cell " << current_element->cellID() << " is refined to maintain regularity" << endl;
-	}
+        if (current_element->numSides()==3){
+          irregularQuadCells.push_back(current_element->cellID());
+        }
+        else if (current_element->numSides()==4){
+          irregularQuadCells.push_back(current_element->cellID());
+        }
+        if (rank==0){
+          cout << "cell " << current_element->cellID() << " is refined to maintain regularity" << endl;
+        }
       }
     }
     
@@ -925,7 +925,7 @@ void Mesh::enforceOneIrregularity(){
       hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
       irregularTriangleCells.clear();
       irregularQuadCells.clear();
-    }else{
+    } else {
       meshIsNotRegular=false;
     }
   }
@@ -1337,8 +1337,8 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           getMultiBasisOrdering( nonParentTrialOrdering, parent, neighborSideIndexInParent,
                                 parentSideIndexInNeighbor, nonParent );
           nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
-                                                                            nonParent->elementType()->testOrderPtr, 
-                                                                            nonParent->elementType()->cellTopoPtr );
+                                                             nonParent->elementType()->testOrderPtr, 
+                                                             nonParent->elementType()->cellTopoPtr );
           // debug code:
           if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
             TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
