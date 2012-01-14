@@ -39,17 +39,19 @@ public:
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     double tol = 1e-14;
-    double x_cut = .5;
-    double y_cut = .5;
+    double x_cut = .50;
+    double y_cut = .50;
     TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
         double x = physicalPoints(cellIndex, ptIndex, 0);
         double y = physicalPoints(cellIndex, ptIndex, 1);
         if ( (abs(x) < 1e-14) && (y<y_cut) ) { // x basically 0 ==> u = 1 - y	  
-          dirichletValues(cellIndex,ptIndex) = 1.0 - y/y_cut;
+	  dirichletValues(cellIndex,ptIndex) = 1.0 - y/y_cut;
+	  //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-y*y)); // bump function
         } else if ( (abs(y) < 1e-14) &&  (x<x_cut) ) { // y basically 0 ==> u = 1 - x
-          dirichletValues(cellIndex,ptIndex) = 1.0 - x/x_cut;
+	  dirichletValues(cellIndex,ptIndex) = 1.0 - x/x_cut;
+	  //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-x*x)); // bump function
         } else {
           dirichletValues(cellIndex,ptIndex) = 0.0;
         }
