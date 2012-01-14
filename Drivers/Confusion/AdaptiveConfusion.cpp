@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   
   // define our manufactured solution:
   double epsilon = 1e-2;
-  double beta_x = 1.0, beta_y = 1.5;
+  double beta_x = 1.0, beta_y = 1.0;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
@@ -132,10 +132,10 @@ int main(int argc, char *argv[]) {
   }
 
   bool limitIrregularity = true;
-  int numRefinements = 3;
+  int numRefinements = 8;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
-  double totalEnergyErrorSquared;
+  double totalEnergyErrorSquared=0.0;
   for (int i=0; i<numRefinements; i++) {
     map<int, double> energyError;
     solution->energyError(energyError);
@@ -153,7 +153,9 @@ int main(int argc, char *argv[]) {
       maxError = max(energyError[cellID],maxError);
       totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
     }
-    cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;
+    if (rank==0){
+      cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;
+    }
 
     //actually do refinements
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
@@ -177,13 +179,7 @@ int main(int argc, char *argv[]) {
 
     // enforce 1-irregularity if desired
     if (limitIrregularity){
-      if (refIterCount==2){
-	vector<int> manualCells;
-	manualCells.push_back(12);
-	mesh->hRefine(manualCells,RefinementPattern::regularRefinementPatternQuad());
-      }else{    
-	//	mesh->enforceOneIrregularity();
-      }
+      mesh->enforceOneIrregularity();
     }
     
     refIterCount++;
@@ -204,6 +200,7 @@ int main(int argc, char *argv[]) {
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
     cout << "Done writing soln to file." << endl;
   }
+
   if (rank==0){
     cout << "mesh test suite consistency parity test returns (after making mesh regular) " << MeshTestSuite::checkMeshConsistency(*mesh) << endl;
   }
