@@ -520,7 +520,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   err = timeSolveVector.MaxValue( &_maxTimeSolve );
   err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
   
-  if (rank == 0) {
+  bool printTimingReport = false;
+  if ((rank == 0) && printTimingReport) {
     cout << "****** SUM OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _totalTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _totalTimeGlobalAssembly << " sec." << endl;

@@ -1189,6 +1189,21 @@ bool MeshTestSuite::testHRefinement() {
   return success;
 }
 
+void MeshTestSuite::printParities(Mesh &mesh) {
+  int numElements = mesh.activeElements().size();
+  for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
+    Teuchos::RCP<Element> elem = mesh.activeElements()[cellIndex];
+    
+    cout << "parities for cellID " << elem->cellID() << ": ";
+    for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
+      int parity = mesh.parityForSide(elem->cellID(),sideIndex);
+      cout << parity;
+      if (sideIndex != elem->numSides()-1) cout << ", ";
+    }
+    cout << endl;
+  }
+}
+
 bool MeshTestSuite::testHRefinementForConfusion() {
   bool success = true;
   
@@ -1888,8 +1903,8 @@ bool MeshTestSuite::testEnergyError() {
   
   map<int,double>::iterator energyErrIt;
   for (energyErrIt = energyError.begin(); energyErrIt != energyError.end(); energyErrIt++) {
-    cout << "Energy error for cellID " << energyErrIt->first;
-    cout << ": " << energyErrIt->second << endl;
+    //cout << "Energy error for cellID " << energyErrIt->first;
+    //cout << ": " << energyErrIt->second << endl;
   }
   
   return success;

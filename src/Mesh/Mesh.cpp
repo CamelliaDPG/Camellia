@@ -1631,6 +1631,15 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
   
   if (neighborPtr->cellID() > -1) {
     _cellSideParitiesForCellID[neighborPtr->cellID()][neighborSide] = -parity;
+    if (neighborPtr->isParent()) { // then we need to set its children accordingly, too
+      vector< pair< int, int> > descendentSides = neighborPtr->getDescendentsForSide(neighborSide);
+      vector< pair< int, int> >::iterator sideIt;
+      for (sideIt = descendentSides.begin(); sideIt != descendentSides.end(); sideIt++) {
+        int descendentID = sideIt->first;
+        int descendentSide = sideIt->second;
+        _cellSideParitiesForCellID[descendentID][descendentSide] = -parity;
+      }
+    }
 //    cout << "setNeighbor: set cellSideParity for cell " << neighborPtr->cellID() << ", sideIndex " << neighborSide << ": ";
 //    cout << _cellSideParitiesForCellID[neighborPtr->cellID()][neighborSide] << endl;
   }
