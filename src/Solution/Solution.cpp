@@ -411,16 +411,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   //EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   
-#ifdef HAVE_MPI
-    // Import solution onto current processor
+  // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
   Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
   Epetra_Import  solnImporter(solnMap, partMap);
   Epetra_Vector  solnCoeff(solnMap);
   solnCoeff.Import(lhsVector, solnImporter, Insert);
-#else
-  Epetra_FEVector solnCoeff = lhsVector;
-#endif
   
   // copy the dof coefficients into our data structure
   vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
@@ -432,11 +428,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
     for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
       int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-#ifdef HAVE_MPI
       _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = solnCoeff[globalIndex];
-#else
-      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = *(solnCoeff[globalIndex]);
-#endif
     }
   }
   
@@ -1041,18 +1033,22 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
   // mpi communicate all energy errors
   double errArray[numProcs][numActiveElements];  
   int cellIDArray[numProcs][numActiveElements];    
+#ifdef HAVE_MPI
   if (numProcs>1){
     //    cout << "sending MPI call for inds on proc " << rank << endl;    
     MPI::COMM_WORLD.Allgather(localErrArray,numActiveElements, MPI::DOUBLE, errArray, numActiveElements , MPI::DOUBLE);      
     MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
     //    cout << "done sending MPI call" << endl;
   }else{
+#else
+#endif
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
       cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
       errArray[0][globalCellIndex] = localErrArray[globalCellIndex];
     }
+#ifdef HAVE_MPI
   }
-  
+#endif
   // copy back to energyError field container 
   for (int procIndex=0;procIndex<numProcs;procIndex++){
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){

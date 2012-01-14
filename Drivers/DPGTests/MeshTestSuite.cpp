@@ -1166,6 +1166,26 @@ bool MeshTestSuite::testHRefinement() {
   
   solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
   
+  // try to reproduce a parity error discovered by Jesse when enforcing 1-irregularity
+  horizontalCells = 1; verticalCells = 2;
+  mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  
+  cellsToRefine.clear();
+  cellsToRefine.push_back(1); // top cell -- will refine to create 2,3,4,5 (2,3 are the bottom)
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  cellsToRefine.clear();
+  cellsToRefine.push_back(2);
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  cellsToRefine.clear();
+  cellsToRefine.push_back(3);
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  cellsToRefine.clear();
+  cellsToRefine.push_back(0);
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());  
+  if ( ! checkMeshConsistency(*mesh) ) {
+    success = false;
+    cout << "testHRefinement failed mesh consistency test in imitating 1-irregularity resolution" << endl;
+  }
   return success;
 }
 
@@ -1863,13 +1883,13 @@ bool MeshTestSuite::testEnergyError() {
   // to start, just compute error for the zero solution
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   
-  FieldContainer<double> energyError;
-  //  solution.energyError(energyError);
+  map<int,double> energyError;
+  solution.energyError(energyError);
   
-  int numActiveCells = horizontalCells * verticalCells;
-  for (int cellIndex = 0; cellIndex < numActiveCells; cellIndex++ ) {
-    cout << "Energy error for cellID " << mesh->activeElements()[cellIndex]->cellID();
-    cout << ": " << energyError(cellIndex) << endl;
+  map<int,double>::iterator energyErrIt;
+  for (energyErrIt = energyError.begin(); energyErrIt != energyError.end(); energyErrIt++) {
+    cout << "Energy error for cellID " << energyErrIt->first;
+    cout << ": " << energyErrIt->second << endl;
   }
   
   return success;

@@ -881,25 +881,27 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
 }
 
 void Mesh::enforceOneIrregularity() {
+  int rank = 0;
+  int numProcs = 1;
 #ifdef HAVE_MPI
-  int rank     = Teuchos::GlobalMPISession::getRank();
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
 #else
   Epetra_SerialComm Comm;
 #endif
   
   bool meshIsNotRegular = true; // assume it's not regular and check elements
-  while (meshIsNotRegular){
+  while (meshIsNotRegular) {
     vector <int> irregularTriangleCells;
     vector <int> irregularQuadCells;
     vector< Teuchos::RCP< Element > > newActiveElements = activeElements();
     vector< Teuchos::RCP< Element > >::iterator newElemIt;
     
-    for (newElemIt = newActiveElements.begin();newElemIt != newActiveElements.end(); newElemIt++){
+    for (newElemIt = newActiveElements.begin(); newElemIt != newActiveElements.end(); newElemIt++) {
       Teuchos::RCP< Element > current_element = *(newElemIt);
       bool isIrregular = false;
-      for (int sideIndex=0; sideIndex<current_element->numSides(); sideIndex++) {
+      for (int sideIndex=0; sideIndex < current_element->numSides(); sideIndex++) {
         int mySideIndexInNeighbor;
         Element* neighbor; // may be a parent
         current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
@@ -908,19 +910,19 @@ void Mesh::enforceOneIrregularity() {
       }
       
       if (isIrregular){
-        if (current_element->numSides()==3){
+        if ( 3 == current_element->numSides() ) {
           irregularQuadCells.push_back(current_element->cellID());
         }
-        else if (current_element->numSides()==4){
+        else if (4 == current_element->numSides() ) {
           irregularQuadCells.push_back(current_element->cellID());
         }
         if (rank==0){
-          cout << "cell " << current_element->cellID() << " is refined to maintain regularity" << endl;
+          cout << "cell " << current_element->cellID() << " refined to maintain regularity" << endl;
         }
       }
     }
     
-    if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)){
+    if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)) {
       hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle());
       hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
       irregularTriangleCells.clear();
