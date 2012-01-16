@@ -54,6 +54,8 @@
 #include "RHS.h"
 #include "BC.h"
 
+#include "LocalStiffnessMatrixFilter.h"
+
 using namespace Intrepid;
 
 class Solution {
@@ -69,6 +71,7 @@ private:
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
+  LocalStiffnessMatrixFilter _filter;
   bool _residualsComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
   void initialize();

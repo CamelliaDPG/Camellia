@@ -92,6 +92,7 @@ Solution::Solution(const Solution &soln) {
   _rhs = soln.rhs();
   _ip = soln.ip();
   _solutionForElementType = soln.solutionForElementTypeMap();
+  _filter = LocalStiffnessMatrixFilter(); // default filter doesn't do anything
   initialize();
 }
 
@@ -240,6 +241,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
+      
+      // apply filter(s) (e.g. penalty method, preconditioners, etc.)
+      _filter.filter(finalStiffness,physicalCellNodes);
       
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),
