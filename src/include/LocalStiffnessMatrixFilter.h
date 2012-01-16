@@ -7,7 +7,9 @@ using namespace Intrepid;
 
 class LocalStiffnessMatrixFilter {
 public:
-  virtual void filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes) {
+  LocalStiffnessMatrixFilter() {}
+  virtual void filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,
+                      vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) {
     // localStiffnessMatrix has dimensions (numCells, numTrialDofs, numTrialDofs)
     // physicalCellNodes has dimensions (numCells, numVerticesPerCell, numDimensions)
     
