@@ -63,6 +63,10 @@ using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
+  if (testPointContainment() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
   if (testEnergyError() ) {
     numTestsPassed++;
   }
@@ -1905,6 +1909,65 @@ bool MeshTestSuite::testEnergyError() {
   for (energyErrIt = energyError.begin(); energyErrIt != energyError.end(); energyErrIt++) {
     //cout << "Energy error for cellID " << energyErrIt->first;
     //cout << ": " << energyErrIt->second << endl;
+  }
+  
+  return success;
+}
+
+bool MeshTestSuite::testPointContainment() {
+  double tol = 2e-12; // had to increase for triangles
+  bool success = true;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  // instead of ref quad, use unit cell (force a transformation)
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;  
+  
+  int pToAdd = 1;
+  int horizontalCells=1,verticalCells=1;
+  bool triangulate = false;
+  int polyOrder = 2;
+  vector<double> expectedValues;
+  
+  PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
+  exactSolution.setUseSinglePointBCForPHI(true);
+  int order = exactSolution.H1Order(); // matters for getting enough cubature points, and of course recovering the exact solution
+  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                  exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+  
+  vector<double> x, y; vector<int> inside;
+  x.push_back(0.5); y.push_back(0.5); inside.push_back(0);
+  x.push_back(-0.5); y.push_back(0.5); inside.push_back(-1);
+  x.push_back(1.0); y.push_back(0.5); inside.push_back(0);
+  x.push_back(1.0); y.push_back(1.0); inside.push_back(0);
+  x.push_back(0.0); y.push_back(1.0); inside.push_back(0);
+  x.push_back(-0.000001); y.push_back(0.0); inside.push_back(-1);
+  int numPoints = inside.size();
+  int spaceDim = 2;
+  FieldContainer<double> points(numPoints,spaceDim);
+  for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
+    int cellID = inside[pointIndex];
+    points(pointIndex,0) = x[pointIndex];
+    points(pointIndex,1) = y[pointIndex];
+  }
+  
+  typedef Teuchos::RCP< Element > ElementPtr;
+  vector<ElementPtr> elements = myMesh->elementsForPoints(points);
+  int testIndex = 0;
+  for (vector<ElementPtr>::iterator elemIt=elements.begin(); elemIt != elements.end(); elemIt++) {
+    if (elemIt->get()) {
+      if ((*elemIt)->cellID() != inside[testIndex]) success = false;
+    } else {
+      if (inside[testIndex] != -1) success = false;
+    }
+    testIndex++;
   }
   
   return success;

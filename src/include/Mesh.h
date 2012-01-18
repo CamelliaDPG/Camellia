@@ -117,6 +117,10 @@ class Mesh {
   void addChildren(ElementPtr parent, vector< vector<int> > &children, 
                    vector< vector< pair< int, int> > > &childrenForSide);
   void setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide);
+  
+  // simple utility functions:
+  static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);
+  static double distance(double x0, double y0, double x1, double y1);
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest);
@@ -146,7 +150,12 @@ public:
   
   BilinearForm & bilinearForm();
   
+  vector<ElementPtr> elementsForPoints(FieldContainer<double> &physicalPoints);
+  bool elementContainsPoint(ElementPtr elem, double x, double y);
+  
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
+  
+  ElementPtr getElement(int cellID);
   
   int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
   

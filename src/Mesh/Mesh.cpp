@@ -880,6 +880,107 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
+  double tol = 1e-14;
+  double d1 = distance(x0,y0,x1,y1);
+  double d2 = distance(x1,y1,x2,y2);
+  double d3 = distance(x2,y2,x0,y0);
+  
+  return (abs(d1 + d2 - d3) < tol) || (abs(d1 + d3 - d2) < tol) || (abs(d2 + d3 - d1) < tol);
+}
+
+double Mesh::distance(double x0, double y0, double x1, double y1) {
+  return sqrt( (x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+}
+
+vector<ElementPtr> Mesh::elementsForPoints(FieldContainer<double> &physicalPoints) {
+  // returns a vector of an active element per point, or null if there is no element including that point
+  vector<ElementPtr> elemsForPoints;
+  int numPoints = physicalPoints.dimension(0);
+  // TODO: work out what to do here for 3D
+  int spaceDim = physicalPoints.dimension(1);
+  // figure out the last element of the original mesh:
+  int lastCellID = 0;
+  while ((_elements.size() > lastCellID) && ! _elements[lastCellID]->isChild()) {
+    lastCellID++;
+  }
+  // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
+  
+  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+    double x = physicalPoints(pointIndex,0);
+    double y = physicalPoints(pointIndex,1);
+    // find the element from the original mesh that contains this point
+    ElementPtr elem;
+    for (int cellID = 0; cellID<lastCellID; cellID++) {
+      if (elementContainsPoint(_elements[cellID],x,y)) {
+        elem = _elements[cellID];
+        break;
+      }
+    }
+    if (elem.get() != NULL) {
+      while ( elem->isParent() ) {
+        int numChildren = elem->numChildren();
+        for (int childIndex = 0; childIndex < numChildren; childIndex++) {
+          ElementPtr child = elem->getChild(childIndex);
+          if ( elementContainsPoint(child,x,y) ) {
+            elem = child;
+            break;
+          }
+        }
+      }
+    }
+    elemsForPoints.push_back(elem);
+  }
+  return elemsForPoints;
+}
+
+bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {  
+  // first, check whether x or y is outside the axis-aligned bounding box for the element
+  FieldContainer<double> vertices;
+  verticesForCell(vertices, elem->cellID());
+  int numVertices = vertices.dimension(0);
+  int spaceDim = vertices.dimension(1);
+  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "elementContainsPoint only supports 2D.");
+  double maxX = vertices(0,0), minX = vertices(0,0);
+  double maxY = vertices(0,1), minY = vertices(0,1);
+  for (int vertexIndex=1; vertexIndex<numVertices; vertexIndex++) {
+    minX = min(minX,vertices(vertexIndex,0));
+    maxX = max(maxX,vertices(vertexIndex,0));
+    minY = min(minY,vertices(vertexIndex,1));
+    maxY = max(maxY,vertices(vertexIndex,1));
+  }
+  if ( (x < minX) || (x > maxX) ) return false;
+  if ( (y < minY) || (y > maxY) ) return false;
+  
+  // now, use code derived from
+  // http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+  // to check whether the point lies within the element.
+  // (This can return false for points on the element edges.
+  //  It's guaranteed to return true for exactly one of the two elements sharing the edge.
+  //  We don't mind which element it returns true for, but when there's no other element sharing
+  //  the edge--when we're on the boundary--then we care.  So we handle this case separately, below.)
+  int i, j, result = false;
+  for (i = 0, j = numVertices-1; i < numVertices; j = i++) {
+    if ( ((vertices(i,1)>y) != (vertices(j,1)>y)) &&
+        (x < (vertices(j,0)-vertices(i,0)) * (y-vertices(i,1)) / (vertices(j,1)-vertices(i,1)) + vertices(i,0)) )
+      result = !result;
+  }
+  
+  if ( !result ) {
+    for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
+      if ( _boundary.boundaryElement(elem->cellID(),sideIndex) ) {
+        // then check whether the point lies along this side
+        double x0 = vertices(sideIndex,0), y0 = vertices(sideIndex,1);
+        double x1 = vertices((sideIndex+1)%numVertices,0), y1 = vertices((sideIndex+1)%numVertices,1);
+        if (colinear(x0,y0,x1,y1,x,y)) result = true;
+      }
+    }
+  }
+  
+  return result;
+  
+}
+
 void Mesh::enforceOneIrregularity() {
   int rank = 0;
   int numProcs = 1;
@@ -1081,6 +1182,10 @@ vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
 
 DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
+}
+
+ElementPtr Mesh::getElement(int cellID) {
+  return _elements[cellID];
 }
 
 ElementTypeFactory & Mesh::getElementTypeFactory() {
