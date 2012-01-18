@@ -21,6 +21,8 @@ PoissonRHSQuartic.cpp
 for i in range(len(Poisson_files)):
     Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
 
-src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp',Poisson_files,'../DPGTests/MeshTestSuite.cpp'])
+#src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp','PenaltyMethodFilter.cpp',Poisson_files,'../DPGTests/MeshTestSuite.cpp'])
+
+src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp','PenaltyMethodFilter.cpp'])
 
 env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])

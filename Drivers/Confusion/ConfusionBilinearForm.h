@@ -22,6 +22,9 @@ public:
   
   virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);
+
+  double getEpsilon();
+  vector<double> getBeta();
   
   bool isFluxOrTrace(int trialID);
   

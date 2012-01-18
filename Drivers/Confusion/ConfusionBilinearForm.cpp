@@ -28,6 +28,16 @@ ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, doub
   _trialIDs.push_back(SIGMA_2);
 }
 
+double ConfusionBilinearForm::getEpsilon(){
+  return _epsilon;
+}
+vector<double> ConfusionBilinearForm::getBeta(){
+  vector<double> beta;
+  beta.push_back(_beta_x);
+  beta.push_back(_beta_y);
+  return beta;
+}
+
 const string & ConfusionBilinearForm::testName(int testID) {
   switch (testID) {
     case TAU:
