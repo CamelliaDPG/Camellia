@@ -113,6 +113,8 @@ public:
   
   double meanValue(int trialID);
   double meshMeasure();
+
+  void setFilter(LocalStiffnessMatrixFilter newFilter){_filter = newFilter;}
   
   void computeResiduals();
   void computeErrorRepresentation();

@@ -1696,6 +1696,7 @@ map< ElementType*, FieldContainer<double> > Solution::solutionForElementTypeMap(
 }
 
 // Jesse's additions below:
+
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
   typedef CellTools<double>  CellTools;
   
@@ -1752,7 +1753,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
   } //end of element type loop 
   fout.close();
 }
-
+  
 void Solution::writeFluxesToFile(int trialID, const string &filePath){
   typedef CellTools<double>  CellTools;
   
