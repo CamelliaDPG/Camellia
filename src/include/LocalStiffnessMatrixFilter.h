@@ -1,9 +1,12 @@
 #ifndef DPG_LOCAL_STIFFNESS_MATRIX_FILTER
 #define DPG_LOCAL_STIFFNESS_MATRIX_FILTER
 
+#include "Mesh.h" // contains bilinear form and boundary too
+#include "BC.h" 
 #include "Intrepid_FieldContainer.hpp"
 
 using namespace Intrepid;
+using namespace std;
 
 class LocalStiffnessMatrixFilter {
 public:
