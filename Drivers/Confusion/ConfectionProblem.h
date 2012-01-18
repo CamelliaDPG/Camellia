@@ -7,14 +7,17 @@
 #include "ConfusionBilinearForm.h"
 
 class ConfectionProblem : public RHS, public BC {
+ private:
+  Teuchos::RCP<ConfusionBilinearForm> _cbf;
 public:
-  ConfectionProblem() : RHS(), BC() {
-    
+  ConfectionProblem( Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(), BC() {
+    _cbf = cbf;
   }
     
   // RHS:
   bool nonZeroRHS(int testVarID) {
-    return testVarID == ConfusionBilinearForm::V;
+    return false;
+    //    return testVarID == ConfusionBilinearForm::V;
   }
   
   void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -28,7 +31,8 @@ public:
   
   // BC
   bool bcsImposed(int varID) {
-    return varID == ConfusionBilinearForm::U_HAT;
+    //    return varID == ConfusionBilinearForm::U_HAT;
+    return varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT;
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
@@ -46,15 +50,29 @@ public:
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
         double x = physicalPoints(cellIndex, ptIndex, 0);
         double y = physicalPoints(cellIndex, ptIndex, 1);
-	if ( (abs(x)<1e-14) || (abs(y)<1e-14) ) {
+	imposeHere(cellIndex,ptIndex) = false;
+	if ( (abs(x)<1e-14) || (abs(y)<1e-14) ) { // if it's on the inflow
 	  imposeHere(cellIndex,ptIndex) = true;
+
+	  double scaling=1.0;
+	  if (!bcsImposed(ConfusionBilinearForm::U_HAT)){
+	    double beta_n=0.0;
+	    vector<double> beta = _cbf->getBeta();	    
+	    for (int dimInd = 0;dimInd<spaceDim;dimInd++){
+	      beta_n += beta[dimInd]*unitNormals(cellIndex,ptIndex,dimInd);
+	      // assumes sigma ~ 0
+	    }
+	    scaling = beta_n;
+	  } else {
+	    scaling = 1.0; // don't weight at all if just applying ot the trace
+	  }
 	  if ( (abs(x) < 1e-14) && (y<y_cut) ) { // x basically 0 ==> u = 1 - y	  
-	    dirichletValues(cellIndex,ptIndex) = 1.0 - y/y_cut;
+	    dirichletValues(cellIndex,ptIndex) = (1.0 - y/y_cut)*scaling;
 	    //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-y*y)); // bump function
 	  } else if ( (abs(y) < 1e-14) &&  (x<x_cut) ) { // y basically 0 ==> u = 1 - x
-	    dirichletValues(cellIndex,ptIndex) = 1.0 - x/x_cut;
+	    dirichletValues(cellIndex,ptIndex) = (1.0 - x/x_cut)*scaling;
 	    //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-x*x)); // bump function
-	  } else {
+	  } else {	    
 	    dirichletValues(cellIndex,ptIndex) = 0.0;
 	  }
 	} // end of if-impose

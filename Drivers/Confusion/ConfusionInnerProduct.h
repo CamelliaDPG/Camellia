@@ -42,18 +42,12 @@
   Implements Confusion inner product for L2 stability in u
 */
 
-/* TO ASK NATE
-   - how do I apply three operators to v (weighted beta dot grad v, epsilon grad v, and v)?
-
-   - BUG - resizing of testValues1 and 2 seems to carry over and cause us to throw exceptions!  
-*/
-
 class ConfusionInnerProduct : public DPGInnerProduct {
  private:
-  Teuchos::RCP<ConfusionBilinearForm> _ConfusionBilinearForm;
+  Teuchos::RCP<ConfusionBilinearForm> _confusionBilinearForm;
  public:
- ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs) : DPGInnerProduct(bfs) {
-    _ConfusionBilinearForm=bfs;
+ ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
+    _confusionBilinearForm=bfs; // redundant, but no way around it.
   } 
   
   void operators(int testID1, int testID2, 
@@ -103,21 +97,24 @@ class ConfusionInnerProduct : public DPGInnerProduct {
 
     if (testID1==testID2){
 
-      double epsilon = _ConfusionBilinearForm->getEpsilon();
-      double _beta_x = _ConfusionBilinearForm->getBeta()[0];
-      double _beta_y = _ConfusionBilinearForm->getBeta()[1];
+      double epsilon = _confusionBilinearForm->getEpsilon();
+      double beta_x = _confusionBilinearForm->getBeta()[0];
+      double beta_y = _confusionBilinearForm->getBeta()[1];
+      //      cout << "Beta = " << beta_x << ", " << beta_y << ", and epsilon = " << epsilon << endl;
     
       if (testID1==ConfusionBilinearForm::V ) {
-	if ((operatorIndex==1)||(operatorIndex==2)) { // if it	
+	if ((operatorIndex==0)||(operatorIndex==1)) { // if it	
+
 	  _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
 	  _bilinearForm->multiplyFCByWeight(testValues2,1.0);
-	} else if (operatorIndex==3) { // if it's the beta dot grad term
+
+	} else if (operatorIndex==2) { // if it's the beta dot grad term
 
 	  int numCells = testValues1.dimension(0);
 	  int basisCardinality = testValues1.dimension(1);
 	  int numPoints = testValues1.dimension(2);
 	  int spaceDim = testValues1.dimension(3);
-	cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
+	  //	  cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
 
 	  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
 			     "ConfusionBilinearForm only supports 2 dimensions right now.");
@@ -131,41 +128,63 @@ class ConfusionInnerProduct : public DPGInnerProduct {
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
 	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
 	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		double x = physicalPoints(cellIndex,basisOrdinal,ptIndex,0);
-		double y = physicalPoints(cellIndex,basisOrdinal,ptIndex,1);
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
 		double weight = getWeight(x,y);
-		testValues1(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
-		  + -_beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
-		testValues2(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0) * weight 
-		  + -_beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1) * weight;
+		testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
+		  + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * sqrt(weight);
+		testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0) * weight 
+		  + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1) * sqrt(weight);
 	      }
 	    }
 	  }
 	}
       } else if (testID1==ConfusionBilinearForm::TAU){
 
-	int numCells = testValues1.dimension(0);
-	int basisCardinality = testValues1.dimension(1);
-	int numPoints = testValues1.dimension(2);
-	int spaceDim = testValues1.dimension(3);
-	cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
-	TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			   "ConfusionBilinearForm 2nd time only supports 2 dimensions right now.");
-	
-	// because we change dimensions of the values, by dotting with beta, 
-	// we'll need to copy the values and resize the original container
-	FieldContainer<double> testValuesCopy1 = testValues1;
-	FieldContainer<double> testValuesCopy2 = testValues2;
-	testValues1.resize(numCells,basisCardinality,numPoints);
-	testValues2.resize(numCells,basisCardinality,numPoints);
-	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	      double x = physicalPoints(cellIndex,basisOrdinal,ptIndex,0);
-	      double y = physicalPoints(cellIndex,basisOrdinal,ptIndex,1);
-	      double weight = getWeight(x,y);
-	      testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*weight;
-	      testValues2(cellIndex,basisOrdinal,ptIndex) = testValues2(cellIndex,basisOrdinal,ptIndex)*weight; 
+	if (operatorIndex==0) {
+	  int numCells = testValues1.dimension(0);
+	  int basisCardinality = testValues1.dimension(1);
+	  int numPoints = testValues1.dimension(2);
+	  int spaceDim = testValues1.dimension(3);
+	  /*
+	  cout << "dimension 0 of physicalPoints " << physicalPoints.dimension(0)<<endl;
+	  cout << "dimension 1 of physicalPoints " << physicalPoints.dimension(1)<<endl;
+	  cout << "dimension 2 of physicalPoints " << physicalPoints.dimension(2)<<endl;
+	  */
+	  //	  cout << "dimension 3 of physicalPoints " << physicalPoints.dimension(3)<<endl;
+	  
+	  // because we change dimensions of the values, by dotting with beta, 
+	  // we'll need to copy the values and resize the original container
+	  FieldContainer<double> testValuesCopy1 = testValues1;
+	  FieldContainer<double> testValuesCopy2 = testValues2;
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
+		double weight = getWeight(x,y);
+		testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*sqrt(weight);
+		testValues2(cellIndex,basisOrdinal,ptIndex) = testValues2(cellIndex,basisOrdinal,ptIndex)*sqrt(weight);
+	      }
+	    }
+	  }
+	} else if (operatorIndex==1) {
+	  
+	  int numCells = testValues1.dimension(0);
+	  int basisCardinality = testValues1.dimension(1);
+	  int numPoints = testValues1.dimension(2);
+	  
+	  FieldContainer<double> testValuesCopy1 = testValues1;
+	  FieldContainer<double> testValuesCopy2 = testValues2;
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
+		double weight = getWeight(x,y);
+		testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*sqrt(weight);
+		testValues2(cellIndex,basisOrdinal,ptIndex) = testValues2(cellIndex,basisOrdinal,ptIndex)*sqrt(weight);
+	      }
 	    }
 	  }
 	}
@@ -176,7 +195,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
 
-    return _ConfusionBilinearForm->getEpsilon()+x*y;
+    return _confusionBilinearForm->getEpsilon() + x*y;
   }
 };
 

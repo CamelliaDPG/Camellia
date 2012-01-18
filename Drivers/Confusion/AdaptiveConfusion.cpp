@@ -52,18 +52,17 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3; // for tests
   
   // define our manufactured solution:
-  double epsilon = 1e-4;
-  double beta_x = 1.0, beta_y = 1.5;
+  double epsilon = 1e-3;
+  double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
   
   // define our inner product:
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( exactSolution.bilinearForm() ) );
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( exactSolution.bilinearForm() ) );
-
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf ) );
+  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
+  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
 
   //  exactSolution.bilinearForm()->printTrialTestInteractions();
   
@@ -94,16 +93,24 @@ int main(int argc, char *argv[]) {
     solution = Teuchos::rcp(new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip));
   else {
     //    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
-    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem() );
+    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
  
   solution->solve(false);
   cout << "Processor " << rank << " returned from solve()." << endl;
 
-
+  /*
+  // save a data file for plotting in MATLAB
+  if (rank==0){
+    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
+    cout << "Done writing soln to file." << endl;
+  }
+  return 0;
+  */
   bool limitIrregularity = true;
-  int numRefinements = 6;
+  int numRefinements = 5;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
   double totalEnergyErrorSquared=0.0;
