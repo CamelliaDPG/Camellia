@@ -94,12 +94,12 @@ private:
   // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
 //  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
 //                                                                int componentOfInterest);
-  void init(FieldContainer<double> &physicalCellNodes, 
+  void init(const FieldContainer<double> &physicalCellNodes, 
             shards::CellTopology &cellTopo,
             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
 public:
-  BasisValueCache(FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
-  BasisValueCache(FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
+  BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
+  BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
                   DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
                   FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
@@ -119,6 +119,8 @@ public:
   
   const FieldContainer<double> & getPhysicalCubaturePoints();
   const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
+
+  const FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
 };
 
 #endif

@@ -45,7 +45,7 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
-void BasisValueCache::init(FieldContainer<double> &physicalCellNodes, 
+void BasisValueCache::init(const FieldContainer<double> &physicalCellNodes, 
                            shards::CellTopology &cellTopo,
                            DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   _isSideCache = false; // VOLUME constructor
@@ -180,13 +180,13 @@ void BasisValueCache::init(FieldContainer<double> &physicalCellNodes,
   }
 }
 
-BasisValueCache::BasisValueCache(FieldContainer<double> &physicalCellNodes, 
+BasisValueCache::BasisValueCache(const FieldContainer<double> &physicalCellNodes, 
                                  shards::CellTopology &cellTopo,
                                  DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   init(physicalCellNodes, cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
 }
 
-BasisValueCache::BasisValueCache(FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
+BasisValueCache::BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
   DofOrdering trialOrdering; // dummy trialOrdering
   init(physicalCellNodes, cellTopo, trialOrdering, cubDegree, false);
 }
@@ -388,4 +388,8 @@ constFCPtr BasisValueCache::getTransformedWeightedValues(BasisPtr basis, EOperat
 
 const FieldContainer<double> & BasisValueCache::getPhysicalCubaturePointsForSide(int sideOrdinal) {
   return _basisCacheSides[sideOrdinal]->getPhysicalCubaturePoints();
+}
+
+const FieldContainer<double> & BasisValueCache::getSideUnitNormals(int sideOrdinal){  
+  return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
