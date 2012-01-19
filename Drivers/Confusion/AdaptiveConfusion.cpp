@@ -51,20 +51,14 @@ int main(int argc, char *argv[]) {
   int polyOrder = 3;
   int pToAdd = 3; // for tests
   
-  // define our manufactured solution:
+  // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-3;
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
-  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
-  
-  // define our inner product:
+  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf ) );
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
 
-  //  exactSolution.bilinearForm()->printTrialTestInteractions();
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -87,13 +81,18 @@ int main(int argc, char *argv[]) {
   mesh->setNumPartitions(numProcs);
   mesh->rebuildLookups();
 
+  // define our inner product:
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf,mesh ) );
+  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
+  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
+
   // create a solution object
   Teuchos::RCP<Solution> solution;
   if (useEggerSchoeberl)
     solution = Teuchos::rcp(new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip));
   else {
-    //    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
-    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
+    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
+    //    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
  
@@ -110,7 +109,7 @@ int main(int argc, char *argv[]) {
   return 0;
   */
   bool limitIrregularity = true;
-  int numRefinements = 5;
+  int numRefinements = 8;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
   double totalEnergyErrorSquared=0.0;
@@ -145,9 +144,11 @@ int main(int argc, char *argv[]) {
 	}else if (current_element->numSides()==4){
 	  quadCellsToRefine.push_back(cellID);
 	}
-	if (rank==0){
+	/*
+	  if (rank==0){
 	  cout << "refining cell ID " << cellID << endl;
-	}
+	  }
+	*/
       }
     }    
     mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());

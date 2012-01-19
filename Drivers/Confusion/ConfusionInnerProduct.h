@@ -32,7 +32,8 @@
 // @HEADER 
 
 #include "ConfusionBilinearForm.h"
-
+#include "Mesh.h"
+#include "BasisValueCache.h" // for Jacobian/cell measure computation
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -45,9 +46,14 @@
 class ConfusionInnerProduct : public DPGInnerProduct {
  private:
   Teuchos::RCP<ConfusionBilinearForm> _confusionBilinearForm;
+  Teuchos::RCP<Mesh> _mesh;
  public:
- ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
+  typedef Teuchos::RCP< ElementType > ElementTypePtr;
+  typedef Teuchos::RCP< Element > ElementPtr;
+  
+ ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs, Teuchos::RCP<Mesh> mesh) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
     _confusionBilinearForm=bfs; // redundant, but no way around it.
+    _mesh=mesh; // for h-scaling
   } 
   
   void operators(int testID1, int testID2, 
@@ -105,6 +111,25 @@ class ConfusionInnerProduct : public DPGInnerProduct {
       if (testID1==ConfusionBilinearForm::V ) {
 	if ((operatorIndex==0)||(operatorIndex==1)) { // if it	
 
+	  //////////////////// 
+	  /*
+	  // compute measure of current cell, scale epsilon term by this 
+	  FieldContainer<double> physicalPointForCell(1,spaceDim);
+	  physicalPointForCell(0,0) = physicalPoints(cellIndex,0,0); // assuming that all all pts corresponding to 1 cell index are the same...
+	  physicalPointForCell(0,1) = physicalPoints(cellIndex,0,1);
+	  vector<ElementPtr> elemVector = _mesh->elementsForPoints(physicalPointForCell);
+	  TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
+			     "More than one element returned for a single pt!");
+	  ElementPtr elem = elemVector[0];
+
+	  // create basisCache
+	  int cubDegree = elem->elementType()->testOrderPtr->maxBasisDegree();
+	  BasisValueCache basisCache = BasisValueCache(physicalCellNodes, *(elem->elementType()->cellTopoPtr), cubDegree);
+
+	  //////////////////// 
+	  testValues1(cellIndex,
+*/
+
 	  _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
 	  _bilinearForm->multiplyFCByWeight(testValues2,1.0);
 
@@ -126,6 +151,9 @@ class ConfusionInnerProduct : public DPGInnerProduct {
 	  testValues1.resize(numCells,basisCardinality,numPoints);
 	  testValues2.resize(numCells,basisCardinality,numPoints);
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+
+	    //	    cout << "element " << elem->cellID() << " is for point " << physicalPointForCell(0,0) << ", " << physicalPointForCell(0,1) << endl;
+
 	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
 	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 		double x = physicalPoints(cellIndex,ptIndex,0);
