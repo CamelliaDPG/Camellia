@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 8, verticalCells = 8;
+  int horizontalCells = 2, verticalCells = 2;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, H1Order+pToAdd, useTriangles);
 
@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<TransientConfusionProblem> problem = Teuchos::rcp( new TransientConfusionProblem(bilinearForm,previousTimeSolution));
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));    
 
-  double Tend = 0*dt;
+  double Tend = 10*dt;
   while (T<Tend){
     // solve
     solution->solve(); 

@@ -213,7 +213,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         cellIDIterator++;
       }
       Teuchos::Array<int> dimensions;
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
       physicalCellNodes.dimensions(dimensions);
       vector< FieldContainer<double> > physicalCellNodesPerSide;
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
@@ -321,7 +321,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
       // nodal H1 basis: we know that one basis function will be 1 at a given vertex,
       // and the others will be 0.
       // (a bit of a hack, but then so is imposing a BC at a single point)
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
       if (physicalCellNodes.dimension(0) > 0) {
         // then we have a cell on which to impose the BC
         int numCells = physicalCellNodes.dimension(0);

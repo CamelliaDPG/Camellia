@@ -59,7 +59,12 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   _vertices = vertices;
   _usePatchBasis = false;
   _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
+
+#ifdef HAVE_MPI
+  _numPartitions = Teuchos::GlobalMPISession::getNProc();
+#else
   _numPartitions = 1;
+#endif
 
   int spaceDim = 2;
   vector<float> vertexCoords(spaceDim);
@@ -708,7 +713,6 @@ void Mesh::buildTypeLookups() {
   }
   // finally, build _physicalCellNodesForElementType and _cellSideParitiesForElementType:
   _physicalCellNodesForElementType.clear();
-  _cellSideParitiesForElementType.clear();
   for (vector< ElementTypePtr >::iterator elemTypeIt = _elementTypes.begin();
        elemTypeIt != _elementTypes.end(); elemTypeIt++) {
     ElementType* elemType = elemTypeIt->get();
@@ -716,7 +720,6 @@ void Mesh::buildTypeLookups() {
     int spaceDim = elemType->cellTopoPtr->getDimension();
     int numSides = elemType->cellTopoPtr->getSideCount();
     _physicalCellNodesForElementType[elemType] = FieldContainer<double>(numCells,numSides,spaceDim);
-    _cellSideParitiesForElementType[elemType]  = FieldContainer<double>(numCells,numSides);
   }
   // copy from the local (per-partition) FieldContainers to the global ones
   for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
@@ -739,7 +742,6 @@ void Mesh::buildTypeLookups() {
         TEST_FOR_EXCEPTION( cellID != _globalCellIndexToCellID[elemType][globalCellIndex],
                            std::invalid_argument, "globalCellIndex -> cellID inconsistency detected" );
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-          _cellSideParitiesForElementType[elemType](globalCellIndex,sideIndex) = partitionedCellSideParities(cellIndex,sideIndex);
           for (int dim=0; dim<spaceDim; dim++) {
             _physicalCellNodesForElementType[elemType](globalCellIndex,sideIndex,dim) 
               = partitionedPhysicalCellNodes(cellIndex,sideIndex,dim);
@@ -1057,13 +1059,13 @@ Epetra_Map Mesh::getCellIDPartitionMap(int rank, Epetra_Comm* Comm){
   Epetra_Map partMap(numActiveElements, numElemsInPartition, partitionLocalElems, indexBase, *Comm);
 }
 
-
-FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber ) {
-  if (partitionNumber >= 0) {
-    return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
-  } else {
-    return _cellSideParitiesForElementType[ elemTypePtr.get() ];
-  }
+FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
+#ifdef HAVE_MPI
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+#else
+  int partitionNumber     = 0;
+#endif
+  return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
 }
 
 vector<double> Mesh::getCellCentroid(int cellID){
@@ -1094,6 +1096,7 @@ void Mesh::determineActiveElements() {
     }
   }
   _partitions.clear();
+  _partitionForCellID.clear();
   FieldContainer<int> partitionedMesh(_numPartitions,_activeElements.size());
   _partitionPolicy->partitionMesh(this,_numPartitions,partitionedMesh);
   for (int i=0; i<_numPartitions; i++) {
@@ -1101,7 +1104,9 @@ void Mesh::determineActiveElements() {
     for (int j=0; j<_activeElements.size(); j++) {
       if (partitionedMesh(i,j) < 0) break; // no more elements in this partition
       //      if (partitionedMesh(i,j)>-1){ 
-      partition.push_back( _elements[partitionedMesh(i,j)] );
+      int cellID = partitionedMesh(i,j);
+      partition.push_back( _elements[cellID] );
+      _partitionForCellID[cellID] = i;
       //      }
     }
     _partitions.push_back( partition );
@@ -1144,10 +1149,6 @@ void Mesh::determinePartitionDofIndices() {
       _partitionLocalIndexForGlobalDofIndex[globalDofIndex] = partitionDofIndex++;
     }
   }
-}
-
-set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
-  return _partitionedGlobalDofIndices[partitionNumber];
 }
 
 vector< Teuchos::RCP< Element > > & Mesh::elements() { 
@@ -1202,9 +1203,6 @@ Epetra_Map Mesh::getPartitionMap() {
 #else
   Epetra_SerialComm Comm;
 #endif
-  // TODO: consider eliminating these calls, or guarding them by a flag to detect whether they're needed
-  setNumPartitions(numProcs);
-  repartition();
   
   // returns map for current processor's local-to-global dof indices
   // determine the local dofs we have, and what their global indices are:
@@ -1248,6 +1246,10 @@ int Mesh::globalDofIndex(int cellID, int localDofIndex) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
   }
   return (*mapEntryIt).second;
+}
+
+set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
+  return _partitionedGlobalDofIndices[partitionNumber];
 }
 
 void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
@@ -1527,6 +1529,7 @@ int Mesh::numElements() {
 }
 
 int Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
+  // returns the global total (across all MPI nodes)
   int numElements = 0;
   for (int partitionNumber=0; partitionNumber<_numPartitions; partitionNumber++) {
     if (   _partitionedPhysicalCellNodesForElementType[partitionNumber].find( elemTypePtr.get() )
@@ -1550,13 +1553,18 @@ int Mesh::parityForSide(int cellID, int sideIndex) {
   }
   // if we get here, then we have an active element...
   ElementTypePtr elemType = elem->elementType();
-  int globalCellIndex = elem->globalCellIndex();
-  int parity = _cellSideParitiesForElementType[elemType.get()](globalCellIndex,sideIndex);
+  int cellIndex = elem->cellIndex();
+  int partitionNumber = partitionForCellID(cellID);
+  int parity = _partitionedCellSideParitiesForElementType[partitionNumber][elemType.get()](cellIndex,sideIndex);
   
   if (_cellSideParitiesForCellID[cellID][sideIndex] != parity ) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "parity lookups don't match");
   }
   return parity;
+}
+
+int Mesh::partitionForCellID( int cellID ) {
+  return _partitionForCellID[ cellID ];
 }
 
 int Mesh::partitionForGlobalDofIndex( int globalDofIndex ) {
@@ -1570,12 +1578,17 @@ int Mesh::partitionLocalIndexForGlobalDofIndex( int globalDofIndex ) {
   return _partitionLocalIndexForGlobalDofIndex[ globalDofIndex ];
 }
 
-FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, int partitionNumber ) {
-  if (partitionNumber >= 0) {
-    return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
-  } else {
-    return _physicalCellNodesForElementType[ elemTypePtr.get() ];
-  }
+FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr) {
+#ifdef HAVE_MPI
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+#else
+  int partitionNumber     = 0;
+#endif
+  return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+}
+
+FieldContainer<double> & Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
+  return _physicalCellNodesForElementType[ elemTypePtr.get() ];
 }
 
 void Mesh::rebuildLookups() {
@@ -1686,10 +1699,6 @@ void Mesh::refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRef
   rebuildLookups();
 }
 
-void Mesh::repartition() {
-  rebuildLookups();
-}
-
 int Mesh::rowSizeUpperBound() {
   // includes multiplicity
   vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
@@ -1753,12 +1762,9 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
 //  cout << " (neighbor's sideIndex: " << neighborSide << ")" << endl;
 }
 
-void Mesh::setNumPartitions(int numPartitions) {
-  _numPartitions = numPartitions;
-}
-
 void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
+  rebuildLookups();
 }
 
 vector<int> Mesh::vertexIndicesForCell(int cellID) {

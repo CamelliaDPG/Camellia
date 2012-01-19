@@ -116,12 +116,12 @@ void PatchBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
   // transform the values back to this reference cell
 //  FieldContainer<double> cellJacobian,cellJacobInv,cellJacobDet;
 //  computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, parentInputPoints);
-//  
+////  
 //  FCPtr transformedValues = BasisEvaluation::getTransformedValues(_parentBasis, 
 //                                                                  (IntrepidExtendedTypes::EOperatorExtended)operatorType, 
 //                                                                  parentInputPoints,
 //                                                                  cellJacobian, cellJacobInv, cellJacobDet);
-//  // copy back to outputValues
+// copy back to outputValues
 //  outputValues = *transformedValues;
 }
 
@@ -188,10 +188,11 @@ void PatchBasis::getValues(FieldContainer<double> & outputValues,
 }
 
 // private method:
-//void MultiBasis::computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
-//                                      FieldContainer<double> &cellJacobDet, const FieldContainer<double> &parentInputPoints) const {
-//  // inputPointsSubRefCell: the points in *reference* coordinates, as seen by the reference sub-cell.
-//  // (i.e. for cubature points, we'd expect these to span (-1,1), not to be confined to, e.g., (-1,0).)
+void PatchBasis::computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
+                                      FieldContainer<double> &cellJacobDet, const FieldContainer<double> &parentInputPoints) const {
+  // TODO: implement this.  (the below code is copied from MultiBasis.)
+  // inputPointsSubRefCell: the points in *reference* coordinates, as seen by the reference sub-cell.
+  // (i.e. for cubature points, we'd expect these to span (-1,1), not to be confined to, e.g., (-1,0).)
 //  int numPoints = inputPointsSubRefCell.dimension(0);
 //  int spaceDim = inputPointsSubRefCell.dimension(1);
 //  int numNodesPerCell = _subRefNodes.dimension(1);
@@ -204,4 +205,4 @@ void PatchBasis::getValues(FieldContainer<double> & outputValues,
 //  CellTools::setJacobian(cellJacobian, parentInputPoints, _childRefNodes, _cellTopo);
 //  CellTools::setJacobianInv(cellJacobInv, cellJacobian );
 //  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
-//}
+}

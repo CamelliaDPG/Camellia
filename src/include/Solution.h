@@ -91,7 +91,11 @@ public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
   Solution(const Solution &soln);
   bool equals(Solution& otherSolution, double tol=0.0);
+#ifdef HAVE_MPI
+  void solve(bool useMumps=true); // could add arguments to allow different solution algorithms to be selected...
+#else
   void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
+#endif
   virtual void solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
                               int trialID,

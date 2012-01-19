@@ -348,6 +348,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternTrian
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad() {
+  // order of the sub-elements is CCW starting at bottom left
   FieldContainer<double> quadPoints(4,4,2);
   quadPoints(0,0,0) = -1.0; // x1
   quadPoints(0,0,1) = -1.0; // y1

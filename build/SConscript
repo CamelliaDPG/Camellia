@@ -1,10 +1,10 @@
 Import('env')
 
-#TrilinosIncludes = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/include')]
-#TrilinosLibDir = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/lib')]
+TrilinosIncludes = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/include')]
+TrilinosLibDir = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/lib')]
 
-TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
-TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
+#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
+#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
 
 includePaths = [Dir('../src/include')]
 

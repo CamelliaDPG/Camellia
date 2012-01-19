@@ -73,7 +73,6 @@ int main(int argc, char *argv[]) {
     horizontalCells = 1; verticalCells = 1;
     Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd);
     mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-    mesh->setNumPartitions(numProcs);
     
     // repeatedly refine the first element along the side shared with cellID 1
     int numRefinements = 4;
@@ -110,6 +109,7 @@ int main(int argc, char *argv[]) {
     double wallTimeForMeshConstruction = timer.WallTime() - wallTimeStart;
     if (rank==0) cout << "time to construct mesh: " << wallTimeForMeshConstruction << endl;
     if (rank==0) cout << "Mesh globalDofs: " << mesh->numGlobalDofs() << endl;
+    if (rank==0) cout << "Mesh activeElement count: " << mesh->activeElements().size() << endl;
     
     // the following line should not be necessary, but if Solution's data structures aren't rebuilt properly, it might be...
     Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);

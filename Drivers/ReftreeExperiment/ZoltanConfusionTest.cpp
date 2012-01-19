@@ -66,7 +66,6 @@ int main(int argc, char *argv[]) {
   //string partitionType = "BLOCK";
   Teuchos::RCP< ZoltanMeshPartitionPolicy > ZoltanPartitionPolicy = Teuchos::rcp(new ZoltanMeshPartitionPolicy(partitionType));
 
-  mesh->setNumPartitions(numProcs);
   mesh->setPartitionPolicy(ZoltanPartitionPolicy);
 
   cout << "refining cells---" << endl;

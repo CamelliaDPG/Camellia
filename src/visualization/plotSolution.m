@@ -48,8 +48,8 @@ while (i < numRows)
     Z(1:verticesPerPatch,patchIndex) = solnValues(patch_start_i:patch_start_i+verticesPerPatch-1,5);
     patch_start_i = patch_start_i + verticesPerPatch;
   end
-  patch(X,Y,Z,Z);
-  %patch(X,Y,Z,Z,'EdgeColor','none');
+  %patch(X,Y,Z,Z);
+  patch(X,Y,Z,Z,'EdgeColor','none');
 end
 
 view(10,20)

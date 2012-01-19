@@ -1426,8 +1426,6 @@ bool MeshTestSuite::testPRefinement() {
       cout << *((*typeIt)->trialOrderPtr.get());
       cout << "testOrdering for type " << typeIndex << ":" << endl;
       cout << *((*typeIt)->testOrderPtr.get());
-      //cout << "physicalCellNodes for type " << typeIndex << endl;
-      //cout << mesh1->physicalCellNodes(*typeIt);
       typeIndex++;
     }
     cout << "trialOrdering for uniform mesh:" << endl;
@@ -1445,7 +1443,8 @@ bool MeshTestSuite::testPRefinement() {
   
   error1 = exactExponential.L2NormOfError(solution1, PoissonBilinearForm::PHI,15); // high fidelity L2norm
   error2 = exactExponential.L2NormOfError(solution2, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-  if (error1 != error2) {
+  double diff = abs(error1-error2);
+  if (diff > tol) {
     success = false;
     cout << "FAILURE: Refined everywhere mesh gives different solution than fresh mesh with same orders." << endl;
   }

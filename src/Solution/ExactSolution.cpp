@@ -79,7 +79,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
 
 void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
   // much of this code is the same as what's in the volume integration in computeStiffness...
-  FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodes(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodesGlobal(elemTypePtr);
   
   unsigned numCells = physicalCellNodes.dimension(0);
   unsigned numNodesPerElem = physicalCellNodes.dimension(1);

@@ -172,38 +172,37 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
     case U:
       // have grad v -- want grad_v dot beta
       { // block off to avoid compiler complaints about adding new variables inside switch/case
-	// dimensions of testTrialValuesAtPoints should be (C,F,P,D)
-	int numCells = testValues.dimension(0);
-	int basisCardinality = testValues.dimension(1);
-	int numPoints = testValues.dimension(2);
+        // dimensions of testTrialValuesAtPoints should be (C,F,P,D)
+        int numCells = testValues.dimension(0);
+        int basisCardinality = testValues.dimension(1);
+        int numPoints = testValues.dimension(2);
 
-	if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD){
-	  int spaceDim = testValues.dimension(3);
-	  cout << "Space dim = " << spaceDim << endl;
-    
-    // because we change dimensions of the values, by dotting with beta, 
-    // we'll need to copy the values and resize the original container
-    FieldContainer<double> testValuesCopy = testValues;
-    testValues.resize(numCells,basisCardinality,numPoints);
-    
-	  cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
-	  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			     "TransientConfusionBilinearForm only supports 2 dimensions right now.");	  
-	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		  + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
-	      }
-	    }
-	  }
-	}else if(_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE){       // also now have a reaction term. 
-	  multiplyFCByWeight(testValues,1.0/get_dt());
-	  cout << "dt = "<<get_dt()<<endl;
-	}
-	else{
-	  cout << "Getting an unexpected operator for transient confusion!" << endl;
-	}
+        if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD) {
+          int spaceDim = testValues.dimension(3);
+          //cout << "Space dim = " << spaceDim << endl;
+          
+          // because we change dimensions of the values, by dotting with beta, 
+          // we'll need to copy the values and resize the original container
+          FieldContainer<double> testValuesCopy = testValues;
+          testValues.resize(numCells,basisCardinality,numPoints);
+          
+          // cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
+          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+                 "TransientConfusionBilinearForm only supports 2 dimensions right now.");	  
+          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+              for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+                                                            + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+              }
+            }
+          }
+        } else if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) {       // also now have a reaction term. 
+          multiplyFCByWeight(testValues,1.0/get_dt());
+          // cout << "dt = "<<get_dt()<<endl;
+        } else {
+          cout << "Getting an unexpected operator for transient confusion!" << endl;
+        }
       }
       break;
     case SIGMA_1:
@@ -215,26 +214,26 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
     case U_HAT:
       // we have u_hat * n -- need to dot with beta
       { // block off to avoid compiler complaints about adding new variables inside switch/case
-	// dimensions of testTrialValuesAtPoints should be (C,F,P,D)
-	int numCells = trialValues.dimension(0);
-	int basisCardinality = trialValues.dimension(1);
-	int numPoints = trialValues.dimension(2);
-	int spaceDim = trialValues.dimension(3);
-	// because we change dimensions of the values, by dotting with beta, 
-	// we'll need to copy the values and resize the original container
-	FieldContainer<double> valuesCopy = trialValues;
-	trialValues.resize(numCells,basisCardinality,numPoints);
-	TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-			   "TransientConfusionBilinearForm only supports 2 dimensions right now.");
-	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	      trialValues(cellIndex,basisOrdinal,ptIndex)
-                = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*_beta_x
-		+ valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*_beta_y;
-	    }
-	  }
-	}
+        // dimensions of testTrialValuesAtPoints should be (C,F,P,D)
+        int numCells = trialValues.dimension(0);
+        int basisCardinality = trialValues.dimension(1);
+        int numPoints = trialValues.dimension(2);
+        int spaceDim = trialValues.dimension(3);
+        // because we change dimensions of the values, by dotting with beta, 
+        // we'll need to copy the values and resize the original container
+        FieldContainer<double> valuesCopy = trialValues;
+        trialValues.resize(numCells,basisCardinality,numPoints);
+        TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+               "TransientConfusionBilinearForm only supports 2 dimensions right now.");
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+          for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+              trialValues(cellIndex,basisOrdinal,ptIndex)
+                      = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*_beta_x
+          + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*_beta_y;
+            }
+          }
+        }
       }
       break;
     case BETA_N_U_MINUS_SIGMA_HAT:

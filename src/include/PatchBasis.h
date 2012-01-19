@@ -53,13 +53,11 @@ class PatchBasis : public DoubleBasis {
   BasisPtr _parentBasis;
   FieldContainer<double> _parentRefNodes;
   
-//  void computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
-//                            FieldContainer<double> &cellJacobDet, const FieldContainer<double> &inputPointsParentRefCell) const;
+  void computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
+                            FieldContainer<double> &cellJacobDet, const FieldContainer<double> &inputPointsParentRefCell) const;
   
   void initializeTags();
 public:
-  // below, subRefNodes means the coordinates of the nodes of the children in the parent/reference cell
-  // if there are N nodes in D-dimensional cellTopo and C bases in bases, then subRefNodes should have dimensions (C,N,D)
   PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesInParentRefCell, shards::CellTopology &patchCellTopo);
   
   void getValues(FieldContainer<double> &outputValues, const FieldContainer<double> &  inputPoints,

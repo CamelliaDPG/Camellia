@@ -78,8 +78,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
   cout << "In driver, setting numProcs = " << numProcs << endl;
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-  mesh->setNumPartitions(numProcs);
-  mesh->rebuildLookups();
 
   // define our inner product:
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf,mesh ) );

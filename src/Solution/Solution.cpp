@@ -47,7 +47,10 @@
 #include "Amesos_Klu.h"
 #include "Amesos.h"
 #include "Amesos_Utils.h"
-//#include "Amesos_Mumps.h"
+// only use MUMPS when we have MPI
+#ifdef HAVE_MPI
+#include "Amesos_Mumps.h"
+#endif
 
 // Epetra includes
 #ifdef HAVE_MPI
@@ -134,8 +137,6 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
-  _mesh->setNumPartitions(numProcs);
-  _mesh->repartition();
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -187,8 +188,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
     
-    FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr, rank);
-    FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr, rank);
+    FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
+    FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
     Teuchos::Array<int> nodeDimensions, parityDimensions;
@@ -396,17 +397,23 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
     }
   } else {
-    cout << "ERROR: not yet building with MUMPS support." << endl;
-//    Amesos_Mumps mumps(problem);
-//    mumps.SymbolicFactorization();
-//    mumps.NumericFactorization();
-//    mumps.Solve();
+    // only use MUMPS when we have MPI
+#ifdef HAVE_MPI
+    if (rank == 0) {
+      cout << "USING MUMPS!\n";
+    }
+    Amesos_Mumps mumps(problem);
+    mumps.SymbolicFactorization();
+    mumps.NumericFactorization();
+    mumps.Solve();
+#else
+    cout << "MUMPS disabled for non-MPI builds!\n";
+#endif
   }
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
   
-  // TODO: figure out the all-to-all communication for lhsVector data
   timer.ResetStartTime();
   int maxLhsLength = 0;
   for (int i=0; i<numProcs; i++) {
@@ -670,7 +677,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
   
   int cubDegree = trialBasis->getDegree();
   
-  BasisValueCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
@@ -703,7 +710,7 @@ double Solution::meshMeasure() {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
     int cubDegree = 1;
-    BasisValueCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+    BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
     FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       value += cellMeasures(cellIndex);
@@ -741,7 +748,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   
   int cubDegree = trialBasis->getDegree();
   
-  BasisValueCache basisCache(_mesh->physicalCellNodes(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
@@ -790,7 +797,7 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   
   values.initialize(0.0);
   
-  FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodes(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
   
   int numCells = physicalCellNodes.dimension(0);
   unsigned spaceDim = physicalCellNodes.dimension(2);
@@ -867,7 +874,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
   // physicalPoints(numCellsForType,numPoints,spaceDim)
   FieldContainer<double> solnCoeffs = _solutionForElementType[elemTypePtr.get()]; // (numcells, numLocalTrialDofs)
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
   
   int numCells = physicalCellNodes.dimension(0);
   int numPoints = physicalPoints.dimension(1);
@@ -979,8 +986,6 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
-  _mesh->setNumPartitions(numProcs);
-  _mesh->repartition();
 #else
   Epetra_SerialComm Comm;
 #endif  
@@ -1078,8 +1083,6 @@ void Solution::computeErrorRepresentation() {
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
-  _mesh->setNumPartitions(numProcs);
-  _mesh->repartition();
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -1094,7 +1097,7 @@ void Solution::computeErrorRepresentation() {
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr,rank);
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
     vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    
@@ -1169,8 +1172,6 @@ void Solution::computeResiduals() {
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
-  _mesh->setNumPartitions(numProcs);
-  _mesh->repartition();
 #else
   Epetra_SerialComm Comm;
 #endif
@@ -1184,8 +1185,8 @@ void Solution::computeResiduals() {
 
     vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
     
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr,rank);
-    FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr,rank);
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+    FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr);
     FieldContainer<double> solution = _solutionForElementType[elemTypePtr.get()];
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
@@ -1245,7 +1246,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
   // physicalPoints(numCellsForType,numPoints,spaceDim)
   FieldContainer<double> solnCoeffs = _solutionForElementType[elemTypePtr.get()]; // (numcells, numLocalTrialDofs)
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
   // 1. Map the physicalPoints from the elements specified in physicalCellNodes into reference element
   // 2. Compute each basis on those points
   // 3. Transform those basis evaluations back into the physical space
@@ -1535,7 +1536,7 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
     
     // compute physicalCubaturePoints, the transformed cubature points on each cell:
     FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints,cubPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
+    CellTools::mapToPhysicalFrame(physCubPoints,cubPoints,_mesh->physicalCellNodesGlobal(elemTypePtr),*(cellTopoPtr.get()));
     
     FieldContainer<double> values(numCellsOfType, numCubPoints);
     solutionValues(values,elemTypePtr,trialID,physCubPoints);
@@ -1713,7 +1714,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     
     FieldContainer<double> vertexPoints, physPoints;    
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodes(elemTypePtr);
+    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     
     int numCells = vertexPoints.dimension(0);       
     
@@ -1770,7 +1771,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
     
     FieldContainer<double> vertexPoints, physPoints;    
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodes(elemTypePtr);
+    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     
     int numCells = vertexPoints.dimension(0);       
     

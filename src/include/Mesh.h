@@ -95,13 +95,12 @@ class Mesh {
   map< ElementType*, map<int, int> > _globalCellIndexToCellID;
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypes;
-  map<int, int> _partitionLocalIndexForGlobalDofIndex;
+  map<int, int> _partitionForCellID;
   map<int, int> _partitionForGlobalDofIndex;
+  map<int, int> _partitionLocalIndexForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
-  map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
-  map< ElementType*, FieldContainer<double> > _cellSideParitiesForElementType; // for uniform mesh, just a single entry..
-  
+  map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..  
   vector< set<int> > _partitionedGlobalDofIndices;
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
@@ -124,10 +123,6 @@ class Mesh {
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest);
-
-  int numInitialElements();
-
-  vector<double> getCellCentroid(int cellID);
   
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
@@ -141,12 +136,7 @@ public:
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
   
-  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType, int partitionNumber = -1 );
-  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr, int partitionNumber = -1 );
-
-  void refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRefinements);
-  
-  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr);
   
   BilinearForm & bilinearForm();
   
@@ -161,6 +151,8 @@ public:
   
   void enforceOneIrregularity();
 
+  vector<double> getCellCentroid(int cellID);
+
   Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
   
   int globalDofIndex(int cellID, int localDofIndex);
@@ -169,11 +161,26 @@ public:
   
   Boundary &boundary();
   
-  int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
-  
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
+
+  vector< Teuchos::RCP< Element > > & activeElements();
+  vector< Teuchos::RCP< Element > > & elements();
+  vector< Teuchos::RCP< Element > > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  
+  vector< ElementPtr > elementsInPartition(int partitionNumber);
+
+  DofOrderingFactory & getDofOrderingFactory();
+  ElementTypeFactory & getElementTypeFactory();
+  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
+                             ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
+                             ElementPtr nonParent);
+  Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
+  
+  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
+  
+  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
   
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   static int neighborDofPermutation(int dofIndex, int numDofsForSide);
@@ -183,25 +190,26 @@ public:
   int numElements();
   
   int numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
+
+  int numInitialElements();
   
-  void repartition();
-  void setNumPartitions(int numPartitions);
+  int parityForSide(int cellID, int sideIndex);
+  
+  int partitionForCellID(int cellID);
+  int partitionForGlobalDofIndex( int globalDofIndex );
+  int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
+
+  FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType);
+  FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
+
+  void rebuildLookups();
+  
+  void refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRefinements);
+    
+  int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
+  
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
-
-  vector< Teuchos::RCP< Element > > & activeElements();
-  vector< Teuchos::RCP< Element > > & elements();
-  vector< Teuchos::RCP< Element > > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
-  
-  vector< ElementPtr > elementsInPartition(int partitionNumber);
-
-  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
-  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
-                             ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
-                             ElementPtr nonParent);
-  
-  DofOrderingFactory & getDofOrderingFactory();
-  ElementTypeFactory & getElementTypeFactory();
-
+    
   vector<int> vertexIndicesForCell(int cellID);
   FieldContainer<double> vertexCoordinates(int vertexIndex);
   
@@ -209,14 +217,6 @@ public:
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
   
-  int parityForSide(int cellID, int sideIndex);
-  int partitionForGlobalDofIndex( int globalDofIndex );
-  int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
-  
-  Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
-  
-  void rebuildLookups();
-
   void writeMeshPartitionsToFile(const string & fileName);
 };
 
