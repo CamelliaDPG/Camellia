@@ -320,8 +320,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
   int numBCs = bcGlobalIndices.size();
-//    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
-//    cout << "bcGlobalValues:" << endl << bcGlobalValues;
+  //    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
+  //    cout << "bcGlobalValues:" << endl << bcGlobalValues;
 
   Epetra_MultiVector v(partMap,1);
   v.PutScalar(0.0);
@@ -402,10 +402,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     if (rank == 0) {
       cout << "USING MUMPS!\n";
     }
-    Amesos_Mumps mumps(problem);
-    mumps.SymbolicFactorization();
-    mumps.NumericFactorization();
-    mumps.Solve();
+    
+      Amesos_Mumps mumps(problem);
+      mumps.SymbolicFactorization();
+      mumps.NumericFactorization();
+      mumps.Solve();
+    
 #else
     cout << "MUMPS disabled for non-MPI builds!\n";
 #endif
@@ -447,69 +449,69 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     }
   }
   
-//  double lhsVectorGathered[numProcs][maxLhsLength];
-//  double *lhsVectorLocal = new double[ maxLhsLength ];
-//  // debugging: clear the vector first:
-//  for (int i=0; i<maxLhsLength; i++ ) {
-//    lhsVectorLocal[i] = 0.0;
-//  }
-//  
-//  lhsVector.ExtractCopy( &lhsVectorLocal ); 
-//  
-////  //debugging output:
-////  cout << "rank " << rank << " lhsVectorLocal:\t";
-////  cout << setprecision(3);
-////  // debugging: clear the vector first:
-////  for (int i=0; i< maxLhsLength; i++ ) {
-////    cout << lhsVectorLocal[i] << "\t";
-////  }
-////  cout << endl;
-//
-//  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
-//
-////  //debugging output:
-////  if (rank == 0) {
-////    cout << "lhsVectorGathered:\n";
-////    // debugging: clear the vector first:
-////    for (int j=0; j< numProcs; j++) {
-////      cout << "rank " << j << ":\t";
-////      for (int i=0; i< maxLhsLength; i++ ) {
-////        cout << lhsVectorGathered[j][i] << "\t";
-////      }
-////      cout << endl;
-////    }
-////  }
-////  cout << setprecision(5);
-//  
-//  // copy the dof coefficients into our data structure
-//  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
-//  vector< Teuchos::RCP< Element > >::iterator elemIt;
-//  
-//  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-//    ElementPtr elemPtr = *(elemIt);
-//    int cellID = elemPtr->cellID();
-//    int cellIndex = elemPtr->globalCellIndex();
-//    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
-//    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-//      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-//      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
-//      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
-//      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
-//      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
-//    }
-//  }
-//
-//  delete lhsVectorLocal;
+  //  double lhsVectorGathered[numProcs][maxLhsLength];
+  //  double *lhsVectorLocal = new double[ maxLhsLength ];
+  //  // debugging: clear the vector first:
+  //  for (int i=0; i<maxLhsLength; i++ ) {
+  //    lhsVectorLocal[i] = 0.0;
+  //  }
+  //  
+  //  lhsVector.ExtractCopy( &lhsVectorLocal ); 
+  //  
+  ////  //debugging output:
+  ////  cout << "rank " << rank << " lhsVectorLocal:\t";
+  ////  cout << setprecision(3);
+  ////  // debugging: clear the vector first:
+  ////  for (int i=0; i< maxLhsLength; i++ ) {
+  ////    cout << lhsVectorLocal[i] << "\t";
+  ////  }
+  ////  cout << endl;
+  //
+  //  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
+  //
+  ////  //debugging output:
+  ////  if (rank == 0) {
+  ////    cout << "lhsVectorGathered:\n";
+  ////    // debugging: clear the vector first:
+  ////    for (int j=0; j< numProcs; j++) {
+  ////      cout << "rank " << j << ":\t";
+  ////      for (int i=0; i< maxLhsLength; i++ ) {
+  ////        cout << lhsVectorGathered[j][i] << "\t";
+  ////      }
+  ////      cout << endl;
+  ////    }
+  ////  }
+  ////  cout << setprecision(5);
+  //  
+  //  // copy the dof coefficients into our data structure
+  //  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
+  //  vector< Teuchos::RCP< Element > >::iterator elemIt;
+  //  
+  //  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+  //    ElementPtr elemPtr = *(elemIt);
+  //    int cellID = elemPtr->cellID();
+  //    int cellIndex = elemPtr->globalCellIndex();
+  //    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
+  //    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+  //      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+  //      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
+  //      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
+  //      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
+  //      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
+  //    }
+  //  }
+  //
+  //  delete lhsVectorLocal;
 
   double timeDistributeSolution = timer.ElapsedTime();
   Epetra_Vector timeDistributeSolutionVector(timeMap);
   timeDistributeSolutionVector[0] = timeDistributeSolution;
   
-    // DEBUGGING: print out solution coefficients
-//    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-//      ElementTypePtr elemTypePtr = *(elemTypeIt);
-//      cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
-//    }
+  // DEBUGGING: print out solution coefficients
+  //    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+  //      ElementTypePtr elemTypePtr = *(elemTypeIt);
+  //      cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
+  //    }
   
   int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
   err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
@@ -901,26 +903,26 @@ void Solution::solutionValues(FieldContainer<double> &values,
   int basisCardinality = basis->getCardinality();
   
   TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
-                     std::invalid_argument,
-                     "for scalar values, values container should be dimensioned(numCells,numPoints).");
+		      std::invalid_argument,
+		      "for scalar values, values container should be dimensioned(numCells,numPoints).");
   TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
-                     std::invalid_argument,
-                     "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
+		      std::invalid_argument,
+		      "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
   TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
-                     std::invalid_argument,
-                     "values.dimension(0) != numCells.");
+		      std::invalid_argument,
+		      "values.dimension(0) != numCells.");
   TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
-                     std::invalid_argument,
-                     "values.dimension(1) != numPoints.");
+		      std::invalid_argument,
+		      "values.dimension(1) != numPoints.");
   TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
-                     std::invalid_argument,
-                     "vector values.dimension(1) != spaceDim.");
+		      std::invalid_argument,
+		      "vector values.dimension(1) != spaceDim.");
   TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
-                     std::invalid_argument,
-                     "physicalPoints.rank() != 3.");
+		      std::invalid_argument,
+		      "physicalPoints.rank() != 3.");
   TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
-                     std::invalid_argument,
-                     "physicalPoints.dimension(2) != spaceDim.");
+		      std::invalid_argument,
+		      "physicalPoints.dimension(2) != spaceDim.");
   
   FieldContainer<double> thisCellJacobian(1,numPoints, spaceDim, spaceDim);
   FieldContainer<double> thisCellJacobInv(1,numPoints, spaceDim, spaceDim);
@@ -966,13 +968,13 @@ void Solution::solutionValues(FieldContainer<double> &values,
         }
       }
       /*if (basisRank == 0) {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-       } else {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-       cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-       }*/
+	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
+	} else {
+	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
+	cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
+	}*/
     }
   }  
 }
@@ -991,13 +993,13 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
 #endif  
   
   /*
-   // ready multivector for storage of energy errors
-   cout << "Initializing multivectors/maps" << endl;
-   Epetra_Map cellIDPartitionMap = _mesh->getCellIDPartitionMap(rank, &Comm); // TODO FIX - should be cellIndex not cellID
-   cout << "Done initing maps" << endl;
-   Epetra_MultiVector energyErrMV(cellIDPartitionMap,1);
-   cout << "Done initing mvs" << endl;
-   */ 
+  // ready multivector for storage of energy errors
+  cout << "Initializing multivectors/maps" << endl;
+  Epetra_Map cellIDPartitionMap = _mesh->getCellIDPartitionMap(rank, &Comm); // TODO FIX - should be cellIndex not cellID
+  cout << "Done initing maps" << endl;
+  Epetra_MultiVector energyErrMV(cellIDPartitionMap,1);
+  cout << "Done initing mvs" << endl;
+  */ 
   int numActiveElements = _mesh->activeElements().size();
   //  energyError.resize( numActiveElements );
   
@@ -1090,7 +1092,7 @@ void Solution::computeErrorRepresentation() {
   if (!_residualsComputed) {
     computeResiduals();
   }
-//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);  
+  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);  
   
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
@@ -1114,7 +1116,7 @@ void Solution::computeErrorRepresentation() {
     
     for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
       
-//      cout << "In compute error rep local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
+      //      cout << "In compute error rep local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
       // changed to Copy from View for debugging...
       Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
                                          ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
@@ -1175,7 +1177,7 @@ void Solution::computeResiduals() {
 #else
   Epetra_SerialComm Comm;
 #endif
-//  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);    
+  //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);    
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);  
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
@@ -1194,12 +1196,12 @@ void Solution::computeResiduals() {
     int numTestDofs  = testOrdering->totalDofs();
     int numCells = physicalCellNodes.dimension(0); // partition-local cells
 
-//    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
+    //    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
     
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
     /*
-    cout << "Num trial/test dofs " << rank << " is " << numTrialDofs << ", " << numTestDofs << endl;
-    cout << "solution dim on " << rank << " is " << solution.dimension(0) << ", " << solution.dimension(1) << endl;
+      cout << "Num trial/test dofs " << rank << " is " << numTrialDofs << ", " << numTestDofs << endl;
+      cout << "solution dim on " << rank << " is " << solution.dimension(0) << ", " << solution.dimension(1) << endl;
     */
       
     // set up diagonal testWeights matrices so we can reuse the existing computeRHS
@@ -1288,29 +1290,29 @@ void Solution::solutionValues(FieldContainer<double> &values,
   int basisCardinality = basis->getCardinality();
   //cout << "num Cells = " << numCells << endl;
   TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
-                     std::invalid_argument,
-                     "for scalar values, values container should be dimensioned(numCells,numPoints).");
+		      std::invalid_argument,
+		      "for scalar values, values container should be dimensioned(numCells,numPoints).");
   TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
-                     std::invalid_argument,
-                     "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
+		      std::invalid_argument,
+		      "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
   TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
-                     std::invalid_argument,
-                     "values.dimension(0) != numCells.");
+		      std::invalid_argument,
+		      "values.dimension(0) != numCells.");
   TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
-                     std::invalid_argument,
-                     "values.dimension(1) != numPoints.");
+		      std::invalid_argument,
+		      "values.dimension(1) != numPoints.");
   TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
-                     std::invalid_argument,
-                     "vector values.dimension(1) != spaceDim.");
+		      std::invalid_argument,
+		      "vector values.dimension(1) != spaceDim.");
   TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
-                     std::invalid_argument,
-                     "physicalPoints.rank() != 3.");
+		      std::invalid_argument,
+		      "physicalPoints.rank() != 3.");
   TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
-                     std::invalid_argument,
-                     "physicalPoints.dimension(2) != spaceDim.");
+		      std::invalid_argument,
+		      "physicalPoints.dimension(2) != spaceDim.");
   TEST_FOR_EXCEPTION( _mesh->bilinearForm().isFluxOrTrace(trialID),
-                     std::invalid_argument,
-                     "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
+		      std::invalid_argument,
+		      "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
   
   FieldContainer<double> thisCellJacobian(1,numPoints, spaceDim, spaceDim);
   FieldContainer<double> thisCellJacobInv(1,numPoints, spaceDim, spaceDim);
@@ -1346,13 +1348,13 @@ void Solution::solutionValues(FieldContainer<double> &values,
         }
       }
       /*if (basisRank == 0) {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-       } else {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-       cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-       }*/
+	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
+	} else {
+	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
+	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
+	cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
+	}*/
     }
   }
 }
@@ -1440,7 +1442,7 @@ void Solution::writeToFile(int trialID, const string &filePath) {
                   //cout << "weight for vertex " << vertexIndex << ": " << weight << endl;
                   for (int dim=0; dim<spaceDim; dim++) {
                     physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += 
-                    weight*vertexPoints(cellIndex, vertexIndex, dim);
+		      weight*vertexPoints(cellIndex, vertexIndex, dim);
                   }
                 }
                 for (int dim=0; dim<spaceDim; dim++) {
@@ -1566,96 +1568,96 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
 } 
 
 /*void Solution::integrate(FieldContainer<double> &valuePerCell, int trialID) {
- int numCells = _mesh->elements.size();
- if ( (valuePerCell.dimension(0) != numCells) || (valuePerCell.rank() != 1) ) {
- TEST_FOR_EXCEPTION( true, std::invalid_argument, "valuePerCell should have dimension numCells." );
- }
+  int numCells = _mesh->elements.size();
+  if ( (valuePerCell.dimension(0) != numCells) || (valuePerCell.rank() != 1) ) {
+  TEST_FOR_EXCEPTION( true, std::invalid_argument, "valuePerCell should have dimension numCells." );
+  }
  
- vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
- vector< ElementTypePtr >::iterator elemTypeIt;
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
  
- for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
- //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
- ElementTypePtr elemTypePtr = *(elemTypeIt);
- int trialDegreeMax = 0;
- int numSidesForTrial = elemTypePtr->dofOrderingPtr->getNumSidesForVarID(trialID);
- for (int sideIndex=0; sideIndex<numSidesForTrial; sideIndex++) {
- trialDegreeMax = max(trialDegreeMax, elemTypePtr->dofOrderingPtr->getBasisCardinality(trialID,sideIndex));
- }
- cubDegree = trialDegreeMax*2;
- FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
- BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), cubDegree, 
- numSidesForTrial != 1); // create side caches if trialID is on side...
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+  //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
+  ElementTypePtr elemTypePtr = *(elemTypeIt);
+  int trialDegreeMax = 0;
+  int numSidesForTrial = elemTypePtr->dofOrderingPtr->getNumSidesForVarID(trialID);
+  for (int sideIndex=0; sideIndex<numSidesForTrial; sideIndex++) {
+  trialDegreeMax = max(trialDegreeMax, elemTypePtr->dofOrderingPtr->getBasisCardinality(trialID,sideIndex));
+  }
+  cubDegree = trialDegreeMax*2;
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+  BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), cubDegree, 
+  numSidesForTrial != 1); // create side caches if trialID is on side...
  
- }
- }*/
+  }
+  }*/
 
 // the following was an attempt to rewrite writeToFile more sensibly, just with
 // some arbitrary points for each cell.  But I don't know how to get MATLAB to
 // build a surface from arbitrary points (if indeed there is any way to do so)
 /*void Solution::writeToFile(int trialID, const string &filePath) {
- // writes out rows of the format: "cellID x y solnValue"
- ofstream fout(filePath.c_str());
- fout << setprecision(15);
- vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
- vector< ElementTypePtr >::iterator elemTypeIt;
- int spaceDim = 2; // TODO: generalize to 3D...
+// writes out rows of the format: "cellID x y solnValue"
+ofstream fout(filePath.c_str());
+fout << setprecision(15);
+vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+vector< ElementTypePtr >::iterator elemTypeIt;
+int spaceDim = 2; // TODO: generalize to 3D...
  
- for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
- ElementTypePtr elemTypePtr = *(elemTypeIt);
- int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
- int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
- Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
- // 0. Set up Cubature
- // Get numerical integration points--these will be the points we compute the solution values for...
- DefaultCubatureFactory<double>  cubFactory;                                   
- int cubDegree = 2*basisDegree;
- Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree); 
+for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+ElementTypePtr elemTypePtr = *(elemTypeIt);
+int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
+int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
+Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+// 0. Set up Cubature
+// Get numerical integration points--these will be the points we compute the solution values for...
+DefaultCubatureFactory<double>  cubFactory;                                   
+int cubDegree = 2*basisDegree;
+Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree); 
  
- int cubDim       = cellTopoCub->getDimension();
- int numCubPoints = cellTopoCub->getNumPoints();
+int cubDim       = cellTopoCub->getDimension();
+int numCubPoints = cellTopoCub->getNumPoints();
  
- FieldContainer<double> cubPoints(numCubPoints, cubDim);
- FieldContainer<double> cubWeights(numCubPoints);
+FieldContainer<double> cubPoints(numCubPoints, cubDim);
+FieldContainer<double> cubWeights(numCubPoints);
  
- cellTopoCub->getCubature(cubPoints, cubWeights);
+cellTopoCub->getCubature(cubPoints, cubWeights);
  
- typedef CellTools<double>  CellTools;
+typedef CellTools<double>  CellTools;
  
- int cellTopoDim = cellTopoPtr->getDimension();
- int numVertices = cellTopoPtr->getVertexCount(cellTopoDim,0);
- FieldContainer<double> refPoints(numCubPoints+numVertices, cubDim);
- FieldContainer<double> refVertices(numVertices,cellTopoDim);
- CellTools::getReferenceSubcellVertices(refVertices,cellTopoDim,0,*(cellTopoPtr.get()));
- for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
- for (int i=0; i<cellTopoDim; i++) {
- refPoints(ptIndex,i) = refVertices(ptIndex,i);
- }
- }
- for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
- for (int i=0; i<cubDim; i++) {
- refPoints(numVertices+ptIndex,i) = cubPoints(ptIndex,i);
- }
- }
+int cellTopoDim = cellTopoPtr->getDimension();
+int numVertices = cellTopoPtr->getVertexCount(cellTopoDim,0);
+FieldContainer<double> refPoints(numCubPoints+numVertices, cubDim);
+FieldContainer<double> refVertices(numVertices,cellTopoDim);
+CellTools::getReferenceSubcellVertices(refVertices,cellTopoDim,0,*(cellTopoPtr.get()));
+for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
+for (int i=0; i<cellTopoDim; i++) {
+refPoints(ptIndex,i) = refVertices(ptIndex,i);
+}
+}
+for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
+for (int i=0; i<cubDim; i++) {
+refPoints(numVertices+ptIndex,i) = cubPoints(ptIndex,i);
+}
+}
  
- // compute physicalCubaturePoints, the transformed cubature points on each cell:
- FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints+numVertices, spaceDim);
- CellTools::mapToPhysicalFrame(physCubPoints,refPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
+// compute physicalCubaturePoints, the transformed cubature points on each cell:
+FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints+numVertices, spaceDim);
+CellTools::mapToPhysicalFrame(physCubPoints,refPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
  
- FieldContainer<double> values(numCellsOfType, numCubPoints+numVertices);
- solutionValues(values,elemTypePtr,trialID,physCubPoints);
+FieldContainer<double> values(numCellsOfType, numCubPoints+numVertices);
+solutionValues(values,elemTypePtr,trialID,physCubPoints);
  
- for (int cellIndex=0; cellIndex < numCellsOfType; cellIndex++) {
- for (int ptIndex=0; ptIndex< numCubPoints + numVertices; ptIndex++) {
- double x = physCubPoints(cellIndex,ptIndex,0);
- double y = physCubPoints(cellIndex,ptIndex,1);
- double z = values(cellIndex,ptIndex);
- fout << _mesh->cellID(elemTypePtr,cellIndex) << " " << x << " " << y << " " << z << endl;
- }
- }
- }
- fout.close();
- }*/
+for (int cellIndex=0; cellIndex < numCellsOfType; cellIndex++) {
+for (int ptIndex=0; ptIndex< numCubPoints + numVertices; ptIndex++) {
+double x = physCubPoints(cellIndex,ptIndex,0);
+double y = physCubPoints(cellIndex,ptIndex,1);
+double z = values(cellIndex,ptIndex);
+fout << _mesh->cellID(elemTypePtr,cellIndex) << " " << x << " " << y << " " << z << endl;
+}
+}
+}
+fout.close();
+}*/
 
 
 void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex) {
@@ -1697,7 +1699,7 @@ map< ElementType*, FieldContainer<double> > Solution::solutionForElementTypeMap(
 }
 
 // Jesse's additions below:
-
+// must write to .m file
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
   typedef CellTools<double>  CellTools;
   
@@ -1707,6 +1709,9 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
   vector< ElementTypePtr >::iterator elemTypeIt;
   int spaceDim = 2; // TODO: generalize to 3D...
   
+  fout << "numCells = " << _mesh->activeElements().size() << endl;
+  fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
+  int globalCellInd = 1; //matlab indexes from 1
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
@@ -1718,38 +1723,34 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     
     int numCells = vertexPoints.dimension(0);       
     
-    DefaultCubatureFactory<double>  cubFactory;
-    int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
-    
-    Teuchos::RCP< Cubature<double> > cellCub = cubFactory.create(*(cellTopoPtr.get()),cubDegree);
-    int numCubPoints = cellCub->getNumPoints();
-    int cubDim = cellCub->getDimension();
-    FieldContainer<double> cubPoints(numCubPoints,cubDim);
-    FieldContainer<double> cubWeights(numCubPoints);// dummy for now
-    
-    cellCub->getCubature(cubPoints, cubWeights);   
-    
-    // map side cubature points in reference parent cell domain to physical space	
-    FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints, cubPoints, physicalCellNodes, cellTopo);
-    
-    FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
-    solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);	
-    
     // NOW loop over all cells to write solution to file
-    for (int cellIndex=0;cellIndex < numCells;cellIndex++){
-      for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
-        for (int dimInd=0;dimInd<spaceDim;dimInd++){
-          fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
-        }
-        fout << computedValues(cellIndex,pointIndex) << endl;
+    int num1DPts = 4;
+    for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+
+	// for some odd reason, I cannot compute the ref-to-phys map for more than 1 point 
+	int numPoints = 1;
+	FieldContainer<double> refPoints(numPoints,spaceDim);
+	double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
+	double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
+	refPoints(0,0) = x;
+	refPoints(0,1) = y;
+	
+	// map side cubature points in reference parent cell domain to physical space	
+	FieldContainer<double> physCubPoints(numCells, numPoints, spaceDim);
+	CellTools::mapToPhysicalFrame(physCubPoints, refPoints, physicalCellNodes, cellTopo);
+	
+	FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
+	solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);	
+	
+	for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
+	  fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,0,0) << ";" << endl;
+	  fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,0,1) << ";" << endl;
+	  fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,0) << ";" << endl;	  
+	}
       }
-      // insert NaN for matlab to plot discontinuities - WILL NOT WORK IN 3D
-      for (int dimInd=0;dimInd<spaceDim;dimInd++){
-        fout << "NaN" << " ";
-      }
-      fout << "NaN" << endl;
     }
+    globalCellInd+=numCells;
     
   } //end of element type loop 
   fout.close();
@@ -1899,41 +1900,41 @@ double Solution::minTimeDistributeSolution() {
 }
 
 Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
-    // determine the local dofs we have, and what their global indices are:
-    int localDofsSize;
-    if (rank == 0) {
-      localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
-    } else {
-      localDofsSize = myGlobalIndicesSet.size();
-    }
-    int *myGlobalIndices;
-    if (localDofsSize!=0){
-      myGlobalIndices = new int[ localDofsSize ];      
-    }else{
-      myGlobalIndices = NULL;
-    }
-    
-    // copy from set object into the allocated array
-    int offset = 0;
-    for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
-         indexIt != myGlobalIndicesSet.end();
-         indexIt++ ){
-      myGlobalIndices[offset++] = *indexIt;
-    }
-    if ( rank == 0 ) {
-      // set up the zmcs, which come at the end...
-      for (int i=0; i<zeroMeanConstraintsSize; i++) {
-        myGlobalIndices[offset++] = i + numGlobalDofs;
-      }
-    }
-    
-    int indexBase = 0;
-    //cout << "process " << rank << " about to construct partMap.\n";
-    //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-    Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, *Comm);
-
-    if (localDofsSize!=0){
-      delete myGlobalIndices;
-    }
-    return partMap;
+  // determine the local dofs we have, and what their global indices are:
+  int localDofsSize;
+  if (rank == 0) {
+    localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
+  } else {
+    localDofsSize = myGlobalIndicesSet.size();
   }
+  int *myGlobalIndices;
+  if (localDofsSize!=0){
+    myGlobalIndices = new int[ localDofsSize ];      
+  }else{
+    myGlobalIndices = NULL;
+  }
+    
+  // copy from set object into the allocated array
+  int offset = 0;
+  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
+	indexIt != myGlobalIndicesSet.end();
+	indexIt++ ){
+    myGlobalIndices[offset++] = *indexIt;
+  }
+  if ( rank == 0 ) {
+    // set up the zmcs, which come at the end...
+    for (int i=0; i<zeroMeanConstraintsSize; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs;
+    }
+  }
+    
+  int indexBase = 0;
+  //cout << "process " << rank << " about to construct partMap.\n";
+  //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
+  Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, *Comm);
+
+  if (localDofsSize!=0){
+    delete myGlobalIndices;
+  }
+  return partMap;
+}
