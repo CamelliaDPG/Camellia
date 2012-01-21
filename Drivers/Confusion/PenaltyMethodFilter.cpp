@@ -10,7 +10,7 @@
 #include "BasisValueCache.h"
 #include "DofOrdering.h"
 
-PenaltyMethodFilter::PenaltyMethodFilter(Constraints constraints){
+PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }
 
@@ -23,7 +23,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
 
   // will only enforce constraints on fluxes at the moment
   vector<int> trialIDs = mesh->bilinearForm().trialIDs(); 
-  vector<int> fluxTraceIDs; // POPULATE with relevant trialIDs
+  vector<int> fluxTraceIDs = trialIDs; // POPULATE with relevant trialIDs
 
   // assumption: filter gets elements of all the same type  
   ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); 
@@ -35,12 +35,12 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
 
   for (vector<int>::iterator fluxTraceIt1 = fluxTraceIDs.begin(); fluxTraceIt1 != fluxTraceIDs.end(); fluxTraceIt1++) {
     for (vector<int>::iterator fluxTraceIt2 = fluxTraceIDs.begin(); fluxTraceIt2 != fluxTraceIDs.end(); fluxTraceIt2++) {
-      
+
       int trialID1 = *fluxTraceIt1;
-      int trialID2 = *fluxTraceIt2;
+      int trialID2 = *fluxTraceIt2;	      
       
       for (int sideIndex = 0; sideIndex<numSides; sideIndex++){
-
+	
 	Teuchos::RCP < Basis<double,FieldContainer<double> > > basis1 = elemTypePtr->trialOrderPtr->getBasis(trialID1,sideIndex);
 	Teuchos::RCP < Basis<double,FieldContainer<double> > > basis2 = elemTypePtr->trialOrderPtr->getBasis(trialID2,sideIndex); 
 	
@@ -67,7 +67,32 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
 	FieldContainer<double> trialValues1Copy = trialValues1Transformed;
 	FieldContainer<double> trialValues2CopyWeighted = trialValues2TransformedWeighted;
 
-	//	FunctionSpaceTools::integrate<double>(miniStiffness,trialValues1Transformed,trialValues2TransformedWeighted,COMP_CPP);
+	map<int,FieldContainer<double> > constraintCoeffs1;
+	map<int,FieldContainer<double> > constraintCoeffs2;
+	FieldContainer<double>  constraintValues;
+	FieldContainer<bool> imposeHere1;	
+	FieldContainer<bool> imposeHere2;	
+	_constraints->imposeConstraints(trialID1,sideCubPoints,sideNormals,constraintCoeffs1,constraintValues1,imposeHere1);
+	_constraints->imposeConstraints(trialID2,sideCubPoints,sideNormals,constraintCoeffs2,constraintValues2,imposeHere2);
+
+	int numCells = sideCubPoints.dimension(0);
+	int numPts = sideCubPoints.dimension(1);
+	int spaceDim = sideCubPoints.dimension(2);
+	for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+	  for (int dofIndex1=0;dofIndex1<numDofs1;dofIndex1++){
+	    for (int dofIndex2=0;dofIndex2<numDofs2;dofIndex2++){
+	      for (int ptIndex=0;ptIndex<numPts;ptIndex++){	    
+		if (imposeHere1(cellIndex,ptIndex) && imposeHere2(cellIndex,ptIndex)){
+		  trialValues1Copy(cellIndex,dofIndex1,ptIndex);
+		  trialValues2CopyWeighted(cellIndex,dofIndex2,ptIndex);
+		}
+	      }
+	    }
+	  }
+	}
+	
+	
+	//	FunctionSpaceTools::integrate<double>(,trialValues1Transformed,trialValues2TransformedWeighted,COMP_CPP);
       
       }      
     }    

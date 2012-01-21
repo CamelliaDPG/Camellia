@@ -52,8 +52,8 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-3;
-  double beta_x = 1.0, beta_y = 1.25;
+  double epsilon = 1e-2;
+  double beta_x = 1.0, beta_y = 1.0;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf,mesh ) );
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
   //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
   //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
 
@@ -107,20 +107,21 @@ int main(int argc, char *argv[]) {
   return 0;
   */
   bool limitIrregularity = true;
-  int numRefinements = 8;
+  int numRefinements = 2;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
-  double totalEnergyErrorSquared=0.0;
+
   for (int i=0; i<numRefinements; i++) {
     map<int, double> energyError;
     solution->energyError(energyError);
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
-    // greedy refinement algorithm
+    // greedy refinement algorithm - mark cells for refinement
     vector<int> triangleCellsToRefine;
     vector<int> quadCellsToRefine;
     double maxError = 0.0;
+    double totalEnergyErrorSquared=0.0;
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
@@ -132,7 +133,7 @@ int main(int argc, char *argv[]) {
       cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;
     }
 
-    //actually do refinements
+    // do refinements on cells with error above threshold
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
@@ -160,9 +161,13 @@ int main(int argc, char *argv[]) {
     }
     
     refIterCount++;
-    cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
+    if (rank==0){
+      cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
+    }
     solution->solve(false);
-    cout << "Solved..." << endl;    
+    if (rank==0){
+      cout << "Solved..." << endl;    
+    }
   } 
   
   if (useEggerSchoeberl) {
@@ -173,7 +178,8 @@ int main(int argc, char *argv[]) {
 
   // save a data file for plotting in MATLAB
   if (rank==0){
-    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.m");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
     cout << "Done writing soln to file." << endl;
   }
