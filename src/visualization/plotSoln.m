@@ -1,4 +1,12 @@
 function plotSoln(filepath,fluxFilepath)
+
+extLocation = strfind(filepath,'.m');
+if isempty(extLocation)
+    disp('Error: filepath specified is not of .m extension.')
+    return
+end
+filepath = filepath(1:extLocation-1);% cut out extension 
+
 run(filepath);
 figure;hold on;
 for i=1:numCells

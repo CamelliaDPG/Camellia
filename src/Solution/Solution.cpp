@@ -49,7 +49,7 @@
 #include "Amesos_Utils.h"
 // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
-#include "Amesos_Mumps.h"
+//#include "Amesos_Mumps.h"
 #endif
 
 // Epetra includes
@@ -402,12 +402,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     if (rank == 0) {
       cout << "USING MUMPS!\n";
     }
-    
+    /*
       Amesos_Mumps mumps(problem);
       mumps.SymbolicFactorization();
       mumps.NumericFactorization();
       mumps.Solve();
-    
+    */
 #else
     cout << "MUMPS disabled for non-MPI builds!\n";
 #endif
@@ -1724,7 +1724,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     int numCells = vertexPoints.dimension(0);       
     
     // NOW loop over all cells to write solution to file
-    int num1DPts = 4;
+    int num1DPts = 5;
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
 
