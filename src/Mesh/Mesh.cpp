@@ -1019,9 +1019,11 @@ void Mesh::enforceOneIrregularity() {
         else if (4 == current_element->numSides() ) {
           irregularQuadCells.push_back(current_element->cellID());
         }
-        if (rank==0){
+	/*
+	  if (rank==0){
           cout << "cell " << current_element->cellID() << " refined to maintain regularity" << endl;
         }
+	*/
       }
     }
     
