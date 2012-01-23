@@ -1,0 +1,40 @@
+% Copyright 2004 by Manuel Carro <mcarro@fi.upm.es>
+%
+% This file may be distributed and/or modified
+%
+% 1. under the LaTeX Project Public License and/or
+% 2. under the GNU Public License.
+%
+% See the file doc/licenses/LICENSE for more details.
+
+\mode<presentation>
+
+\newif\ifbeamer@secheader
+\beamer@secheaderfalse
+
+\DeclareOptionBeamer{secheader}{\beamer@secheadertrue}
+\ProcessOptionsBeamer
+
+\usecolortheme{rose}
+\useinnertheme[shadow]{rounded}
+\usecolortheme{dolphin}
+\useoutertheme{pecoslines}
+
+\usepackage[scaled]{helvet}
+%\usepackage{eulervm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\setbeamertemplate{items}[circle]
+\setbeamertemplate{itemize subitem}[triangle]
+\definecolor{wine}{RGB}{48,24,0}
+\definecolor{problems}{RGB}{21,41,48}
+\definecolor{threesome}{RGB}{24,72,72}
+\setbeamercolor{itemize item}{fg=wine}
+\setbeamercolor{itemize subitem}{fg=wine}
+\setbeamercolor{itemize subsubitem}{fg=wine}
+\usecolortheme[named=threesome]{structure}
+
+\setbeamertemplate{navigation symbols}{}
+\mode
+<all>
