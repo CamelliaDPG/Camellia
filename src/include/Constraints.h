@@ -50,11 +50,10 @@ public:
   }; // returns true if there are any constraints anywhere imposed on varID
 
   //given trialID, field container for constraint matrix gives one coeff per point
-  virtual void imposeConstraints(int varID, FieldContainer<double> &physicalPoints, 
-				 FieldContainer<double> &unitNormals,
-				 vector< map<int,FieldContainer<double> > > &constraintCoeffs,
-				 vector< FieldContainer<double> > &constraintValues,
-				 FieldContainer<bool> &imposeHere){
+  virtual void getConstraints(FieldContainer<double> &physicalPoints, 
+			      FieldContainer<double> &unitNormals,
+			      vector<map<int,FieldContainer<double > > > &constraintCoeffs,
+			      vector<FieldContainer<double > > &constraintValues){
     return;
   };
 };

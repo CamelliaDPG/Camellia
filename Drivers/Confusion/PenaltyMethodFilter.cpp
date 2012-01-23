@@ -23,107 +23,108 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
   
   // will only enforce constraints on fluxes at the moment
   vector<int> trialIDs = mesh->bilinearForm().trialIDs(); 
-  vector<int> fluxTraceIDs = trialIDs; // POPULATE with relevant trialIDs
+  vector<int> fluxTraceIDs;
+  for (vector<int>::iterator trialIt=trialIDs.begin();trialIt!=trialIDs.end();trialIt++){
+    if (mesh->bilinearForm().isFluxOrTrace(*trialIt)){
+      fluxTraceIDs.push_back(*trialIt);
+    }
+  }
   
   // assumption: filter gets elements of all the same type  
+  TEST_FOR_EXCEPTION(cellIDs.size()>0,std::invalid_argument,"no cell IDs given to filter");
+
   ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); 
   int numSides = mesh->elements()[cellIDs[0]]->numSides();
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   int maxTrialDegree = trialOrderPtr->maxBasisDegree();
   BasisValueCache basisCache = BasisValueCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
-  
-  for (vector<int>::iterator fluxTraceIt1 = fluxTraceIDs.begin(); fluxTraceIt1 != fluxTraceIDs.end(); fluxTraceIt1++) {
-    for (vector<int>::iterator fluxTraceIt2 = fluxTraceIDs.begin(); fluxTraceIt2 != fluxTraceIDs.end(); fluxTraceIt2++) {
-      
-      int trialID1 = *fluxTraceIt1;
-      int trialID2 = *fluxTraceIt2;	      
-      
-      for (int sideIndex = 0; sideIndex<numSides; sideIndex++){
-        
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis1 = elemTypePtr->trialOrderPtr->getBasis(trialID1,sideIndex);
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis2 = elemTypePtr->trialOrderPtr->getBasis(trialID2,sideIndex); 
-        
-        //	const FieldContainer<double> & getPhysicalCubaturePoints();
-        //	const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
-        Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis1;
-        Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis2;
-        trialBasis1 = trialOrderPtr->getBasis(trialID1,sideIndex);
-        trialBasis2 = trialOrderPtr->getBasis(trialID2,sideIndex);
-        int numDofs1 = trialOrderPtr->getBasisCardinality(trialID1,sideIndex); 
-        int numDofs2 = trialOrderPtr->getBasisCardinality(trialID2,sideIndex); 
-        
-        EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-        FieldContainer<double> trialValues1Transformed;
-        FieldContainer<double> trialValues2TransformedWeighted;
-        // for trial: the value lives on the side, so we don't use the volume coords either:
-        trialValues1Transformed = *(basisCache.getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
-        trialValues2TransformedWeighted = *(basisCache.getTransformedWeightedValues(trialBasis2,trialOperator,sideIndex,false));
-        
-        // get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
-        FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
-        FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);
-        
-        // make copies b/c we can't fudge with return values from basisCache (const)
-        // (Cell,Field - basis ordinal, Point)
-        FieldContainer<double> trialValues1Copy = trialValues1Transformed;
-        FieldContainer<double> trialValues2CopyWeighted = trialValues2TransformedWeighted;
-        
-        int numCells = sideCubPoints.dimension(0);
-        int numPts = sideCubPoints.dimension(1);
-        int spaceDim = sideCubPoints.dimension(2);
-        
-        for (int cellIndex=0;cellIndex<numCells;cellIndex++){
-          
-          vector< int > constraintIndices1;
-          vector< int > constraintIndices2;    
-          vector< map<int,FieldContainer<double> > > constraintCoeffs1Vector;
-          vector< map<int,FieldContainer<double> > > constraintCoeffs2Vector;    
-          vector< FieldContainer<double> > constraintValues1Vector;
-          vector< FieldContainer<double> > constraintValues2Vector; // dummy variable only - we only need trial constraint vals
-          vector< FieldContainer<bool> > imposeHere1Vector;	
-          vector< FieldContainer<bool> > imposeHere2Vector;	
-          _constraints->imposeConstraints(trialID1,sideCubPoints,sideNormals,constraintIndices1,constraintCoeffs1Vector,constraintValues1Vector,imposeHere1Vector);
-          _constraints->imposeConstraints(trialID2,sideCubPoints,sideNormals,constraintIndices2,constraintCoeffs2Vector,constraintValues2Vector,imposeHere2Vector);    
-          
-          for (int constrIndex=0;constrIndex<constraintIndices1.size();constrIndex++){
-            
-            // not sure this is right. 
-            map<int,FieldContainer<double> > constraintCoeffs1 = constraintCoeffs1Vector[constraintIndices1[constrIndex]];
-            map<int,FieldContainer<double> > constraintCoeffs2 = constraintCoeffs2Vector[constraintIndices2[constrIndex]];
-            FieldContainer<bool> imposeHere1 = imposeHere1Vector[constraintIndices1[constrIndex]];
-            FieldContainer<bool> imposeHere2 = imposeHere2Vector[constraintIndices2[constrIndex]];
-            
-            for (int dofIndex1=0;dofIndex1<numDofs1;dofIndex1++){
-              for (int dofIndex2=0;dofIndex2<numDofs2;dofIndex2++){
-                for (int ptIndex=0;ptIndex<numPts;ptIndex++){	    
-                  if (imposeHere1(cellIndex,ptIndex) && imposeHere2(cellIndex,ptIndex)){
-                    trialValues1Copy(cellIndex,dofIndex1,ptIndex) *= constraintCoeffs1[trialID1](cellIndex,ptIndex);
-                    trialValues2CopyWeighted(cellIndex,dofIndex2,ptIndex)*=constraintCoeffs2[trialID2](cellIndex,ptIndex);
-                  }
-                }
-              }
-            }
-          }
-          
-        }
-        
-        
-        //	FunctionSpaceTools::integrate<double>(,trialValues1Transformed,trialValues2TransformedWeighted,COMP_CPP);
-        
-      }      
-    }    
-    /*
-     FieldContainer<double> unitNormals; // NEED TO SET
-     FieldContainer<double> cubaturePoints; // NEED TO SET
-     // compute constraint matrix
-     vector< map<int,FieldContainer<double> > > constraintCoeffs;
-     vector< FieldContainer<double> > constraintValues;
-     FieldContainer<bool> imposeHere;
-     _constraints.imposeConstraints(trialID, cubaturePoints, unitNormals, 
-     constraintCoeffs, constraintValues,
-     imposeHere);
-     */
-    
+
+  // only allows for L2 inner products at the moment. 
+  EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+	
+  // loop over sides first 
+  for (int sideIndex = 0; sideIndex<numSides; sideIndex++){
+   
+    // GET INTEGRATION INFO - get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
+    FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
+    FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);        
+    int numCells = sideCubPoints.dimension(0);
+    int numPts = sideCubPoints.dimension(1);
+    int spaceDim = sideCubPoints.dimension(2);
+
+    // GET CONSTRAINT INFO
+    vector<map<int, FieldContainer<double> > > constrCoeffsVector;
+    vector<FieldContainer<double> > constraintValuesVector;
+    vector<FieldContainer<bool> > imposeHereVector;
+    _constraints->getConstraints(sideCubPoints,sideNormals,constrCoeffsVector,constraintValuesVector);
+
+    //loop thru constraints
+    for (vector<map<int,FieldContainer<double> > >::iterator constrIt = constrCoeffsVector.begin(); constrIt !=constrCoeffsVector.end(); constrIt++){
+      map<int,FieldContainer<double> > constrCoeffs = *constrIt;
+
+      // loop thru pairs of trialIDs and constr coeffs
+      for (map<int,FieldContainer<double> >::iterator constrIDIt = constrCoeffs.begin(); constrIDIt !=constrCoeffs.end(); constrIDIt++){
+	pair<int,FieldContainer<double> > constrPair = *constrIDIt;
+	int trialID = constrPair.first;
+
+	// get basis to integrate
+	Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);
+	// for trial: the value lives on the side, so we don't use the volume coords either:
+	FieldContainer<double> trialValuesTransformed = *(basisCache.getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
+        // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
+        FieldContainer<double> trialValuesCopy = trialValuesTransformed;
+
+	// transform trial values
+	int numDofs1 = trialOrderPtr->getBasisCardinality(trialID,sideIndex); 
+	for (int dofIndex=0; dofIndex<numDofs1; dofIndex++){
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+	    for (int ptIndex=0; ptIndex<numPts; ptIndex++){
+	      trialValuesCopy(cellIndex, dofIndex, ptIndex) *= constrPair.second(cellIndex, dofIndex, ptIndex); // scale by constraint coeff
+	    }	   
+	  }
+	}
+	
+	/////////////////////////////////////////////////////////////////////////////////////
+
+	for (map<int,FieldContainer<double> >::iterator constrTestIDIt = constrCoeffs.begin(); constrTestIDIt !=constrCoeffs.end(); constrTestIDIt++){
+	  pair<int,FieldContainer<double> > constrTestPair = *constrTestIDIt;
+	  int testTrialID = constrTestPair.first;
+
+	  // get basis to integrate for testing fxns
+	  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
+	  FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache.getTransformedWeightedValues(testTrialBasis,trialOperator,sideIndex,false));
+	  // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
+	  FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
+	  
+	  int numDofs2 = trialOrderPtr->getBasisCardinality(testTrialID,sideIndex); 
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+	    for (int dofIndex=0; dofIndex<numDofs2; dofIndex++){
+	      for (int ptIndex=0; ptIndex<numPts; ptIndex++){
+		testTrialValuesWeightedCopy(cellIndex, dofIndex, ptIndex) *= constrTestPair.second(cellIndex, dofIndex, ptIndex); // scale by constraint coeff
+	      }	   
+	    }
+	  }
+
+	  double penaltyParameter = 1e7; // (single_precision)^(-1) - perhaps have this computed relative to terms in the matrix?
+
+	  // integrate the transformed values, add them to the relevant trial/testTrialID dof combos
+	  FieldContainer<double> unweightedPenaltyMatrix(numCells,numDofs1,numDofs2);
+	  FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,trialValuesCopy,testTrialValuesWeightedCopy,COMP_CPP);
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+	    for (int trialDofIndex=0; trialDofIndex<numDofs1; trialDofIndex++){
+	      for (int testDofIndex=0; testDofIndex<numDofs2; testDofIndex++){		
+		int localTrialDof = trialOrderPtr->getDofIndex(trialID, trialDofIndex, sideIndex);
+		int localTestDof = trialOrderPtr->getDofIndex(testTrialID, testDofIndex, sideIndex);
+		localStiffnessMatrix(cellIndex,localTrialDof,localTestDof) += penaltyParameter*unweightedPenaltyMatrix(cellIndex,trialDofIndex,testDofIndex);
+	      }
+	    }
+	  }	  	  	  
+	}
+	
+	/////////////////////////////////////////////////////////////////////////////////////
+	
+      }
+    }
   }
 }
