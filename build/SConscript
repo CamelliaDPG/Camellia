@@ -1,8 +1,11 @@
 Import('env')
 
-TrilinosIncludes = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/include')]
-TrilinosLibDir = [Dir('../../../trilinos-10.8.3-Source/trilinos_builds/serial-release/lib')]
-
+#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-debug/include']
+#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-debug/lib']
+#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
+#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
+TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/mpi-release/include']
+TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/mpi-release/lib']
 #TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
 #TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
 
@@ -14,7 +17,10 @@ env.Append(CPPPATH=TrilinosIncludes)
 src_lib = SConscript('../src/SConscript',exports = ['env'])
 
 # note - Camellia must be linked first on most linux machines. 
-linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'simpi', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
+#linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'simpi', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
+
+# library 'simpi' is only used in serial codes. remove for mpi build
+linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
 
 libPaths = [TrilinosLibDir,Dir('lib')] 
 

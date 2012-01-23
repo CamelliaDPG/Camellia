@@ -52,8 +52,8 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-2;
-  double beta_x = 1.0, beta_y = 1.0;
+  double epsilon = 1e-3;
+  double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
@@ -107,10 +107,10 @@ int main(int argc, char *argv[]) {
   return 0;
   */
   bool limitIrregularity = true;
-  int numRefinements = 2;
+  int numRefinements = 8;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
-
+  vector<double> errorVector;
   for (int i=0; i<numRefinements; i++) {
     map<int, double> energyError;
     solution->energyError(energyError);
@@ -130,8 +130,9 @@ int main(int argc, char *argv[]) {
       totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
     }
     if (rank==0){
-      cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;
+      cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;      
     }
+    errorVector.push_back(totalEnergyErrorSquared);
 
     // do refinements on cells with error above threshold
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
@@ -143,11 +144,6 @@ int main(int argc, char *argv[]) {
 	}else if (current_element->numSides()==4){
 	  quadCellsToRefine.push_back(cellID);
 	}
-	/*
-	  if (rank==0){
-	  cout << "refining cell ID " << cellID << endl;
-	  }
-	*/
       }
     }    
     mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
@@ -181,6 +177,11 @@ int main(int argc, char *argv[]) {
     //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
     solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.m");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
+    cout << "errors = [" << endl;
+    for (int i = 0;i<errorVector.size();i++){
+      cout << errorVector[i] << endl;
+    }
+    cout << "];" << endl;
     cout << "Done writing soln to file." << endl;
   }
   
