@@ -4,14 +4,9 @@
 #include "Constraints.h"
 #include "LocalStiffnessMatrixFilter.h"
 
-
 class PenaltyMethodFilter : public LocalStiffnessMatrixFilter {
  private:
   Teuchos::RCP<Constraints> _constraints;
-  /*  
-  Teuchos::RCP<Mesh> _meshPtr;
-  Teuchos::RCP<BC> _bcPtr;
-  */
  public: 
   PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints);
   void filter(FieldContainer<double> &localStiffnessMatrix, 

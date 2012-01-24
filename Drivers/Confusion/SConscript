@@ -3,3 +3,5 @@ Import('*')
 src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp','PenaltyMethodFilter.cpp'])
 
 env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])
+
+env.Program('exec/Confection',['ConfectionDriver.cpp',src_obj])

@@ -13,10 +13,10 @@
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }
-
-void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,
-                                 vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){
+void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){
   
+  cout << "Applying Penalty method filter " << endl;
+
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
@@ -31,33 +31,37 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
   }
   
   // assumption: filter gets elements of all the same type  
-  TEST_FOR_EXCEPTION(cellIDs.size()>0,std::invalid_argument,"no cell IDs given to filter");
+  TEST_FOR_EXCEPTION(cellIDs.size()==0,std::invalid_argument,"no cell IDs given to filter");
 
   ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); 
   int numSides = mesh->elements()[cellIDs[0]]->numSides();
+  int numCells = physicalCellNodes.dimension(0);
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   int maxTrialDegree = trialOrderPtr->maxBasisDegree();
-  BasisValueCache basisCache = BasisValueCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
+  BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
 
   // only allows for L2 inner products at the moment. 
   EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
 	
   // loop over sides first 
-  for (int sideIndex = 0; sideIndex<numSides; sideIndex++){
+  for (unsigned int sideIndex = 0; sideIndex<numSides; sideIndex++){
    
     // GET INTEGRATION INFO - get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
     FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
     FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);        
-    int numCells = sideCubPoints.dimension(0);
+    cout << "got cub info " << endl;
+
     int numPts = sideCubPoints.dimension(1);
-    int spaceDim = sideCubPoints.dimension(2);
+
+    cout << "getting constraints" << endl;
 
     // GET CONSTRAINT INFO
     vector<map<int, FieldContainer<double> > > constrCoeffsVector;
     vector<FieldContainer<double> > constraintValuesVector;
     vector<FieldContainer<bool> > imposeHereVector;
     _constraints->getConstraints(sideCubPoints,sideNormals,constrCoeffsVector,constraintValuesVector);
+    cout << "got constraints" << endl;
 
     //loop thru constraints
     for (vector<map<int,FieldContainer<double> > >::iterator constrIt = constrCoeffsVector.begin(); constrIt !=constrCoeffsVector.end(); constrIt++){
@@ -75,12 +79,13 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
         // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
         FieldContainer<double> trialValuesCopy = trialValuesTransformed;
 
+	cout << "transforming trial values " << endl;
 	// transform trial values
 	int numDofs1 = trialOrderPtr->getBasisCardinality(trialID,sideIndex); 
 	for (int dofIndex=0; dofIndex<numDofs1; dofIndex++){
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
 	    for (int ptIndex=0; ptIndex<numPts; ptIndex++){
-	      trialValuesCopy(cellIndex, dofIndex, ptIndex) *= constrPair.second(cellIndex, dofIndex, ptIndex); // scale by constraint coeff
+	      trialValuesCopy(cellIndex, dofIndex, ptIndex) *= constrPair.second(cellIndex, ptIndex); // scale by constraint coeff
 	    }	   
 	  }
 	}
@@ -97,11 +102,12 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
 	  // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
 	  FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
 	  
+	  cout << "transforming test values " << endl;
 	  int numDofs2 = trialOrderPtr->getBasisCardinality(testTrialID,sideIndex); 
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
 	    for (int dofIndex=0; dofIndex<numDofs2; dofIndex++){
 	      for (int ptIndex=0; ptIndex<numPts; ptIndex++){
-		testTrialValuesWeightedCopy(cellIndex, dofIndex, ptIndex) *= constrTestPair.second(cellIndex, dofIndex, ptIndex); // scale by constraint coeff
+		testTrialValuesWeightedCopy(cellIndex, dofIndex, ptIndex) *= constrTestPair.second(cellIndex, ptIndex); // scale by constraint coeff
 	      }	   
 	    }
 	  }

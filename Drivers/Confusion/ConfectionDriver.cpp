@@ -53,10 +53,8 @@ int main(int argc, char *argv[]) {
   double epsilon = 1e-3;
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
-  bool useEggerSchoeberl = false;
-  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
-  Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
 
+  Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -70,7 +68,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;  
+  int horizontalCells = 4, verticalCells = 4;  
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -84,16 +82,24 @@ int main(int argc, char *argv[]) {
 
   // create a solution object
   Teuchos::RCP<Solution> solution;
-  if (useEggerSchoeberl)
-    solution = Teuchos::rcp(new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip));
-  else {
-    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
-    //    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
-    solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
-  }
+  //  Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
+  Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
+
+  solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
+
+  Teuchos::RCP<ConfectionBCConstraints> bcConstraints = Teuchos::rcp( new ConfectionBCConstraints(bf) );
+  Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(bcConstraints));
+  
+  solution->setFilter(penaltyBC);
  
   solution->solve(false);
   cout << "Processor " << rank << " returned from solve()." << endl;
+  if (rank==0){
+    //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u_confect.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat_confect.dat");
+  }
+  return 0;
 
   /*
   // save a data file for plotting in MATLAB
@@ -105,7 +111,7 @@ int main(int argc, char *argv[]) {
   return 0;
   */
   bool limitIrregularity = true;
-  int numRefinements = 12;
+  int numRefinements = 4;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
   vector<double> errorVector;
@@ -166,12 +172,6 @@ int main(int argc, char *argv[]) {
     }
   } 
   
-  if (useEggerSchoeberl) {
-    // print out the L2 error of the solution:
-    double l2error = exactSolution.L2NormOfError(*solution, ConfusionBilinearForm::U);
-    cout << "L2 error: " << l2error << endl;
-  }
-
   // save a data file for plotting in MATLAB
   if (rank==0){
     //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
