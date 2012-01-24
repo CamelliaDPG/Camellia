@@ -155,7 +155,7 @@ public:
             }
           }
         }
-      } else if (testID1==ConfusionBilinearForm::TAU){
+      } else if (testID1==ConfusionBilinearForm::TAU){ // L2 portion of Tau
         
         if (operatorIndex==0) {
           int numCells = testValues1.dimension(0);
@@ -163,22 +163,20 @@ public:
           int numPoints = testValues1.dimension(2);
           int spaceDim = testValues1.dimension(3);
           
-          // because we change dimensions of the values, by dotting with beta, 
-          // we'll need to copy the values and resize the original container
-          FieldContainer<double> testValuesCopy1 = testValues1;
-          FieldContainer<double> testValuesCopy2 = testValues2;
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                double x = physicalPoints(cellIndex,ptIndex,0);
-                double y = physicalPoints(cellIndex,ptIndex,1);
-                double weight = getWeight(x,y);
-                testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*weight;
-                testValues2(cellIndex,basisOrdinal,ptIndex) = testValues2(cellIndex,basisOrdinal,ptIndex);
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
+		for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
+		  double weight = getWeight(x,y);
+		  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+		  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex);
+		}
               }
             }
           }
-        } else if (operatorIndex==1) {
+        } else if (operatorIndex==1) { // div portion of TAU
           
           int numCells = testValues1.dimension(0);
           int basisCardinality = testValues1.dimension(1);
