@@ -20,27 +20,18 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-  
-  // will only enforce constraints on fluxes at the moment
-  vector<int> trialIDs = mesh->bilinearForm().trialIDs(); 
-  vector<int> fluxTraceIDs;
-  for (vector<int>::iterator trialIt=trialIDs.begin();trialIt!=trialIDs.end();trialIt++){
-    if (mesh->bilinearForm().isFluxOrTrace(*trialIt)){
-      fluxTraceIDs.push_back(*trialIt);
-    }
-  }
-  
+    
   // assumption: filter gets elements of all the same type  
   TEST_FOR_EXCEPTION(cellIDs.size()==0,std::invalid_argument,"no cell IDs given to filter");
 
   ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); 
-  int numSides = mesh->elements()[cellIDs[0]]->numSides();
   int numCells = physicalCellNodes.dimension(0);
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   int maxTrialDegree = trialOrderPtr->maxBasisDegree();
   BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
-
+  cout << "maxTrialDegree = " << maxTrialDegree << endl;
+  unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 
   EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
 	
@@ -51,6 +42,9 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
     FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
     FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);        
     cout << "got cub info " << endl;
+    vector<int> ptDims;
+    sideNormals.dimensions(ptDims);
+    cout << "sideNormals has dimensions " << sideNormals.dimension(0) << ", " << sideNormals.dimension(1) << ", " << sideNormals.dimension(3) << endl;
 
     int numPts = sideCubPoints.dimension(1);
 
