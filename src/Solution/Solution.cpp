@@ -248,7 +248,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
         int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
         cellIDs.push_back(cellID);
       }
-      _filter.filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
+      _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
       
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),

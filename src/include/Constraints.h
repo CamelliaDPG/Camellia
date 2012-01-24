@@ -45,17 +45,12 @@ using namespace std;
 
 class Constraints {
 public:  
-  virtual bool constraintsImposed(int varID){
-    return false;
-  }; // returns true if there are any constraints anywhere imposed on varID
-
   //given trialID, field container for constraint matrix gives one coeff per point
   virtual void getConstraints(FieldContainer<double> &physicalPoints, 
 			      FieldContainer<double> &unitNormals,
 			      vector<map<int,FieldContainer<double > > > &constraintCoeffs,
-			      vector<FieldContainer<double > > &constraintValues){
-    return;
-  };
+			      vector<FieldContainer<double > > &constraintValues){};
+  // TODO - figure out some way to skip over edges, points, or variables we don't use
 };
 
 #endif

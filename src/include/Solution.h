@@ -71,7 +71,7 @@ private:
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
-  LocalStiffnessMatrixFilter _filter;
+  Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   bool _residualsComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
   void initialize();
@@ -118,7 +118,9 @@ public:
   double meanValue(int trialID);
   double meshMeasure();
 
-  void setFilter(const LocalStiffnessMatrixFilter &newFilter){_filter = newFilter;}
+  void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter){
+    _filter = newFilter;
+  }
   
   void computeResiduals();
   void computeErrorRepresentation();
