@@ -72,6 +72,7 @@ private:
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
+
   bool _residualsComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
   void initialize();
@@ -134,6 +135,7 @@ public:
   Teuchos::RCP<BC> bc() const;
   Teuchos::RCP<RHS> rhs() const;
   Teuchos::RCP<DPGInnerProduct> ip() const;
+  Teuchos::RCP<LocalStiffnessMatrixFilter> filter() const;
   
   // Jesse's additions:
   void writeFieldsToFile(int trialID, const string &filePath);
