@@ -95,6 +95,7 @@ Solution::Solution(const Solution &soln) {
   _rhs = soln.rhs();
   _ip = soln.ip();
   _solutionForElementType = soln.solutionForElementTypeMap();
+  _filter = soln.filter();
   initialize();
 }
 
@@ -103,6 +104,7 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
   _bc = bc;
   _rhs = rhs;
   _ip = ip;
+  _filter = Teuchos::rcp(new LocalStiffnessMatrixFilter());
   initialize();
 }
 
@@ -248,7 +250,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
         int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
         cellIDs.push_back(cellID);
       }
-      if (filter.get()) {
+      if (_filter.get()) {
         _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
       } 
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
@@ -585,6 +587,10 @@ Teuchos::RCP<RHS> Solution::rhs() const {
 
 Teuchos::RCP<DPGInnerProduct> Solution::ip() const { 
   return _ip;
+}
+
+Teuchos::RCP<LocalStiffnessMatrixFilter> Solution::filter() const{
+  return _filter;
 }
 
 ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType) {
