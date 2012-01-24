@@ -148,10 +148,10 @@ public:
                 double y = physicalPoints(cellIndex,ptIndex,1);
                 double weight = getWeight(x,y);
                 testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
-		  + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
+                + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
                 testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0)
-		  + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);
-	      }
+                + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);
+              }
             }
           }
         }
@@ -166,13 +166,17 @@ public:
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		double x = physicalPoints(cellIndex,ptIndex,0);
-		double y = physicalPoints(cellIndex,ptIndex,1);
-		for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
-		  double weight = getWeight(x,y);
-		  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
-		  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex);
-		}
+                double x = physicalPoints(cellIndex,ptIndex,0);
+                double y = physicalPoints(cellIndex,ptIndex,1);
+                for (int dimIndex=0; dimIndex<spaceDim; dimIndex++) {
+                  double weight = getWeight(x,y);
+                  cout << "testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
+                  cout << "testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
+                  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+                  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex);
+                  cout << "testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
+                  cout << "testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
+                }
               }
             }
           }

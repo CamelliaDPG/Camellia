@@ -104,7 +104,6 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
   _bc = bc;
   _rhs = rhs;
   _ip = ip;
-  _filter = Teuchos::rcp(new LocalStiffnessMatrixFilter());
   initialize();
 }
 
@@ -218,11 +217,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
                                                     physicalCellNodes, cellSideParities);
         FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
         BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-        //cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
+        cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
       }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
-      //cout << "Solution: physicalCellNodes--" << endl << physicalCellNodes;
+      cout << "Solution: physicalCellNodes--" << endl << physicalCellNodes;
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
       

@@ -167,7 +167,7 @@ void BasisValueCache::init(const FieldContainer<double> &physicalCellNodes,
       FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
       
       // values we want to keep around: cubPointsSide, cubPointsSideRefCell, sideNormals, jacobianSideRefCell, jacobianInvSideRefCell, jacobianDetSideRefCell
-      BasisValueCache* sideCache = new BasisValueCache(cellTopo, _numCells, _spaceDim, 
+      BasisValueCache* sideCache = new BasisValueCache(cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
                                                        cubPointsSide, cubPointsSideRefCell, 
                                                        cubWeightsSide, weightedMeasureSideRefCell,
                                                        sideNormals, jacobianSideRefCell,
@@ -192,6 +192,7 @@ BasisValueCache::BasisValueCache(const FieldContainer<double> &physicalCellNodes
 }
 
 BasisValueCache::BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
+                                 FieldContainer<double> &cubPointsSidePhysical,
                                  FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
                                  FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                                  FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
@@ -204,6 +205,8 @@ BasisValueCache::BasisValueCache(shards::CellTopology &cellTopo, int numCells, i
   
   _cubPoints = cubPointsSide;
   _cubPointsSideRefCell = cubPointsSideRefCell;
+  
+  _physCubPoints = cubPointsSidePhysical; // NOTE the meaning of _physCubPoints in this context: these are in _spaceDim + 1 dimensions...
   _cubWeights = cubWeightsSide;
   _weightedMeasure = sideMeasure;
   

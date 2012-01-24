@@ -12,12 +12,10 @@ class LocalStiffnessMatrixFilter {
 public:
   LocalStiffnessMatrixFilter() {}
   virtual void filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,
-                      vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) {
+                      vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) = 0;
     // localStiffnessMatrix has dimensions (numCells, numTrialDofs, numTrialDofs)
     // physicalCellNodes has dimensions (numCells, numVerticesPerCell, numDimensions)
-    
-    // default implementation doesn't do anything -- override this method to actually filter...
-  }
+
 };
 
 #endif

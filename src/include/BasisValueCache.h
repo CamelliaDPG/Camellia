@@ -101,7 +101,8 @@ public:
   BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
                   DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
-  BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
+  // side cache constructor:
+  BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
                   FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
                   FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                   FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,

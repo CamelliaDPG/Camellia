@@ -44,7 +44,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
     cout << "got cub info " << endl;
     vector<int> ptDims;
     sideNormals.dimensions(ptDims);
-    cout << "sideNormals has dimensions " << sideNormals.dimension(0) << ", " << sideNormals.dimension(1) << ", " << sideNormals.dimension(3) << endl;
+    cout << "sideNormals has dimensions " << sideNormals.dimension(0) << ", " << sideNormals.dimension(1) << ", " << sideNormals.dimension(2) << endl;
 
     int numPts = sideCubPoints.dimension(1);
 
