@@ -16,8 +16,6 @@ class AbstractFunction {
   AbstractFunction(); 
   virtual void getValues(FieldContainer<double> &functionValues,
 			     FieldContainer<double> &physicalPoints);
-  virtual void getDerivatives(FieldContainer<double> &functionDerivatives,
-			     FieldContainer<double> &physicalPoints);
 };
 
 #endif
