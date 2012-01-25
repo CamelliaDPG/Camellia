@@ -217,11 +217,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
                                                     physicalCellNodes, cellSideParities);
         FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
         BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-        cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
+	//        cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
       }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
-      cout << "Solution: physicalCellNodes--" << endl << physicalCellNodes;
+      //      cout << "Solution: physicalCellNodes--" << endl << physicalCellNodes;
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
       
