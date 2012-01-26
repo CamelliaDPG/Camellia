@@ -140,7 +140,7 @@ public:
   
   BilinearForm & bilinearForm();
   
-  vector<ElementPtr> elementsForPoints(FieldContainer<double> &physicalPoints);
+  vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints);
   bool elementContainsPoint(ElementPtr elem, double x, double y);
   
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default

@@ -13,9 +13,17 @@
 #include "AbstractFunction.h"
 
 class SolutionFunction : AbstractFunction {
+  Teuchos::RCP<Solution> _solution;
+  int _trialID;
 public:
-  SolutionFunction(Teuchos::RCP<Solution>, int trialID);
-  void getValues(FieldContainer<double> &functionValues, FieldContainer<double> &physicalPoints);
+  SolutionFunction(Teuchos::RCP<Solution> soln, int trialID) {
+    _solution = soln;
+    _trialID = trialID;
+  }
+  
+  void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
+    _solution->solutionValues(functionValues, trialID, physicalPoints);
+  }
 };
 
 #endif

@@ -895,7 +895,7 @@ double Mesh::distance(double x0, double y0, double x1, double y1) {
   return sqrt( (x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
 }
 
-vector<ElementPtr> Mesh::elementsForPoints(FieldContainer<double> &physicalPoints) {
+vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<ElementPtr> elemsForPoints;
   int numPoints = physicalPoints.dimension(0);

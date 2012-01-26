@@ -217,15 +217,10 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
                                                     physicalCellNodes, cellSideParities);
         FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
         BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-	//        cout << "preStiffnessTransposed\n" << preStiffnessTransposed;
       }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
-      //      cout << "Solution: physicalCellNodes--" << endl << physicalCellNodes;
-      
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
-      
-      //cout << "inner product matrix" << endl << ipMatrix;
       
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
@@ -875,8 +870,8 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
 void Solution::solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
                               int trialID,
-                              FieldContainer<double> &physicalPoints,
-                              FieldContainer<double> &sideRefCellPoints,
+                              const FieldContainer<double> &physicalPoints,
+                              const FieldContainer<double> &sideRefCellPoints,
                               int sideIndex) {
   // currently, we only support computing solution values on all the cells of a given type at once.
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
@@ -1245,10 +1240,129 @@ void Solution::computeResiduals() {
   _residualsComputed = true;
 }
 
+void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+  // the following is due to the fact that we *do not* transform basis values.
+  EFunctionSpaceExtended fs = _mesh->bilinearForm().functionSpaceForTrial(trialID);
+  TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
+                     std::invalid_argument,
+                     "This version of solutionValues only supports HVOL and HGRAD bases.");
+  
+  TEST_FOR_EXCEPTION( values.dimension(0) != physicalPoints.dimension(0),
+                     std::invalid_argument,
+                     "values.dimension(0) != physicalPoints.dimension(0).");
+  
+  
+  // physicalPoints dimensions: (P,D)
+  // values dimensions: (P) or (P,D)
+  //int numPoints = physicalPoints.dimension(0);
+  int spaceDim = physicalPoints.dimension(1);
+  int valueRank = values.rank();
+  Teuchos::Array<int> oneValueDimensions;
+  oneValueDimensions.push_back(1);
+  Teuchos::Array<int> onePointDimensions;
+  onePointDimensions.push_back(1); // C (cell)
+  onePointDimensions.push_back(1); // P (point)
+  onePointDimensions.push_back(spaceDim); // D (space)
+  if (valueRank >= 1) oneValueDimensions.push_back(spaceDim);
+  FieldContainer<double> oneValue(oneValueDimensions);
+  Teuchos::Array<int> oneCellDofsDimensions;
+  oneCellDofsDimensions.push_back(0); // initialize according to elementType
+  vector< ElementPtr > elements = _mesh->elementsForPoints(physicalPoints);
+  vector< ElementPtr >::iterator elemIt;
+  int physicalPointIndex = -1;
+  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+    physicalPointIndex++;
+    ElementPtr elem = *elemIt;
+    ElementTypePtr elemTypePtr = elem->elementType();
+    
+    Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
+    int elemGlobalIndex = elem->globalCellIndex();
+    
+    int totalDofs = trialOrder->totalDofs();
+    oneCellDofsDimensions[0] = totalDofs;
+    
+    FieldContainer<double> solnCoeffs(oneCellDofsDimensions,
+                                      &_solutionForElementType[elemTypePtr.get()](elemGlobalIndex,0)); // (numcells, numLocalTrialDofs)
+    
+    int numCells = 1;
+    int numPoints = 1;
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
+    
+    int numNodesPerCell = _mesh->physicalCellNodesGlobal(elemTypePtr).dimension(1);
+    Teuchos::Array<int> physicalCellNodesDimensions;
+    physicalCellNodesDimensions.push_back(numCells);
+    physicalCellNodesDimensions.push_back(numNodesPerCell);
+    physicalCellNodesDimensions.push_back(spaceDim);
+    FieldContainer<double> physicalCellNodes(physicalCellNodesDimensions, 
+                                             &_mesh->physicalCellNodesGlobal(elemTypePtr)(elemGlobalIndex,0,0));
+    
+    FieldContainer<double> physicalPoint(onePointDimensions);
+    for (int dim=0; dim<spaceDim; dim++) {
+      physicalPoint[dim] = physicalPoints(physicalPointIndex,dim);
+    }
+    
+    // 1. Map the physicalPoints from the element specified in physicalCellNodes into reference element
+    // 2. Compute each basis on those points
+    // 3. Transform those basis evaluations back into the physical space
+    // 4. Multiply by the solnCoeffs
+    
+    
+    typedef CellTools<double>  CellTools;
+    typedef FunctionSpaceTools fst;
+    
+    // 1. compute refElemPoints, the evaluation points mapped to reference cell:
+    FieldContainer<double> refElemPoint(numCells, numPoints, spaceDim);
+    CellTools::mapToReferenceFrame(refElemPoint,physicalPoint,physicalCellNodes,cellTopo);
+    refElemPoint.resize(numPoints,spaceDim);
+    
+    int sideIndex = 0; // field variable assumed
+    
+    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+    
+    int basisRank = trialOrder->getBasisRank(trialID);
+    int basisCardinality = basis->getCardinality();
+
+    TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 1,
+                       std::invalid_argument,
+                       "for scalar values, values container should be dimensioned(numPoints).");
+    TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 2,
+                       std::invalid_argument,
+                       "for scalar values, values container should be dimensioned(numPoints,spaceDim).");
+    TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(1) != spaceDim,
+                       std::invalid_argument,
+                       "vector values.dimension(1) != spaceDim.");
+    TEST_FOR_EXCEPTION( physicalPoints.rank() != 2,
+                       std::invalid_argument,
+                       "physicalPoints.rank() != 2.");
+    TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
+                       std::invalid_argument,
+                       "physicalPoints.dimension(1) != spaceDim.");
+    TEST_FOR_EXCEPTION( _mesh->bilinearForm().isFluxOrTrace(trialID),
+                       std::invalid_argument,
+                       "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
+    
+    values.initialize(0.0);
+    Teuchos::RCP< FieldContainer<double> > basisValues;
+    basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoint);
+    
+    // now, apply coefficient weights:
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
+        if (basisRank == 0) {
+          values(physicalPointIndex) += (*basisValues)(dofOrdinal,0) * solnCoeffs(localDofIndex);
+        } else {
+          for (int i=0; i<spaceDim; i++) {
+            values(physicalPointIndex ,i) += (*basisValues)(dofOrdinal,0,i) * solnCoeffs(localDofIndex);
+          }
+        }
+      }
+  }
+}
+
 void Solution::solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
                               int trialID,
-                              FieldContainer<double> &physicalPoints) {
+                              const FieldContainer<double> &physicalPoints) {
   int sideIndex = 0;
   // currently, we only support computing solution values on all the cells of a given type at once.
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
@@ -1353,14 +1467,6 @@ void Solution::solutionValues(FieldContainer<double> &values,
           }
         }
       }
-      /*if (basisRank == 0) {
-	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-	} else {
-	cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-	cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-	cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-	}*/
     }
   }
 }

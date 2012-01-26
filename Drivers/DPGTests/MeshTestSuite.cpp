@@ -63,6 +63,10 @@ using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
+  if (testMeshSolvePointwise() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
   if (testPointContainment() ) {
     numTestsPassed++;
   }
@@ -88,10 +92,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   if (testFluxNorm() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testMeshSolvePointwise() ) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -635,7 +635,8 @@ bool MeshTestSuite::testMeshSolvePointwise() {
 
   int numPointsPerElement = 1;
   int numElements = horizontalElements * verticalElements;
-  testPoints.resize(numElements,numPointsPerElement,2);
+  int spaceDim = 2;
+  testPoints.resize(numElements,numPointsPerElement,spaceDim);
   // could replace the following by something that figures out a point (or several) in the
   // middle of each element (using the vertices of each element).
   // That would eliminate the dependence on the layout ordering of the mesh.
@@ -681,6 +682,22 @@ bool MeshTestSuite::testMeshSolvePointwise() {
       double diff = abs(expectedSolnValues(elemIndex,ptIndex) - solnValues(elemIndex,ptIndex));
       if ( diff > tol ) {
         cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << ", but soln was " << solnValues(elemIndex,ptIndex) << endl;
+        success = false;
+      }
+    }
+  }
+  
+  // now try using the elementsForPoints variant of solutionValues
+  solnValues.resize(numElements*numPointsPerElement); // four elements, one test point each
+  testPoints.resize(numElements*numPointsPerElement,spaceDim);
+  solution2x2.solutionValues(solnValues,PoissonBilinearForm::PHI,testPoints);
+  
+  for (int elemIndex=0; elemIndex<numElements; elemIndex++) {
+    for (int ptIndex=0; ptIndex<numPointsPerElement; ptIndex++) {
+      int solnIndex = elemIndex*numPointsPerElement + ptIndex;
+      double diff = abs(expectedSolnValues(elemIndex,ptIndex) - solnValues(solnIndex));
+      if ( diff > tol ) {
+        cout << "Solve 4-element Poisson: expected " << expectedSolnValues(elemIndex,ptIndex) << ", but soln was " << solnValues(solnIndex) << " (using elementsForPoints solutionValues)" << endl;
         success = false;
       }
     }

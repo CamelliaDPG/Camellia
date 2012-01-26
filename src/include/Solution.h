@@ -100,13 +100,14 @@ public:
   virtual void solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
                               int trialID,
-                              FieldContainer<double> &physicalPoints);
+                              const FieldContainer<double> &physicalPoints);
   void solutionValues(FieldContainer<double> &values, 
                       ElementTypePtr elemTypePtr, 
                       int trialID,
-                      FieldContainer<double> &physicalPoints,
-                      FieldContainer<double> &sideRefCellPoints,
+                      const FieldContainer<double> &physicalPoints,
+                      const FieldContainer<double> &sideRefCellPoints,
                       int sideIndex);
+  void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex);
   
