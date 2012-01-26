@@ -63,6 +63,7 @@
 #endif
 
 #include "DPGTests.h"
+#include "SolutionTests.h"
 
 using namespace std;
 using namespace Intrepid;
@@ -123,6 +124,14 @@ void DPGTests::runTests() {
   
   numTestsTotal += vectBasisTestsTotal;
   numTestsPassed += vectBasisTestsPassed;
+  
+  int solutionTestsTotal = 0;
+  int solutionTestsPassed = 0;
+
+  SolutionTests solnTests;
+  solnTests.runTests(solutionTestsTotal, solutionTestsPassed);
+  numTestsTotal += solutionTestsTotal;
+  numTestsPassed += solutionTestsPassed;
   
   int meshTestsTotal = 0;
   int meshTestsPassed = 0;

@@ -126,6 +126,29 @@ void Solution::initialize() {
   _residualsComputed = false;
 }
 
+void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight) {
+  // thisSoln += weight * otherSoln
+  // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
+  const map< ElementType*, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForElementTypeMap());
+  TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForElementType.size(),
+                     std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
+  map< ElementType*, FieldContainer<double> >::iterator mapIt;
+  for (mapIt=_solutionForElementType.begin(); mapIt != _solutionForElementType.end(); mapIt++) {
+    ElementType* elemTypePtr = mapIt->first;
+    FieldContainer<double>* myValues = &(mapIt->second);
+    map< ElementType*, FieldContainer<double> >::const_iterator otherMapIt = otherMapPtr->find(elemTypePtr);
+    TEST_FOR_EXCEPTION(otherMapIt == otherMapPtr->end(),
+                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (elemTypePtr not found).");
+    const FieldContainer<double>* otherValues = &(otherMapIt->second);
+    int numValues = myValues->size();
+    TEST_FOR_EXCEPTION(numValues != otherValues->size(),
+                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (differing # of coefficients).");
+    for (int dofIndex = 0; dofIndex < numValues; dofIndex++) {
+      (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
+    }
+  }
+}
+
 void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();
@@ -1806,7 +1829,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
 
 
 // protected method; used for solution comparison...
-map< ElementType*, FieldContainer<double> > Solution::solutionForElementTypeMap() const {
+const map< ElementType*, FieldContainer<double> > & Solution::solutionForElementTypeMap() const {
   return _solutionForElementType;
 }
 

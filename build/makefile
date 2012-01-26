@@ -47,6 +47,7 @@ OBJ_NAMES = DofOrdering \
        PoissonBCLinear \
        PoissonRHSLinear \
        MeshTestSuite \
+       SolutionTests \
        MultiBasis \
        PatchBasis \
        Solution \
@@ -140,6 +141,9 @@ MultiOrderStudy.o: $(DRIVERS_DIR)/MultiOrderStudy/MultiOrderStudy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 MeshTestSuite.o: $(DRIVERS_DIR)/DPGTests/MeshTestSuite.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp

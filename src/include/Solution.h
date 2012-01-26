@@ -86,7 +86,7 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 protected:
-  map< ElementType*, FieldContainer<double> > solutionForElementTypeMap() const;
+  const map< ElementType*, FieldContainer<double> > & solutionForElementTypeMap() const;
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
@@ -97,6 +97,8 @@ public:
 #else
   void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
 #endif
+  void addSolution(Teuchos::RCP<Solution> soln, double weight); // thisSoln += weight * soln
+  
   virtual void solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
                               int trialID,
