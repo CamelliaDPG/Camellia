@@ -1270,6 +1270,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   vector< ElementPtr > elements = _mesh->elementsForPoints(physicalPoints);
   vector< ElementPtr >::iterator elemIt;
   int physicalPointIndex = -1;
+  values.initialize(0.0);
   for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
     physicalPointIndex++;
     ElementPtr elem = *elemIt;
@@ -1341,7 +1342,6 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
                        std::invalid_argument,
                        "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
     
-    values.initialize(0.0);
     Teuchos::RCP< FieldContainer<double> > basisValues;
     basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoint);
     
