@@ -12,7 +12,7 @@
 #include "Solution.h"
 #include "AbstractFunction.h"
 
-class SolutionFunction : AbstractFunction {
+class SolutionFunction : public AbstractFunction {
   Teuchos::RCP<Solution> _solution;
   int _trialID;
 public:
