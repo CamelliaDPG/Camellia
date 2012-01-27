@@ -46,6 +46,16 @@
 #include "BilinearFormUtility.h"
 #include "BasisValueCache.h"
 
+bool BilinearFormUtility::_warnAboutZeroRowsAndColumns = true;
+
+void BilinearFormUtility::setWarnAboutZeroRowsAndColumns( bool value ) {
+  _warnAboutZeroRowsAndColumns = value;
+}
+
+bool BilinearFormUtility::warnAboutZeroRowsAndColumns() {
+  return _warnAboutZeroRowsAndColumns;
+}
+
 bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array) {
   // for now, only support rank 3 FCs 
   double tol = 1e-15;
@@ -65,7 +75,9 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
         j++;
       }
       if ( ! nonZeroFound ) {
-        cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
+        if (_warnAboutZeroRowsAndColumns) {
+          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
+        }
         zeroRowOrColFound = true;
       }
     }
@@ -77,7 +89,9 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
         i++;
       }
       if ( ! nonZeroFound ) {
-        cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+        if (_warnAboutZeroRowsAndColumns) {
+          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+        }
         zeroRowOrColFound = true;
       }
     }

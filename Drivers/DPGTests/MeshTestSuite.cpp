@@ -264,7 +264,7 @@ bool MeshTestSuite::testFluxNorm() {
     // Poisson is set up such that the solution should be x + 2y
     
     double L2normFlux = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
-    cout << "L2 norm of phi_hat " << L2normFlux << endl;
+    //cout << "L2 norm of phi_hat " << L2normFlux << endl;
     
     double normDiff = abs(expectedValues[i] - L2normFlux);
     
@@ -277,7 +277,7 @@ bool MeshTestSuite::testFluxNorm() {
     double fluxDiff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
     fluxDiff = fluxDiff / L2normFlux;
     
-    cout << "Relative L2 Error in phi_hat solution of Poisson: " << fluxDiff << endl;
+    //cout << "Relative L2 Error in phi_hat solution of Poisson: " << fluxDiff << endl;
     if (fluxDiff > tol) {
       success = false;
       cout << "Failure: Error in phi_hat solution of Poisson was " << fluxDiff << "; tolerance set to " << tol << endl;
@@ -323,19 +323,19 @@ bool MeshTestSuite::testSacadoExactSolution() {
       
       solution.solve();
       diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
-      cout << "L2 Error in solution of phi Poisson (Sacado version): " << diff << endl;
+      //cout << "L2 Error in solution of phi Poisson (Sacado version): " << diff << endl;
       diff = diff / L2norm;
       
-      cout << "Relative L2 Error in phi solution of Poisson (Sacado version): " << diff << endl;
+      //cout << "Relative L2 Error in phi solution of Poisson (Sacado version): " << diff << endl;
       if (diff > tol) {
         success = false;
         cout << "Failure: Error in phi solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
       }
-      cout << "L2 norm of phi_hat " << L2normFlux << endl;
+      //cout << "L2 norm of phi_hat " << L2normFlux << endl;
       double fluxDiff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI_HAT);
       fluxDiff = fluxDiff / L2normFlux;
       
-      cout << "Relative L2 Error in phi_hat solution of Poisson (Sacado version): " << fluxDiff << endl;
+      //cout << "Relative L2 Error in phi_hat solution of Poisson (Sacado version): " << fluxDiff << endl;
       if (fluxDiff > tol) {
         success = false;
         cout << "Failure: Error in phi_hat solution of Poisson (Sacado version) was " << fluxDiff << "; tolerance set to " << tol << endl;
@@ -494,7 +494,7 @@ bool MeshTestSuite::testExactSolution(bool checkL2Norm) {
     } else {
       solution.solve();
       diff = exactSolution->L2NormOfError(solution, PoissonBilinearForm::PHI);
-      cout << "Error in solution of Poisson exactly recoverable solution " << i << ": " << diff << endl;
+      //cout << "Error in solution of Poisson exactly recoverable solution " << i << ": " << diff << endl;
       if (diff > tol) {
         success = false;
         cout << "Failure: Error in solution of Poisson was " << diff << "; tolerance set to " << tol << endl;
@@ -706,9 +706,9 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   // would be better to actually do the meshing, etc. with reference to the BC & RHS given by PoissonExactSolution,
   // but we do know that these are the same, so we'll just use the solutions we already have....
   double phiError = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI);
-  cout << "for 1x1 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
+  //cout << "for 1x1 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
   phiError = exactSolution.L2NormOfError(solution2x2, PoissonBilinearForm::PHI);
-  cout << "for 2x2 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
+  //cout << "for 2x2 mesh, L2 error in phi for PoissonExactSolutionLinear: " << phiError << endl;
   
   return success;
 }
@@ -985,10 +985,10 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
         if (neighborParity != -myParity) {
           success = false;
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != -neighborParity on boundary; sideIndex = " << sideIndex << endl;
-	  cout << "neighbor parity = " << neighborParity << " and myparity = " << myParity << endl;
-	  cout << "side index in neighbor is " << mySideIndexInNeighbor << endl;
-	  vector<double> centroid = mesh.getCellCentroid(cellID);
-	  cout << "element centroid for cellID " << cellID << " is " << centroid[0] << "," << centroid[1] << endl;
+          cout << "neighbor parity = " << neighborParity << " and myparity = " << myParity << endl;
+          cout << "side index in neighbor is " << mySideIndexInNeighbor << endl;
+          vector<double> centroid = mesh.getCellCentroid(cellID);
+          cout << "element centroid for cellID " << cellID << " is " << centroid[0] << "," << centroid[1] << endl;
         }
         // this check needs to be modified for 3D
         // TODO: modify for 3D
@@ -1137,13 +1137,14 @@ bool MeshTestSuite::testHRefinement() {
   double refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
   double fineError = exactSolution.L2NormOfError(origSolution,PoissonBilinearForm::PHI);
   
-  cout << "refinedError:" << refinedError << endl;
-  cout << "fineError:" << fineError << endl;
+//  cout << "refinedError:" << refinedError << endl;
+//  cout << "fineError:" << fineError << endl;
   
   double diff = abs(refinedError - fineError);
-  cout << "Difference of L2 error in refined vs. originally fine mesh: " << diff << endl;
+  
   if (diff > tol) {
     cout << "FAILURE: after uniform regular refinement, L2 error different from originally fine mesh.\n";
+    cout << "Difference of L2 error in refined vs. originally fine mesh: " << diff << endl;
   }
   
   // TODO: work out how to fix solution.equals to work with meshes whose cells may be in different orders...
@@ -1179,10 +1180,10 @@ bool MeshTestSuite::testHRefinement() {
   
   refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
   
-  cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   if (refinedError > tol) {
     success = false;
     cout << "FAILURE: after 'deep' refinement for exactly recoverable solution, L2 error greater than tolerance.\n";
+    cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
   solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
@@ -1295,12 +1296,12 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   
   double refinedError = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
   
-  cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   // relaxed tolerance
   double tol = 1e-1;
   if ((refinedError > tol) || (refinedError != refinedError)) { // second compare: is refinedError NaN?
     success = false;
     cout << "FAILURE: after 'deep' refinement for exactly recoverable solution, L2 error greater than tolerance.\n";
+    cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
   solution.writeToFile(ConfusionBilinearForm::U, "confusion_demo.dat");
@@ -1378,7 +1379,7 @@ bool MeshTestSuite::testPRefinement() {
   Solution solution3(mesh3, exactPolynomial.bc(), exactPolynomial.ExactSolution::rhs(),ip0);
   solution3.solve();
   double error3 = exactPolynomial.L2NormOfError(solution3, PoissonBilinearForm::PHI,15); // high fidelity L2norm
-  cout << "refined mesh error: " << error3 << endl;
+  //cout << "refined mesh error: " << error3 << endl;
   
   for (int cellID=0; cellID< horizontalCells * verticalCells; cellID++) {
     FieldContainer<double> expectedSolnDofs; // for phi
@@ -1500,10 +1501,10 @@ bool MeshTestSuite::testPRefinement() {
 
      solution.solve();
      diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     cout << "1st p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+     //cout << "1st p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
      diff = diff / L2norm;
      
-     cout << "Relative L2 Error: " << diff << endl;
+     //cout << "Relative L2 Error: " << diff << endl;
      prev_error = diff;
      
      myMesh->refine(cellsToRefine,vector<int>());
@@ -1513,9 +1514,9 @@ bool MeshTestSuite::testPRefinement() {
      }
      solution.solve();
      diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     cout << "2nd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+     //cout << "2nd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
      diff = diff / L2norm;
-     cout << "Relative L2 Error: " << diff << endl;
+     //cout << "Relative L2 Error: " << diff << endl;
      
      if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
        success = false;
@@ -1532,9 +1533,9 @@ bool MeshTestSuite::testPRefinement() {
      }
      solution.solve();
      diff = exactSolution.L2NormOfError(solution, PoissonBilinearForm::PHI,15);
-     cout << "3rd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
+     //cout << "3rd p-refinement test: POISSON Manuf. #" << i << " (p=" << H1Order-1 << "): L2 Error in solution for " << sqrtElements << "x" << sqrtElements << " mesh: " << diff << endl;
      diff = diff / L2norm;
-     cout << "Relative L2 Error: " << diff << endl;
+     //cout << "Relative L2 Error: " << diff << endl;
      
      if ( (diff / prev_error > 1.02) && (prev_error > tol) ) {
        success = false;
@@ -1592,7 +1593,7 @@ bool MeshTestSuite::testSinglePointBC() {
     cout << "FAILURE: When using single-point BC, failed to resolve linear polynomial... (error: " << error << ")" << endl;
     cout << "(L2 norm of solution: " << L2norm << ")\n";
   } else {
-    cout << "Success! Single-point BC Poisson error: " << error << endl;
+    //cout << "Success! Single-point BC Poisson error: " << error << endl;
   }
   
   PoissonExactSolution exactPolynomialConforming = PoissonExactSolution(PoissonExactSolution::POLYNOMIAL, 1, true); // use conforming traces
@@ -1623,7 +1624,7 @@ bool MeshTestSuite::testSinglePointBC() {
     cout << "FAILURE: When using single-point BC with conforming traces, failed to resolve linear polynomial... (error: " << error << ")" << endl;
     cout << "(L2 norm of true solution: " << L2norm << ")\n";
   } else {
-    cout << "Success! Single-point BC Poisson error (conforming traces): " << error << endl;
+    //cout << "Success! Single-point BC Poisson error (conforming traces): " << error << endl;
   }
   
   return success;
@@ -1718,7 +1719,6 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using single-point BC, failed to resolve linear polynomial... (error: " << error << ")" << endl;
-  } else {
     cout << "Single-point BC Poisson error (standard element): " << error << endl;
   }
   
@@ -1753,12 +1753,11 @@ bool MeshTestSuite::testSolutionForSingleElementUpgradedSide() {
   if (error > tol) {
     success = false;
     cout << "FAILURE: When using upgraded side, failed to resolve linear polynomial... (error: " << error << ")" << endl;
+    cout << "Single-point BC Poisson error (upgraded side): " << error << endl;
     ostringstream fileName;
     fileName << "testSolutionForSingleElementUpgradedSide_FAILURE.p=" << order-1 << ".dat";
     solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
     cout << "Wrote solution out to disk at: " << fileName.str() << endl;
-  } else {
-    cout << "Single-point BC Poisson error (upgraded side): " << error << endl;
   }
   
   return success;

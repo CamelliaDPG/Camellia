@@ -653,7 +653,7 @@ bool Solution::equals(Solution& otherSolution, double tol) {
       maxDiff = max(maxDiff,diff);
     }
   }
-  cout << "Solution maxDiff is " << maxDiff << endl;
+  //cout << "Solution maxDiff is " << maxDiff << endl;
   return true;
 }
 

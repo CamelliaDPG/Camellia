@@ -24,7 +24,7 @@ private:
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  string testSuiteName() { return "PatchBasisTests."; }
+  string testSuiteName() { return "PatchBasisTests"; }
   bool testPatchBasis1D(); // 1D patches are all that's supported right now (suffices for 2D DPG.)
 };
 

@@ -49,6 +49,7 @@ OBJ_NAMES = DofOrdering \
        MeshTestSuite \
        SolutionTests \
        PatchBasisTests \
+       VectorizedBasisTestSuite \
        MultiBasis \
        PatchBasis \
        Solution \
@@ -148,6 +149,9 @@ SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 PatchBasisTests.o: $(DRIVERS_DIR)/DPGTests/PatchBasisTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+VectorizedBasisTestSuite.o: $(DRIVERS_DIR)/DPGTests/VectorizedBasisTestSuite.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp

@@ -16,7 +16,7 @@ private:
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  string testSuiteName() { return "SolutionTests."; }
+  string testSuiteName() { return "SolutionTests"; }
   bool testAddSolution();
 };
 

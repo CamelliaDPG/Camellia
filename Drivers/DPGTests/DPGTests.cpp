@@ -118,16 +118,17 @@ void DPGTests::runTests() {
     //return; // just for now, exit on fail
   }
   
-  int vectBasisTestsTotal  = 0;
-  int vectBasisTestsPassed = 0;
-  VectorizedBasisTestSuite::runTests(vectBasisTestsTotal,vectBasisTestsPassed);
-  cout << "Completed VectorizedBasisTestSuite.  Passed " << vectBasisTestsPassed << " of " << vectBasisTestsTotal << " tests." << endl;
-  
-  numTestsTotal  += vectBasisTestsTotal;
-  numTestsPassed += vectBasisTestsPassed;
+//  int vectBasisTestsTotal  = 0;
+//  int vectBasisTestsPassed = 0;
+//  VectorizedBasisTestSuite::runTests(vectBasisTestsTotal,vectBasisTestsPassed);
+//  cout << "Completed VectorizedBasisTestSuite.  Passed " << vectBasisTestsPassed << " of " << vectBasisTestsTotal << " tests." << endl;
+//  
+//  numTestsTotal  += vectBasisTestsTotal;
+//  numTestsPassed += vectBasisTestsPassed;
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite() ) );
@@ -137,39 +138,10 @@ void DPGTests::runTests() {
     int numSuiteTests = 0, numSuiteTestsPassed = 0;
     testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
     string name = testSuite->testSuiteName();
-    cout << name << ": passed " << numSuiteTestsPassed << " / " << numSuiteTests << " tests." << endl;
+    cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
   }
-  
-//  int solutionTestsTotal  = 0;
-//  int solutionTestsPassed = 0;
-//
-//  SolutionTests solnTests;
-//  solnTests.runTests(solutionTestsTotal, solutionTestsPassed);
-//  numTestsTotal  += solutionTestsTotal;
-//  numTestsPassed += solutionTestsPassed;
-//  if (solutionTestsTotal > solutionTestsPassed) {
-//    cout << "Failed " << solutionTestsTotal - solutionTestsPassed << " of " << solutionTestsTotal << " solution tests.\n";
-//  }
-//  
-//  int patchBasisTestsTotal  = 0;
-//  int patchBasisTestsPassed = 0;
-//  PatchBasisTests patchBasisTest;
-//  patchBasisTest.runTests(patchBasisTestsTotal, patchBasisTestsPassed);
-//  numTestsTotal  += patchBasisTestsTotal;
-//  numTestsPassed += patchBasisTestsPassed;
-//  if (patchBasisTestsTotal > patchBasisTestsPassed) {
-//    cout << "Failed " << patchBasisTestsTotal - patchBasisTestsPassed << " of " << patchBasisTestsTotal << " PatchBasis tests.\n";
-//  }
-//  
-//  int meshTestsTotal = 0;
-//  int meshTestsPassed = 0;
-//  MeshTestSuite::runTests(meshTestsTotal,meshTestsPassed);
-//  cout << "Completed MeshTestSuite.  Passed " << meshTestsPassed << " of " << meshTestsTotal << " tests." << endl;
-//  
-//  numTestsTotal += meshTestsTotal;
-//  numTestsPassed += meshTestsPassed;
   
   success = testOptimalStiffnessByIntegrating();
   ++numTestsTotal;
@@ -325,6 +297,9 @@ void DPGTests::runTests() {
 }
 
 bool DPGTests::testComputeStiffnessConformingVertices() {
+  bool oldWarnState = BilinearFormUtility::warnAboutZeroRowsAndColumns();
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(false);
+  
   bool success = true;
   
   string myName = "testComputeStiffnessConformingVertices";
@@ -391,8 +366,10 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   }
   
   success = fcsAgree(myName,expectedConformingStiffness,conformingStiffness,tol);
-  
+
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(oldWarnState);
   return success;
+
 }
 
 bool DPGTests::testDofOrdering() {
@@ -1253,6 +1230,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
 }
 
 bool DPGTests::testLowOrderTrialCubicTest() {
+  bool oldWarnState = BilinearFormUtility::warnAboutZeroRowsAndColumns();
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(false);
   int numTests = 1;
   
   int order = 3; // cubic
@@ -1824,8 +1803,10 @@ bool DPGTests::testLowOrderTrialCubicTest() {
     success = false;
     cout << myNameFinalByIntegratingUsingActual << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
   }
-  
+
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(oldWarnState);
   return success;
+
 }
 
 bool DPGTests::testOptimalStiffnessByMultiplying() {
@@ -1929,7 +1910,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
   int numSides = 4;
   string myName = "testOptimalStiffnessByIntegrating";
   
-  cout << myName << ": testing with order=" << order << ", testOrder=" << testOrder << endl;
+  //cout << myName << ": testing with order=" << order << ", testOrder=" << testOrder << endl;
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -2028,7 +2009,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
         success = false;
         cout << myName << ": failed for testIndex " << testIndex << "." << endl;
       } else {
-        cout << myName << ": succeeded for testIndex " << testIndex << "." << endl;
+        //cout << myName << ": succeeded for testIndex " << testIndex << "." << endl;
       }
     }
     
@@ -2046,7 +2027,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
       success = false;
       cout << myName << ": failed for final, summing test." << endl;
     } else {
-      cout << myName << ": succeeded for final, summing test." << endl;
+      //cout << myName << ": succeeded for final, summing test." << endl;
     }
   }
   
@@ -2054,6 +2035,9 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
 }
 
 bool DPGTests::testComputeOptimalTest() {
+  bool oldWarnState = BilinearFormUtility::warnAboutZeroRowsAndColumns();
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(false);
+  
   string myName = "testComputeOptimalTest";
   
   double tol = 1e-14;
@@ -2151,7 +2135,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     // otherwise, let's try another test...
     for (int order = 1; order <= 5; order++) {
-      cout << "testComputeOptimalTest: running symmetric test for order=" << order << endl;
+      //cout << "testComputeOptimalTest: running symmetric test for order=" << order << endl;
       
       DofOrderingFactory dofOrderingFactory(bilinearForm);
       Teuchos::RCP<DofOrdering> highOrderHGradOrdering = dofOrderingFactory.testOrdering(order, cellTopo);
@@ -2194,7 +2178,7 @@ bool DPGTests::testComputeOptimalTest() {
     
     // otherwise, let's try another test...
     for (int testOrder = 2; testOrder <= 5; testOrder++) {
-      cout << "testComputeOptimalTest: running asymmetric test for testOrder=" << testOrder << endl;
+      //cout << "testComputeOptimalTest: running asymmetric test for testOrder=" << testOrder << endl;
       
       Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(testOrder, cellTopo);
       
@@ -2232,6 +2216,7 @@ bool DPGTests::testComputeOptimalTest() {
       }
     }
   }
+  BilinearFormUtility::setWarnAboutZeroRowsAndColumns(oldWarnState);
   return bSuccess;
 }
 
@@ -2480,7 +2465,7 @@ bool DPGTests::testComputeRHS() {
   double tol = 1e-14;
   int testOrder = 3; 
   
-  cout << myName << ": testing with testOrder=" << testOrder << endl;
+  //cout << myName << ": testing with testOrder=" << testOrder << endl;
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -2669,7 +2654,7 @@ bool DPGTests::testComputeOptimalTestPoisson() {
   
   for (int order = 2; order <= 3; order++) {    
     for (int testOrder=order+3; testOrder < order+5; testOrder++) {
-      cout << "testComputeOptimalTestPoisson: testing with order=" << order << ", testOrder=" << testOrder << endl;
+      //cout << "testComputeOptimalTestPoisson: testing with order=" << order << ", testOrder=" << testOrder << endl;
       Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new PoissonBilinearForm() );
       
       DofOrderingFactory dofOrderingFactory(bilinearForm);

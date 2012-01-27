@@ -61,7 +61,6 @@ map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPt
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
   int basisRank; // to discard
-  cout << _cellTopoKeys.size() << endl; // TODO: delete this...
   return getBasis(basisRank,polyOrder,cellTopoKey,fs);
 }
 

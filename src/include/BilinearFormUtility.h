@@ -46,6 +46,9 @@ class DPGTests;
 
 class BilinearFormUtility {
 private:
+  static bool _warnAboutZeroRowsAndColumns;
+  static void setWarnAboutZeroRowsAndColumns( bool value );
+  static bool warnAboutZeroRowsAndColumns();
   static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array);
 public:
   friend class DPGTests;

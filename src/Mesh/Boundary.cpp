@@ -388,10 +388,10 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 int globalDofIndex = _mesh->globalDofIndex(cellID, localDofIndex);
                 globalDofIndicesAndValues[globalDofIndex] = dirichletValues(cellIndex,ptIndex);
                 isSingleton[trialID] = false; // we've imposed it...
-                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
-                cout << " for variable " << _mesh->bilinearForm().trialName(trialID) << " at point: (";
-                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
-                cout << ")" << endl;
+//                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
+//                cout << " for variable " << _mesh->bilinearForm().trialName(trialID) << " at point: (";
+//                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
+//                cout << ")" << endl;
               }
             }
           }

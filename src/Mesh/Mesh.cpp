@@ -121,7 +121,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
                                        int H1Order, int pTest, bool triangulate) {
-  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
+//  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
