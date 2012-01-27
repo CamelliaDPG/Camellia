@@ -43,15 +43,28 @@
 
 #include "BilinearForm.h"
 #include "MultiBasis.h"
+#include "PatchBasis.h"
 #include "Vectorized_Basis.hpp"
 
 using namespace Intrepid;
 using namespace std;
 
+/*
+ NOTES on what needs to be done to support arbitrary CellTopology (e.g. curvilinear elements):
+ Basically, we need to remove the dependence in BasisFactor on cellTopoKeys, and replace that with CellTopology pointers.
+ In order to allow optimal reuse, we'll then have to implement a CellTopologyFactory that makes sure that the pointers to
+ a particular CellTopology are the same.
+ 
+ Actually, it occurs to me that we can isolate many of the changes to current code to BasisFactory: for calls involving the
+ cellTopoKeys, we simply use this to call the appropriate CellTopologyFactory method to get the pointer to the right CellTopology.
+ 
+ */
+
 class BasisFactory {
 private:
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
   typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
+  typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
   typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
   static map< pair< pair<int,int>, EFunctionSpaceExtended >, BasisPtr >
               _existingBasis; // keys are ((polyOrder,cellTopoKey),fs))
@@ -64,10 +77,12 @@ private:
   static map< Basis<double,FieldContainer<double> >*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
   static set< Basis<double,FieldContainer<double> >*> _multiBases;
   static map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > _multiBasesMap;
+  static map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > _patchBasesLines;
 public:
   static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
   static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
   static MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
+  static PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
   static BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
   static BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);

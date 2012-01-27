@@ -40,7 +40,9 @@ class Mesh;
 
 #include "DofOrderingFactory.h"
 
-class MeshTestSuite {
+#include "TestSuite.h"
+
+class MeshTestSuite : public TestSuite {
 private:
   static bool checkMeshDofConnectivities(Mesh &mesh);
   static bool checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOrdering); 
@@ -49,7 +51,8 @@ private:
   // checkDofOrderingHasNoOverlap returns true if no two (varID,basisOrdinal,sideIndex) tuples map to same dofIndex
 public:
   static bool checkMeshConsistency(Mesh &mesh);
-  static void runTests(int &numTestsRun, int &numTestsPassed);
+  void runTests(int &numTestsRun, int &numTestsPassed);
+  string testSuiteName() { return "MeshTestSuite."; }
   static bool testBuildMesh();
   static bool testMeshSolvePointwise();
   static bool testExactSolution(bool checkL2Error);

@@ -47,6 +47,7 @@
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
 typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
+typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
 
 //define the static maps:
 map< pair< pair<int,int>, EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
@@ -56,6 +57,7 @@ map< Basis<double,FieldContainer<double> >*, EFunctionSpaceExtended > BasisFacto
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_cellTopoKeys; // allows lookup of cellTopoKeys
 set< Basis<double,FieldContainer<double> >* > BasisFactory::_multiBases;
 map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > BasisFactory::_multiBasesMap;
+map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBasesLines;
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
   int basisRank; // to discard
@@ -232,6 +234,33 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   
   return multiBasis;
 }
+
+PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey) {
+  TEST_FOR_EXCEPTION(cellTopoKey != shards::Line<2>::key, std::invalid_argument, "getPatchBasis only supports lines right now.");
+  TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(0) != 2, std::invalid_argument, "should be just 2 points in patchNodes.");
+  TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(1) != 1, std::invalid_argument, "patchNodes.dimension(1) != 1.");
+  TEST_FOR_EXCEPTION(! basisKnown(parent), std::invalid_argument, "parentBasis not registered with BasisFactory.");
+  vector<double> points;
+  for (int i=0; i<patchNodesInParentRefCell.size(); i++) {
+    points.push_back(patchNodesInParentRefCell[i]);
+  }
+  pair<Basis<double,FieldContainer<double> >*, vector<double> > key = make_pair( parent.get(), points );
+  map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr >::iterator entry = _patchBasesLines.find(key);
+  if ( entry != _patchBasesLines.end() ) {
+    return entry->second;
+  }
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  PatchBasisPtr patchBasis = Teuchos::rcp( new PatchBasis(parent, patchNodesInParentRefCell, line_2));
+  
+  _patchBasesLines[key] = patchBasis;
+  _polyOrders[patchBasis.get()] = _polyOrders[parent.get()];
+  _functionSpaces[patchBasis.get()] = _functionSpaces[parent.get()];
+  _cellTopoKeys[patchBasis.get()] = cellTopoKey;
+  _ranks[patchBasis.get()] = _ranks[parent.get()];
+  
+  return patchBasis;
+}
+
 
 void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, EFunctionSpaceExtended fs ) {
   pair< pair<int,int>, EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );

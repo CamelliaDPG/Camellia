@@ -64,6 +64,7 @@
 
 #include "DPGTests.h"
 #include "SolutionTests.h"
+#include "PatchBasisTests.h"
 
 using namespace std;
 using namespace Intrepid;
@@ -117,29 +118,58 @@ void DPGTests::runTests() {
     //return; // just for now, exit on fail
   }
   
-  int vectBasisTestsTotal = 0;
+  int vectBasisTestsTotal  = 0;
   int vectBasisTestsPassed = 0;
   VectorizedBasisTestSuite::runTests(vectBasisTestsTotal,vectBasisTestsPassed);
   cout << "Completed VectorizedBasisTestSuite.  Passed " << vectBasisTestsPassed << " of " << vectBasisTestsTotal << " tests." << endl;
   
-  numTestsTotal += vectBasisTestsTotal;
+  numTestsTotal  += vectBasisTestsTotal;
   numTestsPassed += vectBasisTestsPassed;
   
-  int solutionTestsTotal = 0;
-  int solutionTestsPassed = 0;
-
-  SolutionTests solnTests;
-  solnTests.runTests(solutionTestsTotal, solutionTestsPassed);
-  numTestsTotal += solutionTestsTotal;
-  numTestsPassed += solutionTestsPassed;
+  // setup our TestSuite tests:
+  vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
+  testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite() ) );
   
-  int meshTestsTotal = 0;
-  int meshTestsPassed = 0;
-  MeshTestSuite::runTests(meshTestsTotal,meshTestsPassed);
-  cout << "Completed MeshTestSuite.  Passed " << meshTestsPassed << " of " << meshTestsTotal << " tests." << endl;
+  for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin(); testSuiteIt != testSuites.end(); testSuiteIt++) {
+    Teuchos::RCP< TestSuite > testSuite = *testSuiteIt;
+    int numSuiteTests = 0, numSuiteTestsPassed = 0;
+    testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
+    string name = testSuite->testSuiteName();
+    cout << name << ": passed " << numSuiteTestsPassed << " / " << numSuiteTests << " tests." << endl;
+    numTestsTotal  += numSuiteTests;
+    numTestsPassed += numSuiteTestsPassed;
+  }
   
-  numTestsTotal += meshTestsTotal;
-  numTestsPassed += meshTestsPassed;
+//  int solutionTestsTotal  = 0;
+//  int solutionTestsPassed = 0;
+//
+//  SolutionTests solnTests;
+//  solnTests.runTests(solutionTestsTotal, solutionTestsPassed);
+//  numTestsTotal  += solutionTestsTotal;
+//  numTestsPassed += solutionTestsPassed;
+//  if (solutionTestsTotal > solutionTestsPassed) {
+//    cout << "Failed " << solutionTestsTotal - solutionTestsPassed << " of " << solutionTestsTotal << " solution tests.\n";
+//  }
+//  
+//  int patchBasisTestsTotal  = 0;
+//  int patchBasisTestsPassed = 0;
+//  PatchBasisTests patchBasisTest;
+//  patchBasisTest.runTests(patchBasisTestsTotal, patchBasisTestsPassed);
+//  numTestsTotal  += patchBasisTestsTotal;
+//  numTestsPassed += patchBasisTestsPassed;
+//  if (patchBasisTestsTotal > patchBasisTestsPassed) {
+//    cout << "Failed " << patchBasisTestsTotal - patchBasisTestsPassed << " of " << patchBasisTestsTotal << " PatchBasis tests.\n";
+//  }
+//  
+//  int meshTestsTotal = 0;
+//  int meshTestsPassed = 0;
+//  MeshTestSuite::runTests(meshTestsTotal,meshTestsPassed);
+//  cout << "Completed MeshTestSuite.  Passed " << meshTestsPassed << " of " << meshTestsTotal << " tests." << endl;
+//  
+//  numTestsTotal += meshTestsTotal;
+//  numTestsPassed += meshTestsPassed;
   
   success = testOptimalStiffnessByIntegrating();
   ++numTestsTotal;

@@ -6,7 +6,9 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-class SolutionTests {
+#include "TestSuite.h"
+
+class SolutionTests : public TestSuite {
 private:
   FieldContainer<double> _testPoints;
   Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2;
@@ -14,6 +16,7 @@ private:
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
+  string testSuiteName() { return "SolutionTests."; }
   bool testAddSolution();
 };
 

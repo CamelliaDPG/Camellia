@@ -51,16 +51,21 @@ PatchBasis::PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesI
   }
   
   if (_patchNodesInParentRefCell.rank() != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes should be rank 3.");
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes should be rank 2.");
   }
   
   if (_parentTopo.getKey() != shards::Line<2>::key) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
   }
   
+  // resize _patchNodesInParentRefCell for convenience in mapToPhysicalFrame:
+  _patchNodesInParentRefCell.resize(1,_patchNodesInParentRefCell.dimension(0),_patchNodesInParentRefCell.dimension(1));
+  
+  // I don't think we actually need _parentRefNodes...
+  // TODO: delete this
   // otherwise, set parent's ref nodes to be that of Line<2>
   _parentRefNodes = FieldContainer<double>(1,2,1); // for convenience in mapToPhysicalFrame, make this a rank-3 container
-  _parentRefNodes(0,0,0) = -1.0;
+  _parentRefNodes(0,0,0) = 0.0;
   _parentRefNodes(0,1,0) = 1.0;
   
 //  _childRefNodes = FieldContainer<double>(1,2,1);
@@ -68,10 +73,10 @@ PatchBasis::PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesI
 //  _childRefNodes(0,1,0) = 1.0;
   
   // in 1D, each subRefCell ought to have 2 nodes
-  if (_patchNodesInParentRefCell.dimension(0) != 2) {
+  if (_patchNodesInParentRefCell.dimension(1) != 2) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes requires two nodes per line segment.");
   }
-  if (_patchNodesInParentRefCell.dimension(1) != 1) {
+  if (_patchNodesInParentRefCell.dimension(2) != 1) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis requires patchNodes to have dimensions (numNodesPerCell,spaceDim).  Right now, spaceDim must==1.");
   }
   
@@ -98,13 +103,19 @@ void PatchBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
   if (spaceDim != 1) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
   }
+  if (operatorType != Intrepid::OPERATOR_VALUE) {
+    TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports OPERATOR_VALUE right now.");
+  }
   
   typedef CellTools<double>  CellTools;
   FieldContainer<double> parentInputPoints(numPoints,spaceDim);
   
   // first, transform the inputPoints into parent's reference frame:
   int parentCellIndex = 0;
-  CellTools::mapToPhysicalFrame (parentInputPoints, inputPoints, _parentRefNodes, _parentTopo, parentCellIndex);
+  CellTools::mapToPhysicalFrame (parentInputPoints, inputPoints, _patchNodesInParentRefCell, _parentTopo, parentCellIndex);
+//  cout << "_patchNodesInParentRefCell:\n" << _patchNodesInParentRefCell;
+//  cout << "inputPoints:\n" << inputPoints;
+//  cout << "parentInputPoints:\n" << parentInputPoints;
   
   _parentBasis->getValues(outputValues, parentInputPoints, operatorType);
 
