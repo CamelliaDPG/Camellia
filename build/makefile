@@ -87,7 +87,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion PoissonEnergyErrorTest AdaptiveTransientConfusion ScalingExperiment ConfectionDriver
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver
 ECHOES = 
 
 default: all
@@ -108,9 +108,6 @@ ConfectionDriver: ConfectionDriver.o $(OBJS)
 
 ConfectionDriver.o: $(DRIVERS_DIR)/Confusion/ConfectionDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-PoissonEnergyErrorTest: PoissonEnergyErrorTest.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonEnergyErrorTest.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesStudy: StokesStudy.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
@@ -227,9 +224,6 @@ DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %ConvergenceStudy.o: $(SRCS_DIR)/ConvergenceStudy/%ConvergenceStudy.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
-
-PoissonEnergyErrorTest.o: $(DRIVERS_DIR)/DPGTests/PoissonEnergyErrorTest.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %.o: $(SRCS_DIR)/%.cpp

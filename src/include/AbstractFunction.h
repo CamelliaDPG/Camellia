@@ -13,8 +13,7 @@ class AbstractFunction {
  private:
   //  int _numComponents;
  public:
-  AbstractFunction(); 
-  virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
+  virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) = 0;
 };
 
 #endif
