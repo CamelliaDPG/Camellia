@@ -209,7 +209,10 @@ public:
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
-    
+  
+  void setUsePatchBasis( bool value );
+  bool usePatchBasis();
+  
   vector<int> vertexIndicesForCell(int cellID);
   FieldContainer<double> vertexCoordinates(int vertexIndex);
   

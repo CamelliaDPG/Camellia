@@ -77,7 +77,8 @@ private:
   static map< Basis<double,FieldContainer<double> >*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
   static set< Basis<double,FieldContainer<double> >*> _multiBases;
   static map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > _multiBasesMap;
-  static map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > _patchBasesLines;
+  static map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > _patchBases;
+  static set< Basis<double,FieldContainer<double> >* > _patchBasisSet;
 public:
   static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
   static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
@@ -93,6 +94,7 @@ public:
   
   static bool basisKnown(BasisPtr basis);
   static bool isMultiBasis(BasisPtr basis);
+  static bool isPatchBasis(BasisPtr basis);
   
   static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, EFunctionSpaceExtended fs );
 };

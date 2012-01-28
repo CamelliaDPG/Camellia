@@ -6,8 +6,38 @@
 #include "BasisFactory.h"
 
 #include "BilinearForm.h" // defines IntrepidExtendedTypes
+#include "StokesBilinearForm.h"
+
+// for some reason, we throw an exception (at least in debug mode) if we don't
+// explicitly initialize the _mesh variable
+PatchBasisTests::PatchBasisTests() : _mesh(Teuchos::rcp((Mesh *)NULL)) {}
+
+void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testPatchBasis1D()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testSimpleRefinement()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testMultiLevelRefinement()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+}
 
 void PatchBasisTests::setup() {
+  
+  /**** SUPPORT FOR TESTS THAT PATCHBASIS COMPUTES THE CORRECT VALUES *****/
   // for tests, we'll do a simple division of a line segment into thirds
   // (for now, PatchBasis only supports 1D bases--sufficient for 2D DPG meshes)
   // setup bases:
@@ -44,7 +74,48 @@ void PatchBasisTests::setup() {
     _testPoints1DLeftParent(i,0)   = -1.0       + offset;
     _testPoints1DMiddleParent(i,0) = -1.0 / 3.0 + offset;
     _testPoints1DRightParent(i,0)  =  1.0 / 3.0 + offset;
-  }  
+  }
+  
+  /**** SUPPORT FOR TESTS THAT PATCHBASIS IS CORRECTLY ASSIGNED WITHIN MESH *****/
+  // first, build a simple mesh
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;  
+  
+  double mu = 1.0;
+  Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesBilinearForm(mu) );
+  
+  int H1Order = 3;
+  int horizontalCells = 2; int verticalCells = 2;
+  
+  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, stokesBF, H1Order, H1Order+1);
+  
+  // the right way to determine the southwest element, etc. is as follows:
+  FieldContainer<double> points(4,2);
+  // southwest center:
+  points(0,0) = 0.25; points(0,1) = 0.25;
+  // southeast center:
+  points(0,0) = 0.75; points(0,1) = 0.25;
+  // northwest center:
+  points(0,0) = 0.25; points(0,1) = 0.75;
+  // northeast center:
+  points(0,0) = 0.75; points(0,1) = 0.75;
+  vector<ElementPtr> elements = _mesh->elementsForPoints(points);
+  
+  _sw = elements[0];
+  _se = elements[1];
+  _nw = elements[2];
+  _ne = elements[3];
+  
+  _mesh->setUsePatchBasis(true);
 }
 
 void PatchBasisTests::teardown() {
@@ -52,15 +123,16 @@ void PatchBasisTests::teardown() {
   _testPoints1DLeftParent.resize(0);
   _testPoints1DMiddleParent.resize(0);
   _testPoints1DRightParent.resize(0);
-}
-
-void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  setup();
-  if (testPatchBasis1D()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
+  _parentBasis = Teuchos::rcp((DoubleBasis *)NULL);
+  _patchBasisLeft = Teuchos::rcp((PatchBasis *)NULL);
+  _patchBasisMiddle = Teuchos::rcp((PatchBasis *)NULL);
+  _patchBasisRight = Teuchos::rcp((PatchBasis *)NULL);
+  
+  _mesh = Teuchos::rcp((Mesh *)NULL);
+  _sw = Teuchos::rcp((Element *)NULL);
+  _se = Teuchos::rcp((Element *)NULL);
+  _nw = Teuchos::rcp((Element *)NULL);
+  _ne = Teuchos::rcp((Element *)NULL);
   
 }
 
@@ -107,4 +179,26 @@ bool PatchBasisTests::testPatchBasis1D() {
   }
   
   return success;
+}
+
+bool PatchBasisTests::testSimpleRefinement() {
+  // refine in the sw, and then check that the right elements have PatchBases
+  bool success = true;
+  vector<int> cellIDsToRefine;
+  cellIDsToRefine.push_back(_sw->cellID());
+  //_mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad()); // will likely throw an exception right now.
+  
+  // se of the sw element will include the point (0.375, 0.125)--that should be in the center
+  FieldContainer<double> testPoint(1,2);
+  testPoint(0,0) = 0.375;
+  testPoint(0,1) = 0.125;
+  ElementPtr swse = _mesh->elementsForPoints(testPoint)[0];
+  
+  
+  
+  return false; // unimplemented
+}
+
+bool PatchBasisTests::testMultiLevelRefinement() {
+  return false; // unimplemented
 }

@@ -1456,6 +1456,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           }
         } else {
           TEST_FOR_EXCEPTION(true, std::invalid_argument, "Need to add PatchBasis creation to Mesh.");
+          
         }
         nonParent->setElementType(nonParentType);
         
@@ -1767,6 +1768,15 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
 void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
   rebuildLookups();
+}
+
+void Mesh::setUsePatchBasis( bool value ) {
+  // TODO: throw an exception if we've already been refined??
+  _usePatchBasis = value;
+}
+
+bool Mesh::usePatchBasis() {
+  return _usePatchBasis;
 }
 
 vector<int> Mesh::vertexIndicesForCell(int cellID) {

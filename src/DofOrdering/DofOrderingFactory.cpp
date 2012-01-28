@@ -65,8 +65,8 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
 }
 
 DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder, 
-                                                            const shards::CellTopology &cellTopo,
-                                                            bool conformingVertices) {
+                                                 const shards::CellTopology &cellTopo,
+                                                 bool conformingVertices) {
   // right now, only works for 2D topologies
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
@@ -205,11 +205,46 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
   return varIDsToUpgrade;
 }
 
+map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrderingPtr childTrialOrdering, int childSideIndex,
+                                                               const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
+                                                               int childIndexInParentSide) {
+  vector<int> varIDs = childTrialOrdering->getVarIDs();
+  map<int, BasisPtr> varIDsToUpgrade;
+  vector<int>::iterator idIt;
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+    int varID = *idIt;
+    int numSides = childTrialOrdering->getNumSidesForVarID(varID);
+    if (numSides > 1) { // a variable that lives on the sides: we need to match basis
+      BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
+      FieldContainer<double> nodes(2,1); // just 1D patches supported right now
+      if (childIndexInParentSide==0) {
+        nodes(0,0) = -1.0;
+        nodes(1,0) = 0.0;
+      } else {
+        nodes(0,0) = 0.0;
+        nodes(1,0) = 1.0;
+      }
+      BasisPtr patchBasis = BasisFactory::getPatchBasis(basis, nodes);
+      varIDsToUpgrade[varID] = patchBasis;
+    }
+  }
+  return varIDsToUpgrade;
+}
+
 void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex, 
                                           const shards::CellTopology &cellTopo,
                                           vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide ) {
   map<int, BasisPtr> varIDsToUpgrade = getMultiBasisUpgradeMap(childTrialOrdersForSide);
   trialOrdering = upgradeSide(trialOrdering,cellTopo,varIDsToUpgrade,sideIndex);
+}
+
+void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
+                                          const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
+                                          int childIndexInParentSide, const shards::CellTopology &childCellTopo) {
+  TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
+  map<int, BasisPtr> varIDsToUpgrade = getPatchBasisUpgradeMap(childTrialOrdering, childSideIndex, parentTrialOrdering,
+                                                               parentSideIndex, childIndexInParentSide);
+  childTrialOrdering = upgradeSide(childTrialOrdering,childCellTopo,varIDsToUpgrade,childSideIndex);
 }
 
 bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex) {

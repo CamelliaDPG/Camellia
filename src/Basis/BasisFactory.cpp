@@ -57,7 +57,8 @@ map< Basis<double,FieldContainer<double> >*, EFunctionSpaceExtended > BasisFacto
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_cellTopoKeys; // allows lookup of cellTopoKeys
 set< Basis<double,FieldContainer<double> >* > BasisFactory::_multiBases;
 map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > BasisFactory::_multiBasesMap;
-map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBasesLines;
+map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBases;
+set< Basis<double,FieldContainer<double> >* > BasisFactory::_patchBasisSet;
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
   int basisRank; // to discard
@@ -244,14 +245,15 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
     points.push_back(patchNodesInParentRefCell[i]);
   }
   pair<Basis<double,FieldContainer<double> >*, vector<double> > key = make_pair( parent.get(), points );
-  map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr >::iterator entry = _patchBasesLines.find(key);
-  if ( entry != _patchBasesLines.end() ) {
+  map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr >::iterator entry = _patchBases.find(key);
+  if ( entry != _patchBases.end() ) {
     return entry->second;
   }
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   PatchBasisPtr patchBasis = Teuchos::rcp( new PatchBasis(parent, patchNodesInParentRefCell, line_2));
   
-  _patchBasesLines[key] = patchBasis;
+  _patchBasisSet.insert(patchBasis.get());
+  _patchBases[key] = patchBasis;
   _polyOrders[patchBasis.get()] = _polyOrders[parent.get()];
   _functionSpaces[patchBasis.get()] = _functionSpaces[parent.get()];
   _cellTopoKeys[patchBasis.get()] = cellTopoKey;
@@ -307,4 +309,8 @@ bool BasisFactory::basisKnown(BasisPtr basis) {
 
 bool BasisFactory::isMultiBasis(BasisPtr basis) {
   return _multiBases.find(basis.get()) != _multiBases.end();
+}
+
+bool BasisFactory::isPatchBasis(BasisPtr basis) {
+  return _patchBasisSet.find(basis.get()) != _patchBasisSet.end();
 }
