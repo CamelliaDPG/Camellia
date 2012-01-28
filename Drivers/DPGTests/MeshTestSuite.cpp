@@ -56,6 +56,9 @@
 #include "Element.h"
 #include "ElementType.h"
 #include "BasisFactory.h"
+#include "Projector.h"
+#include "SimpleFunction.h"
+
 
 #include <sstream>
 
@@ -138,6 +141,11 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testBuildMesh() ) {
     numTestsPassed++;
   }
+  numTestsRun++;
+  if (testProjection() ) {
+    numTestsPassed++;
+  }
+
 }
 
 bool MeshTestSuite::testBasisRefinement() {
@@ -1986,4 +1994,37 @@ bool MeshTestSuite::testPointContainment() {
   }
   
   return success;
+}
+
+bool MeshTestSuite::testProjection(){
+
+  // reference cell physical cell nodes in counterclockwise order
+  FieldContainer<double> physicalCellNodes(1,4,2);
+  physicalCellNodes(1,1,0) = -1.0;
+  physicalCellNodes(1,1,1) = -1.0;
+
+  physicalCellNodes(1,2,0) = 1.0;
+  physicalCellNodes(1,2,1) = -1.0; 
+
+  physicalCellNodes(1,3,0) = 1.0;
+  physicalCellNodes(1,3,1) = 1.0;
+
+  physicalCellNodes(1,4,0) = -1.0;
+  physicalCellNodes(1,4,1) = 1.0;
+
+  EFunctionSpaceExtended fs = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
+  BasisFactory basisFactory;
+  unsigned cellTopoKey = shards::Quadrilateral<4>::key;
+  Projector projector;
+  FieldContainer<double> basisCoefficients;
+
+  int polyOrder = 20; // some large number
+  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = basisFactory.getBasis( polyOrder, cellTopoKey, fs);  
+
+  //  Teuchos::RCP<BasisFunction> basisFunction = Teuchos::rcp(new BasisFunction(basis));
+  Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
+
+  //  projector.projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
+
+  return false;
 }
