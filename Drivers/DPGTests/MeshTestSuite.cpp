@@ -2000,17 +2000,17 @@ bool MeshTestSuite::testProjection(){
 
   // reference cell physical cell nodes in counterclockwise order
   FieldContainer<double> physicalCellNodes(1,4,2);
-  physicalCellNodes(1,1,0) = -1.0;
-  physicalCellNodes(1,1,1) = -1.0;
+  physicalCellNodes(0,0,0) = -1.0;
+  physicalCellNodes(0,0,1) = -1.0;
 
-  physicalCellNodes(1,2,0) = 1.0;
-  physicalCellNodes(1,2,1) = -1.0; 
+  physicalCellNodes(0,1,0) = 1.0;
+  physicalCellNodes(0,1,1) = -1.0; 
 
-  physicalCellNodes(1,3,0) = 1.0;
-  physicalCellNodes(1,3,1) = 1.0;
+  physicalCellNodes(0,2,0) = 1.0;
+  physicalCellNodes(0,2,1) = 1.0;
 
-  physicalCellNodes(1,4,0) = -1.0;
-  physicalCellNodes(1,4,1) = 1.0;
+  physicalCellNodes(0,3,0) = -1.0;
+  physicalCellNodes(0,3,1) = 1.0;
 
   EFunctionSpaceExtended fs = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
   BasisFactory basisFactory;
