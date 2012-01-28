@@ -65,10 +65,6 @@ static const string & S_V_3 = "v_3";
 static const string & S_ONE = "1";
 static const string & S_DEFAULT_TEST = "invalid test";
 
-StokesBilinearForm::StokesBilinearForm() {
-  StokesBilinearForm(1.0);
-}
-
 StokesBilinearForm::StokesBilinearForm(double mu) {
   _mu = mu;
   

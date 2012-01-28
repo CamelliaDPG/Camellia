@@ -43,7 +43,6 @@
 class StokesBilinearForm : public BilinearForm {
   double _mu; // viscosity (constant)
 public:
-  StokesBilinearForm();
   StokesBilinearForm(double mu);
     
   // implement the virtual methods declared in super:
