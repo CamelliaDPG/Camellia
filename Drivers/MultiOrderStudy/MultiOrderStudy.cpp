@@ -71,7 +71,7 @@ Teuchos::RCP<Mesh> MultiOrderStudy::makeMultiOrderMesh16x16(const FieldContainer
   // get the cellIDs as they're laid out in the quad mesh returned by buildQuadMesh:
   Mesh::quadMeshCellIDs(cellIDs, horizontalElements, verticalElements, useTriangles);
   
-  vector<int> cellsToPRefine, cellsToHRefine;
+  vector<int> cellsToPRefine;
   
   //cout << cellIDs;
   
@@ -88,6 +88,6 @@ Teuchos::RCP<Mesh> MultiOrderStudy::makeMultiOrderMesh16x16(const FieldContainer
       }
     }
   }
-  mesh->refine(cellsToPRefine,cellsToHRefine);
+  mesh->pRefine(cellsToPRefine);
   return mesh;
 }

@@ -65,7 +65,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
 
 void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
   int numElements = mesh->activeElements().size();
-  vector<int> elementsToRefineP,elementsToRefineH;
+  vector<int> elementsToRefineP;
 /*  // every third element is: untouched, refined once, refined twice
   for (int i=0; i<numElements; i++) {
     if ((i%3)==1) {
@@ -101,7 +101,7 @@ void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
       elementsToRefineP.push_back(cellID);
     }
   }
-  mesh->refine(elementsToRefineP,elementsToRefineH);
+  mesh->pRefine(elementsToRefineP);
 }
 
 void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {

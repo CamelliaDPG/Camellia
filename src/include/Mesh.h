@@ -145,7 +145,9 @@ public:
   
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
   
-  ElementPtr getElement(int cellID);
+  
+  
+  Boundary &boundary();
   
   int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
   
@@ -155,15 +157,15 @@ public:
 
   Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
   
+  ElementPtr getElement(int cellID);
+  
   int globalDofIndex(int cellID, int localDofIndex);
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
   
-  Boundary &boundary();
-  
+  vector< Teuchos::RCP< Element > > & activeElements();  
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
-  vector< Teuchos::RCP< Element > > & activeElements();
   vector< Teuchos::RCP< Element > > & elements();
   vector< Teuchos::RCP< Element > > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   
@@ -200,11 +202,12 @@ public:
   int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
 
   FieldContainer<double> & physicalCellNodes( ElementTypePtr elemType);
+  FieldContainer<double> physicalCellNodesForCell(int cellID);
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
   void rebuildLookups();
   
-  void refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRefinements);
+  void pRefine(vector<int> cellIDsForPRefinements);
     
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   

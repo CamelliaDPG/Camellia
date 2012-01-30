@@ -24,8 +24,34 @@ private:
   PatchBasisPtr _patchBasisLeft, _patchBasisMiddle, _patchBasisRight;
   
   // stuff for mesh/refinement tests
-  Teuchos::RCP<Mesh> _mesh; // a 2x2 mesh set to use patchBasis
+  Teuchos::RCP<Mesh> _mesh; // a 2x2 mesh with usePatchBasis==true
   ElementPtr _sw, _se, _nw, _ne;
+  
+  vector<int> _fluxIDs;
+  vector<int> _fieldIDs;
+  
+  bool childPolyOrdersAgreeWithParent(ElementPtr child);
+  
+  void getPolyOrders(vector< map<int, int> > &polyOrderMapVector, ElementPtr elem);
+  void getPolyOrdersAlongSharedSides(vector< map<int, int> > &childPOrderMapForSide,
+                                     vector< map<int, int> > &parentPOrderMapForSide,
+                                     ElementPtr child);
+  
+  bool meshLooksGood();
+  
+  bool patchBasisCorrectlyAppliedInMesh(); // checks that the right elements have some PatchBasis in the right places
+  bool patchBasesAgreeWithParentInMesh(); // checks that those elements with PatchBases compute values that agree with their parents
+  
+  bool polyOrdersAgree(const vector< map<int, int> > &polyOrderMapVector1,
+                       const vector< map<int, int> > &polyOrderMapVector2);
+  
+  bool pRefined(const vector< map<int, int> > &pOrderMapForSideBefore,
+                const vector< map<int, int> > &pOrderMapForSideAfter);
+  
+  bool doPRefinementAndTestIt(ElementPtr elem, const string &testName);
+  
+  void makeSimpleRefinement();
+  void makeMultiLevelRefinement();
   
   void setup();
   void teardown();
@@ -36,8 +62,14 @@ public:
   // 1D patches are all that's supported right now (suffices for 2D DPG.)
   bool testPatchBasis1D(); // check the correctness of the gimmicky divide-into-thirds PatchBasis
 
-  bool testSimpleRefinement();  // refine in the sw, and then check that the right elements have PatchBases
-  bool testMultiLevelRefinement(); // refine in the sw, and then in the se of the sw--check for multi-level PatchBasis, and correct values…
+  bool testSimpleRefinement();  // h-refine in the sw, and then check that the right elements have PatchBases
+  bool testMultiLevelRefinement(); // h-refine in the sw, and then in the se of the sw--check for multi-level PatchBasis, and correct values…
+  
+  bool testChildPRefinementSimple(); // in same mesh as the simple h-refinement test, p-refine the child.  Check that its parent also gets p-refined...
+  bool testChildPRefinementMultiLevel(); // in same mesh as the multi-level h-refinement test, p-refine the child.  Check that its parent and grandparent also get p-refined...
+  
+  bool testNeighborPRefinementSimple(); // in same mesh as the simple h-refinement test, p-refine a big neighbor.  Check that its parent also gets p-refined...
+  bool testNeighborPRefinementMultiLevel(); // in same mesh as the multi-level h-refinement test, p-refine a big neighbor.  Check that its parent and grandparent also get p-refined...
 };
 
 

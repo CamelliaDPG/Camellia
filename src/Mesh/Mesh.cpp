@@ -1456,6 +1456,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           }
         } else {
           TEST_FOR_EXCEPTION(true, std::invalid_argument, "Need to add PatchBasis creation to Mesh.");
+          // TODO: add PatchBasis creation to Mesh.
           
         }
         nonParent->setElementType(nonParentType);
@@ -1590,6 +1591,21 @@ FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > el
   return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
 }
 
+FieldContainer<double> Mesh::physicalCellNodesForCell( int cellID ) {
+  ElementPtr elem = _elements[cellID];
+  int numSides = elem->numSides();
+  int spaceDim = elem->elementType()->cellTopoPtr->getDimension();
+  int numCells = 1;
+  FieldContainer<double> physicalCellNodes(numCells,numSides,spaceDim);
+  
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int i=0; i<spaceDim; i++) {
+      physicalCellNodes(0,sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
+    }
+  }
+  return physicalCellNodes;
+}
+
 FieldContainer<double> & Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
   return _physicalCellNodesForElementType[ elemTypePtr.get() ];
 }
@@ -1603,14 +1619,7 @@ void Mesh::rebuildLookups() {
   //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
-// the following is not at all meant to be efficient; we do a lot of rebuilding of
-// data structures...
-void Mesh::refine(vector<int> cellIDsForPRefinements, vector<int> cellIDsForHRefinements) {
-  TEST_FOR_EXCEPTION( ( cellIDsForHRefinements.size() > 0 ),
-                     std::invalid_argument,
-                     "h-refinements not yet supported.");
-  // TODO: Implement h-refinements...
-  
+void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test

@@ -1377,7 +1377,7 @@ bool MeshTestSuite::testPRefinement() {
   }
   Teuchos::RCP<Mesh> mesh3 = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), H1Order, H1Order+1);
   cellsToRefine.push_back(refinedCellID);
-  mesh3->refine(cellsToRefine,vector<int>());
+  mesh3->pRefine(cellsToRefine);
   
   if ( ! checkMeshConsistency(*(mesh3.get()))) {
     cout << "After p-refinement, mesh consistency test FAILED." << endl;
@@ -1430,17 +1430,17 @@ bool MeshTestSuite::testPRefinement() {
   for (int i=5; i<8; i++) {
     cellsToRefine.push_back(i);
   }
-  mesh1->refine(cellsToRefine,vector<int>()); // no h-refinements
+  mesh1->pRefine(cellsToRefine);
   cellsToRefine.clear();
   for (int i=8; i<mesh1->elements().size(); i++) {
     cellsToRefine.push_back(i);
   }
-  mesh1->refine(cellsToRefine,vector<int>()); // no h-refinements
+  mesh1->pRefine(cellsToRefine);
   cellsToRefine.clear();
   for (int i=0; i<5; i++) {
     cellsToRefine.push_back(i);
   }
-  mesh1->refine(cellsToRefine,vector<int>()); // no h-refinements
+  mesh1->pRefine(cellsToRefine);
   // now the mesh should be uniform again...
   if (mesh1->elementTypes().size() != 1) {
     cout << "FAILURE: refined-everywhere uniform mesh should have only one element type." << endl;
@@ -1489,7 +1489,7 @@ bool MeshTestSuite::testPRefinement() {
      double diff;
      double prev_error = 1.0; // relative error starts at 1
      
-     myMesh->refine(cellsToRefine,vector<int>()); // no h-refinements
+     myMesh->pRefine(cellsToRefine);
      // now that we've refined 1 element, its 2 neighbors are also changed, but the diagonal elemnt has not.
      // depending on how the mesh oriented the elements, we might have either 3 or 4 element types.
      // (as presently implemented, it should be 4 types).
@@ -1515,7 +1515,7 @@ bool MeshTestSuite::testPRefinement() {
      //cout << "Relative L2 Error: " << diff << endl;
      prev_error = diff;
      
-     myMesh->refine(cellsToRefine,vector<int>());
+     myMesh->pRefine(cellsToRefine);
      if ( ! checkMeshConsistency(*(myMesh.get())) ) {
        success = false;
        cout << "FAILURE: After 2nd p-refinement, checkMeshConsistency failed." << endl;
@@ -1534,7 +1534,7 @@ bool MeshTestSuite::testPRefinement() {
      cellsToRefine.push_back(0);
      cellsToRefine.push_back(1);
      cellsToRefine.push_back(3);
-     myMesh->refine(cellsToRefine,vector<int>());
+     myMesh->pRefine(cellsToRefine);
      if ( ! checkMeshConsistency(*(myMesh.get())) ) {
        success = false;
        cout << "FAILURE: After 3rd p-refinement, checkMeshConsistency failed." << endl;

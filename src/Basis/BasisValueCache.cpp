@@ -138,7 +138,6 @@ void BasisValueCache::init(const FieldContainer<double> &physicalCellNodes,
       FieldContainer<double> jacobianInvSideRefCell(_numCells, numCubPointsSide, _spaceDim, _spaceDim);
       FieldContainer<double> weightedMeasureSideRefCell(_numCells, numCubPointsSide);
       
-      
       // compute geometric cell information
       //cout << "computing geometric cell info for boundary integral." << endl;
       CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideOrdinal, cellTopo);
