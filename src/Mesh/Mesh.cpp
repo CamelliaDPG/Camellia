@@ -1254,6 +1254,7 @@ Epetra_Map Mesh::getPartitionMap() {
 
 void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex) {
   DofOrderingPtr parentTrialOrdering = child->getParent()->elementType()->trialOrderPtr;
+  //cout << "Adding patchBasis for element " << child->cellID() << ":\n" << physicalCellNodesForCell(child->cellID());
   int parentSideIndex = child->parentSideForSideIndex(sideIndex);
   int childIndexInParentSide = child->indexInParentSide(parentSideIndex);
   map< int, BasisPtr > varIDsToUpgrade = _dofOrderingFactory.getPatchBasisUpgradeMap(originalChildOrdering, sideIndex,
@@ -1451,13 +1452,13 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
       }
       // all our children matched => we're done:
       return;
-    } else {
+    } else { // one broken
       vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(neighborSideIndexInParent);
       
       if ( childrenForSide.size() > 1 ) { // then parent is broken along side, and neighbor isn't...
         vector< pair< int, int> > descendentsForSide = parent->getDescendentsForSide(neighborSideIndexInParent);
         
-        if ( !_usePatchBasis ) {
+        if ( !_usePatchBasis ) { // MultiBasis
           Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
 
           getMultiBasisOrdering( nonParentTrialOrdering, parent, neighborSideIndexInParent,
@@ -1470,7 +1471,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
             TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
           }
-        } else {
+        } else { // PatchBasis
           vector< pair< int, int> >::iterator entryIt;
           for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
             int childCellID = (*entryIt).first;

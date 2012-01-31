@@ -234,9 +234,11 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh() {
         BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex);
         bool hasPatchBasis = BasisFactory::isPatchBasis(basis);
         bool shouldHavePatchBasis;
-        // check who the neighbor is on this side:
-        int sideIndexInNeighbor = elem->getSideIndexInNeighbor(sideIndex);
-        int neighborCellID = elem->getNeighborCellID(sideIndex);
+        // check who the (ancestor's) neighbor is on this side:
+        int sideIndexInNeighbor;
+        ElementPtr neighbor = _mesh->ancestralNeighborForSide(elem,sideIndex,sideIndexInNeighbor);
+        int neighborCellID = neighbor->cellID();
+        
         // check whether the neighbor relationship is symmetric:
         if (neighborCellID == -1) {
           shouldHavePatchBasis = false;
@@ -454,17 +456,22 @@ void PatchBasisTests::setup() {
   // southwest center:
   points(0,0) = 0.25; points(0,1) = 0.25;
   // southeast center:
-  points(0,0) = 0.75; points(0,1) = 0.25;
+  points(1,0) = 0.75; points(1,1) = 0.25;
   // northwest center:
-  points(0,0) = 0.25; points(0,1) = 0.75;
+  points(2,0) = 0.25; points(2,1) = 0.75;
   // northeast center:
-  points(0,0) = 0.75; points(0,1) = 0.75;
+  points(3,0) = 0.75; points(3,1) = 0.75;
   vector<ElementPtr> elements = _mesh->elementsForPoints(points);
   
   _sw = elements[0];
   _se = elements[1];
   _nw = elements[2];
   _ne = elements[3];
+  
+//  cout << "SW nodes:\n" << _mesh->physicalCellNodesForCell(_sw->cellID());
+//  cout << "SE nodes:\n" << _mesh->physicalCellNodesForCell(_se->cellID());
+//  cout << "NW nodes:\n" << _mesh->physicalCellNodesForCell(_nw->cellID());
+//  cout << "NE nodes:\n" << _mesh->physicalCellNodesForCell(_ne->cellID());
   
   _mesh->setUsePatchBasis(true);
 }
