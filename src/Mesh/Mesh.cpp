@@ -752,6 +752,44 @@ void Mesh::buildTypeLookups() {
   }
 }
 
+BilinearForm & Mesh::bilinearForm() { 
+  return *(_bilinearForm.get()); 
+}
+
+Boundary & Mesh::boundary() { 
+  return _boundary; 
+}
+
+int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber) {
+  if (partitionNumber == -1){ 
+    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() )
+        && 
+        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex )
+         !=
+          _globalCellIndexToCellID[elemTypePtr.get()].end()
+         )
+        )
+      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
+    else
+      return -1;
+  } else {
+    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
+        &&
+         (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
+           return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
+    } else return -1;
+  }
+}
+
+bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
+  double tol = 1e-14;
+  double d1 = distance(x0,y0,x1,y1);
+  double d2 = distance(x1,y1,x2,y2);
+  double d3 = distance(x2,y2,x0,y0);
+  
+  return (abs(d1 + d2 - d3) < tol) || (abs(d1 + d3 - d2) < tol) || (abs(d2 + d3 - d1) < tol);
+}
+
 void Mesh::determineDofPairings() {
   _dofPairingIndex.clear();
   vector<ElementPtr>::iterator elemIterator;
@@ -803,7 +841,7 @@ void Mesh::determineDofPairings() {
               neighbor = _elements[neighborCellID];
               for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                 int myLocalDofIndex;
-                if (descendentsForSide.size() > 1) {
+                if ( (descendentsForSide.size() > 1) && ( !_usePatchBasis ) ) {
                   // multi-basis
                   myLocalDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,descendentSubSideIndexInMe);
                 } else {
@@ -813,11 +851,11 @@ void Mesh::determineDofPairings() {
                 // neighbor's dofs are in reverse order from mine along each side
                 // TODO: generalize this to some sort of permutation for 3D meshes...
                 int permutedDofOrdinal = neighborDofPermutation(dofOrdinal,numDofs);
-
+                
                 int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                 addDofPairing(cellID, myLocalDofIndex, neighborCellID, neighborLocalDofIndex);
-//                cout << "added DofPairing (cellID, localDofIndex): (" << cellID << ", " << myLocalDofIndex << ") = ";
-//                cout << "(" << neighborCellID << ", " << neighborLocalDofIndex << ")\n";
+                //                cout << "added DofPairing (cellID, localDofIndex): (" << cellID << ", " << myLocalDofIndex << ") = ";
+                //                cout << "(" << neighborCellID << ", " << neighborLocalDofIndex << ")\n";
               }
             }
           }
@@ -851,44 +889,6 @@ void Mesh::determineDofPairings() {
       }
     }
   }  
-}
-
-BilinearForm & Mesh::bilinearForm() { 
-  return *(_bilinearForm.get()); 
-}
-
-Boundary & Mesh::boundary() { 
-  return _boundary; 
-}
-
-int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber) {
-  if (partitionNumber == -1){ 
-    if (( _globalCellIndexToCellID.find( elemTypePtr.get() ) != _globalCellIndexToCellID.end() )
-        && 
-        ( _globalCellIndexToCellID[elemTypePtr.get()].find( cellIndex )
-         !=
-          _globalCellIndexToCellID[elemTypePtr.get()].end()
-         )
-        )
-      return _globalCellIndexToCellID[elemTypePtr.get()][ cellIndex ];
-    else
-      return -1;
-  } else {
-    if ( ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) != _cellIDsForElementType[partitionNumber].end() )
-        &&
-         (_cellIDsForElementType[partitionNumber][elemTypePtr.get()].size() > cellIndex ) ) {
-           return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
-    } else return -1;
-  }
-}
-
-bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
-  double tol = 1e-14;
-  double d1 = distance(x0,y0,x1,y1);
-  double d2 = distance(x1,y1,x2,y2);
-  double d3 = distance(x2,y2,x0,y0);
-  
-  return (abs(d1 + d2 - d3) < tol) || (abs(d1 + d3 - d2) < tol) || (abs(d2 + d3 - d1) < tol);
 }
 
 double Mesh::distance(double x0, double y0, double x1, double y1) {
@@ -1195,6 +1195,17 @@ ElementTypeFactory & Mesh::getElementTypeFactory() {
   return _elementTypeFactory;
 }
 
+
+
+void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
+                                 ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
+                                 ElementPtr nonParent) {
+  map< int, BasisPtr > varIDsToUpgrade = multiBasisUpgradeMap(parent,sideIndex);
+  originalNonParentOrdering = _dofOrderingFactory.upgradeSide(originalNonParentOrdering,
+                                                              *(nonParent->elementType()->cellTopoPtr),
+                                                              varIDsToUpgrade,parentSideIndexInNeighbor);
+}
+
 Epetra_Map Mesh::getPartitionMap() {
   int rank = 0;
   int numProcs = 1;
@@ -1239,6 +1250,18 @@ Epetra_Map Mesh::getPartitionMap() {
     delete myGlobalIndices;
   }
   return partMap;
+}
+
+void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex) {
+  DofOrderingPtr parentTrialOrdering = child->getParent()->elementType()->trialOrderPtr;
+  int parentSideIndex = child->parentSideForSideIndex(sideIndex);
+  int childIndexInParentSide = child->indexInParentSide(parentSideIndex);
+  map< int, BasisPtr > varIDsToUpgrade = _dofOrderingFactory.getPatchBasisUpgradeMap(originalChildOrdering, sideIndex,
+                                                                                     parentTrialOrdering, parentSideIndex,
+                                                                                     childIndexInParentSide);
+  originalChildOrdering = _dofOrderingFactory.upgradeSide(originalChildOrdering,
+                                                          *(child->elementType()->cellTopoPtr),
+                                                          varIDsToUpgrade,parentSideIndex);
 }
 
 int Mesh::globalDofIndex(int cellID, int localDofIndex) {
@@ -1384,15 +1407,6 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
   return varIDsToUpgrade;
 }
 
-void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
-                                 ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
-                                 ElementPtr nonParent) {
-  map< int, BasisPtr > varIDsToUpgrade = multiBasisUpgradeMap(parent,sideIndex);
-  originalNonParentOrdering = _dofOrderingFactory.upgradeSide(originalNonParentOrdering,
-                                                              *(nonParent->elementType()->cellTopoPtr),
-                                                              varIDsToUpgrade,parentSideIndexInNeighbor);
-}
-
 void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
   // sets new ElementType to match elem to neighbor on side sideIndex
   
@@ -1440,28 +1454,36 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     } else {
       vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(neighborSideIndexInParent);
       
-      Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
-      
       if ( childrenForSide.size() > 1 ) { // then parent is broken along side, and neighbor isn't...
-        ElementTypePtr nonParentType;
+        vector< pair< int, int> > descendentsForSide = parent->getDescendentsForSide(neighborSideIndexInParent);
+        
         if ( !_usePatchBasis ) {
+          Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
+
           getMultiBasisOrdering( nonParentTrialOrdering, parent, neighborSideIndexInParent,
                                 parentSideIndexInNeighbor, nonParent );
-          nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
-                                                             nonParent->elementType()->testOrderPtr, 
-                                                             nonParent->elementType()->cellTopoPtr );
+          ElementTypePtr nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
+                                                                            nonParent->elementType()->testOrderPtr, 
+                                                                            nonParent->elementType()->cellTopoPtr );
+          nonParent->setElementType(nonParentType);
           // debug code:
           if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
             TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
           }
         } else {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "Need to add PatchBasis creation to Mesh.");
-          // TODO: add PatchBasis creation to Mesh.
-          
+          vector< pair< int, int> >::iterator entryIt;
+          for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
+            int childCellID = (*entryIt).first;
+            ElementPtr child = _elements[childCellID];
+            int childSideIndex = (*entryIt).second;
+            DofOrderingPtr childTrialOrdering = child->elementType()->trialOrderPtr;
+            getPatchBasisOrdering(childTrialOrdering,child,childSideIndex);
+            ElementTypePtr childType = _elementTypeFactory.getElementType(childTrialOrdering, 
+                                                                          child->elementType()->testOrderPtr, 
+                                                                          child->elementType()->cellTopoPtr );
+            child->setElementType(childType);
+          }
         }
-        nonParent->setElementType(nonParentType);
-        
-        vector< pair< int, int> > descendentsForSide = parent->getDescendentsForSide(neighborSideIndexInParent);
         
         vector< pair< int, int> >::iterator entryIt;
         for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {

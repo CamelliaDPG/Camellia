@@ -167,6 +167,19 @@ int Element::getSideIndexInNeighbor(int sideIndex) {
   return _neighbors[sideIndex].second;
 }
 
+int Element::indexInParentSide(int parentSide) {
+  Element* parent = getParent();
+  int numChildrenForSide = parent->childIndicesForSide(parentSide).size();
+  for (int childIndexInSide = 0; childIndexInSide<numChildrenForSide; childIndexInSide++) {
+    int childIndex = parent->childIndicesForSide(parentSide)[childIndexInSide].first;
+    int childCellID = parent->getChild(childIndex)->cellID();
+    if (_cellID == childCellID) {
+      return childIndexInSide;
+    }
+  }
+  return -1; // not found
+}
+
 //int Element::subSideIndexInNeighbor(int neighborsSideIndexInMe) {
 //  return _subSideIndicesInNeighbors[neighborsSideIndexInMe];
 //}

@@ -70,6 +70,9 @@ public:
   void getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
   int getNeighborCellID(int sideIndex);
   int getSideIndexInNeighbor(int sideIndex);
+  
+  int indexInParentSide(int parentSide);
+  
   void setNeighbor(int neighborsSideIndexInMe, Teuchos::RCP< Element > elemPtr, int mySideIndexInNeighbor);
   //int subSideIndexInNeighbor(int neighborsSideIndexInMe);
   

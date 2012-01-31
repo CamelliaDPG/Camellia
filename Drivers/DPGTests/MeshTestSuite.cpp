@@ -788,7 +788,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                       int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                       int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
                       if (neighborsGlobalDofIndex != globalDofIndex) {
-//                        cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
+                        //                        cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
                         cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
                         cout << neighborCellID << ", " << neighborLocalDofIndex << ") -- ";
                         cout << globalDofIndex << " != " << neighborsGlobalDofIndex << "\n";
@@ -803,13 +803,32 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                   cout << ", sideIndex " << mySideIndexInNeighbor << ") has cardinality " << neighborNumBasisDofs << endl;
                   success = false;
                 }
-              } else {
-                int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numBasisDofs);
-                int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
-                int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
-                if (neighborsGlobalDofIndex != globalDofIndex) {
-                  cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
-                  success = false;
+              } else { // (neighborNumBasisDofs == numBasisDofs)
+                if (! neighbor->isParent() ) { 
+                  int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numBasisDofs);
+                  int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
+                  int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                  if (neighborsGlobalDofIndex != globalDofIndex) {
+                    cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
+                    success = false;
+                  }
+                } else { // neighbor->isParent()
+                  // for PatchBasis:
+                  vector< pair<int,int> > descendentsForSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor);
+                  vector< pair<int,int> >:: iterator entryIt;
+                  int descendentIndex = -1;
+                  for (entryIt = descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
+                    int neighborCellID = (*entryIt).first;
+                    mySideIndexInNeighbor = (*entryIt).second;
+                    neighbor = mesh.elements()[neighborCellID].get();
+                    int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numBasisDofs);
+                    int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
+                    int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                    if (neighborsGlobalDofIndex != globalDofIndex) {
+                      cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
+                      success = false;
+                    }
+                  }
                 }
               }
             }

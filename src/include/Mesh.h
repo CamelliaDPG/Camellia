@@ -178,6 +178,8 @@ public:
                              ElementPtr nonParent);
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
+  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+  
   void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);

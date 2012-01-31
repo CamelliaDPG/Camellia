@@ -70,6 +70,7 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     teardown();
   } catch (...) {
     cout << "PatchBasisTests: caught exception while running tests.\n";
+    teardown();
   }
 }
 
@@ -177,7 +178,8 @@ void PatchBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
 
 void PatchBasisTests::makeSimpleRefinement() {
   vector<int> cellIDsToRefine;
-  cellIDsToRefine.push_back(_sw->cellID());
+  //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
+  cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 3, as things are right now implemented
   // the next line will throw an exception in Mesh right now, because Mesh doesn't yet support PatchBasis
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
 }
@@ -304,34 +306,16 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
            we control all that.  It's less clear what we should do if we wanted a similar feature in the core
            code, or to write a similar test for a more general topology or refinement pattern.
            */
-          double firstVertex_x = childCellNodes(0,sideIndex,0);
-          double secondVertex_x = childCellNodes(0,(sideIndex + 1) % numSides,0);
-          double firstVertex_y = childCellNodes(0,sideIndex,1);
-          double secondVertex_y = childCellNodes(0,(sideIndex + 1) % numSides,1);
-          
-          int parentNumSides = parent->numSides();
-          double parentFirstVertex_x = parentCellNodes(0,parentSideIndex,0);
-          double parentSecondVertex_x = parentCellNodes(0,(parentSideIndex + 1) % parentNumSides,0);
-          double parentFirstVertex_y = parentCellNodes(0,parentSideIndex,1);
-          double parentSecondVertex_y = parentCellNodes(0,(parentSideIndex + 1) % parentNumSides,1);
-          
-          bool firstParentVertexAgrees;
-          if ( (parentFirstVertex_x == firstVertex_x) && (parentFirstVertex_y == firstVertex_y)) {
-            firstParentVertexAgrees = true;
-          } else if ( (parentSecondVertex_x == secondVertex_x) && (parentFirstVertex_y == secondVertex_y) ) {
-            firstParentVertexAgrees = false;
+          FieldContainer<double> childEdgeNodesInParentRef(1,2,1);
+          int childIndexInParentSide = elem->indexInParentSide(parentSideIndex);
+          if (childIndexInParentSide == 0) {
+            childEdgeNodesInParentRef(0,0,0) = -1;
+            childEdgeNodesInParentRef(0,1,0) = 0;
+          } else if (childIndexInParentSide == 1) {
+            childEdgeNodesInParentRef(0,0,0) = 0;
+            childEdgeNodesInParentRef(0,1,0) = 1;
           } else {
-            TEST_FOR_EXCEPTION( true, std::invalid_argument, 
-                               "neither first nor second vertex agree between parent and child edges");
-          }
-          
-          FieldContainer<double> childEdgeNodesInParentRef(2,1);
-          if (firstParentVertexAgrees) {
-            childEdgeNodesInParentRef(0,0) = -1;
-            childEdgeNodesInParentRef(1,0) = 0;
-          } else {
-            childEdgeNodesInParentRef(0,0) = 0;
-            childEdgeNodesInParentRef(1,0) = 1;
+            TEST_FOR_EXCEPTION( true, std::invalid_argument, "indexInParentSide isn't 0 or 1" );
           }
           
           FieldContainer<double> parentTestPoints(_testPoints1D);
