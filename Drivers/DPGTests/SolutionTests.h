@@ -18,6 +18,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName() { return "SolutionTests"; }
   bool testAddSolution();
+  bool testProjectFunction();
 };
 
 

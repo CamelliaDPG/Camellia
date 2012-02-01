@@ -7,6 +7,7 @@
 #include "ConfusionBilinearForm.h"
 #include "ConfusionManufacturedSolution.h"
 #include "MathInnerProduct.h"
+#include "SimpleFunction.h"
 
 void SolutionTests::setup() {
   // first, build a simple mesh
@@ -68,6 +69,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testProjectFunction()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
 }
 
@@ -75,7 +83,7 @@ bool SolutionTests::testAddSolution() {
   bool success = true;
   
   double weight = 3.141592;
-  double tol = 1e-15;
+  double tol = 1e-14;
   
   FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
   FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
@@ -118,4 +126,51 @@ bool SolutionTests::testAddSolution() {
   }
   
   return success;
+}
+
+bool SolutionTests::testProjectFunction() {
+  bool success = true;
+  double tol = 1e-14;
+  Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
+  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  functionMap[ConfusionBilinearForm::U] = simpleFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_1] = simpleFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_2] = simpleFunction;
+
+  _confusionSolution1_2x2->projectOntoMesh(functionMap);  
+  
+  FieldContainer<double> valuesU(_testPoints.dimension(0));
+  FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
+  FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
+  
+  _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
+  _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
+
+  FieldContainer<double> allCellTestPoints = _testPoints;
+  allCellTestPoints.resize(1,_testPoints.dimension(0),_testPoints.dimension(1));
+  FieldContainer<double> functionValues(1,_testPoints.dimension(0));
+  simpleFunction->getValues(functionValues,allCellTestPoints);
+  int numValues = functionValues.size();
+  for (int valueIndex = 0;valueIndex<numValues;valueIndex++){
+    double diff = abs(functionValues[valueIndex]-valuesU[valueIndex]);
+    if (diff>tol){
+      success = false;
+      cout << "Test failed: difference in projected and computed values is " << diff << endl;
+    }
+    diff = abs(functionValues[valueIndex]-valuesSIGMA1[valueIndex]);
+    if (diff>tol){
+      success = false;
+      cout << "Test failed: difference in projected and computed values is " << diff << endl;
+    }
+
+    diff = abs(functionValues[valueIndex]-valuesSIGMA2[valueIndex]);
+    if (diff>tol){
+      success = false;
+      cout << "Test failed: difference in projected and computed values is " << diff << endl;
+    }
+
+  }      
+
+  return success;  
 }
