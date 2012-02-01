@@ -58,6 +58,8 @@
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
 
+class Solution;
+
 class Mesh {
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
@@ -182,6 +184,8 @@ public:
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
   
   void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  // for the case where we want to reproject the previous mesh solution onto the new one:
+  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, Teuchos::RCP<Solution> solution); 
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
   

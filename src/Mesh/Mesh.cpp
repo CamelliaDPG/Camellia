@@ -41,6 +41,8 @@
 #include "DofOrderingFactory.h"
 #include "BasisFactory.h"
 
+#include "Solution.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 #ifdef HAVE_MPI
@@ -1281,6 +1283,11 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 }
 
 void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+  Teuchos::RCP<Solution> solution = Teuchos::rcp((Solution*)NULL);
+  hRefine(cellIDs,refPattern,solution); 
+}
+
+void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, Teuchos::RCP<Solution> solution) {
   vector<int>::iterator cellIt;
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;

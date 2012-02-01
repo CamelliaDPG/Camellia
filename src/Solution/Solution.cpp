@@ -82,6 +82,7 @@
 #include "BasisEvaluation.h"
 #include "BasisValueCache.h"
 #include "Solution.h"
+#include "Projector.h"
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
@@ -2072,3 +2073,30 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   }
   return partMap;
 }
+
+void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
+
+  vector< ElementPtr > activeElems = _mesh->activeElements();
+  for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    projectOntoCell(functionMap,cellID);
+  }
+}
+
+void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID){
+  typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
+  for (map<int, AbstractFxnPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
+      int trialID = functionIt->first;
+      AbstractFxnPtr function = functionIt->second;
+      ElementPtr element = _mesh->getElement(cellID);
+      ElementTypePtr elemTypePtr = element->elementType();
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+      Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      
+      FieldContainer<double> basisCoefficients;
+      Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);
+      setSolnCoeffsForCellID(basisCoefficients,cellID,trialID); 
+  }
+}
+	 

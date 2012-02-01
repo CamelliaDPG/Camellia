@@ -53,6 +53,7 @@
 #include "DPGInnerProduct.h"
 #include "RHS.h"
 #include "BC.h"
+#include "AbstractFunction.h"
 
 #include "LocalStiffnessMatrixFilter.h"
 
@@ -111,7 +112,7 @@ public:
                       int sideIndex);
   void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
-  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex);
+  void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
   
   double integrateSolution(int trialID);
   void integrateSolution(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
@@ -121,6 +122,9 @@ public:
   
   double meanValue(int trialID);
   double meshMeasure();
+
+  void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
+  void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
 
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter){
     _filter = newFilter;
