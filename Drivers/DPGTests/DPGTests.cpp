@@ -66,6 +66,11 @@
 #include "SolutionTests.h"
 #include "PatchBasisTests.h"
 
+#include "Projector.h"
+#include "SimpleFunction.h"
+#include "BasisValueCache.h"
+
+
 using namespace std;
 using namespace Intrepid;
 
@@ -291,6 +296,15 @@ void DPGTests::runTests() {
     cout << "Passed test testComputeOptimalTestPoisson." << endl;
   } else {
     cout << "Failed test testComputeOptimalTestPoisson." << endl;
+  }
+
+  success = testProjection();
+  ++numTestsTotal;
+  if (success) {
+    numTestsPassed++;
+    cout << "Passed test testProjection." << endl;
+  } else {
+    cout << "Failed test testProjection." << endl;
   }
   
   cout << "Passed " << numTestsPassed << " out of " << numTestsTotal << "." << endl;
@@ -2732,4 +2746,67 @@ bool DPGTests::testComputeOptimalTestPoisson() {
     }
   }
   return bSuccess;
+}
+
+
+bool DPGTests::testProjection(){
+  double tol = 1e-14;
+  // reference cell physical cell nodes in counterclockwise order
+  FieldContainer<double> physicalCellNodes(1,4,2);
+  physicalCellNodes(0,0,0) = -1.0;
+  physicalCellNodes(0,0,1) = -1.0;
+
+  physicalCellNodes(0,1,0) = 1.0;
+  physicalCellNodes(0,1,1) = -1.0; 
+
+  physicalCellNodes(0,2,0) = 1.0;
+  physicalCellNodes(0,2,1) = 1.0;
+
+  physicalCellNodes(0,3,0) = -1.0;
+  physicalCellNodes(0,3,1) = 1.0;
+
+  EFunctionSpaceExtended fs = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  BasisFactory basisFactory;
+  unsigned cellTopoKey = shards::Quadrilateral<4>::key;
+  Projector projector;
+  FieldContainer<double> basisCoefficients;
+
+  int polyOrder = 5; // some large number
+  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = basisFactory.getBasis( polyOrder, cellTopoKey, fs);  
+
+  // creating basisCache to compute values at certain points
+  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  int basisRank = BasisFactory::getBasisRank(basis);
+  DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
+  int ID = 0; // fake ID 
+  dofOrderPtr->addEntry(ID,basis,basisRank);  
+  int maxTrialDegree = dofOrderPtr->maxBasisDegree();
+
+  BasisValueCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
+
+  // simple function f(x,y) = x;
+  Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
+
+  projector.projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
+
+  int numDofs = basis->getCardinality();
+  EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE;
+  FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
+  FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
+  int numPts = cubPoints.dimension(1);
+  FieldContainer<double> basisSum(numPts);
+  FieldContainer<double> functionValues;
+  simpleFunction->getValues(functionValues,cubPoints);
+  bool passedTest = true;
+  for (int i=0;i<numPts;i++){
+    double x = cubPoints(0,i,0);
+    for (int j = 0;j<numDofs;j++){
+      basisSum(i) += basisCoefficients(j)*basisValues(0,j,i);
+    }
+    if (abs(basisSum(i)-functionValues(0,i))>tol){
+      passedTest = false;
+    }
+  }
+
+  return passedTest;
 }

@@ -1,5 +1,5 @@
 # include everything in this directory. 
-includeDir = Dir(['.','../Poisson','../Confusion','../MultiOrderStudy'])
+includeDir = Dir(['.','../Poisson','../Confusion','../MultiOrderStudy','../Stokes'])
 #env = Environment(CXX='c++',CC='gcc',CXXFLAGS = '-O3',CPPPATH=includeDir)
 env = Environment(CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0', '-g'],CPPPATH=includeDir)
 

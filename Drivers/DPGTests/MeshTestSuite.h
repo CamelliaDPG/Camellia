@@ -71,7 +71,6 @@ public:
   static bool testRefinementPattern();
   static bool testEnergyError();
   static bool testPointContainment();
-  static bool testProjection();
 };
 
 #endif
