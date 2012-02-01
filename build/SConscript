@@ -1,27 +1,33 @@
 Import('env')
 
-#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-debug/include']
-#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-debug/lib']
-#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
-#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
-TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/mpi-release/include']
-TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/mpi-release/lib']
-#TrilinosIncludes = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/include']
-#TrilinosLibDir = ['/workspace/jchan/trilinos-10.8.3-Source/trilinos_builds/serial-release/lib']
+################## USER DEFINED VARS ######################
+
+Mumps_Dir = '/workspace/jchan/MUMPS_4.9.2/'
+Trilinos_Dir = '/workspace/jchan/trilinos_builds/mpi_release/'
+Scalapack_lib = '/workspace/jchan/lib/scalapack'
+
+################## END USER DEFINED VARS ###################
+
+MumpsIncludes = [Mumps_Dir+'include',Mumps_Dir+'PORD/include']
+MumpsLibDirs = [Mumps_Dir+'lib',Mumps_Dir+'PORD/lib',Scalapack_lib]
+MumpsLibs = ['dmumps', 'mumps_common', 'pord', 'scalapack']
+
+TrilinosIncludes = [Trilinos_Dir+'include']
+TrilinosLibDir = [Trilinos_Dir+'lib']
 
 includePaths = [Dir('../src/include')]
 
 env.Append(CPPPATH=includePaths)
+env.Append(CPPPATH=MumpsIncludes)
 env.Append(CPPPATH=TrilinosIncludes)
 
+#src_lib = SConscript('../src/SConscript',exports = ['env'],variant_dir='scons_build')
 src_lib = SConscript('../src/SConscript',exports = ['env'])
 
-# note - Camellia must be linked first on most linux machines. 
-#linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'simpi', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
-
 # library 'simpi' is only used in serial codes. remove for mpi build
-linkedLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
+TrilinosLibs = [ 'Camellia', 'intrepid', 'ml', 'ifpack', 'pamgen_extras', 'pamgen', 'amesos', 'galeri', 'aztecoo', 'isorropia', 'epetraext', 'tpetraext', 'tpetrainout', 'tpetra', 'triutils', 'shards', 'zoltan', 'epetra', 'kokkoslinalg', 'kokkosnodeapi', 'kokkos', 'sacado', 'tpi', 'teuchos', 'lapack','blas','pthread']
 
-libPaths = [TrilinosLibDir,Dir('lib')] 
+libPaths = [Dir('lib'),TrilinosLibDir,MumpsLibDirs] 
+linkedLibs = [TrilinosLibs,MumpsLibs]
 
 env.Append(LIBS=linkedLibs,LIBPATH=libPaths)
