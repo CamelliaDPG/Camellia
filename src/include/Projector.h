@@ -13,7 +13,8 @@ using namespace std;
 class Projector{
  public:
   
-  void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, const FieldContainer<double> &physicalCellNodes);
-  
+  static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, 
+                                       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, 
+                                       const FieldContainer<double> &physicalCellNodes);
 };
 #endif

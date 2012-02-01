@@ -46,6 +46,7 @@ OBJ_NAMES = DofOrdering \
        Boundary \
        PoissonBCLinear \
        PoissonRHSLinear \
+       Projector \
        MeshTestSuite \
        SolutionTests \
        PatchBasisTests \
@@ -206,6 +207,9 @@ Elem%.o: $(SRCS_DIR)/Mesh/Elem%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Mesh.o: $(SRCS_DIR)/Mesh/Mesh.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Projector.o: $(SRCS_DIR)/Projection/Projector.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 MeshPartitionPolicy.o: $(SRCS_DIR)/Mesh/MeshPartitionPolicy.cpp

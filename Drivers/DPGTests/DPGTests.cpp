@@ -2768,7 +2768,7 @@ bool DPGTests::testProjection(){
   EFunctionSpaceExtended fs = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
   BasisFactory basisFactory;
   unsigned cellTopoKey = shards::Quadrilateral<4>::key;
-  Projector projector;
+
   FieldContainer<double> basisCoefficients;
 
   int polyOrder = 5; // some large number
@@ -2787,7 +2787,7 @@ bool DPGTests::testProjection(){
   // simple function f(x,y) = x;
   Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
 
-  projector.projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
+  Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
 
   int numDofs = basis->getCardinality();
   EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE;

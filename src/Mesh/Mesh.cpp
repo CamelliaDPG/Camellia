@@ -1038,28 +1038,29 @@ void Mesh::enforceOneIrregularity() {
   }
 }
 
-Epetra_Map Mesh::getCellIDPartitionMap(int rank, Epetra_Comm* Comm){
-  int indexBase = 0; // 0 for cpp, 1 for fortran
-  int numActiveElements = activeElements().size();
-  
-  // determine cell IDs for this partition
-  vector< ElementPtr > elemsInPartition = elementsInPartition(rank);
-  int numElemsInPartition = elemsInPartition.size();
-  int *partitionLocalElems;
-  if (numElemsInPartition!=0){
-    partitionLocalElems = new int[numElemsInPartition];
-  }else{
-    partitionLocalElems = NULL;
-  }  
-  
-  // set partition-local cell IDs
-  for (int activeCellIndex=0; activeCellIndex<numElemsInPartition; activeCellIndex++) {
-    ElementPtr elemPtr = elemsInPartition[activeCellIndex];
-    int cellIndex = elemPtr->globalCellIndex();
-    partitionLocalElems[activeCellIndex] = cellIndex;
-  }
-  Epetra_Map partMap(numActiveElements, numElemsInPartition, partitionLocalElems, indexBase, *Comm);
-}
+// commented this out because it appears to be unused
+//Epetra_Map Mesh::getCellIDPartitionMap(int rank, Epetra_Comm* Comm){
+//  int indexBase = 0; // 0 for cpp, 1 for fortran
+//  int numActiveElements = activeElements().size();
+//  
+//  // determine cell IDs for this partition
+//  vector< ElementPtr > elemsInPartition = elementsInPartition(rank);
+//  int numElemsInPartition = elemsInPartition.size();
+//  int *partitionLocalElems;
+//  if (numElemsInPartition!=0){
+//    partitionLocalElems = new int[numElemsInPartition];
+//  }else{
+//    partitionLocalElems = NULL;
+//  }  
+//  
+//  // set partition-local cell IDs
+//  for (int activeCellIndex=0; activeCellIndex<numElemsInPartition; activeCellIndex++) {
+//    ElementPtr elemPtr = elemsInPartition[activeCellIndex];
+//    int cellIndex = elemPtr->globalCellIndex();
+//    partitionLocalElems[activeCellIndex] = cellIndex;
+//  }
+//  Epetra_Map partMap(numActiveElements, numElemsInPartition, partitionLocalElems, indexBase, *Comm);
+//}
 
 FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
 #ifdef HAVE_MPI
@@ -1254,7 +1255,8 @@ Epetra_Map Mesh::getPartitionMap() {
 
 void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex) {
   DofOrderingPtr parentTrialOrdering = child->getParent()->elementType()->trialOrderPtr;
-  //cout << "Adding patchBasis for element " << child->cellID() << ":\n" << physicalCellNodesForCell(child->cellID());
+  //cout << "Adding PatchBasis for element " << child->cellID() << " along side " << sideIndex << "\n";
+  //cout << "Adding PatchBasis for element " << child->cellID() << ":\n" << physicalCellNodesForCell(child->cellID());
   int parentSideIndex = child->parentSideForSideIndex(sideIndex);
   int childIndexInParentSide = child->indexInParentSide(parentSideIndex);
   map< int, BasisPtr > varIDsToUpgrade = _dofOrderingFactory.getPatchBasisUpgradeMap(originalChildOrdering, sideIndex,

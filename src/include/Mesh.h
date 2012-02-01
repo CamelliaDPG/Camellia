@@ -155,7 +155,8 @@ public:
 
   vector<double> getCellCentroid(int cellID);
 
-  Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
+  // commented out because unused
+  //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
   
   ElementPtr getElement(int cellID);
   
