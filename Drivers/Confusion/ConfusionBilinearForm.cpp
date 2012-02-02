@@ -55,7 +55,7 @@ void ConfusionBilinearForm::setEpsilon(double newEpsilon){
 
 vector<double> ConfusionBilinearForm::getBeta(double x, double y){
   vector<double> beta;
-  if (useConstBeta){
+  if (_useConstBeta){
     beta.push_back(_beta_x);
     beta.push_back(_beta_y);
   } else {
