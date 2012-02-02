@@ -46,6 +46,7 @@ public:
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
         double x = physicalPoints(cellIndex, ptIndex, 0);
         double y = physicalPoints(cellIndex, ptIndex, 1);
+	
         if ( (abs(x) < 1e-14) && (y<y_cut) ) { // x basically 0 ==> u = 1 - y	  
 	  dirichletValues(cellIndex,ptIndex) = 1.0 - y/y_cut;
 	  //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-y*y)); // bump function

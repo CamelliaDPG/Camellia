@@ -23,33 +23,38 @@ class ConfectionBCConstraints : public Constraints {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);       
+    map<int,FieldContainer<double> > outflowConstraint;
+    FieldContainer<double> uCoeffs(numCells,numPoints);
+    FieldContainer<double> beta_sigmaCoeffs(numCells,numPoints);
+    FieldContainer<double> outflowValues(numCells,numPoints);
+
+    // default to no constraints, apply on outflow only
+    uCoeffs.initialize(0.0);
+    beta_sigmaCoeffs.initialize(0.0);
+    outflowValues.initialize(0.0);
+    
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       for (int pointIndex=0;pointIndex<numPoints;pointIndex++){
 	double x = physicalPoints(cellIndex,pointIndex,0);
 	double y = physicalPoints(cellIndex,pointIndex,1);
-	vector<double> beta = _confusionBilinearForm->getBeta();
+	vector<double> beta = _confusionBilinearForm->getBeta(x,y);
 	double beta_n = beta[0]*unitNormals(cellIndex,pointIndex,0)+beta[1]*unitNormals(cellIndex,pointIndex,1);
-	cout << "x,y = " << x << ", " << y << endl;
+
+	
 	if ((abs(x-1.0) < tol) || (abs(y-1.0) < tol)) { // if on outflow boundary
 	  TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
-	  map<int,FieldContainer<double> > outflowConstraint;
-	  FieldContainer<double> uCoeffs(numCells,numPoints);
-	  FieldContainer<double> beta_sigmaCoeffs(numCells,numPoints);
-	  FieldContainer<double> outflowValues(numCells,numPoints);
-
-	  // this combo isolates sigma_n
-	  uCoeffs(cellIndex,pointIndex) = 1.0;
-	  //	  uCoeffs(cellIndex,pointIndex) = beta_n;
-	  //	  beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;
-
-	  outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
-	  //	  outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;
 	  
-	  outflowValues.initialize(0.0); // sigma outflow = 0
-	  constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
+	  // this combo isolates sigma_n
+	  //	  uCoeffs(cellIndex,pointIndex) = 1.0;
+	  uCoeffs(cellIndex,pointIndex) = beta_n;
+	  beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
 	}
+	
       }
     }
+    outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
+    outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;	        
+    constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
     
   }
 };

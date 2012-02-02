@@ -13,9 +13,7 @@
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }
-void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){
-  
-  cout << "Applying Penalty method filter " << endl;
+void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){ 
 
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
@@ -30,7 +28,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   int maxTrialDegree = trialOrderPtr->maxBasisDegree();
   BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
-  cout << "maxTrialDegree = " << maxTrialDegree << endl;
+
   unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 
   EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
@@ -41,21 +39,14 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
     // GET INTEGRATION INFO - get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
     FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
     FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);        
-    cout << "got cub info " << endl;
-    vector<int> ptDims;
-    sideNormals.dimensions(ptDims);
-    cout << "sideNormals has dimensions " << sideNormals.dimension(0) << ", " << sideNormals.dimension(1) << ", " << sideNormals.dimension(2) << endl;
 
     int numPts = sideCubPoints.dimension(1);
-
-    cout << "getting constraints" << endl;
 
     // GET CONSTRAINT INFO
     vector<map<int, FieldContainer<double> > > constrCoeffsVector;
     vector<FieldContainer<double> > constraintValuesVector;
     vector<FieldContainer<bool> > imposeHereVector;
     _constraints->getConstraints(sideCubPoints,sideNormals,constrCoeffsVector,constraintValuesVector);
-    cout << "got constraints" << endl;
 
     //loop thru constraints
     for (vector<map<int,FieldContainer<double> > >::iterator constrIt = constrCoeffsVector.begin(); constrIt !=constrCoeffsVector.end(); constrIt++){
@@ -73,7 +64,6 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
         // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
         FieldContainer<double> trialValuesCopy = trialValuesTransformed;
 
-	cout << "transforming trial values " << endl;
 	// transform trial values
 	int numDofs1 = trialOrderPtr->getBasisCardinality(trialID,sideIndex); 
 	for (int dofIndex=0; dofIndex<numDofs1; dofIndex++){
@@ -96,7 +86,6 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
 	  // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
 	  FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
 	  
-	  cout << "transforming test values " << endl;
 	  int numDofs2 = trialOrderPtr->getBasisCardinality(testTrialID,sideIndex); 
 	  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
 	    for (int dofIndex=0; dofIndex<numDofs2; dofIndex++){

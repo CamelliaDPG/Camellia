@@ -31,10 +31,20 @@ ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, doub
 double ConfusionBilinearForm::getEpsilon(){
   return _epsilon;
 }
-vector<double> ConfusionBilinearForm::getBeta(){
+
+void ConfusionBilinearForm::setEpsilon(double newEpsilon){
+  _epsilon = newEpsilon;
+}
+
+vector<double> ConfusionBilinearForm::getBeta(double x, double y){
   vector<double> beta;
-  beta.push_back(_beta_x);
-  beta.push_back(_beta_y);
+  //  beta.push_back(_beta_x);beta.push_back(_beta_y);
+  double xn = (x-.5);
+  double yn = (y-.5);
+  double r  = 1.0; //sqrt(xn*xn+yn*yn);
+  beta.push_back(-yn/r);
+  beta.push_back(xn/r);  
+
   return beta;
 }
 
@@ -170,8 +180,13 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-                                                            + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+		//                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+		//                                                            + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+		double x = points(cellIndex,ptIndex,0);
+		double y = points(cellIndex,ptIndex,1);
+                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+
               }
             }
           }
@@ -200,9 +215,15 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+		double x = points(cellIndex,ptIndex,0);
+		double y = points(cellIndex,ptIndex,1);
+		
+		//                trialValues(cellIndex,basisOrdinal,ptIndex)
+		//                = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*_beta_x
+		//                  + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*_beta_y;
                 trialValues(cellIndex,basisOrdinal,ptIndex)
-                = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*_beta_x
-                  + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*_beta_y;
+		  = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*getBeta(x,y)[0]
+                  + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*getBeta(x,y)[1];
               }
             }
           }

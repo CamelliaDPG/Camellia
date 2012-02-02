@@ -8,10 +8,7 @@
 #include "ZoltanMeshPartitionPolicy.h"
 
 // added by Jesse
-#include "PenaltyMethodFilter.h"
-#include "ConfectionProblem.h"
 #include "ConfusionInnerProduct.h"
-#include "ConfectionBCConstraints.h"
 
 // Trilinos includes
 #include "Epetra_Time.h"
@@ -74,7 +71,6 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
-  cout << "In driver, setting numProcs = " << numProcs << endl;
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
@@ -105,7 +101,7 @@ int main(int argc, char *argv[]) {
   return 0;
   */
   bool limitIrregularity = true;
-  int numRefinements = 12;
+  int numRefinements = 2;
   double thresholdFactor = 0.20;
   int refIterCount = 0;  
   vector<double> errorVector;

@@ -11,18 +11,18 @@
 #include "DPGInnerProduct.h"
 
 /*
- Implements Confusion inner product for L2 stability in u
- */
+  Implements Confusion inner product for L2 stability in u
+*/
 
 class ConfusionInnerProduct : public DPGInnerProduct {
-private:
+ private:
   Teuchos::RCP<ConfusionBilinearForm> _confusionBilinearForm;
   Teuchos::RCP<Mesh> _mesh;
-public:
+ public:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   
-  ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs, Teuchos::RCP<Mesh> mesh) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
+ ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs, Teuchos::RCP<Mesh> mesh) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
     _confusionBilinearForm=bfs; // redundant, but no way around it.
     _mesh=mesh; // for h-scaling
   } 
@@ -72,9 +72,7 @@ public:
     if (testID1==testID2){
       
       double epsilon = _confusionBilinearForm->getEpsilon();
-      double beta_x = _confusionBilinearForm->getBeta()[0];
-      double beta_y = _confusionBilinearForm->getBeta()[1];
-      int spaceDim = _confusionBilinearForm->getBeta().size();
+      int spaceDim = physicalPoints.dimension(2);
 
       //      cout << "Beta = " << beta_x << ", " << beta_y << ", and epsilon = " << epsilon << endl;
       
@@ -116,14 +114,16 @@ public:
 	    
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
 		testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*scaling;
               }
             }
           }
-	} else if (operatorIndex==1) {
+        } else if (operatorIndex==1) {
           
-	  _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
-	  //	  _bilinearForm->multiplyFCByWeight(testValues2,1.0);
+          _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
+          //      _bilinearForm->multiplyFCByWeight(testValues2,1.0);
           
         } else if (operatorIndex==2) { // if it's the beta dot grad term
           
@@ -147,6 +147,9 @@ public:
                 double x = physicalPoints(cellIndex,ptIndex,0);
                 double y = physicalPoints(cellIndex,ptIndex,1);
                 double weight = getWeight(x,y);
+		double beta_x = _confusionBilinearForm->getBeta(x,y)[0];
+		double beta_y = _confusionBilinearForm->getBeta(x,y)[1];
+
                 testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
                 + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
                 testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0)
@@ -166,17 +169,12 @@ public:
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                double x = physicalPoints(cellIndex,ptIndex,0);
-                double y = physicalPoints(cellIndex,ptIndex,1);
-                for (int dimIndex=0; dimIndex<spaceDim; dimIndex++) {
-                  double weight = getWeight(x,y);
-                  cout << "testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
-                  cout << "testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
-                  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
-                  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex);
-                  cout << "testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
-                  cout << "testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex)" <<  testValues2(cellIndex,basisOrdinal,ptIndex,dimIndex) << endl;
-                }
+		double x = physicalPoints(cellIndex,ptIndex,0);
+		double y = physicalPoints(cellIndex,ptIndex,1);
+		for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
+		  double weight = getWeight(x,y);
+		  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+		}
               }
             }
           }
@@ -186,8 +184,6 @@ public:
           int basisCardinality = testValues1.dimension(1);
           int numPoints = testValues1.dimension(2);
           
-          FieldContainer<double> testValuesCopy1 = testValues1;
-          FieldContainer<double> testValuesCopy2 = testValues2;
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -195,7 +191,6 @@ public:
                 double y = physicalPoints(cellIndex,ptIndex,1);
                 double weight = getWeight(x,y);
                 testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*weight;
-                testValues2(cellIndex,basisOrdinal,ptIndex) = testValues2(cellIndex,basisOrdinal,ptIndex);
               }
             }
           }
@@ -207,7 +202,8 @@ public:
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
     
-    return _confusionBilinearForm->getEpsilon() + x*y;
+    //    return _confusionBilinearForm->getEpsilon() + x*y;
+    return 1.0; // for confection
   }
 };
 

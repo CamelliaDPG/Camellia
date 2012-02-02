@@ -24,7 +24,8 @@ public:
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);
 
   double getEpsilon();
-  vector<double> getBeta();
+  void setEpsilon(double newEpsilon);
+  vector<double> getBeta(double x, double y);
   
   bool isFluxOrTrace(int trialID);
   
