@@ -13,11 +13,28 @@ static const string & S_TAU = "\\tau";
 static const string & S_V = "v";
 static const string & S_DEFAULT_TEST = "invalid test";
 
+ConfusionBilinearForm::ConfusionBilinearForm(double epsilon) {
+  _epsilon = epsilon;
+  _beta_x = 0.0;
+  _beta_y = 0.0;
+  _useConstBeta = false; // will use beta defined in the 
+  
+  _testIDs.push_back(TAU);
+  _testIDs.push_back(V);
+  
+  _trialIDs.push_back(U_HAT);
+  _trialIDs.push_back(BETA_N_U_MINUS_SIGMA_HAT);
+  _trialIDs.push_back(U);
+  _trialIDs.push_back(SIGMA_1);
+  _trialIDs.push_back(SIGMA_2);
+}
+
 ConfusionBilinearForm::ConfusionBilinearForm(double epsilon, double beta_x, double beta_y) {
   _epsilon = epsilon;
   _beta_x = beta_x;
   _beta_y = beta_y;
-  
+  _useConstBeta = true;
+
   _testIDs.push_back(TAU);
   _testIDs.push_back(V);
   
@@ -38,13 +55,15 @@ void ConfusionBilinearForm::setEpsilon(double newEpsilon){
 
 vector<double> ConfusionBilinearForm::getBeta(double x, double y){
   vector<double> beta;
-  //  beta.push_back(_beta_x);beta.push_back(_beta_y);
-  double xn = (x-.5);
-  double yn = (y-.5);
-  double r  = 1.0; //sqrt(xn*xn+yn*yn);
-  beta.push_back(-yn/r);
-  beta.push_back(xn/r);  
-
+  if (useConstBeta){
+    beta.push_back(_beta_x);beta.push_back(_beta_y);
+  } else {
+    double xn = (x-.5);
+    double yn = (y-.5);
+    double r  = 1.0; //sqrt(xn*xn+yn*yn);
+    beta.push_back(-yn/r);
+    beta.push_back(xn/r);  
+  }
   return beta;
 }
 
@@ -180,12 +199,12 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-                + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
-//		double x = points(cellIndex,ptIndex,0);
-//		double y = points(cellIndex,ptIndex,1);
-//                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-//		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+		//                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+		//                + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+		double x = points(cellIndex,ptIndex,0);
+		double y = points(cellIndex,ptIndex,1);
+                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
 
               }
             }

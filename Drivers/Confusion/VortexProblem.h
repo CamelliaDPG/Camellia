@@ -32,8 +32,8 @@ class VortexProblem : public RHS, public BC, public Constraints {
   
   // BC
   bool bcsImposed(int varID) {
-    //    return varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT;
-    return varID == ConfusionBilinearForm::U_HAT;
+    return varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT;
+    //    return varID == ConfusionBilinearForm::U_HAT;
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
@@ -55,13 +55,21 @@ class VortexProblem : public RHS, public BC, public Constraints {
 
 	// inflow 
 	double u0=0.0;
+	double sigma_n = 0.0;
 	// points are already on boundary; just test if they're inflow or outflow
 	if (beta_n < 0){
 	  double pi = 2.0*acos(0.0);
 	  //	  u0 = sin(2.0*pi*x)+sin(2.0*pi*y);
-	  u0 = abs(x*y + (1-x)*(1-y) -.5);
+	  u0 = abs(x*y + (1.0-x)*(1.0-y) -.5);
+	  double sigma1 = y - (1.0-y);
+	  double sigma2 = x - (1.0-x);
+	  double n1 = unitNormals(cellIndex,ptIndex,0);
+	  double n2 = unitNormals(cellIndex,ptIndex,1);
+	  sigma_n = _cbf->getEpsilon()*(sigma1*n1 + sigma2*n2);
+	  //      u0 = abs((x-.5)*(x-.5) + (y-.5)*(y-.5)-.25);
+	  
 	  if (bcsImposed(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT)){
-	    dirichletValues(cellIndex,ptIndex) = beta_n*u0;
+	    dirichletValues(cellIndex,ptIndex) = beta_n*u0-sigma_n;
 	  } else {
 	    dirichletValues(cellIndex,ptIndex) = u0;
 	  }
