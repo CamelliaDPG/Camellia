@@ -17,7 +17,7 @@ ConfusionBilinearForm::ConfusionBilinearForm(double epsilon) {
   _epsilon = epsilon;
   _beta_x = 0.0;
   _beta_y = 0.0;
-  _useConstBeta = false; // will use beta defined in the 
+  _useConstBeta = false; // will use beta defined in the routine
   
   _testIDs.push_back(TAU);
   _testIDs.push_back(V);
@@ -56,7 +56,8 @@ void ConfusionBilinearForm::setEpsilon(double newEpsilon){
 vector<double> ConfusionBilinearForm::getBeta(double x, double y){
   vector<double> beta;
   if (useConstBeta){
-    beta.push_back(_beta_x);beta.push_back(_beta_y);
+    beta.push_back(_beta_x);
+    beta.push_back(_beta_y);
   } else {
     double xn = (x-.5);
     double yn = (y-.5);
@@ -205,7 +206,7 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
 		double y = points(cellIndex,ptIndex,1);
                 testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
 		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
-
+		
               }
             }
           }
