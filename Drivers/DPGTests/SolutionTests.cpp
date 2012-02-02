@@ -12,6 +12,13 @@
 #include "MathInnerProduct.h"
 #include "SimpleFunction.h"
 
+// unclear on why these initializers are necessary but others (e.g. _confusionSolution1_2x2) are not
+// maybe a bug in Teuchos::RCP?
+SolutionTests::SolutionTests() :
+_confusionExactSolution(Teuchos::rcp( (ConfusionManufacturedSolution*) NULL )),
+_poissonExactSolution(Teuchos::rcp( (PoissonExactSolution*) NULL ))
+{}
+
 void SolutionTests::setup() {
   // first, build a simple mesh
   
@@ -31,29 +38,29 @@ void SolutionTests::setup() {
   
   double epsilon = 1e-2;
   double beta_x = 1.0, beta_y = 1.0;
-  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); // 0 doesn't mean constant, but a particular solution...
+  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(epsilon,beta_x,beta_y) ); 
   
   bool useConformingTraces = true;
   int polyOrder = 2;
-  Teuchos::RCP<PoissonExactSolution> poissonSolution = 
+  _poissonExactSolution = 
     Teuchos::rcp( new PoissonExactSolution(PoissonExactSolution::POLYNOMIAL, 
 					   polyOrder, useConformingTraces) );  
-  poissonSolution->setUseSinglePointBCForPHI(false); // impose zero-mean constraint
+  _poissonExactSolution->setUseSinglePointBCForPHI(false); // impose zero-mean constraint
 
 
   int H1Order = 3;
   int horizontalCells = 2; int verticalCells = 2;
   
   // before we hRefine, compute a solution for comparison after refinement
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(_confusionExactSolution->bilinearForm()));
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _confusionExactSolution->bilinearForm(), H1Order, H1Order+1);
 
-  Teuchos::RCP<Mesh> poissonMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, poissonSolution->bilinearForm(), H1Order, H1Order+2);
-  Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(poissonSolution->bilinearForm()));
+  Teuchos::RCP<Mesh> poissonMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
+  Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
 
-  _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip) );
-  _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip) );
-  _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, poissonSolution->bc(),poissonSolution->ExactSolution::rhs(), ip));
+  _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
+  _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
+  _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
 
   _confusionSolution1_2x2->solve();
   _confusionSolution2_2x2->solve();
