@@ -1,0 +1,11 @@
+Import('*')
+
+src_obj_confection = env.Object(['ConfusionBilinearForm.cpp','PenaltyMethodFilter.cpp','ConfectionManufacturedSolution.cpp'])
+
+src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp'])
+
+env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])
+
+env.Program('exec/Confection',['ConfectionDriver.cpp',src_obj_confection])
+
+env.Program('exec/Vortex',['VortexDriver.cpp',src_obj_confection])
