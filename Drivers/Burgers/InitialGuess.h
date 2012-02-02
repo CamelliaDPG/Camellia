@@ -1,12 +1,12 @@
-#ifndef SIMPLE_FUNCTION_INTERFACE
-#define SIMPLE_FUNCTION_INTERFACE
+#ifndef BURGERS_INITIAL_GUESS
+#define BURGERS_INITIAL_GUESS
 
 #include "AbstractFunction.h"
 
 using namespace Intrepid;
 using namespace std;
 
-class SimpleFunction : public AbstractFunction {
+class InitialGuess : public AbstractFunction {
 public:    
   void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
     int numCells = physicalPoints.dimension(0);
@@ -17,7 +17,7 @@ public:
       for (int j=0;j<numPoints;j++){
         double x = physicalPoints(i,j,0);
         double y = physicalPoints(i,j,1);
-        functionValues(i,j) = x*y + 3.0*x*x;
+        functionValues(i,j) = 1.0-2.0*x; // extrapolate the boundary condition
       }
     }  
   }
