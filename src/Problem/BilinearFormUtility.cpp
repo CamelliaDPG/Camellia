@@ -806,42 +806,48 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
     for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
       int testID = *testIterator;
       
-      EOperatorExtended testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-      bool notZero = rhs.nonZeroRHS(testID);
-      if (notZero) { // compute the integral(s)
-        
-        testBasis = testOrdering->getBasis(testID);
-        
-        Teuchos::RCP< const FieldContainer<double> > testValuesTransformedWeighted;
-        
-        testValuesTransformedWeighted = basisCache.getTransformedWeightedValues(testBasis,testOperator);
-        FieldContainer<double> physCubPoints = basisCache.getPhysicalCubaturePoints();
-        
-        int testDofOffset = testOrdering->getDofIndex(testID,0);
-        // note that weightCellBasisValues does depend on contiguous test basis dofs...
-        // (this is the plan, since there shouldn't be any kind of identification between different test dofs,
-        //  especially since test functions live only inside the cell)
-        FieldContainer<double> testValuesTransformedWeightedWeighted = *testValuesTransformedWeighted;
-        weightCellBasisValues(testValuesTransformedWeightedWeighted, weights, testDofOffset);
-
-        FieldContainer<double> rhsPointValues; // the rhs method will resize...	
-        rhs.rhs(testID,physCubPoints,rhsPointValues);
-        
-        //cout << "rhsPointValues for testID " << testID << ":" << endl << rhsPointValues;
-        
-        //cout << "d." << endl;
-        //   d. Sum up (integrate)
-        // to integrate, first multiply the testValues (C,F,P) or (C,F,P,D)
-        //               by the rhsPointValues (C,P) or (C,P,D), respectively, and then sum.
-        int numPoints = rhsPointValues.dimension(1);
-        for (unsigned k=0; k < numCells; k++) {
-          for (int i=0; i < testBasis->getCardinality(); i++) {
-            for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-              if (rhsPointValues.rank() == 2) {
-                rhsVector(k,optTestIndex) += testValuesTransformedWeightedWeighted(k,i,ptIndex) * rhsPointValues(k,ptIndex);
-              } else {
-                for (int d=0; d<spaceDim; d++) {
-                  rhsVector(k,optTestIndex) += testValuesTransformedWeightedWeighted(k,i,ptIndex,d) * rhsPointValues(k,ptIndex,d);
+      vector<EOperatorExtended> testOperators = rhs.operatorsForTestID(testID);
+      int operatorIndex = -1;
+      for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
+           testOpIt != testOperators.end(); testOpIt++) {
+        operatorIndex++;
+        EOperatorExtended testOperator = *testOpIt;
+        bool notZero = rhs.nonZeroRHS(testID);
+        if (notZero) { // compute the integral(s)
+          
+          testBasis = testOrdering->getBasis(testID);
+          
+          Teuchos::RCP< const FieldContainer<double> > testValuesTransformedWeighted;
+          
+          testValuesTransformedWeighted = basisCache.getTransformedWeightedValues(testBasis,testOperator);
+          FieldContainer<double> physCubPoints = basisCache.getPhysicalCubaturePoints();
+          
+          int testDofOffset = testOrdering->getDofIndex(testID,0);
+          // note that weightCellBasisValues does depend on contiguous test basis dofs...
+          // (this is the plan, since there shouldn't be any kind of identification between different test dofs,
+          //  especially since test functions live only inside the cell)
+          FieldContainer<double> testValuesTransformedWeightedWeighted = *testValuesTransformedWeighted;
+          weightCellBasisValues(testValuesTransformedWeightedWeighted, weights, testDofOffset);
+          
+          FieldContainer<double> rhsPointValues; // the rhs method will resize...	
+          rhs.rhs(testID,operatorIndex,physCubPoints,rhsPointValues);
+          
+          //cout << "rhsPointValues for testID " << testID << ":" << endl << rhsPointValues;
+          
+          //cout << "d." << endl;
+          //   d. Sum up (integrate)
+          // to integrate, first multiply the testValues (C,F,P) or (C,F,P,D)
+          //               by the rhsPointValues (C,P) or (C,P,D), respectively, and then sum.
+          int numPoints = rhsPointValues.dimension(1);
+          for (unsigned k=0; k < numCells; k++) {
+            for (int i=0; i < testBasis->getCardinality(); i++) {
+              for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+                if (rhsPointValues.rank() == 2) {
+                  rhsVector(k,optTestIndex) += testValuesTransformedWeightedWeighted(k,i,ptIndex) * rhsPointValues(k,ptIndex);
+                } else {
+                  for (int d=0; d<spaceDim; d++) {
+                    rhsVector(k,optTestIndex) += testValuesTransformedWeightedWeighted(k,i,ptIndex,d) * rhsPointValues(k,ptIndex,d);
+                  }
                 }
               }
             }

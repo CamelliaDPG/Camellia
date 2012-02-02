@@ -40,11 +40,26 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
+#include "BilinearForm.h" // defines EOperatorExtended
+
+#include <vector>
+
+using namespace std;
+
 using namespace Intrepid;
 
 class RHS {
 public:
   virtual bool nonZeroRHS(int testVarID) = 0;
+  virtual vector<EOperatorExtended> operatorsForTestID(int testID) {
+    vector<EOperatorExtended> ops;
+    ops.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    return ops;
+  }
+  virtual void rhs(int testVarID, int operatorIndex, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+    TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
+    rhs(testVarID,physicalPoints,values);
+  }
   virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) = 0;
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
