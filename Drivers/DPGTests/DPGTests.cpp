@@ -2801,7 +2801,7 @@ bool DPGTests::testProjection(){
   for (int i=0;i<numPts;i++){
     double x = cubPoints(0,i,0);
     for (int j = 0;j<numDofs;j++){
-      basisSum(i) += basisCoefficients(j)*basisValues(0,j,i);
+      basisSum(i) += basisCoefficients(0,j)*basisValues(0,j,i);
     }
     if (abs(basisSum(i)-functionValues(0,i))>tol){
       passedTest = false;
