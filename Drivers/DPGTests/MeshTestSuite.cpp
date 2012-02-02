@@ -1268,7 +1268,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   
   double epsilon = 1e-2;
   double beta_x = 1.0, beta_y = 1.0;
-  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); // 0 doesn't mean constant, but a particular solution...
+  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
   
   int H1Order = 3;
   int horizontalCells = 1; int verticalCells = 1;
