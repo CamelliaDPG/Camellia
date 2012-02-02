@@ -36,6 +36,7 @@ OBJ_NAMES = DofOrdering \
        PoissonBilinearForm \
        BilinearFormUtility \
        BasisFactory \
+       ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
        MathInnerProduct \
@@ -108,6 +109,9 @@ ConfectionDriver: ConfectionDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfectionDriver.o -o ConfectionDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 ConfectionDriver.o: $(DRIVERS_DIR)/Confusion/ConfectionDriver.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+ConfectionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfectionManufacturedSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 StokesStudy: StokesStudy.o $(OBJS)
