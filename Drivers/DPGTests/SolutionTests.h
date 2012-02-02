@@ -11,7 +11,7 @@
 class SolutionTests : public TestSuite {
 private:
   FieldContainer<double> _testPoints;
-  Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2;
+  Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2, _poissonSolution;
   void setup();
   void teardown();
 public:
@@ -19,6 +19,7 @@ public:
   string testSuiteName() { return "SolutionTests"; }
   bool testAddSolution();
   bool testProjectFunction();
+  bool testEnergyError();
 };
 
 
