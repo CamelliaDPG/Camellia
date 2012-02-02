@@ -180,12 +180,12 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		//                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		//                                                            + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
-		double x = points(cellIndex,ptIndex,0);
-		double y = points(cellIndex,ptIndex,1);
-                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+                + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+//		double x = points(cellIndex,ptIndex,0);
+//		double y = points(cellIndex,ptIndex,1);
+//                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
+//		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
 
               }
             }
