@@ -72,10 +72,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
     numTestsPassed++;
   }
   numTestsRun++;
-  if (testEnergyError() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
   if (testHRefinementForConfusion() ) {
     numTestsPassed++;
   }
@@ -782,7 +778,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                       int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                       int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
                       if (neighborsGlobalDofIndex != globalDofIndex) {
-                        //                        cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
+
                         cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
                         cout << neighborCellID << ", " << neighborLocalDofIndex << ") -- ";
                         cout << globalDofIndex << " != " << neighborsGlobalDofIndex << "\n";
@@ -803,7 +799,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                   int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
                   int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
                   if (neighborsGlobalDofIndex != globalDofIndex) {
-                    cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
+		    cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
                     success = false;
                   }
                 } else { // neighbor->isParent()
@@ -1266,12 +1262,12 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   // h-convergence
   int sqrtElements = 2;
   
-  double epsilon = 1e-2;
+  double epsilon = 1e-1;
   double beta_x = 1.0, beta_y = 1.0;
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
   
   int H1Order = 3;
-  int horizontalCells = 1; int verticalCells = 1;
+  int horizontalCells = 4; int verticalCells = 4;
   
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
@@ -1280,8 +1276,8 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   cellsToRefine.clear();
   
   // start with a fresh 2x1 mesh:
-  horizontalCells = 1; verticalCells = 1;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
+  horizontalCells = 4; verticalCells = 4;
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 2;
@@ -1321,11 +1317,11 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   double tol = 1e-1;
   if ((refinedError > tol) || (refinedError != refinedError)) { // second compare: is refinedError NaN?
     success = false;
-    cout << "FAILURE: after 'deep' refinement for exactly recoverable solution, L2 error greater than tolerance.\n";
+    cout << "FAILURE: after 'deep' refinement for smooth solution, L2 error greater than tolerance.\n";
     cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
-  solution.writeToFile(ConfusionBilinearForm::U, "confusion_demo.dat");
+  solution.writeFieldsToFile(ConfusionBilinearForm::U, "confusion_demo.m");
   
   return success;
 }
@@ -1899,55 +1895,6 @@ bool MeshTestSuite::vectorPairsEqual( vector< pair<int,int> > &first, vector< pa
     }
   }
   return true;
-}
-
-bool MeshTestSuite::testEnergyError() {
-  bool success = true;
-  
-  // first, build a simple mesh
-  
-  double tol = 2e-11;
-  
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
-  
-  double epsilon = 1e-2;
-  double beta_x = 1.0, beta_y = 1.0;
-  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
-  
-  int H1Order = 3;
-  int horizontalCells = 1; int verticalCells = 1;
-  
-  // before we hRefine, compute a solution for comparison after refinement
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-  
-  vector<int> cellsToRefine;
-  cellsToRefine.clear();
-  
-  horizontalCells = 10; verticalCells = 10;
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+1);
-  
-  // to start, just compute error for the zero solution
-  Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
-  
-  map<int,double> energyError;
-  solution.energyError(energyError);
-  
-  map<int,double>::iterator energyErrIt;
-  for (energyErrIt = energyError.begin(); energyErrIt != energyError.end(); energyErrIt++) {
-    //cout << "Energy error for cellID " << energyErrIt->first;
-    //cout << ": " << energyErrIt->second << endl;
-  }
-  
-  return success;
 }
 
 bool MeshTestSuite::testPointContainment() {

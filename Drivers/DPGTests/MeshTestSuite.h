@@ -69,7 +69,6 @@ public:
   static bool testHRefinement();
   static bool testHRefinementForConfusion();
   static bool testRefinementPattern();
-  static bool testEnergyError();
   static bool testPointContainment();
 };
 
