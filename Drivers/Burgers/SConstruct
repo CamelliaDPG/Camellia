@@ -1,5 +1,5 @@
 # include everything in this directory. 
-includeDir = ['.']
+includeDir = ['.','../Confusion']
 
 #env = Environment(CXX='c++',CC='gcc',CXXFLAGS = '-O3',CPPPATH=includeDir)
 import os
