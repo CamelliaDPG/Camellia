@@ -972,11 +972,18 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
   
   if ( !result ) {
     for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
-      if ( _boundary.boundaryElement(elem->cellID(),sideIndex) ) {
-        // then check whether the point lies along this side
-        double x0 = vertices(sideIndex,0), y0 = vertices(sideIndex,1);
-        double x1 = vertices((sideIndex+1)%numVertices,0), y1 = vertices((sideIndex+1)%numVertices,1);
-        if (colinear(x0,y0,x1,y1,x,y)) result = true;
+      vector< pair<int,int> > descendantsForSide = elem->getDescendentsForSide(sideIndex);
+      for (vector< pair<int,int> >::iterator descendantIt = descendantsForSide.begin();
+           descendantIt != descendantsForSide.end(); descendantIt++) {
+        int descCellID = descendantIt->first;
+        int descSide = descendantIt->second;
+        if ( _boundary.boundaryElement(descCellID,descSide) ) {
+          // then check whether the point lies along this side
+          double x0 = vertices(sideIndex,0), y0 = vertices(sideIndex,1);
+          double x1 = vertices((sideIndex+1)%numVertices,0), y1 = vertices((sideIndex+1)%numVertices,1);
+          if (colinear(x0,y0,x1,y1,x,y)) result = true;
+          // TODO: if we set result=true here, we could actually modify the element to be the descCellID that matched, if we passed elem by reference...  (It would save a little searching)
+        }        
       }
     }
   }
@@ -1108,11 +1115,9 @@ void Mesh::determineActiveElements() {
     vector<ElementPtr> partition;
     for (int j=0; j<_activeElements.size(); j++) {
       if (partitionedMesh(i,j) < 0) break; // no more elements in this partition
-      //      if (partitionedMesh(i,j)>-1){ 
       int cellID = partitionedMesh(i,j);
       partition.push_back( _elements[cellID] );
       _partitionForCellID[cellID] = i;
-      //      }
     }
     _partitions.push_back( partition );
   }
@@ -1173,6 +1178,15 @@ vector< ElementPtr > Mesh::elementsOfType(int partitionNumber, ElementTypePtr el
     elementsOfType.push_back(_elements[cellIDs[cellIndex]]);
   }
   return elementsOfType;
+}
+
+vector< ElementPtr > Mesh::elementsOfTypeGlobal(ElementTypePtr elemTypePtr) {
+  vector< ElementPtr > elementsOfTypeVector;
+  for (int partitionNumber=0; partitionNumber<_numPartitions; partitionNumber++) {
+    vector< ElementPtr > elementsOfTypeForPartition = elementsOfType(partitionNumber,elemTypePtr);
+    elementsOfTypeVector.insert(elementsOfTypeVector.end(),elementsOfTypeForPartition.begin(),elementsOfTypeForPartition.end());
+  }
+  return elementsOfTypeVector;
 }
 
 vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
