@@ -62,7 +62,7 @@ public:
   }
   virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
-  };
+  }
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
 };
