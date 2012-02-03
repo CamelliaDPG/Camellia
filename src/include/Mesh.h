@@ -151,7 +151,7 @@ public:
   
   Boundary &boundary();
   
-  int cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int partitionNumber=-1);
+  int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
   
   void enforceOneIrregularity();
 
@@ -166,11 +166,12 @@ public:
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
   
-  vector< Teuchos::RCP< Element > > & activeElements();  
+  vector< ElementPtr > & activeElements();  
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
-  vector< Teuchos::RCP< Element > > & elements();
-  vector< Teuchos::RCP< Element > > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  vector< ElementPtr > & elements();
+  vector< ElementPtr > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr);
   
   vector< ElementPtr > elementsInPartition(int partitionNumber);
 
