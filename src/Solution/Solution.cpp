@@ -1239,9 +1239,17 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
     physicalPointIndex++;
     ElementPtr elem = *elemIt;
+    if (elem.get() == NULL) {
+      // values for this point will already have been initialized to 0, the best we can do...
+      continue;
+    }
     ElementTypePtr elemTypePtr = elem->elementType();
     
     int cellID = elem->cellID();
+    if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+      // cellID not known -- default to 0
+      continue;
+    }
     FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
     
     int numCells = 1;
