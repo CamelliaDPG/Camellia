@@ -47,7 +47,6 @@ void SolutionTests::setup() {
 					   polyOrder, useConformingTraces) );  
   _poissonExactSolution->setUseSinglePointBCForPHI(false); // impose zero-mean constraint
 
-
   int H1Order = 3;
   int horizontalCells = 2; int verticalCells = 2;
   
@@ -61,6 +60,7 @@ void SolutionTests::setup() {
   _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
 
   _confusionSolution1_2x2->solve();
   _confusionSolution2_2x2->solve();
@@ -168,15 +168,15 @@ bool SolutionTests::testProjectFunction() {
   functionMap[ConfusionBilinearForm::SIGMA_1] = simpleFunction;
   functionMap[ConfusionBilinearForm::SIGMA_2] = simpleFunction;
 
-  _confusionSolution1_2x2->projectOntoMesh(functionMap);  
+  _confusionUnsolved->projectOntoMesh(functionMap);  
   
   FieldContainer<double> valuesU(_testPoints.dimension(0));
   FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
   FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
   
-  _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U, _testPoints);
-  _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
-  _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
+  _confusionUnsolved->solutionValues(valuesU, ConfusionBilinearForm::U, _testPoints);
+  _confusionUnsolved->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, _testPoints);
+  _confusionUnsolved->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, _testPoints);
 
   FieldContainer<double> allCellTestPoints = _testPoints;
   allCellTestPoints.resize(1,_testPoints.dimension(0),_testPoints.dimension(1));

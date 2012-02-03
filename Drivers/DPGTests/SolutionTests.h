@@ -15,7 +15,7 @@
 class SolutionTests : public TestSuite {
 private:
   FieldContainer<double> _testPoints;
-  Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2, _poissonSolution;
+  Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2, _poissonSolution, _confusionUnsolved;
   Teuchos::RCP< PoissonExactSolution > _poissonExactSolution;
   Teuchos::RCP< ConfusionManufacturedSolution > _confusionExactSolution;
   void setup();
