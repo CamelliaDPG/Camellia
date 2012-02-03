@@ -60,7 +60,9 @@ public:
     TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
     rhs(testVarID,physicalPoints,values);
   }
-  virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) = 0;
+  virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
+  };
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
 };
