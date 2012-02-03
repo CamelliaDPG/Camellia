@@ -159,7 +159,7 @@ VectorizedBasisTestSuite.o: $(DRIVERS_DIR)/DPGTests/VectorizedBasisTestSuite.cpp
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
-PenaltyMethodFilter.o: $(DRIVERS_DIR)/Confusion/PenaltyMethodFilter.cpp
+PenaltyMethodFilter.o: $(SRCS_DIR)/Solution/PenaltyMethodFilter.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 TransientConfusionBilinearForm.o: $(DRIVERS_DIR)/TransientConfusion/TransientConfusionBilinearForm.cpp
