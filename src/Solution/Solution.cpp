@@ -95,7 +95,7 @@ Solution::Solution(const Solution &soln) {
   _bc = soln.bc();
   _rhs = soln.rhs();
   _ip = soln.ip();
-  _solutionForElementType = soln.solutionForElementTypeMap();
+  _solutionForCellIDGlobal = soln.solutionForCellIDGlobal();
   _filter = soln.filter();
   initialize();
 }
@@ -109,37 +109,25 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
 }
 
 void Solution::initialize() {
-  // sets up the data structure for storing the solution (will want to do this if the mesh changes!)
+  // clear the data structure in case it already stores some stuff
+  _solutionForCellIDGlobal.clear();
   
-  // first, clear the data structure in case it already stores some stuff
-  _solutionForElementType.clear();
-  
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
-  
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-    int numDofsForType = elemTypePtr->trialOrderPtr->totalDofs();
-    FieldContainer<double> solutionCoeffs(numCellsOfType,numDofsForType);
-    _solutionForElementType[elemTypePtr.get()] = solutionCoeffs;
-  }
   _residualsComputed = false;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight) {
   // thisSoln += weight * otherSoln
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
-  const map< ElementType*, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForElementTypeMap());
-  TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForElementType.size(),
+  const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
+  TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
                      std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
-  map< ElementType*, FieldContainer<double> >::iterator mapIt;
-  for (mapIt=_solutionForElementType.begin(); mapIt != _solutionForElementType.end(); mapIt++) {
-    ElementType* elemTypePtr = mapIt->first;
+  map< int, FieldContainer<double> >::iterator mapIt;
+  for (mapIt=_solutionForCellIDGlobal.begin(); mapIt != _solutionForCellIDGlobal.end(); mapIt++) {
+    int cellID = mapIt->first;
     FieldContainer<double>* myValues = &(mapIt->second);
-    map< ElementType*, FieldContainer<double> >::const_iterator otherMapIt = otherMapPtr->find(elemTypePtr);
+    map< int, FieldContainer<double> >::const_iterator otherMapIt = otherMapPtr->find(cellID);
     TEST_FOR_EXCEPTION(otherMapIt == otherMapPtr->end(),
-                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (elemTypePtr not found).");
+                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (cellID not found).");
     const FieldContainer<double>* otherValues = &(otherMapIt->second);
     int numValues = myValues->size();
     TEST_FOR_EXCEPTION(numValues != otherValues->size(),
@@ -456,72 +444,24 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   solnCoeff.Import(lhsVector, solnImporter, Insert);
   
   // copy the dof coefficients into our data structure
-  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
-  vector< Teuchos::RCP< Element > >::iterator elemIt;
-  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-    ElementPtr elemPtr = *(elemIt);
-    int cellID = elemPtr->cellID();
-    int cellIndex = elemPtr->globalCellIndex();
-    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
-    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = solnCoeff[globalIndex];
+  // get ALL element types (not just ours)-- this is a global import that we should get rid of eventually...
+  elementTypes = _mesh->elementTypes();
+  for ( vector< ElementTypePtr >::iterator elemTypeIt = elementTypes.begin();
+       elemTypeIt != elementTypes.end(); elemTypeIt++) {
+    vector< ElementPtr > elements = _mesh->elementsOfTypeGlobal(*elemTypeIt);
+    vector< ElementPtr >::iterator elemIt;
+    int numDofs = (*elemTypeIt)->trialOrderPtr->totalDofs();
+    FieldContainer<double> elemDofs(numDofs);
+    for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+      ElementPtr elemPtr = *(elemIt);
+      int cellID = elemPtr->cellID();
+      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+        int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
+        elemDofs(dofIndex) = solnCoeff[globalIndex];
+      }
+      _solutionForCellIDGlobal[cellID] = elemDofs;
     }
   }
-  
-  //  double lhsVectorGathered[numProcs][maxLhsLength];
-  //  double *lhsVectorLocal = new double[ maxLhsLength ];
-  //  // debugging: clear the vector first:
-  //  for (int i=0; i<maxLhsLength; i++ ) {
-  //    lhsVectorLocal[i] = 0.0;
-  //  }
-  //  
-  //  lhsVector.ExtractCopy( &lhsVectorLocal ); 
-  //  
-  ////  //debugging output:
-  ////  cout << "rank " << rank << " lhsVectorLocal:\t";
-  ////  cout << setprecision(3);
-  ////  // debugging: clear the vector first:
-  ////  for (int i=0; i< maxLhsLength; i++ ) {
-  ////    cout << lhsVectorLocal[i] << "\t";
-  ////  }
-  ////  cout << endl;
-  //
-  //  Comm.GatherAll( lhsVectorLocal, &lhsVectorGathered[0][0], maxLhsLength );
-  //
-  ////  //debugging output:
-  ////  if (rank == 0) {
-  ////    cout << "lhsVectorGathered:\n";
-  ////    // debugging: clear the vector first:
-  ////    for (int j=0; j< numProcs; j++) {
-  ////      cout << "rank " << j << ":\t";
-  ////      for (int i=0; i< maxLhsLength; i++ ) {
-  ////        cout << lhsVectorGathered[j][i] << "\t";
-  ////      }
-  ////      cout << endl;
-  ////    }
-  ////  }
-  ////  cout << setprecision(5);
-  //  
-  //  // copy the dof coefficients into our data structure
-  //  vector< Teuchos::RCP< Element > > elements = _mesh->activeElements();
-  //  vector< Teuchos::RCP< Element > >::iterator elemIt;
-  //  
-  //  for (elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
-  //    ElementPtr elemPtr = *(elemIt);
-  //    int cellID = elemPtr->cellID();
-  //    int cellIndex = elemPtr->globalCellIndex();
-  //    int numDofs = elemPtr->elementType()->trialOrderPtr->totalDofs();
-  //    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-  //      int globalIndex = _mesh->globalDofIndex(cellID, dofIndex);
-  //      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
-  //      int partitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex( globalIndex );
-  //      TEST_FOR_EXCEPTION( partitionLocalIndex > maxLhsLength, std::invalid_argument, "partitionLocalIndex out of bounds");
-  //      _solutionForElementType[elemPtr->elementType().get()](cellIndex,dofIndex) = lhsVectorGathered[partition][partitionLocalIndex];
-  //    }
-  //  }
-  //
-  //  delete lhsVectorLocal;
 
   double timeDistributeSolution = timer.ElapsedTime();
   Epetra_Vector timeDistributeSolutionVector(timeMap);
@@ -626,36 +566,38 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
   return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopoPtr);
 }
 
-bool Solution::equals(Solution& otherSolution, double tol) {
-  vector<ElementTypePtr> myElemTypes = _mesh->elementTypes();
-  vector<ElementTypePtr> otherElemTypes = otherSolution.mesh()->elementTypes();
-  // check that the # of elem types are the same:
-  int numElemTypes = myElemTypes.size();
-  if ( numElemTypes != otherElemTypes.size() ) {
-    return false;
-  }
-  double maxDiff = 0.0;
-  map< ElementType*, FieldContainer<double> > otherSolutionForElementType = otherSolution.solutionForElementTypeMap();
-  for (int elemTypeIndex=0; elemTypeIndex<numElemTypes; elemTypeIndex++) {
-    ElementTypePtr otherElemType = otherElemTypes[elemTypeIndex];
-    FieldContainer<double> otherSoln = otherSolutionForElementType[otherElemType.get()];
-    FieldContainer<double> mySoln = _solutionForElementType[getEquivalentElementType( otherSolution.mesh(), otherElemType ).get()];
-    int numSolnEntries = mySoln.size();
-    if ( numSolnEntries != otherSoln.size() ) {
-      return false;
-    }
-    for (int i=0; i<numSolnEntries; i++) {
-      double mine = mySoln[i], theirs = otherSoln[i];
-      double diff = abs(mine-theirs);
-      if (diff > tol) {
-        return false;
-      }
-      maxDiff = max(maxDiff,diff);
-    }
-  }
-  //cout << "Solution maxDiff is " << maxDiff << endl;
-  return true;
-}
+// The following method isn't really a good idea.
+//bool Solution::equals(Solution& otherSolution, double tol) {
+//  double maxDiff = 0.0;
+//  map< int, FieldContainer<double> > otherSolutionForCell = otherSolution.solutionForCellIDGlobal();
+//  int numElements = otherSolutionForCell.size();
+//  if (numElements != _solutionForCellIDGlobal.size()) return false;
+//  
+//  for (map< int, FieldContainer<double> >::iterator entryIt=_solutionForCellIDGlobal.begin();
+//       entryIt != _solutionForCellIDGlobal.end(); entryIt++) {
+//    int cellID = entryIt->first;
+//    FieldContainer<double> mySoln = entryIt->second;
+//    vector<double> centroid = _mesh->getCellCentroid(cellID);
+//    
+//    vector<ElementPtr> 
+//    int otherCellID = 
+//    FieldContainer<double> otherSoln = otherSolutionForCell[cellID];
+//    int numSolnEntries = mySoln.size();
+//    if ( numSolnEntries != otherSoln.size() ) {
+//      return false;
+//    }
+//    for (int i=0; i<numSolnEntries; i++) {
+//      double mine = mySoln[i], theirs = otherSoln[i];
+//      double diff = abs(mine-theirs);
+//      if (diff > tol) {
+//        return false;
+//      }
+//      maxDiff = max(maxDiff,diff);
+//    }
+//  }
+//  //cout << "Solution maxDiff is " << maxDiff << endl;
+//  return true;
+//}
 
 void Solution::integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID) {
   // only supports scalar-valued field bases right now...
@@ -899,7 +841,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // currently, we only support computing solution values on all the cells of a given type at once.
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
   // physicalPoints(numCellsForType,numPoints,spaceDim)
-  FieldContainer<double> solnCoeffs = _solutionForElementType[elemTypePtr.get()]; // (numcells, numLocalTrialDofs)
+  FieldContainer<double> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
   
   int numCells = physicalCellNodes.dimension(0);
@@ -1213,7 +1155,7 @@ void Solution::computeResiduals() {
     
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
     FieldContainer<double> cellSideParities  = _mesh->cellSideParities(elemTypePtr);
-    FieldContainer<double> solution = _solutionForElementType[elemTypePtr.get()];
+    FieldContainer<double> solution = solutionForElementTypeGlobal(elemTypePtr);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     
     int numTrialDofs = trialOrdering->totalDofs();
@@ -1299,26 +1241,13 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     ElementPtr elem = *elemIt;
     ElementTypePtr elemTypePtr = elem->elementType();
     
-    Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
-    int elemGlobalIndex = elem->globalCellIndex();
-    
-    int totalDofs = trialOrder->totalDofs();
-    oneCellDofsDimensions[0] = totalDofs;
-    
-    FieldContainer<double> solnCoeffs(oneCellDofsDimensions,
-                                      &_solutionForElementType[elemTypePtr.get()](elemGlobalIndex,0)); // (numcells, numLocalTrialDofs)
+    int cellID = elem->cellID();
+    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
     
     int numCells = 1;
     int numPoints = 1;
-    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-    
-    int numNodesPerCell = _mesh->physicalCellNodesGlobal(elemTypePtr).dimension(1);
-    Teuchos::Array<int> physicalCellNodesDimensions;
-    physicalCellNodesDimensions.push_back(numCells);
-    physicalCellNodesDimensions.push_back(numNodesPerCell);
-    physicalCellNodesDimensions.push_back(spaceDim);
-    FieldContainer<double> physicalCellNodes(physicalCellNodesDimensions, 
-                                             &_mesh->physicalCellNodesGlobal(elemTypePtr)(elemGlobalIndex,0,0));
+  
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
     
     FieldContainer<double> physicalPoint(onePointDimensions);
     for (int dim=0; dim<spaceDim; dim++) {
@@ -1336,13 +1265,15 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     
     // 1. compute refElemPoints, the evaluation points mapped to reference cell:
     FieldContainer<double> refElemPoint(numCells, numPoints, spaceDim);
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
     CellTools::mapToReferenceFrame(refElemPoint,physicalPoint,physicalCellNodes,cellTopo);
     refElemPoint.resize(numPoints,spaceDim);
     
     int sideIndex = 0; // field variable assumed
     
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+    Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
     
+    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
     int basisRank = trialOrder->getBasisRank(trialID);
     int basisCardinality = basis->getCardinality();
 
@@ -1369,16 +1300,16 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoint);
     
     // now, apply coefficient weights:
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-        if (basisRank == 0) {
-          values(physicalPointIndex) += (*basisValues)(dofOrdinal,0) * solnCoeffs(localDofIndex);
-        } else {
-          for (int i=0; i<spaceDim; i++) {
-            values(physicalPointIndex ,i) += (*basisValues)(dofOrdinal,0,i) * solnCoeffs(localDofIndex);
-          }
+    for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+      int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
+      if (basisRank == 0) {
+        values(physicalPointIndex) += (*basisValues)(dofOrdinal,0) * solnCoeffs(localDofIndex);
+      } else {
+        for (int i=0; i<spaceDim; i++) {
+          values(physicalPointIndex,i) += (*basisValues)(dofOrdinal,0,i) * solnCoeffs(localDofIndex);
         }
       }
+    }
   }
 }
 
@@ -1390,7 +1321,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // currently, we only support computing solution values on all the cells of a given type at once.
   // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
   // physicalPoints(numCellsForType,numPoints,spaceDim)
-  FieldContainer<double> solnCoeffs = _solutionForElementType[elemTypePtr.get()]; // (numcells, numLocalTrialDofs)
+  FieldContainer<double> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
   // 1. Map the physicalPoints from the elements specified in physicalCellNodes into reference element
   // 2. Compute each basis on those points
@@ -1702,104 +1633,28 @@ void Solution::writeQuadSolutionToFile(int trialID, const string &filePath) {
   fout.close();
 } 
 
-/*void Solution::integrate(FieldContainer<double> &valuePerCell, int trialID) {
-  int numCells = _mesh->elements.size();
-  if ( (valuePerCell.dimension(0) != numCells) || (valuePerCell.rank() != 1) ) {
-  TEST_FOR_EXCEPTION( true, std::invalid_argument, "valuePerCell should have dimension numCells." );
+FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr elemType) {
+  vector< ElementPtr > elementsOfType = _mesh->elementsOfTypeGlobal(elemType);
+  int numDofsForType = elemType->trialOrderPtr->totalDofs();
+  int numCellsOfType = elementsOfType.size();
+  FieldContainer<double> solutionCoeffs(numCellsOfType,numDofsForType);
+  for (vector< ElementPtr >::iterator elemIt = elementsOfType.begin();
+       elemIt != elementsOfType.end(); elemIt++) {
+    int globalCellIndex = (*elemIt)->globalCellIndex();
+    int cellID = (*elemIt)->cellID();
+    for (int dofIndex=0; dofIndex<numDofsForType; dofIndex++) {
+      if ( _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end() ) {
+        solutionCoeffs(globalCellIndex,dofIndex) = _solutionForCellIDGlobal[cellID](dofIndex);
+      } else { // no solution set for that cellID, return 0
+        solutionCoeffs(globalCellIndex,dofIndex) = 0.0;
+      }
+    }
   }
- 
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
- 
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-  //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
-  ElementTypePtr elemTypePtr = *(elemTypeIt);
-  int trialDegreeMax = 0;
-  int numSidesForTrial = elemTypePtr->dofOrderingPtr->getNumSidesForVarID(trialID);
-  for (int sideIndex=0; sideIndex<numSidesForTrial; sideIndex++) {
-  trialDegreeMax = max(trialDegreeMax, elemTypePtr->dofOrderingPtr->getBasisCardinality(trialID,sideIndex));
-  }
-  cubDegree = trialDegreeMax*2;
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
-  BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), cubDegree, 
-  numSidesForTrial != 1); // create side caches if trialID is on side...
- 
-  }
-  }*/
-
-// the following was an attempt to rewrite writeToFile more sensibly, just with
-// some arbitrary points for each cell.  But I don't know how to get MATLAB to
-// build a surface from arbitrary points (if indeed there is any way to do so)
-/*void Solution::writeToFile(int trialID, const string &filePath) {
-// writes out rows of the format: "cellID x y solnValue"
-ofstream fout(filePath.c_str());
-fout << setprecision(15);
-vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-vector< ElementTypePtr >::iterator elemTypeIt;
-int spaceDim = 2; // TODO: generalize to 3D...
- 
-for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-ElementTypePtr elemTypePtr = *(elemTypeIt);
-int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-int basisDegree = elemTypePtr->trialOrderPtr->getBasis(trialID)->getDegree();
-Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-// 0. Set up Cubature
-// Get numerical integration points--these will be the points we compute the solution values for...
-DefaultCubatureFactory<double>  cubFactory;                                   
-int cubDegree = 2*basisDegree;
-Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(*(cellTopoPtr.get()), cubDegree); 
- 
-int cubDim       = cellTopoCub->getDimension();
-int numCubPoints = cellTopoCub->getNumPoints();
- 
-FieldContainer<double> cubPoints(numCubPoints, cubDim);
-FieldContainer<double> cubWeights(numCubPoints);
- 
-cellTopoCub->getCubature(cubPoints, cubWeights);
- 
-typedef CellTools<double>  CellTools;
- 
-int cellTopoDim = cellTopoPtr->getDimension();
-int numVertices = cellTopoPtr->getVertexCount(cellTopoDim,0);
-FieldContainer<double> refPoints(numCubPoints+numVertices, cubDim);
-FieldContainer<double> refVertices(numVertices,cellTopoDim);
-CellTools::getReferenceSubcellVertices(refVertices,cellTopoDim,0,*(cellTopoPtr.get()));
-for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
-for (int i=0; i<cellTopoDim; i++) {
-refPoints(ptIndex,i) = refVertices(ptIndex,i);
+  return solutionCoeffs;
 }
-}
-for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
-for (int i=0; i<cubDim; i++) {
-refPoints(numVertices+ptIndex,i) = cubPoints(ptIndex,i);
-}
-}
- 
-// compute physicalCubaturePoints, the transformed cubature points on each cell:
-FieldContainer<double> physCubPoints(numCellsOfType, numCubPoints+numVertices, spaceDim);
-CellTools::mapToPhysicalFrame(physCubPoints,refPoints,_mesh->physicalCellNodes(elemTypePtr),*(cellTopoPtr.get()));
- 
-FieldContainer<double> values(numCellsOfType, numCubPoints+numVertices);
-solutionValues(values,elemTypePtr,trialID,physCubPoints);
- 
-for (int cellIndex=0; cellIndex < numCellsOfType; cellIndex++) {
-for (int ptIndex=0; ptIndex< numCubPoints + numVertices; ptIndex++) {
-double x = physCubPoints(cellIndex,ptIndex,0);
-double y = physCubPoints(cellIndex,ptIndex,1);
-double z = values(cellIndex,ptIndex);
-fout << _mesh->cellID(elemTypePtr,cellIndex) << " " << x << " " << y << " " << z << endl;
-}
-}
-}
-fout.close();
-}*/
-
 
 void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex) {
-  int cellIndex = _mesh->elements()[cellID]->globalCellIndex();
-  ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
-  
-  Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
+  Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
   Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
   
   int basisRank = trialOrder->getBasisRank(trialID);
@@ -1808,12 +1663,11 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
   
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-    solnCoeffs(dofOrdinal) = _solutionForElementType[elemTypePtr.get()](cellIndex,localDofIndex);
+    solnCoeffs(dofOrdinal) = _solutionForCellIDGlobal[cellID](localDofIndex);
   }
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
-  int cellIndex = _mesh->elements()[cellID]->globalCellIndex();
   ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
   
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
@@ -1824,14 +1678,13 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
   TEST_FOR_EXCEPTION(solnCoeffsToSet.size() != basisCardinality, std::invalid_argument, "solnCoeffsToSet.size() != basisCardinality");
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-    _solutionForElementType[elemTypePtr.get()](cellIndex,localDofIndex) = solnCoeffsToSet[dofOrdinal];
+    _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
 }
 
-
 // protected method; used for solution comparison...
-const map< ElementType*, FieldContainer<double> > & Solution::solutionForElementTypeMap() const {
-  return _solutionForElementType;
+const map< int, FieldContainer<double> > & Solution::solutionForCellIDGlobal() const {
+  return _solutionForCellIDGlobal;
 }
 
 // Jesse's additions below:
@@ -1864,26 +1717,26 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
 
-	// for some odd reason, I cannot compute the ref-to-phys map for more than 1 point 
-	int numPoints = 1;
-	FieldContainer<double> refPoints(numPoints,spaceDim);
-	double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
-	double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
-	refPoints(0,0) = x;
-	refPoints(0,1) = y;
-	
-	// map side cubature points in reference parent cell domain to physical space	
-	FieldContainer<double> physCubPoints(numCells, numPoints, spaceDim);
-	CellTools::mapToPhysicalFrame(physCubPoints, refPoints, physicalCellNodes, cellTopo);
-	
-	FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
-	solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);	
-	
-	for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
-	  fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,0,0) << ";" << endl;
-	  fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,0,1) << ";" << endl;
-	  fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,0) << ";" << endl;	  
-	}
+        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point 
+        int numPoints = 1;
+        FieldContainer<double> refPoints(numPoints,spaceDim);
+        double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
+        double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
+        refPoints(0,0) = x;
+        refPoints(0,1) = y;
+        
+        // map side cubature points in reference parent cell domain to physical space	
+        FieldContainer<double> physCubPoints(numCells, numPoints, spaceDim);
+        CellTools::mapToPhysicalFrame(physCubPoints, refPoints, physicalCellNodes, cellTopo);
+        
+        FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
+        solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);	
+        
+        for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
+          fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,0,0) << ";" << endl;
+          fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,0,1) << ";" << endl;
+          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,0) << ";" << endl;	  
+        }
       }
     }
     globalCellInd+=numCells;

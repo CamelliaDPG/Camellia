@@ -64,7 +64,9 @@ private:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   
-  map< ElementType*, FieldContainer<double> > _solutionForElementType; // for uniform mesh, just a single entry.
+  map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
+  
+//  map< ElementType*, FieldContainer<double> > _solutionForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _errorRepresentationForElementType; // for uniform mesh, just a single entry.
 
@@ -76,6 +78,9 @@ private:
 
   bool _residualsComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
+  
+  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
+  
   void initialize();
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
@@ -85,14 +90,15 @@ private:
   double _meanTimeLocalStiffness, _meanTimeGlobalAssembly, _meanTimeBCImposition, _meanTimeSolve, _meanTimeDistributeSolution;
   double _maxTimeLocalStiffness, _maxTimeGlobalAssembly, _maxTimeBCImposition, _maxTimeSolve, _maxTimeDistributeSolution;
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
-  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
+  
 protected:
-  const map< ElementType*, FieldContainer<double> > & solutionForElementTypeMap() const;
+  const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
+  FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
   Solution(const Solution &soln);
-  bool equals(Solution& otherSolution, double tol=0.0);
+//  bool equals(Solution& otherSolution, double tol=0.0);
 #ifdef HAVE_MPI
   void solve(bool useMumps=true); // could add arguments to allow different solution algorithms to be selected...
 #else

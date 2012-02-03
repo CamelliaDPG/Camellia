@@ -1083,6 +1083,21 @@ bool MeshTestSuite::testHRefinement() {
   Solution origSolution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   origSolution.solve();
   
+  static const int NUM_POINTS_1D = 10;
+  double x[NUM_POINTS_1D] = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
+  double y[NUM_POINTS_1D] = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
+  
+  FieldContainer<double> testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
+  for (int i=0; i<NUM_POINTS_1D; i++) {
+    for (int j=0; j<NUM_POINTS_1D; j++) {
+      testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
+      testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
+    }
+  }
+  int trialID = PoissonBilinearForm::PHI;
+  FieldContainer<double> valuesOriginal(testPoints.dimension(0));
+  origSolution.solutionValues(valuesOriginal,trialID,testPoints);
+  
   mesh->hRefine(cellsToRefine,RefinementPattern::noRefinementPatternQuad());
   
   int numElementsEnd = mesh->numElements(); // should be twice as many
@@ -1109,9 +1124,15 @@ bool MeshTestSuite::testHRefinement() {
   Solution solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
   solution.solve();
 
-  if ( ! solution.equals(origSolution) ) {
-    success = false;
-    cout << "FAILURE: Expected noRefinementPattern to produce no change in solution. \n";
+  FieldContainer<double> valuesNew(valuesOriginal.dimension(0));
+  solution.solutionValues(valuesNew,trialID,testPoints);
+  
+  for (int valueIndex=0; valueIndex<valuesOriginal.dimension(0); valueIndex++) {
+    double diff = abs(valuesOriginal[valueIndex] - valuesNew[valueIndex]);
+    if (diff > tol) {
+      success = false;
+      cout << "FAILURE: Expected noRefinementPattern to produce no change in solution. \n";
+    }
   }
   
   // TODO: try a regular refinement pattern.  Check that this is a 4x4 mesh, and try solving.
