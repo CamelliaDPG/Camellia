@@ -406,9 +406,11 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   } else {
     // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
+    /*
     if (rank == 0) {
       cout << "USING MUMPS!\n";
     }
+    */
     
     Amesos_Mumps mumps(problem);
     mumps.SymbolicFactorization();
@@ -1725,11 +1727,11 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     int numCells = vertexPoints.dimension(0);       
     
     // NOW loop over all cells to write solution to file
-    int num1DPts = 4;
+    int num1DPts = 5;
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
 
-        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point 
+        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point at a time
         int numPoints = 1;
         FieldContainer<double> refPoints(numPoints,spaceDim);
         double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);

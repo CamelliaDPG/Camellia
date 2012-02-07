@@ -12,8 +12,9 @@ figure;hold on;
 for i=1:numCells
     surf(x{i},y{i},z{i}')
 end
+colorbar
 shading interp;
 if (nargin>1)
     A=load(fluxFilepath);
-    plot3(A(:,1),A(:,2),A(:,3),'r');
+    plot3(A(:,1),A(:,2),A(:,3),'k','linewidth',1.5);
 end
