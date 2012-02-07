@@ -18,22 +18,77 @@ class BurgersProblem : public RHS, public BC, public Constraints {
   }
   
   // RHS:
+  
+  vector<EOperatorExtended> operatorsForTestID(int testID){
+    vector<EOperatorExtended> ops;    
+    if (testID==BurgersBilinearForm::V){
+      ops.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+    } else if (testID==BurgersBilinearForm::TAU){
+      ops.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+    }
+    return ops;    
+  }
+    
   bool nonZeroRHS(int testVarID) {
-    return false; //testVarID == BurgersBilinearForm::V;
+    return ((testVarID == BurgersBilinearForm::V)||(testVarID == BurgersBilinearForm::TAU));
+    //    return false;
   }
   
-  void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  void rhs(int testVarID, int operatorIndex, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
-    values.resize(numCells,numPoints);
-    values.initialize(0.0);
+
+    if (testVarID==BurgersBilinearForm::V){
+      values.resize(numCells,numPoints,spaceDim);
+      values.initialize(0.0);    
+      FieldContainer<double> beta = _bf->getBeta(physicalPoints);
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+	for (int ptIndex=0; ptIndex<numPoints; ptIndex++){
+	  double x = physicalPoints(cellIndex,ptIndex,0);
+	  double y = physicalPoints(cellIndex,ptIndex,1);
+	  FieldContainer<double> value(1); // only one point on one cell
+	  FieldContainer<double> point(1,2); // one point, one cell, 2 space dim
+	  point(0,0) = x; point(0,1) = y;	  
+	  _bf->getBackgroundFlow()->solutionValues(value, BurgersBilinearForm::U, point);
+	  double u = value(0); 
+	  
+	  //sign is positive - opposite from applyBilinearFormData
+	  values(cellIndex,ptIndex,0) = beta(cellIndex,ptIndex,0)/2.0; // making it rank 2 will automatically dot it with the gradient
+	  values(cellIndex,ptIndex,1) = beta(cellIndex,ptIndex,1);
+
+	  //	  vector<double> beta = _bf->getBeta(x,y);
+	  //	  values(cellIndex,ptIndex,0) = beta[0]; // making it rank 2 will automatically dot it with the gradient
+	  //	  values(cellIndex,ptIndex,1) = beta[1];
+
+	  values(cellIndex,ptIndex,0) *= u;
+	  values(cellIndex,ptIndex,1) *= u;
+	}
+      }
+      
+    } else if (testVarID==BurgersBilinearForm::TAU){ // should be against divergence of tau
+      values.resize(numCells,numPoints);
+      values.initialize(0.0);
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+	for (int ptIndex=0; ptIndex<numPoints; ptIndex++){
+	  double x = physicalPoints(cellIndex,ptIndex,0);
+	  double y = physicalPoints(cellIndex,ptIndex,1);
+	  FieldContainer<double> value(1); // only one point on one cell
+	  FieldContainer<double> point(1,2); // one point, one cell, 2 space dim
+	  point(0,0) = x;
+	  point(0,1) = y;	  
+	  _bf->getBackgroundFlow()->solutionValues(value, BurgersBilinearForm::U, point);
+	  double u = value(0); 
+	  values(cellIndex,ptIndex) = -u; 
+	}
+      }      
+    } 
   }
+
   
   // BC
   bool bcsImposed(int varID) {
-    return varID == BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT;
-    //    return varID == BurgersBilinearForm::U_HAT;
+    return varID == BurgersBilinearForm::U_HAT;
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
@@ -44,34 +99,32 @@ class BurgersProblem : public RHS, public BC, public Constraints {
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     double tol = 1e-14;
-    double x_cut = .50;
-    double y_cut = .50;
     TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
+
+    FieldContainer<double> beta = _bf->getBeta(physicalPoints);
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
         double x = physicalPoints(cellIndex, ptIndex, 0);
         double y = physicalPoints(cellIndex, ptIndex, 1);
-	double beta_n = _bf->getBeta(x,y)[0]*unitNormals(cellIndex,ptIndex,0)+_bf->getBeta(x,y)[1]*unitNormals(cellIndex,ptIndex,1);
-
-	// inflow 
-	double u0=0.0;
-	// points are already on boundary; just test if they're inflow or outflow
-	if (beta_n < 0){
-	  double pi = 2.0*acos(0.0);
-	  //	  u0 = sin(2.0*pi*x)+sin(2.0*pi*y);
-	  u0 = abs(x*y + (1-x)*(1-y) - .5);
-	  
-	  dirichletValues(cellIndex,ptIndex) = beta_n*u0;
-
-	  imposeHere(cellIndex,ptIndex) = true;
-	} else {
-	  imposeHere(cellIndex,ptIndex) = false;
+	//	double beta_n = _bf->getBeta(x,y)[0]*unitNormals(cellIndex,ptIndex,0)+_bf->getBeta(x,y)[1]*unitNormals(cellIndex,ptIndex,1);
+	double beta_n = 0;
+	for (int i = 0;i<spaceDim;i++){
+	  beta_n += beta(cellIndex,ptIndex,i)*unitNormals(cellIndex,ptIndex,i);
 	}
-	
+
+	double u0;	
+	if (abs(y-1.0)>tol){ // if we're not at the top outflow boundary
+	  u0 = 1.0-2.0*x;
+	}	
+	if (abs(y-1.0)>tol){ // if not at top boundary
+	  dirichletValues(cellIndex,ptIndex) = u0; 
+	  //	  dirichletValues(cellIndex,ptIndex) = 0.0;	  
+	  imposeHere(cellIndex,ptIndex) = true; // test by imposing all zeros
+	}
       }
     }
   }
-
+  
   virtual void getConstraints(FieldContainer<double> &physicalPoints, 
 			      FieldContainer<double> &unitNormals,
 			      vector<map<int,FieldContainer<double > > > &constraintCoeffs,
@@ -89,13 +142,19 @@ class BurgersProblem : public RHS, public BC, public Constraints {
     uCoeffs.initialize(0.0);
     beta_sigmaCoeffs.initialize(0.0);
     outflowValues.initialize(0.0);
-    
+
+    FieldContainer<double> beta = _bf->getBeta(physicalPoints);
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       for (int pointIndex=0;pointIndex<numPoints;pointIndex++){
 	double x = physicalPoints(cellIndex,pointIndex,0);
 	double y = physicalPoints(cellIndex,pointIndex,1);
-	vector<double> beta = _bf->getBeta(x,y);
-	double beta_n = beta[0]*unitNormals(cellIndex,pointIndex,0)+beta[1]*unitNormals(cellIndex,pointIndex,1);
+	//	vector<double> beta = _bf->getBeta(x,y);
+	//	double beta_n = beta[0]*unitNormals(cellIndex,pointIndex,0)+beta[1]*unitNormals(cellIndex,pointIndex,1); // MODIFY THIS TO ACCT FOR DIFF IN NONLINEAR FLUXES?
+	double beta_n = 0;
+	for (int i = 0;i<spaceDim;i++){
+	  beta_n += beta(cellIndex,pointIndex,i)*unitNormals(cellIndex,pointIndex,i);
+	}
+
 	
 	bool isOnABoundary=false;
 	if ((abs(x) < 1e-12) || (abs(y) < 1e-12)){
@@ -104,20 +163,17 @@ class BurgersProblem : public RHS, public BC, public Constraints {
 	if ((abs(x-1.0) < 1e-12) || (abs(y-1.0) < 1e-12)){
 	  isOnABoundary = true;
 	}
-	if ( (beta_n > 0.0) && isOnABoundary) {
+	if (isOnABoundary && (abs(y-1.0)<tol)) { // top boundary
 	  // this combo isolates sigma_n
 	  uCoeffs(cellIndex,pointIndex) = beta_n;
 	  beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
-	}
-	
+	}	
       }
     }
-    //    outflowConstraint[BurgersBilinearForm::U_HAT] = beta_sigmaCoeffs;
     outflowConstraint[BurgersBilinearForm::U_HAT] = uCoeffs;
     outflowConstraint[BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;
     constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
-    constraintValues.push_back(outflowValues); // only one constraint on outflow
-    
+    constraintValues.push_back(outflowValues); // only one constraint on outflow    
   }
 
 };

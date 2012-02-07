@@ -1,4 +1,5 @@
 #include "BurgersBilinearForm.h"
+#include "Solution.h"
 
 // trial variable names:
 static const string & S_SIGMA_1 = "\\sigma_1";
@@ -13,10 +14,10 @@ static const string & S_TAU = "\\tau";
 static const string & S_V = "v";
 static const string & S_DEFAULT_TEST = "invalid test";
 
-BurgersBilinearForm::BurgersBilinearForm(double epsilon, double beta_x, double beta_y) {
+BurgersBilinearForm::BurgersBilinearForm(double epsilon) {
   _epsilon = epsilon;
-  _beta_x = beta_x;
-  _beta_y = beta_y;
+
+  _backgroundFlow = Teuchos::rcp((Solution*)NULL); // initialize null pointer for now
   
   _testIDs.push_back(TAU);
   _testIDs.push_back(V);
@@ -28,6 +29,10 @@ BurgersBilinearForm::BurgersBilinearForm(double epsilon, double beta_x, double b
   _trialIDs.push_back(SIGMA_2);
 }
 
+void BurgersBilinearForm::setBackgroundFlow(Teuchos::RCP<Solution> flow){
+  _backgroundFlow = flow;
+}
+
 double BurgersBilinearForm::getEpsilon(){
   return _epsilon;
 }
@@ -36,14 +41,38 @@ void BurgersBilinearForm::setEpsilon(double newEpsilon){
   _epsilon = newEpsilon;
 }
 
+FieldContainer<double> BurgersBilinearForm::getBeta(FieldContainer<double> physicalPoints){
+  int numCells = physicalPoints.dimension(0);
+  int numPoints = physicalPoints.dimension(1);
+  int spaceDim = physicalPoints.dimension(2);
+  FieldContainer<double> allPoints = physicalPoints;
+  allPoints.resize(numCells*numPoints,spaceDim);
+
+  FieldContainer<double> values(numCells*numPoints);
+  _backgroundFlow->solutionValues(values, BurgersBilinearForm::U, allPoints);  
+  values.resize(numCells,numPoints);
+  FieldContainer<double> beta(numCells,numPoints,spaceDim);
+  for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+    for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+      beta(cellIndex,ptIndex,0) = 1.0*values(cellIndex,ptIndex);
+      //      beta(cellIndex,ptIndex,0) = 1.0;
+      beta(cellIndex,ptIndex,1) = 1.0;
+    }
+  }
+  return beta;
+}
+
 vector<double> BurgersBilinearForm::getBeta(double x, double y){
-  vector<double> beta;
-  //  beta.push_back(_beta_x);beta.push_back(_beta_y);
-  double xn = (x-.5);
-  double yn = (y-.5);
-  double r  = 1.0; //sqrt(xn*xn+yn*yn);
-  beta.push_back(-yn/r);
-  beta.push_back(xn/r);  
+  FieldContainer<double> values(1); // only one point on one cell
+  FieldContainer<double> point(1,2); // one point, one cell, 2 space dim
+  point(0,0) = x;
+  point(0,1) = y;
+  
+  _backgroundFlow->solutionValues(values, BurgersBilinearForm::U, point);
+  double u = values(0);
+
+  vector<double> beta;  
+  beta.push_back(u);beta.push_back(1.0); // (u*du)_x + (du)_y 
 
   return beta;
 }
@@ -177,15 +206,15 @@ void BurgersBilinearForm::applyBilinearFormData(int trialID, int testID,
           testValues.resize(numCells,basisCardinality,numPoints);
           TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "BurgersBilinearForm only supports 2 dimensions right now.");
+
+	  FieldContainer<double> beta = getBeta(points);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		//                testValues(cellIndex,basisOrdinal,ptIndex)  = -_beta_x * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		//                                                            + -_beta_y * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
 		double x = points(cellIndex,ptIndex,0);
 		double y = points(cellIndex,ptIndex,1);
-                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0)
-		  + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+		//                testValues(cellIndex,basisOrdinal,ptIndex)  = -getBeta(x,y)[0] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0) + -getBeta(x,y)[1] * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
+                testValues(cellIndex,basisOrdinal,ptIndex)  = -beta(cellIndex,ptIndex,0) * testValuesCopy(cellIndex,basisOrdinal,ptIndex,0) + -beta(cellIndex,ptIndex,1) * testValuesCopy(cellIndex,basisOrdinal,ptIndex,1);
 
               }
             }
@@ -212,18 +241,23 @@ void BurgersBilinearForm::applyBilinearFormData(int trialID, int testID,
           trialValues.resize(numCells,basisCardinality,numPoints);
           TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "BurgersBilinearForm only supports 2 dimensions right now.");
-          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-              for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+
+	  FieldContainer<double> beta = getBeta(points);
+	  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                trialValues(cellIndex,basisOrdinal,ptIndex)
+		  = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*beta(cellIndex,ptIndex,0)
+		  + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*beta(cellIndex,ptIndex,1);
+		
+		/*
 		double x = points(cellIndex,ptIndex,0);
 		double y = points(cellIndex,ptIndex,1);
-		
-		//                trialValues(cellIndex,basisOrdinal,ptIndex)
-		//                = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*_beta_x
-		//                  + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*_beta_y;
+
                 trialValues(cellIndex,basisOrdinal,ptIndex)
 		  = valuesCopy(cellIndex,basisOrdinal,ptIndex,0)*getBeta(x,y)[0]
                   + valuesCopy(cellIndex,basisOrdinal,ptIndex,1)*getBeta(x,y)[1];
+		*/
               }
             }
           }

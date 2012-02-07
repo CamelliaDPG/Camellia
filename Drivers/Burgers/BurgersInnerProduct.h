@@ -141,14 +141,17 @@ class BurgersInnerProduct : public DPGInnerProduct {
           FieldContainer<double> testValuesCopy2 = testValues2;
           testValues1.resize(numCells,basisCardinality,numPoints);
           testValues2.resize(numCells,basisCardinality,numPoints);
+	  FieldContainer<double> beta = _burgersBilinearForm->getBeta(physicalPoints);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {                        
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                 double x = physicalPoints(cellIndex,ptIndex,0);
                 double y = physicalPoints(cellIndex,ptIndex,1);
                 double weight = getWeight(x,y);
-		double beta_x = _burgersBilinearForm->getBeta(x,y)[0];
-		double beta_y = _burgersBilinearForm->getBeta(x,y)[1];
+		//		double beta_x = _burgersBilinearForm->getBeta(x,y)[0];
+		//		double beta_y = _burgersBilinearForm->getBeta(x,y)[1];
+		double beta_x = beta(cellIndex,ptIndex,0);
+		double beta_y = beta(cellIndex,ptIndex,1);
 
                 testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
                 + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;

@@ -3,11 +3,15 @@
 
 #include "BilinearForm.h"
 
+class Solution;
+
 class BurgersBilinearForm : public BilinearForm {
 private:
-  double _epsilon, _beta_x, _beta_y;
+  double _epsilon;
+  Teuchos::RCP<Solution> _backgroundFlow;
 public:
-  BurgersBilinearForm(double epsilon, double beta_x, double beta_y);
+  //  BurgersBilinearForm(double epsilon, Teuchos::RCP<Solution> backgroundFlow);
+  BurgersBilinearForm(double epsilon);
   
   // implement the virtual methods declared in super:
   const string & testName(int testID);
@@ -25,7 +29,10 @@ public:
 
   double getEpsilon();
   void setEpsilon(double newEpsilon);
+  FieldContainer<double> getBeta(FieldContainer<double> physicalPoints);
   vector<double> getBeta(double x, double y);
+  void setBackgroundFlow(Teuchos::RCP<Solution> flow);
+  Teuchos::RCP<Solution> getBackgroundFlow(){return _backgroundFlow;}
   
   bool isFluxOrTrace(int trialID);
   

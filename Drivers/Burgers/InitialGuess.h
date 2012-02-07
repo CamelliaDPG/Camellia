@@ -17,7 +17,8 @@ public:
       for (int j=0;j<numPoints;j++){
         double x = physicalPoints(i,j,0);
         double y = physicalPoints(i,j,1);
-        functionValues(i,j) = 1.0-2.0*x; // extrapolate the boundary condition
+	functionValues(i,j) = 1.0-2.0*x; // extrapolate the boundary condition
+	//	functionValues(i,j) = 1.0; // extrapolate the boundary condition
       }
     }  
   }

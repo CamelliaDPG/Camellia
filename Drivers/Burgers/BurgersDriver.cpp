@@ -39,15 +39,12 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 2; // for tests
+  int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-2;
-  double beta_x = 1.0, beta_y = 1.0;
   bool useTriangles = false;
-
-  Teuchos::RCP<BurgersBilinearForm> bf = Teuchos::rcp(new BurgersBilinearForm(epsilon,beta_x,beta_y));
-  
+ 
   FieldContainer<double> quadPoints(4,2);
   
   quadPoints(0,0) = 0.0; // x1
@@ -66,12 +63,13 @@ int main(int argc, char *argv[]) {
   // SET UP PROBLEM 
   ////////////////////////////////////////////////////////////////////
 
+  Teuchos::RCP<BurgersBilinearForm> bf = Teuchos::rcp(new BurgersBilinearForm(epsilon));
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
-  // define our inner product:
-  Teuchos::RCP<BurgersInnerProduct> ip = Teuchos::rcp( new BurgersInnerProduct( bf, mesh ) );
+  // ==================== SET INITIAL GUESS ==========================
 
   Teuchos::RCP<Solution> backgroundFlow = Teuchos::rcp(new Solution(mesh, Teuchos::rcp((BC*)NULL) , Teuchos::rcp((RHS*)NULL), Teuchos::rcp((DPGInnerProduct*)NULL))); // create null solution 
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
@@ -80,6 +78,13 @@ int main(int argc, char *argv[]) {
   functionMap[BurgersBilinearForm::SIGMA_2] = Teuchos::rcp(new ZeroFunction());
 
   backgroundFlow->projectOntoMesh(functionMap);
+  bf->setBackgroundFlow(backgroundFlow);
+
+  // ==================== END SET INITIAL GUESS ==========================
+
+
+  // define our inner product:
+  Teuchos::RCP<BurgersInnerProduct> ip = Teuchos::rcp( new BurgersInnerProduct( bf, mesh ) );
 
   // create a solution object
   Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(bf) );
@@ -88,11 +93,52 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
 
-  //  backgroundFlow->addSolution(solution,1.0);
-
+  /*
+  solution->solve(false);
+  backgroundFlow->addSolution(solution,1.0);
   if (rank==0){
-    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u0.m");
+    solution->writeFieldsToFile(BurgersBilinearForm::U, "du.m");
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U,"u.m");
   }
+  solution->solve(false);
+  backgroundFlow->addSolution(solution,1.0);
+  if (rank==0){
+    solution->writeFieldsToFile(BurgersBilinearForm::U, "du.m");
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U,"u.m");
+  }
+  return 0;
+  */
+
+  int numNRSteps = 8;
+  for (int i=0;i<numNRSteps;i++){
+    solution->solve(false);
+    if (rank==0){
+      cout << "solved on NR iter " << i << endl;
+      ostringstream filename;
+      filename << "u" << i << ".m";
+      backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, filename.str());
+      filename.clear();filename.str("");
+      filename << "du" << i << ".m";
+      solution->writeFieldsToFile(BurgersBilinearForm::U, filename.str());
+      filename.clear();filename.str("");
+      filename << "du_hat" << i << ".dat";
+      solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, filename.str());
+
+      filename.clear();filename.str("");
+      filename << "sigma_x" << i << ".m";
+      solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, filename.str());
+      filename.clear();filename.str("");
+      filename << "sigma_y" << i << ".m";
+      solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, filename.str());
+      filename.clear();filename.str("");
+      filename << "sigma_hat" << i << ".dat";
+      solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, filename.str());
+    }
+    backgroundFlow->addSolution(solution,1.0);
+  }
+
   return 0;
 
   ////////////////////////////////////////////////////////////////////
@@ -100,7 +146,7 @@ int main(int argc, char *argv[]) {
   solution->solve();
 
   bool limitIrregularity = true;
-  int numRefinements = 8;
+  int numRefinements = 2;
   double thresholdFactor = 0.2;
   int refIterCount = 0;  
   vector<double> errorVector;
@@ -170,14 +216,14 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigma_y.m");
     solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "u_hat.dat");
     solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "sigma_hat.dat");
-
+    
     ofstream fout1("errors.dat");
     fout1 << setprecision(15);
     for (int i = 0;i<errorVector.size();i++){
       fout1 << errorVector[i] << endl;
     }
     fout1.close();
-
+    
     ofstream fout2("dofs.dat");
     for (int i = 0;i<dofVector.size();i++){
       fout2 << dofVector[i] << endl;
