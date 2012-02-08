@@ -1680,8 +1680,8 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test
-  //   b. create new element type, and store for later
-  //   c. Loop through neighbors, calling dofOrderingFactory.matchSides to sync edges and creating/recording new types
+  //   b. create and set new element type
+  //   c. Loop through sides, calling matchNeighbor for each
   
   // 1. Loop through cellIDsForPRefinements:
   vector<int>::iterator cellIt;
@@ -1708,7 +1708,6 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
     elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
                                                              elem->elementType()->cellTopoPtr ) );
     
-    //   c. Loop through neighbors, calling dofOrderingFactory.matchSides to sync edges and creating/recording new types
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       matchNeighbor(elem,sideIndex);
