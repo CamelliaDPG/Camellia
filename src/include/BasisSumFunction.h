@@ -8,6 +8,8 @@
 #include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
+#include "AbstractFunction.h"
+
 using namespace Intrepid;
 using namespace std;
 
