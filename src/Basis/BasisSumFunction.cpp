@@ -1,4 +1,5 @@
 #include "BasisSumFunction.h"
+#include "Intrepid_CellTools.hpp"
 
 void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints){
   
@@ -8,13 +9,14 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
   TEST_FOR_EXCEPTION(numCells!=1,std::invalid_argument,"BasisSumFunction only projects on cell at a time (allowing for differing bases per cell)");
 
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
+  typedef CellTools<double>  CellTools;
   CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->getBaseCellTopology());
   refElemPoints.resize(numPoints,spaceDim); // to reduce down - numCells = 1 anyways
   
-  int numDofs = basis->getCardinality();
+  int numDofs = _basis->getCardinality();
 
   FieldContainer<double> basisValues(numDofs,numPoints);
-  basis->getValues(basisValues, refElemPoints, IntrepidExtendedTypes::OPERATOR_VALUE);
+  _basis->getValues(basisValues, refElemPoints, Intrepid::OPERATOR_VALUE);
   
   functionValues.resize(numPoints);
   functionValues.initialize(0.0);
@@ -24,18 +26,3 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
     }
   }  
 }
-
-
-/*
-class BasisSumFunction : public AbstractFunction {
- private:  
-  BasisPtr _basis;
-  FieldContainer<double> _coefficients;
- public:
-  BasisSumFunction(BasisPtr basis, FieldContainer<double> coefficients,cell){
-    _coefficients = coefficients;
-    _basis = basis;
-  }
-  virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
-};
-*/
