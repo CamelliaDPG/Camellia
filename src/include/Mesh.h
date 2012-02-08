@@ -147,8 +147,6 @@ public:
   
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
   
-  
-  
   Boundary &boundary();
   
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
@@ -216,6 +214,7 @@ public:
   void rebuildLookups();
   
   void pRefine(vector<int> cellIDsForPRefinements);
+  void pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> solution);
     
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   

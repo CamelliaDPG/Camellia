@@ -81,6 +81,8 @@
 #include "BilinearFormUtility.h"
 #include "BasisEvaluation.h"
 #include "BasisValueCache.h"
+#include "BasisSumFunction.h"
+
 #include "Solution.h"
 #include "Projector.h"
 
@@ -408,7 +410,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 #ifdef HAVE_MPI
     /*
     if (rank == 0) {
-      cout << "USING MUMPS!\n";
+      // cout << "USING MUMPS!\n";
     }
     */
     
@@ -1968,3 +1970,32 @@ void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &
   }
 }
 	 
+void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
+  // NOTE: this only projects field functions for now.
+  DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
+  vector<int> trialIDs = oldTrialOrdering->getVarIDs();
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  
+  FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
+  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  
+  for (vector<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+    int trialID = *trialIDIt;
+    if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
+      BasisPtr basis = oldTrialOrdering->getBasis(trialID);
+      int basisCardinality = basis->getCardinality();
+      FieldContainer<double> basisCoefficients(basisCardinality);
+      
+      for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++) {
+        int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
+        basisCoefficients(dofOrdinal) = (*solutionCoeffs)(dofIndex);
+      }
+      Teuchos::RCP<BasisSumFunction> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, physicalCellNodes) );
+      functionMap[trialID] = oldTrialFunction;
+    }
+  }
+  for (vector<int>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
+    int childID = *childIDIt;
+    projectOntoCell(functionMap,childID);
+  }
+}

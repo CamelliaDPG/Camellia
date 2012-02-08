@@ -1303,6 +1303,7 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
 
 void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, Teuchos::RCP<Solution> solution) {
   vector<int>::iterator cellIt;
+  
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
@@ -1378,6 +1379,14 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
     
     _elements[cellID]->setRefinementPattern(refPattern);
     addChildren(_elements[cellID],children,childrenForSides);
+    if ( solution.get() ) { // do projection
+      int numChildren = _elements[cellID]->numChildren();
+      vector<int> childIDs;
+      for (int i=0; i<numChildren; i++) {
+        childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
+      }
+      solution->projectOldCellOntoNewCells(cellID,elemType,childIDs);
+    }
   }
   rebuildLookups();
 }
@@ -1515,7 +1524,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           int childSideIndex = (*entryIt).second;
           _boundary.deleteElement(childCellID, childSideIndex);
         }
-        // by virtue of having assigned the multi-basis, we've already matched p-order ==> we're done
+        // by virtue of having assigned the patch- or multi-basis, we've already matched p-order ==> we're done
         return;
       }
     }
@@ -1570,14 +1579,22 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
                                                                  neighbor->elementType()->cellTopoPtr ) );
     //return NEIGHBOR_NEEDED_NEW;
   } else if (changed == -1) { // PatchBasis
+    // TODO: If it's true that we never get here, eliminate this code, and also the related return value in 
+    //       DofOrderingFactory—probably can change that to throwing an exception…
+    // not sure if we ever get here: we only get here if neither elem nor neighbor broken, and in that case,
+    // we shouldn't have PatchBasis…
     // using "maximum rule", consistent with the above--but we need to propagate the change
     TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
                        "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
-    int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
-    int neighborSidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
-    int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
-    // we're going to need to figure out which side is the big one, and which the small
+    // determine polyOrder for each side--take the maximum
+    int neighborPolyOrder = _dofOrderingFactory.polyOrder(neighborTrialOrdering);
+    int myPolyOrder = _dofOrderingFactory.polyOrder(elemTrialOrdering);
+    if (neighborPolyOrder != myPolyOrder) {
+      // determine the first PatchBasis ancestor (ancestralNeighborForSide??) and setup new PatchBases for all
+      // neighbors along that side (including inactive neighbors?)
+      
+    }
     
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
   } else {
@@ -1677,6 +1694,10 @@ void Mesh::rebuildLookups() {
 }
 
 void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+  pRefine(cellIDsForPRefinements, Teuchos::rcp((Solution*) NULL));
+}
+
+void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> solution) {
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test
@@ -1688,6 +1709,7 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
+    ElementTypePtr oldElemType = elem->elementType();
     const shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr.get());
     //   a. create new DofOrderings for trial and test
     Teuchos::RCP<DofOrdering> currentTrialOrdering, currentTestOrdering;
@@ -1711,6 +1733,12 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       matchNeighbor(elem,sideIndex);
+    }
+    
+    if ( solution.get() ) { // do projection
+      vector<int> childIDs;
+      childIDs.push_back(cellID);
+      solution->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
   }
   rebuildLookups();

@@ -36,6 +36,7 @@ OBJ_NAMES = DofOrdering \
        PoissonBilinearForm \
        BilinearFormUtility \
        BasisFactory \
+       BasisSumFunction \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \

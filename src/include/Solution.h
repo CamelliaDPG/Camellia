@@ -131,6 +131,7 @@ public:
 
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
+  void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);
 
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter){
     _filter = newFilter;
