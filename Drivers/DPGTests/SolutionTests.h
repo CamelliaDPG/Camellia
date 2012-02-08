@@ -27,6 +27,7 @@ public:
   bool testAddSolution();
   bool testProjectFunction();
   bool testEnergyError();
+  bool testHRefinementInitialization();
 };
 
 

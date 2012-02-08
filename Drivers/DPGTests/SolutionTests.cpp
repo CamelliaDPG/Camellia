@@ -107,6 +107,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testHRefinementInitialization()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
 }
 
@@ -225,6 +232,59 @@ bool SolutionTests::testEnergyError(){
   if (totalEnergyErrorSquared>tol){
     success = false;
     cout << "testEnergyError failed: energy error is " << totalEnergyErrorSquared << endl;
+  }
+  
+  
+  return success;
+}
+
+
+bool SolutionTests::testHRefinementInitialization(){
+
+  double tol = 1e-14;
+
+  bool success = true;
+  vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
+
+  _poissonSolution->solve(false);
+  FieldContainer<double> expectedValuesPSI_2(_testPoints.dimension(0)); 
+  FieldContainer<double> expectedValuesPSI_1(_testPoints.dimension(0)); 
+  FieldContainer<double> expectedValuesPHI(_testPoints.dimension(0)); 
+  _poissonSolution->solutionValues(expectedValuesPHI,PoissonBilinearForm::PHI,_testPoints);
+  _poissonSolution->solutionValues(expectedValuesPSI_1,PoissonBilinearForm::PSI_1,_testPoints);
+  _poissonSolution->solutionValues(expectedValuesPSI_2,PoissonBilinearForm::PSI_2,_testPoints);
+
+  vector<int> quadCellsToRefine;
+  quadCellsToRefine.push_back(0); // just refine first cell  
+  _poissonSolution->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
+
+  FieldContainer<double> initializedValuesPHI(_testPoints.dimension(0)); 
+  FieldContainer<double> initializedValuesPSI_1(_testPoints.dimension(0)); 
+  FieldContainer<double> initializedValuesPSI_2(_testPoints.dimension(0)); 
+  _poissonSolution->solutionValues(initializedValuesPHI,PoissonBilinearForm::PHI,_testPoints);
+  _poissonSolution->solutionValues(initializedValuesPSI_1,PoissonBilinearForm::PSI_1,_testPoints);
+  _poissonSolution->solutionValues(initializedValuesPSI_2,PoissonBilinearForm::PSI_2,_testPoints);
+
+  int numPts = _testPoints.dimension(0);
+  for (int i = 0;i<numPts;i++){
+    double diff1 = abs(expectedValuesPHI(i)-initializedValuesPHI(i));
+    double diff2 = abs(expectedValuesPSI_1(i)-initializedValuesPSI_1(i));
+    double diff3 = abs(expectedValuesPSI_2(i)-initializedValuesPSI_2(i));
+    
+    if (diff1>tol){
+      success = false;
+      cout << "testHRefinementInitialization failed: difference in PHI is " << diff1 << endl;
+    }
+
+    if (diff2>tol){
+      success = false;
+      cout << "testHRefinementInitialization failed: difference in PSI_1 is " << diff2 << endl;
+    }
+
+    if (diff3>tol){
+      success = false;
+      cout << "testHRefinementInitialization failed: difference in PSI_2 is " << diff3 << endl;
+    }
   }
   
   
