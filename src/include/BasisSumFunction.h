@@ -25,6 +25,7 @@ class BasisSumFunction : public AbstractFunction {
     _coefficients = basisCoefficients;
     _basis = basis; // note - _basis->getBaseCellTopology
     _physicalCellNodes = physicalCellNodes; // note - rank 3, but dim(0) = 1
+    TEST_FOR_EXCEPTION(_coefficients.dimension(0)!=basis->getCardinality(),std::invalid_argument,"BasisSumFunction: coefficients passed in do not match cardinality of basis.");
   }
   virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
 };
