@@ -302,7 +302,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
                                     const shards::CellTopology &secondCellTopo) {
   // upgrades the lesser-order basis 
   map<int, BasisPtr> varIDsToUpgrade;
-  int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second
+  int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
   vector<int> varIDs = firstOrdering->getVarIDs();
   vector<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
@@ -311,6 +311,10 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
     if (numSides > 1) { // a variable that lives on the sides: we need to match basis
       BasisPtr firstBasis = firstOrdering->getBasis(varID,firstSideIndex);
       BasisPtr secondBasis = secondOrdering->getBasis(varID,secondSideIndex);
+      if (BasisFactory::isPatchBasis(firstBasis) || BasisFactory::isPatchBasis(secondBasis)) {
+        return -1; // then we need to deal with ancestors, etc.--and we can't do that here
+      }
+      
       // use cardinality instead of degree to compare so that multiBasis > singleBasis
       if ( firstBasis->getCardinality() > secondBasis->getCardinality() ) {
         if (orderingToUpgrade == 1) {

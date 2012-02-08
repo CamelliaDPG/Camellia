@@ -1530,7 +1530,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
   
   int changed = _dofOrderingFactory.matchSides(elemTrialOrdering, sideIndex, cellTopo,
                                                neighborTrialOrdering, mySideIndexInNeighbor, neighborTopo);
-  // changed == 1 for me, 2 for neighbor, 0 for neither
+  // changed == 1 for me, 2 for neighbor, 0 for neither, -1 for PatchBasis
   if (changed==1) {
     TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
@@ -1569,6 +1569,17 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     neighbor->setElementType( _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering, 
                                                                  neighbor->elementType()->cellTopoPtr ) );
     //return NEIGHBOR_NEEDED_NEW;
+  } else if (changed == -1) { // PatchBasis
+    // using "maximum rule", consistent with the above--but we need to propagate the change
+    TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
+                       std::invalid_argument,
+                       "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
+    int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
+    int neighborSidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
+    int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
+    // we're going to need to figure out which side is the big one, and which the small
+    
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
   } else {
     //return NEITHER_NEEDED_NEW;
   }
@@ -1694,65 +1705,14 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
       newTestOrdering = currentTestOrdering;
     }
     
+    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
+                                                             elem->elementType()->cellTopoPtr ) );
+    
     //   c. Loop through neighbors, calling dofOrderingFactory.matchSides to sync edges and creating/recording new types
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      // TODO: should be able to replace this whole loop with a single call to matchNeighbor
-      // (WILL FIRST NEED TO SET elem->elementType so that it includes newTest/TrialOrdering...)
-      Element* neighbor;
-      int mySideIndexInNeighbor;
-      elem->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
-      int neighborCellID = neighbor->cellID(); // may be -1 if it's the boundary
-      const shards::CellTopology neighborTopo = *(neighbor->elementType()->cellTopoPtr.get());
-      if (neighborCellID >= 0) {
-        Teuchos::RCP<DofOrdering> neighborTrialOrdering;
-        Teuchos::RCP<DofOrdering> neighborTestOrdering; 
-        neighborTrialOrdering = neighbor->elementType()->trialOrderPtr;
-        neighborTestOrdering  = neighbor->elementType()->testOrderPtr;
-        int changed = _dofOrderingFactory.matchSides(newTrialOrdering, sideIndex, cellTopo,
-                                                     neighborTrialOrdering, mySideIndexInNeighbor, neighborTopo);
-        // changed == 1 for me, 2 for neighbor, 0 for neither
-        if (changed==1) {
-          TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
-                             std::invalid_argument,
-                             "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
-          int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
-          int neighborSidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
-          int mySidePolyOrder = BasisFactory::basisPolyOrder(newTrialOrdering->getBasis(boundaryVarID,sideIndex));
-          TEST_FOR_EXCEPTION(mySidePolyOrder != neighborSidePolyOrder,
-                             std::invalid_argument,
-                             "After matchSides(), the appropriate sides don't have the same order.");
-          int testPolyOrder = _dofOrderingFactory.polyOrder(newTestOrdering);
-          if (testPolyOrder < mySidePolyOrder + _pToAddToTest) {
-            newTestOrdering = _dofOrderingFactory.testOrdering( mySidePolyOrder + _pToAddToTest, cellTopo);
-          }
-        }
-        if (changed==2) {
-          // if need be, upgrade neighborTestOrdering as well.
-          TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
-                             std::invalid_argument,
-                             "BilinearForm has no traces or fluxes, but somehow neighbor was upgraded...");
-          TEST_FOR_EXCEPTION(neighborTrialOrdering.get() == neighbor->elementType()->trialOrderPtr.get(),
-                             std::invalid_argument,
-                             "neighborTrialOrdering was supposed to be upgraded, but remains unchanged...");
-          int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
-          int sidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
-          int mySidePolyOrder = BasisFactory::basisPolyOrder(newTrialOrdering->getBasis(boundaryVarID,sideIndex));
-          TEST_FOR_EXCEPTION(mySidePolyOrder != sidePolyOrder,
-                             std::invalid_argument,
-                             "After matchSides(), the appropriate sides don't have the same order.");
-          int testPolyOrder = _dofOrderingFactory.polyOrder(neighborTestOrdering);
-          if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
-            neighborTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, neighborTopo);
-          }
-          neighbor->setElementType( _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering, 
-                                                                       neighbor->elementType()->cellTopoPtr ) );
-        }
-      }
+      matchNeighbor(elem,sideIndex);
     }
-    //   b. create new element type
-    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
-                                                             elem->elementType()->cellTopoPtr ) );
   }
   rebuildLookups();
 }
