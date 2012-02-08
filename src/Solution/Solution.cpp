@@ -1996,6 +1996,8 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   }
   for (vector<int>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
     int childID = *childIDIt;
+    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
+    _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
     projectOntoCell(functionMap,childID);
   }
 }

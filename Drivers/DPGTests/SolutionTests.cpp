@@ -115,6 +115,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
+  setup();
+  if (testPRefinementInitialization()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
 }
 
 bool SolutionTests::testAddSolution() {
@@ -247,46 +254,77 @@ bool SolutionTests::testHRefinementInitialization(){
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
 
   _poissonSolution->solve(false);
-  FieldContainer<double> expectedValuesPSI_2(_testPoints.dimension(0)); 
-  FieldContainer<double> expectedValuesPSI_1(_testPoints.dimension(0)); 
-  FieldContainer<double> expectedValuesPHI(_testPoints.dimension(0)); 
-  _poissonSolution->solutionValues(expectedValuesPHI,PoissonBilinearForm::PHI,_testPoints);
-  _poissonSolution->solutionValues(expectedValuesPSI_1,PoissonBilinearForm::PSI_1,_testPoints);
-  _poissonSolution->solutionValues(expectedValuesPSI_2,PoissonBilinearForm::PSI_2,_testPoints);
-
+  
+  // test for all field variables:
+  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm().trialVolumeIDs();
+  
+  map<int, FieldContainer<double> > expectedMap;
+  
+  FieldContainer<double> expectedValues(_testPoints.dimension(0)); 
+  FieldContainer<double> actualValues(_testPoints.dimension(0)); 
+  
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
+    expectedMap[fieldID] = expectedValues;
+  }
+  
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // just refine first cell  
   _poissonSolution->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
-
-  FieldContainer<double> initializedValuesPHI(_testPoints.dimension(0)); 
-  FieldContainer<double> initializedValuesPSI_1(_testPoints.dimension(0)); 
-  FieldContainer<double> initializedValuesPSI_2(_testPoints.dimension(0)); 
-  _poissonSolution->solutionValues(initializedValuesPHI,PoissonBilinearForm::PHI,_testPoints);
-  _poissonSolution->solutionValues(initializedValuesPSI_1,PoissonBilinearForm::PSI_1,_testPoints);
-  _poissonSolution->solutionValues(initializedValuesPSI_2,PoissonBilinearForm::PSI_2,_testPoints);
-
-  int numPts = _testPoints.dimension(0);
-  for (int i = 0;i<numPts;i++){
-    double diff1 = abs(expectedValuesPHI(i)-initializedValuesPHI(i));
-    double diff2 = abs(expectedValuesPSI_1(i)-initializedValuesPSI_1(i));
-    double diff3 = abs(expectedValuesPSI_2(i)-initializedValuesPSI_2(i));
-    
-    if (diff1>tol){
+  
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonSolution->solutionValues(actualValues,fieldID,_testPoints);
+    double maxDiff;
+    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
       success = false;
-      cout << "testHRefinementInitialization failed: difference in PHI is " << diff1 << endl;
-    }
-
-    if (diff2>tol){
-      success = false;
-      cout << "testHRefinementInitialization failed: difference in PSI_1 is " << diff2 << endl;
-    }
-
-    if (diff3>tol){
-      success = false;
-      cout << "testHRefinementInitialization failed: difference in PSI_2 is " << diff3 << endl;
+      cout << "testHRefinementInitialization failed: max difference in " 
+           << _poissonSolution->mesh()->bilinearForm().trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
   
+  return success;
+}
+
+
+bool SolutionTests::testPRefinementInitialization() {
+  
+  double tol = 1e-14;
+  
+  bool success = true;
+  vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
+  
+  _poissonSolution->solve(false);
+  
+  // test for all field variables:
+  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm().trialVolumeIDs();
+  
+  map<int, FieldContainer<double> > expectedMap;
+  
+  FieldContainer<double> expectedValues(_testPoints.dimension(0)); 
+  FieldContainer<double> actualValues(_testPoints.dimension(0)); 
+  
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
+    expectedMap[fieldID] = expectedValues;
+  }
+  
+  vector<int> quadCellsToRefine;
+  quadCellsToRefine.push_back(0); // just refine first cell  
+  _poissonSolution->mesh()->pRefine(quadCellsToRefine,_poissonSolution); // passing in solution to reinitialize stuff
+  
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonSolution->solutionValues(actualValues,fieldID,_testPoints);
+    double maxDiff;
+    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
+      success = false;
+      cout << "testHRefinementInitialization failed: max difference in " 
+      << _poissonSolution->mesh()->bilinearForm().trialName(fieldID) << " is " << maxDiff << endl;
+    }
+  }
   
   return success;
 }

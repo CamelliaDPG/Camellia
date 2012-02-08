@@ -18,11 +18,12 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
   FieldContainer<double> basisValues(numDofs,numPoints);
   _basis->getValues(basisValues, refElemPoints, Intrepid::OPERATOR_VALUE);
   
-  functionValues.resize(numPoints);
+  functionValues.resize(numCells,numPoints);
   functionValues.initialize(0.0);
+  int cellIndex = 0;
   for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
     for (int i=0;i<numDofs;i++){
-      functionValues(ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
+      functionValues(cellIndex,ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
     }
   }  
 }

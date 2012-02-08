@@ -28,6 +28,7 @@ public:
   bool testProjectFunction();
   bool testEnergyError();
   bool testHRefinementInitialization();
+  bool testPRefinementInitialization();
 };
 
 
