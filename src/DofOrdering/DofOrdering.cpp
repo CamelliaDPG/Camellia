@@ -104,7 +104,7 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   for (vector<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
     int numSides = getNumSidesForVarID(varID);
-    if ( numSides == oldDofOrdering->getNumSidesForVarID(numSides) ) {
+    if ( numSides == oldDofOrdering->getNumSidesForVarID(varID) ) {
       for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
         BasisPtr basis = getBasis(varID,sideIndex);
         if (basis.get() == oldDofOrdering->getBasis(varID,sideIndex).get() ) {
