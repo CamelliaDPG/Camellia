@@ -254,6 +254,10 @@ bool SolutionTests::testHRefinementInitialization(){
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
 
   _poissonSolution->solve(false);
+  int trialIDToWrite = PoissonBilinearForm::PHI;
+  string filePrefix = "phi";
+  string fileSuffix = ".m";
+  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "BeforeRefinement" + fileSuffix);
   
   // test for all field variables:
   vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm().trialVolumeIDs();
@@ -270,8 +274,10 @@ bool SolutionTests::testHRefinementInitialization(){
   }
   
   vector<int> quadCellsToRefine;
-  quadCellsToRefine.push_back(0); // just refine first cell  
+  quadCellsToRefine.push_back(1);
   _poissonSolution->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
+  
+  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
   
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
