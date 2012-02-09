@@ -309,6 +309,7 @@ bool SolutionTests::testPRefinementInitialization() {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
     expectedMap[fieldID] = expectedValues;
+//    cout << "expectedValues:\n" << expectedValues;
   }
   
   vector<int> quadCellsToRefine;

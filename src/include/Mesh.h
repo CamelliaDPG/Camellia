@@ -188,6 +188,8 @@ public:
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
   
+  int maxPolyOrder(ElementPtr elem, int sideIndex);
+  
   map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
   
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);

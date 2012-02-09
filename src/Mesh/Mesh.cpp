@@ -1504,6 +1504,17 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
             TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
           }
         } else { // PatchBasis
+          // check to see if non-parent needs a p-upgrade
+          bool nonParentUpgraded = false;
+          int maxPolyOrder = this->maxPolyOrder(nonParent,neighborSideIndexInParent);
+          Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
+          int nonParentPolyOrder = _dofOrderingFactory.polyOrder(nonParentTrialOrdering);
+          if (maxPolyOrder > nonParentPolyOrder) {
+            // upgrade p along the side
+            nonParentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(nonParentTrialOrdering, parentSideIndexInNeighbor, maxPolyOrder);
+            nonParentUpgraded = true;
+          }
+          // TODO: if nonParentUpgraded, then upgrade all the existing PatchBases along that side...
           vector< pair< int, int> >::iterator entryIt;
           for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
             int childCellID = (*entryIt).first;
@@ -1600,6 +1611,36 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
   } else {
     //return NEITHER_NEEDED_NEW;
   }
+}
+
+int Mesh::maxPolyOrder(ElementPtr elem, int sideIndex) {
+  // returns maximum polyOrder (on interior/field variables) of this element and any that border it on the given side
+  int mySideIndexInNeighbor;
+  ElementPtr neighbor = ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
+  if ((neighbor.get() == NULL) || (neighbor->cellID() < 0)) { // as presently implemented, neighbor won't be NULL, but an "empty" elementPtr, _nullPtr, with cellID -1.  I'm a bit inclined to think a NULL would be better.  The _nullPtr conceit comes from the early days of the Mesh class, and seems a bit weird now.
+    return _dofOrderingFactory.polyOrder(elem->elementType()->trialOrderPtr);
+  }
+  int maxOrder = max(_dofOrderingFactory.polyOrder(neighbor->elementType()->trialOrderPtr),
+                     _dofOrderingFactory.polyOrder(elem->elementType()->trialOrderPtr));
+  int ancestorSideIndex;
+  Element* ancestor;
+  neighbor->getNeighbor(ancestor,ancestorSideIndex,mySideIndexInNeighbor);
+  Element* parent = NULL;
+  if (ancestor->isParent()) {
+    parent = ancestor;
+  } else if (neighbor->isParent()) {
+    parent = neighbor.get();
+  }
+  if (parent != NULL) {
+    vector< pair< int, int> > descendentSides = parent->getDescendentsForSide(ancestorSideIndex);
+    vector< pair< int, int> >::iterator sideIt;
+    for (sideIt = descendentSides.begin(); sideIt != descendentSides.end(); sideIt++) {
+      int descendentID = sideIt->first;
+      int descOrder = _dofOrderingFactory.polyOrder(_elements[descendentID]->elementType()->trialOrderPtr);
+      maxOrder = max(maxOrder,descOrder);
+    }
+  }
+  return maxOrder;
 }
 
 int Mesh::numElements() {

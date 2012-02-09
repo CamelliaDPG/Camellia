@@ -133,8 +133,8 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite() ) );
   

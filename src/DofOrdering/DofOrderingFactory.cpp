@@ -394,16 +394,15 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
 }
 
 DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
-                                                      const shards::CellTopology &cellTopo, int pToAdd) {
+                                           const shards::CellTopology &cellTopo, int pToAdd) {
   // could consider adding a cache that lets you go from (DofOrdering*,pToAdd) --> enrichedDofOrdering...
   // (since likely we'll be upgrading the same DofOrdering a bunch of times)
   vector<int> varIDs = dofOrdering->getVarIDs();
-  vector<int>::iterator idIt;
   int interiorPolyOrder = polyOrder(dofOrdering); // rule is, any bases with polyOrder < interiorPolyOrder+pToAdd get upgraded 
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     EFunctionSpaceExtended fs;
@@ -421,6 +420,36 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
     }
     if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
       addConformingVertexPairings(varID, newOrdering, cellTopo);
+    }
+  }
+  newOrdering->rebuildIndex();
+  // return Teuchos::RCP to the old element if there was one, or the newly inserted element
+  newOrdering = *(_trialOrderings.insert(newOrdering).first);
+  _isConforming[newOrdering.get()] = conforming;
+  return newOrdering;
+}
+
+DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder) {
+  bool conforming = _isConforming[dofOrdering.get()];
+  DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
+  vector<int> varIDs = dofOrdering->getVarIDs();
+  Teuchos::RCP< shards::CellTopology > cellTopoPtr = dofOrdering->cellTopology();
+  for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+    int varID = *idIt;
+    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    EFunctionSpaceExtended fs;
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      fs = BasisFactory::getBasisFunctionSpace(basis);
+      int basisRank = BasisFactory::getBasisRank(basis);
+      if ( (numSides > 1) && (sideIndex==sideIndexToSet) && (BasisFactory::basisPolyOrder(basis) < newPolyOrder) ) {
+        // upgrade basis
+        basis = BasisFactory::setPolyOrder(basis, newPolyOrder);
+      }
+      newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+    }
+    if ((numSides > 1) && (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) && (conforming)) {
+      addConformingVertexPairings(varID, newOrdering, *cellTopoPtr);
     }
   }
   newOrdering->rebuildIndex();

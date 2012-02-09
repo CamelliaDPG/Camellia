@@ -86,6 +86,10 @@ void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
   dofIdentifications[make_pair(varID,sidePair2)] = sidePair1;
 }
 
+Teuchos::RCP< shards::CellTopology > DofOrdering::cellTopology(int sideIndex) {
+  return _cellTopologyForSide[sideIndex];
+}
+
 BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
@@ -147,6 +151,11 @@ void DofOrdering::rebuildIndex() {
     //cout << "rebuildIndex: varID=" << varID << endl;
     for (int sideIndex=0; sideIndex<numSidesForVarID[varID]; sideIndex++) {
       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = getBasis(varID,sideIndex);
+      int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
+      if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() ) {
+        Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology( basis->getBaseCellTopology() ));
+        _cellTopologyForSide[cellTopoSideIndex] = cellTopoPtr;
+      }
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
         pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideIndex,dofOrdinal));
         if ( dofIdentifications.find(key) != dofIdentifications.end() ) {
