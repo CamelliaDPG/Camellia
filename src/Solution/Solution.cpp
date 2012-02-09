@@ -1969,8 +1969,6 @@ void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &
 void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID){
   typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-  cout << "projectOntoCell: physicalCellNodes for cellID " << cellID << ":" << endl;
-  cout << physicalCellNodes;
   
   for (map<int, AbstractFxnPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
@@ -1991,9 +1989,6 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
   vector<int> trialIDs = oldTrialOrdering->getVarIDs();
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-  
-  cout << "projectOldCellOntoNewCells: physicalCellNodes for cellID " << cellID << ":" << endl;
-  cout << physicalCellNodes;
   
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
