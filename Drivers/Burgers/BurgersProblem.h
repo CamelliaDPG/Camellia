@@ -39,6 +39,24 @@ class BurgersProblem : public RHS, public BC, public Constraints {
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
 
+    /*
+    if (testVarID==BurgersBilinearForm::V){
+      values.resize(numCells,numPoints,spaceDim);
+      values.initialize(0.0);
+    } else if (testVarID==BurgersBilinearForm::TAU){
+      values.resize(numCells,numPoints);
+      values.initialize(0.0);
+    }
+    return;
+    */
+
+    FieldContainer<double> points = physicalPoints;
+    FieldContainer<double> solnValues(numCells,numPoints);
+    points.resize(numCells*numPoints,spaceDim);
+    solnValues.resize(numCells*numPoints);
+    _bf->getBackgroundFlow()->solutionValues(solnValues,BurgersBilinearForm::U, points);
+    solnValues.resize(numCells,numPoints);
+
     if (testVarID==BurgersBilinearForm::V){
       values.resize(numCells,numPoints,spaceDim);
       values.initialize(0.0);    
@@ -47,20 +65,12 @@ class BurgersProblem : public RHS, public BC, public Constraints {
 	for (int ptIndex=0; ptIndex<numPoints; ptIndex++){
 	  double x = physicalPoints(cellIndex,ptIndex,0);
 	  double y = physicalPoints(cellIndex,ptIndex,1);
-	  FieldContainer<double> value(1); // only one point on one cell
-	  FieldContainer<double> point(1,2); // one point, one cell, 2 space dim
-	  point(0,0) = x; point(0,1) = y;	  
-	  _bf->getBackgroundFlow()->solutionValues(value, BurgersBilinearForm::U, point);
-	  double u = value(0); 
+	  double u = solnValues(cellIndex,ptIndex);
 	  
 	  //sign is positive - opposite from applyBilinearFormData
 	  values(cellIndex,ptIndex,0) = beta(cellIndex,ptIndex,0)/2.0; // making it rank 2 will automatically dot it with the gradient
 	  values(cellIndex,ptIndex,1) = beta(cellIndex,ptIndex,1);
-
-	  //	  vector<double> beta = _bf->getBeta(x,y);
-	  //	  values(cellIndex,ptIndex,0) = beta[0]; // making it rank 2 will automatically dot it with the gradient
-	  //	  values(cellIndex,ptIndex,1) = beta[1];
-
+	  
 	  values(cellIndex,ptIndex,0) *= u;
 	  values(cellIndex,ptIndex,1) *= u;
 	}
@@ -68,20 +78,13 @@ class BurgersProblem : public RHS, public BC, public Constraints {
       
     } else if (testVarID==BurgersBilinearForm::TAU){ // should be against divergence of tau
       values.resize(numCells,numPoints);
-      values.initialize(0.0);
       for (int cellIndex=0; cellIndex<numCells; cellIndex++){
 	for (int ptIndex=0; ptIndex<numPoints; ptIndex++){
-	  double x = physicalPoints(cellIndex,ptIndex,0);
-	  double y = physicalPoints(cellIndex,ptIndex,1);
-	  FieldContainer<double> value(1); // only one point on one cell
-	  FieldContainer<double> point(1,2); // one point, one cell, 2 space dim
-	  point(0,0) = x;
-	  point(0,1) = y;	  
-	  _bf->getBackgroundFlow()->solutionValues(value, BurgersBilinearForm::U, point);
-	  double u = value(0); 
+	  double u = solnValues(cellIndex,ptIndex);
 	  values(cellIndex,ptIndex) = -u; 
 	}
       }      
+      
     } 
   }
 

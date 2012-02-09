@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 3; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-2;
@@ -93,29 +93,12 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
 
-  /*
-  solution->solve(false);
-  backgroundFlow->addSolution(solution,1.0);
-  if (rank==0){
-    solution->writeFieldsToFile(BurgersBilinearForm::U, "du.m");
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
-    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U,"u.m");
-  }
-  solution->solve(false);
-  backgroundFlow->addSolution(solution,1.0);
-  if (rank==0){
-    solution->writeFieldsToFile(BurgersBilinearForm::U, "du.m");
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
-    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U,"u.m");
-  }
-  return 0;
-  */
-
-  int numNRSteps = 8;
+  int numNRSteps = 7;
   for (int i=0;i<numNRSteps;i++){
     solution->solve(false);
+    backgroundFlow->addSolution(solution,1.0);
+    /*
     if (rank==0){
-      cout << "solved on NR iter " << i << endl;
       ostringstream filename;
       filename << "u" << i << ".m";
       backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, filename.str());
@@ -125,7 +108,7 @@ int main(int argc, char *argv[]) {
       filename.clear();filename.str("");
       filename << "du_hat" << i << ".dat";
       solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, filename.str());
-
+    
       filename.clear();filename.str("");
       filename << "sigma_x" << i << ".m";
       solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, filename.str());
@@ -135,10 +118,62 @@ int main(int argc, char *argv[]) {
       filename.clear();filename.str("");
       filename << "sigma_hat" << i << ".dat";
       solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, filename.str());
-    }
-    backgroundFlow->addSolution(solution,1.0);
+    }    
+    */
+    if (rank==0){
+      //      cout << "energy error = " << totalEnergyErrorSquared << endl;
+      cout << "on iter = " << i << endl;
+    }    
+    
+  }
+  if (rank==0){
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_unif.m");
+    backgroundFlow->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_unif.dat");
   }
 
+  map<int, double> energyError;
+  solution->energyError(energyError);
+  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+  vector< Teuchos::RCP< Element > >::iterator activeElemIt;
+
+  // greedy refinement algorithm - mark cells for refinement
+  vector<int> triangleCellsToRefine;
+  vector<int> quadCellsToRefine;
+  double maxError = 0.0;
+  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    int cellID = current_element->cellID();
+    maxError = max(energyError[cellID],maxError);
+  }
+
+  // do refinements on cells with error above threshold
+  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    int cellID = current_element->cellID();
+    if (energyError[cellID]>=.2*maxError){
+      if (current_element->numSides()==3){
+	triangleCellsToRefine.push_back(cellID);
+      }else if (current_element->numSides()==4){
+	quadCellsToRefine.push_back(cellID);
+      }
+    }
+  }    
+  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),backgroundFlow);
+  triangleCellsToRefine.clear();
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),backgroundFlow);
+  quadCellsToRefine.clear();
+
+  // one more nonlinear solve
+  for (int i=0;i<numNRSteps;i++){
+    solution->solve(false);
+    backgroundFlow->addSolution(solution,1.0);
+    if (rank==0){
+      cout << "on iter = " << i << endl;
+    }        
+  }
+
+
+  
   return 0;
 
   ////////////////////////////////////////////////////////////////////
