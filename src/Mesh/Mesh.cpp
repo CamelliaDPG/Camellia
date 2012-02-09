@@ -831,21 +831,21 @@ void Mesh::determineDofPairings() {
             numDofs = min(neighborNumDofs,numDofs); // if there IS a multi-basis, we match the smaller basis with it...
             
             // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
-            //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendents along that side...
-            vector< pair<int,int> > descendentsForSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor);
+            //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
+            vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
             vector< pair<int,int> >:: iterator entryIt;
-            int descendentIndex = -1;
-            for (entryIt = descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
-              descendentIndex++;
-              int descendentSubSideIndexInMe = neighborChildPermutation(descendentIndex, descendentsForSide.size());
+            int descendantIndex = -1;
+            for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
+              descendantIndex++;
+              int descendantSubSideIndexInMe = neighborChildPermutation(descendantIndex, descendantsForSide.size());
               neighborCellID = (*entryIt).first;
               mySideIndexInNeighbor = (*entryIt).second;
               neighbor = _elements[neighborCellID];
               for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                 int myLocalDofIndex;
-                if ( (descendentsForSide.size() > 1) && ( !_usePatchBasis ) ) {
+                if ( (descendantsForSide.size() > 1) && ( !_usePatchBasis ) ) {
                   // multi-basis
-                  myLocalDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,descendentSubSideIndexInMe);
+                  myLocalDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,descendantSubSideIndexInMe);
                 } else {
                   myLocalDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
                 }
@@ -972,7 +972,7 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
   
   if ( !result ) {
     for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
-      vector< pair<int,int> > descendantsForSide = elem->getDescendentsForSide(sideIndex);
+      vector< pair<int,int> > descendantsForSide = elem->getDescendantsForSide(sideIndex);
       for (vector< pair<int,int> >::iterator descendantIt = descendantsForSide.begin();
            descendantIt != descendantsForSide.end(); descendantIt++) {
         int descCellID = descendantIt->first;
@@ -1017,7 +1017,7 @@ void Mesh::enforceOneIrregularity() {
         int mySideIndexInNeighbor;
         Element* neighbor; // may be a parent
         current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
-        int numNeighborsOnSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor).size();
+        int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
         if (numNeighborsOnSide > 2) isIrregular=true;
       }
       
@@ -1488,7 +1488,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
       vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(neighborSideIndexInParent);
       
       if ( childrenForSide.size() > 1 ) { // then parent is broken along side, and neighbor isn't...
-        vector< pair< int, int> > descendentsForSide = parent->getDescendentsForSide(neighborSideIndexInParent);
+        vector< pair< int, int> > descendantsForSide = parent->getDescendantsForSide(neighborSideIndexInParent);
         
         if ( !_usePatchBasis ) { // MultiBasis
           Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
@@ -1516,7 +1516,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           }
           // TODO: if nonParentUpgraded, then upgrade all the existing PatchBases along that side...
           vector< pair< int, int> >::iterator entryIt;
-          for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
+          for ( entryIt=descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
             int childCellID = (*entryIt).first;
             ElementPtr child = _elements[childCellID];
             int childSideIndex = (*entryIt).second;
@@ -1530,7 +1530,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
         }
         
         vector< pair< int, int> >::iterator entryIt;
-        for ( entryIt=descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
+        for ( entryIt=descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
           int childCellID = (*entryIt).first;
           int childSideIndex = (*entryIt).second;
           _boundary.deleteElement(childCellID, childSideIndex);
@@ -1632,11 +1632,11 @@ int Mesh::maxPolyOrder(ElementPtr elem, int sideIndex) {
     parent = neighbor.get();
   }
   if (parent != NULL) {
-    vector< pair< int, int> > descendentSides = parent->getDescendentsForSide(ancestorSideIndex);
+    vector< pair< int, int> > descendantSides = parent->getDescendantsForSide(ancestorSideIndex);
     vector< pair< int, int> >::iterator sideIt;
-    for (sideIt = descendentSides.begin(); sideIt != descendentSides.end(); sideIt++) {
-      int descendentID = sideIt->first;
-      int descOrder = _dofOrderingFactory.polyOrder(_elements[descendentID]->elementType()->trialOrderPtr);
+    for (sideIt = descendantSides.begin(); sideIt != descendantSides.end(); sideIt++) {
+      int descendantID = sideIt->first;
+      int descOrder = _dofOrderingFactory.polyOrder(_elements[descendantID]->elementType()->trialOrderPtr);
       maxOrder = max(maxOrder,descOrder);
     }
   }
@@ -1832,12 +1832,12 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
   if (neighborPtr->cellID() > -1) {
     _cellSideParitiesForCellID[neighborPtr->cellID()][neighborSide] = -parity;
     if (neighborPtr->isParent()) { // then we need to set its children accordingly, too
-      vector< pair< int, int> > descendentSides = neighborPtr->getDescendentsForSide(neighborSide);
+      vector< pair< int, int> > descendantSides = neighborPtr->getDescendantsForSide(neighborSide);
       vector< pair< int, int> >::iterator sideIt;
-      for (sideIt = descendentSides.begin(); sideIt != descendentSides.end(); sideIt++) {
-        int descendentID = sideIt->first;
-        int descendentSide = sideIt->second;
-        _cellSideParitiesForCellID[descendentID][descendentSide] = -parity;
+      for (sideIt = descendantSides.begin(); sideIt != descendantSides.end(); sideIt++) {
+        int descendantID = sideIt->first;
+        int descendantSide = sideIt->second;
+        _cellSideParitiesForCellID[descendantID][descendantSide] = -parity;
       }
     }
 //    cout << "setNeighbor: set cellSideParity for cell " << neighborPtr->cellID() << ", sideIndex " << neighborSide << ": ";

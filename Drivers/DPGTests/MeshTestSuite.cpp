@@ -752,20 +752,20 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
               if (neighborNumBasisDofs != numBasisDofs) {
                 if ( neighbor->isParent() ) {
                   // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
-                  //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendents along that side...
+                  //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
                   int numDofs = min(neighborNumBasisDofs,numBasisDofs); // if there IS a multi-basis, we match the smaller basis with it...
-                  vector< pair<int,int> > descendentsForSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor);
+                  vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
                   vector< pair<int,int> >:: iterator entryIt;
-                  int descendentIndex = -1;
-                  for (entryIt = descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
-                    descendentIndex++;
-                    int neighborSubSideIndexInMe = mesh.neighborChildPermutation(descendentIndex, descendentsForSide.size());
+                  int descendantIndex = -1;
+                  for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
+                    descendantIndex++;
+                    int neighborSubSideIndexInMe = mesh.neighborChildPermutation(descendantIndex, descendantsForSide.size());
                     int neighborCellID = (*entryIt).first;
                     mySideIndexInNeighbor = (*entryIt).second;
                     neighbor = mesh.elements()[neighborCellID].get();
                     for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                       int myLocalDofIndex;
-                      if (descendentsForSide.size() > 1) {
+                      if (descendantsForSide.size() > 1) {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,neighborSubSideIndexInMe);
                       } else {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
@@ -804,10 +804,10 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                   }
                 } else { // neighbor->isParent()
                   // for PatchBasis:
-                  vector< pair<int,int> > descendentsForSide = neighbor->getDescendentsForSide(mySideIndexInNeighbor);
+                  vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
                   vector< pair<int,int> >:: iterator entryIt;
-                  int descendentIndex = -1;
-                  for (entryIt = descendentsForSide.begin(); entryIt != descendentsForSide.end(); entryIt++) {
+                  int descendantIndex = -1;
+                  for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
                     int neighborCellID = (*entryIt).first;
                     mySideIndexInNeighbor = (*entryIt).second;
                     neighbor = mesh.elements()[neighborCellID].get();
@@ -1200,8 +1200,8 @@ bool MeshTestSuite::testHRefinement() {
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 8; // 1 to start!
   for (int i=0; i<numRefinements; i++) {
-    vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
-    int cellID = descendents[0].first;
+    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    int cellID = descendants[0].first;
     cellsToRefine.clear();
     cellsToRefine.push_back(cellID);
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
@@ -1303,21 +1303,21 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   // repeatedly refine the first element along the side shared with cellID 1
   int numRefinements = 2;
   for (int i=0; i<numRefinements; i++) {
-    vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
-    int numDescendents = descendents.size();
+    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    int numDescendants = descendants.size();
     cellsToRefine.clear();
-    for (int j=0; j<numDescendents; j++ ) {
-      int cellID = descendents[j].first;
+    for (int j=0; j<numDescendants; j++ ) {
+      int cellID = descendants[j].first;
       cellsToRefine.push_back(cellID);
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
 
     // same thing for north side
-    descendents = mesh->elements()[0]->getDescendentsForSide(2);
-    numDescendents = descendents.size();
+    descendants = mesh->elements()[0]->getDescendantsForSide(2);
+    numDescendants = descendants.size();
     cellsToRefine.clear();
-    for (int j=0; j<numDescendents; j++ ) {
-      int cellID = descendents[j].first;
+    for (int j=0; j<numDescendants; j++ ) {
+      int cellID = descendants[j].first;
       cellsToRefine.push_back(cellID);
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());

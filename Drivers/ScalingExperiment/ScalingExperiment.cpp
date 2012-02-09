@@ -77,21 +77,21 @@ int main(int argc, char *argv[]) {
     // repeatedly refine the first element along the side shared with cellID 1
     int numRefinements = 4;
     for (int i=0; i<numRefinements; i++) {
-      vector< pair<int,int> > descendents = mesh->elements()[0]->getDescendentsForSide(1);
-      int numDescendents = descendents.size();
+      vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+      int numDescendants = descendants.size();
       cellsToRefine.clear();
-      for (int j=0; j<numDescendents; j++ ) {
-        int cellID = descendents[j].first;
+      for (int j=0; j<numDescendants; j++ ) {
+        int cellID = descendants[j].first;
         cellsToRefine.push_back(cellID);
       }
       mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
       
       // same thing for north side
-      descendents = mesh->elements()[0]->getDescendentsForSide(2);
-      numDescendents = descendents.size();
+      descendants = mesh->elements()[0]->getDescendantsForSide(2);
+      numDescendants = descendants.size();
       cellsToRefine.clear();
-      for (int j=0; j<numDescendents; j++ ) {
-        int cellID = descendents[j].first;
+      for (int j=0; j<numDescendants; j++ ) {
+        int cellID = descendants[j].first;
         cellsToRefine.push_back(cellID);
       }
       mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());

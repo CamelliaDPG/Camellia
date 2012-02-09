@@ -123,13 +123,13 @@ vector< pair<int,int> > & Element::childIndicesForSide(int sideIndex) {
   return _refPattern->childrenForSides()[sideIndex];
 }
 
-vector< pair< int, int> > Element::getDescendentsForSide(int sideIndex) {
-  // returns a flat list of leaf nodes (descendents that are not themselves parents)
-  // pair (descendentCellID, descendentSideIndex)
-  vector< pair< int, int> > descendentsForSide;
+vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex) {
+  // returns a flat list of leaf nodes (descendants that are not themselves parents)
+  // pair (descendantCellID, descendantSideIndex)
+  vector< pair< int, int> > descendantsForSide;
   if ( ! isParent() ) {
-    descendentsForSide.push_back( make_pair( this->cellID(), sideIndex) );
-    return descendentsForSide;
+    descendantsForSide.push_back( make_pair( this->cellID(), sideIndex) );
+    return descendantsForSide;
   }
   vector< pair<int,int> > childIndices = childIndicesForSide(sideIndex);
   vector< pair<int,int> >::iterator entryIt;
@@ -137,13 +137,13 @@ vector< pair< int, int> > Element::getDescendentsForSide(int sideIndex) {
   for (entryIt=childIndices.begin(); entryIt != childIndices.end(); entryIt++) {
     int childIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
-    vector< pair<int,int> > childDescendents = _children[childIndex]->getDescendentsForSide(childSideIndex);
+    vector< pair<int,int> > childDescendants = _children[childIndex]->getDescendantsForSide(childSideIndex);
     vector< pair<int,int> >::iterator childEntryIt;
-    for (childEntryIt=childDescendents.begin(); childEntryIt != childDescendents.end(); childEntryIt++) {
-      descendentsForSide.push_back(*childEntryIt);
+    for (childEntryIt=childDescendants.begin(); childEntryIt != childDescendants.end(); childEntryIt++) {
+      descendantsForSide.push_back(*childEntryIt);
     }
   }
-  return descendentsForSide;
+  return descendantsForSide;
 }
 
 void Element::getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe) {
