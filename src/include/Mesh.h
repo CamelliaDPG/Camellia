@@ -188,7 +188,7 @@ public:
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
   
-  int maxPolyOrder(ElementPtr elem, int sideIndex);
+  void maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem, int sideIndex);
   
   map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
   

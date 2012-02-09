@@ -765,7 +765,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                     neighbor = mesh.elements()[neighborCellID].get();
                     for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                       int myLocalDofIndex;
-                      if (descendantsForSide.size() > 1) {
+                      if ((descendantsForSide.size() > 1) && !mesh.usePatchBasis()) {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,neighborSubSideIndexInMe);
                       } else {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);

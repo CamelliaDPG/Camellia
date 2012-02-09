@@ -42,7 +42,7 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     teardown();
     
     // for now, disable the p-refinement tests:
-/*    setup();
+    /*setup();
     if (testChildPRefinementSimple()) {
       numTestsPassed++;
     }
