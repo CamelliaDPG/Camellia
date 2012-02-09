@@ -1411,6 +1411,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
   Element* neighbor;
   int mySideIndexInNeighbor;
   elem->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
+  
   int neighborCellID = neighbor->cellID(); // may be -1 if it's the boundary
   if (neighborCellID < 0) {
     return; // no change
@@ -1471,9 +1472,8 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           }
         } else { // PatchBasis
           // check to see if non-parent needs a p-upgrade
-          bool nonParentUpgraded = false;
           int maxPolyOrder, minPolyOrder; 
-          this->maxMinPolyOrder(maxPolyOrder, minPolyOrder, nonParent,neighborSideIndexInParent);
+          this->maxMinPolyOrder(maxPolyOrder, minPolyOrder, nonParent,parentSideIndexInNeighbor);
           Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
           int nonParentPolyOrder = _dofOrderingFactory.polyOrder(nonParentTrialOrdering);
           if (maxPolyOrder > nonParentPolyOrder) {
@@ -1795,7 +1795,16 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> so
     
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      matchNeighbor(elem,sideIndex);
+      // get the big neighbor along the side, if we're a small element…
+      // TODO: figure out if this is what we really want to do, instead of the
+      int neighborSideIndex;
+      ElementPtr neighborToMatch = ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
+      
+      if (neighborToMatch->cellID() != -1) { // then we have a neighbor to match along that side...
+        matchNeighbor(neighborToMatch,neighborSideIndex);
+      }
+      
+      //matchNeighbor(elem,sideIndex);
     }
     
     if ( solution.get() ) { // do projection
