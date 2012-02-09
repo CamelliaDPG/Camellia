@@ -90,6 +90,36 @@ Teuchos::RCP< shards::CellTopology > DofOrdering::cellTopology(int sideIndex) {
   return _cellTopologyForSide[sideIndex];
 }
 
+void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                          const FieldContainer<double> &oldValues ) {
+  // copy the coefficients for the bases that agree between the two DofOrderings
+  // requires that "like" bases are actually pointers to the same memory location
+  TEST_FOR_EXCEPTION( newValues.rank() != 1, std::invalid_argument, "newValues.rank() != 1");
+  TEST_FOR_EXCEPTION( newValues.size() != totalDofs(), std::invalid_argument, "newValues.size() != totalDofs()");
+  TEST_FOR_EXCEPTION( oldValues.rank() != 1, std::invalid_argument, "oldValues.rank() != 1");
+  TEST_FOR_EXCEPTION( oldValues.size() != oldDofOrdering->totalDofs(), std::invalid_argument, "oldValues.size() != oldDofOrdering->totalDofs()");
+  
+  newValues.initialize(0.0);
+  
+  for (vector<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+    int varID = *varIDIt;
+    int numSides = getNumSidesForVarID(varID);
+    if ( numSides == oldDofOrdering->getNumSidesForVarID(numSides) ) {
+      for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
+        BasisPtr basis = getBasis(varID,sideIndex);
+        if (basis.get() == oldDofOrdering->getBasis(varID,sideIndex).get() ) {
+          // bases alike: copy coefficients
+          int cardinality = basis->getCardinality();
+          for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++) {
+            int dofIndex = getDofIndex(varID,dofOrdinal,sideIndex);
+            newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideIndex) );
+          }
+        }
+      }
+    }
+  }
+}
+
 BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
@@ -123,6 +153,17 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   }
 }
 
+int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
+  return getBasis(varID,sideIndex)->getCardinality();
+}
+
+int DofOrdering::getNumSidesForVarID(int varID) {
+  return numSidesForVarID[varID];
+}
+
+const vector<int> & DofOrdering::getVarIDs() { 
+  return varIDs;
+}
 
 int DofOrdering::maxBasisDegree() {
   map< pair<int,int>, Teuchos::RCP< Basis<double,FieldContainer<double> > > >::iterator basisIterator;

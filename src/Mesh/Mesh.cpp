@@ -1388,6 +1388,9 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
       solution->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
   }
+  if (solution.get()) {
+    solution->processSideUpgrades(_cellSideUpgrades);
+  }
   rebuildLookups();
 }
 
@@ -1399,45 +1402,6 @@ int Mesh::neighborChildPermutation(int childIndex, int numChildrenInSide) {
 int Mesh::neighborDofPermutation(int dofIndex, int numDofsForSide) {
   // we'll need to be more sophisticated in 3D, but for now we just reverse the order
   return numDofsForSide - dofIndex - 1;
-}
-
-map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex) {
-  vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(sideIndex);
-  map< int, BasisPtr > varIDsToUpgrade;
-  vector< map< int, BasisPtr > > childVarIDsToUpgrade;
-  vector< pair< int, int> >::iterator entryIt;
-  for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
-    int childCellIndex = (*entryIt).first;
-    int childSideIndex = (*entryIt).second;
-    ElementPtr childCell = parent->getChild(childCellIndex);
-    DofOrderingPtr childTrialOrder = childCell->elementType()->trialOrderPtr;
-    
-    if ( childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() > 1)) {
-      childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex) );
-    } else {
-      pair< DofOrderingPtr,int > entry = make_pair(childTrialOrder,childSideIndex);
-      vector< pair< DofOrderingPtr,int > > childTrialOrdersForSide;
-      childTrialOrdersForSide.push_back(entry);
-      childVarIDsToUpgrade.push_back( _dofOrderingFactory.getMultiBasisUpgradeMap(childTrialOrdersForSide) );
-    }
-  }
-  map< int, BasisPtr >::iterator varMapIt;
-  for (varMapIt=childVarIDsToUpgrade[0].begin(); varMapIt != childVarIDsToUpgrade[0].end(); varMapIt++) {
-    int varID = (*varMapIt).first;
-    vector< BasisPtr > bases;
-    int numChildrenInSide = childVarIDsToUpgrade.size();
-    for (int childIndex = 0; childIndex<numChildrenInSide; childIndex++) {
-      //permute child index (this is from neighbor's point of view)
-      int permutedChildIndex = neighborChildPermutation(childIndex,numChildrenInSide);
-      if (! childVarIDsToUpgrade[permutedChildIndex][varID].get()) {
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "null basis");
-      }
-      bases.push_back(childVarIDsToUpgrade[permutedChildIndex][varID]);
-    }
-    BasisPtr multiBasis = BasisFactory::getMultiBasis(bases);
-    varIDsToUpgrade[varID] = multiBasis;
-  }
-  return varIDsToUpgrade;
 }
 
 void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
@@ -1499,7 +1463,8 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           ElementTypePtr nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
                                                                             nonParent->elementType()->testOrderPtr, 
                                                                             nonParent->elementType()->cellTopoPtr );
-          nonParent->setElementType(nonParentType);
+          setElementType(nonParent->cellID(), nonParentType, true); // true: only a side upgrade
+          //nonParent->setElementType(nonParentType);
           // debug code:
           if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
             TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
@@ -1529,7 +1494,8 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
             ElementTypePtr childType = _elementTypeFactory.getElementType(childTrialOrdering, 
                                                                           child->elementType()->testOrderPtr, 
                                                                           child->elementType()->cellTopoPtr );
-            child->setElementType(childType);
+            setElementType(childCellID,childType,true); //true: sideUpgradeOnly
+            //child->setElementType(childType);
           }
         }
         
@@ -1569,8 +1535,11 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     if (testPolyOrder < mySidePolyOrder + _pToAddToTest) {
       elemTestOrdering = _dofOrderingFactory.testOrdering( mySidePolyOrder + _pToAddToTest, cellTopo);
     }
-    elem->setElementType( _elementTypeFactory.getElementType(elemTrialOrdering, elemTestOrdering, 
-                                                             elem->elementType()->cellTopoPtr ) );
+    ElementTypePtr newType = _elementTypeFactory.getElementType(elemTrialOrdering, elemTestOrdering, 
+                                                                elem->elementType()->cellTopoPtr );
+    setElementType(elem->cellID(), newType, true); // true: 
+//    elem->setElementType( _elementTypeFactory.getElementType(elemTrialOrdering, elemTestOrdering, 
+//                                                             elem->elementType()->cellTopoPtr ) );
     //return ELEMENT_NEEDED_NEW;
   } else if (changed==2) {
     // if need be, upgrade neighborTestOrdering as well.
@@ -1590,8 +1559,9 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
       neighborTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, neighborTopo);
     }
-    neighbor->setElementType( _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering, 
-                                                                 neighbor->elementType()->cellTopoPtr ) );
+    ElementTypePtr newType = _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering, 
+                                                                neighbor->elementType()->cellTopoPtr );
+    setElementType( neighbor->cellID(), newType, true); // true: sideUpgradeOnly
     //return NEIGHBOR_NEEDED_NEW;
   } else if (changed == -1) { // PatchBasis
     // TODO: If it's true that we never get here, eliminate this code, and also the related return value in 
@@ -1649,6 +1619,45 @@ void Mesh::maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem
       minPolyOrder = min(minPolyOrder,descOrder);
     }
   }
+}
+
+map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex) {
+  vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(sideIndex);
+  map< int, BasisPtr > varIDsToUpgrade;
+  vector< map< int, BasisPtr > > childVarIDsToUpgrade;
+  vector< pair< int, int> >::iterator entryIt;
+  for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
+    int childCellIndex = (*entryIt).first;
+    int childSideIndex = (*entryIt).second;
+    ElementPtr childCell = parent->getChild(childCellIndex);
+    DofOrderingPtr childTrialOrder = childCell->elementType()->trialOrderPtr;
+    
+    if ( childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() > 1)) {
+      childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex) );
+    } else {
+      pair< DofOrderingPtr,int > entry = make_pair(childTrialOrder,childSideIndex);
+      vector< pair< DofOrderingPtr,int > > childTrialOrdersForSide;
+      childTrialOrdersForSide.push_back(entry);
+      childVarIDsToUpgrade.push_back( _dofOrderingFactory.getMultiBasisUpgradeMap(childTrialOrdersForSide) );
+    }
+  }
+  map< int, BasisPtr >::iterator varMapIt;
+  for (varMapIt=childVarIDsToUpgrade[0].begin(); varMapIt != childVarIDsToUpgrade[0].end(); varMapIt++) {
+    int varID = (*varMapIt).first;
+    vector< BasisPtr > bases;
+    int numChildrenInSide = childVarIDsToUpgrade.size();
+    for (int childIndex = 0; childIndex<numChildrenInSide; childIndex++) {
+      //permute child index (this is from neighbor's point of view)
+      int permutedChildIndex = neighborChildPermutation(childIndex,numChildrenInSide);
+      if (! childVarIDsToUpgrade[permutedChildIndex][varID].get()) {
+        TEST_FOR_EXCEPTION(true, std::invalid_argument, "null basis");
+      }
+      bases.push_back(childVarIDsToUpgrade[permutedChildIndex][varID]);
+    }
+    BasisPtr multiBasis = BasisFactory::getMultiBasis(bases);
+    varIDsToUpgrade[varID] = multiBasis;
+  }
+  return varIDsToUpgrade;
 }
 
 int Mesh::numElements() {
@@ -1734,6 +1743,7 @@ FieldContainer<double> & Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementTyp
 }
 
 void Mesh::rebuildLookups() {
+  _cellSideUpgrades.clear();
   determineActiveElements();
   buildTypeLookups(); // build data structures for efficient lookup by element type
   buildLocalToGlobalMap();
@@ -1775,9 +1785,13 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> so
     } else {
       newTestOrdering = currentTestOrdering;
     }
+
+    ElementTypePtr newType = _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
+                                                                elem->elementType()->cellTopoPtr );
+    setElementType(cellID,newType,false); // false: *not* sideUpgradeOnly
     
-    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
-                                                             elem->elementType()->cellTopoPtr ) );
+//    elem->setElementType( _elementTypeFactory.getElementType(newTrialOrdering, newTestOrdering, 
+//                                                             elem->elementType()->cellTopoPtr ) );
     
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
@@ -1789,6 +1803,9 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> so
       childIDs.push_back(cellID);
       solution->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
+  }
+  if (solution.get()) {
+    solution->processSideUpgrades(_cellSideUpgrades);
   }
   rebuildLookups();
 }
@@ -1819,6 +1836,25 @@ int Mesh::rowSizeUpperBound() {
     }
   }
   return maxRowSize;
+}
+
+void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
+  ElementPtr elem = _elements[cellID];
+  if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
+    ElementTypePtr oldType;
+    map<int, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);
+    if (existingEntryIt != _cellSideUpgrades.end() ) {
+      oldType = (existingEntryIt->second).first;
+    } else {
+      oldType = elem->elementType();
+      if (oldType.get() == newType.get()) {
+        // no change is actually happening
+        return;
+      }
+    }
+    _cellSideUpgrades[cellID] = make_pair(oldType,newType);
+  }
+  elem->setElementType(newType);
 }
 
 void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide) {

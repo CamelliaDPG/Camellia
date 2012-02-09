@@ -251,7 +251,8 @@ bool SolutionTests::testHRefinementInitialization(){
   double tol = 1e-14;
 
   bool success = true;
-  vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
+  Teuchos::RCP< Mesh > mesh = _poissonSolution->mesh();
+  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
 
   _poissonSolution->solve(false);
   int trialIDToWrite = PoissonBilinearForm::PHI;
@@ -275,7 +276,19 @@ bool SolutionTests::testHRefinementInitialization(){
   
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
-  _poissonSolution->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
+  
+  // this next loop entirely in service of debug output re. physicalCellNodes...
+  for (int cellID=0; cellID < mesh->numElements(); cellID++) {
+    Teuchos::RCP< Element > elem = mesh->getElement(cellID);
+    FieldContainer<double> nodesForType = mesh->physicalCellNodesGlobal(elem->elementType());
+    Teuchos::Array<int> dimensions;
+    nodesForType.dimensions(dimensions);
+    dimensions[0] = 1; // single-element nodes
+    FieldContainer<double> nodesForCell(dimensions,&nodesForType(elem->globalCellIndex(),0,0));
+    cout << "After hRefine, nodes for cellID " << cellID << ":\n";
+    cout << nodesForCell;
+  }
   
   _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
   

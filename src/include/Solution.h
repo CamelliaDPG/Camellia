@@ -129,6 +129,7 @@ public:
   double meanValue(int trialID);
   double meshMeasure();
 
+  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades );
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
   void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);

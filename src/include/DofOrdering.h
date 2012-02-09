@@ -64,21 +64,17 @@ public:
   
   void addEntry(int varID, Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis, int basisRank, int sideIndex = 0);
   
+  void copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                            const FieldContainer<double> &oldValues );
+  
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=0, int subSideIndex = -1);
   
-  const vector<int> & getVarIDs() { return varIDs; }
+  const vector<int> & getVarIDs();
   
-  int getNumSidesForVarID(int varID) {
-    return numSidesForVarID[varID];
-  }
+  int getNumSidesForVarID(int varID);
   
-  int getBasisCardinality(int varID, int sideIndex) {
-    return getBasis(varID,sideIndex)->getCardinality();
-  }
-  //const & vector<int> getVarIDs() { return varIDs; }
-  
-//  int getVarID(int varIndex) {return varIDs[varIndex];};
+  int getBasisCardinality(int varID, int sideIndex);
   
   BasisPtr getBasis(int varID, int sideIndex = 0);
   

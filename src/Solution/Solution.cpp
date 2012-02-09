@@ -1944,6 +1944,18 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   return partMap;
 }
 
+void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades ) {
+  for (map<int, pair< ElementTypePtr, ElementTypePtr > >::const_iterator upgradeIt = cellSideUpgrades.begin();
+       upgradeIt != cellSideUpgrades.end(); upgradeIt++) {
+    int cellID = upgradeIt->first;
+    DofOrderingPtr oldTrialOrdering = (upgradeIt->second).first->trialOrderPtr;
+    DofOrderingPtr newTrialOrdering = (upgradeIt->second).second->trialOrderPtr;
+    FieldContainer<double> newCoefficients(newTrialOrdering->totalDofs());
+    newTrialOrdering->copyLikeCoefficients( newCoefficients, oldTrialOrdering, _solutionForCellIDGlobal[cellID] );
+    _solutionForCellIDGlobal[cellID] = newCoefficients;
+  }
+}
+
 void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
 
   vector< ElementPtr > activeElems = _mesh->activeElements();
@@ -1956,25 +1968,32 @@ void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &
 
 void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID){
   typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  cout << "projectOntoCell: physicalCellNodes for cellID " << cellID << ":" << endl;
+  cout << physicalCellNodes;
+  
   for (map<int, AbstractFxnPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
-      int trialID = functionIt->first;
-      AbstractFxnPtr function = functionIt->second;
-      ElementPtr element = _mesh->getElement(cellID);
-      ElementTypePtr elemTypePtr = element->elementType();
-      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-      Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-      
-      FieldContainer<double> basisCoefficients;
-      Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);
-      setSolnCoeffsForCellID(basisCoefficients,cellID,trialID); 
+    int trialID = functionIt->first;
+    AbstractFxnPtr function = functionIt->second;
+    ElementPtr element = _mesh->getElement(cellID);
+    ElementTypePtr elemTypePtr = element->elementType();
+    
+    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+    
+    FieldContainer<double> basisCoefficients;
+    Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);
+    setSolnCoeffsForCellID(basisCoefficients,cellID,trialID); 
   }
 }
 	 
 void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
-  // NOTE: this only projects field functions for now.
+  // NOTE: this only projects field variables for now.
   DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
   vector<int> trialIDs = oldTrialOrdering->getVarIDs();
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  
+  cout << "projectOldCellOntoNewCells: physicalCellNodes for cellID " << cellID << ":" << endl;
+  cout << physicalCellNodes;
   
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;

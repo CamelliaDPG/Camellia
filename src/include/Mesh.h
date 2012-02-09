@@ -86,6 +86,10 @@ class Mesh {
                                                                   //( will need to do something else in 3D )
   vector< vector<int> > _cellSideParitiesForCellID;
   
+  // keep track of upgrades to the sides of cells since the last rebuild:
+  // (used to remap solution coefficients)
+  map< int, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
+  
   map< pair<int,int>, pair<int,int> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
   // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
   // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
@@ -117,6 +121,9 @@ class Mesh {
   ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<int> > &children, 
                    vector< vector< pair< int, int> > > &childrenForSide);
+  
+  void setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly);
+  
   void setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide);
   
   // simple utility functions:
