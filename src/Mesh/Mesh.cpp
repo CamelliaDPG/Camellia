@@ -1515,6 +1515,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
             nonParentUpgraded = true;
           }
           // TODO: if nonParentUpgraded, then upgrade all the existing PatchBases along that side...
+
           vector< pair< int, int> >::iterator entryIt;
           for ( entryIt=descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
             int childCellID = (*entryIt).first;

@@ -88,7 +88,7 @@ public:
   bool isNeighbor(Teuchos::RCP<Element> putativeNeighbor, int &sideIndexForNeighbor);
   bool isParent();
   bool isChild();
-  vector< pair<int,int> > getDescendantsForSide(int sideIndex);
+  vector< pair<int,int> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
 //destructor:
   ~Element();
 };
