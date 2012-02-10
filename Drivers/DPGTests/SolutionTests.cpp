@@ -141,14 +141,21 @@ bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::R
       int cellID = soln1It->first;
       cout << cellID << " ";
     }
-    cout << "\n";
+    cout << endl;
     cout << "SOLUTION 2 entries: ";
     for(map< int, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).begin();
         soln2It != (*solnMap2).end(); soln2It++) {
       int cellID = soln2It->first;
       cout << cellID << " ";
     }
-    cout << "\n";
+    cout << endl;
+    cout << "active elements: ";
+    int numElements = soln1->mesh()->activeElements().size();
+    for (int elemIndex=0; elemIndex<numElements; elemIndex++){
+      int cellID = soln1->mesh()->activeElements()[elemIndex]->cellID();
+      cout << cellID << " ";
+    }
+    cout << endl;
     
     return false;
   }
