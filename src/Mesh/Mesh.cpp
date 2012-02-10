@@ -856,8 +856,8 @@ void Mesh::determineDofPairings() {
                 
                 int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                 addDofPairing(cellID, myLocalDofIndex, neighborCellID, neighborLocalDofIndex);
-                //                cout << "added DofPairing (cellID, localDofIndex): (" << cellID << ", " << myLocalDofIndex << ") = ";
-                //                cout << "(" << neighborCellID << ", " << neighborLocalDofIndex << ")\n";
+//                cout << "added DofPairing (cellID, localDofIndex): (" << cellID << ", " << myLocalDofIndex << ") = ";
+//                cout << "(" << neighborCellID << ", " << neighborLocalDofIndex << ")\n";
               }
             }
           }

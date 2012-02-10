@@ -42,7 +42,7 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     teardown();
     
     // for now, disable the p-refinement tests:
-    /*setup();
+    setup();
     if (testChildPRefinementSimple()) {
       numTestsPassed++;
     }
@@ -68,7 +68,7 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
       numTestsPassed++;
     }
     numTestsRun++;
-    teardown();*/
+    teardown();
   } catch (...) {
     cout << "PatchBasisTests: caught exception while running tests.\n";
     teardown();
@@ -88,9 +88,15 @@ bool PatchBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
   vector< map< int, int> > elemPOrdersBeforeRefinement; // includes all fields and fluxes
   getPolyOrders(elemPOrdersBeforeRefinement,elem);
   
+//  cout << "trialOrdering for cell " << elem->cellID() << " before p-refinement:\n";
+//  cout << *(elem->elementType()->trialOrderPtr);
+  
   vector<int> cellsToRefine;
   cellsToRefine.push_back(elem->cellID());
   _mesh->pRefine(cellsToRefine);
+  
+//  cout << "trialOrdering for cell " << elem->cellID() << " after p-refinement:\n";
+//  cout << *(elem->elementType()->trialOrderPtr);
   
   if (elem->isChild()) {
     if ( ! childPolyOrdersAgreeWithParent(elem) ) {
@@ -110,6 +116,9 @@ bool PatchBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
   
   if ( !meshLooksGood() ) {
     success = false;
+  }
+  
+  if ( !success ) {
     cout << "Failed " << testName << ".\n";
   }
   return success;
@@ -134,7 +143,7 @@ void PatchBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
   map<int, int> polyOrders;
   for (varIt = _fieldIDs.begin(); varIt != _fieldIDs.end(); varIt++) {
     int fieldID = *varIt;
-    int polyOrder = elem->elementType()->trialOrderPtr->getBasis(fieldID)->getDegree();
+    int polyOrder = BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fieldID));
     polyOrders[fieldID] = polyOrder;
   }
   polyOrderMapVector.push_back(polyOrders);
@@ -144,7 +153,7 @@ void PatchBasisTests::getPolyOrders(vector< map<int, int> > &polyOrderMapVector,
     vector<int>::iterator varIt;
     for (varIt = _fluxIDs.begin(); varIt != _fluxIDs.end(); varIt++) {
       int fluxID = *varIt;
-      int polyOrder = elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex)->getDegree();
+      int polyOrder =  BasisFactory::basisPolyOrder(elem->elementType()->trialOrderPtr->getBasis(fluxID,sideIndex));
       polyOrders[fluxID] = polyOrder;
     }
     polyOrderMapVector.push_back(polyOrders);
@@ -180,7 +189,7 @@ void PatchBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
 void PatchBasisTests::makeSimpleRefinement() {
   vector<int> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
-  cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 3, as things are right now implemented
+  cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 0, as things are right now implemented
   // the next line will throw an exception in Mesh right now, because Mesh doesn't yet support PatchBasis
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
 }
@@ -377,7 +386,10 @@ bool PatchBasisTests::pRefined(const vector< map<int, int> > &pOrderMapForSideBe
     map<int, int>::iterator beforeMapIt;
     for (beforeMapIt=beforeMap.begin(); beforeMapIt != beforeMap.end(); beforeMapIt++) {
       pair<int,int> entry = *beforeMapIt;
-      if (afterMap[entry.first] != (entry.second + 1)) {
+      int sideIndex = entry.first;
+      int pOrderAfter = afterMap[sideIndex];
+      int pOrderBefore = entry.second;
+      if (pOrderAfter != (pOrderBefore + 1)) {
         return false;
       }
     }
