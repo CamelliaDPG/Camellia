@@ -275,7 +275,9 @@ bool SolutionTests::testHRefinementInitialization(){
   
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
-  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),_poissonSolution); // passing in solution to reinitialize stuff
+  vector< Teuchos::RCP<Solution> > solutions;
+  solutions.push_back(_poissonSolution);
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions); // passing in solution to reinitialize stuff
   
   _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
   
@@ -319,7 +321,9 @@ bool SolutionTests::testPRefinementInitialization() {
   
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // just refine first cell  
-  _poissonSolution->mesh()->pRefine(quadCellsToRefine,_poissonSolution); // passing in solution to reinitialize stuff
+  vector< Teuchos::RCP<Solution> > solutions;
+  solutions.push_back(_poissonSolution);
+  _poissonSolution->mesh()->pRefine(quadCellsToRefine,solutions); // passing in solution to reinitialize stuff
   
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;

@@ -191,7 +191,7 @@ public:
   
   void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   // for the case where we want to reproject the previous mesh solution onto the new one:
-  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, Teuchos::RCP<Solution> solution); 
+  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
   
@@ -223,7 +223,7 @@ public:
   void rebuildLookups();
   
   void pRefine(vector<int> cellIDsForPRefinements);
-  void pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> solution);
+  void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
     
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   

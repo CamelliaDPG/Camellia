@@ -1297,11 +1297,10 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 }
 
 void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
-  Teuchos::RCP<Solution> solution = Teuchos::rcp((Solution*)NULL);
-  hRefine(cellIDs,refPattern,solution); 
+  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
 }
 
-void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, Teuchos::RCP<Solution> solution) {
+void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions) {
   vector<int>::iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
@@ -1379,17 +1378,20 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
     
     _elements[cellID]->setRefinementPattern(refPattern);
     addChildren(_elements[cellID],children,childrenForSides);
-    if ( solution.get() ) { // do projection
+    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+         solutionIt != solutions.end(); solutionIt++) {
+       // do projection
       int numChildren = _elements[cellID]->numChildren();
       vector<int> childIDs;
       for (int i=0; i<numChildren; i++) {
         childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
       }
-      solution->projectOldCellOntoNewCells(cellID,elemType,childIDs);
+      (*solutionIt)->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
   }
-  if (solution.get()) {
-    solution->processSideUpgrades(_cellSideUpgrades);
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+       solutionIt != solutions.end(); solutionIt++) {
+    (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
   }
   rebuildLookups();
 }
@@ -1479,7 +1481,12 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           if (maxPolyOrder > nonParentPolyOrder) {
             // upgrade p along the side
             nonParentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(nonParentTrialOrdering, parentSideIndexInNeighbor, maxPolyOrder);
+            ElementTypePtr nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
+                                                                              nonParent->elementType()->testOrderPtr, 
+                                                                              nonParent->elementType()->cellTopoPtr );
+            setElementType(nonParent->cellID(), nonParentType, true); // true: only a side upgrade
           }
+
           // get all descendants, not just leaf nodes, for the PatchBasis upgrade
           // could make more efficient by checking whether we really need to upgrade the whole hierarchy, but 
           // this is probably more trouble than it's worth, unless we end up with some *highly* irregular meshes.
@@ -1604,13 +1611,16 @@ void Mesh::maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem
   Element* ancestor;
   neighbor->getNeighbor(ancestor,ancestorSideIndex,mySideIndexInNeighbor);
   Element* parent = NULL;
+  int parentSideIndex;
   if (ancestor->isParent()) {
     parent = ancestor;
+    parentSideIndex = ancestorSideIndex;
   } else if (neighbor->isParent()) {
     parent = neighbor.get();
+    parentSideIndex = mySideIndexInNeighbor;
   }
   if (parent != NULL) {
-    vector< pair< int, int> > descendantSides = parent->getDescendantsForSide(ancestorSideIndex);
+    vector< pair< int, int> > descendantSides = parent->getDescendantsForSide(parentSideIndex);
     vector< pair< int, int> >::iterator sideIt;
     for (sideIt = descendantSides.begin(); sideIt != descendantSides.end(); sideIt++) {
       int descendantID = sideIt->first;
@@ -1753,10 +1763,10 @@ void Mesh::rebuildLookups() {
 }
 
 void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
-  pRefine(cellIDsForPRefinements, Teuchos::rcp((Solution*) NULL));
+  pRefine(cellIDsForPRefinements, vector< Teuchos::RCP<Solution> >());
 }
 
-void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> solution) {
+void Mesh::pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions) {
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test
@@ -1795,26 +1805,26 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, Teuchos::RCP<Solution> so
     
     int numSides = elem->numSides();
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      // get the big neighbor along the side, if we're a small element…
-      // TODO: figure out if this is what we really want to do, instead of the
+      // get and match the big neighbor along the side, if we're a small element…
       int neighborSideIndex;
       ElementPtr neighborToMatch = ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
       
       if (neighborToMatch->cellID() != -1) { // then we have a neighbor to match along that side...
         matchNeighbor(neighborToMatch,neighborSideIndex);
       }
-      
-      //matchNeighbor(elem,sideIndex);
     }
     
-    if ( solution.get() ) { // do projection
+    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+         solutionIt != solutions.end(); solutionIt++) {
+      // do projection
       vector<int> childIDs;
       childIDs.push_back(cellID);
-      solution->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
+      (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
   }
-  if (solution.get()) {
-    solution->processSideUpgrades(_cellSideUpgrades);
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+       solutionIt != solutions.end(); solutionIt++) {
+    (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
   }
   rebuildLookups();
 }

@@ -442,7 +442,8 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::getBasisRank(basis);
-      if ( (numSides > 1) && (sideIndex==sideIndexToSet) && (BasisFactory::basisPolyOrder(basis) < newPolyOrder) ) {
+      int basisPolyOrder = BasisFactory::basisPolyOrder(basis);
+      if ( (numSides > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) ) {
         // upgrade basis
         basis = BasisFactory::setPolyOrder(basis, newPolyOrder);
       }
