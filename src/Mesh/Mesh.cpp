@@ -1271,7 +1271,13 @@ Epetra_Map Mesh::getPartitionMap() {
 
 void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex) {
   DofOrderingPtr parentTrialOrdering = child->getParent()->elementType()->trialOrderPtr;
-  //cout << "Adding PatchBasis for element " << child->cellID() << " along side " << sideIndex << "\n";
+//  cout << "Adding PatchBasis for element " << child->cellID() << " along side " << sideIndex << "\n";
+//  
+//  cout << "parent is cellID " << child->getParent()->cellID() << "; parent trialOrdering:\n";
+//  cout << *parentTrialOrdering;
+//  
+//  cout << "original childTrialOrdering:\n" << *originalChildOrdering;
+  
   //cout << "Adding PatchBasis for element " << child->cellID() << ":\n" << physicalCellNodesForCell(child->cellID());
   int parentSideIndex = child->parentSideForSideIndex(sideIndex);
   int childIndexInParentSide = child->indexInParentSide(parentSideIndex);
@@ -1281,6 +1287,8 @@ void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementP
   originalChildOrdering = _dofOrderingFactory.upgradeSide(originalChildOrdering,
                                                           *(child->elementType()->cellTopoPtr),
                                                           varIDsToUpgrade,parentSideIndex);
+  
+//  cout << "childTrialOrdering after upgrading side:\n" << *originalChildOrdering;
 }
 
 int Mesh::globalDofIndex(int cellID, int localDofIndex) {
@@ -1476,15 +1484,28 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           // check to see if non-parent needs a p-upgrade
           int maxPolyOrder, minPolyOrder; 
           this->maxMinPolyOrder(maxPolyOrder, minPolyOrder, nonParent,parentSideIndexInNeighbor);
-          Teuchos::RCP<DofOrdering> nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
+          DofOrderingPtr nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
+          DofOrderingPtr    parentTrialOrdering =    parent->elementType()->trialOrderPtr;
+          
+          int    parentPolyOrder = _dofOrderingFactory.polyOrder(   parentTrialOrdering);
           int nonParentPolyOrder = _dofOrderingFactory.polyOrder(nonParentTrialOrdering);
+          
           if (maxPolyOrder > nonParentPolyOrder) {
-            // upgrade p along the side
+            // upgrade p along the side in non-parent
             nonParentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(nonParentTrialOrdering, parentSideIndexInNeighbor, maxPolyOrder);
             ElementTypePtr nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
                                                                               nonParent->elementType()->testOrderPtr, 
                                                                               nonParent->elementType()->cellTopoPtr );
             setElementType(nonParent->cellID(), nonParentType, true); // true: only a side upgrade
+
+          }
+          // now, importantly, do the same thing in the parent:
+          if (maxPolyOrder > parentPolyOrder) {
+            parentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(parentTrialOrdering, neighborSideIndexInParent, maxPolyOrder);
+            ElementTypePtr parentType = _elementTypeFactory.getElementType(parentTrialOrdering,
+                                                                           parent->elementType()->testOrderPtr,
+                                                                           parent->elementType()->cellTopoPtr);
+            setElementType(parent->cellID(), parentType, true); // true: only a side upgrade            
           }
 
           // get all descendants, not just leaf nodes, for the PatchBasis upgrade

@@ -1948,6 +1948,8 @@ void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, Element
   for (map<int, pair< ElementTypePtr, ElementTypePtr > >::const_iterator upgradeIt = cellSideUpgrades.begin();
        upgradeIt != cellSideUpgrades.end(); upgradeIt++) {
     int cellID = upgradeIt->first;
+    if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end())
+      continue; // no previous solution for this cell
     DofOrderingPtr oldTrialOrdering = (upgradeIt->second).first->trialOrderPtr;
     DofOrderingPtr newTrialOrdering = (upgradeIt->second).second->trialOrderPtr;
     FieldContainer<double> newCoefficients(newTrialOrdering->totalDofs());
