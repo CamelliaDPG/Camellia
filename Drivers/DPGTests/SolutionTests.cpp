@@ -238,19 +238,24 @@ bool SolutionTests::testAddRefinedSolutions(){
   functionMap[ConfusionBilinearForm::U] = simpleFunction;
   functionMap[ConfusionBilinearForm::SIGMA_1] = simpleFunction;
   functionMap[ConfusionBilinearForm::SIGMA_2] = simpleFunction;
-  _confusionSolution1_2x2->projectOntoMesh(functionMap);  
+  _confusionSolution2_2x2->projectOntoMesh(functionMap);  // pretend confusionSolution1 is the linearized solution
+
+  // solve
+  _confusionSolution1_2x2->solve(false);
+
+  // add the two solutions together
+  _confusionSolution2_2x2->addSolution(_confusionSolution1_2x2,1.0);    // pretend confusionSolution2 is the accumulated solution
 
   // refine the mesh
   vector<int> quadCellsToRefine;
-  quadCellsToRefine.push_back(0);
-  quadCellsToRefine.push_back(1);
+  quadCellsToRefine.push_back(0); // refine first cell
   vector< Teuchos::RCP<Solution> > solutions;
   solutions.push_back(_confusionSolution1_2x2);
   solutions.push_back(_confusionSolution2_2x2);
   _confusionSolution1_2x2->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
 
   // solve
-  _confusionSolution1_2x2->solve(false);
+  _confusionSolution1_2x2->solve(false); // resolve for du on new mesh
   
   // add the two solutions together
   _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2,1.0);    
