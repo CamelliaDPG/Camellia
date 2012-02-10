@@ -18,13 +18,13 @@ private:
   Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2, _poissonSolution, _confusionUnsolved;
   Teuchos::RCP< PoissonExactSolution > _poissonExactSolution;
   Teuchos::RCP< ConfusionManufacturedSolution > _confusionExactSolution;
-  bool storageSizesAgree(Teuchos::RCP< Solution > sol1, Teuchos::RCP< Solution > sol2);
   
   void setup();
   void teardown();
 public:
   SolutionTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
+  static bool storageSizesAgree(Teuchos::RCP< Solution > sol1, Teuchos::RCP< Solution > sol2);
   string testSuiteName() { return "SolutionTests"; }
   bool testAddSolution();
   bool testProjectFunction();
