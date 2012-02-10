@@ -26,6 +26,7 @@ public:
   string testSuiteName() { return "SolutionTests"; }
   bool testAddSolution();
   bool testProjectFunction();
+  bool testAddRefinedSolutions();
   bool testEnergyError();
   bool testHRefinementInitialization();
   bool testPRefinementInitialization();
