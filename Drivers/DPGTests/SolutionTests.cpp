@@ -102,6 +102,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
 
   setup();
+  if (testAddRefinedSolutions()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  setup();
   if (testEnergyError()) {
     numTestsPassed++;
   }
@@ -220,6 +227,38 @@ bool SolutionTests::testProjectFunction() {
   return success;  
 }
 
+
+
+bool SolutionTests::testAddRefinedSolutions(){
+  bool success = true;
+  double tol = 1e-14;
+
+  Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
+  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
+  functionMap[ConfusionBilinearForm::U] = simpleFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_1] = simpleFunction;
+  functionMap[ConfusionBilinearForm::SIGMA_2] = simpleFunction;
+  _confusionSolution1_2x2->projectOntoMesh(functionMap);  
+
+  // refine the mesh
+  vector<int> quadCellsToRefine;
+  quadCellsToRefine.push_back(0);
+  quadCellsToRefine.push_back(1);
+  vector< Teuchos::RCP<Solution> > solutions;
+  solutions.push_back(_confusionSolution1_2x2);
+  solutions.push_back(_confusionSolution2_2x2);
+  _confusionSolution1_2x2->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
+
+  // solve
+  _confusionSolution1_2x2->solve(false);
+  
+  // add the two solutions together
+  _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2,1.0);    
+
+  return success;  
+}
+
+
 bool SolutionTests::testEnergyError(){
 
   double tol = 1e-11;
@@ -273,11 +312,13 @@ bool SolutionTests::testHRefinementInitialization(){
     expectedMap[fieldID] = expectedValues;
   }
   
+  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
   vector< Teuchos::RCP<Solution> > solutions;
   solutions.push_back(_poissonSolution);
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions); // passing in solution to reinitialize stuff
+  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
   
   _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
   
@@ -291,6 +332,9 @@ bool SolutionTests::testHRefinementInitialization(){
            << _poissonSolution->mesh()->bilinearForm().trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
+
+  _poissonSolution->solve(false);
+  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postSolve.m");
   
   return success;
 }
