@@ -1394,14 +1394,17 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
       for (int i=0; i<numChildren; i++) {
         childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
       }
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
-  }
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-       solutionIt != solutions.end(); solutionIt++) {
-    (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+    _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
   }
   rebuildLookups();
+  // now discard any old coefficients
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+       solutionIt != solutions.end(); solutionIt++) {
+    (*solutionIt)->discardInactiveCellCoefficients();
+  }
 }
 
 int Mesh::neighborChildPermutation(int childIndex, int numChildrenInSide) {
@@ -1840,14 +1843,18 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solu
       // do projection
       vector<int> childIDs;
       childIDs.push_back(cellID);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
-  }
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-       solutionIt != solutions.end(); solutionIt++) {
-    (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+    _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
   }
   rebuildLookups();
+  
+  // now discard any old coefficients
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
+       solutionIt != solutions.end(); solutionIt++) {
+    (*solutionIt)->discardInactiveCellCoefficients();
+  }
 }
 
 int Mesh::rowSizeUpperBound() {

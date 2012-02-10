@@ -92,7 +92,6 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
 protected:
-  const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:
@@ -120,6 +119,8 @@ public:
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
   
+  const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
+  
   double integrateSolution(int trialID);
   void integrateSolution(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
   
@@ -140,6 +141,8 @@ public:
   
   void computeResiduals();
   void computeErrorRepresentation();
+  
+  void discardInactiveCellCoefficients();
   //  void energyError(FieldContainer<double> &energyError);
   void energyError(map<int, double> &energyError);
   

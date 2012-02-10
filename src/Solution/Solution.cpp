@@ -1209,6 +1209,23 @@ void Solution::computeResiduals() {
   _residualsComputed = true;
 }
 
+void Solution::discardInactiveCellCoefficients() {
+  vector< ElementPtr > activeElems = _mesh->activeElements();
+  set< int > activeCellIDs;
+  for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    activeCellIDs.insert(cellID);
+  }
+  for (map< int, FieldContainer<double> >::iterator solnIt = _solutionForCellIDGlobal.begin();
+       solnIt != _solutionForCellIDGlobal.end(); solnIt++) {
+    int cellID = solnIt->first;
+    if ( activeCellIDs.find(cellID) == activeCellIDs.end() ) {
+      _solutionForCellIDGlobal.erase(cellID);
+    }
+  }
+}
+
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
   // the following is due to the fact that we *do not* transform basis values.
   EFunctionSpaceExtended fs = _mesh->bilinearForm().functionSpaceForTrial(trialID);

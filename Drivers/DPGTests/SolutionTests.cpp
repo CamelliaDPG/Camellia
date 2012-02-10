@@ -131,6 +131,42 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
 }
 
+bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
+  const map< int, FieldContainer<double> >* solnMap1 = &(soln1->solutionForCellIDGlobal());
+  const map< int, FieldContainer<double> >* solnMap2 = &(soln2->solutionForCellIDGlobal());
+  if (solnMap1->size() != solnMap2->size() ) {
+    cout << "SOLUTION 1 entries: ";
+    for(map< int, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
+        soln1It != (*solnMap1).end(); soln1It++) {
+      int cellID = soln1It->first;
+      cout << cellID << " ";
+    }
+    cout << "\n";
+    cout << "SOLUTION 2 entries: ";
+    for(map< int, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).begin();
+        soln2It != (*solnMap2).end(); soln2It++) {
+      int cellID = soln2It->first;
+      cout << cellID << " ";
+    }
+    cout << "\n";
+    
+    return false;
+  }
+  for(map< int, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
+      soln1It != (*solnMap1).end(); soln1It++) {
+    int cellID = soln1It->first;
+    int size = soln1It->second.size();
+    map< int, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).find(cellID);
+    if (soln2It == (*solnMap2).end()) {
+      return false;
+    }
+    if ((soln2It->second).size() != size) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool SolutionTests::testAddSolution() {
   bool success = true;
   
@@ -256,6 +292,11 @@ bool SolutionTests::testAddRefinedSolutions(){
 
   // solve
   _confusionSolution1_2x2->solve(false); // resolve for du on new mesh
+  
+  if ( ! storageSizesAgree(_confusionSolution1_2x2, _confusionSolution2_2x2) ) {
+    cout << "Storage sizes disagree, so add will fail.\n";
+    return false;
+  }
   
   // add the two solutions together
   _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2,1.0);    
