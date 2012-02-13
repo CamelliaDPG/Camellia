@@ -95,152 +95,60 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
 
-  int numNRSteps = 7;
-  for (int i=0;i<numNRSteps;i++){
-    solution->solve(false);
-    backgroundFlow->addSolution(solution,1.0);
-    
-    if (rank==0){
-      ostringstream filename;
-      filename << "u" << i << ".m";
-      backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, filename.str());
-      filename.clear();filename.str("");
-      filename << "du" << i << ".m";
-      solution->writeFieldsToFile(BurgersBilinearForm::U, filename.str());
-      filename.clear();filename.str("");
-      filename << "du_hat" << i << ".dat";
-      solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, filename.str());
-    
-      filename.clear();filename.str("");
-      filename << "sigma_x" << i << ".m";
-      solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, filename.str());
-      filename.clear();filename.str("");
-      filename << "sigma_y" << i << ".m";
-      solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, filename.str());
-      filename.clear();filename.str("");
-      filename << "sigma_hat" << i << ".dat";
-      solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, filename.str());
-    }    
-    
-    if (rank==0){
-      //      cout << "energy error = " << totalEnergyErrorSquared << endl;
-      cout << "on iter = " << i << endl;
-    }        
-  }
+  int numRefs = 3;
+  int refIter = 0;
+  for (int refIndex=0;refIndex<numRefs;refIndex++){    
 
-  //  if (rank==0){
-  //    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u.m");
-  //    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
-  //  }
-  cout << "getting energy error" << endl;
-
-  map<int, double> energyError;
-  solution->energyError(energyError);
-  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-  vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-
-  // greedy refinement algorithm - mark cells for refinement
-  vector<int> triangleCellsToRefine;
-  vector<int> quadCellsToRefine;
-  double maxError = 0.0;
-  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-    Teuchos::RCP< Element > current_element = *(activeElemIt);
-    int cellID = current_element->cellID();
-    maxError = max(energyError[cellID],maxError);
-  }
-
-  // do refinements on cells with error above threshold
-  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-    Teuchos::RCP< Element > current_element = *(activeElemIt);
-    int cellID = current_element->cellID();
-    if (energyError[cellID]>=.2*maxError){
-      if (current_element->numSides()==3){
-	triangleCellsToRefine.push_back(cellID);
-      }else if (current_element->numSides()==4){
-	quadCellsToRefine.push_back(cellID);
-      }
-    }
-  }    
-
-  cout << "refining" << endl;
-
-  // reinitialize both background flow/solution data structures
-  vector< Teuchos::RCP<Solution> > solutions;
-  solutions.push_back(solution);
-  solutions.push_back(backgroundFlow);
-
-  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),solutions);
-  triangleCellsToRefine.clear();
-  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
-  quadCellsToRefine.clear();
-  
-  //  backgroundFlow->discardInactiveCellCoefficients();
-
-  //  backgroundFlow->projectOntoMesh(functionMap);
-  if (rank==0){
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_postRef.dat");
-  }
-
-  // one more nonlinear solve
-  for (int i=0;i<numNRSteps;i++){
-    solution->solve(false);
-    cout << "adding solution" << endl;
-    cout << "Storage sizes agree = " << SolutionTests::storageSizesAgree(backgroundFlow,solution) << endl;
-
-    backgroundFlow->addSolution(solution,1.0);
-    if (rank==0){
-      cout << "on iter = " << i << endl;
-    }        
-  }
-
-  if (rank==0){
-    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
-  }
-  
-  return 0;
-
-  ////////////////////////////////////////////////////////////////////
- 
-  solution->solve(false);
-
-  bool limitIrregularity = true;
-  int numRefinements = 2;
-  double thresholdFactor = 0.2;
-  int refIterCount = 0;  
-  vector<double> errorVector;
-  vector<double> L2errorVector;
-  vector<double> meshSizes; // assuming uniform meshes
-  vector<int> dofVector;
-  for (int i=0; i<numRefinements; i++) {
+    // initialize energyError stuff
     map<int, double> energyError;
-    solution->energyError(energyError);
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
+
+    int i = 0;    
+    double prevError = 0.0;
+    bool converged = false;
+    while (!converged){ // while energy error has not stabilized
+
+      solution->solve();
+
+      backgroundFlow->addSolution(solution,1.0);
+
+      // see if energy error has stabilized
+      solution->energyError(energyError);    
+      double totalError = 0.0;
+      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+	Teuchos::RCP< Element > current_element = *(activeElemIt);
+	totalError += energyError[current_element->cellID()];
+      }
+      double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
+      if (rank==0){
+	cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
+      }
+
+      double tol = .01; // if change is less than 1%, solve again
+      if (relErrorDiff<tol){
+	converged = true;
+      } else {
+	prevError=totalError; // reset previous error and continue
+      } 
+      i++;
+    }
 
     // greedy refinement algorithm - mark cells for refinement
     vector<int> triangleCellsToRefine;
     vector<int> quadCellsToRefine;
     double maxError = 0.0;
-    double totalEnergyErrorSquared=0.0;
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
-      //      cout << "energy error for cellID " << cellID << " = " << energyError[cellID] << endl;      
       maxError = max(energyError[cellID],maxError);
-      totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
     }
-    if (rank==0){
-      cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared<<endl;      
-    }
-    errorVector.push_back(totalEnergyErrorSquared);
-    dofVector.push_back(mesh->numGlobalDofs());
-
+    
     // do refinements on cells with error above threshold
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
-      if (energyError[cellID]>=thresholdFactor*maxError){
+      if (energyError[cellID]>=.2*maxError){
 	if (current_element->numSides()==3){
 	  triangleCellsToRefine.push_back(cellID);
 	}else if (current_element->numSides()==4){
@@ -248,49 +156,52 @@ int main(int argc, char *argv[]) {
 	}
       }
     }    
-    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
+
+    if (rank==0){
+      cout << "refining on iter " << refIter << endl;
+    }
+    refIter++;
+
+    // reinitialize both background flow/solution data structures
+    vector< Teuchos::RCP<Solution> > solutions;
+    solutions.push_back(solution);
+    solutions.push_back(backgroundFlow);
+
+    cout << "refining/reinitializing dofs on rank " << rank << endl;
+    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),solutions);
     triangleCellsToRefine.clear();
-    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
     quadCellsToRefine.clear();
+    cout << "enforcing one irregularity on rank " << rank << endl;
 
-    // enforce 1-irregularity if desired
-    if (limitIrregularity){
-      mesh->enforceOneIrregularity();
-    }
-    
-    refIterCount++;
+    mesh->enforceOneIrregularity(solutions);
+    solutions.clear();
+
+    cout << "discarding old cell coeffs on rank " << rank << endl;
+    backgroundFlow->discardInactiveCellCoefficients();
     if (rank==0){
-      cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
+      cout << "proceeding to next refinement iteration" << endl;
     }
+  }
+
+  // one more nonlinear solve on refined mesh
+  int numNRSteps = 6;
+  for (int i=0;i<numNRSteps;i++){
     solution->solve(false);
+    //    cout << "adding solution" << endl;
     if (rank==0){
-      cout << "Solved..." << endl;    
+      cout << "on iter = " << i << ", storage sizes agree = " << SolutionTests::storageSizesAgree(backgroundFlow,solution) << endl;
     }
-  } 
+    
+    backgroundFlow->addSolution(solution,1.0);
+  }
   
-  // save a data file for plotting in MATLAB
-  if (rank==0){
-    solution->writeFieldsToFile(BurgersBilinearForm::U, "u.m");
-    solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigma_x.m");
-    solution->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigma_y.m");
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "u_hat.dat");
-    solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "sigma_hat.dat");
-    
-    ofstream fout1("errors.dat");
-    fout1 << setprecision(15);
-    for (int i = 0;i<errorVector.size();i++){
-      fout1 << errorVector[i] << endl;
-    }
-    fout1.close();
-    
-    ofstream fout2("dofs.dat");
-    for (int i = 0;i<dofVector.size();i++){
-      fout2 << dofVector[i] << endl;
-    }
-    fout2.close();
 
-    cout << "Done writing soln to file." << endl;
+  if (rank==0){
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
   }
   
   return 0;
+ 
 }
