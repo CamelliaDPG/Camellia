@@ -10,6 +10,10 @@
 #include "StokesBilinearForm.h"
 #include "BasisEvaluation.h"
 
+#include "ConfusionManufacturedSolution.h"
+#include "ConfusionBilinearForm.h"
+#include "MathInnerProduct.h"
+
 #include "MeshTestSuite.h" // used for checkMeshConsistency
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
@@ -28,6 +32,13 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   try {
     setup();
+    if (testSolveUniformMesh()) {
+      numTestsPassed++;
+    }
+    numTestsRun++;
+    teardown();
+    
+    setup();
     if (testSimpleRefinement()) {
       numTestsPassed++;
     }
@@ -41,7 +52,6 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     numTestsRun++;
     teardown();
     
-    // for now, disable the p-refinement tests:
     setup();
     if (testChildPRefinementSimple()) {
       numTestsPassed++;
@@ -115,6 +125,10 @@ bool PatchBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &test
   }
   
   if ( !meshLooksGood() ) {
+    success = false;
+  }
+  
+  if ( !refinementsHaveNotIncreasedError() ) {
     success = false;
   }
   
@@ -354,7 +368,7 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
     }
   }
   
-  return valuesAgree; // unimplemented
+  return valuesAgree;
 }
 
 bool PatchBasisTests::polyOrdersAgree(const vector< map<int, int> > &pOrderMapVector1,
@@ -399,6 +413,8 @@ bool PatchBasisTests::pRefined(const vector< map<int, int> > &pOrderMapForSideBe
 }
 
 void PatchBasisTests::setup() {
+  
+  _useMumps = false; // false because Jesse reports trouble with MUMPS
   
   /**** SUPPORT FOR TESTS THAT PATCHBASIS COMPUTES THE CORRECT VALUES *****/
   // for tests, we'll do a simple division of a line segment into thirds
@@ -453,16 +469,24 @@ void PatchBasisTests::setup() {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
   
-  double mu = 1.0;
-  Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesBilinearForm(mu) );
-  
-  _fluxIDs = stokesBF->trialBoundaryIDs();
-  _fieldIDs = stokesBF->trialVolumeIDs();
-  
   int H1Order = 3;
   int horizontalCells = 2; int verticalCells = 2;
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, stokesBF, H1Order, H1Order+1);
+  // setup the solution objects:
+  polyOrder = H1Order - 1;
+  
+  double eps = 1.0; // not really testing for sharp gradients right now--just want to see if things basically work
+  double beta_x = 1.0;
+  double beta_y = 1.0;
+  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
+  
+  Teuchos::RCP<BilinearForm> confusionBF = _confusionExactSolution->bilinearForm();
+  
+  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
+  
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
+  
+  _confusionSolution = Teuchos::rcp( new Solution(_mesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip) );
   
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
@@ -486,8 +510,47 @@ void PatchBasisTests::setup() {
 //  cout << "NW nodes:\n" << _mesh->physicalCellNodesForCell(_nw->cellID());
 //  cout << "NE nodes:\n" << _mesh->physicalCellNodesForCell(_ne->cellID());
   
+  _confusionSolution->solve(_useMumps);
+  
+  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+    int fieldID = *fieldIt;
+    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+    _confusionL2ErrorForOriginalMesh[fieldID] = err;
+  }
+  
+  _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_before_refinement.m");
+  
   _mesh->setUsePatchBasis(true);
+  
+  _fluxIDs = confusionBF->trialBoundaryIDs();
+  _fieldIDs = confusionBF->trialVolumeIDs();
+  
 }
+
+bool PatchBasisTests::refinementsHaveNotIncreasedError() {
+  double tol = 1e-11;
+  
+  bool success = true;
+  
+  _confusionSolution->solve(_useMumps);
+  
+  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+    int fieldID = *fieldIt;
+    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
+    if (err - originalErr > tol) {
+      cout << "PatchBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
+      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
+      
+      _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+      
+      success = false;
+    }
+  }
+  
+  return success;
+}
+
 
 void PatchBasisTests::teardown() {
   _testPoints1D.resize(0);
@@ -557,7 +620,7 @@ bool PatchBasisTests::testSimpleRefinement() {
   bool success = true;
   makeSimpleRefinement();
   
-  if ( !meshLooksGood() ) {
+  if ( !meshLooksGood() || (! refinementsHaveNotIncreasedError()) ) {
     success = false;
     cout << "Failed testSimpleRefinement.\n";
   }
@@ -570,7 +633,7 @@ bool PatchBasisTests::testMultiLevelRefinement() {
   bool success = true;
   makeMultiLevelRefinement();
   
-  if ( !meshLooksGood() ) {
+  if ( !meshLooksGood() || (! refinementsHaveNotIncreasedError())) {
     success = false;
     cout << "Failed testMultiLevelRefinement.\n";
   }
@@ -632,3 +695,8 @@ bool PatchBasisTests::testNeighborPRefinementMultiLevel() {
   
   return doPRefinementAndTestIt(neighbor,"testNeighborPRefinementMultiLevel");
 } 
+
+bool PatchBasisTests::testSolveUniformMesh() {
+  // just test on an unrefined mesh: we shouldn't be using any PatchBases, so this is a sanity check
+  return refinementsHaveNotIncreasedError();
+}

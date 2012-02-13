@@ -9,6 +9,8 @@
 #include "Teuchos_RCP.hpp"
 
 #include "Mesh.h"
+#include "Solution.h"
+#include "ExactSolution.h"
 
 typedef Basis<double, FieldContainer<double> > DoubleBasis;
 typedef Teuchos::RCP< DoubleBasis > BasisPtr;
@@ -23,9 +25,15 @@ private:
   BasisPtr _parentBasis;
   PatchBasisPtr _patchBasisLeft, _patchBasisMiddle, _patchBasisRight;
   
+  bool _useMumps;
+  
   // stuff for mesh/refinement tests
   Teuchos::RCP<Mesh> _mesh; // a 2x2 mesh with usePatchBasis==true
   ElementPtr _sw, _se, _nw, _ne;
+  
+  Teuchos::RCP<Solution> _confusionSolution;
+  Teuchos::RCP<ExactSolution> _confusionExactSolution;
+  map<int, double> _confusionL2ErrorForOriginalMesh; // a baseline to compare against
   
   vector<int> _fluxIDs;
   vector<int> _fieldIDs;
@@ -47,6 +55,8 @@ private:
   
   bool pRefined(const vector< map<int, int> > &pOrderMapForSideBefore,
                 const vector< map<int, int> > &pOrderMapForSideAfter);
+  
+  bool refinementsHaveNotIncreasedError();
   
   bool doPRefinementAndTestIt(ElementPtr elem, const string &testName);
   
@@ -70,6 +80,8 @@ public:
   
   bool testNeighborPRefinementSimple(); // in same mesh as the simple h-refinement test, p-refine a big neighbor.  Check that its parent also gets p-refined...
   bool testNeighborPRefinementMultiLevel(); // in same mesh as the multi-level h-refinement test, p-refine a big neighbor.  Check that its parent and grandparent also get p-refined...
+  
+  bool testSolveUniformMesh(); // in original, unrefined mesh: do we solve correctly?
 };
 
 
