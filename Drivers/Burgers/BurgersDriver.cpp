@@ -13,6 +13,8 @@
 #include "ZeroFunction.h"
 #include "InitialGuess.h"
 
+#include "SolutionTests.h"
+
 // Trilinos includes
 #include "Epetra_Time.h"
 #include "Intrepid_FieldContainer.hpp"
@@ -97,7 +99,7 @@ int main(int argc, char *argv[]) {
   for (int i=0;i<numNRSteps;i++){
     solution->solve(false);
     backgroundFlow->addSolution(solution,1.0);
-    /*
+    
     if (rank==0){
       ostringstream filename;
       filename << "u" << i << ".m";
@@ -119,17 +121,18 @@ int main(int argc, char *argv[]) {
       filename << "sigma_hat" << i << ".dat";
       solution->writeFluxesToFile(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, filename.str());
     }    
-    */
+    
     if (rank==0){
       //      cout << "energy error = " << totalEnergyErrorSquared << endl;
       cout << "on iter = " << i << endl;
-    }    
-    
+    }        
   }
-  if (rank==0){
-    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_unif.m");
-    backgroundFlow->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_unif.dat");
-  }
+
+  //  if (rank==0){
+  //    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u.m");
+  //    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat.dat");
+  //  }
+  cout << "getting energy error" << endl;
 
   map<int, double> energyError;
   solution->energyError(energyError);
@@ -158,27 +161,48 @@ int main(int argc, char *argv[]) {
       }
     }
   }    
-  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),backgroundFlow);
+
+  cout << "refining" << endl;
+
+  // reinitialize both background flow/solution data structures
+  vector< Teuchos::RCP<Solution> > solutions;
+  solutions.push_back(solution);
+  solutions.push_back(backgroundFlow);
+
+  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),solutions);
   triangleCellsToRefine.clear();
-  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),backgroundFlow);
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
   quadCellsToRefine.clear();
+  
+  //  backgroundFlow->discardInactiveCellCoefficients();
+
+  //  backgroundFlow->projectOntoMesh(functionMap);
+  if (rank==0){
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_postRef.dat");
+  }
 
   // one more nonlinear solve
   for (int i=0;i<numNRSteps;i++){
     solution->solve(false);
+    cout << "adding solution" << endl;
+    cout << "Storage sizes agree = " << SolutionTests::storageSizesAgree(backgroundFlow,solution) << endl;
+
     backgroundFlow->addSolution(solution,1.0);
     if (rank==0){
       cout << "on iter = " << i << endl;
     }        
   }
 
-
+  if (rank==0){
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
+  }
   
   return 0;
 
   ////////////////////////////////////////////////////////////////////
  
-  solution->solve();
+  solution->solve(false);
 
   bool limitIrregularity = true;
   int numRefinements = 2;
@@ -238,7 +262,7 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
     }
-    solution->solve();
+    solution->solve(false);
     if (rank==0){
       cout << "Solved..." << endl;    
     }

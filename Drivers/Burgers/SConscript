@@ -1,5 +1,6 @@
 Import('*')
 
 src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfectionManufacturedSolution.cpp','BurgersBilinearForm.cpp'])
+src_other = env.Object(['../DPGTests/SolutionTests.cpp','../Poisson/PoissonBilinearForm.cpp',Glob('../Poisson/PoissonExactSolution*.cpp'),Glob('../Poisson/PoissonBC*.cpp'),Glob('../Poisson/PoissonRHS*.cpp'),'../Confusion/ConfusionManufacturedSolution.cpp','../Stokes/StokesBilinearForm.cpp'])
 
-env.Program('exec/Burgers',['BurgersDriver.cpp',src_obj])
+env.Program('exec/Burgers',['BurgersDriver.cpp',src_obj,src_other])
