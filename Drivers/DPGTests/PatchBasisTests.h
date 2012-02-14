@@ -38,6 +38,8 @@ private:
   vector<int> _fluxIDs;
   vector<int> _fieldIDs;
   
+  bool basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh);
+  
   bool childPolyOrdersAgreeWithParent(ElementPtr child);
   
   void getPolyOrders(vector< map<int, int> > &polyOrderMapVector, ElementPtr elem);
@@ -45,18 +47,23 @@ private:
                                      vector< map<int, int> > &parentPOrderMapForSide,
                                      ElementPtr child);
   
+  static void hRefineAllActiveCells(Teuchos::RCP<Mesh>);
+  
   bool meshLooksGood();
   
-  bool patchBasisCorrectlyAppliedInMesh(); // checks that the right elements have some PatchBasis in the right places
+  static bool patchBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh,vector<int> fluxIDs,vector<int> fieldIDs); // checks that the right elements have some PatchBasis in the right places
   bool patchBasesAgreeWithParentInMesh(); // checks that those elements with PatchBases compute values that agree with their parents
   
   bool polyOrdersAgree(const vector< map<int, int> > &polyOrderMapVector1,
                        const vector< map<int, int> > &polyOrderMapVector2);
   
+  void pRefineAllActiveCells();
+  
   bool pRefined(const vector< map<int, int> > &pOrderMapForSideBefore,
                 const vector< map<int, int> > &pOrderMapForSideAfter);
-  
+
   bool refinementsHaveNotIncreasedError();
+  bool refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> solution);
   
   bool doPRefinementAndTestIt(ElementPtr elem, const string &testName);
   

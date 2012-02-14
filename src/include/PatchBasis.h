@@ -67,7 +67,10 @@ public:
                  const FieldContainer<double> &    cellVertices,
                  const EOperator        operatorType) const;
 
-  BasisPtr parentBasis();
+  BasisPtr nonPatchAncestorBasis(); // the ancestor of whom all descendants are PatchBases
+  
+  BasisPtr parentBasis(); // the immediate parent
+  
 };
 
 #endif

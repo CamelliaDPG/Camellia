@@ -62,6 +62,8 @@
 
 using namespace Intrepid;
 
+typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   if (testMeshSolvePointwise() ) {
@@ -136,6 +138,87 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
     numTestsPassed++;
   }
 
+}
+
+bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords) {
+  // iterates through all active elements, and checks that each edge agrees with its neighbor basis.
+  // first pass is just for PatchBasis, but intent is to extend to apply to MultiBasis, too.
+  
+  bool success = true;
+  
+  double tol = 1e-15; // small tolerance
+  double maxDiff = 0.0;
+  
+  int numPoints = testPointsRefCoords.dimension(0);
+  
+  // in 2D, the neighbor's view of the test points will be simply flipped relative to its peer
+  // (which might be the ancestor of the element that we test below)
+  FieldContainer<double> neighborTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
+  FieldContainer<double> ancestorTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
+  
+  int numElements = mesh->activeElements().size();
+  vector<int> fluxIDs = mesh->bilinearForm().trialBoundaryIDs();
+  for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
+    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
+    DofOrderingPtr trialOrder = elem->elementType()->trialOrderPtr;
+    int cellID = elem->cellID();
+    int numSides = elem->numSides();
+    
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
+      int neighborSideIndex;
+      Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
+      DofOrderingPtr neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
+      int ancestorCellID = neighbor->getNeighborCellID(neighborSideIndex);
+      if ( neighbor->isParent() ) {
+        // we'll handle this element when we handle neighbor's active descendants.
+        continue;
+      }
+      // because of the above, we can assume, below, that elem is the small guy if the two aren't peers.
+      ancestorTestPointsRefCoords = testPointsRefCoords;
+      int ancestorSideIndex;
+      if ( ancestorCellID != cellID ) {
+        // then we need to map the coords into ancestor's ref space
+        // simplest (though not most efficient!) to do this by iteratively mapping into parent's space
+        Teuchos::RCP<Element> currentElement = mesh->getElement(cellID);
+        ancestorSideIndex = sideIndex;
+        while (currentElement->cellID() != ancestorCellID) {
+          // TODO: make sure that this is safe: are we allowed to pass ancestorTestPointsRefCoords for both arguments?
+          currentElement->getSidePointsInParentRefCoords(ancestorTestPointsRefCoords, ancestorSideIndex, 
+                                                         ancestorTestPointsRefCoords);
+          ancestorSideIndex = currentElement->parentSideForSideIndex(ancestorSideIndex);
+          currentElement = mesh->getElement(currentElement->getParent()->cellID());
+        }
+      }
+      
+      mesh->getElement(ancestorCellID)->getSidePointsInNeighborRefCoords(neighborTestPointsRefCoords, ancestorSideIndex,
+                                                                         ancestorTestPointsRefCoords);
+      
+      for (vector<int>::iterator fluxIt = fluxIDs.begin(); fluxIt != fluxIDs.end(); fluxIt++) {
+        int fluxID = *fluxIt;
+        BasisPtr basis = trialOrder->getBasis(fluxID,sideIndex);
+        BasisPtr neighborBasis = neighborTrialOrder->getBasis(fluxID,neighborSideIndex);
+        FieldContainer<double> values(numPoints,basis->getCardinality());
+        FieldContainer<double> neighborValues(numPoints, neighborBasis->getCardinality());
+        basis->getValues(values,testPointsRefCoords,Intrepid::OPERATOR_VALUE);
+        neighborBasis->getValues(neighborValues,neighborTestPointsRefCoords,Intrepid::OPERATOR_VALUE);
+        for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
+          int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,neighborBasis->getCardinality());
+          for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
+            double diff = abs(neighborValues(neighborDofOrdinal,pointIndex) - values(dofOrdinal,pointIndex));
+            if (diff > tol) {
+              success = false;
+            }
+            maxDiff = max(diff,maxDiff);
+          }
+        }
+      }
+    }
+  }
+  
+  if ( ! success ) {
+    cout << "neighboring bases disagree on point values; maxDiff: " << maxDiff << endl;
+  }
+  return success;
 }
 
 bool MeshTestSuite::testBasisRefinement() {

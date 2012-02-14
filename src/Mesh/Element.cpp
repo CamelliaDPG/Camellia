@@ -36,6 +36,9 @@
 
 #include "Element.h"
 
+#include "Intrepid_CellTools.hpp"
+
+
 // constructor:
 Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int globalCellIndex) {
   _cellID = cellID;
@@ -64,6 +67,71 @@ void Element::addChild(Teuchos::RCP< Element > childPtr) {
 
 Teuchos::RCP< Element > Element::getChild(int childIndex) {
   return _children[childIndex];
+}
+
+
+void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
+                                               const FieldContainer<double> &refPoints) {
+  // assumes neighbor on the side is a peer.  For what to do if not, see MeshTestSuite::neighborBasesAgreeOnSides().
+  // TODO: consider incorporating similar logic here, and reduce the amount of logic in neighborBasesAgreeOnSides().
+  
+  if ((sideIndex >= _numSides) || (_neighbors[sideIndex].first == NULL) || (_neighbors[sideIndex].first->cellID() == -1) ) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "neighbor is NULL.");
+  }
+  // 2D: assume that neighbor and element both have similarly ordered (CW or CCW) vertices, so that
+  //     the transformation is just a flip from (-1,1) to (1,-1)
+  FieldContainer<double> nodesInNeighborRef(1,2,1);
+  nodesInNeighborRef(0,0,0) = 1.0;
+  nodesInNeighborRef(0,1,0) = -1.0;
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  CellTools<double>::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,line_2,0);
+}
+
+void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex, 
+                                             const FieldContainer<double> &childRefPoints) {
+  /*
+   
+   This is very much a 2D implementation of this method.
+   Because our edge divisions can be assumed to be in exactly two equal pieces wherever they are divided, 
+   we know that child's side indices in parent cell are either (-1,0) or (0,1).
+   
+   As in the Mesh class, we assume that there is directional agreement between parent and child: if child's
+   vertices are ordered counter-clockwise, then so are parent's.
+   */
+   
+  if (_parent == NULL) {
+    TEST_FOR_EXCEPTION(true,std::invalid_argument,"parent is null");
+  }
+  
+  if (childRefPoints.size() != parentRefPoints.size()) {
+    TEST_FOR_EXCEPTION(true,std::invalid_argument,"childRefPoints.size() != parentRefPoints.size()");
+  }
+  
+  int parentSideIndex = parentSideForSideIndex(sideIndex);
+  int numChildrenForSide = _parent->childIndicesForSide(parentSideIndex).size();
+  if (numChildrenForSide==1) {
+    // that's OK; we can just copy the childRefPoints into parentRefPoints
+    int numPoints = childRefPoints.size();
+    for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
+      parentRefPoints[pointIndex] = childRefPoints[pointIndex];
+    }
+    return;
+  }
+  
+  FieldContainer<double> childEdgeNodesInParentRef(1,2,1);
+  int childIndexInParentSide = indexInParentSide(parentSideIndex);
+  if (childIndexInParentSide == 0) {
+    childEdgeNodesInParentRef(0,0,0) = -1;
+    childEdgeNodesInParentRef(0,1,0) = 0;
+  } else if (childIndexInParentSide == 1) {
+    childEdgeNodesInParentRef(0,0,0) = 0;
+    childEdgeNodesInParentRef(0,1,0) = 1;
+  } else {
+    TEST_FOR_EXCEPTION( true, std::invalid_argument, "indexInParentSide isn't 0 or 1" );
+  }
+  
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  CellTools<double>::mapToPhysicalFrame(parentRefPoints,childRefPoints,childEdgeNodesInParentRef,line_2,0);
 }
 
 Element* Element::getParent() {

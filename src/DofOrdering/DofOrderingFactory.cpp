@@ -442,9 +442,9 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {
-        // if we have a PatchBasis, then we want to get the underlying basis...
-        while (BasisFactory::isPatchBasis(basis)) {
-          basis = ((PatchBasis*)basis.get())->parentBasis();
+        if (BasisFactory::isPatchBasis(basis)) {
+          // if we have a PatchBasis, then we want to get the underlying basis...
+          basis = ((PatchBasis*)basis.get())->nonPatchAncestorBasis();
         }
       }
       fs = BasisFactory::getBasisFunctionSpace(basis);

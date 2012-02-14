@@ -218,6 +218,13 @@ void PatchBasis::computeCellJacobians(FieldContainer<double> &cellJacobian, Fiel
 //  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
 }
 
+BasisPtr PatchBasis::nonPatchAncestorBasis() {
+  BasisPtr basis = _parentBasis;
+  while (BasisFactory::isPatchBasis(basis)) {
+    basis = ((PatchBasis*)basis.get())->parentBasis();
+  }
+  return basis;
+}
 
 BasisPtr PatchBasis::parentBasis() {
   return _parentBasis;

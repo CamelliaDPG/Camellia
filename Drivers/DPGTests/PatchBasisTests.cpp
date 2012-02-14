@@ -85,6 +85,16 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
 }
 
+bool PatchBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {
+  bool success = true;
+  
+  // for every side (PatchBasis or no), compute values for that side, and values for its neighbor along
+  // the same physical points.  (Imitate the comparison between parent and child, only remember that
+  // the neighbor involves a flip: (-1,1) --> (1,-1).)
+ 
+  return MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D);
+}
+
 bool PatchBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &testName) {
   bool success = true;
   
@@ -200,6 +210,16 @@ void PatchBasisTests::getPolyOrdersAlongSharedSides(vector< map<int, int> > &chi
   }
 }
 
+void PatchBasisTests::hRefineAllActiveCells(Teuchos::RCP<Mesh> mesh) {
+  vector<int> cellIDsToRefine;
+  for (vector< ElementPtr >::const_iterator elemIt=mesh->activeElements().begin();
+       elemIt != mesh->activeElements().end(); elemIt++) {
+    int cellID = (*elemIt)->cellID();
+    cellIDsToRefine.push_back(cellID);
+  }
+  mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
+}
+
 void PatchBasisTests::makeSimpleRefinement() {
   vector<int> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
@@ -223,7 +243,7 @@ void PatchBasisTests::makeMultiLevelRefinement() {
 
 bool PatchBasisTests::meshLooksGood() {
   bool looksGood = true;
-  if ( !patchBasisCorrectlyAppliedInMesh() ) {
+  if ( !patchBasisCorrectlyAppliedInMesh(_mesh,_fluxIDs,_fieldIDs) ) {
     cout << "patchBasisCorrectlyAppliedInMesh returned false.\n";
     looksGood = false;
   }
@@ -235,12 +255,15 @@ bool PatchBasisTests::meshLooksGood() {
     cout << "MeshTestSuite::checkMeshConsistency() returned false.\n";
     looksGood = false;
   }
+  if ( !basisValuesAgreeWithPermutedNeighbor(_mesh) ) {
+    cout << "basisValuesAgreeWithPermutedNeighbor return false.\n";
+  }
   return looksGood;
 }
 
-bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh() {
+bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh(Teuchos::RCP<Mesh> mesh, vector<int> fluxIDs, vector<int> fieldIDs) {
   // checks that the right elements have some PatchBasis in the right places
-  vector< ElementPtr > activeElements = _mesh->activeElements();
+  vector< ElementPtr > activeElements = mesh->activeElements();
   
   // depending on our debugging needs, could revise this to return more information
   // about the nature and extent of the incorrectness when correct == false.
@@ -251,7 +274,7 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh() {
   for (elemIt = activeElements.begin(); elemIt != activeElements.end(); elemIt++) {
     ElementPtr elem = *elemIt;
     vector<int>::iterator varIt;
-    for (varIt = _fluxIDs.begin(); varIt != _fluxIDs.end(); varIt++) {
+    for (varIt = fluxIDs.begin(); varIt != fluxIDs.end(); varIt++) {
       int fluxID = *varIt;
       int numSides = elem->numSides();
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
@@ -260,13 +283,13 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh() {
         bool shouldHavePatchBasis;
         // check who the (ancestor's) neighbor is on this side:
         int sideIndexInNeighbor;
-        ElementPtr neighbor = _mesh->ancestralNeighborForSide(elem,sideIndex,sideIndexInNeighbor);
+        ElementPtr neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,sideIndexInNeighbor);
         int neighborCellID = neighbor->cellID();
         
         // check whether the neighbor relationship is symmetric:
         if (neighborCellID == -1) {
           shouldHavePatchBasis = false;
-        } else if (_mesh->getElement(neighborCellID)->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
+        } else if (mesh->getElement(neighborCellID)->getNeighborCellID(sideIndexInNeighbor) != elem->cellID()) {
           // i.e. neighbor's neighbor is our parent/ancestor--so we should have a PatchBasis
           shouldHavePatchBasis = true;
         } else {
@@ -277,7 +300,7 @@ bool PatchBasisTests::patchBasisCorrectlyAppliedInMesh() {
         }
       }
     }
-    for (varIt = _fieldIDs.begin(); varIt != _fieldIDs.end(); varIt++) {
+    for (varIt = fieldIDs.begin(); varIt != fieldIDs.end(); varIt++) {
       int fieldID = *varIt;
       bool shouldHavePatchBasis = false; // false for all fields
       BasisPtr basis = elem->elementType()->trialOrderPtr->getBasis(fieldID);
@@ -312,41 +335,13 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
         BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
         if (BasisFactory::isPatchBasis(basis)) {
           // get parent basis:
-          int parentSideIndex = elem->parentSideForSideIndex(sideIndex);
           Element* parent = elem->getParent();
+          int parentSideIndex = elem->parentSideForSideIndex(sideIndex);
           BasisPtr parentBasis = parent->elementType()->trialOrderPtr->getBasis(varID, parentSideIndex);
-        
-          FieldContainer<double> childCellNodes = _mesh->physicalCellNodesForCell(cellID);
-          FieldContainer<double> parentCellNodes = _mesh->physicalCellNodesForCell(parent->cellID());
-        
-          /*
-           It appears that there's no way (built in) to go from 2D points along the edge to the 1D ref cell
-           So we want to keep things in 1D points.  The basic idea here is to treat the parent's edge as the
-           "physical" space.  The trick is to figure out what the child's edge nodes should be inside the
-           parent.  Because our edge divisions can be assumed to be in exactly two pieces wherever they are divided, 
-           we can look for the shared vertex between parent and child along the side.  If the shared vertex is at the
-           "earlier" vertex for parent (where earlier is understood modulo the side: so on the side 3 of a quad,
-           vertex 3 is earlier than vertex 0), then the edge nodes are -1 and 0.  Otherwise, they are 0 and -1.
-           
-           This assumes a fair bit about the nature of our cell topologies, etc.  This is a test in which
-           we control all that.  It's less clear what we should do if we wanted a similar feature in the core
-           code, or to write a similar test for a more general topology or refinement pattern.
-           */
-          FieldContainer<double> childEdgeNodesInParentRef(1,2,1);
-          int childIndexInParentSide = elem->indexInParentSide(parentSideIndex);
-          if (childIndexInParentSide == 0) {
-            childEdgeNodesInParentRef(0,0,0) = -1;
-            childEdgeNodesInParentRef(0,1,0) = 0;
-          } else if (childIndexInParentSide == 1) {
-            childEdgeNodesInParentRef(0,0,0) = 0;
-            childEdgeNodesInParentRef(0,1,0) = 1;
-          } else {
-            TEST_FOR_EXCEPTION( true, std::invalid_argument, "indexInParentSide isn't 0 or 1" );
-          }
           
           FieldContainer<double> parentTestPoints(_testPoints1D);
-          shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-          CellTools<double>::mapToPhysicalFrame(parentTestPoints,_testPoints1D,childEdgeNodesInParentRef,line_2,0);
+          
+          elem->getSidePointsInParentRefCoords(parentTestPoints,sideIndex,_testPoints1D);
           
           // evaluate testPoints and parentTestPoints in respective bases
           FCPtr parentValues = BasisEvaluation::getValues(parentBasis,IntrepidExtendedTypes::OPERATOR_VALUE,parentTestPoints);
@@ -355,14 +350,20 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
           // check that they agree
           TEST_FOR_EXCEPTION(parentValues->size() != childValues->size(), std::invalid_argument,
                              "parentValues and childValues don't have the same size--perhaps parentBasis and child don't have the same order?");
-          for (int i=0; i<parentValues->size(); i++) {
-            double diff = abs((*parentValues)[i]-(*childValues)[i]);
-            if (diff > tol) {
-              cout << "For child cellID " << cellID << " on side " << sideIndex << ", ";
-              cout << "parent value != childValue (" << (*parentValues)[i] << " != " << (*childValues)[i] << ")\n";
-              valuesAgree = false;
-            }
+          double maxDiff;
+          if ( !fcsAgree(*parentValues,*childValues,tol,maxDiff) ) {
+            valuesAgree = false;
+            cout << "For child cellID " << cellID << " on side " << sideIndex << ", ";
+            cout << "parent values and childValues differ; maxDiff = " << maxDiff << "\n";
           }
+//          for (int i=0; i<parentValues->size(); i++) {
+//            double diff = abs((*parentValues)[i]-(*childValues)[i]);
+//            if (diff > tol) {
+//              cout << "For child cellID " << cellID << " on side " << sideIndex << ", ";
+//              cout << "parent value != childValue (" << (*parentValues)[i] << " != " << (*childValues)[i] << ")\n";
+//              valuesAgree = false;
+//            }
+//          }
         }
       }
     }
@@ -388,6 +389,16 @@ bool PatchBasisTests::polyOrdersAgree(const vector< map<int, int> > &pOrderMapVe
     mapVectorIt2++;
   }
   return true;
+}
+
+void PatchBasisTests::pRefineAllActiveCells() {
+  vector<int> cellIDsToRefine;
+  for (vector< ElementPtr >::const_iterator elemIt=_mesh->activeElements().begin();
+       elemIt != _mesh->activeElements().end(); elemIt++) {
+    int cellID = (*elemIt)->cellID();
+    cellIDsToRefine.push_back(cellID);
+  }
+  _mesh->pRefine(cellIDsToRefine);
 }
 
 bool PatchBasisTests::pRefined(const vector< map<int, int> > &pOrderMapForSideBefore,
@@ -528,11 +539,15 @@ void PatchBasisTests::setup() {
 }
 
 bool PatchBasisTests::refinementsHaveNotIncreasedError() {
+  return refinementsHaveNotIncreasedError(_confusionSolution);
+}
+
+bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> solution) {
   double tol = 1e-11;
   
   bool success = true;
   
-  _confusionSolution->solve(_useMumps);
+  solution->solve(_useMumps);
   
   for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
     int fieldID = *fieldIt;
@@ -542,7 +557,8 @@ bool PatchBasisTests::refinementsHaveNotIncreasedError() {
       cout << "PatchBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
       cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
       
-      _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
       
       success = false;
     }
@@ -697,6 +713,74 @@ bool PatchBasisTests::testNeighborPRefinementMultiLevel() {
 } 
 
 bool PatchBasisTests::testSolveUniformMesh() {
-  // just test on an unrefined mesh: we shouldn't be using any PatchBases, so this is a sanity check
-  return refinementsHaveNotIncreasedError();
+  // TODO: clean up this test, and make it a proper test... (Right now, a container for debug code!)
+  int H1Order = 2;
+  int horizontalCells = 2; int verticalCells = 2;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;  
+  
+  // setup the solution objects:
+  int polyOrder = H1Order - 1;
+  
+  Teuchos::RCP<BilinearForm> confusionBF = _confusionExactSolution->bilinearForm();
+  
+  Teuchos::RCP<Mesh> multiBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
+
+  hRefineAllActiveCells(multiBasisMesh);
+  
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
+  
+  Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip));
+  cout << "solving MultiBasis...\n";
+  mbSolution->solve(_useMumps);
+  
+  mbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
+  mbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
+  
+//  cout << "MultiBasis localToGlobalMap:\n";
+//  multiBasisMesh->printLocalToGlobalMap();
+  
+  Teuchos::RCP<Mesh> patchBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
+  patchBasisMesh->setUsePatchBasis(true);
+  
+  Teuchos::RCP<Solution> pbSolution = Teuchos::rcp(new Solution(patchBasisMesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip));
+
+  bool success = true;
+  
+  hRefineAllActiveCells(patchBasisMesh);
+  
+  cout << "solving PatchBasis...\n";
+  pbSolution->solve(_useMumps);
+  
+  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
+  
+//  cout << "PatchBasis localToGlobalMap:\n";
+//  patchBasisMesh->printLocalToGlobalMap();
+  
+  vector<int> cellsToRefine;
+  // just refine first active element
+  cellsToRefine.push_back(patchBasisMesh->activeElements()[0]->cellID());
+  patchBasisMesh->hRefine(cellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+  if ( !patchBasisCorrectlyAppliedInMesh(patchBasisMesh,_fluxIDs,_fieldIDs) ) {
+    cout << "patchBasisCorrectlyAppliedInMesh returned false.\n";
+    success = false;
+  }
+  
+  pbSolution->solve(_useMumps);
+  
+  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_refined.m");
+  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis_refined.m");
+  
+  return success;
 }
