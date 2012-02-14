@@ -217,3 +217,8 @@ void PatchBasis::computeCellJacobians(FieldContainer<double> &cellJacobian, Fiel
 //  CellTools::setJacobianInv(cellJacobInv, cellJacobian );
 //  CellTools::setJacobianDet(cellJacobDet, cellJacobian );
 }
+
+
+BasisPtr PatchBasis::parentBasis() {
+  return _parentBasis;
+}

@@ -220,6 +220,8 @@ public:
   FieldContainer<double> physicalCellNodesForCell(int cellID);
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
+  void printLocalToGlobalMap(); // for debugging
+  
   void rebuildLookups();
   
   void pRefine(vector<int> cellIDsForPRefinements);

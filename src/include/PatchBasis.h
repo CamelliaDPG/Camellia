@@ -66,6 +66,8 @@ public:
                  const FieldContainer<double> &   inputPoints,
                  const FieldContainer<double> &    cellVertices,
                  const EOperator        operatorType) const;
+
+  BasisPtr parentBasis();
 };
 
 #endif

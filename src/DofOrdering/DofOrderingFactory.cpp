@@ -429,7 +429,8 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
   return newOrdering;
 }
 
-DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder) {
+DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
+                                                    int newPolyOrder, bool replacePatchBasis) {
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
   vector<int> varIDs = dofOrdering->getVarIDs();
@@ -440,6 +441,12 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
     EFunctionSpaceExtended fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      if (replacePatchBasis) {
+        // if we have a PatchBasis, then we want to get the underlying basis...
+        while (BasisFactory::isPatchBasis(basis)) {
+          basis = ((PatchBasis*)basis.get())->parentBasis();
+        }
+      }
       fs = BasisFactory::getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::getBasisRank(basis);
       int basisPolyOrder = BasisFactory::basisPolyOrder(basis);

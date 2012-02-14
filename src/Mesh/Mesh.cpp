@@ -803,6 +803,13 @@ void Mesh::determineDofPairings() {
     ElementPtr elemPtr = *(elemIterator);
     ElementTypePtr elemTypePtr = elemPtr->elementType();
     int cellID = elemPtr->cellID();
+    
+    // DEBUG code:
+//    cout << "cellID " << cellID << " trialOrdering:\n";
+//    cout << *(elemTypePtr->trialOrderPtr);
+//    cout << "cellID " << cellID << " testOrdering:\n";
+//    cout << *(elemTypePtr->testOrderPtr);
+    
     if ( elemPtr->isParent() ) {
       TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
     }
@@ -823,7 +830,7 @@ void Mesh::determineDofPairings() {
             // check that the bases agree in #dofs:
             int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
             
-            if ( !neighbor->isParent() && (numDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
+            if ( (!neighbor->isParent() || _usePatchBasis) && (numDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
               TEST_FOR_EXCEPTION(numDofs != neighborNumDofs,
                                  std::invalid_argument,
                                  "Element and neighbor don't agree on basis along shared side.");              
@@ -1495,7 +1502,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           
           if (maxPolyOrder > nonParentPolyOrder) {
             // upgrade p along the side in non-parent
-            nonParentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(nonParentTrialOrdering, parentSideIndexInNeighbor, maxPolyOrder);
+            nonParentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(nonParentTrialOrdering, parentSideIndexInNeighbor, maxPolyOrder, false);
             ElementTypePtr nonParentType = _elementTypeFactory.getElementType(nonParentTrialOrdering, 
                                                                               nonParent->elementType()->testOrderPtr, 
                                                                               nonParent->elementType()->cellTopoPtr );
@@ -1504,7 +1511,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           }
           // now, importantly, do the same thing in the parent:
           if (maxPolyOrder > parentPolyOrder) {
-            parentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(parentTrialOrdering, neighborSideIndexInParent, maxPolyOrder);
+            parentTrialOrdering = _dofOrderingFactory.setSidePolyOrder(parentTrialOrdering, neighborSideIndexInParent, maxPolyOrder, false);
             ElementTypePtr parentType = _elementTypeFactory.getElementType(parentTrialOrdering,
                                                                            parent->elementType()->testOrderPtr,
                                                                            parent->elementType()->cellTopoPtr);
@@ -1595,24 +1602,44 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     setElementType( neighbor->cellID(), newType, true); // true: sideUpgradeOnly
     //return NEIGHBOR_NEEDED_NEW;
   } else if (changed == -1) { // PatchBasis
-    // TODO: If it's true that we never get here, eliminate this code, and also the related return value in 
-    //       DofOrderingFactory—probably can change that to throwing an exception…
-    // not sure if we ever get here: we only get here if neither elem nor neighbor broken, and in that case,
-    // we shouldn't have PatchBasis…
-    // using "maximum rule", consistent with the above--but we need to propagate the change
+    // if we get here, these are the facts:
+    // 1. both element and neighbor are unbroken--leaf nodes.
+    // 2. one of element or neighbor has a PatchBasis
+    
     TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
-                       "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
+                       "BilinearForm has no traces or fluxes, but somehow neighbor was upgraded...");
+    int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
+    
+    // So what we need to do is figure out the right p-order for the side and set both bases accordingly.
     // determine polyOrder for each side--take the maximum
     int neighborPolyOrder = _dofOrderingFactory.polyOrder(neighborTrialOrdering);
     int myPolyOrder = _dofOrderingFactory.polyOrder(elemTrialOrdering);
-    if (neighborPolyOrder != myPolyOrder) {
-      // determine the first PatchBasis ancestor (ancestralNeighborForSide??) and setup new PatchBases for all
-      // neighbors along that side (including inactive neighbors?)
-      
-    }
     
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
+    int polyOrder = max(neighborPolyOrder,myPolyOrder); // "maximum" rule
+    
+    // upgrade element
+    elemTrialOrdering = _dofOrderingFactory.setSidePolyOrder(elemTrialOrdering,sideIndex,polyOrder,true);
+    int sidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
+    int testPolyOrder = _dofOrderingFactory.polyOrder(elemTestOrdering);
+    if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
+      elemTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, cellTopo );
+    }
+    ElementTypePtr newElemType = _elementTypeFactory.getElementType(elemTrialOrdering, elemTestOrdering, 
+                                                                    elem->elementType()->cellTopoPtr );
+    setElementType( elem->cellID(), newElemType, true); // true: sideUpgradeOnly
+    
+    // upgrade neighbor
+    neighborTrialOrdering = _dofOrderingFactory.setSidePolyOrder(neighborTrialOrdering,mySideIndexInNeighbor,polyOrder,true);
+    testPolyOrder = _dofOrderingFactory.polyOrder(neighborTestOrdering);
+    if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
+      neighborTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, neighborTopo);
+    }
+    ElementTypePtr newNeighborType = _elementTypeFactory.getElementType(neighborTrialOrdering, neighborTestOrdering, 
+                                                                        neighbor->elementType()->cellTopoPtr );
+    setElementType( neighbor->cellID(), newNeighborType, true); // true: sideUpgradeOnly
+    
+    // TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
   } else {
     //return NEITHER_NEEDED_NEW;
   }
@@ -1774,6 +1801,16 @@ FieldContainer<double> Mesh::physicalCellNodesForCell( int cellID ) {
 
 FieldContainer<double> & Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr ) {
   return _physicalCellNodesForElementType[ elemTypePtr.get() ];
+}
+
+void Mesh::printLocalToGlobalMap() {
+  for (map< pair<int,int>, int>::iterator entryIt = _localToGlobalMap.begin();
+       entryIt != _localToGlobalMap.end(); entryIt++) {
+    int cellID = entryIt->first.first;
+    int localDofIndex = entryIt->first.second;
+    int globalDofIndex = entryIt->second;
+    cout << "(" << cellID << "," << localDofIndex << ") --> " << globalDofIndex << endl;
+  }
 }
 
 void Mesh::rebuildLookups() {

@@ -113,7 +113,7 @@ public:
                                bool conformingVertices = true);
   DofOrderingPtr pRefine(DofOrderingPtr dofOrdering, 
                          const shards::CellTopology &cellTopo, int pToAdd = 1);
-  DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder);
+  DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
   DofOrderingPtr getTrialOrdering(DofOrdering &ordering);
   DofOrderingPtr getTestOrdering(DofOrdering &ordering);
   int matchSides(DofOrderingPtr &firstOrdering, int firstSideIndex, 

@@ -200,6 +200,9 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   }
   this->solutionValues(exactValues,trialID, physCubPoints);
   
+//  cout << "ExactSolution: exact values:\n" << exactValues;
+//  cout << "ExactSolution: computed values:\n" << computedValues;
+  
   FieldContainer<double> errorSquared(dimensions);
   
   squaredDifference(errorSquared,computedValues,exactValues);

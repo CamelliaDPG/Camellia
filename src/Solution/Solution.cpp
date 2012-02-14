@@ -231,16 +231,22 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
                                                     physicalCellNodes, cellSideParities);
         FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
         BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
+        
+//        cout << "preStiffness:\n" << preStiffness;
       }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
+      
+//      cout << "ipMatrix:\n" << ipMatrix;
       
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
       int optSuccess = BilinearFormUtility::computeOptimalTest(optTestCoeffs, ipMatrix, _mesh->bilinearForm(),
                                                                trialOrderingPtr, testOrderingPtr,
                                                                *(cellTopoPtr.get()), physicalCellNodes, cellSideParities);
+      
+//      cout << "optTestCoeffs:\n" << optTestCoeffs;
       
       if ( optSuccess != 0 ) {
         cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
@@ -320,7 +326,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
   
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
   // determine and impose BCs
 
