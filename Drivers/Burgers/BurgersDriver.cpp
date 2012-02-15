@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
 
-  int numRefs = 2;
+  int numRefs = 4;
   int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
 
@@ -109,14 +109,11 @@ int main(int argc, char *argv[]) {
     bool converged = false;
     while (!converged){ // while energy error has not stabilized
 
-      cout << "solving..." << endl;
       solution->solve();
-
-      cout << "summing background flow..." << endl;
+ 
       backgroundFlow->addSolution(solution,1.0);
 
       // see if energy error has stabilized
-      cout << "getting energy error" << endl;
       solution->energyError(energyError);    
       double totalError = 0.0;
       for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
@@ -136,11 +133,6 @@ int main(int argc, char *argv[]) {
       } 
       i++;
       
-      /*
-	if (i>1){
-	converged=true;
-      }
-      */
       
     }
 
@@ -169,39 +161,6 @@ int main(int argc, char *argv[]) {
 	}
       }
     }  
-    /*
-    quadCellsToRefine.clear();
-    // shoudl induce hanging on 4x4 mesh initial, np 2
-    if (refIter==0){
-      quadCellsToRefine.push_back(0);
-      quadCellsToRefine.push_back(1);
-      quadCellsToRefine.push_back(6);
-      quadCellsToRefine.push_back(7);
-      quadCellsToRefine.push_back(9);
-      quadCellsToRefine.push_back(10);
-      quadCellsToRefine.push_back(11);
-      quadCellsToRefine.push_back(13);
-      quadCellsToRefine.push_back(14);
-    } else if (refIter==1) {
-      quadCellsToRefine.push_back(16);
-      quadCellsToRefine.push_back(17);
-      quadCellsToRefine.push_back(19);
-      quadCellsToRefine.push_back(24);
-      quadCellsToRefine.push_back(26);
-      quadCellsToRefine.push_back(29);
-      quadCellsToRefine.push_back(30);
-      quadCellsToRefine.push_back(35);
-      quadCellsToRefine.push_back(36);
-      quadCellsToRefine.push_back(39);
-      quadCellsToRefine.push_back(40);
-      quadCellsToRefine.push_back(43);
-      quadCellsToRefine.push_back(45);
-      quadCellsToRefine.push_back(46);
-      quadCellsToRefine.push_back(49);
-      quadCellsToRefine.push_back(50);
-    }
-    */
-
     if (rank==0){
       cout << "refining on iter " << refIter << endl;
     }
@@ -212,19 +171,16 @@ int main(int argc, char *argv[]) {
     solutions.push_back(solution);
     solutions.push_back(backgroundFlow);
 
-    cout << "refining/reinitializing dofs on rank " << rank << endl;
     mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),solutions);
     triangleCellsToRefine.clear();
     mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
     quadCellsToRefine.clear();
 
-    //    cout << "enforcing one irregularity on rank " << rank << endl;
-    //    mesh->enforceOneIrregularity(solutions);
+    mesh->enforceOneIrregularity(solutions);
 
-    cout << "discarding old cell coeffs on rank " << rank << endl;
-    backgroundFlow->discardInactiveCellCoefficients();
+    //    cout << "discarding old cell coeffs on rank " << rank << endl;
+    //    backgroundFlow->discardInactiveCellCoefficients();
 
-    cout << "proceeding to next refinement iteration on rank " << rank << endl;
   }
 
   // one more nonlinear solve on refined mesh
