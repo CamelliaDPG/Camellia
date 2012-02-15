@@ -157,9 +157,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 #endif
   
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
-  typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
-  
-  //cout << "process " << rank << " about to get elementTypes.\n";
+  typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr; 
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -191,6 +189,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
+  //  cout << "Computing local matrices" << endl;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
@@ -287,6 +286,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     }
   }
   double timeLocalStiffness = timer.ElapsedTime();
+  //  cout << "Done computing local matrices" << endl;
   
   Epetra_Vector timeLocalStiffnessVector(timeMap);
   timeLocalStiffnessVector[0] = timeLocalStiffness;
@@ -1049,7 +1049,6 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
       }
     }
   }      
-
 }
 
 void Solution::computeErrorRepresentation() {
@@ -1087,6 +1086,7 @@ void Solution::computeErrorRepresentation() {
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, physicalCellNodes);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
+    FieldContainer<double> solutionRepresentation(numCells,numTestDofs);
     
     Epetra_SerialDenseSolver solver;
     
@@ -1101,12 +1101,24 @@ void Solution::computeErrorRepresentation() {
       Epetra_SerialDenseMatrix rhs(Copy, & (_residualForElementType[elemTypePtr.get()](localCellIndex,0)),
                                    _residualForElementType[elemTypePtr.get()].dimension(1), // stride
                                    _residualForElementType[elemTypePtr.get()].dimension(1), 1);
+
+
+      /*
+      int info = rhs.Reshape(numTestDofs,2); // add an extra column
+      if (info!=0){
+	cout << "could not reshape matrix - error code " << info << endl;
+      }      
+      for(int i = 0;i < numTestDofs; i++){
+	rhs(i,1) = _operatorSolutionForElementType[elemTypePtr.get()](localCellIndex,i);
+      }
       
-      Epetra_SerialDenseMatrix errorRepresentationMatrix(numTestDofs,1);
+      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,2);
+      */
+      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
       solver.SetMatrix(ipMatrixT);
       //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
-      int success = solver.SetVectors(errorRepresentationMatrix, rhs);
+      int success = solver.SetVectors(representationMatrix, rhs);
       
       if (success != 0) {
         cout << "computeErrorRepresentation: failed to SetVectors with error " << success << endl;
@@ -1133,7 +1145,7 @@ void Solution::computeErrorRepresentation() {
       }
       
       for (int i=0; i<numTestDofs; i++) {
-        errorRepresentation(localCellIndex,i) = errorRepresentationMatrix(i,0);
+        errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
       }
     }
     _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
@@ -1206,7 +1218,7 @@ void Solution::computeResiduals() {
       //      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;          
       for (int i=0; i<numTestDofs; i++) {
 	for (int j=0; j<numTrialDofs; j++) {      
-          residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);                
+          residuals(localCellIndex,i)        -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);
         }         
       }
     }    
@@ -1223,12 +1235,16 @@ void Solution::discardInactiveCellCoefficients() {
     int cellID = elem->cellID();
     activeCellIDs.insert(cellID);
   }
+  vector<int> cellIDsToErase;
   for (map< int, FieldContainer<double> >::iterator solnIt = _solutionForCellIDGlobal.begin();
        solnIt != _solutionForCellIDGlobal.end(); solnIt++) {
     int cellID = solnIt->first;
     if ( activeCellIDs.find(cellID) == activeCellIDs.end() ) {
-      _solutionForCellIDGlobal.erase(cellID);
+      cellIDsToErase.push_back(cellID);
     }
+  }
+  for (vector<int>::iterator it = cellIDsToErase.begin();it !=cellIDsToErase.end();it++){
+    _solutionForCellIDGlobal.erase(*it);
   }
 }
 

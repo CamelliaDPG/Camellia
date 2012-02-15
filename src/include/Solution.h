@@ -70,6 +70,9 @@ private:
   map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _errorRepresentationForElementType; // for uniform mesh, just a single entry.
 
+  map< ElementType*,FieldContainer<double> > _operatorSolutionForElementType;
+  map< ElementType*,FieldContainer<double> > _solutionRepresentationForElementType;
+
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<RHS> _rhs;
@@ -143,7 +146,7 @@ public:
   void computeErrorRepresentation();
   
   void discardInactiveCellCoefficients();
-  //  void energyError(FieldContainer<double> &energyError);
+
   void energyError(map<int, double> &energyError);
   
   void writeToFile(int trialID, const string &filePath);
