@@ -44,13 +44,13 @@ class Mesh;
 
 class MeshTestSuite : public TestSuite {
 private:
-  static bool checkMeshDofConnectivities(Mesh &mesh);
+  static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh);
   static bool checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOrdering); 
   static bool vectorPairsEqual( vector< pair<int,int> > &first, vector< pair<int,int> > &second);
-  static void printParities(Mesh &mesh);
+  static void printParities(Teuchos::RCP<Mesh> mesh);
   // checkDofOrderingHasNoOverlap returns true if no two (varID,basisOrdinal,sideIndex) tuples map to same dofIndex
 public:
-  static bool checkMeshConsistency(Mesh &mesh);
+  static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh);
   static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords);
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName() { return "MeshTestSuite"; }

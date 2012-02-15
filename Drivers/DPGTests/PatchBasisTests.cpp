@@ -251,12 +251,12 @@ bool PatchBasisTests::meshLooksGood() {
     cout << "patchBasesAgreeWithParentInMesh returned false.\n";
     looksGood = false;
   }
-  if ( !MeshTestSuite::checkMeshConsistency(*_mesh) ) {
+  if ( !MeshTestSuite::checkMeshConsistency(_mesh) ) {
     cout << "MeshTestSuite::checkMeshConsistency() returned false.\n";
     looksGood = false;
   }
   if ( !basisValuesAgreeWithPermutedNeighbor(_mesh) ) {
-    cout << "basisValuesAgreeWithPermutedNeighbor return false.\n";
+    cout << "basisValuesAgreeWithPermutedNeighbor returned false.\n";
   }
   return looksGood;
 }
@@ -740,7 +740,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
   
   Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip));
-  cout << "solving MultiBasis...\n";
+//  cout << "solving MultiBasis...\n";
   mbSolution->solve(_useMumps);
   
   mbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
@@ -758,7 +758,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   hRefineAllActiveCells(patchBasisMesh);
   
-  cout << "solving PatchBasis...\n";
+//  cout << "solving PatchBasis...\n";
   pbSolution->solve(_useMumps);
   
   pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");

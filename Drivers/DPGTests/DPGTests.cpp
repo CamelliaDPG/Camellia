@@ -65,6 +65,7 @@
 #include "DPGTests.h"
 #include "SolutionTests.h"
 #include "PatchBasisTests.h"
+#include "ElementTests.h"
 
 #include "Projector.h"
 #include "SimpleFunction.h"
@@ -112,16 +113,6 @@ void DPGTests::runTests() {
   // set up a few special entries for BasisFactory first:
   createBases();
   
-  success = testMultiBasis();
-  ++numTestsTotal;
-  if (success) {
-    numTestsPassed++;
-    cout << "Passed test testMultiBasis." << endl;
-    //return; // just for now, exit on success    
-  } else {
-    cout << "Failed test testMultiBasis." << endl;
-    //return; // just for now, exit on fail
-  }
   
 //  int vectBasisTestsTotal  = 0;
 //  int vectBasisTestsPassed = 0;
@@ -133,6 +124,7 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new ElementTests() ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
@@ -146,6 +138,17 @@ void DPGTests::runTests() {
     cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
+  }
+  
+  success = testMultiBasis();
+  ++numTestsTotal;
+  if (success) {
+    numTestsPassed++;
+    cout << "Passed test testMultiBasis." << endl;
+    //return; // just for now, exit on success    
+  } else {
+    cout << "Failed test testMultiBasis." << endl;
+    //return; // just for now, exit on fail
   }
   
   success = testOptimalStiffnessByIntegrating();

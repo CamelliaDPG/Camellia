@@ -167,26 +167,34 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
     for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
       int neighborSideIndex;
       Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem,sideIndex,neighborSideIndex);
-      DofOrderingPtr neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
-      int ancestorCellID = neighbor->getNeighborCellID(neighborSideIndex);
-      if ( neighbor->isParent() ) {
-        // we'll handle this element when we handle neighbor's active descendants.
+      if ( (neighbor->cellID() == -1) || neighbor->isParent() ) { // boundary or broken neighbor
+        // if broken neighbor, we'll handle this element when we handle neighbor's active descendants.
         continue;
       }
+      DofOrderingPtr neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
+      int ancestorCellID = neighbor->getNeighborCellID(neighborSideIndex);
+      int subSideIndexInNeighbor = -1;
       // because of the above, we can assume, below, that elem is the small guy if the two aren't peers.
       ancestorTestPointsRefCoords = testPointsRefCoords;
-      int ancestorSideIndex;
+      int ancestorSideIndex = sideIndex;
       if ( ancestorCellID != cellID ) {
         // then we need to map the coords into ancestor's ref space
         // simplest (though not most efficient!) to do this by iteratively mapping into parent's space
         Teuchos::RCP<Element> currentElement = mesh->getElement(cellID);
-        ancestorSideIndex = sideIndex;
         while (currentElement->cellID() != ancestorCellID) {
-          // TODO: make sure that this is safe: are we allowed to pass ancestorTestPointsRefCoords for both arguments?
+          FieldContainer<double> oldAncestorTestPointsRefCoords = ancestorTestPointsRefCoords;
           currentElement->getSidePointsInParentRefCoords(ancestorTestPointsRefCoords, ancestorSideIndex, 
-                                                         ancestorTestPointsRefCoords);
+                                                         oldAncestorTestPointsRefCoords);
           ancestorSideIndex = currentElement->parentSideForSideIndex(ancestorSideIndex);
           currentElement = mesh->getElement(currentElement->getParent()->cellID());
+        }
+        vector< pair<int,int> > descendantsForSide = mesh->getElement(ancestorCellID)->getDescendantsForSide(ancestorSideIndex);
+        int subSideIndexInAncestor = -1;
+        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end(); descIt++) {
+          subSideIndexInAncestor++;
+          if (descIt->first == cellID) {
+            subSideIndexInNeighbor = mesh->neighborChildPermutation(subSideIndexInAncestor, descendantsForSide.size());
+          }
         }
       }
       
@@ -197,19 +205,35 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
         int fluxID = *fluxIt;
         BasisPtr basis = trialOrder->getBasis(fluxID,sideIndex);
         BasisPtr neighborBasis = neighborTrialOrder->getBasis(fluxID,neighborSideIndex);
-        FieldContainer<double> values(numPoints,basis->getCardinality());
-        FieldContainer<double> neighborValues(numPoints, neighborBasis->getCardinality());
+        FieldContainer<double> values(basis->getCardinality(),numPoints);
+        FieldContainer<double> neighborValues(neighborBasis->getCardinality(),numPoints);
         basis->getValues(values,testPointsRefCoords,Intrepid::OPERATOR_VALUE);
         neighborBasis->getValues(neighborValues,neighborTestPointsRefCoords,Intrepid::OPERATOR_VALUE);
+        bool failedHere = false;
         for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
-          int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,neighborBasis->getCardinality());
+          int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,basis->getCardinality());
+          if (BasisFactory::isMultiBasis(neighborBasis)) {
+            neighborDofOrdinal = ((MultiBasis*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
+          }
           for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
             double diff = abs(neighborValues(neighborDofOrdinal,pointIndex) - values(dofOrdinal,pointIndex));
             if (diff > tol) {
               success = false;
+              failedHere = true;
             }
             maxDiff = max(diff,maxDiff);
           }
+        }
+        if (failedHere) {
+          cout << "cellID " << cellID << "'s testPoints:\n" << testPointsRefCoords;
+          
+          cout << "neighbor cellID " << neighbor->cellID() << "'s testPoints:\n" << neighborTestPointsRefCoords;
+          // for debugging, some console output:
+          cout << "values for cellID " << cellID << ", fluxID " << fluxID << ", side " << sideIndex << ":\n";
+          cout << values;
+          
+          cout << "values for neighbor cellID " << neighbor->cellID() << ", fluxID " << fluxID << ", side " << neighborSideIndex << ":\n";
+          cout << neighborValues;
         }
       }
     }
@@ -608,10 +632,10 @@ bool MeshTestSuite::testBuildMesh() {
   // some basic sanity checks:
   int numElementsExpected = 1;
   if (myMesh->numElements() != numElementsExpected) {
-    cout << "myMesh.numElements() != numElementsExpected; numElements()=" << myMesh->numElements() << endl;
+    cout << "mymesh->numElements() != numElementsExpected; numElements()=" << myMesh->numElements() << endl;
     success = false;
   }
-  bool localSuccess = checkMeshDofConnectivities(*myMesh);
+  bool localSuccess = checkMeshDofConnectivities(myMesh);
 
   if (!localSuccess) {
     cout << "checkMeshDofConnectivities failed for 1x1 mesh." << endl;
@@ -625,7 +649,7 @@ bool MeshTestSuite::testBuildMesh() {
     cout << "myMesh2x1.numElements() != numElementsExpected; numElements()=" << myMesh2x1->numElements() << endl;
     success = false;
   }
-  localSuccess = checkMeshDofConnectivities(*myMesh2x1);
+  localSuccess = checkMeshDofConnectivities(myMesh2x1);
   
   if (!localSuccess) {
     cout << "checkMeshDofConnectivities failed for 2x1 mesh." << endl;
@@ -794,16 +818,16 @@ bool MeshTestSuite::testMeshSolvePointwise() {
   return success;
 }
 
-bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
-  int numCells = mesh.activeElements().size();
+bool MeshTestSuite::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
+  int numCells = mesh->activeElements().size();
   bool success = true;
-  int numGlobalDofs = mesh.numGlobalDofs();
+  int numGlobalDofs = mesh->numGlobalDofs();
   vector<int> globalDofIndexHitCount(numGlobalDofs,0);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    Teuchos::RCP<Element> elem = mesh.activeElements()[cellIndex];
+    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
     int cellID = elem->cellID();
     DofOrdering trialOrder = *(elem->elementType()->trialOrderPtr.get());
-    vector< int > trialIDs = mesh.bilinearForm().trialIDs();
+    vector< int > trialIDs = mesh->bilinearForm().trialIDs();
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
       int numSides = trialOrder.getNumSidesForVarID(trialID);
@@ -812,12 +836,12 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
         for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
           // a very basic check on the mesh dof ordering: the globalDofIndices for all localDofs should not be negative!
           int localDofIndex = trialOrder.getDofIndex(trialID, dofOrdinal, sideIndex);
-          int globalDofIndex = mesh.globalDofIndex(cellID,localDofIndex);
+          int globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
           if (globalDofIndex < 0) {
-            cout << "mesh.globalDofIndex(" << cellID << "," << localDofIndex << ") = " << globalDofIndex << " < 0.  Error!";
+            cout << "mesh->globalDofIndex(" << cellID << "," << localDofIndex << ") = " << globalDofIndex << " < 0.  Error!";
             success = false;
-          } else if (globalDofIndex >= mesh.numGlobalDofs()) {
-            cout << "mesh.globalDofIndex(" << cellID << "," << localDofIndex << ") = " << globalDofIndex << " >= myMesh.numGlobalDofs().  Error!";
+          } else if (globalDofIndex >= mesh->numGlobalDofs()) {
+            cout << "mesh->globalDofIndex(" << cellID << "," << localDofIndex << ") = " << globalDofIndex << " >= mymesh->numGlobalDofs().  Error!";
             success = false;
           } else {
             globalDofIndexHitCount[globalDofIndex]++;
@@ -825,7 +849,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
           
           // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
           // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
-          if (mesh.bilinearForm().isFluxOrTrace(trialID)) {
+          if (mesh->bilinearForm().isFluxOrTrace(trialID)) {
             Element* neighbor;
             int mySideIndexInNeighbor;
             elem->getNeighbor(neighbor,mySideIndexInNeighbor,sideIndex);
@@ -833,7 +857,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
               Teuchos::RCP<DofOrdering> neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
               int neighborNumBasisDofs = neighborTrialOrder->getBasisCardinality(trialID,mySideIndexInNeighbor);
               if (neighborNumBasisDofs != numBasisDofs) {
-                if ( mesh.usePatchBasis() ) {
+                if ( mesh->usePatchBasis() ) {
                   cout << "FAILURE: usePatchBasis==true, but neighborNumBasisDofs != numBasisDofs.\n";
                   success = false;
                   continue;
@@ -847,24 +871,24 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                   int descendantIndex = -1;
                   for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
                     descendantIndex++;
-                    int neighborSubSideIndexInMe = mesh.neighborChildPermutation(descendantIndex, descendantsForSide.size());
+                    int neighborSubSideIndexInMe = mesh->neighborChildPermutation(descendantIndex, descendantsForSide.size());
                     int neighborCellID = (*entryIt).first;
                     mySideIndexInNeighbor = (*entryIt).second;
-                    neighbor = mesh.elements()[neighborCellID].get();
+                    neighbor = mesh->elements()[neighborCellID].get();
                     for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                       int myLocalDofIndex;
-                      if ((descendantsForSide.size() > 1) && !mesh.usePatchBasis()) {
+                      if ((descendantsForSide.size() > 1) && !mesh->usePatchBasis()) {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,neighborSubSideIndexInMe);
                       } else {
                         myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
                       }
-                      globalDofIndex = mesh.globalDofIndex(cellID,myLocalDofIndex);
+                      globalDofIndex = mesh->globalDofIndex(cellID,myLocalDofIndex);
                       
                       // neighbor's dofs are in reverse order from mine along each side
-                      int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numDofs);
+                      int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numDofs);
                       
                       int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
-                      int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
+                      int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
                       if (neighborsGlobalDofIndex != globalDofIndex) {
 
                         cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
@@ -883,9 +907,9 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                 }
               } else { // (neighborNumBasisDofs == numBasisDofs)
                 if (! neighbor->isParent() ) { 
-                  int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numBasisDofs);
+                  int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
                   int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
-                  int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                  int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
                   if (neighborsGlobalDofIndex != globalDofIndex) {
                     cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
                     success = false;
@@ -898,11 +922,11 @@ bool MeshTestSuite::checkMeshDofConnectivities(Mesh &mesh) {
                   for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
                     int neighborCellID = (*entryIt).first;
                     mySideIndexInNeighbor = (*entryIt).second;
-                    neighbor = mesh.elements()[neighborCellID].get();
+                    neighbor = mesh->elements()[neighborCellID].get();
                     neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
-                    int permutedDofOrdinal = mesh.neighborDofPermutation(dofOrdinal,numBasisDofs);
+                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
                     int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
-                    int neighborsGlobalDofIndex = mesh.globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                    int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
                     if (neighborsGlobalDofIndex != globalDofIndex) {
                       cout << "FAILURE: cellID " << cellID << "'s neighbor on side " << sideIndex;
                       cout << " (cellID " << neighborCellID << ")'s globalDofIndex " << neighborsGlobalDofIndex;
@@ -1059,23 +1083,23 @@ bool MeshTestSuite::testDofOrderingFactory() {
   return success;
 }
 
-bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
+bool MeshTestSuite::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
   success = checkMeshDofConnectivities(mesh);
   // now, check element types:
-  int numElements = mesh.activeElements().size();
+  int numElements = mesh->activeElements().size();
   for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
-    Teuchos::RCP<Element> elem = mesh.activeElements()[cellIndex];
-    int cellID = mesh.elements()[elem->cellID()]->cellID();
+    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
+    int cellID = mesh->elements()[elem->cellID()]->cellID();
     if ( cellID != elem->cellID() ) {
       success = false;
-      cout << "cellID for element doesn't match its index in mesh.elements() --";
+      cout << "cellID for element doesn't match its index in mesh->elements() --";
       cout <<  elem->cellID() << " != " << cellID << endl;
     }
-    if ( cellID != mesh.cellID(elem->elementType(), elem->globalCellIndex()) ) {
+    if ( cellID != mesh->cellID(elem->elementType(), elem->globalCellIndex()) ) {
       success = false;
-      cout << "cellID index in mesh.elements() doesn't match what's reported by mesh.cellID(elemType,cellIndex) --";
-      cout <<  cellID << " != " << mesh.cellID(elem->elementType(), elem->globalCellIndex()) << endl;
+      cout << "cellID index in mesh->elements() doesn't match what's reported by mesh->cellID(elemType,cellIndex) --";
+      cout <<  cellID << " != " << mesh->cellID(elem->elementType(), elem->globalCellIndex()) << endl;
     }
     // check that the vertices are lined up correctly
     int numSides = elem->numSides();
@@ -1083,22 +1107,22 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
 //      Element* neighbor;
       int mySideIndexInNeighbor;
 //       elem->getNeighbor(neighbor,mySideIndexInNeighbor,sideIndex);
-      Teuchos::RCP<Element> neighbor = mesh.ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
+      Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
       int neighborCellID = neighbor->cellID();
-      int myParity = mesh.parityForSide(cellID,sideIndex);
-      if ( mesh.boundary().boundaryElement(cellID,sideIndex) ) { // on boundary
+      int myParity = mesh->parityForSide(cellID,sideIndex);
+      if ( mesh->boundary().boundaryElement(cellID,sideIndex) ) { // on boundary
         if ( myParity != 1 ) {
           success = false;
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != 1 on boundary; sideIndex = " << sideIndex << endl;
         }
       } else { //not on boundary
-        int neighborParity = mesh.parityForSide(neighborCellID,mySideIndexInNeighbor);
+        int neighborParity = mesh->parityForSide(neighborCellID,mySideIndexInNeighbor);
         if (neighborParity != -myParity) {
           success = false;
           cout << "Mesh consistency FAILURE: cellID " << cellID << " has parity != -neighborParity on boundary; sideIndex = " << sideIndex << endl;
           cout << "neighbor parity = " << neighborParity << " and myparity = " << myParity << endl;
           cout << "side index in neighbor is " << mySideIndexInNeighbor << endl;
-          vector<double> centroid = mesh.getCellCentroid(cellID);
+          vector<double> centroid = mesh->getCellCentroid(cellID);
           cout << "element centroid for cellID " << cellID << " is " << centroid[0] << "," << centroid[1] << endl;
         }
         // this check needs to be modified for 3D
@@ -1106,8 +1130,8 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
         if ( neighborCellID == elem->getNeighborCellID(sideIndex) ) { // peers, then
           FieldContainer<double> myVertices;
           FieldContainer<double> neighborVertices;
-          mesh.verticesForSide(myVertices,cellID,sideIndex);
-          mesh.verticesForSide(neighborVertices,neighborCellID,mySideIndexInNeighbor);
+          mesh->verticesForSide(myVertices,cellID,sideIndex);
+          mesh->verticesForSide(neighborVertices,neighborCellID,mySideIndexInNeighbor);
           int numPoints = myVertices.dimension(0);
           for (int i=0; i<numPoints; i++) { // numPoints
             int neighborVertexIndex = numPoints - 1 - i; // should be in reverse order, based on our 2D layout strategy
@@ -1125,6 +1149,19 @@ bool MeshTestSuite::checkMeshConsistency(Mesh &mesh) {
       }
     }
   }
+  // check that bases agree along shared edges:
+  // setup test points:
+  static const int NUM_POINTS_1D = 10;
+  double x[NUM_POINTS_1D] = {0.11,-0.2,0.313,-0.4,0.54901,-0.6,0.73134,-0.810,0.912,-1.0};
+  
+  FieldContainer<double> testPoints1D = FieldContainer<double>(NUM_POINTS_1D,1);
+  for (int i=0; i<NUM_POINTS_1D; i++) {
+    testPoints1D(i, 0) = x[i];
+  }
+  
+  // TODO: get this working for MultiBasis
+  //neighborBasesAgreeOnSides(mesh,testPoints1D);
+  
   return success;
 }
 
@@ -1256,7 +1293,7 @@ bool MeshTestSuite::testHRefinement() {
   
   // TODO: check that the element types of fineMesh and refined mesh match...
   
-  if (! checkMeshConsistency(*mesh) ) {
+  if (! checkMeshConsistency(mesh) ) {
     success = false;
     cout << "FAILURE: after uniform regular refinement, mesh fails consistency check.\n";
   }
@@ -1301,7 +1338,7 @@ bool MeshTestSuite::testHRefinement() {
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
   
-  if (! checkMeshConsistency(*mesh) ) {
+  if (! checkMeshConsistency(mesh) ) {
     success = false;
     cout << "FAILURE: after 'deep' refinement, mesh fails consistency check.\n";
   }
@@ -1336,21 +1373,21 @@ bool MeshTestSuite::testHRefinement() {
   cellsToRefine.clear();
   cellsToRefine.push_back(0);
   mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());  
-  if ( ! checkMeshConsistency(*mesh) ) {
+  if ( ! checkMeshConsistency(mesh) ) {
     success = false;
     cout << "testHRefinement failed mesh consistency test in imitating 1-irregularity resolution" << endl;
   }
   return success;
 }
 
-void MeshTestSuite::printParities(Mesh &mesh) {
-  int numElements = mesh.activeElements().size();
+void MeshTestSuite::printParities(Teuchos::RCP<Mesh> mesh) {
+  int numElements = mesh->activeElements().size();
   for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
-    Teuchos::RCP<Element> elem = mesh.activeElements()[cellIndex];
+    Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
     
     cout << "parities for cellID " << elem->cellID() << ": ";
     for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
-      int parity = mesh.parityForSide(elem->cellID(),sideIndex);
+      int parity = mesh->parityForSide(elem->cellID(),sideIndex);
       cout << parity;
       if (sideIndex != elem->numSides()-1) cout << ", ";
     }
@@ -1417,7 +1454,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
   }
   
-  if (! checkMeshConsistency(*mesh) ) {
+  if (! checkMeshConsistency(mesh) ) {
     success = false;
     cout << "FAILURE: after 'deep' refinement, mesh fails consistency check.\n";
   }
@@ -1503,7 +1540,7 @@ bool MeshTestSuite::testPRefinement() {
   cellsToRefine.push_back(refinedCellID);
   mesh3->pRefine(cellsToRefine);
   
-  if ( ! checkMeshConsistency(*(mesh3.get()))) {
+  if ( ! checkMeshConsistency(mesh3) ) {
     cout << "After p-refinement, mesh consistency test FAILED." << endl;
     success = false;
   }
@@ -1626,7 +1663,7 @@ bool MeshTestSuite::testPRefinement() {
      } else {
        //cout << "numElementTypes after 1st p-refinement: " << numElementTypes << endl;
      }
-     if ( ! checkMeshConsistency(*(myMesh.get())) ) {
+     if ( ! checkMeshConsistency(myMesh) ) {
        success = false;
        cout << "FAILURE: After 1st p-refinement, checkMeshConsistency failed." << endl;
      }
@@ -1640,7 +1677,7 @@ bool MeshTestSuite::testPRefinement() {
      prev_error = diff;
      
      myMesh->pRefine(cellsToRefine);
-     if ( ! checkMeshConsistency(*(myMesh.get())) ) {
+     if ( ! checkMeshConsistency(myMesh) ) {
        success = false;
        cout << "FAILURE: After 2nd p-refinement, checkMeshConsistency failed." << endl;
      }
@@ -1659,7 +1696,7 @@ bool MeshTestSuite::testPRefinement() {
      cellsToRefine.push_back(1);
      cellsToRefine.push_back(3);
      myMesh->pRefine(cellsToRefine);
-     if ( ! checkMeshConsistency(*(myMesh.get())) ) {
+     if ( ! checkMeshConsistency(myMesh) ) {
        success = false;
        cout << "FAILURE: After 3rd p-refinement, checkMeshConsistency failed." << endl;
      }
@@ -1710,7 +1747,7 @@ bool MeshTestSuite::testSinglePointBC() {
   quadPoints(3,1) = 1.0;  
   
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactPolynomial.bilinearForm(), order, order+pToAdd);
-  if ( ! checkMeshConsistency(*(mesh.get()))) {
+  if ( ! checkMeshConsistency(mesh) ) {
     cout << "In singlePointBC test, mesh consistency test FAILED for non-conforming mesh." << endl;
     success = false;
   }
@@ -1734,7 +1771,7 @@ bool MeshTestSuite::testSinglePointBC() {
   
   mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, 
                                exactPolynomialConforming.bilinearForm(), order, order+pToAdd);
-  if ( ! checkMeshConsistency(*(mesh.get()))) {
+  if ( ! checkMeshConsistency(mesh) ) {
     cout << "In singlePointBC test, mesh consistency test FAILED for conforming mesh." << endl;
     success = false;
   }
