@@ -1000,6 +1000,10 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
 }
 
 void Mesh::enforceOneIrregularity() {
+  enforceOneIrregularity(vector< Teuchos::RCP<Solution> >()); 
+}
+
+void Mesh::enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions) {
   int rank = 0;
   int numProcs = 1;
 #ifdef HAVE_MPI
@@ -1042,10 +1046,9 @@ void Mesh::enforceOneIrregularity() {
 	*/
       }
     }
-    
     if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)) {
-      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle());
-      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
+      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle(),solutions);
+      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad(),solutions);
       irregularTriangleCells.clear();
       irregularQuadCells.clear();
     } else {

@@ -159,6 +159,7 @@ public:
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
   
   void enforceOneIrregularity();
+  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
 
   vector<double> getCellCentroid(int cellID);
 
