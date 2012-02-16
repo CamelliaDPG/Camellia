@@ -55,7 +55,6 @@ public:
   static bool testComputeRHS();
   static bool testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   static bool testWeightBasis();
-  static bool testMultiBasis();
   static bool checkOptTestWeights(FieldContainer<double> &optWeights,
                                   FieldContainer<double> &ipMatrix,
                                   FieldContainer<double> &preStiffness,

@@ -51,7 +51,8 @@ private:
   // checkDofOrderingHasNoOverlap returns true if no two (varID,basisOrdinal,sideIndex) tuples map to same dofIndex
 public:
   static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh);
-  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords);
+  static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords,
+                                        bool reportErrors = false);
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName() { return "MeshTestSuite"; }
   static bool testBuildMesh();

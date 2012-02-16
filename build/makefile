@@ -52,10 +52,11 @@ OBJ_NAMES = DofOrdering \
        Projector \
        MeshTestSuite \
        SolutionTests \
-       PatchBasisTests \
        VectorizedBasisTestSuite \
        MultiBasis \
+       MultiBasisTests \
        PatchBasis \
+       PatchBasisTests \
        Solution \
        DPGInnerProduct \
        ExactSolution \
@@ -156,6 +157,9 @@ ElementTests.o: $(DRIVERS_DIR)/DPGTests/ElementTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 PatchBasisTests.o: $(DRIVERS_DIR)/DPGTests/PatchBasisTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+MultiBasisTests.o: $(DRIVERS_DIR)/DPGTests/MultiBasisTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 VectorizedBasisTestSuite.o: $(DRIVERS_DIR)/DPGTests/VectorizedBasisTestSuite.cpp

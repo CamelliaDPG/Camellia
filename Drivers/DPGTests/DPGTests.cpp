@@ -64,6 +64,7 @@
 
 #include "DPGTests.h"
 #include "SolutionTests.h"
+#include "MultiBasisTests.h"
 #include "PatchBasisTests.h"
 #include "ElementTests.h"
 
@@ -125,6 +126,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   testSuites.push_back( Teuchos::rcp( new ElementTests() ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
@@ -139,18 +141,7 @@ void DPGTests::runTests() {
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
   }
-  
-  success = testMultiBasis();
-  ++numTestsTotal;
-  if (success) {
-    numTestsPassed++;
-    cout << "Passed test testMultiBasis." << endl;
-    //return; // just for now, exit on success    
-  } else {
-    cout << "Failed test testMultiBasis." << endl;
-    //return; // just for now, exit on fail
-  }
-  
+    
   success = testOptimalStiffnessByIntegrating();
   ++numTestsTotal;
   if (success) {
@@ -2235,102 +2226,6 @@ bool DPGTests::testComputeOptimalTest() {
   }
   BilinearFormUtility::setWarnAboutZeroRowsAndColumns(oldWarnState);
   return bSuccess;
-}
-
-bool DPGTests::testMultiBasis() {
-  // 1. create trialOrdering for side
-  // 2. make MultiBasis for a side along a side broken in 2, with trialOrdering in each
-  // 3. test that MultiBasis agrees at the vertices
-  bool success = true;
-  double tol = 1e-15;
-  
-  Teuchos::RCP<PoissonBilinearForm> bilinearForm = Teuchos::rcp(new PoissonBilinearForm());
-  
-  int polyOrder = 2; 
-  Teuchos::RCP<DofOrdering> trialOrdering;
-  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  
-  DofOrderingFactory dofOrderingFactory(bilinearForm);
-  
-  trialOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
-  
-  // suppose that the broken element is on the west side of the big element
-  int parentSideIndexInNeighbor = 3;
-  int numChildren = 2;
-
-  vector< pair< Teuchos::RCP<DofOrdering>, int> > childTrialOrdersForSide;
-  for (int childIndex=0; childIndex<numChildren; childIndex++) {
-    int childSideIndex = 1;
-    childTrialOrdersForSide.push_back(make_pair(trialOrdering,childSideIndex));
-  }
-  
-  Teuchos::RCP<DofOrdering> mbTrialOrdering = trialOrdering;
-  
-  dofOrderingFactory.assignMultiBasis( mbTrialOrdering, parentSideIndexInNeighbor, 
-                                       quad_4, childTrialOrdersForSide );
-  
-  int trialID = PoissonBilinearForm::PHI_HAT, sideIndex = 1;
-  int numFields = trialOrdering->getBasisCardinality(trialID,sideIndex), numPoints = 1;
-  int spaceDim = 1; // along sides...
-  // TODO: make the two trialOrderings different... (or maybe just add a test with multiple MB levels)
-  FieldContainer<double> values1(numFields,numPoints);
-  FieldContainer<double> points1(numPoints,spaceDim);
-  FieldContainer<double> values2(numFields,numPoints);
-  FieldContainer<double> points2(numPoints,spaceDim);
-  points1(0,0) = -0.75;
-//  points1(1,0) = -0.25;
-//  points1(2,0) = 0.75;
-  points2(0,0) = -0.35;
-//  points2(1,0) = -0.15;
-//  points2(2,0) = 0.40;
-  int numMBPoints = numChildren*numPoints;
-  int numMBFields = mbTrialOrdering->getBasisCardinality(trialID,parentSideIndexInNeighbor);
-  if (numMBFields != 2*numFields) {
-    success = false;
-    cout << "FAILURE: in testMultiBasis, MB doesn't have the expected cardinality\n";
-  }
-  FieldContainer<double> mbValues(numMBFields,numMBPoints);
-  FieldContainer<double> mbPoints(numMBPoints,spaceDim);
-  
-  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-    mbPoints(pointIndex,0) = -(points1(pointIndex,0) - 1.0) / 2.0;
-    mbPoints(pointIndex + numPoints,0) = -(points2(pointIndex,0) + 1.0) / 2.0;
-  }
-  
-  trialOrdering->getBasis(trialID,sideIndex)->getValues(values1,points1,Intrepid::OPERATOR_VALUE);
-  trialOrdering->getBasis(trialID,sideIndex)->getValues(values2,points2,Intrepid::OPERATOR_VALUE);
-  mbTrialOrdering->getBasis(trialID,parentSideIndexInNeighbor)->getValues(mbValues,mbPoints,Intrepid::OPERATOR_VALUE);
-  for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      for (int childIndex=0; childIndex<numChildren; childIndex++) { 
-        int childSubSideIndexInMB = Mesh::neighborChildPermutation(childIndex, numChildren);
-        FieldContainer<double> values = (childIndex == 0) ? values1 : values2;
-        int permutedFieldIndex = Mesh::neighborDofPermutation(fieldIndex,numFields); // within the subbasis
-        int mbPointIndex = childIndex*numPoints + pointIndex;
-        MultiBasis* multiBasis = (MultiBasis*) mbTrialOrdering->getBasis(trialID,parentSideIndexInNeighbor).get();
-//      TODO: figure out which of the following is right, and fix whatever bug(s) are implied--
-//        the uncommented one is the one that (mostly) works--only failure is on the shared dof, and we know
-//        whats up with that one--we need to allow it to be nonzero on the second side...
-        int mbFieldIndex = multiBasis->relativeToAbsoluteDofOrdinal(permutedFieldIndex,childSubSideIndexInMB);
-//        int mbFieldIndex = multiBasis->relativeToAbsoluteDofOrdinal(fieldIndex,childIndex);
-        double diff = abs( mbValues(mbFieldIndex, mbPointIndex) - values(fieldIndex,pointIndex) );
-        if (diff > tol) {
-          success = false;
-          cout << "FAILURE: in testMultiBasis, MB and sub-basis differ by " << diff << " for child " << childIndex << ", point " << pointIndex;
-          cout << ", fieldIndex " << fieldIndex << endl;
-          cout << mbValues(mbFieldIndex, mbPointIndex) << " != " << values(fieldIndex,pointIndex) << endl;
-          cout << "(mbFieldIndex, mbPointIndex) = (" << mbFieldIndex << ", " << mbPointIndex << "); ";
-          cout << "child " << childIndex << ": (fieldIndex, pointIndex) = (" << fieldIndex << ", " << pointIndex << ")\n";
-        }
-      }
-    }
-  }
-  if ( ! success ) {
-    cout << "MultiBasis values:\n" << mbValues;
-    cout << "sub-basis 1 values:\n" << values1;
-    cout << "sub-basis 2 values:\n" << values2;
-  }
-  return success;
 }
 
 bool DPGTests::testWeightBasis() {

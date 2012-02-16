@@ -140,7 +140,8 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
 
 }
 
-bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords) {
+bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords,
+                                              bool reportErrors) {
   // iterates through all active elements, and checks that each edge agrees with its neighbor basis.
   // first pass is just for PatchBasis, but intent is to extend to apply to MultiBasis, too.
   
@@ -148,7 +149,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   
   double tol = 1e-15; // small tolerance
   double maxDiff = 0.0;
-  
+    
   int numPoints = testPointsRefCoords.dimension(0);
   
   // in 2D, the neighbor's view of the test points will be simply flipped relative to its peer
@@ -224,7 +225,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
             maxDiff = max(diff,maxDiff);
           }
         }
-        if (failedHere) {
+        if (failedHere && reportErrors) {
           cout << "cellID " << cellID << "'s testPoints:\n" << testPointsRefCoords;
           
           cout << "neighbor cellID " << neighbor->cellID() << "'s testPoints:\n" << neighborTestPointsRefCoords;
@@ -234,6 +235,8 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
           
           cout << "values for neighbor cellID " << neighbor->cellID() << ", fluxID " << fluxID << ", side " << neighborSideIndex << ":\n";
           cout << neighborValues;
+          cout << "**** neighborBasesAgreeOnSides suppressing further output re. disagreement ****\n\n";
+          reportErrors = false;
         }
       }
     }
