@@ -169,12 +169,12 @@ class ConfusionInnerProduct : public DPGInnerProduct {
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-		double x = physicalPoints(cellIndex,ptIndex,0);
-		double y = physicalPoints(cellIndex,ptIndex,1);
-		for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
-		  double weight = getWeight(x,y);
-		  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
-		}
+                double x = physicalPoints(cellIndex,ptIndex,0);
+                double y = physicalPoints(cellIndex,ptIndex,1);
+                for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
+                  double weight = getWeight(x,y);
+                  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+                }
               }
             }
           }
@@ -202,8 +202,8 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
     
-    //    return _confusionBilinearForm->getEpsilon() + x*y;
-    return 1.0; // for confection
+    return _confusionBilinearForm->getEpsilon() + x*y;
+    // return 1.0; // for confection
   }
 };
 
