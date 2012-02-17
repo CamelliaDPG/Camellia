@@ -955,6 +955,17 @@ void Solution::solutionValues(FieldContainer<double> &values,
   }  
 }
 
+double Solution::energyErrorTotal() {
+  double energyErrorSquared = 0.0;
+  map<int,double> energyErrorPerCell;
+  energyError(energyErrorPerCell);
+  for (map<int,double>::iterator cellEnergyIt = energyErrorPerCell.begin(); 
+       cellEnergyIt != energyErrorPerCell.end(); cellEnergyIt++) {
+    energyErrorSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
+  }
+  return sqrt(energyErrorSquared);
+}
+
 void Solution::energyError(map<int,double> &energyError){ //FieldContainer<double> &energyError) {
   int numProcs=1;
   int rank=0;

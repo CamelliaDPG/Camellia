@@ -146,7 +146,7 @@ public:
   void computeErrorRepresentation();
   
   void discardInactiveCellCoefficients();
-
+  double energyErrorTotal();
   void energyError(map<int, double> &energyError);
   
   void writeToFile(int trialID, const string &filePath);
