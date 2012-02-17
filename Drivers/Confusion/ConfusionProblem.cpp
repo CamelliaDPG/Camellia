@@ -22,8 +22,8 @@ void ConfusionProblem::rhs(int testVarID, FieldContainer<double> &physicalPoints
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   values.resize(numCells,numPoints);
-  //    values.initialize(1.0);
-  values.initialize(0.0);
+  values.initialize(1.0);
+  //values.initialize(0.0);
 }
 
 // BC

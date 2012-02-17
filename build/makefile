@@ -40,6 +40,7 @@ OBJ_NAMES = DofOrdering \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
+       ConfusionProblem \
        MathInnerProduct \
        Element \
        ElementTests \
@@ -51,6 +52,7 @@ OBJ_NAMES = DofOrdering \
        PoissonRHSLinear \
        Projector \
        MeshTestSuite \
+       MeshRefinementTests \
        SolutionTests \
        VectorizedBasisTestSuite \
        MultiBasis \
@@ -150,6 +152,9 @@ MultiOrderStudy.o: $(DRIVERS_DIR)/MultiOrderStudy/MultiOrderStudy.cpp
 MeshTestSuite.o: $(DRIVERS_DIR)/DPGTests/MeshTestSuite.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
+MeshRefinementTests.o: $(DRIVERS_DIR)/DPGTests/MeshRefinementTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
 SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
@@ -175,6 +180,9 @@ TransientConfusionBilinearForm.o: $(DRIVERS_DIR)/TransientConfusion/TransientCon
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
+
+ConfusionProblem.o: $(DRIVERS_DIR)/Confusion/ConfusionProblem.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
 ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp

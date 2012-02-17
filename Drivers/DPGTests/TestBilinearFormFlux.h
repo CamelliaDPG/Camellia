@@ -41,8 +41,8 @@
 
 class TestBilinearFormFlux : public BilinearForm {
 private:
-  static const string & S_TEST;
-  static const string & S_TRIAL;
+//  static const string & S_TEST;
+//  static const string & S_TRIAL;
   
 public:
   TestBilinearFormFlux() {
@@ -52,9 +52,11 @@ public:
   
   // implement the virtual methods declared in super:
   const string & testName(int testID) {
+    const static string S_TEST = "test";
     return S_TEST;
   }
   const string & trialName(int trialID) {
+    const static string S_TRIAL = "flux";
     return S_TRIAL;
   }
   
@@ -84,8 +86,5 @@ public:
   }
   
 };
-
-const string & TestBilinearFormFlux::S_TEST  = "test";
-const string & TestBilinearFormFlux::S_TRIAL = "trace";
 
 #endif

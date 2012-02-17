@@ -12,8 +12,9 @@
 #include "BasisEvaluation.h"
 
 #include "ConfusionManufacturedSolution.h"
+#include "ConfusionProblem.h"
 #include "ConfusionBilinearForm.h"
-#include "MathInnerProduct.h"
+#include "ConfusionInnerProduct.h"
 
 #include "MeshTestSuite.h" // used for checkMeshConsistency
 
@@ -399,20 +400,25 @@ void MultiBasisTests::setup() {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = 3;
+  int delta_p = 3; // for tests
   int horizontalCells = 2; int verticalCells = 2;
   
   double eps = 1.0; // not really testing for sharp gradients right now--just want to see if things basically work
   double beta_x = 1.0;
   double beta_y = 1.0;
-  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
+  // _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<BilinearForm> confusionBF = _confusionExactSolution->bilinearForm();
+  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem() );
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
+  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
+
+//  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
+
+  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( confusionBF, _mesh ) );
   
-  _confusionSolution = Teuchos::rcp( new Solution(_mesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip) );
+  _confusionSolution = Teuchos::rcp( new Solution(_mesh, confusionProblem, confusionProblem, ip) );
   
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
@@ -438,11 +444,13 @@ void MultiBasisTests::setup() {
   
   _confusionSolution->solve(_useMumps);
   
-  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
-    int fieldID = *fieldIt;
-    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-    _confusionL2ErrorForOriginalMesh[fieldID] = err;
-  }
+//  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+//    int fieldID = *fieldIt;
+//    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+//    _confusionL2ErrorForOriginalMesh[fieldID] = err;
+//  }
+  
+  _confusionEnergyErrorForOriginalMesh = _confusionSolution->energyErrorTotal();
   
   _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis_before_refinement.m");
   
@@ -463,21 +471,32 @@ bool MultiBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   bool success = true;
   
   solution->solve(_useMumps);
-  
-  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
-    int fieldID = *fieldIt;
-    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
-    if (err - originalErr > tol) {
-      cout << "MultiBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
-      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
-      
-      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
-      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
-      
-      success = false;
-    }
+
+  double err = _confusionSolution->energyErrorTotal();
+  double diff = err - _confusionEnergyErrorForOriginalMesh;
+  if (diff > tol) {
+    cout << "MultiBasisTests: increase in error after refinement " << diff << " > tol " << tol << ".\n";
+    
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
+    
+    success = false;
   }
+  
+//  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+//    int fieldID = *fieldIt;
+//    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+//    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
+//    if (err - originalErr > tol) {
+//      cout << "MultiBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
+//      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
+//      
+//      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
+//      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
+//      
+//      success = false;
+//    }
+//  }
   
   return success;
 }

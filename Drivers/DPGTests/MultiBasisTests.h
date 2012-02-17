@@ -30,8 +30,10 @@ private:
   ElementPtr _sw, _se, _nw, _ne;
   
   Teuchos::RCP<Solution> _confusionSolution;
-  Teuchos::RCP<ExactSolution> _confusionExactSolution;
-  map<int, double> _confusionL2ErrorForOriginalMesh; // a baseline to compare against
+  //Teuchos::RCP<ExactSolution> _confusionExactSolution;
+//  map<int, double> _confusionL2ErrorForOriginalMesh; // a baseline to compare against
+  double _confusionEnergyErrorForOriginalMesh; // a baseline to compare against
+
   
   vector<int> _fluxIDs;
   vector<int> _fieldIDs;

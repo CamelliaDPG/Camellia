@@ -12,6 +12,8 @@
 
 #include "ConfusionManufacturedSolution.h"
 #include "ConfusionBilinearForm.h"
+#include "ConfusionProblem.h"
+#include "ConfusionInnerProduct.h"
 #include "MathInnerProduct.h"
 
 #include "MeshTestSuite.h" // used for checkMeshConsistency
@@ -479,25 +481,27 @@ void PatchBasisTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
-  
+
   int H1Order = 3;
+  int delta_p = 3; // for tests
   int horizontalCells = 2; int verticalCells = 2;
-  
-  // setup the solution objects:
-  polyOrder = H1Order - 1;
   
   double eps = 1.0; // not really testing for sharp gradients right now--just want to see if things basically work
   double beta_x = 1.0;
   double beta_y = 1.0;
-  _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
+  // _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<BilinearForm> confusionBF = _confusionExactSolution->bilinearForm();
+  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem() );
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
+  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
+  //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
   
-  _confusionSolution = Teuchos::rcp( new Solution(_mesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip) );
+  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
+  
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( confusionBF, _mesh ) );
+  
+  _confusionSolution = Teuchos::rcp( new Solution(_mesh, confusionProblem, confusionProblem, ip) );
   
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
@@ -523,11 +527,13 @@ void PatchBasisTests::setup() {
   
   _confusionSolution->solve(_useMumps);
   
-  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
-    int fieldID = *fieldIt;
-    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-    _confusionL2ErrorForOriginalMesh[fieldID] = err;
-  }
+  //  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+  //    int fieldID = *fieldIt;
+  //    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+  //    _confusionL2ErrorForOriginalMesh[fieldID] = err;
+  //  }
+  
+  _confusionEnergyErrorForOriginalMesh = _confusionSolution->energyErrorTotal();
   
   _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_before_refinement.m");
   
@@ -548,21 +554,32 @@ bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   bool success = true;
   
   solution->solve(_useMumps);
-  
-  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
-    int fieldID = *fieldIt;
-    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
-    if (err - originalErr > tol) {
-      cout << "PatchBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
-      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
-      
-      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
-      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
-      
-      success = false;
-    }
+
+  double err = _confusionSolution->energyErrorTotal();
+  double diff = err - _confusionEnergyErrorForOriginalMesh;
+  if (diff > tol) {
+    cout << "PatchBasisTests: increase in error after refinement " << diff << " > tol " << tol << ".\n";
+    
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
+    
+    success = false;
   }
+  
+//  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
+//    int fieldID = *fieldIt;
+//    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
+//    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
+//    if (err - originalErr > tol) {
+//      cout << "PatchBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
+//      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
+//      
+//      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+//      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
+//      
+//      success = false;
+//    }
+//  }
   
   return success;
 }
@@ -730,8 +747,9 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   // setup the solution objects:
   int polyOrder = H1Order - 1;
-  
-  Teuchos::RCP<BilinearForm> confusionBF = _confusionExactSolution->bilinearForm();
+    
+  double eps = 1.0, beta_x = 1.0, beta_y = 1.0;
+  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
   Teuchos::RCP<Mesh> multiBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
 
@@ -739,7 +757,9 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
   
-  Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip));
+  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem() );
+  
+  Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, confusionProblem, confusionProblem, ip));
 //  cout << "solving MultiBasis...\n";
   mbSolution->solve(_useMumps);
   
@@ -752,7 +772,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   Teuchos::RCP<Mesh> patchBasisMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order);
   patchBasisMesh->setUsePatchBasis(true);
   
-  Teuchos::RCP<Solution> pbSolution = Teuchos::rcp(new Solution(patchBasisMesh, _confusionExactSolution->bc(), _confusionExactSolution->rhs(), ip));
+  Teuchos::RCP<Solution> pbSolution = Teuchos::rcp(new Solution(patchBasisMesh, confusionProblem, confusionProblem, ip));
 
   bool success = true;
   

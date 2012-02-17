@@ -159,19 +159,29 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
   vector<int>::iterator idIt;
   int interiorVariable;
   bool interiorVariableFound = false;
+  int minSidePolyOrder = INT_MAX;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
-    if (dofOrdering->getNumSidesForVarID(varID) == 1) {
+    int numSides = dofOrdering->getNumSidesForVarID(varID);
+    if (numSides == 1) {
       interiorVariable = varID;
       interiorVariableFound = true;
       break;
+    } else {
+      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+        int polyOrder = BasisFactory::basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) );
+        minSidePolyOrder = min(minSidePolyOrder,polyOrder);
+      }
     }
   }
   if ( ! interiorVariableFound) {
     // all side variables, which is a bit weird
-    TEST_FOR_EXCEPTION( true,
+    // if we have some idea of what the minimum poly order is for a side, then we return that.
+    // otherwise, throw an exception
+    TEST_FOR_EXCEPTION( minSidePolyOrder == INT_MAX,
                        std::invalid_argument,
                        "DofOrdering appears not to have any interior (volume) varIDs--DofOrderingFactory cannot pRefine.");
+    return minSidePolyOrder;
   }
   BasisPtr interiorBasis = dofOrdering->getBasis(interiorVariable);
   return BasisFactory::basisPolyOrder(interiorBasis);

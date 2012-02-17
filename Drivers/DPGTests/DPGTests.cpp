@@ -48,7 +48,6 @@
 
 #include "TestBilinearFormDx.h"
 #include "TestBilinearFormTrace.h"
-#include "TestBilinearFormFlux.h"
 #include "TestBilinearFormAnalyticBoundaryIntegral.h"
 #include "TestRHSOne.h"
 #include "TestRHSLinear.h"
@@ -67,6 +66,7 @@
 #include "MultiBasisTests.h"
 #include "PatchBasisTests.h"
 #include "ElementTests.h"
+#include "MeshRefinementTests.h"
 
 #include "Projector.h"
 #include "SimpleFunction.h"
@@ -125,9 +125,10 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  testSuites.push_back( Teuchos::rcp( new ElementTests() ) );
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests() ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests() ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
+  testSuites.push_back( Teuchos::rcp( new ElementTests() ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite() ) );
