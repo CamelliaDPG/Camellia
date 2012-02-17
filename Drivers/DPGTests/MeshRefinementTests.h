@@ -88,13 +88,17 @@ class MeshRefinementTests : public TestSuite {
   ElementPtr _B1patch;
   ElementPtr _C4patch, _C5patch;
   
+  double _h, _h_small;
+  
   Teuchos::RCP< TestBilinearFormFlux > _fluxBilinearForm;
 
-  void preStiffnessExpectedUniform(FieldContainer<double> &preStiff, double h, ElementTypePtr elemType);
+  void preStiffnessExpectedUniform(FieldContainer<double> &preStiff, double h, ElementTypePtr elemType,
+                                   FieldContainer<double> &sideParities);
   void preStiffnessExpectedPatch(FieldContainer<double> &preStiff, double h, 
                                  const map<int,int> &sidesWithBiggerNeighborToIndexInParentSide,
-                                 ElementTypePtr elemType);
-  void preStiffnessExpectedMulti(FieldContainer<double> &preStiff, double h, const set<int> &brokenSides, ElementTypePtr elemType);
+                                 ElementTypePtr elemType, FieldContainer<double> &sideParities);
+  void preStiffnessExpectedMulti(FieldContainer<double> &preStiff, double h, const set<int> &brokenSides, ElementTypePtr elemType,
+                                 FieldContainer<double> &sideParities);
   
   void setup();
   void teardown();

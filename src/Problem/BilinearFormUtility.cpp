@@ -316,6 +316,17 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   }
 }
 
+void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID) {
+  Teuchos::RCP<DofOrdering> trialOrder = mesh->getElement(cellID)->elementType()->trialOrderPtr;
+  Teuchos::RCP<DofOrdering> testOrder  = mesh->getElement(cellID)->elementType()->testOrderPtr;
+  shards::CellTopology     cellTopo  = *(mesh->getElement(cellID)->elementType()->cellTopoPtr);
+  FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+  FieldContainer<double> cellSideParities  = mesh->cellSideParitiesForCell(cellID);
+  int numCells = 1;
+  stiffness.resize(numCells,testOrder->totalDofs(),trialOrder->totalDofs());
+  computeStiffnessMatrix(stiffness,mesh->bilinearForm(),trialOrder,testOrder,cellTopo,physicalCellNodes,cellSideParities);
+}
+
 void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
                                                  shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,

@@ -458,14 +458,18 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   // determine test ordering for each child
   for (int childIndex=0; childIndex<numChildren; childIndex++) {
     int maxDegree = childTrialOrders[childIndex]->maxBasisDegree();
-    childTestOrders[childIndex] = _dofOrderingFactory.testOrdering(pTrial + _pToAddToTest, *(childTopos[childIndex]));
+    int testOrder = max(pTrial,maxDegree) + _pToAddToTest;
+    
+    childTestOrders[childIndex] = _dofOrderingFactory.testOrdering(testOrder, *(childTopos[childIndex]));
   }
 
   vector<int> childCellIDs;
   // create ElementTypePtr for each child, and add child to mesh...
   for (int childIndex=0; childIndex<numChildren; childIndex++) {
     int maxDegree = childTrialOrders[childIndex]->maxBasisDegree();
-    childTestOrders[childIndex] = _dofOrderingFactory.testOrdering(maxDegree + _pToAddToTest, *(childTopos[childIndex]));
+    int testOrder = max(pTrial,maxDegree) + _pToAddToTest;
+    
+    childTestOrders[childIndex] = _dofOrderingFactory.testOrdering(testOrder, *(childTopos[childIndex]));
 
     ElementTypePtr childType = _elementTypeFactory.getElementType(childTrialOrders[childIndex], 
                                                                   childTestOrders[childIndex], 
@@ -1088,6 +1092,16 @@ FieldContainer<double> & Mesh::cellSideParities( ElementTypePtr elemTypePtr ) {
   int partitionNumber     = 0;
 #endif
   return _partitionedCellSideParitiesForElementType[ partitionNumber ][ elemTypePtr.get() ];
+}
+
+FieldContainer<double> Mesh::cellSideParitiesForCell( int cellID ) {
+  vector<int> parities = _cellSideParitiesForCellID[cellID];
+  int numSides = parities.size();
+  FieldContainer<double> cellSideParities(1,numSides);
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    cellSideParities(0,sideIndex) = parities[sideIndex];
+  }
+  return cellSideParities;
 }
 
 vector<double> Mesh::getCellCentroid(int cellID){

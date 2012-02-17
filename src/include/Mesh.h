@@ -146,6 +146,7 @@ public:
                               bool useTriangles);
   
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr);
+  FieldContainer<double> cellSideParitiesForCell( int cellID );
   
   BilinearForm & bilinearForm();
   

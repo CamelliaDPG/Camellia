@@ -68,9 +68,12 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, EFunctionS
 BasisPtr BasisFactory::getBasis(int &basisRank,
                                 int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
 
+  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+    TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
+  }
+  
   BasisPtr basis;
-  pair< pair<int,int>, EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey),
-                                                                 fs );
+  pair< pair<int,int>, EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   
   if ( _existingBasis.find(key) != _existingBasis.end() ) {
     basis = _existingBasis[key];

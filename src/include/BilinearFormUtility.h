@@ -39,6 +39,8 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
+#include "Mesh.h"
+
 using namespace std;
 using namespace Intrepid;
 
@@ -72,6 +74,8 @@ public:
                                      shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                      FieldContainer<double> &cellSideParities);
 
+  static void computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
+  
   // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
   static void computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
                                             FieldContainer<double> &optimalTestWeights,

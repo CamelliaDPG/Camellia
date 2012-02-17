@@ -8,11 +8,15 @@
 
 #include "DofOrdering.h"
 #include "MeshRefinementTests.h"
+#include "BilinearFormUtility.h"
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
 void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &preStiff, 
-                                                      double h, ElementTypePtr elemType) {
+                                                      double h, ElementTypePtr elemType,
+                                                      FieldContainer<double> &sideParities) {
+  double h_ratio = h / 2.0; // because the master line has length 2...
+  
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
   DofOrderingPtr testOrder = elemType->testOrderPtr;
   preStiff.resize(1,testOrder->totalDofs(),trialOrder->totalDofs());
@@ -56,7 +60,7 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
   trialBasis->getValues(trialValues, refPoints1D, Intrepid::OPERATOR_VALUE);
   for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++) {
     for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      if (abs(testValues(trialOrdinal,pointIndex)-1.0) < tol) {
+      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol) {
         v_ordinals[pointIndex] = trialOrdinal;
       }
     }
@@ -78,22 +82,24 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
       int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
       int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
       int trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
-      preStiff(0,testDofIndex,trialDofIndex) = 2.0/3.0 * h; // computed manually
+      preStiff(0,testDofIndex,trialDofIndex) = 2.0/3.0 * h_ratio * sideParities(0,sideIndex); // "2/3" computed manually
       testOrdinal = phi_ordinals[ phiNodes[1-nodeIndex] ]; // ordinal of the test that "disagrees"
       testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
-      preStiff(0,testDofIndex,trialDofIndex) = 1.0/3.0 * h; // computed manually
+      preStiff(0,testDofIndex,trialDofIndex) = 1.0/3.0 * h_ratio * sideParities(0,sideIndex); // "1/3" computed manually
     }
   }
 }
 
 void MeshRefinementTests::preStiffnessExpectedPatch(FieldContainer<double> &preStiff, double h, 
                                                     const map<int,int> &sidesWithBiggerNeighborToIndexInParentSide,
-                                                    ElementTypePtr elemType) {
+                                                    ElementTypePtr elemType,
+                                                    FieldContainer<double> &sideParities) {
   
 }
 
 void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preStiff, double h,
-                                                    const set<int> &brokenSides, ElementTypePtr elemType) {
+                                                    const set<int> &brokenSides, ElementTypePtr elemType,
+                                                    FieldContainer<double> &sideParities) {
   
 }
 
@@ -121,6 +127,9 @@ void MeshRefinementTests::setup() {
   int H1Order = 2;  // means linear for fluxes
   int delta_p = -1; // means tests will likewise be (bi-)linear
   int horizontalCells = 2; int verticalCells = 1;
+  
+  _h = 1.0;
+  _h_small = 0.5;
   
   _fluxBilinearForm = Teuchos::rcp( new TestBilinearFormFlux() );
   
@@ -218,9 +227,83 @@ void MeshRefinementTests::runTests(int &numTestsRun, int &numTestsPassed) {
 }
 
 bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
-  bool success = false;
+  bool success = true;
   
-  cout << "testUniformMeshStiffnessMatrices unimplemented.\n";
+  double tol = 1e-14;
+  double maxDiff;
+  
+  FieldContainer<double> expectedValues;
+  FieldContainer<double> physicalCellNodes;
+  FieldContainer<double> actualValues;
+  FieldContainer<double> sideParities;
+  
+  // test that _B1{multi|patch} and _C4{multi|patch} have the expected values
+  
+  // B1: (large element)
+  // multi:
+  // determine expected values:
+  ElementTypePtr elemType = _B1multi->elementType();
+  sideParities = _multiB->cellSideParitiesForCell(_B1multi->cellID());
+  preStiffnessExpectedUniform(expectedValues,_h,elemType,sideParities);
+  // get actual values:
+  physicalCellNodes = _multiB->physicalCellNodesForCell(_B1multi->cellID());
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _multiB, _B1multi->cellID());
+
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in uniform mesh B (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
+  
+  // patch:
+  // determine expected values:
+  elemType = _B1patch->elementType();
+  sideParities = _patchB->cellSideParitiesForCell(_B1patch->cellID());
+  preStiffnessExpectedUniform(expectedValues,_h,elemType,sideParities);
+  // get actual values:
+  physicalCellNodes = _patchB->physicalCellNodesForCell(_B1patch->cellID());
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchB, _B1patch->cellID());
+  
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in uniform mesh B (with usePatchBasis=true) stiffness computation; maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
+  
+  // C4: (small element)
+  // multi:
+  // determine expected values:
+  elemType = _C4multi->elementType();
+  sideParities = _multiC->cellSideParitiesForCell(_C4multi->cellID());
+  preStiffnessExpectedUniform(expectedValues,_h_small,elemType,sideParities);
+  // get actual values:
+  physicalCellNodes = _multiC->physicalCellNodesForCell(_C4multi->cellID());
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _multiC, _C4multi->cellID());
+  
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in uniform mesh C (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
+  
+  // patch:
+  // determine expected values:
+  elemType = _C4patch->elementType();
+  sideParities = _patchC->cellSideParitiesForCell(_C4patch->cellID());
+  preStiffnessExpectedUniform(expectedValues,_h_small,elemType,sideParities);
+  // get actual values:
+  physicalCellNodes = _patchC->physicalCellNodesForCell(_C4patch->cellID());
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchC, _C4patch->cellID());
+  
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in uniform mesh C (with usePatchBasis=true) stiffness computation; maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
   
   return success;
 }
@@ -230,7 +313,7 @@ bool MeshRefinementTests::testMultiBasisStiffnessMatrices() {
   
   cout << "testMultiBasisStiffnessMatrices unimplemented.\n";
   
-  return success;  
+  return success;
 }
 
 bool MeshRefinementTests::testPatchBasisStiffnessMatrices() {
