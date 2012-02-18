@@ -92,9 +92,13 @@ class MeshRefinementTests : public TestSuite {
   
   Teuchos::RCP< TestBilinearFormFlux > _fluxBilinearForm;
   
+  bool checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh);
+  bool checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID);
+  
   bool checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh);
   bool checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID);
   
+  void multiBrokenSides(set<int> &brokenSideSet, ElementPtr elem);
   void patchParentSideIndices(map<int,int> &parentSideIndices, Teuchos::RCP<Mesh> mesh, ElementPtr elem);
   
   void preStiffnessExpectedUniform(FieldContainer<double> &preStiff, double h, ElementTypePtr elemType,

@@ -12,6 +12,60 @@
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
+bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh) {
+  bool success = true;
+  int numElements = mesh->numActiveElements();
+  for (int cellIndex = 0; cellIndex < numElements; cellIndex++) {
+    if ( ! checkMultiElementStiffness(mesh, mesh->getActiveElement(cellIndex)->cellID()) ) {
+      success = false;
+    }
+  }
+  return success;  
+}
+
+bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID) {
+  bool success = true;
+  
+  double tol = 1e-14;
+  double maxDiff;
+  
+  FieldContainer<double> expectedValues;
+  FieldContainer<double> physicalCellNodes;
+  FieldContainer<double> actualValues;
+  FieldContainer<double> sideParities;
+  
+  set<int> brokenSideSet;
+  
+  ElementPtr elem = mesh->getElement(cellID);
+  
+  // if the element is a child, then h = _h_small; otherwise, h = _h:
+  double h = elem->isChild() ? _h_small : _h;
+  
+  // determine expected values:
+  multiBrokenSides(brokenSideSet,elem);
+  ElementTypePtr elemType = elem->elementType();
+  sideParities = mesh->cellSideParitiesForCell(cellID);
+  preStiffnessExpectedMulti(expectedValues,h,brokenSideSet,elemType,sideParities);
+  
+//  if (cellID == 1) {
+//    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
+//    cout << expectedValues;
+//  }
+  
+  // get actual values:
+  physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, mesh, cellID);
+  
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in element " << cellID <<  " stiffness computation (using Multi-Basis); maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
+  
+  return success;
+}
+
 bool MeshRefinementTests::checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
   int numElements = mesh->numActiveElements();
@@ -58,6 +112,24 @@ bool MeshRefinementTests::checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh, in
     success = false;
   }
   return success;
+}
+
+void MeshRefinementTests::multiBrokenSides(set<int> &brokenSideSet, ElementPtr elem) {
+  brokenSideSet.clear();
+  int numSides = elem->numSides();
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {  
+    Element* neighbor;
+    int sideIndexInNeighbor;
+    elem->getNeighbor(neighbor, sideIndexInNeighbor, sideIndex);
+    if (neighbor->cellID() == -1) {
+      // boundary or this is a small side; either way, not broken
+      continue;
+    }
+    if (neighbor->isParent() && (neighbor->childIndicesForSide(sideIndexInNeighbor).size() > 1)) {
+      // if neighbor is a parent *and* broken along the given side, then MultiBasis…
+      brokenSideSet.insert(sideIndex);
+    }
+  }
 }
 
 void MeshRefinementTests::patchParentSideIndices(map<int,int> &parentSideIndices, Teuchos::RCP<Mesh> mesh, ElementPtr elem) {
@@ -263,7 +335,112 @@ void MeshRefinementTests::preStiffnessExpectedPatch(FieldContainer<double> &preS
 void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preStiff, double h,
                                                     const set<int> &brokenSides, ElementTypePtr elemType,
                                                     FieldContainer<double> &sideParities) {
+  double h_ratio = h / 2.0; // because the master line has length 2...
   
+  DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+  DofOrderingPtr testOrder = elemType->testOrderPtr;
+  preStiff.resize(1,testOrder->totalDofs(),trialOrder->totalDofs());
+  int testID  =  testOrder->getVarIDs()[0]; // just one
+  int trialID = trialOrder->getVarIDs()[0]; // just one (the flux)
+  
+  int numPoints = 4;
+  FieldContainer<double> refPoints2D(numPoints,2); // quad nodes (for bilinear basis)
+  refPoints2D(0,0) = -1.0;
+  refPoints2D(0,1) = -1.0;
+  refPoints2D(1,0) =  1.0;
+  refPoints2D(1,1) = -1.0;
+  refPoints2D(2,0) =  1.0;
+  refPoints2D(2,1) =  1.0;
+  refPoints2D(3,0) = -1.0;
+  refPoints2D(3,1) =  1.0;
+  
+  int phi_ordinals[numPoints]; // phi_i = 1 at node x_i, and 0 at other nodes
+  
+  double tol = 1e-15;
+  BasisPtr testBasis = testOrder->getBasis(testID);
+  FieldContainer<double> testValues(testBasis->getCardinality(),refPoints2D.dimension(0));
+  testBasis->getValues(testValues, refPoints2D, Intrepid::OPERATOR_VALUE);
+  for (int testOrdinal=0; testOrdinal<testBasis->getCardinality(); testOrdinal++) {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+      if (abs(testValues(testOrdinal,pointIndex)-1.0) < tol) {
+        phi_ordinals[pointIndex] = testOrdinal;
+      }
+    }
+  }
+  
+  BasisPtr trialBasis = trialOrder->getBasis(trialID,0); // uniform: all sides should be the same
+  
+  numPoints = 2;
+  FieldContainer<double> refPoints1D(numPoints,1); // line nodes (for linear basis)
+  refPoints2D(0,0) = -1.0;
+  refPoints2D(1,0) = 1.0;
+  int v_ordinals[numPoints];
+  
+  FieldContainer<double> trialValues(trialBasis->getCardinality(),refPoints1D.dimension(0));
+  trialBasis->getValues(trialValues, refPoints1D, Intrepid::OPERATOR_VALUE);
+  for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++) {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol) {
+        v_ordinals[pointIndex] = trialOrdinal;
+      }
+    }
+  }
+  
+  map<int,pair<int,int> > phiNodesForSide; // sideIndex --> pair( phiNodeIndex for v0, phiNodeIndex for v1)
+  phiNodesForSide[0] = make_pair(0,1);
+  phiNodesForSide[1] = make_pair(1,2);
+  phiNodesForSide[2] = make_pair(2,3);
+  phiNodesForSide[3] = make_pair(3,0);
+  
+  preStiff.initialize(0.0);
+  int numSides = 4;
+  int phiNodes[2];
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    phiNodes[0] = phiNodesForSide[sideIndex].first;
+    phiNodes[1] = phiNodesForSide[sideIndex].second;
+    
+    double agreeValue[2], disagreeValue[2];
+    
+    agreeValue[0]    = 2.0 / 3.0;  // for non-multi bases, if nodes for phi and v0 line up
+    disagreeValue[0] = 1.0 / 3.0;  // for non-multi bases, if nodes for phi and v0 don't line up
+    agreeValue[1]    = 2.0 / 3.0;  // for non-multi bases, if nodes for phi and v1 line up
+    disagreeValue[1] = 1.0 / 3.0;  // for non-multi bases, if nodes for phi and v1 don't line up
+    
+    bool hasMultiBasis = (brokenSides.find(sideIndex) != brokenSides.end());
+    int numSubSides = hasMultiBasis ? 2 : 1; // because of our setup, max subsides is 2
+        
+    for (int subSideIndex=0; subSideIndex < numSubSides; subSideIndex++) {
+      if (hasMultiBasis) {
+        // here, the meaning of agreement: if phi belongs to the first node in the big element edge and the little edge node is the first, that's agreement 
+        if (subSideIndex == 0) {
+          agreeValue[0]    = 5.0 / 12.0;
+          disagreeValue[0] = 1.0 / 12.0;
+          agreeValue[1]    = 1.0 /  6.0;
+          disagreeValue[1] = 1.0 /  3.0;
+        } else {
+          agreeValue[0]    = 1.0 /  6.0;
+          disagreeValue[0] = 1.0 /  3.0;
+          agreeValue[1]    = 5.0 / 12.0;
+          disagreeValue[1] = 1.0 / 12.0;
+        }
+      }
+      for (int nodeIndex=0; nodeIndex<2; nodeIndex++) { // loop over the line's two nodes
+        int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
+        int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
+        int trialDofIndex;
+        if (hasMultiBasis) {
+          trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex,subSideIndex);
+//          cout << "trialDofIndex for trialID " << trialID << ", node " << nodeIndex << ", subSideIndex " << subSideIndex << ": " << trialDofIndex << endl;
+        } else {
+          trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
+        }
+        preStiff(0,testDofIndex,trialDofIndex) = agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+        testOrdinal = phi_ordinals[ phiNodes[1-nodeIndex] ]; // ordinal of the test that "disagrees"
+        testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
+        preStiff(0,testDofIndex,trialDofIndex) = disagreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+      }
+    }
+  }
 }
 
 void MeshRefinementTests::setup() {
@@ -488,9 +665,19 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
 }
 
 bool MeshRefinementTests::testMultiBasisStiffnessMatrices() {
-  bool success = false;
+  bool success = true;
   
-  cout << "testMultiBasisStiffnessMatrices unimplemented.\n";
+  if ( ! checkMultiElementStiffness(_multiA) ) {
+    success = false;
+  }
+  
+  if ( ! checkMultiElementStiffness(_multiB) ) {
+    success = false;
+  }
+  
+  if ( ! checkMultiElementStiffness(_multiC) ) {
+    success = false;
+  }
   
   return success;
 }
