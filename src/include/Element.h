@@ -63,6 +63,8 @@ public:
   
   Teuchos::RCP< ElementType > elementType() { return _elemTypePtr; }
   void setElementType( Teuchos::RCP< ElementType > newElementType) { _elemTypePtr = newElementType; }
+  
+  pair<int,int> ancestralNeighborCellIDForSide(int sideIndex);
   int cellID() { return _cellID; }
   int cellIndex() { return _cellIndex; }
   void setCellIndex(int newCellIndex) { _cellIndex = newCellIndex; }

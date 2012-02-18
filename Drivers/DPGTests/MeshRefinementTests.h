@@ -78,20 +78,22 @@ class MeshRefinementTests : public TestSuite {
   
   // MultiBasis meshes:
   Teuchos::RCP<Mesh> _multiA, _multiB, _multiC;
-  ElementPtr _A1multi, _A4multi, _A5multi;
+  ElementPtr _A1multi, _A3multi, _A4multi, _A5multi;
   ElementPtr _B1multi;
   ElementPtr _C4multi, _C5multi;  
   
   // PatchBasis meshes:
   Teuchos::RCP<Mesh> _patchA, _patchB, _patchC;
-  ElementPtr _A1patch, _A4patch, _A5patch;
+  ElementPtr _A1patch, _A3patch, _A4patch, _A5patch;
   ElementPtr _B1patch;
   ElementPtr _C4patch, _C5patch;
   
   double _h, _h_small;
   
   Teuchos::RCP< TestBilinearFormFlux > _fluxBilinearForm;
-
+  
+  void patchParentSideIndices(map<int,int> &parentSideIndices, Teuchos::RCP<Mesh> mesh, ElementPtr elem);
+  
   void preStiffnessExpectedUniform(FieldContainer<double> &preStiff, double h, ElementTypePtr elemType,
                                    FieldContainer<double> &sideParities);
   void preStiffnessExpectedPatch(FieldContainer<double> &preStiff, double h, 
@@ -109,6 +111,9 @@ public:
   bool testUniformMeshStiffnessMatrices(); // a baseline test: sanity check on our setup
   bool testMultiBasisStiffnessMatrices();
   bool testPatchBasisStiffnessMatrices();
+  
+  bool testMultiBasisSideParities();
+  bool testPatchBasisSideParities();
 };
 
 #endif

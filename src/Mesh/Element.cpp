@@ -65,10 +65,27 @@ void Element::addChild(Teuchos::RCP< Element > childPtr) {
   childPtr->setParent(this, parentSideLookupTable);
 }
 
+pair<int,int> Element::ancestralNeighborCellIDForSide(int sideIndex) {
+  Element* elem = this;
+  while (elem->getNeighborCellID(sideIndex) == -1) {
+    if ( ! elem->isChild() ) {
+      return make_pair(-1,-1);
+    }
+    sideIndex = elem->parentSideForSideIndex(sideIndex);
+    if (sideIndex == -1) return make_pair(-1,-1);
+    elem = elem->getParent();
+  }
+  // once we get here, we have the appropriate ancestor:
+  int elemSideIndexInNeighbor = elem->getSideIndexInNeighbor(sideIndex);
+  if (elemSideIndexInNeighbor >= 4) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
+  }
+  return make_pair(elem->cellID(),elemSideIndexInNeighbor);
+}
+
 Teuchos::RCP< Element > Element::getChild(int childIndex) {
   return _children[childIndex];
 }
-
 
 void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
                                                const FieldContainer<double> &refPoints) {

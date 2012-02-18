@@ -558,6 +558,17 @@ ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr el
 }
 
 ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor) {
+  // the commented-out code here is an effort to move the logic for this into element, where it belongs
+  // (but there's a bug either here or in ancestralNeighborCellIDForSide(sideIndex), which causes tests to
+  //   fail with exceptions indicating that multi-basis isn't applied where it should be...)
+//  pair<int,int> neighborCellAndSide = elem->ancestralNeighborCellIDForSide(sideIndex);
+//  elemSideIndexInNeighbor = neighborCellAndSide.second;
+//  int neighborCellID = neighborCellAndSide.first;
+//  if (neighborCellID == -1) {
+//    return _nullPtr;
+//  } else {
+//    return _elements[neighborCellID];
+//  }
   // returns neighbor for side, or the neighbor of the ancestor who has a neighbor along shared side
   while (elem->getNeighborCellID(sideIndex) == -1) {
     if ( ! elem->isChild() ) {
