@@ -1235,6 +1235,10 @@ vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
   }
 }
 
+ElementPtr Mesh::getActiveElement(int index) {
+  return _activeElements[index];
+}
+
 DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
@@ -1246,8 +1250,6 @@ ElementPtr Mesh::getElement(int cellID) {
 ElementTypeFactory & Mesh::getElementTypeFactory() {
   return _elementTypeFactory;
 }
-
-
 
 void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                                  ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
@@ -1747,6 +1749,10 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     varIDsToUpgrade[varID] = multiBasis;
   }
   return varIDsToUpgrade;
+}
+
+int Mesh::numActiveElements() {
+  return _activeElements.size();
 }
 
 int Mesh::numElements() {

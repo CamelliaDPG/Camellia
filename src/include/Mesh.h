@@ -173,7 +173,7 @@ public:
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
   
-  vector< ElementPtr > & activeElements();  
+  vector< ElementPtr > & activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
   vector< ElementPtr > & elements();
@@ -181,7 +181,8 @@ public:
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr);
   
   vector< ElementPtr > elementsInPartition(int partitionNumber);
-
+  
+  ElementPtr getActiveElement(int index);
   DofOrderingFactory & getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
@@ -203,6 +204,8 @@ public:
   
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   static int neighborDofPermutation(int dofIndex, int numDofsForSide);
+  
+  int numActiveElements();
   
   int numGlobalDofs();
   

@@ -12,6 +12,54 @@
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
+bool MeshRefinementTests::checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh) {
+  bool success = true;
+  int numElements = mesh->numActiveElements();
+  for (int cellIndex = 0; cellIndex < numElements; cellIndex++) {
+    if ( ! checkPatchElementStiffness(mesh, mesh->getActiveElement(cellIndex)->cellID()) ) {
+      success = false;
+    }
+  }
+  return success;
+}
+
+bool MeshRefinementTests::checkPatchElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID) {
+  bool success = true;
+  
+  double tol = 1e-14;
+  double maxDiff;
+  
+  FieldContainer<double> expectedValues;
+  FieldContainer<double> physicalCellNodes;
+  FieldContainer<double> actualValues;
+  FieldContainer<double> sideParities;
+  
+  map<int,int> parentSideMap;
+  
+  ElementPtr elem = mesh->getElement(cellID);
+
+  // if the element is a child, then h = _h_small; otherwise, h = _h:
+  double h = elem->isChild() ? _h_small : _h;
+  
+  // determine expected values:
+  patchParentSideIndices(parentSideMap,mesh,elem);
+  ElementTypePtr elemType = elem->elementType();
+  sideParities = mesh->cellSideParitiesForCell(cellID);
+  preStiffnessExpectedPatch(expectedValues,h,parentSideMap,elemType,sideParities);
+  
+  // get actual values:
+  physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, mesh, cellID);
+  
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Failure in element " << cellID <<  " stiffness computation; maxDiff = " << maxDiff << endl;
+    cout << "expectedValues:\n" << expectedValues;
+    cout << "actualValues:\n" << actualValues;
+    success = false;
+  }
+  return success;
+}
+
 void MeshRefinementTests::patchParentSideIndices(map<int,int> &parentSideIndices, Teuchos::RCP<Mesh> mesh, ElementPtr elem) {
   // returns map from child side index --> child index in the matching parent side (0 or 1)
   parentSideIndices.clear();
@@ -448,91 +496,17 @@ bool MeshRefinementTests::testMultiBasisStiffnessMatrices() {
 }
 
 bool MeshRefinementTests::testPatchBasisStiffnessMatrices() {
-  bool success = false;
+  bool success = true;
   
-  double tol = 1e-14;
-  double maxDiff;
-  
-  FieldContainer<double> expectedValues;
-  FieldContainer<double> physicalCellNodes;
-  FieldContainer<double> actualValues;
-  FieldContainer<double> sideParities;
-  
-  map<int,int> parentSideMap;
-  
-  // test that _A{3,4}patch and have the expected values
-  
-  // A3: (small element)
-  // determine expected values:
-  patchParentSideIndices(parentSideMap,_patchA,_A3patch);
-  ElementTypePtr elemType = _A3patch->elementType();
-  sideParities = _patchA->cellSideParitiesForCell(_A3patch->cellID());
-  preStiffnessExpectedPatch(expectedValues,_h_small,parentSideMap,elemType,sideParities);
-
-  // get actual values:
-  physicalCellNodes = _patchA->physicalCellNodesForCell(_A3patch->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchA, _A3patch->cellID());
-
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Failure in element _A3patch stiffness computation; maxDiff = " << maxDiff << endl;
-    cout << "expectedValues:\n" << expectedValues;
-    cout << "actualValues:\n" << actualValues;
-    success = false;
-  }
-    
-  // A4: (small element)
-  // determine expected values:
-  patchParentSideIndices(parentSideMap,_patchA,_A4patch);
-  elemType = _A4patch->elementType();
-  sideParities = _patchA->cellSideParitiesForCell(_A4patch->cellID());
-  preStiffnessExpectedPatch(expectedValues,_h_small,parentSideMap,elemType,sideParities);
-  
-  // get actual values:
-  physicalCellNodes = _patchA->physicalCellNodesForCell(_A4patch->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchA, _A4patch->cellID());
-  
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Failure in element _A4patch stiffness computation; maxDiff = " << maxDiff << endl;
-    cout << "expectedValues:\n" << expectedValues;
-    cout << "actualValues:\n" << actualValues;
+  if ( ! checkPatchElementStiffness(_patchA) ) {
     success = false;
   }
   
-  // *******  following are elements that should have just "normal" values (no PatchBasis interaction) *******
-  
-  // A1: (large element)
-  // determine expected values:
-  patchParentSideIndices(parentSideMap,_patchA,_A1patch);
-  elemType = _A1patch->elementType();
-  sideParities = _patchA->cellSideParitiesForCell(_A1patch->cellID());
-  preStiffnessExpectedPatch(expectedValues,_h,parentSideMap,elemType,sideParities);
-  
-  // get actual values:
-  physicalCellNodes = _patchA->physicalCellNodesForCell(_A1patch->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchA, _A1patch->cellID());
-  
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Failure in element _A1patch stiffness computation; maxDiff = " << maxDiff << endl;
-    cout << "expectedValues:\n" << expectedValues;
-    cout << "actualValues:\n" << actualValues;
+  if ( ! checkPatchElementStiffness(_patchB) ) {
     success = false;
   }
   
-  // A5: (small element)
-  // determine expected values:
-  patchParentSideIndices(parentSideMap,_patchA,_A5patch);
-  elemType = _A5patch->elementType();
-  sideParities = _patchA->cellSideParitiesForCell(_A5patch->cellID());
-  preStiffnessExpectedPatch(expectedValues,_h_small,parentSideMap,elemType,sideParities);
-  
-  // get actual values:
-  physicalCellNodes = _patchA->physicalCellNodesForCell(_A5patch->cellID());
-  BilinearFormUtility::computeStiffnessMatrixForCell(actualValues, _patchA, _A5patch->cellID());
-  
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Failure in element _A5patch stiffness computation; maxDiff = " << maxDiff << endl;
-    cout << "expectedValues:\n" << expectedValues;
-    cout << "actualValues:\n" << actualValues;
+  if ( ! checkPatchElementStiffness(_patchC) ) {
     success = false;
   }
   
