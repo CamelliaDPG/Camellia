@@ -65,6 +65,7 @@ class Mesh {
   typedef Teuchos::RCP< Element > ElementPtr;
   
   int _pToAddToTest;
+  bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
@@ -233,6 +234,8 @@ public:
   void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
     
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
+  
+  void setEnforceMultiBasisFluxContinuity( bool value );
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
   

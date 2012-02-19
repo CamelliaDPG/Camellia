@@ -46,6 +46,8 @@
 #include "BilinearFormUtility.h"
 #include "BasisValueCache.h"
 
+#include "Solution.h"
+
 bool BilinearFormUtility::_warnAboutZeroRowsAndColumns = true;
 
 void BilinearFormUtility::setWarnAboutZeroRowsAndColumns( bool value ) {
@@ -331,7 +333,14 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
                                                  shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                                  FieldContainer<double> &cellSideParities) {
-  
+  Teuchos::RCP<Solution> prevSoln = Teuchos::rcp( (Solution*) NULL);
+  computeStiffnessMatrix(stiffness,bilinearForm,trialOrdering,testOrdering,cellTopo,physicalCellNodes,cellSideParities,prevSoln);
+}
+
+void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+                                                 Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                                 FieldContainer<double> &cellSideParities, Teuchos::RCP<Solution> prevSoln) {
   // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
   //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
   // stiffness dimensions are: (numCells, # testOrdering Dofs, # trialOrdering Dofs)
@@ -804,6 +813,8 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
 
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
 
+  FieldContainer<double> rhsPointValues; // the rhs method will resize...	
+  
   rhsVector.initialize(0.0);
     
   for (int optTestIndex=0; optTestIndex < numOptTestFunctions; optTestIndex++) {
@@ -840,7 +851,6 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
           FieldContainer<double> testValuesTransformedWeightedWeighted = *testValuesTransformedWeighted;
           weightCellBasisValues(testValuesTransformedWeightedWeighted, weights, testDofOffset);
           
-          FieldContainer<double> rhsPointValues; // the rhs method will resize...	
           rhs.rhs(testID,operatorIndex,physCubPoints,rhsPointValues);
           
           //cout << "rhsPointValues for testID " << testID << ":" << endl << rhsPointValues;

@@ -403,6 +403,34 @@ BasisPtr MultiBasis::getSubBasis(int basisIndex) {
   return _bases[basisIndex];
 }
 
+vector< pair<int,int> > MultiBasis::adjacentVertexOrdinals() { // NOTE: prototype, untested code!
+  // assumes that each basis has one vertex at each end, and the last one of one basis is adjacent to the
+  // first of the next... (i.e. very much depends on being a 1D basis)
+  // (we can also precompute this on construction, or lazily store construct and store it once asked...)
+  int dofOffset = 0;
+  vector< pair<int, int> > adjacencies;
+  int numBases = _bases.size();
+  for (int basisIndex=0; basisIndex<numBases; basisIndex++) {
+    BasisPtr basis = _bases[basisIndex];
+    
+    if (basisIndex > 0) { // as in, this is not our first time through
+      // then pair the last one in the previous basis with the first in this basis
+      adjacencies.push_back( make_pair( dofOffset - 1, dofOffset ) );
+    }
+    
+    if ( BasisFactory::isMultiBasis(basis) ) {
+      MultiBasis* multiBasis = (MultiBasis*) basis.get();
+      vector< pair<int,int> > subAdjacencies = multiBasis->adjacentVertexOrdinals();
+      for (vector< pair<int,int> >::iterator adjIt = subAdjacencies.begin();
+           adjIt != subAdjacencies.end(); adjIt++) {
+        adjacencies.push_back( make_pair( adjIt->first + dofOffset, adjIt->second + dofOffset ) );
+      }
+    }
+    dofOffset += basis->getCardinality();
+  }
+  return adjacencies;
+}
+
 int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal) {
   int numBases = _bases.size();
   int maxReachableLeaf = 0; // for a given basis
@@ -422,12 +450,11 @@ int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdina
         MultiBasis* multiBasis = (MultiBasis*) basis.get();
         return dofOffset + multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal, leafOrdinal - previousMaxReachable);
       } else {
-        return dofOffset + basisDofOrdinal; // this happens to work out correctly even if basisDofOrdinal refers to the shared Dof
-        // (but we'll need to be more careful in 3D!)
+        return dofOffset + basisDofOrdinal;
+        // (we'll need to be more careful in 3D!)
       }
     }
     dofOffset += basis->getCardinality();
-    //dofOffset -= 1; // for the dof shared with the previous basis...
     previousMaxReachable = maxReachableLeaf;
   }
   TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");

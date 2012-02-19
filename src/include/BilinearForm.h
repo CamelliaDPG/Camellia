@@ -87,9 +87,11 @@ public:
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
   virtual void trialTestOperators(int testID1, int testID2, 
-                         vector<EOperatorExtended> &testOp1,
-                         vector<EOperatorExtended> &testOp2); // default implementation calls trialTestOperator
+                                  vector<EOperatorExtended> &testOp1,
+                                  vector<EOperatorExtended> &testOp2); // default implementation calls trialTestOperator
 
+  virtual void previousSolutionRequired(set<int> &trialIDs); // default: just clear the set
+  
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      FieldContainer<double> &points) {
@@ -98,7 +100,12 @@ public:
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      int trialID, int testID, int operatorIndex,
-                                     FieldContainer<double> &points); // default implmentation calls operatorIndex-less version
+                                     FieldContainer<double> &points); // default implementation calls operatorIndex-less version
+  
+  virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
+                                     int trialID, int testID, int operatorIndex,
+                                     FieldContainer<double> &points, const map<int, FieldContainer<double> > &previousSolutionValues);
+  // default implementation calls previousSolutionValues-free version
                            
   const vector< int > & trialIDs();
   const vector< int > & testIDs();

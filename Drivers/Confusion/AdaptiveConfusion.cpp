@@ -51,6 +51,13 @@ int main(int argc, char *argv[]) {
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
+  bool usePatchBasis = false;
+  bool enforceMBFluxContinuity = false;
+  bool limitIrregularity = false;
+  
+  int numRefinements = 5;
+  double thresholdFactor = 0.20;
+  
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
 
@@ -71,6 +78,9 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
+  mesh->setUsePatchBasis(usePatchBasis); 
+  mesh->setEnforceMultiBasisFluxContinuity(enforceMBFluxContinuity);
+  
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
@@ -89,7 +99,7 @@ int main(int argc, char *argv[]) {
   }
  
   solution->solve(false);
-  cout << "Processor " << rank << " returned from solve()." << endl;
+  //cout << "Processor " << rank << " returned from solve()." << endl;
 
   /*
   // save a data file for plotting in MATLAB
@@ -100,9 +110,6 @@ int main(int argc, char *argv[]) {
   }
   return 0;
   */
-  bool limitIrregularity = true;
-  int numRefinements = 2;
-  double thresholdFactor = 0.20;
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<int> dofVector;
@@ -111,7 +118,7 @@ int main(int argc, char *argv[]) {
     solution->energyError(energyError);
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-
+    
     // greedy refinement algorithm - mark cells for refinement
     vector<int> triangleCellsToRefine;
     vector<int> quadCellsToRefine;
@@ -129,24 +136,24 @@ int main(int argc, char *argv[]) {
     }
     errorVector.push_back(totalEnergyErrorSquared);
     dofVector.push_back(mesh->numGlobalDofs());
-
+    
     // do refinements on cells with error above threshold
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
       if (energyError[cellID]>=thresholdFactor*maxError){
-	if (current_element->numSides()==3){
-	  triangleCellsToRefine.push_back(cellID);
-	}else if (current_element->numSides()==4){
-	  quadCellsToRefine.push_back(cellID);
-	}
+        if (current_element->numSides()==3){
+          triangleCellsToRefine.push_back(cellID);
+        } else if (current_element->numSides()==4){
+          quadCellsToRefine.push_back(cellID);
+        }
       }
     }    
     mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
     triangleCellsToRefine.clear();
     mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
     quadCellsToRefine.clear();
-
+    
     // enforce 1-irregularity if desired
     if (limitIrregularity){
       mesh->enforceOneIrregularity();
@@ -180,13 +187,15 @@ int main(int argc, char *argv[]) {
       fout1 << errorVector[i] << endl;
     }
     fout1.close();
+    
     ofstream fout2("dofs.dat");
     for (int i = 0;i<dofVector.size();i++){
       fout2 << dofVector[i] << endl;
     }
     fout2.close();
+    cout << "wrote files: u.m, u_hat.dat, errors.dat, dofs.dat\n";
 
-    cout << "Done writing soln to file." << endl;
+//    cout << "Done writing soln to file." << endl;
   }
   
   return 0;

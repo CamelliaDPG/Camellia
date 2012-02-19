@@ -69,13 +69,20 @@ public:
                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                 FieldContainer<double> &cellSideParities);
   
+  // the "pre-stiffness" (rectangular) matrix methods:
   static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                      FieldContainer<double> &cellSideParities);
+  
+  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                     shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
+                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<Solution> prevSoln);
 
   static void computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
   
+  // final (square) stiffness methods, with optimal test functions applied:
   // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
   static void computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
                                             FieldContainer<double> &optimalTestWeights,

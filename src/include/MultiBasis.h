@@ -71,6 +71,8 @@ public:
   
   BasisPtr getSubBasis(int basisIndex);
   
+  vector< pair<int,int> > adjacentVertexOrdinals(); // NOTE: prototype, untested code!
+  
   int numLeafNodes();
   
   int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal);

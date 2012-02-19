@@ -72,6 +72,13 @@ void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, Fi
   applyBilinearFormData(trialID,testID,trialValues,testValues,points);
 }
 
+void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
+                                         int trialID, int testID, int operatorIndex,
+                                         FieldContainer<double> &points, 
+                                         const map<int, FieldContainer<double> > &previousSolutionValues) {
+  applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, points);
+}
+
 void BilinearForm::trialTestOperators(int testID1, int testID2, 
                                       vector<EOperatorExtended> &testOps1,
                                       vector<EOperatorExtended> &testOps2) {
@@ -91,6 +98,12 @@ void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight
     *valuePtr *= weight;
     valuePtr++;
   }
+}
+
+
+void BilinearForm::previousSolutionRequired(set<int> &trialIDs) {
+  // default: just clear the set
+  trialIDs.clear();
 }
 
 vector<int> BilinearForm::trialVolumeIDs() {

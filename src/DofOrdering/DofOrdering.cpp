@@ -140,7 +140,9 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
       TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
     }
     MultiBasis* multiBasis = (MultiBasis*) basis.get();
+    //cout << "(basisDofOrdinal, subSideIndex) : (" << basisDofOrdinal << ", " << subSideIndex << ") --> ";
     basisDofOrdinal = multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal,subSideIndex);
+    //cout << basisDofOrdinal << endl;
   }
   
   pair<int,pair<int,int> > key = make_pair(varID,make_pair(sideIndex, basisDofOrdinal) );

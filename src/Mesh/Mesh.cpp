@@ -60,6 +60,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest) : _dofOrderingFactory(bilinearForm) {
   _vertices = vertices;
   _usePatchBasis = false;
+  _enforceMBFluxContinuity = false;  
   _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
 
 #ifdef HAVE_MPI
@@ -845,7 +846,9 @@ void Mesh::determineDofPairings() {
             // check that the bases agree in #dofs:
             int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
             
-            if ( (!neighbor->isParent() || _usePatchBasis) && (numDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
+            bool hasMultiBasis = neighbor->isParent() && !_usePatchBasis;
+            
+            if ( !hasMultiBasis && (numDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
               TEST_FOR_EXCEPTION(numDofs != neighborNumDofs,
                                  std::invalid_argument,
                                  "Element and neighbor don't agree on basis along shared side.");              
@@ -878,8 +881,22 @@ void Mesh::determineDofPairings() {
                 
                 int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                 addDofPairing(cellID, myLocalDofIndex, neighborCellID, neighborLocalDofIndex);
-//                cout << "added DofPairing (cellID, localDofIndex): (" << cellID << ", " << myLocalDofIndex << ") = ";
-//                cout << "(" << neighborCellID << ", " << neighborLocalDofIndex << ")\n";
+              }
+            }
+            
+            if ( hasMultiBasis && _enforceMBFluxContinuity ) {
+              // marry the last node from one MB leaf to first node from the next
+              // note that we're doing this for both traces and fluxes, but with traces this is redundant
+              BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID,sideIndex);
+              MultiBasis* multiBasis = (MultiBasis *) basis.get();
+              vector< pair<int,int> > adjacentDofOrdinals = multiBasis->adjacentVertexOrdinals();
+              for (vector< pair<int,int> >::iterator dofPairIt = adjacentDofOrdinals.begin();
+                   dofPairIt != adjacentDofOrdinals.end(); dofPairIt++) {
+                int firstOrdinal  = dofPairIt->first;
+                int secondOrdinal = dofPairIt->second;
+                int firstDofIndex  = elemTypePtr->trialOrderPtr->getDofIndex(trialID,firstOrdinal, sideIndex);
+                int secondDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,secondOrdinal,sideIndex);
+                addDofPairing(cellID,firstDofIndex, cellID, secondDofIndex);
               }
             }
           }
@@ -1973,6 +1990,10 @@ void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOn
     _cellSideUpgrades[cellID] = make_pair(oldType,newType);
   }
   elem->setElementType(newType);
+}
+
+void Mesh::setEnforceMultiBasisFluxContinuity( bool value ) {
+  _enforceMBFluxContinuity = value;
 }
 
 void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide) {

@@ -47,10 +47,10 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   sideParities = mesh->cellSideParitiesForCell(cellID);
   preStiffnessExpectedMulti(expectedValues,h,brokenSideSet,elemType,sideParities);
   
-//  if (cellID == 1) {
-//    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
-//    cout << expectedValues;
-//  }
+  if (cellID == 1) {
+    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
+    cout << expectedValues;
+  }
   
   // get actual values:
   physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
@@ -218,10 +218,10 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
       int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
       int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
       int trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
-      preStiff(0,testDofIndex,trialDofIndex) = 2.0/3.0 * h_ratio * sideParities(0,sideIndex); // "2/3" computed manually
+      preStiff(0,testDofIndex,trialDofIndex) += 2.0/3.0 * h_ratio * sideParities(0,sideIndex); // "2/3" computed manually
       testOrdinal = phi_ordinals[ phiNodes[1-nodeIndex] ]; // ordinal of the test that "disagrees"
       testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
-      preStiff(0,testDofIndex,trialDofIndex) = 1.0/3.0 * h_ratio * sideParities(0,sideIndex); // "1/3" computed manually
+      preStiff(0,testDofIndex,trialDofIndex) += 1.0/3.0 * h_ratio * sideParities(0,sideIndex); // "1/3" computed manually
     }
   }
 }
@@ -324,10 +324,10 @@ void MeshRefinementTests::preStiffnessExpectedPatch(FieldContainer<double> &preS
       int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
       int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
       int trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
-      preStiff(0,testDofIndex,trialDofIndex) = agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+      preStiff(0,testDofIndex,trialDofIndex) += agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
       testOrdinal = phi_ordinals[ phiNodes[1-nodeIndex] ]; // ordinal of the test that "disagrees"
       testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
-      preStiff(0,testDofIndex,trialDofIndex) = disagreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+      preStiff(0,testDofIndex,trialDofIndex) += disagreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
     }
   }
 }
@@ -434,10 +434,10 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
         } else {
           trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
         }
-        preStiff(0,testDofIndex,trialDofIndex) = agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+        preStiff(0,testDofIndex,trialDofIndex) += agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
         testOrdinal = phi_ordinals[ phiNodes[1-nodeIndex] ]; // ordinal of the test that "disagrees"
         testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
-        preStiff(0,testDofIndex,trialDofIndex) = disagreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
+        preStiff(0,testDofIndex,trialDofIndex) += disagreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
       }
     }
   }
