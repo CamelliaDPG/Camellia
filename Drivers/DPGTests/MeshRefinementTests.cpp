@@ -48,8 +48,8 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   preStiffnessExpectedMulti(expectedValues,h,brokenSideSet,elemType,sideParities);
   
   if (cellID == 1) {
-    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
-    cout << expectedValues;
+//    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
+//    cout << expectedValues;
   }
   
   // get actual values:
