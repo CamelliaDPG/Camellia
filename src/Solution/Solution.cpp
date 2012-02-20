@@ -955,6 +955,99 @@ void Solution::solutionValues(FieldContainer<double> &values,
   }  
 }
 
+double Solution::totalRHSNorm(){
+  vector< Teuchos::RCP< Element > > activeElements = _mesh->activeElements();
+  vector< Teuchos::RCP< Element > >::iterator activeElemIt;
+
+  map<int,double> rhsNormMap;
+  rhsNorm(rhsNormMap);
+  double totalNorm = 0.0;
+  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    totalNorm += rhsNormMap[current_element->cellID()];
+  }  
+  return totalNorm;
+}
+
+
+void Solution::rhsNorm(map<int,double> &rhsNormMap){
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif  
+
+  int numActiveElements = _mesh->activeElements().size();
+  
+  computeErrorRepresentation();  
+  
+  // initialize error array to -1 (cannot have negative index...) 
+  int localCellIDArray[numActiveElements];
+  double localNormArray[numActiveElements];  
+  for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
+    localCellIDArray[globalCellIndex] = -1;    
+    localNormArray[globalCellIndex] = -1.0;        
+  }  
+  
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);   
+  vector<ElementTypePtr>::iterator elemTypeIt;  
+  int cellIndStart = 0;
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);    
+    
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    
+    
+    FieldContainer<double> rhs = _rhsForElementType[elemTypePtr.get()];
+    FieldContainer<double> rhsReps = _rhsRepresentationForElementType[elemTypePtr.get()];
+    int numTestDofs = rhs.dimension(1);    
+    int numCells = rhs.dimension(0);    
+    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In rhsNorm::numCells does not match number of elems in partition.");    
+    
+    for (int cellIndex=cellIndStart;cellIndex<numCells;cellIndex++){
+      double normSquared = 0.0;
+      for (int i=0; i<numTestDofs; i++) {      
+        normSquared += rhs(cellIndex,i) * rhsReps(cellIndex,i);
+      }
+      localNormArray[cellIndex] = sqrt(normSquared);
+      int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
+      localCellIDArray[cellIndex] = cellID; 
+    }   
+    cellIndStart += numCells; // increment to go to the next set of element types
+  } // end of loop thru element types
+  
+  // mpi communicate all energy norms
+  double normArray[numProcs][numActiveElements];  
+  int cellIDArray[numProcs][numActiveElements];    
+#ifdef HAVE_MPI
+  if (numProcs>1){
+    MPI::COMM_WORLD.Allgather(localNormArray,numActiveElements, MPI::DOUBLE, normArray, numActiveElements , MPI::DOUBLE);      
+    MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
+  }else{
+#else
+#endif
+    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
+      cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
+      normArray[0][globalCellIndex] = localNormArray[globalCellIndex];
+    }
+#ifdef HAVE_MPI
+  }
+#endif
+  // copy back to rhsNorm map
+  for (int procIndex=0;procIndex<numProcs;procIndex++){
+    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
+      if (cellIDArray[procIndex][globalCellIndex]!=-1){
+        rhsNormMap[cellIDArray[procIndex][globalCellIndex]] = normArray[procIndex][globalCellIndex];
+      }
+    }
+  }      
+}
+
 double Solution::energyErrorTotal() {
   double energyErrorSquared = 0.0;
   map<int,double> energyErrorPerCell;
@@ -1097,7 +1190,7 @@ void Solution::computeErrorRepresentation() {
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, physicalCellNodes);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
-    FieldContainer<double> solutionRepresentation(numCells,numTestDofs);
+    FieldContainer<double> rhsRepresentation(numCells,numTestDofs);
     
     Epetra_SerialDenseSolver solver;
     
@@ -1114,18 +1207,18 @@ void Solution::computeErrorRepresentation() {
                                    _residualForElementType[elemTypePtr.get()].dimension(1), 1);
 
 
-      /*
+      
       int info = rhs.Reshape(numTestDofs,2); // add an extra column
       if (info!=0){
 	cout << "could not reshape matrix - error code " << info << endl;
       }      
       for(int i = 0;i < numTestDofs; i++){
-	rhs(i,1) = _operatorSolutionForElementType[elemTypePtr.get()](localCellIndex,i);
+	rhs(i,1) = _rhsForElementType[elemTypePtr.get()](localCellIndex,i);
       }
       
       Epetra_SerialDenseMatrix representationMatrix(numTestDofs,2);
-      */
-      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
+      
+      //      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
       solver.SetMatrix(ipMatrixT);
       //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
@@ -1157,9 +1250,11 @@ void Solution::computeErrorRepresentation() {
       
       for (int i=0; i<numTestDofs; i++) {
         errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
+        rhsRepresentation(localCellIndex,i) = representationMatrix(i,1);
       }
     }
     _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
+    _rhsRepresentationForElementType[elemTypePtr.get()] = rhsRepresentation;
   }
 }
 
@@ -1215,6 +1310,9 @@ void Solution::computeResiduals() {
     FieldContainer<double> residuals(numCells,numTestDofs);
     BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
                                     testWeights, testOrdering, cellTopo, physicalCellNodes);
+
+    FieldContainer<double> rhs(numCells,numTestDofs);
+    rhs = residuals; // copy rhs into its own separate container
     
     // compute b(u, v):
     FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
@@ -1234,6 +1332,7 @@ void Solution::computeResiduals() {
       }
     }    
     _residualForElementType[elemTypePtr.get()] = residuals;
+    _rhsForElementType[elemTypePtr.get()] = rhs;
   }
   _residualsComputed = true;
 }
@@ -1259,7 +1358,72 @@ void Solution::discardInactiveCellCoefficients() {
   }
 }
 
+void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+  int numTotalCells = physicalPoints.dimension(0);
+  int numPoints = physicalPoints.dimension(1);
+  int spaceDim = physicalPoints.dimension(2);
+  for (int cellIndex=0;cellIndex<numTotalCells;cellIndex++){
+
+    FieldContainer<double> cellPoint(1,1,spaceDim); // a single point to find elem we're in
+    for (int i=0;i<spaceDim;i++){cellPoint(0,0,i) = physicalPoints(cellIndex,0,i);}
+    vector< ElementPtr > elements = _mesh->elementsForPoints(cellPoint); // operate under assumption that all points for a given cell index are in that cell
+    ElementPtr elem = elements[0];
+    ElementTypePtr elemTypePtr = elem->elementType();
+    int cellID = elem->cellID();
+
+    if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+      // cellID not known -- default to 0
+      continue;
+    }
+
+    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
+    int numCells = 1; // do one cell at a time
+
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+
+    // store points in local container
+    FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
+    for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+      for (int dim=0; dim<spaceDim; dim++) {
+	physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
+      }
+    }
+
+    typedef CellTools<double>  CellTools;
+    typedef FunctionSpaceTools fst;
+  
+    // 1. compute refElemPoints, the evaluation points mapped to reference cell:
+    FieldContainer<double> refElemPoints(numCells,numPoints, spaceDim);
+    CellTools::mapToReferenceFrame(refElemPoints,physicalPointsForCell,physicalCellNodes,*(elemTypePtr->cellTopoPtr.get()));
+    refElemPoints.resize(numPoints,spaceDim);
+
+    Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
+    
+    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
+    int basisRank = trialOrder->getBasisRank(trialID);
+    int basisCardinality = basis->getCardinality();
+
+    Teuchos::RCP< FieldContainer<double> > basisValues;
+    basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoints);
+    
+    // now, apply coefficient weights:
+    for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+	int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, 0); // 0 assumes field var
+	values(cellIndex,ptIndex) += (*basisValues)(dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
+      }
+    }
+  }  
+  
+}
+
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+
+  if (physicalPoints.rank()==3){ // if we have dimensions (C,P,D), call a different method
+    solutionValuesOverCells(values, trialID, physicalPoints);
+    return;
+  }else{
+
   // the following is due to the fact that we *do not* transform basis values.
   EFunctionSpaceExtended fs = _mesh->bilinearForm().functionSpaceForTrial(trialID);
   TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
@@ -1269,8 +1433,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   TEST_FOR_EXCEPTION( values.dimension(0) != physicalPoints.dimension(0),
                      std::invalid_argument,
                      "values.dimension(0) != physicalPoints.dimension(0).");
-  
-  
+   
   // physicalPoints dimensions: (P,D)
   // values dimensions: (P) or (P,D)
   //int numPoints = physicalPoints.dimension(0);
@@ -1372,6 +1535,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
         }
       }
     }
+  }
   }
 }
 
@@ -1763,9 +1927,17 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
   int spaceDim = 2; // TODO: generalize to 3D...
+  int num1DPts = 5;
   
   fout << "numCells = " << _mesh->activeElements().size() << endl;
   fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
+
+  // initialize storage
+  fout << "for i = 1:numCells" << endl;
+  fout << "x{i} = zeros(" << num1DPts << ",1);"<<endl;
+  fout << "y{i} = zeros(" << num1DPts << ",1);"<<endl;
+  fout << "z{i} = zeros(" << num1DPts << ");"<<endl;
+  fout << "end" << endl;
   int globalCellInd = 1; //matlab indexes from 1
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
     ElementTypePtr elemTypePtr = *(elemTypeIt);
@@ -1779,7 +1951,6 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     int numCells = vertexPoints.dimension(0);       
     
     // NOW loop over all cells to write solution to file
-    int num1DPts = 5;
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
 

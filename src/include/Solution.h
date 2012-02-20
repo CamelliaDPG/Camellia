@@ -70,8 +70,9 @@ private:
   map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _errorRepresentationForElementType; // for uniform mesh, just a single entry.
 
-  map< ElementType*,FieldContainer<double> > _operatorSolutionForElementType;
-  map< ElementType*,FieldContainer<double> > _solutionRepresentationForElementType;
+  // evaluates the inversion of the RHS
+  map< ElementType*,FieldContainer<double> > _rhsForElementType;
+  map< ElementType*,FieldContainer<double> > _rhsRepresentationForElementType;
 
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<BC> _bc;
@@ -119,6 +120,8 @@ public:
                       const FieldContainer<double> &sideRefCellPoints,
                       int sideIndex);
   void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
+  void solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
+
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
   
@@ -148,7 +151,9 @@ public:
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
   void energyError(map<int, double> &energyError);
-  
+  void rhsNorm(map<int, double> &energyNorm);
+  double totalRHSNorm();
+
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
   
