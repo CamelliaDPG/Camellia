@@ -1413,16 +1413,58 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
 	values(cellIndex,ptIndex) += (*basisValues)(dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
       }
     }
-  }  
+  }
   
 }
 
-void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache) {
+  vector<int> cellIDs = basisCache->cellIDs();
+  int numCells = cellIDs.size();
+  if (numCells != values.dimension(0)) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
+  }
+  int spaceDim = values.dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+    int cellID = cellIDs[cellIndex];
+    
+    if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+      // cellID not known -- default values for that cell to 0
+      continue;
+    }
+    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
+    
+    DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
+    
+    int sideIndex = 0; // assume field variable
+    BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
+    int basisCardinality = basis->getCardinality();
+    int basisRank = trialOrder->getBasisRank(trialID);
+    
+    Teuchos::RCP<const FieldContainer<double> > transformedValues = basisCache->getTransformedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+    
+    // now, apply coefficient weights:
+    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
+        //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
+        if (basisRank == 0) {
+          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(cellIndex,localDofIndex);
+        } else {
+          for (int i=0; i<spaceDim; i++) {
+            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
+          }
+        }
+      }
+    }
+  }
+}
 
-  if (physicalPoints.rank()==3){ // if we have dimensions (C,P,D), call a different method
+void Solution::solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints) {
+  if (physicalPoints.rank()==3) { // if we have dimensions (C,P,D), call a different method
     solutionValuesOverCells(values, trialID, physicalPoints);
     return;
-  }else{
+  } else {
 
   // the following is due to the fact that we *do not* transform basis values.
   EFunctionSpaceExtended fs = _mesh->bilinearForm().functionSpaceForTrial(trialID);

@@ -768,8 +768,27 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
                                      Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, 
                                      FieldContainer<double> &physicalCellNodes) {
+  // this method is deprecated--here basically until we can revise tests, etc. to use the BasisCache version
+  // Get numerical integration points and weights
+  
   // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
   //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
+  DefaultCubatureFactory<double>  cubFactory;
+    
+  int cubDegreeTest = testOrdering->maxBasisDegree();
+  int cubDegree = 2*cubDegreeTest;
+  
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, cellTopo, cubDegree)); // DON'T create side caches, too
+
+  computeRHS(rhsVector,bilinearForm,rhs,optimalTestWeights,testOrdering,basisCache);
+}
+
+
+void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector, 
+                                     BilinearForm &bilinearForm, RHS &rhs, 
+                                     FieldContainer<double> &optimalTestWeights,
+                                     Teuchos::RCP<DofOrdering> testOrdering,
+                                     BasisCachePtr basisCache) {
   // optimalTestWeights dimensions are: (numCells, numTrial, numTest) -- numTrial is the optTest index
   // rhsVector dimensions are: (numCells, # trialOrdering Dofs)
 
@@ -782,32 +801,17 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
   //   d. Sum up (integrate) and place in rhsVector according to DofOrdering indices
 
   // 0. Set up Cubature
-
-  unsigned numCells = physicalCellNodes.dimension(0);
-  unsigned numNodesPerElem = physicalCellNodes.dimension(1);
-  unsigned spaceDim = physicalCellNodes.dimension(2);
-  //  cout << "num cells in utility: " << numCells << endl;
-
-  // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
-                     std::invalid_argument,
-                     "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
-                     std::invalid_argument,
-                     "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
+  
+  shards::CellTopology cellTopo = basisCache->cellTopology();
+  
+  unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  unsigned spaceDim = cellTopo.getDimension();
 
   int numOptTestFunctions = optimalTestWeights.dimension(1); // should also == numTrialDofs
 
   TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != rhsVector.dimension(1) ),
                      std::invalid_argument,
                      "optimalTestWeights.dimension(1) (=" << optimalTestWeights.dimension(1) << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
-
-  // Get numerical integration points and weights
-  DefaultCubatureFactory<double>  cubFactory;
-  int cubDegreeTest = testOrdering->maxBasisDegree();
-  int cubDegree = 2*cubDegreeTest;
-  
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, cellTopo, cubDegree)); // DON'T create side caches, too
 
   vector<int> testIDs = bilinearForm.testIDs();
   vector<int>::iterator testIterator;

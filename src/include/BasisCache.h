@@ -133,6 +133,10 @@ public:
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
+  const vector<int> & cellIDs();
+  
+  shards::CellTopology cellTopology();
+  
   void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
   
   const FieldContainer<double> & getPhysicalCubaturePoints();

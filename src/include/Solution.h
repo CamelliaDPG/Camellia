@@ -53,6 +53,7 @@
 #include "DPGInnerProduct.h"
 #include "RHS.h"
 #include "BC.h"
+#include "BasisCache.h"
 #include "AbstractFunction.h"
 
 #include "LocalStiffnessMatrixFilter.h"
@@ -63,6 +64,7 @@ class Solution {
 private:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
+  typedef Teuchos::RCP< BasisCache > BasisCachePtr;
   
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
   
@@ -120,6 +122,7 @@ public:
                       const FieldContainer<double> &sideRefCellPoints,
                       int sideIndex);
   void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
+  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
   void solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
 
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);

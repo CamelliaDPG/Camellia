@@ -127,6 +127,14 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDi
   
 }
 
+const vector<int> & BasisCache::cellIDs() {
+  return _cellIDs;
+}
+
+shards::CellTopology BasisCache::cellTopology() {
+  return _cellTopo;
+}
+
 void BasisCache::discardPhysicalNodeInfo() {
   // discard physicalNodes and all transformed basis values.
   _knownValuesTransformed.clear();
