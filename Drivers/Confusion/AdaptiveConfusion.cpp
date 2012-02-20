@@ -47,12 +47,12 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-3;
+  double epsilon = 1e-6;
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   bool usePatchBasis = false;
-  bool enforceMBFluxContinuity = false;
+  bool enforceMBFluxContinuity = true;
   bool limitIrregularity = false;
   
   int numRefinements = 5;
@@ -180,6 +180,7 @@ int main(int argc, char *argv[]) {
     //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
     solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
+    solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "beta_n_u_minus_sigma_hat.dat");
 
     ofstream fout1("errors.dat");
     fout1 << setprecision(15);
@@ -193,7 +194,7 @@ int main(int argc, char *argv[]) {
       fout2 << dofVector[i] << endl;
     }
     fout2.close();
-    cout << "wrote files: u.m, u_hat.dat, errors.dat, dofs.dat\n";
+    cout << "wrote files: u.m, u_hat.dat, errors.dat, dofs.dat, beta_n_u_minus_sigma_hat.dat\n";
 
 //    cout << "Done writing soln to file." << endl;
   }
