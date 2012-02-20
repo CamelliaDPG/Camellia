@@ -978,11 +978,27 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
 }
 
 bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {  
+  // the following commented-out bit is the start of a more efficient version of this method:
+//  vector<int> vertexIndices = _verticesForCellID[elem->cellID()];
+//  int numVertices = vertexIndices.size();
+//  
+//  double maxX = _vertices[vertexIndices[0]](0);
+//  double minX = maxX;
+//  double maxY = _vertices[vertexIndices[0]](1);
+//  double minY = maxY;
+//  for (int vertexIndex=1; vertexIndex<numVertices; vertexIndex++) {
+//    minX = min(minX,_vertices[vertexIndices[vertexIndex]](0));
+//    maxX = max(maxX,_vertices[vertexIndices[vertexIndex]](0));
+//    minY = min(minY,_vertices[vertexIndices[vertexIndex]](1));
+//    maxY = max(maxY,_vertices[vertexIndices[vertexIndex]](1));
+//  }
+  
+  
   // first, check whether x or y is outside the axis-aligned bounding box for the element
-  FieldContainer<double> vertices;
+  int numVertices = elem->numSides();
+  int spaceDim = 2;
+  FieldContainer<double> vertices(numVertices,spaceDim);
   verticesForCell(vertices, elem->cellID());
-  int numVertices = vertices.dimension(0);
-  int spaceDim = vertices.dimension(1);
   TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "elementContainsPoint only supports 2D.");
   double maxX = vertices(0,0), minX = vertices(0,0);
   double maxY = vertices(0,1), minY = vertices(0,1);
@@ -1133,16 +1149,15 @@ FieldContainer<double> Mesh::cellSideParitiesForCell( int cellID ) {
 }
 
 vector<double> Mesh::getCellCentroid(int cellID){
-
-  FieldContainer<double> verts; // gets resized inside verticesForCell
-  verticesForCell(verts, cellID);    
+  int numVertices = _elements[cellID]->numSides();
+  int spaceDim = 2;
+  FieldContainer<double> vertices(numVertices,spaceDim);
+  verticesForCell(vertices, cellID);    
   //average vertex positions together to get a centroid (avoids using vertex in case local enumeration overlaps)
-  int numVertices = verts.dimension(0);
-  int num_dim = verts.dimension(1);//_elements[cellID]->elementType()->cellTopoPtr->getDimension();
-  vector<double> coords(num_dim,0.0);
-  for (int k=0;k<num_dim;k++){
+  vector<double> coords(spaceDim,0.0);
+  for (int k=0;k<spaceDim;k++){
     for (int j=0;j<numVertices;j++){
-      coords[k] += verts(j,k);
+      coords[k] += vertices(j,k);
     }
     coords[k] = coords[k]/((double)(numVertices));
   }
@@ -2058,7 +2073,7 @@ void Mesh::verticesForCell(FieldContainer<double>& vertices, int cellID) {
   ElementTypePtr elemType = _elements[cellID]->elementType();
   int dimension = elemType->cellTopoPtr->getDimension();
   int numVertices = elemType->cellTopoPtr->getVertexCount(dimension,0);
-  vertices.resize(numVertices,dimension);
+  //vertices.resize(numVertices,dimension);
   for (int vertexIndex = 0; vertexIndex < numVertices; vertexIndex++) {
     for (int i=0; i<dimension; i++) {
       vertices(vertexIndex,i) = _vertices[vertexIndices[vertexIndex]](i);

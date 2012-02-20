@@ -80,9 +80,10 @@ void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
   // for up to two refinements.
   for (int i=0; i<numElements; i++) {
     int cellID = mesh->activeElements()[i]->cellID();
-    FieldContainer<double> vertices;
+    int numVertices = mesh->activeElements()[i]->numSides();
+    int spaceDim = 2;
+    FieldContainer<double> vertices(numVertices,spaceDim);
     mesh->verticesForCell(vertices,cellID);
-    int numVertices = vertices.dimension(0);
     bool positiveX = true, positiveY = true;
     for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
       double x = vertices(vertexIndex,0);
