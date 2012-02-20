@@ -21729,7 +21729,7 @@ fi=(329)
 140 2
 fe=(328)
 
-fn=(6320) std::vector<Teuchos::RCP<BasisValueCache>, std::allocator<Teuchos::RCP<BasisValueCache> > >::_M_insert_aux(__gnu_cxx::__normal_iterator<Teuchos::RCP<BasisValueCache>*, std::vector<Teuchos::RCP<BasisValueCache>, std::allocator<Teuchos::RCP<BasisValueCache> > > >, Teuchos::RCP<BasisValueCache> const&)
+fn=(6320) std::vector<Teuchos::RCP<BasisCache>, std::allocator<Teuchos::RCP<BasisCache> > >::_M_insert_aux(__gnu_cxx::__normal_iterator<Teuchos::RCP<BasisCache>*, std::vector<Teuchos::RCP<BasisCache>, std::allocator<Teuchos::RCP<BasisCache> > > >, Teuchos::RCP<BasisCache> const&)
 295 324
 +4 108
 fi=(329)
@@ -29452,8 +29452,8 @@ calls=1 -15
 * 62
 fe=(187)
 
-fl=(251) /workspace/jchan/camellia/src/Basis/BasisValueCache.cpp
-fn=(2344) global constructors keyed to _ZN15BasisValueCache4initERKN8Intrepid14FieldContainerIdLi0EEERN6shards12CellTopologyER11DofOrderingib
+fl=(251) /workspace/jchan/camellia/src/Basis/BasisCache.cpp
+fn=(2344) global constructors keyed to _ZN15BasisCache4initERKN8Intrepid14FieldContainerIdLi0EEERN6shards12CellTopologyER11DofOrderingib
 397 1
 fi=(107)
 72 2
@@ -29496,7 +29496,7 @@ calls=1 57
 * 62
 fe=(251)
 
-fn=(5376) BasisValueCache::BasisValueCache(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, DofOrdering&, int, bool)
+fn=(5376) BasisCache::BasisCache(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, DofOrdering&, int, bool)
 182 480
 fi=(331)
 -63 60
@@ -29721,7 +29721,7 @@ fi=(110)
 +1 60
 fe=(251)
 185 60
-cfn=(5396) BasisValueCache::init(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, DofOrdering&, int, bool)
+cfn=(5396) BasisCache::init(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, DofOrdering&, int, bool)
 calls=60 50 
 * 9610711
 +1 480
@@ -29763,7 +29763,7 @@ calls=60 372
 * 60
 fe=(251)
 
-fn=(5752) BasisValueCache::getTransformedWeightedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
+fn=(5752) BasisCache::getTransformedWeightedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
 354 2652
 fi=(110)
 171 884
@@ -29809,7 +29809,7 @@ fi=(229)
 744 216
 fe=(251)
 359 1296
-cfn=(5632) BasisValueCache::getTransformedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
+cfn=(5632) BasisCache::getTransformedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
 calls=216 -66 
 * 108521252
 fi=(229)
@@ -30137,7 +30137,7 @@ fi=(229)
 181 528
 fe=(251)
 316 2112
-cfn=(5648) BasisValueCache::getValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
+cfn=(5648) BasisCache::getValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, bool)
 calls=264 -79 
 * 25545201
 fi=(333)
@@ -31402,7 +31402,7 @@ cfn=(1508)
 calls=48 0 
 * 36756
 * 1008
-cfn=(6306) BasisValueCache::BasisValueCache(shards::CellTopology&, int, int, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&)
+cfn=(6306) BasisCache::BasisCache(shards::CellTopology&, int, int, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&, Intrepid::FieldContainer<double, 0>&)
 calls=48 +20 
 * 516167
 fi=(333)
@@ -31946,7 +31946,7 @@ fi=(331)
 142 300
 fe=(251)
 
-fn=(6582) BasisValueCache::BasisValueCache(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, int)
+fn=(6582) BasisCache::BasisCache(Intrepid::FieldContainer<double, 0> const&, shards::CellTopology&, int)
 188 320
 fi=(331)
 -69 40
@@ -32247,15 +32247,15 @@ calls=40 372
 * 40
 fe=(251)
 
-fn=(6406) BasisValueCache::getPhysicalCubaturePointsForSide(int)
+fn=(6406) BasisCache::getPhysicalCubaturePointsForSide(int)
 391 400
 +2 80
 
-fn=(5630) BasisValueCache::getPhysicalCubaturePoints()
+fn=(5630) BasisCache::getPhysicalCubaturePoints()
 220 740
 +2 740
 
-fn=(6370) BasisValueCache::getTransformedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, int, bool)
+fn=(6370) BasisCache::getTransformedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, int, bool)
 376 960
 +2 160
 fi=(333)
@@ -32332,7 +32332,7 @@ fi=(229)
 fe=(251)
 384 1120
 
-fn=(6626) BasisValueCache::getCellMeasures()
+fn=(6626) BasisCache::getCellMeasures()
 224 224
 fi=(329)
 626 32
@@ -32357,7 +32357,7 @@ calls=32 81
 -1 2048
 +6 224
 
-fn=(6702) BasisValueCache::getSideUnitNormals(int)
+fn=(6702) BasisCache::getSideUnitNormals(int)
 395 80
 +2 16
 
@@ -33523,7 +33523,7 @@ fi=(331)
 -39 192
 fe=(251)
 
-fn=(6402) BasisValueCache::getTransformedWeightedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, int, bool)
+fn=(6402) BasisCache::getTransformedWeightedValues(Teuchos::RCP<Intrepid::Basis<double, Intrepid::FieldContainer<double, 0> > >, IntrepidExtendedTypes::EOperatorExtended, int, bool)
 387 512
 fi=(333)
 280 256
@@ -36845,8 +36845,8 @@ calls=4 -95
 * 324
 fe=(230)
 858 8
-cfi=(445) /workspace/jchan/camellia/src/include/BasisValueCache.h
-cfn=(5916) BasisValueCache::~BasisValueCache()
+cfi=(445) /workspace/jchan/camellia/src/include/BasisCache.h
+cfn=(5916) BasisCache::~BasisCache()
 calls=4 59 
 * 37071
 +2 32
@@ -49835,7 +49835,7 @@ calls=1 668
 * 228
 * 1
 
-fn=(6330) Teuchos::RCPNodeTmpl<BasisValueCache, Teuchos::DeallocDelete<BasisValueCache> >::delete_obj()
+fn=(6330) Teuchos::RCPNodeTmpl<BasisCache, Teuchos::DeallocDelete<BasisCache> >::delete_obj()
 531 288
 +2 96
 -2 96
@@ -49847,7 +49847,7 @@ fn=(6330) Teuchos::RCPNodeTmpl<BasisValueCache, Teuchos::DeallocDelete<BasisValu
 fi=(338)
 985 192
 cfi=(445)
-cfn=(5917) BasisValueCache::~BasisValueCache()'2
+cfn=(5917) BasisCache::~BasisCache()'2
 calls=48 59 
 * 565153
 * 48
@@ -49972,7 +49972,7 @@ cfn=(3320)
 calls=100 0 
 * 8100
 
-fn=(6332) Teuchos::RCPNodeTmpl<BasisValueCache, Teuchos::DeallocDelete<BasisValueCache> >::~RCPNodeTmpl()
+fn=(6332) Teuchos::RCPNodeTmpl<BasisCache, Teuchos::DeallocDelete<BasisCache> >::~RCPNodeTmpl()
 513 288
 158 96
 513 96

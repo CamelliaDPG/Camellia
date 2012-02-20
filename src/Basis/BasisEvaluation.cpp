@@ -52,7 +52,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, EOperatorExtended op,
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                       "Unknown basis.  BasisValueCache only works for bases created by BasisFactory");
+                       "Unknown basis.  BasisCache only works for bases created by BasisFactory");
   }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known

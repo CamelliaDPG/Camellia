@@ -7,7 +7,7 @@
 //#include "Intrepid_FunctionSpaceTools.hpp"
 //#include "Intrepid_PointTools.hpp"
 
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 #include "DofOrdering.h"
 
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
@@ -27,7 +27,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, c
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
   int maxTrialDegree = trialOrderPtr->maxBasisDegree();
-  BasisValueCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
+  BasisCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
 
   unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 

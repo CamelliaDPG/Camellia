@@ -31,7 +31,7 @@
 #include "BilinearFormUtility.h"
 
 #include "DPGInnerProduct.h"
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 
 using namespace IntrepidExtendedTypes;
 
@@ -57,7 +57,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   
   // Set up Basis cache
   int cubDegree = 2*dofOrdering->maxBasisDegree();
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, cubDegree);
+  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree);
   
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator1;

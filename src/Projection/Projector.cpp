@@ -11,7 +11,7 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 #include "BasisFactory.h"
 
 #include <Epetra_SerialDenseVector.h>
@@ -36,7 +36,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   int maxTrialDegree = dofOrderPtr->maxBasisDegree();
 
   // do not build side caches - no projections for sides supported at the moment
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
+  BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
   // assume only L2 projections
   EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE;
 

@@ -44,7 +44,7 @@
 #include "Epetra_DataAccess.h"
 
 #include "BilinearFormUtility.h"
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 
 #include "Solution.h"
 
@@ -386,12 +386,12 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
                      std::invalid_argument,
                      "numTrialDofs and stiffness.dimension(2) do not match.");
   
-  // 0. Set up BasisValueCache
+  // 0. Set up BasisCache
   int cubDegreeTrial = trialOrdering->maxBasisDegree();
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = cubDegreeTrial + cubDegreeTest;
 
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
+  BasisCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
   
   unsigned numSides = cellTopo.getSideCount();
   
@@ -572,7 +572,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   //  more sense given the inversion that we must do to compute the optimal test functions...)
   
   // steps:
-  // 0. Set up BasisValueCache
+  // 0. Set up BasisCache
   // 3. For each (test, trial) combination:
   //   a. Apply the specified operators to the basis in the DofOrdering, at the cubature points
   //   b. Multiply the two bases together, weighted with Jacobian/Piola transform and cubature weights
@@ -602,12 +602,12 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                      std::invalid_argument,
                      "stiffness.dimension(1) (=" << stiffness.dimension(1) << ") and stiffness.dimension(2) (=" << stiffness.dimension(2) << ") do not match.");
   
-  // Set up BasisValueCache
+  // Set up BasisCache
   int cubDegreeTrial = trialOrdering->maxBasisDegree();
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = cubDegreeTrial + cubDegreeTest;
   
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
+  BasisCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
   
   unsigned numSides = cellTopo.getSideCount();
 
@@ -806,7 +806,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
   DefaultCubatureFactory<double>  cubFactory;
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = 2*cubDegreeTest;
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, cubDegree); // DON'T create side caches, too
+  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree); // DON'T create side caches, too
 
   vector<int> testIDs = bilinearForm.testIDs();
   vector<int>::iterator testIterator;

@@ -80,7 +80,7 @@
 
 #include "BilinearFormUtility.h"
 #include "BasisEvaluation.h"
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 #include "BasisSumFunction.h"
 
 #include "Solution.h"
@@ -655,7 +655,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
   
   int cubDegree = trialBasis->getDegree();
   
-  BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
@@ -688,7 +688,7 @@ double Solution::meshMeasure() {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
     int cubDegree = 1;
-    BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+    BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
     FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
     for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++) {
       value += cellMeasures(cellIndex);
@@ -726,7 +726,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   
   int cubDegree = trialBasis->getDegree();
   
-  BasisValueCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
+  BasisCache basisCache(_mesh->physicalCellNodesGlobal(elemTypePtr), *(elemTypePtr->cellTopoPtr), cubDegree);
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   

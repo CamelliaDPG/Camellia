@@ -35,7 +35,7 @@
 
 #include "L2InnerProduct.h"
 #include "BilinearFormUtility.h"
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 #include "AbstractFunction.h"
 
 using namespace IntrepidExtendedTypes;
@@ -78,7 +78,7 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
   
   // Set up Basis cache
   int cubDegree = 2*dofOrdering->maxBasisDegree();
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, cubDegree);
+  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree);
   
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator1;
@@ -176,7 +176,7 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
   
   // Set up Basis cache
   int cubDegree = 2*dofOrdering->maxBasisDegree();
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, cubDegree);
+  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree);
   
   vector<int> trialIDs = _bilinearForm->trialIDs();
   vector<int>::iterator trialIterator1;

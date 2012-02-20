@@ -70,7 +70,7 @@
 
 #include "Projector.h"
 #include "SimpleFunction.h"
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 
 
 using namespace std;
@@ -2681,7 +2681,7 @@ bool DPGTests::testProjection(){
   dofOrderPtr->addEntry(ID,basis,basisRank);  
   int maxTrialDegree = dofOrderPtr->maxBasisDegree();
 
-  BasisValueCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
+  BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
 
   // simple function f(x,y) = x;
   Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());

@@ -1,5 +1,5 @@
 /*
- *  BasisValueCache.cpp
+ *  BasisCache.cpp
  *
  */
 // @HEADER
@@ -32,7 +32,7 @@
 //
 // @HEADER 
 
-#include "BasisValueCache.h"
+#include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
 
@@ -45,7 +45,7 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
-void BasisValueCache::init(const FieldContainer<double> &physicalCellNodes, 
+void BasisCache::init(const FieldContainer<double> &physicalCellNodes, 
                            shards::CellTopology &cellTopo,
                            DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   _isSideCache = false; // VOLUME constructor
@@ -166,31 +166,31 @@ void BasisValueCache::init(const FieldContainer<double> &physicalCellNodes,
       FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
       
       // values we want to keep around: cubPointsSide, cubPointsSideRefCell, sideNormals, jacobianSideRefCell, jacobianInvSideRefCell, jacobianDetSideRefCell
-      BasisValueCache* sideCache = new BasisValueCache(cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
+      BasisCache* sideCache = new BasisCache(cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
                                                        cubPointsSide, cubPointsSideRefCell, 
                                                        cubWeightsSide, weightedMeasureSideRefCell,
                                                        sideNormals, jacobianSideRefCell,
                                                        jacobianInvSideRefCell, jacobianDetSideRefCell);
       
-      Teuchos::RCP< const BasisValueCache > constCache = Teuchos::rcp(sideCache,false);
+      Teuchos::RCP< const BasisCache > constCache = Teuchos::rcp(sideCache,false);
       
       _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
     }
   }
 }
 
-BasisValueCache::BasisValueCache(const FieldContainer<double> &physicalCellNodes, 
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                                  shards::CellTopology &cellTopo,
                                  DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   init(physicalCellNodes, cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
 }
 
-BasisValueCache::BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
   DofOrdering trialOrdering; // dummy trialOrdering
   init(physicalCellNodes, cellTopo, trialOrdering, cubDegree, false);
 }
 
-BasisValueCache::BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
+BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
                                  FieldContainer<double> &cubPointsSidePhysical,
                                  FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
                                  FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
@@ -217,11 +217,11 @@ BasisValueCache::BasisValueCache(shards::CellTopology &cellTopo, int numCells, i
   
 }
 
-const FieldContainer<double> & BasisValueCache::getPhysicalCubaturePoints() {
+const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints() {
   return _physCubPoints;
 }
 
-FieldContainer<double> BasisValueCache::getCellMeasures() {
+FieldContainer<double> BasisCache::getCellMeasures() {
   int numCells = _weightedMeasure.dimension(0);
   int numPoints = _weightedMeasure.dimension(1);
   FieldContainer<double> cellMeasures(numCells);
@@ -233,7 +233,7 @@ FieldContainer<double> BasisValueCache::getCellMeasures() {
   return cellMeasures;
 }
 
-constFCPtr BasisValueCache::getValues(BasisPtr basis, EOperatorExtended op,
+constFCPtr BasisCache::getValues(BasisPtr basis, EOperatorExtended op,
                                       bool useCubPointsSideRefCell) {
   FieldContainer<double> cubPoints;
   if (useCubPointsSideRefCell) {
@@ -248,7 +248,7 @@ constFCPtr BasisValueCache::getValues(BasisPtr basis, EOperatorExtended op,
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                       "Unknown basis.  BasisValueCache only works for bases created by BasisFactory");
+                       "Unknown basis.  BasisCache only works for bases created by BasisFactory");
   }
   // first, let's check whether the exact request is already known
   pair< Basis<double,FieldContainer<double> >*, EOperatorExtended> key = make_pair(basis.get(), op);
@@ -289,7 +289,7 @@ constFCPtr BasisValueCache::getValues(BasisPtr basis, EOperatorExtended op,
   return result;
 }
 
-constFCPtr BasisValueCache::getTransformedValues(BasisPtr basis, EOperatorExtended op,
+constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op,
                                                  bool useCubPointsSideRefCell) {
   pair<Basis<double,FieldContainer<double> >*, EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end()) {
@@ -350,7 +350,7 @@ constFCPtr BasisValueCache::getTransformedValues(BasisPtr basis, EOperatorExtend
   return result;
 }
 
-constFCPtr BasisValueCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
+constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
                                                          bool useCubPointsSideRefCell) {
   pair<Basis<double,FieldContainer<double> >*, EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformedWeighted.find(key) != _knownValuesTransformedWeighted.end()) {
@@ -367,12 +367,12 @@ constFCPtr BasisValueCache::getTransformedWeightedValues(BasisPtr basis, EOperat
 }
 
 /*** SIDE VARIANTS ***/
-constFCPtr BasisValueCache::getValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal,
+constFCPtr BasisCache::getValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal,
                                       bool useCubPointsSideRefCell) {
   return _basisCacheSides[sideOrdinal]->getValues(basis,op,useCubPointsSideRefCell);
 }
 
-constFCPtr BasisValueCache::getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, 
+constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, 
                                                  bool useCubPointsSideRefCell) {
   constFCPtr transformedValues;
   if ( ! _isSideCache ) {
@@ -383,15 +383,15 @@ constFCPtr BasisValueCache::getTransformedValues(BasisPtr basis, EOperatorExtend
   return transformedValues;
 }
 
-constFCPtr BasisValueCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
+constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
                                                          int sideOrdinal, bool useCubPointsSideRefCell) {
   return _basisCacheSides[sideOrdinal]->getTransformedWeightedValues(basis,op,useCubPointsSideRefCell);
 }
 
-const FieldContainer<double> & BasisValueCache::getPhysicalCubaturePointsForSide(int sideOrdinal) {
+const FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int sideOrdinal) {
   return _basisCacheSides[sideOrdinal]->getPhysicalCubaturePoints();
 }
 
-const FieldContainer<double> & BasisValueCache::getSideUnitNormals(int sideOrdinal){  
+const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){  
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }

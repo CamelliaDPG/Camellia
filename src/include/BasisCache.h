@@ -2,7 +2,7 @@
 #define DPG_BASIS_VALUE_CACHE
 
 /*
- *  BasisValueCache.h
+ *  BasisCache.h
  *
  */
 
@@ -56,13 +56,13 @@
 using namespace Intrepid;
 using namespace std;
 
-class BasisValueCache {
+class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 private:
   int _numCells, _spaceDim;
   int _numSides;
   bool _isSideCache;
-  vector< Teuchos::RCP<BasisValueCache> > _basisCacheSides;
+  vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
   FieldContainer<double> _cubPoints, _cubWeights;
   FieldContainer<double> _cellJacobian;
   FieldContainer<double> _cellJacobInv;
@@ -98,11 +98,11 @@ private:
             shards::CellTopology &cellTopo,
             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
 public:
-  BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
-  BasisValueCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
+  BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
+  BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
                   DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   // side cache constructor:
-  BasisValueCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
+  BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
                   FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
                   FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                   FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,

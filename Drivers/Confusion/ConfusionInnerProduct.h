@@ -3,7 +3,7 @@
 
 #include "ConfusionBilinearForm.h"
 #include "Mesh.h"
-#include "BasisValueCache.h" // for Jacobian/cell measure computation
+#include "BasisCache.h" // for Jacobian/cell measure computation
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -101,7 +101,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             
             // create basisCache
             int cubDegree = elem->elementType()->testOrderPtr->maxBasisDegree();
-            BasisValueCache basisCache = BasisValueCache(allPhysicalNodesForType, *(elem->elementType()->cellTopoPtr), cubDegree);
+            BasisCache basisCache = BasisCache(allPhysicalNodesForType, *(elem->elementType()->cellTopoPtr), cubDegree);
             FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
 
             double scaling = epsilon;
