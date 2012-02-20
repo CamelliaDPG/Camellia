@@ -338,10 +338,11 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
 
   // loop thru all objects
   for (int i=0;i<num_obj;i++){
-    FieldContainer<double> verts; // gets resized inside verticesForCell
-    mesh->verticesForCell(verts, global_ids[i]);    
+    int numVertices = mesh->getElement(global_ids[i])->numSides();
+    int spaceDim = 2;
+    FieldContainer<double> verts(numVertices,spaceDim);
+    mesh->verticesForCell(verts, global_ids[i]);
     //average vertex positions together to get a centroid (avoids using vertex in case local enumeration overlaps)
-    int numVertices = verts.dimension(0);
     vector<double> coords(num_dim,0.0);
     //    cout << "Centroid for GID " << global_ids[i] << " is at ";
     for (int k=0;k<num_dim;k++){
