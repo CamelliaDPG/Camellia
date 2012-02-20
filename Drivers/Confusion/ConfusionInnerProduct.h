@@ -202,8 +202,8 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
     
-    //    return _confusionBilinearForm->getEpsilon() + x*y;
-    return 1.0; // for confection
+    return _confusionBilinearForm->getEpsilon() + x*y;
+    //    return 1.0; // for confection
   }
 };
 
