@@ -70,6 +70,7 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+//  mesh->setEnforceMultiBasisFluxContinuity(true); // experiment
 
   // ==================== SET INITIAL GUESS ==========================
 
