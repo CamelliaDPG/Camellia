@@ -1,8 +1,8 @@
 Import('*')
 
-src_obj_confection = env.Object(['ConfusionBilinearForm.cpp','PenaltyMethodFilter.cpp','ConfectionManufacturedSolution.cpp'])
+src_obj_confection = env.Object(['ConfusionBilinearForm.cpp','ConfectionManufacturedSolution.cpp','VortexManufacturedSolution.cpp'])
 
-src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp'])
+src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp','ConfusionProblem.cpp'])
 
 env.Program('exec/AdaptiveConfusion',['AdaptiveConfusion.cpp',src_obj])
 

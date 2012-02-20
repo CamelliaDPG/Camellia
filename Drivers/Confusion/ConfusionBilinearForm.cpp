@@ -15,8 +15,8 @@ static const string & S_DEFAULT_TEST = "invalid test";
 
 ConfusionBilinearForm::ConfusionBilinearForm(double epsilon) {
   _epsilon = epsilon;
-  _beta_x = 0.0;
-  _beta_y = 0.0;
+  _beta_x = 0.0/0.0;//induce NaN
+  _beta_y = 0.0/0.0;
   _useConstBeta = false; // will use beta defined in the routine
   
   _testIDs.push_back(TAU);
@@ -58,12 +58,9 @@ vector<double> ConfusionBilinearForm::getBeta(double x, double y){
   if (_useConstBeta){
     beta.push_back(_beta_x);
     beta.push_back(_beta_y);
-  } else {
-    double xn = (x-.5);
-    double yn = (y-.5);
-    double r  = 1.0; //sqrt(xn*xn+yn*yn);
-    beta.push_back(-yn/r);
-    beta.push_back(xn/r);  
+  } else { 
+    beta.push_back(-(y-.5));
+    beta.push_back(x-.5);  
   }
   return beta;
 }

@@ -60,16 +60,14 @@ class VortexProblem : public RHS, public BC, public Constraints {
 	if (beta_n < 0){
 	  double pi = 2.0*acos(0.0);
 	  //	  u0 = sin(2.0*pi*x)+sin(2.0*pi*y);
-	  u0 = abs(x*y + (1.0-x)*(1.0-y) -.5);
-	  double sigma1 = y - (1.0-y);
-	  double sigma2 = x - (1.0-x);
+	  //	  u0 = abs(x*y + (1.0-x)*(1.0-y) -.5);
 	  double n1 = unitNormals(cellIndex,ptIndex,0);
 	  double n2 = unitNormals(cellIndex,ptIndex,1);
-	  sigma_n = _cbf->getEpsilon()*(sigma1*n1 + sigma2*n2);
-	  //      u0 = abs((x-.5)*(x-.5) + (y-.5)*(y-.5)-.25);
+
+	  u0 = sqrt((x-.5)*(x-.5) + (y-.5)*(y-.5))-.5;
 	  
 	  if (bcsImposed(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT)){
-	    dirichletValues(cellIndex,ptIndex) = beta_n*u0-sigma_n;
+	    dirichletValues(cellIndex,ptIndex) = beta_n*u0;
 	  } else {
 	    dirichletValues(cellIndex,ptIndex) = u0;
 	  }
@@ -115,11 +113,32 @@ class VortexProblem : public RHS, public BC, public Constraints {
 	if ((abs(x-1.0) < 1e-12) || (abs(y-1.0) < 1e-12)){
 	  isOnABoundary = true;
 	}
+
+	/*
+	isOnABoundary = false;
+	// manually enforce outflow boundaries
+	if (x>0.0 && x<.5 && abs(y)<1e-14){ //bottom
+	  isOnABoundary = true;
+	}
+	if (y>0.0 && y<.5 && abs(x-1.0)<1e-14){ // right
+	  isOnABoundary = true;
+	}
+	if (x<1.0 && x>.5 && abs(y-1.0)<1e-14){ // top
+	  isOnABoundary = true;
+	}
+	if (y<1.0 && y>.5 && abs(x)<1e-14){
+	  isOnABoundary = true;
+	}
+	if (isOnABoundary){
+	  cout << "At pts x,y = " << x << "," << y << ", beta_n = " << beta_n << ", and unit normal = " << unitNormals(cellIndex,pointIndex,0) << ","<< unitNormals(cellIndex,pointIndex,1) << endl;
+	}
+	*/
+
 	if ( (beta_n > 0.0) && isOnABoundary) {
 	  // this combo isolates sigma_n
 	  uCoeffs(cellIndex,pointIndex) = beta_n;
 	  beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
-	  outflowValues(cellIndex,pointIndex) = 0.0;//beta_n*_cbf->getEpsilon();
+	  outflowValues(cellIndex,pointIndex) = 0.0;// _cbf->getEpsilon();
 	}
 	
       }

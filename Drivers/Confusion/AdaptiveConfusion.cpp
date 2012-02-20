@@ -47,20 +47,20 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-6;
+
+  double epsilon =  1e-2;
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   bool usePatchBasis = false;
-  bool enforceMBFluxContinuity = true;
-  bool limitIrregularity = false;
+  bool enforceMBFluxContinuity = false;
+  bool limitIrregularity = true;
   
-  int numRefinements = 5;
-  double thresholdFactor = 0.20;
-  
+  int numRefinements = 4;
+  double thresholdFactor = 0.20;  
+
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
-
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -85,31 +85,24 @@ int main(int argc, char *argv[]) {
 
   // define our inner product:
   Teuchos::RCP<ConfusionInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
-  //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
 
   // create a solution object
   Teuchos::RCP<Solution> solution;
   if (useEggerSchoeberl)
     solution = Teuchos::rcp(new Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip));
   else {
-    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem() );
-    //    Teuchos::RCP<ConfectionProblem> problem = Teuchos::rcp( new ConfectionProblem(bf) );
+    Teuchos::RCP<ConfusionProblem> problem = Teuchos::rcp( new ConfusionProblem(bf) );
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
  
   solution->solve(false);
-  //cout << "Processor " << rank << " returned from solve()." << endl;
 
-  /*
-  // save a data file for plotting in MATLAB
   if (rank==0){
-    solution->writeToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "Confusion_u_hat_adaptive.dat");
-    cout << "Done writing soln to file." << endl;
+    //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u_unif.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat_unif.dat");
   }
-  return 0;
-  */
+
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<int> dofVector;

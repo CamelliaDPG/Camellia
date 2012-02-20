@@ -41,12 +41,12 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-4;
+  double epsilon = 1e-2;
   double beta_x = .8, beta_y = .6;
   bool useTriangles = false;
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<ConfectionManufacturedSolution> exactSolution = Teuchos::rcp(new ConfectionManufacturedSolution(epsilon,beta_x,beta_y));
-  bool useExactSolution = false;
+  bool useExactSolution = true;
   
   FieldContainer<double> quadPoints(4,2);
 
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
   }
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 4, verticalCells = 4;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh;
   mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -101,6 +101,41 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
   }
+  int cubDegree = 15;
+  double l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
+
+  bf->setEpsilon(bf->getEpsilon()*.1);
+
+  solution->solve(false);
+  if (rank==0){
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
+  }
+  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
+
+  bf->setEpsilon(bf->getEpsilon()*.1);
+
+  solution->solve(false);
+  if (rank==0){
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
+  }
+  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
+
+  bf->setEpsilon(bf->getEpsilon()*.1);
+
+  solution->solve(false);
+  if (rank==0){
+    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
+    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
+  }
+  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
+
+  return 0;
 
   bool limitIrregularity = true;
   int numRefinements = 4;

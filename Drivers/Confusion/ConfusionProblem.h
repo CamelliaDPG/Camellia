@@ -7,8 +7,10 @@
 #include "ConfusionBilinearForm.h"
 
 class ConfusionProblem : public RHS, public BC {
-public:
-  ConfusionProblem();
+ private:
+  Teuchos::RCP<ConfusionBilinearForm> _cbf;
+ public:
+  ConfusionProblem(Teuchos::RCP<ConfusionBilinearForm> cbf);
     
   // RHS:
   bool nonZeroRHS(int testVarID);
@@ -21,6 +23,6 @@ public:
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,
-                        FieldContainer<bool> &imposeHere);
+			FieldContainer<bool> &imposeHere);
 };
 #endif
