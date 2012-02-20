@@ -26,6 +26,7 @@ for i in range(len(Poisson_files)):
 Confusion_dir = "../Confusion"
 Confusion_files = Split("""
 ConfusionBilinearForm.cpp
+ConfusionProblem.cpp
 ConfusionManufacturedSolution.cpp
 """)
 
@@ -33,6 +34,6 @@ for i in range(len(Confusion_files)):
     Confusion_files[i]=Confusion_dir+"/"+Confusion_files[i]
     print Confusion_files
     
-src_obj = env.Object(['PatchBasisTests.cpp','VectorizedBasisTestSuite.cpp','MeshTestSuite.cpp','SolutionTests.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp'),'../Stokes/StokesBilinearForm.cpp'])
+src_obj = env.Object(['PatchBasisTests.cpp','VectorizedBasisTestSuite.cpp','MeshTestSuite.cpp','SolutionTests.cpp','MultiBasisTests.cpp','ElementTests.cpp','MeshRefinementTests.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp'),'../Stokes/StokesBilinearForm.cpp'])
 
 env.Program('exec/DPGTests',['DPGTests.cpp',src_obj])
