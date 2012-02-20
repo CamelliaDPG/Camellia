@@ -45,14 +45,11 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
-void BasisCache::init(const FieldContainer<double> &physicalCellNodes, 
-                      shards::CellTopology &cellTopo,
-                      DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
+void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering,
+                      int maxTestDegree, bool createSideCacheToo) {
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
-  _numCells = physicalCellNodes.dimension(0);
-  _spaceDim = physicalCellNodes.dimension(2);
   
   // _cubDegree, _maxTestDegree, and _cubFactory should become local to init() once we
   // put side cache creation back here, where it belongs.)
@@ -69,19 +66,38 @@ void BasisCache::init(const FieldContainer<double> &physicalCellNodes,
   _cubWeights.resize(numCubPoints);
   
   cellTopoCub->getCubature(_cubPoints, _cubWeights);
-  
-  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
+
+BasisCache::BasisCache(ElementTypePtr elemType, bool testVsTest) {
+  // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
+  shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
+
+  DofOrdering trialOrdering;
+  if (testVsTest)
+    trialOrdering = *(elemType->testOrderPtr); // bit of a lie here -- treat the testOrdering as trialOrdering
+  else
+    trialOrdering = *(elemType->trialOrderPtr);
+  
+  bool createSideCacheToo = !testVsTest;
+  
+  int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
+
+  init(cellTopo,trialOrdering,maxTestDegree,createSideCacheToo);
+}
+
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  init(physicalCellNodes, cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
+  init(cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
+  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
   DofOrdering trialOrdering; // dummy trialOrdering
-  init(physicalCellNodes, cellTopo, trialOrdering, cubDegree, false);
+  bool createSideCacheToo = false;
+  init(cellTopo, trialOrdering, cubDegree, createSideCacheToo);
+  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
@@ -309,6 +325,10 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
 
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo) {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
+  
+  _numCells = physicalCellNodes.dimension(0);
+  _spaceDim = physicalCellNodes.dimension(2);
+  
   _basisCacheSides.clear();  // it would be better not to have to recreate these every time the physicalCellNodes changes, but this is a first pass.
   _cellIDs = cellIDs;
   // 1. Determine Jacobians

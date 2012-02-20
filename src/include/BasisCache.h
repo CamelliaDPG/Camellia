@@ -51,12 +51,15 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
+#include "ElementType.h"
+
 #include "DofOrdering.h"
 
 using namespace Intrepid;
 using namespace std;
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+typedef Teuchos::RCP<ElementType> ElementTypePtr;
 
 class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
@@ -107,10 +110,9 @@ private:
   // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
   //  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
   //                                                                int componentOfInterest);
-  void init(const FieldContainer<double> &physicalCellNodes, 
-            shards::CellTopology &cellTopo,
-            DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
+  void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
 public:
+  BasisCache(ElementTypePtr elemType, bool testVsTest=false); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
