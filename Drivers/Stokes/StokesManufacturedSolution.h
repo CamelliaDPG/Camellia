@@ -65,7 +65,7 @@ protected:
   template <typename T> const T u2(T &x, T &y);  // in 2 dimensions
   template <typename T> const T  p(T &x, T &y);  // in 2 dimensions
   
-  void f_rhs(FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent);
+  void f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent);
   int pressureID();
 public:
   StokesManufacturedSolution(StokesManufacturedSolutionType type, 
@@ -79,7 +79,7 @@ public:
                                FieldContainer<double> &unitNormal);
   // RHS 
   virtual bool nonZeroRHS(int testVarID);
-  virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
+  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
   // BC
   virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 

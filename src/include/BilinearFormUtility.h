@@ -35,6 +35,7 @@
 #include "BilinearForm.h"
 #include "DPGInnerProduct.h"
 #include "RHS.h"
+#include "BasisCache.h"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
@@ -45,6 +46,8 @@ using namespace std;
 using namespace Intrepid;
 
 class DPGTests;
+
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BilinearFormUtility {
 private:

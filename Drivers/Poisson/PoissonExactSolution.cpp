@@ -151,7 +151,7 @@ bool PoissonExactSolution::nonZeroRHS(int testVarID) {
   }
 }
 
-void PoissonExactSolution::rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void PoissonExactSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);

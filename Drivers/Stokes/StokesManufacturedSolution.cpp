@@ -280,7 +280,7 @@ bool StokesManufacturedSolution::nonZeroRHS(int testVarID) {
   }
 }
 
-void StokesManufacturedSolution::f_rhs(FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent) { // -1 for both
+void StokesManufacturedSolution::f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent) { // -1 for both
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
@@ -323,7 +323,7 @@ void StokesManufacturedSolution::f_rhs(FieldContainer<double> &physicalPoints, F
   }
 }
 
-void StokesManufacturedSolution::rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);

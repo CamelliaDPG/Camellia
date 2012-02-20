@@ -806,7 +806,8 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
   DefaultCubatureFactory<double>  cubFactory;
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = 2*cubDegreeTest;
-  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree); // DON'T create side caches, too
+  
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, cellTopo, cubDegree)); // DON'T create side caches, too
 
   vector<int> testIDs = bilinearForm.testIDs();
   vector<int>::iterator testIterator;
@@ -841,8 +842,8 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
           
           Teuchos::RCP< const FieldContainer<double> > testValuesTransformedWeighted;
           
-          testValuesTransformedWeighted = basisCache.getTransformedWeightedValues(testBasis,testOperator);
-          FieldContainer<double> physCubPoints = basisCache.getPhysicalCubaturePoints();
+          testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
+          FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
           
           int testDofOffset = testOrdering->getDofIndex(testID,0);
           // note that weightCellBasisValues does depend on contiguous test basis dofs...
@@ -851,7 +852,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
           FieldContainer<double> testValuesTransformedWeightedWeighted = *testValuesTransformedWeighted;
           weightCellBasisValues(testValuesTransformedWeightedWeighted, weights, testDofOffset);
           
-          rhs.rhs(testID,operatorIndex,physCubPoints,rhsPointValues);
+          rhs.rhs(testID,operatorIndex,basisCache,rhsPointValues);
           
           //cout << "rhsPointValues for testID " << testID << ":" << endl << rhsPointValues;
           

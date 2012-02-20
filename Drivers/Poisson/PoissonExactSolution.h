@@ -67,7 +67,7 @@ public:
                        FieldContainer<double> &unitNormal);
 // RHS 
   virtual bool nonZeroRHS(int testVarID);
-  virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
+  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
 // BC
   virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 

@@ -22,7 +22,7 @@ class VortexProblem : public RHS, public BC, public Constraints {
     return false; //testVarID == ConfusionBilinearForm::V;
   }
   
-  void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);

@@ -15,7 +15,7 @@ class ConfusionProblem : public RHS, public BC {
   // RHS:
   bool nonZeroRHS(int testVarID);
   
-  void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
+  void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);
   
   // BC
   bool bcsImposed(int varID);

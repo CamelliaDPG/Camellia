@@ -48,7 +48,7 @@ bool PoissonRHSCubic::nonZeroRHS(int testVarID) {
   }
 }
 
-void PoissonRHSCubic::rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void PoissonRHSCubic::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   // for an exact solution of x^3 + 2y^3, f = 6x + 12y
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);

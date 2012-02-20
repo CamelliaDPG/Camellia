@@ -42,6 +42,8 @@
 
 #include "BilinearForm.h" // defines EOperatorExtended
 
+#include "BasisCache.h"
+
 #include <vector>
 
 using namespace std;
@@ -56,11 +58,14 @@ public:
     ops.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
     return ops;
   }
-  virtual void rhs(int testVarID, int operatorIndex, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values) {
+    rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
+  }
+  virtual void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
     rhs(testVarID,physicalPoints,values);
   }
-  virtual void rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
   }
   // physPoints (numCells,numPoints,spaceDim)

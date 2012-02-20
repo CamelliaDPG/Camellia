@@ -34,7 +34,7 @@ public:
     //    return false;
   }
   
-  void rhs(int testVarID, int operatorIndex, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+  void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);

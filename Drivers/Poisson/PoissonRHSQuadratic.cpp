@@ -49,7 +49,7 @@ bool PoissonRHSQuadratic::nonZeroRHS(int testVarID) {
   }
 }
 
-void PoissonRHSQuadratic::rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void PoissonRHSQuadratic::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   // for an exact solution of x^4 + x^3 y, f = 6x
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);

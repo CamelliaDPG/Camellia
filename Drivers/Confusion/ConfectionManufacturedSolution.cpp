@@ -91,7 +91,7 @@ bool ConfectionManufacturedSolution::nonZeroRHS(int testVarID) {
   }
 }
 
-void ConfectionManufacturedSolution::rhs(int testVarID, FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void ConfectionManufacturedSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
