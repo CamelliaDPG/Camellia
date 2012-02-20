@@ -1,5 +1,5 @@
-#ifndef DPG_BASIS_VALUE_CACHE
-#define DPG_BASIS_VALUE_CACHE
+#ifndef CAMELLIA_BASIS_CACHE
+#define CAMELLIA_BASIS_CACHE
 
 /*
  *  BasisCache.h
@@ -56,6 +56,8 @@
 using namespace Intrepid;
 using namespace std;
 
+typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+
 class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 private:
@@ -70,6 +72,17 @@ private:
   FieldContainer<double> _weightedMeasure;
   FieldContainer<double> _physCubPoints;
   
+  // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
+  DofOrdering _trialOrdering;
+  
+  vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
+  
+  // _cubFactory, _cubDegree, _maxTestDegree instance variables are just a temporary addition -- can be deleted once we separate
+  // the creation of the reference from physical side cache info.  (i.e. once we can push the side cache creation
+  // back into init().)
+  DefaultCubatureFactory<double> _cubFactory;
+  int _cubDegree, _maxTestDegree;
+  
   // containers specifically for sides:
   FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
   FieldContainer<double> _sideNormals;
@@ -77,37 +90,37 @@ private:
   shards::CellTopology _cellTopo;
   
   map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
-        Teuchos::RCP< const FieldContainer<double> > > _knownValues;
+  Teuchos::RCP< const FieldContainer<double> > > _knownValues;
   
   map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
-        Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformed;
+  Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformed;
   
   map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedDottedWithNormal;
   
   map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
-        Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedWeighted;
+  Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedWeighted;
   
   map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
   
   // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
-//  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
-//                                                                int componentOfInterest);
+  //  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
+  //                                                                int componentOfInterest);
   void init(const FieldContainer<double> &physicalCellNodes, 
             shards::CellTopology &cellTopo,
             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
 public:
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
-                  DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
+             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   // side cache constructor:
   BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
-                  FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
-                  FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
-                  FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-                  FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
-    
+             FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
+             FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
+             FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
+             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
+  
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> getCellMeasures();
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
@@ -118,10 +131,14 @@ public:
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
+  void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
+  
   const FieldContainer<double> & getPhysicalCubaturePoints();
   const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
-
+  
   const FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
+  
+  void setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo);
 };
 
 #endif

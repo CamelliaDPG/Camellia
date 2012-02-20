@@ -46,16 +46,21 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
 void BasisCache::init(const FieldContainer<double> &physicalCellNodes, 
-                           shards::CellTopology &cellTopo,
-                           DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
+                      shards::CellTopology &cellTopo,
+                      DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
   _numCells = physicalCellNodes.dimension(0);
   _spaceDim = physicalCellNodes.dimension(2);
-  int cubDegree = trialOrdering.maxBasisDegree() + maxTestDegree;
-  DefaultCubatureFactory<double>  cubFactory;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree); 
+  
+  // _cubDegree, _maxTestDegree, and _cubFactory should become local to init() once we
+  // put side cache creation back here, where it belongs.)
+  // (same might be true of _trialOrdering.)
+  _cubDegree = trialOrdering.maxBasisDegree() + maxTestDegree;
+  _maxTestDegree = maxTestDegree;
+  Teuchos::RCP<Cubature<double> > cellTopoCub = _cubFactory.create(cellTopo, _cubDegree); 
+  _trialOrdering = trialOrdering; // makes a copy--would be better to have an RCP here
   
   int cubDim       = cellTopoCub->getDimension();
   int numCubPoints = cellTopoCub->getNumPoints();
@@ -65,123 +70,12 @@ void BasisCache::init(const FieldContainer<double> &physicalCellNodes,
   
   cellTopoCub->getCubature(_cubPoints, _cubWeights);
   
-  // 1. Determine Jacobians
-  // Compute cell Jacobians, their inverses and their determinants
-  
-  // Containers for Jacobian
-  _cellJacobian = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobInv = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobDet = FieldContainer<double>(_numCells, numCubPoints);
-  
-  typedef CellTools<double>  CellTools;
-  
-  CellTools::setJacobian(_cellJacobian, _cubPoints, physicalCellNodes, _cellTopo);
-  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
-  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
-  
-  // compute weighted measure
-  _weightedMeasure = FieldContainer<double>(_numCells, numCubPoints);
-  fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
-  
-  // compute physicalCubaturePoints, the transformed cubature points on each cell:
-  _physCubPoints = FieldContainer<double>(_numCells, numCubPoints, _spaceDim);
-  CellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,physicalCellNodes,_cellTopo);
-  
-  if ( createSideCacheToo ) {
-    _numSides = cellTopo.getSideCount();
-    vector<int> sideTrialIDs;
-    vector<int> trialIDs = trialOrdering.getVarIDs();
-    int numTrialIDs = trialIDs.size();
-    for (int i=0; i<numTrialIDs; i++) {
-      if (trialOrdering.getNumSidesForVarID(trialIDs[i]) == _numSides) {
-        sideTrialIDs.push_back(trialIDs[i]);
-      }
-    }
-    int numSideTrialIDs = sideTrialIDs.size();
-    for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
-      shards::CellTopology side(cellTopo.getCellTopologyData(_spaceDim-1,sideOrdinal)); // create relevant subcell (side) topology
-      int sideDim = side.getDimension();                              
-      Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
-      int numCubPointsSide = sideCub->getNumPoints();
-      FieldContainer<double> cubPointsSide(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
-      FieldContainer<double> cubWeightsSide(numCubPointsSide);
-      bool multiBasis = false;
-      if ( numSideTrialIDs > 0) {
-        BasisPtr sampleBasis = trialOrdering.getBasis(sideTrialIDs[0],sideOrdinal);
-        if (BasisFactory::isMultiBasis(sampleBasis) ) {
-          multiBasis = true;
-        }
-      }
-      
-      if ( ! multiBasis ) {
-        sideCub->getCubature(cubPointsSide, cubWeightsSide);
-      } else {
-        // loop through looking for highest-degree multi-basis
-        BasisPtr basis;
-        int maxTrialDegree = 0;
-        for (int i=0; i<numSideTrialIDs; i++) {
-          if (trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
-            basis = trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
-            maxTrialDegree = basis->getDegree();
-          }
-        }
-        
-        MultiBasis* multiBasis = (MultiBasis*) basis.get();
-        multiBasis->getCubature(cubPointsSide, cubWeightsSide, maxTestDegree);
-        numCubPointsSide = cubPointsSide.dimension(0);
-      }
-      
-      FieldContainer<double> cubPointsSideRefCell(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-      FieldContainer<double> cubPointsSidePhysical(_numCells, numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the physical cell
-      FieldContainer<double> jacobianSideRefCell(_numCells, numCubPointsSide, _spaceDim, _spaceDim);
-      FieldContainer<double> jacobianDetSideRefCell(_numCells, numCubPointsSide);
-      FieldContainer<double> jacobianInvSideRefCell(_numCells, numCubPointsSide, _spaceDim, _spaceDim);
-      FieldContainer<double> weightedMeasureSideRefCell(_numCells, numCubPointsSide);
-      
-      // compute geometric cell information
-      //cout << "computing geometric cell info for boundary integral." << endl;
-      CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideOrdinal, cellTopo);
-      CellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-      
-      CellTools::setJacobianDet(jacobianDetSideRefCell, jacobianSideRefCell );
-      CellTools::setJacobianInv(jacobianInvSideRefCell, jacobianSideRefCell );
-      
-      // map side cubature points in reference parent cell domain to physical space
-      CellTools::mapToPhysicalFrame(cubPointsSidePhysical, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-      
-      // compute weighted edge measure
-      FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasureSideRefCell,
-                                                     jacobianSideRefCell,
-                                                     cubWeightsSide,
-                                                     sideOrdinal,
-                                                     cellTopo);
-      
-      // get normals
-      FieldContainer<double> sideNormals(_numCells, numCubPointsSide, _spaceDim);
-      FieldContainer<double> normalLengths(_numCells, numCubPointsSide);
-      CellTools::getPhysicalSideNormals(sideNormals, jacobianSideRefCell, sideOrdinal, cellTopo);
-      
-      // make unit length
-      RealSpaceTools<double>::vectorNorm(normalLengths, sideNormals, NORM_TWO);
-      FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
-      
-      // values we want to keep around: cubPointsSide, cubPointsSideRefCell, sideNormals, jacobianSideRefCell, jacobianInvSideRefCell, jacobianDetSideRefCell
-      BasisCache* sideCache = new BasisCache(cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
-                                                       cubPointsSide, cubPointsSideRefCell, 
-                                                       cubWeightsSide, weightedMeasureSideRefCell,
-                                                       sideNormals, jacobianSideRefCell,
-                                                       jacobianInvSideRefCell, jacobianDetSideRefCell);
-      
-      Teuchos::RCP< const BasisCache > constCache = Teuchos::rcp(sideCache,false);
-      
-      _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
-    }
-  }
+  setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
-                                 shards::CellTopology &cellTopo,
-                                 DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
+                       shards::CellTopology &cellTopo,
+                       DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
   init(physicalCellNodes, cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
 }
 
@@ -191,11 +85,11 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
 }
 
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
-                                 FieldContainer<double> &cubPointsSidePhysical,
-                                 FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
-                                 FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
-                                 FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-                                 FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell) {
+                       FieldContainer<double> &cubPointsSidePhysical,
+                       FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
+                       FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
+                       FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
+                       FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell) {
   _isSideCache = true; // this is the SIDE constructor: we don't have sides here!  (// TODO: think about 3D here)
   
   _cellTopo = cellTopo;
@@ -217,6 +111,23 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDi
   
 }
 
+void BasisCache::discardPhysicalNodeInfo() {
+  // discard physicalNodes and all transformed basis values.
+  _knownValuesTransformed.clear();
+  _knownValuesTransformedWeighted.clear();
+  _knownValuesTransformedDottedWithNormal.clear();
+  _knownValuesTransformedWeighted.clear();
+  _cellIDs.clear();
+  
+  // resize all the related fieldcontainers to reclaim their memory
+  _cellJacobian.resize(0);
+  _cellJacobInv.resize(0);
+  _cellJacobDet.resize(0);
+  _weightedMeasure.resize(0);
+  _physCubPoints.resize(0);
+}
+
+
 const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints() {
   return _physCubPoints;
 }
@@ -234,7 +145,7 @@ FieldContainer<double> BasisCache::getCellMeasures() {
 }
 
 constFCPtr BasisCache::getValues(BasisPtr basis, EOperatorExtended op,
-                                      bool useCubPointsSideRefCell) {
+                                 bool useCubPointsSideRefCell) {
   FieldContainer<double> cubPoints;
   if (useCubPointsSideRefCell) {
     cubPoints = _cubPointsSideRefCell;
@@ -290,7 +201,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, EOperatorExtended op,
 }
 
 constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op,
-                                                 bool useCubPointsSideRefCell) {
+                                            bool useCubPointsSideRefCell) {
   pair<Basis<double,FieldContainer<double> >*, EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end()) {
     return _knownValuesTransformed[key];
@@ -351,7 +262,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op
 }
 
 constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
-                                                         bool useCubPointsSideRefCell) {
+                                                    bool useCubPointsSideRefCell) {
   pair<Basis<double,FieldContainer<double> >*, EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformedWeighted.find(key) != _knownValuesTransformedWeighted.end()) {
     return _knownValuesTransformedWeighted[key];
@@ -368,12 +279,12 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExt
 
 /*** SIDE VARIANTS ***/
 constFCPtr BasisCache::getValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal,
-                                      bool useCubPointsSideRefCell) {
+                                 bool useCubPointsSideRefCell) {
   return _basisCacheSides[sideOrdinal]->getValues(basis,op,useCubPointsSideRefCell);
 }
 
 constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, 
-                                                 bool useCubPointsSideRefCell) {
+                                            bool useCubPointsSideRefCell) {
   constFCPtr transformedValues;
   if ( ! _isSideCache ) {
     transformedValues = _basisCacheSides[sideOrdinal]->getTransformedValues(basis,op,useCubPointsSideRefCell);
@@ -384,7 +295,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op
 }
 
 constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, 
-                                                         int sideOrdinal, bool useCubPointsSideRefCell) {
+                                                    int sideOrdinal, bool useCubPointsSideRefCell) {
   return _basisCacheSides[sideOrdinal]->getTransformedWeightedValues(basis,op,useCubPointsSideRefCell);
 }
 
@@ -394,4 +305,122 @@ const FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int 
 
 const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){  
   return _basisCacheSides[sideOrdinal]->_sideNormals;
+}
+
+void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo) {
+  discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
+  _basisCacheSides.clear();  // it would be better not to have to recreate these every time the physicalCellNodes changes, but this is a first pass.
+  _cellIDs = cellIDs;
+  // 1. Determine Jacobians
+  // Compute cell Jacobians, their inverses and their determinants
+  
+  int numCubPoints = _cubPoints.dimension(0);
+  
+  // Containers for Jacobian
+  _cellJacobian = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobInv = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobDet = FieldContainer<double>(_numCells, numCubPoints);
+  
+  typedef CellTools<double>  CellTools;
+  
+  CellTools::setJacobian(_cellJacobian, _cubPoints, physicalCellNodes, _cellTopo);
+  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+  
+  // compute weighted measure
+  _weightedMeasure = FieldContainer<double>(_numCells, numCubPoints);
+  fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
+  
+  // compute physicalCubaturePoints, the transformed cubature points on each cell:
+  _physCubPoints = FieldContainer<double>(_numCells, numCubPoints, _spaceDim);
+  CellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,physicalCellNodes,_cellTopo);
+  
+  if ( createSideCacheToo ) {
+    _numSides = _cellTopo.getSideCount();
+    vector<int> sideTrialIDs;
+    vector<int> trialIDs = _trialOrdering.getVarIDs();
+    int numTrialIDs = trialIDs.size();
+    for (int i=0; i<numTrialIDs; i++) {
+      if (_trialOrdering.getNumSidesForVarID(trialIDs[i]) == _numSides) {
+        sideTrialIDs.push_back(trialIDs[i]);
+      }
+    }
+    int numSideTrialIDs = sideTrialIDs.size();
+    for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+      shards::CellTopology side(_cellTopo.getCellTopologyData(_spaceDim-1,sideOrdinal)); // create relevant subcell (side) topology
+      int sideDim = side.getDimension();                              
+      Teuchos::RCP<Cubature<double> > sideCub = _cubFactory.create(side, _cubDegree);
+      int numCubPointsSide = sideCub->getNumPoints();
+      FieldContainer<double> cubPointsSide(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
+      FieldContainer<double> cubWeightsSide(numCubPointsSide);
+      bool multiBasis = false;
+      if ( numSideTrialIDs > 0) {
+        BasisPtr sampleBasis = _trialOrdering.getBasis(sideTrialIDs[0],sideOrdinal);
+        if (BasisFactory::isMultiBasis(sampleBasis) ) {
+          multiBasis = true;
+        }
+      }
+      
+      if ( ! multiBasis ) {
+        sideCub->getCubature(cubPointsSide, cubWeightsSide);
+      } else {
+        // loop through looking for highest-degree multi-basis
+        BasisPtr basis;
+        int maxTrialDegree = 0;
+        for (int i=0; i<numSideTrialIDs; i++) {
+          if (_trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
+            basis = _trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+            maxTrialDegree = basis->getDegree();
+          }
+        }
+        
+        MultiBasis* multiBasis = (MultiBasis*) basis.get();
+        multiBasis->getCubature(cubPointsSide, cubWeightsSide, _maxTestDegree);
+        numCubPointsSide = cubPointsSide.dimension(0);
+      }
+      
+      FieldContainer<double> cubPointsSideRefCell(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
+      FieldContainer<double> cubPointsSidePhysical(_numCells, numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the physical cell
+      FieldContainer<double> jacobianSideRefCell(_numCells, numCubPointsSide, _spaceDim, _spaceDim);
+      FieldContainer<double> jacobianDetSideRefCell(_numCells, numCubPointsSide);
+      FieldContainer<double> jacobianInvSideRefCell(_numCells, numCubPointsSide, _spaceDim, _spaceDim);
+      FieldContainer<double> weightedMeasureSideRefCell(_numCells, numCubPointsSide);
+      
+      // compute geometric cell information
+      //cout << "computing geometric cell info for boundary integral." << endl;
+      CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideOrdinal, _cellTopo);
+      CellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, _cellTopo);
+      
+      CellTools::setJacobianDet(jacobianDetSideRefCell, jacobianSideRefCell );
+      CellTools::setJacobianInv(jacobianInvSideRefCell, jacobianSideRefCell );
+      
+      // map side cubature points in reference parent cell domain to physical space
+      CellTools::mapToPhysicalFrame(cubPointsSidePhysical, cubPointsSideRefCell, physicalCellNodes, _cellTopo);
+      
+      // compute weighted edge measure
+      FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasureSideRefCell,
+                                                     jacobianSideRefCell,
+                                                     cubWeightsSide,
+                                                     sideOrdinal,
+                                                     _cellTopo);
+      
+      // get normals
+      FieldContainer<double> sideNormals(_numCells, numCubPointsSide, _spaceDim);
+      FieldContainer<double> normalLengths(_numCells, numCubPointsSide);
+      CellTools::getPhysicalSideNormals(sideNormals, jacobianSideRefCell, sideOrdinal, _cellTopo);
+      
+      // make unit length
+      RealSpaceTools<double>::vectorNorm(normalLengths, sideNormals, NORM_TWO);
+      FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
+      
+      // values we want to keep around: cubPointsSide, cubPointsSideRefCell, sideNormals, jacobianSideRefCell, jacobianInvSideRefCell, jacobianDetSideRefCell
+      BasisCache* sideCache = new BasisCache(_cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
+                                             cubPointsSide, cubPointsSideRefCell, 
+                                             cubWeightsSide, weightedMeasureSideRefCell,
+                                             sideNormals, jacobianSideRefCell,
+                                             jacobianInvSideRefCell, jacobianDetSideRefCell);
+      
+      _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
+    }
+  }
 }
