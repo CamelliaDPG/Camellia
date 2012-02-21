@@ -34,5 +34,11 @@ public:
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,
                         FieldContainer<bool> &imposeHere);
-};
+
+  virtual void getConstraints(FieldContainer<double> &physicalPoints, 
+                              FieldContainer<double> &unitNormals,
+                              vector<map<int,FieldContainer<double > > > &constraintCoeffs,
+                              vector<FieldContainer<double > > &constraintValues);
+
+
 #endif

@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
 
   int H1Order = polyOrder + 1;
-  int horizontalCells = 4, verticalCells = 4;
+  int horizontalCells = 2, verticalCells = 2;
 
   ////////////////////////////////////////////////////////////////////
   // SET UP PROBLEM 
@@ -69,9 +69,9 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
-//  mesh->setPartitionPolicy(Teuchos::rcp(new MeshPartitionPolicy()));
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new MeshPartitionPolicy()));
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-//  mesh->setEnforceMultiBasisFluxContinuity(true); // experiment
+  //  mesh->setEnforceMultiBasisFluxContinuity(true); // experiment
 
   // ==================== SET INITIAL GUESS ==========================
 
@@ -97,7 +97,16 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
 
-  int numRefs = 4;
+  // =================== END INITIALIZATION CODE ==========================
+
+  solution->solve(); 
+  backgroundFlow->addSolution(solution,.5);
+  solution->solve(); 
+  backgroundFlow->addSolution(solution,.5);
+
+  return 0;
+
+  int numRefs = 1;
   int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
 
@@ -112,40 +121,43 @@ int main(int argc, char *argv[]) {
     while (!converged) { // while energy error has not stabilized
 
       solution->solve();
- 
-      backgroundFlow->addSolution(solution,1.0);
-
+      
       // see if energy error has stabilized
       solution->energyError(energyError);    
       double totalError = 0.0;
-      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++) {
-        Teuchos::RCP< Element > current_element = *(activeElemIt);
-        totalError += energyError[current_element->cellID()];
+      
+      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+	Teuchos::RCP< Element > current_element = *(activeElemIt);
+	totalError += energyError[current_element->cellID()]*energyError[current_element->cellID()];
       }
       double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
       if (rank==0){
 	cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
       }
 
-      double tol = .01; // if change is less than 1%, solve again
+      double tol = .015; // if change is less than %, solve again
       if (relErrorDiff<tol){
 	converged = true;
       } else {
 	prevError=totalError; // reset previous error and continue
       } 
-      i++;
-      
-      
+
+      double stepLength = .5;
+      backgroundFlow->addSolution(solution,stepLength);
+
+      i++;            
     }
 
     // greedy refinement algorithm - mark cells for refinement
     vector<int> triangleCellsToRefine;
     vector<int> quadCellsToRefine;
     double maxError = 0.0;
+    double totalEnergyError = 0.0;
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
       maxError = max(energyError[cellID],maxError);
+      totalEnergyError += energyError[current_element->cellID()]*energyError[current_element->cellID()]; 
     }
     
     // do refinements on cells with error above threshold
@@ -156,17 +168,10 @@ int main(int argc, char *argv[]) {
 	if (current_element->numSides()==3){
 	  triangleCellsToRefine.push_back(cellID);
 	}else if (current_element->numSides()==4){
-	  if (rank==0){
-	    cout << "refining CellID = " << cellID << endl;
-	  }
 	  quadCellsToRefine.push_back(cellID);
 	}
       }
     }  
-    if (rank==0){
-      cout << "refining on iter " << refIter << endl;
-    }
-    refIter++;
 
     // reinitialize both background flow/solution data structures
     vector< Teuchos::RCP<Solution> > solutions;
@@ -180,13 +185,16 @@ int main(int argc, char *argv[]) {
 
     mesh->enforceOneIrregularity(solutions);
 
-    //    cout << "discarding old cell coeffs on rank " << rank << endl;
-    //    backgroundFlow->discardInactiveCellCoefficients();
+    if (rank==0){
+      cout << "refined on iter " << refIter << " with energy error " << sqrt(totalEnergyError) << " and " << mesh->numGlobalDofs() << " global dofs" << endl;
+    }
+    refIter++;
+
 
   }
 
   // one more nonlinear solve on refined mesh
-  int numNRSteps = 6;
+  int numNRSteps = 5;
   for (int i=0;i<numNRSteps;i++){
     solution->solve(false);
     //    cout << "adding solution" << endl;
@@ -200,6 +208,8 @@ int main(int argc, char *argv[]) {
 
   if (rank==0){
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");
+    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigmay.m");
     solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
   }
   

@@ -45,12 +45,12 @@ FieldContainer<double> BurgersBilinearForm::getBeta(FieldContainer<double> physi
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  FieldContainer<double> allPoints = physicalPoints;
-  allPoints.resize(numCells*numPoints,spaceDim);
+  //  FieldContainer<double> allPoints = physicalPoints;
+  //  allPoints.resize(numCells*numPoints,spaceDim);
 
-  FieldContainer<double> values(numCells*numPoints);
-  _backgroundFlow->solutionValues(values, BurgersBilinearForm::U, allPoints);  
-  values.resize(numCells,numPoints);
+  FieldContainer<double> values(numCells,numPoints);
+  _backgroundFlow->solutionValues(values, BurgersBilinearForm::U, physicalPoints);  
+  //  values.resize(numCells,numPoints);
   FieldContainer<double> beta(numCells,numPoints,spaceDim);
   for (int cellIndex=0;cellIndex<numCells;cellIndex++){
     for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
