@@ -3,8 +3,8 @@
 
 #include "AbstractFunction.h"
 
-//using namespace Intrepid;
-//using namespace std;
+using namespace Intrepid;
+using namespace std;
 
 class InitialGuess : public AbstractFunction {
 public:    
