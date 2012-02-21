@@ -29,6 +29,7 @@
 // @HEADER 
 
 #include "BilinearForm.h"
+#include "BasisCache.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -68,15 +69,14 @@ const vector< int > & BilinearForm::testIDs() {
 
 void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                          int trialID, int testID, int operatorIndex,
-                                         FieldContainer<double> &points) {
+                                         const FieldContainer<double> &points) {
   applyBilinearFormData(trialID,testID,trialValues,testValues,points);
 }
 
 void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                          int trialID, int testID, int operatorIndex,
-                                         FieldContainer<double> &points, 
-                                         const map<int, FieldContainer<double> > &previousSolutionValues) {
-  applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, points);
+                                         Teuchos::RCP<BasisCache> basisCache) {
+  applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, basisCache->getPhysicalCubaturePoints());
 }
 
 void BilinearForm::trialTestOperators(int testID1, int testID2, 

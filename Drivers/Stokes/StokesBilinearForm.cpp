@@ -283,7 +283,7 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
 
 void StokesBilinearForm::applyBilinearFormData(int trialID, int testID, 
                                                FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                                               FieldContainer<double> &points) {
+                                               const FieldContainer<double> &points) {
   
   switch (testID) {
     case Q_1:

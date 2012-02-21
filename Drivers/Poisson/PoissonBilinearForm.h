@@ -49,8 +49,8 @@ public:
        EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
        
   void applyBilinearFormData(int trialID, int testID,
-                           FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                           FieldContainer<double> &points);
+                             FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+                             const FieldContainer<double> &points);
                            
   virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);

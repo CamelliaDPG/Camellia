@@ -142,7 +142,7 @@ bool PoissonBilinearForm::trialTestOperator(int trialID, int testID,
 
 void PoissonBilinearForm::applyBilinearFormData(int trialID, int testID, 
                            FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
-                           FieldContainer<double> &points) {
+                           const FieldContainer<double> &points) {
   switch (testID) {
     case Q_1:
       // - (phi, div q1)_K + (phi_hat, q_1n)_dK - (psi, q1)

@@ -201,7 +201,7 @@ bool StokesVVPBilinearForm::trialTestOperator(int trialID, int testID,
 
 void StokesVVPBilinearForm::applyBilinearFormData(int trialID, int testID, 
                                                   FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                                                  FieldContainer<double> &points) {
+                                                  const FieldContainer<double> &points) {
   switch (testID) {
     case Q_1:
       switch (trialID) {

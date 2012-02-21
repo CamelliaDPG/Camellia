@@ -15,12 +15,12 @@ public:
   const string & trialName(int trialID);
   
   void trialTestOperators(int trialID, int testID, 
-			  vector<EOperatorExtended> &trialOperators,
-			  vector<EOperatorExtended> &testOperators);
+                          vector<EOperatorExtended> &trialOperators,
+                          vector<EOperatorExtended> &testOperators);
   
   void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
-						    int trialID, int testID, int operatorIndex,
-						    FieldContainer<double> &points);
+                             int trialID, int testID, int operatorIndex,
+                             const FieldContainer<double> &points);
 
   void set_dt(double new_dt);
   double get_dt();

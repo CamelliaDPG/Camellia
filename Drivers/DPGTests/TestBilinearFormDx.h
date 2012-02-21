@@ -61,7 +61,7 @@ public:
        
   void applyBilinearFormData(int trialID, int testID,
                            FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                           FieldContainer<double> &points) {
+                           const FieldContainer<double> &points) {
     // leave values as they are...             
   }
                            

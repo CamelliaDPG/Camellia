@@ -169,7 +169,7 @@ bool BurgersBilinearForm::trialTestOperator(int trialID, int testID,
 
 void BurgersBilinearForm::applyBilinearFormData(int trialID, int testID, 
                                                 FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                                                FieldContainer<double> &points) {
+                                                const FieldContainer<double> &points) {
   switch (testID) {
     case TAU:
       // 1/eps (sigma, tau)_K + (u, div tau)_K - (u_hat, tau_n)_dK

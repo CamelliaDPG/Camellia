@@ -34,6 +34,8 @@
 #include "Intrepid_Types.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
+class BasisCache;
+
 using namespace std;
 using namespace Intrepid;
 
@@ -94,18 +96,18 @@ public:
   
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
-                                     FieldContainer<double> &points) {
+                                     const FieldContainer<double> &points) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
   }
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      int trialID, int testID, int operatorIndex,
-                                     FieldContainer<double> &points); // default implementation calls operatorIndex-less version
+                                     const FieldContainer<double> &points); // default implementation calls operatorIndex-less version
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      int trialID, int testID, int operatorIndex,
-                                     FieldContainer<double> &points, const map<int, FieldContainer<double> > &previousSolutionValues);
-  // default implementation calls previousSolutionValues-free version
+                                     Teuchos::RCP<BasisCache> basisCache);
+  // default implementation calls BasisCache-less version
                            
   const vector< int > & trialIDs();
   const vector< int > & testIDs();

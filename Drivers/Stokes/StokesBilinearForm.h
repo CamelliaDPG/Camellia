@@ -54,7 +54,7 @@ public:
   
   void applyBilinearFormData(int trialID, int testID,
                              FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                             FieldContainer<double> &points);
+                             const FieldContainer<double> &points);
   
   virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);

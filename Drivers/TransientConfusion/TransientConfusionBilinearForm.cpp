@@ -145,7 +145,7 @@ void TransientConfusionBilinearForm::trialTestOperators(int trialID, int testID,
 // now use the operator-indexed one (for multiple operators)
 void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
 						  int trialID, int testID, int operatorIndex,
-						  FieldContainer<double> &points) {
+						  const FieldContainer<double> &points) {
 
   switch (testID) {
   case TAU:

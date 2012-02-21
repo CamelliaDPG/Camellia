@@ -193,7 +193,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, Fie
       int sendbuf[maxPartitionSize];
       int recvbuf[numNodes][maxPartitionSize];
       for (int i=0;i<maxPartitionSize;i++){
-	sendbuf[i] = partitionedActiveCells(myNode,i);
+        sendbuf[i] = partitionedActiveCells(myNode,i);
       }
       /*
       cout << "for this node, partitioned cells = " ;      
