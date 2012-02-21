@@ -39,26 +39,33 @@ DPGInnerProduct::DPGInnerProduct(Teuchos::RCP< BilinearForm > bfs) {
   _bilinearForm = bfs;
 }
 
+void DPGInnerProduct::applyInnerProductData(FieldContainer<double> &testValues1,
+                                            FieldContainer<double> &testValues2,
+                                            int testID1, int testID2, int operatorIndex,
+                                            Teuchos::RCP<BasisCache> basisCache) {
+  applyInnerProductData(testValues1, testValues2, testID1, testID2, operatorIndex, basisCache->getPhysicalCubaturePoints());  
+}
+
 void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                                 Teuchos::RCP<DofOrdering> dofOrdering, shards::CellTopology &cellTopo,
-                                                 FieldContainer<double>& physicalCellNodes) {
+                                                FieldContainer<double>& physicalCellNodes) {
+  Teuchos::RCP<shards::CellTopology> cellTopoPtr = Teuchos::rcp( new shards::CellTopology(cellTopo.getCellTopologyData() ) );
+  Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(dofOrdering,dofOrdering, cellTopoPtr) );
+  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,true));
+  ipBasisCache->setPhysicalCellNodes(physicalCellNodes,vector<int>(), false);
+  computeInnerProductMatrix(innerProduct,dofOrdering,ipBasisCache);
+}
+
+void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
+                                                Teuchos::RCP<DofOrdering> dofOrdering, Teuchos::RCP<BasisCache> basisCache) {
   // much of this code is the same as what's in the volume integration in computeStiffness...
-  unsigned numCells = physicalCellNodes.dimension(0);
-  unsigned numNodesPerElem = physicalCellNodes.dimension(1);
-  unsigned spaceDim = physicalCellNodes.dimension(2);
+  FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
   
-  // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
-                     std::invalid_argument,
-                     "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
-                     std::invalid_argument,
-                     "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
+  unsigned numCells = physicalCubaturePoints.dimension(0);
+  unsigned spaceDim = physicalCubaturePoints.dimension(2);
   
-  // Set up Basis cache
-  int cubDegree = 2*dofOrdering->maxBasisDegree();
-  BasisCache basisCache(physicalCellNodes, cellTopo, cubDegree);
-  
+  shards::CellTopology cellTopo = basisCache->cellTopology();
+    
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator1;
   vector<int>::iterator testIterator2;
@@ -66,7 +73,6 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > test1Basis, test2Basis;
 
   innerProduct.initialize(0.0);
-  FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
   
   for (testIterator1= testIDs.begin(); testIterator1 != testIDs.end(); testIterator1++) {
     int testID1 = *testIterator1;
@@ -102,15 +108,15 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
       
         Teuchos::RCP< const FieldContainer<double> > test1ValuesTransformedWeighted, test2ValuesTransformed;
         
-        test1ValuesTransformedWeighted = basisCache.getTransformedWeightedValues(test1Basis,op1);
-        test2ValuesTransformed = basisCache.getTransformedValues(test2Basis,op2);
+        test1ValuesTransformedWeighted = basisCache->getTransformedWeightedValues(test1Basis,op1);
+        test2ValuesTransformed = basisCache->getTransformedValues(test2Basis,op2);
         
         FieldContainer<double> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
         FieldContainer<double> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
 
         //cout << "rank of test2ValuesTransformed: " << test2ValuesTransformed->rank() << endl;
         applyInnerProductData(innerProductDataAppliedToTest1, innerProductDataAppliedToTest2, 
-                              testID1, testID2, operatorIndex, physicalCubaturePoints);
+                              testID1, testID2, operatorIndex, basisCache);
 
         FunctionSpaceTools::integrate<double>(miniMatrix,innerProductDataAppliedToTest1,
                                               innerProductDataAppliedToTest2,COMP_CPP);

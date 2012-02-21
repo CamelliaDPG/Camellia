@@ -55,7 +55,7 @@ class L2InnerProduct : public DPGInnerProduct {
   void applyInnerProductData(FieldContainer<double> &testValues1,
                              FieldContainer<double> &testValues2,
 			     int testID1, int testID2, int operatorIndex,
-			     FieldContainer<double>& physicalPoints);
+			     const FieldContainer<double>& physicalPoints);
 
   // overwrite the original computeInnerProductMatrix routine - instead compute trial L2 matrix
   void computeInnerProductMatrix(FieldContainer<double> &innerProduct,

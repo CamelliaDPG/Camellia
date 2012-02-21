@@ -53,7 +53,7 @@ public:
   void applyInnerProductData(FieldContainer<double> &testValues1,
                              FieldContainer<double> &testValues2,
                      int testID1, int testID2, int operatorIndex,
-                     FieldContainer<double>& physicalPoints);
+                     const FieldContainer<double>& physicalPoints);
 };
 
 #endif

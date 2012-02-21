@@ -38,6 +38,8 @@
 
 #include "BilinearForm.h"
 
+#include "BasisCache.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -68,6 +70,10 @@ public:
                                          shards::CellTopology &cellTopo,
                                          FieldContainer<double>& physicalCellNodes);
   
+  virtual void computeInnerProductMatrix(FieldContainer<double> &innerProduct,
+                                         Teuchos::RCP<DofOrdering> dofOrdering,
+                                         Teuchos::RCP<BasisCache> basisCache);
+  
   virtual void printInteractions();
   
   virtual void operators(int testID1, int testID2, 
@@ -77,7 +83,14 @@ public:
   virtual void applyInnerProductData(FieldContainer<double> &testValues1,
                                      FieldContainer<double> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
-                                     FieldContainer<double>& physicalPoints) = 0;
+                                     const FieldContainer<double>& physicalPoints) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyInnerProductData!");
+  }
+  
+  virtual void applyInnerProductData(FieldContainer<double> &testValues1,
+                                     FieldContainer<double> &testValues2,
+                                     int testID1, int testID2, int operatorIndex,
+                                     Teuchos::RCP<BasisCache> basisCache);
                          
   // equivalent to calling computeInnerProduct but with just one dof lit up per function
   // (and can be more efficiently implemented than actually calling computeInnerProduct with such arguments)

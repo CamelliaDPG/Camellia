@@ -59,6 +59,14 @@ public:
   friend class DPGTests;
 
   static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
+                                FieldContainer<double> &innerProductMatrix,
+                                BilinearForm &bilinearForm,
+                                Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                FieldContainer<double> &cellSideParities,
+                                Teuchos::RCP<BasisCache> stiffnessBasisCache); // stiffness as opposed to the test-test cache
+  
+  // deprecated computeOptimalTests:
+  static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                  DPGInnerProduct &innerProduct,
                                  BilinearForm &bilinearForm,
                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
@@ -77,12 +85,12 @@ public:
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                      FieldContainer<double> &cellSideParities);
-  
+
+  // the real one:
   static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                     shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
-                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<Solution> prevSoln);
-
+                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  
   static void computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
   
   // final (square) stiffness methods, with optimal test functions applied:

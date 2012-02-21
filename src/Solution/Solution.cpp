@@ -231,6 +231,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,false);
       
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -248,7 +249,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
 //      }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
-      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
+      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
       
 //      cout << "ipMatrix:\n" << ipMatrix;
       
@@ -256,7 +257,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       int optSuccess = BilinearFormUtility::computeOptimalTest(optTestCoeffs, ipMatrix, _mesh->bilinearForm(),
                                                                trialOrderingPtr, testOrderingPtr,
-                                                               *(cellTopoPtr.get()), physicalCellNodes, cellSideParities);
+                                                               cellSideParities, basisCache);
       
 //      cout << "optTestCoeffs:\n" << optTestCoeffs;
       
@@ -1183,7 +1184,9 @@ void Solution::computeErrorRepresentation() {
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);    
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,true));
+    
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
@@ -1192,10 +1195,20 @@ void Solution::computeErrorRepresentation() {
     
     int numCells = physicalCellNodes.dimension(0);
     int numTestDofs = testOrdering->totalDofs();
+    
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");    
     FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
     
-    _ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, physicalCellNodes);
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
+      cellIDs.push_back(cellID);
+    }
+    
+    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,false);
+    
+    _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
     FieldContainer<double> rhsRepresentation(numCells,numTestDofs);
     
@@ -1339,8 +1352,7 @@ void Solution::computeResiduals() {
     // compute b(u, v):
     FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
     BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-                                                trialOrdering, testOrdering, cellTopo, 
-                                                physicalCellNodes, cellSideParities);    
+                                                trialOrdering, testOrdering, cellSideParities, basisCache);    
 
     // now, weight the entries in b(u,v) by the solution coefficients to compute:
     // l(v) - b(u_h,v)    
@@ -1348,8 +1360,8 @@ void Solution::computeResiduals() {
       int globalCellIndex = elemsInPartitionOfType[localCellIndex]->globalCellIndex();
       //      cout << "For global cell ind = " << elemsInPartitionOfType[localCellIndex]->globalCellIndex() << " and cellID = " << elemsInPartitionOfType[localCellIndex]->cellID() << endl;          
       for (int i=0; i<numTestDofs; i++) {
-	for (int j=0; j<numTrialDofs; j++) {      
-          residuals(localCellIndex,i)        -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);
+        for (int j=0; j<numTrialDofs; j++) {      
+          residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);
         }         
       }
     }    

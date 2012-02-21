@@ -20,16 +20,22 @@ public:
   bool trialTestOperator(int trialID, int testID, 
                          EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
   
-  void applyBilinearFormData(int trialID, int testID,
-                             FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
-                             const FieldContainer<double> &points);
+//  void applyBilinearFormData(int trialID, int testID,
+//                             FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
+//                             int operatorIndex, 
+//                             Teuchos::RCP<BasisCache> basisCache);
+  
+  void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
+                             int trialID, int testID, int operatorIndex, // operatorIndex unused
+                             Teuchos::RCP<BasisCache> basisCache);
   
   virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
   virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID);
 
   double getEpsilon();
   void setEpsilon(double newEpsilon);
-  FieldContainer<double> getBeta(FieldContainer<double> physicalPoints);
+  FieldContainer<double> getBeta(Teuchos::RCP<BasisCache> basisCache);
+  FieldContainer<double> getBeta(const FieldContainer<double> &physicalPoints); // BC depends on this version
   vector<double> getBeta(double x, double y);
   void setBackgroundFlow(Teuchos::RCP<Solution> flow);
   Teuchos::RCP<Solution> getBackgroundFlow(){return _backgroundFlow;}

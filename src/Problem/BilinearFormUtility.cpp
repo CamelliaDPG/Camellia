@@ -132,10 +132,28 @@ int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestW
                                             Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                             shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                             FieldContainer<double> &cellSideParities) {
+  // deprecated version (use the BasisCache version instead)
+  DefaultCubatureFactory<double>  cubFactory;
+  
+  int maxTestDegree = testOrdering->maxBasisDegree();
+  
+  bool createSideCachesToo = true;
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, cellTopo, *trialOrdering, maxTestDegree, createSideCachesToo));
+  return computeOptimalTest(optimalTestWeights,innerProductMatrix,bilinearForm,
+                            trialOrdering,testOrdering,cellSideParities,basisCache);
+}
+
+int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestWeights,
+                                            FieldContainer<double> &innerProductMatrix,
+                                            BilinearForm &bilinearForm,
+                                            Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                            FieldContainer<double> &cellSideParities,
+                                            Teuchos::RCP<BasisCache> stiffnessBasisCache) { // as opposed to the test-test cache
+                                          
   // all arguments are as in computeStiffnessMatrix, except:
   // optimalTestWeights, which has dimensions (numCells, numTrialDofs, numTestDofs)
   // innerProduct: the inner product which defines the sense in which these test functions are optimal
-  int numCells = physicalCellNodes.dimension(0);
+  int numCells = stiffnessBasisCache->getPhysicalCubaturePoints().dimension(0);
   int numTestDofs = testOrdering->totalDofs();
   int numTrialDofs = trialOrdering->totalDofs();
   
@@ -155,7 +173,7 @@ int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestW
   
   // RHS:
   computeStiffnessMatrix(stiffnessMatrix, bilinearForm, trialOrdering, testOrdering,
-                         cellTopo, physicalCellNodes, cellSideParities);
+                         cellSideParities, stiffnessBasisCache);
   
   transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
   
@@ -333,16 +351,25 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
                                                  shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                                  FieldContainer<double> &cellSideParities) {
-  Teuchos::RCP<Solution> prevSoln = Teuchos::rcp( (Solution*) NULL);
-  computeStiffnessMatrix(stiffness,bilinearForm,trialOrdering,testOrdering,cellTopo,physicalCellNodes,cellSideParities,prevSoln);
+  // this method is deprecated--here basically until we can revise tests, etc. to use the BasisCache version
+  // Get numerical integration points and weights
+  
+  // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
+  //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
+  DefaultCubatureFactory<double>  cubFactory;
+  
+  int maxTestDegree = testOrdering->maxBasisDegree();
+  
+  bool createSideCachesToo = true;
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(physicalCellNodes, cellTopo, *trialOrdering, maxTestDegree, createSideCachesToo));
+  
+  computeStiffnessMatrix(stiffness,bilinearForm,trialOrdering,testOrdering,cellSideParities,basisCache);
 }
 
 void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
-                                                 FieldContainer<double> &cellSideParities, Teuchos::RCP<Solution> prevSoln) {
-  // physicalCellNodes: the nodal points for the element(s) with topology cellTopo
-  //                 The dimensions are (numCells, numNodesPerElement, spaceDimension)
+                                                 FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+
   // stiffness dimensions are: (numCells, # testOrdering Dofs, # trialOrdering Dofs)
   // (while (cell,trial,test) is more natural conceptually, I believe the above ordering makes
   //  more sense given the inversion that we must do to compute the optimal test functions...)
@@ -361,20 +388,13 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   int numTestDofs = testOrdering->totalDofs();
   int numTrialDofs = trialOrdering->totalDofs();
 
-  unsigned numCells = physicalCellNodes.dimension(0);
-  unsigned numNodesPerElem = physicalCellNodes.dimension(1);
-  unsigned spaceDim = physicalCellNodes.dimension(2);
+  shards::CellTopology cellTopo = basisCache->cellTopology();
+  unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  unsigned spaceDim = cellTopo.getDimension();
   
   //cout << "trialOrdering: " << *trialOrdering;
   //cout << "testOrdering: " << *testOrdering;
   
-  // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
-                     std::invalid_argument,
-                     "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
-                     std::invalid_argument,
-                     "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   // check stiffness dimensions:
   TEST_FOR_EXCEPTION( ( numCells != stiffness.dimension(0) ),
                      std::invalid_argument,
@@ -390,8 +410,6 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   int cubDegreeTrial = trialOrdering->maxBasisDegree();
   int cubDegreeTest = testOrdering->maxBasisDegree();
   int cubDegree = cubDegreeTrial + cubDegreeTest;
-
-  BasisCache basisCache(physicalCellNodes, cellTopo, *trialOrdering, cubDegreeTest, true); // DO create side caches, too
   
   unsigned numSides = cellTopo.getSideCount();
   
@@ -441,14 +459,14 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
           
           FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
 
-          trialValuesTransformed = basisCache.getTransformedValues(trialBasis,trialOperator);
-          testValuesTransformedWeighted = basisCache.getTransformedWeightedValues(testBasis,testOperator);
+          trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator);
+          testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
           
-          FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
+          FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
           FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
           FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
           bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
-                                             trialID,testID,operatorIndex,physicalCubaturePoints);
+                                             trialID,testID,operatorIndex,basisCache);
           
           //integrate:
           FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
@@ -489,11 +507,11 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
             FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );    
 
             // for trial: the value lives on the side, so we don't use the volume coords either:
-            trialValuesTransformed = basisCache.getTransformedValues(trialBasis,trialOperator,sideOrdinal,false);
+            trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator,sideOrdinal,false);
             // for test: do use the volume coords:
-            testValuesTransformed = basisCache.getTransformedValues(testBasis,testOperator,sideOrdinal,true);
+            testValuesTransformed = basisCache->getTransformedValues(testBasis,testOperator,sideOrdinal,true);
             // 
-            testValuesTransformedWeighted = basisCache.getTransformedWeightedValues(testBasis,testOperator,sideOrdinal,true);
+            testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator,sideOrdinal,true);
             
             // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
             FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed;
@@ -519,10 +537,10 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
               }
             }
            
-            FieldContainer<double> cubPointsSidePhysical = basisCache.getPhysicalCubaturePointsForSide(sideOrdinal);
+            FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
             FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
             bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
-                                               trialID,testID,operatorIndex,cubPointsSidePhysical);
+                                               trialID,testID,operatorIndex,basisCache);
             
             
             //cout << "sideOrdinal: " << sideOrdinal << "; cubPointsSidePhysical" << endl << cubPointsSidePhysical;

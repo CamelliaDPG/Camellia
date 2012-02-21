@@ -142,7 +142,7 @@ void BurgersInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
         FieldContainer<double> testValuesCopy2 = testValues2;
         testValues1.resize(numCells,basisCardinality,numPoints);
         testValues2.resize(numCells,basisCardinality,numPoints);
-        FieldContainer<double> beta = _burgersBilinearForm->getBeta(physicalPoints);
+        FieldContainer<double> beta = _burgersBilinearForm->getBeta(basisCache);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {                        
           for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {

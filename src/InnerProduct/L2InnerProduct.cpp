@@ -54,7 +54,7 @@ void L2InnerProduct::operators(int testID1, int testID2,
 void L2InnerProduct::applyInnerProductData(FieldContainer<double> &testValues1, 
 					   FieldContainer<double> &testValues2,
 					   int testID1, int testID2, int operatorIndex,
-					   FieldContainer<double>& physicalPoints) {
+					   const FieldContainer<double>& physicalPoints) {
   // empty implementation -- no weights needed...
 }
 

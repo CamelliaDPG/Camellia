@@ -176,7 +176,7 @@ void OptimalInnerProduct::operators(int testID1, int testID2,
 void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValues1,
                                                 FieldContainer<double> &testValues2,
                                                 int testID1, int testID2, int operatorIndex,
-                                                FieldContainer<double>& physicalPoints) {
+                                                const FieldContainer<double>& physicalPoints) {
   pair<int, int> key = make_pair(testID1,testID2);
   if ( _testCombos.find(key) != _testCombos.end() ) {
     vector< pair<pair<OpOpIndexPair,OpOpIndexPair>, int> > entries = _testCombos[key];

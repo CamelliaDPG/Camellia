@@ -39,6 +39,7 @@
 // abstract class
 
 #include "Intrepid_FieldContainer.hpp"
+#include "BasisCache.h"
 
 using namespace Intrepid;
 
@@ -49,6 +50,14 @@ public:
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,
                         FieldContainer<bool> &imposeHere) = 0;
+  
+//  virtual void imposeBC(int varID, Teuchos::RCP<BasisCache> sideBasisCache, 
+//                        FieldContainer<double> &unitNormals,
+//                        FieldContainer<double> &dirichletValues,
+//                        FieldContainer<bool> &imposeHere) {
+//    imposeBC(varID,sideBasisCache->getPhysicalCubaturePoints(),unitNormals,dirichletValues,imposeHere);
+//  }
+  
   virtual bool singlePointBC(int varID) {
     return false; 
   } 

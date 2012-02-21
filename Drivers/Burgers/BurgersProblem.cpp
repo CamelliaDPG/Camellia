@@ -58,7 +58,7 @@ void BurgersProblem::rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCac
   if (testVarID==BurgersBilinearForm::V){
     values.resize(numCells,numPoints,spaceDim);
     values.initialize(0.0);    
-    FieldContainer<double> beta = _bf->getBeta(points);
+    FieldContainer<double> beta = _bf->getBeta(basisCache);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++){
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++){
         double x = points(cellIndex,ptIndex,0);
