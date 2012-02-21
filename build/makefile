@@ -38,6 +38,7 @@ OBJ_NAMES = DofOrdering \
        BasisFactory \
        BasisSumFunction \
        BurgersBilinearForm \
+       BurgersInnerProduct \
        BurgersProblem \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
@@ -179,6 +180,9 @@ VectorizedBasisTestSuite.o: $(DRIVERS_DIR)/DPGTests/VectorizedBasisTestSuite.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 BurgersBilinearForm.o: $(DRIVERS_DIR)/Burgers/BurgersBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+BurgersInnerProduct.o: $(DRIVERS_DIR)/Burgers/BurgersInnerProduct.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 BurgersProblem.o: $(DRIVERS_DIR)/Burgers/BurgersProblem.cpp
