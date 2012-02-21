@@ -69,7 +69,8 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setPartitionPolicy(Teuchos::rcp(new MeshPartitionPolicy()));
+  //mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 //  mesh->setEnforceMultiBasisFluxContinuity(true); // experiment
 
   // ==================== SET INITIAL GUESS ==========================
@@ -108,7 +109,7 @@ int main(int argc, char *argv[]) {
     int i = 0;    
     double prevError = 0.0;
     bool converged = false;
-    while (!converged){ // while energy error has not stabilized
+    while (!converged) { // while energy error has not stabilized
 
       solution->solve();
  
@@ -117,9 +118,9 @@ int main(int argc, char *argv[]) {
       // see if energy error has stabilized
       solution->energyError(energyError);    
       double totalError = 0.0;
-      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-	Teuchos::RCP< Element > current_element = *(activeElemIt);
-	totalError += energyError[current_element->cellID()];
+      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++) {
+        Teuchos::RCP< Element > current_element = *(activeElemIt);
+        totalError += energyError[current_element->cellID()];
       }
       double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
       if (rank==0){

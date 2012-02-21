@@ -347,7 +347,7 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
     //    cout << "Centroid for GID " << global_ids[i] << " is at ";
     for (int k=0;k<num_dim;k++){
       for (int j=0;j<numVertices;j++){
-	coords[k] += verts(j,k);
+        coords[k] += verts(j,k);
       }
       coords[k] = coords[k]/((double)(numVertices));
       //      cout << coords[k] << ", ";

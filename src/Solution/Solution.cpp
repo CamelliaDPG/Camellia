@@ -193,6 +193,9 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,true));
+    
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTrialDofs = trialOrderingPtr->totalDofs();
@@ -212,6 +215,13 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
     while (startCellIndexForBatch < totalCellsForType) {
       int cellsLeft = totalCellsForType - startCellIndexForBatch;
       int numCells = min(maxCellBatch,cellsLeft);
+      
+      // determine cellIDs
+      vector<int> cellIDs;
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
+        cellIDs.push_back(cellID);
+      }
       //cout << "testDofOrdering: " << *testOrderingPtr;
       //cout << "trialDofOrdering: " << *trialOrderingPtr;
       nodeDimensions[0] = numCells;
@@ -219,20 +229,23 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
       FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
       
+      bool createSideCacheToo = true;
+      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+      
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
       
-      { // this block is not necessary for the solution.  Here just to produce debugging output
-        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-        
-        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()), 
-                                                    physicalCellNodes, cellSideParities);
-        FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
-        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-        
-//        cout << "preStiffness:\n" << preStiffness;
-      }
+//      { // this block is not necessary for the solution.  Here just to produce debugging output
+//        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
+//        
+//        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
+//                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()), 
+//                                                    physicalCellNodes, cellSideParities);
+//        FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
+//        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
+//        
+////        cout << "preStiffness:\n" << preStiffness;
+//      }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
       
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, *(cellTopoPtr.get()), physicalCellNodes);
@@ -258,18 +271,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
-      vector<int> cellIDs;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
-        cellIDs.push_back(cellID);
-      }
       if (_filter.get()) {
         _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
       } 
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),
-                                      optTestCoeffs, testOrderingPtr,
-                                      *(cellTopoPtr.get()), physicalCellNodes);
+                                      optTestCoeffs, testOrderingPtr, basisCache);
       
       FieldContainer<int> globalDofIndices(numTrialDofs);
       
@@ -1276,6 +1283,7 @@ void Solution::computeResiduals() {
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
+    
     Teuchos::RCP<DofOrdering> trialOrdering = elemTypePtr->trialOrderPtr;
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
 
@@ -1289,8 +1297,15 @@ void Solution::computeResiduals() {
     int numTrialDofs = trialOrdering->totalDofs();
     int numTestDofs  = testOrdering->totalDofs();
     int numCells = physicalCellNodes.dimension(0); // partition-local cells
-
+    
     //    cout << "Num elems in partition " << rank << " is " << elemsInPartition.size() << endl;
+    
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
+      cellIDs.push_back(cellID);
+    }
     
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
     /*
@@ -1308,8 +1323,15 @@ void Solution::computeResiduals() {
     
     // compute l(v) and store in residuals:
     FieldContainer<double> residuals(numCells,numTestDofs);
-    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
-                                    testWeights, testOrdering, cellTopo, physicalCellNodes);
+    
+    // prepare basisCache and cellIDs
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
+    bool createSideCacheToo = true;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
+                                    testWeights, testOrdering, basisCache);
+//    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
+//                                    testWeights, testOrdering, cellTopo, physicalCellNodes);
 
     FieldContainer<double> rhs(numCells,numTestDofs);
     rhs = residuals; // copy rhs into its own separate container
@@ -1449,10 +1471,10 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
         int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
-          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(cellIndex,localDofIndex);
+          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
         } else {
           for (int i=0; i<spaceDim; i++) {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
+            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
           }
         }
       }
@@ -2184,9 +2206,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
     
   // copy from set object into the allocated array
   int offset = 0;
-  for ( set<int>::iterator indexIt = myGlobalIndicesSet.begin();
-	indexIt != myGlobalIndicesSet.end();
-	indexIt++ ){
+  for (set<int>::iterator indexIt = myGlobalIndicesSet.begin(); indexIt != myGlobalIndicesSet.end(); indexIt++ ) {
     myGlobalIndices[offset++] = *indexIt;
   }
   if ( rank == 0 ) {
