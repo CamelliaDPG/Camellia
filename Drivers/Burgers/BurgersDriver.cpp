@@ -13,8 +13,6 @@
 #include "ZeroFunction.h"
 #include "InitialGuess.h"
 
-#include "SolutionTests.h"
-
 // Trilinos includes
 #include "Epetra_Time.h"
 #include "Intrepid_FieldContainer.hpp"
@@ -44,7 +42,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-2;
+  double epsilon = 1e-3;
   bool useTriangles = false;
  
   FieldContainer<double> quadPoints(4,2);
@@ -99,14 +97,13 @@ int main(int argc, char *argv[]) {
 
   // =================== END INITIALIZATION CODE ==========================
 
-  solution->solve(); 
+  solution->solve(false);
   backgroundFlow->addSolution(solution,.5);
-  solution->solve(); 
+  solution->solve(false);
   backgroundFlow->addSolution(solution,.5);
-
   return 0;
 
-  int numRefs = 1;
+  int numRefs = 5;
   int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
 
@@ -120,7 +117,7 @@ int main(int argc, char *argv[]) {
     bool converged = false;
     while (!converged) { // while energy error has not stabilized
 
-      solution->solve();
+      solution->solve(false);
       
       // see if energy error has stabilized
       solution->energyError(energyError);    
@@ -196,12 +193,7 @@ int main(int argc, char *argv[]) {
   // one more nonlinear solve on refined mesh
   int numNRSteps = 5;
   for (int i=0;i<numNRSteps;i++){
-    solution->solve(false);
-    //    cout << "adding solution" << endl;
-    if (rank==0){
-      cout << "on iter = " << i << ", storage sizes agree = " << SolutionTests::storageSizesAgree(backgroundFlow,solution) << endl;
-    }
-    
+    solution->solve(false);    
     backgroundFlow->addSolution(solution,1.0);
   }
   

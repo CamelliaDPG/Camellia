@@ -179,6 +179,6 @@ void BurgersProblem::getConstraints(FieldContainer<double> &physicalPoints,
   }
   outflowConstraint[BurgersBilinearForm::U_HAT] = uCoeffs;
   outflowConstraint[BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;
-  constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
-  constraintValues.push_back(outflowValues); // only one constraint on outflow    
+  //  constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
+  //  constraintValues.push_back(outflowValues); // only one constraint on outflow    
 }

@@ -22,11 +22,7 @@ public:
   
 //  void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values);  
   void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values);
-  
-  void getConstraints(FieldContainer<double> &physicalPoints, FieldContainer<double> &unitNormals,
-                      vector<map<int,FieldContainer<double > > > &constraintCoeffs,
-                      vector<FieldContainer<double > > &constraintValues);
-  
+    
   // BC
   bool bcsImposed(int varID);
   
@@ -35,10 +31,10 @@ public:
                         FieldContainer<double> &dirichletValues,
                         FieldContainer<bool> &imposeHere);
 
-  virtual void getConstraints(FieldContainer<double> &physicalPoints, 
+  void getConstraints(FieldContainer<double> &physicalPoints, 
                               FieldContainer<double> &unitNormals,
                               vector<map<int,FieldContainer<double > > > &constraintCoeffs,
                               vector<FieldContainer<double > > &constraintValues);
-
+};
 
 #endif
