@@ -1303,8 +1303,8 @@ bool MeshTestSuite::testHRefinement() {
   
   solution.solve();
   
-  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined.dat");
-  origSolution.writeToFile(PoissonBilinearForm::PHI, "phi_fine.dat");
+//  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined.dat");
+//  origSolution.writeToFile(PoissonBilinearForm::PHI, "phi_fine.dat");
   
   double refinedError = exactSolution.L2NormOfError(solution,PoissonBilinearForm::PHI);
   double fineError = exactSolution.L2NormOfError(origSolution,PoissonBilinearForm::PHI);
@@ -1358,7 +1358,7 @@ bool MeshTestSuite::testHRefinement() {
     cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
-  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
+//  solution.writeToFile(PoissonBilinearForm::PHI, "phi_refined_again.dat");
   
   // try to reproduce a parity error discovered by Jesse when enforcing 1-irregularity
   horizontalCells = 1; verticalCells = 2;
@@ -1575,16 +1575,16 @@ bool MeshTestSuite::testPRefinement() {
       }
     }
   }
-  ostringstream fileName;
-  fileName << "PoissonPhiSolution_Manu_LinearOnLinear.p=" << H1Order-1 << ".4x1.dat";
-  solution1.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-  fileName.str(""); // clear out the filename
-  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=" << H1Order << ".4x1.dat";
-  solution2.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-  fileName.str("");
-  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=1or2.4x1.dat";
-  solution3.writeToFile(PoissonBilinearForm::PHI, fileName.str());
-  fileName.str("");
+//  ostringstream fileName;
+//  fileName << "PoissonPhiSolution_Manu_LinearOnLinear.p=" << H1Order-1 << ".4x1.dat";
+//  solution1.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+//  fileName.str(""); // clear out the filename
+//  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=" << H1Order << ".4x1.dat";
+//  solution2.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+//  fileName.str("");
+//  fileName << "PoissonPhiSolution_Manu_LinearOnQuadratic.p=1or2.4x1.dat";
+//  solution3.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+//  fileName.str("");
   
   // Do a test that just refines everywhere, albeit in several steps...  Compare that with solution starting with a higher-order mesh (should be identical).
   mesh1 = Mesh::buildQuadMesh(quadPoints, 4, 3, exactExponential.bilinearForm(), H1Order, H1Order+1);
@@ -1718,9 +1718,9 @@ bool MeshTestSuite::testPRefinement() {
      //  success = false;
      //  cout << "Failure: Error in solution of Poisson (Sacado version) was " << diff << "; tolerance set to " << tol << endl;
      //}
-     ostringstream fileName;
-     fileName << "PoissonPhiSolution_Manu_" << i << ".p=" << H1Order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
-     solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
+//     ostringstream fileName;
+//     fileName << "PoissonPhiSolution_Manu_" << i << ".p=" << H1Order-1 << "." << sqrtElements << "x" << sqrtElements << ".dat";
+//     solution.writeToFile(PoissonBilinearForm::PHI, fileName.str());
    } 
   
   return success;
