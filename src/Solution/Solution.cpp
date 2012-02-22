@@ -271,13 +271,15 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
       
-      // apply filter(s) (e.g. penalty method, preconditioners, etc.)
-      if (_filter.get()) {
-        _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
-      } 
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),
                                       optTestCoeffs, testOrderingPtr, basisCache);
+      
+      // apply filter(s) (e.g. penalty method, preconditioners, etc.)
+      if (_filter.get()) {
+        _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
+        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
+      } 
       
       FieldContainer<int> globalDofIndices(numTrialDofs);
       
