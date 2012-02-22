@@ -705,6 +705,86 @@ double Solution::meshMeasure() {
   return value;
 }
 
+double Solution::L2NormOfSolutionGlobal(int trialID){
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  int indexBase = 0;
+  Epetra_Map procMap(numProcs,indexBase,Comm);
+  double localL2Norm = L2NormOfSolution(trialID);
+  Epetra_Vector l2NormVector(procMap);
+  l2NormVector[0] = localL2Norm;
+  double globalL2Norm;
+  int errCode = l2NormVector.Norm1( &globalL2Norm );
+  if (errCode!=0){
+    cout << "Error in L2NormOfSolutionGlobal, errCode = " << errCode << endl;
+  }
+  return globalL2Norm;  
+}
+
+double Solution::L2NormOfSolution(int trialID){
+
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+
+  double value = 0.0;
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
+  vector<ElementTypePtr>::iterator elemTypeIt;
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    int numCells = _mesh->numElementsOfType(elemTypePtr);
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr)); // may overdo on cubature
+    
+    // get cellIDs for basisCache
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
+      cellIDs.push_back(cellID);
+    }
+
+    // get physcellnodes for elemtype
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+
+    bool createSideCacheToo = false;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    FieldContainer<double> values(numCells,numPoints);
+    bool weightForCubature = false;
+    solutionValues(values, trialID, basisCache, weightForCubature);
+    FieldContainer<double> weightedValues(numCells,numPoints);
+    weightForCubature = true;
+    solutionValues(weightedValues, trialID, basisCache, weightForCubature);
+ 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
+      }
+    }
+  }
+  
+  return value;
+
+}
+
 double Solution::integrateSolution(int trialID) {
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
@@ -1451,7 +1531,7 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
   
 }
 
-void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache) {
+void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, bool weightForCubature) {
   vector<int> cellIDs = basisCache->cellIDs();
   int numCells = cellIDs.size();
   if (numCells != values.dimension(0)) {
@@ -1474,8 +1554,13 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
     BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
     int basisCardinality = basis->getCardinality();
     int basisRank = trialOrder->getBasisRank(trialID);
-    
-    Teuchos::RCP<const FieldContainer<double> > transformedValues = basisCache->getTransformedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+
+    Teuchos::RCP<const FieldContainer<double> > transformedValues;
+    if (weightForCubature) {
+      transformedValues = basisCache->getTransformedWeightedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+    } else {
+      transformedValues = basisCache->getTransformedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+    }
     
     // now, apply coefficient weights:
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
@@ -2068,6 +2153,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
   int spaceDim = 2; // TODO: generalize to 3D...
   
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
+    
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     int numSides = cellTopo.getSideCount();
@@ -2075,10 +2161,29 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
     FieldContainer<double> vertexPoints, physPoints;    
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
-    
+
     int numCells = vertexPoints.dimension(0);       
-    
-    for (int sideIndex=0; sideIndex < numSides; sideIndex++){
+    // takes centroid of all cells
+    int numVertices = vertexPoints.dimension(1);
+    FieldContainer<double> cellIDs(numCells);
+    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
+      FieldContainer<double> cellCentroid(spaceDim);
+      cellCentroid.initialize(0.0);
+      for (int vertIndex=0;vertIndex<numVertices;vertIndex++){	
+	for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
+	  cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
+	}
+      }
+      for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
+	cellCentroid(dimIndex) /= numVertices;
+      }
+      cellCentroid.resize(1,spaceDim); // only one cell
+      int cellID = _mesh->elementsForPoints(cellCentroid)[0]->cellID();      
+      cellIDs(cellIndex) = cellID;
+    }
+       
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++){     
+
       DefaultCubatureFactory<double>  cubFactory;
       int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
       shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); 
@@ -2101,14 +2206,20 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       // we now have cubPointsSideRefCell
       FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
       solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);	
-      
+
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
+	FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
         for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
           for (int dimInd=0;dimInd<spaceDim;dimInd++){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
           }
-          fout << computedValues(cellIndex,pointIndex) << endl;
+	  /* // if we can figure out how to undo the parity negation on fluxes, do so here
+	  if (_mesh->bilinearForm().functionSpaceForTrial(trialID)==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL){
+	    computedValues(cellIndex,pointIndex) *= cellParities(sideIndex);
+	  }
+	  */
+	  fout << computedValues(cellIndex,pointIndex) << endl;
         }
         // insert NaN for matlab to plot discontinuities - WILL NOT WORK IN 3D
         for (int dimInd=0;dimInd<spaceDim;dimInd++){

@@ -122,7 +122,7 @@ public:
                       const FieldContainer<double> &sideRefCellPoints,
                       int sideIndex);
   void solutionValues(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
-  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
+  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, bool weightForCubature = false);
   void solutionValuesOverCells(FieldContainer<double> &values, int trialID, const FieldContainer<double> &physicalPoints);
 
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
@@ -138,6 +138,9 @@ public:
   
   double meanValue(int trialID);
   double meshMeasure();
+
+  double L2NormOfSolution(int trialID);
+  double L2NormOfSolutionGlobal(int trialID);
 
   void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades );
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
