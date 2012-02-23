@@ -109,7 +109,7 @@ public:
 #else
   void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
 #endif
-  void addSolution(Teuchos::RCP<Solution> soln, double weight); // thisSoln += weight * soln
+  void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   
   virtual void solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
@@ -147,9 +147,7 @@ public:
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
   void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);
 
-  void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter){
-    _filter = newFilter;
-  }
+  void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
   
   void computeResiduals();
   void computeErrorRepresentation();

@@ -117,20 +117,31 @@ void Solution::initialize() {
   _residualsComputed = false;
 }
 
-void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight) {
+void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
   // thisSoln += weight * otherSoln
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
   const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
-  TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
-                     std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
-  map< int, FieldContainer<double> >::iterator mapIt;
-  for (mapIt=_solutionForCellIDGlobal.begin(); mapIt != _solutionForCellIDGlobal.end(); mapIt++) {
+  if ( ! allowEmptyCells ) {
+    TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
+                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
+  }
+  map< int, FieldContainer<double> >::const_iterator mapIt;
+  for (mapIt=otherMapPtr->begin(); mapIt != otherMapPtr->end(); mapIt++) {
     int cellID = mapIt->first;
-    FieldContainer<double>* myValues = &(mapIt->second);
-    map< int, FieldContainer<double> >::const_iterator otherMapIt = otherMapPtr->find(cellID);
-    TEST_FOR_EXCEPTION(otherMapIt == otherMapPtr->end(),
-                       std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (cellID not found).");
-    const FieldContainer<double>* otherValues = &(otherMapIt->second);
+    const FieldContainer<double>* otherValues = &(mapIt->second);
+    map< int, FieldContainer<double> >::iterator myMapIt = _solutionForCellIDGlobal.find(cellID);
+    if (myMapIt == _solutionForCellIDGlobal.end()) {
+      if ( !allowEmptyCells ) {
+        TEST_FOR_EXCEPTION(true,std::invalid_argument,
+                           "otherSoln doesn't match Solution's solutionMap (cellID not found).");
+      } else {
+        // just copy, and apply the weight
+        _solutionForCellIDGlobal[cellID] = *otherValues;
+        BilinearForm::multiplyFCByWeight(_solutionForCellIDGlobal[cellID],weight);
+        continue;
+      }
+    }
+    FieldContainer<double>* myValues = &(myMapIt->second);
     int numValues = myValues->size();
     TEST_FOR_EXCEPTION(numValues != otherValues->size(),
                        std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (differing # of coefficients).");
@@ -748,21 +759,23 @@ double Solution::L2NormOfSolution(int trialID){
 
 
   double value = 0.0;
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCells = _mesh->numElementsOfType(elemTypePtr);
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr)); // may overdo on cubature
+    vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
+    int numCells = cells.size();
+    // note: basisCache below will use a greater cubature degree than strictly necessary
+    //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr)); 
     
     // get cellIDs for basisCache
     vector<int> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      int cellID = _mesh->cellID(elemTypePtr, cellIndex, rank);
+      int cellID = cells[cellIndex]->cellID();
       cellIDs.push_back(cellID);
     }
 
-    // get physcellnodes for elemtype
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
 
     bool createSideCacheToo = false;
@@ -778,7 +791,7 @@ double Solution::L2NormOfSolution(int trialID){
  
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
+        value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
       }
     }
   }
@@ -2054,6 +2067,10 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     solnCoeffs(dofOrdinal) = _solutionForCellIDGlobal[cellID](localDofIndex);
   }
+}
+
+void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
+  _filter = newFilter;
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
