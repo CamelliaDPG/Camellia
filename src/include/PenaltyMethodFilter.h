@@ -9,7 +9,7 @@ class PenaltyMethodFilter : public LocalStiffnessMatrixFilter {
   Teuchos::RCP<Constraints> _constraints;
  public: 
   PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints);
-  void filter(FieldContainer<double> &localStiffnessMatrix, 
+  void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
 	      const FieldContainer<double> &physicalCellNodes,
 	      vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc);
 };

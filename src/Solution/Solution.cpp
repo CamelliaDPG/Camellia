@@ -288,8 +288,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
-        _filter->filter(finalStiffness,physicalCellNodes,cellIDs,_mesh,_bc);
-        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
+        _filter->filter(finalStiffness,localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
+	//        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       } 
       
       FieldContainer<int> globalDofIndices(numTrialDofs);

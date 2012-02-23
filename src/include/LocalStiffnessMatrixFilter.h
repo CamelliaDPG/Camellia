@@ -11,7 +11,7 @@ using namespace std;
 class LocalStiffnessMatrixFilter {
 public:
   LocalStiffnessMatrixFilter() {}
-  virtual void filter(FieldContainer<double> &localStiffnessMatrix, const FieldContainer<double> &physicalCellNodes,
+  virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, const FieldContainer<double> &physicalCellNodes,
                       vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) = 0;
     // localStiffnessMatrix has dimensions (numCells, numTrialDofs, numTrialDofs)
     // physicalCellNodes has dimensions (numCells, numVerticesPerCell, numDimensions)
