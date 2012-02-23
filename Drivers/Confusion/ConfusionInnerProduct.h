@@ -106,10 +106,10 @@ class ConfusionInnerProduct : public DPGInnerProduct {
 
             double scaling = epsilon;
 	    if (operatorIndex==0){ // scale the L2 component of v 
-	      scaling = min(epsilon/cellMeasures(cellIndex),1.0);
+	      scaling = sqrt(min(epsilon/cellMeasures(cellIndex),1.0));
 	      //	      cout << "L2 coeff for cell " << elem->cellID() << " is " << epsilon/scaling << endl;
 	    } 
-	                
+	    
             //////////////////// 
 	    
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
@@ -122,7 +122,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
           }
         } else if (operatorIndex==1) {
           
-          _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
+          _bilinearForm->multiplyFCByWeight(testValues1,sqrt(epsilon));
           //      _bilinearForm->multiplyFCByWeight(testValues2,1.0);
           
         } else if (operatorIndex==2) { // if it's the beta dot grad term
@@ -202,8 +202,8 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
     
-    return _confusionBilinearForm->getEpsilon() + x*y;
-    //    return 1.0; // for confection
+    //    return _confusionBilinearForm->getEpsilon() + x*y;
+    return 1.0; // for the new inflow condition
   }
 };
 

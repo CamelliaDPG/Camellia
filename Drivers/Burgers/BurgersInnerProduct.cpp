@@ -18,8 +18,8 @@
 #include "DPGInnerProduct.h"
 
 /*
- Implements Burgers inner product for L2 stability in u
- */
+  Implements Burgers inner product for L2 stability in u
+*/
 
 BurgersInnerProduct::BurgersInnerProduct(Teuchos::RCP< BurgersBilinearForm > bfs, Teuchos::RCP<Mesh> mesh) : DPGInnerProduct((Teuchos::RCP< BurgersBilinearForm>) bfs) {
   _burgersBilinearForm=bfs; // redundant, but no way around it.
@@ -107,97 +107,96 @@ void BurgersInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
           
           double scaling = epsilon;
           if (operatorIndex==0){ // scale the L2 component of v 
-            scaling = min(epsilon/cellMeasures(cellIndex),1.0);
-            //	      cout << "L2 coeff for cell " << elem->cellID() << " is " << epsilon/scaling << endl;
-          } 
-          
-          //////////////////// 
-          
-          for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              double x = physicalPoints(cellIndex,ptIndex,0);
-              double y = physicalPoints(cellIndex,ptIndex,1);
-              testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*scaling;
-            }
-          }
-        }
+            scaling = sqrt(min(epsilon/cellMeasures(cellIndex),1.0));
+	  } 
+	  
+	  //////////////////// 
+	  
+	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	      double x = physicalPoints(cellIndex,ptIndex,0);
+	      double y = physicalPoints(cellIndex,ptIndex,1);
+	      testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*scaling;
+	    }
+	  }
+	}
       } else if (operatorIndex==1) {
-        
-        _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
-        //      _bilinearForm->multiplyFCByWeight(testValues2,1.0);
-        
+	
+	_bilinearForm->multiplyFCByWeight(testValues1,sqrt(epsilon));
+	//      _bilinearForm->multiplyFCByWeight(testValues2,1.0);
+      
       } else if (operatorIndex==2) { // if it's the beta dot grad term
         
-        int numCells = testValues1.dimension(0);
-        int basisCardinality = testValues1.dimension(1);
-        int numPoints = testValues1.dimension(2);
-        //	  cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
+	int numCells = testValues1.dimension(0);
+	int basisCardinality = testValues1.dimension(1);
+	int numPoints = testValues1.dimension(2);
+	//	  cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
         
-        TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
-                           "BurgersBilinearForm only supports 2 dimensions right now.");
+	TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+			   "BurgersBilinearForm only supports 2 dimensions right now.");
         
-        // because we change dimensions of the values, by dotting with beta, 
-        // we'll need to copy the values and resize the original container
-        FieldContainer<double> testValuesCopy1 = testValues1;
-        FieldContainer<double> testValuesCopy2 = testValues2;
-        testValues1.resize(numCells,basisCardinality,numPoints);
-        testValues2.resize(numCells,basisCardinality,numPoints);
-        FieldContainer<double> beta = _burgersBilinearForm->getBeta(basisCache);
-        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {                        
-          for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              double x = physicalPoints(cellIndex,ptIndex,0);
-              double y = physicalPoints(cellIndex,ptIndex,1);
-              double weight = getWeight(x,y);
-              //		double beta_x = _burgersBilinearForm->getBeta(x,y)[0];
-              //		double beta_y = _burgersBilinearForm->getBeta(x,y)[1];
-              double beta_x = beta(cellIndex,ptIndex,0);
-              double beta_y = beta(cellIndex,ptIndex,1);
+	// because we change dimensions of the values, by dotting with beta, 
+	// we'll need to copy the values and resize the original container
+	FieldContainer<double> testValuesCopy1 = testValues1;
+	FieldContainer<double> testValuesCopy2 = testValues2;
+	testValues1.resize(numCells,basisCardinality,numPoints);
+	testValues2.resize(numCells,basisCardinality,numPoints);
+	FieldContainer<double> beta = _burgersBilinearForm->getBeta(basisCache);
+	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {                        
+	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	      double x = physicalPoints(cellIndex,ptIndex,0);
+	      double y = physicalPoints(cellIndex,ptIndex,1);
+	      double weight = getWeight(x,y);
+	      //		double beta_x = _burgersBilinearForm->getBeta(x,y)[0];
+	      //		double beta_y = _burgersBilinearForm->getBeta(x,y)[1];
+	      double beta_x = beta(cellIndex,ptIndex,0);
+	      double beta_y = beta(cellIndex,ptIndex,1);
               
-              testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
-              + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
-              testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0)
-              + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);
-            }
-          }
-        }
+	      testValues1(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) * weight 
+		+ beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1) * weight;
+	      testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0)
+		+ beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);
+	    }
+	  }
+	}
       }
     } else if (testID1==BurgersBilinearForm::TAU){ // L2 portion of Tau
       
       if (operatorIndex==0) {
-        int numCells = testValues1.dimension(0);
-        int basisCardinality = testValues1.dimension(1);
-        int numPoints = testValues1.dimension(2);
-        int spaceDim = testValues1.dimension(3);
+	int numCells = testValues1.dimension(0);
+	int basisCardinality = testValues1.dimension(1);
+	int numPoints = testValues1.dimension(2);
+	int spaceDim = testValues1.dimension(3);
         
-        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-          for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              double x = physicalPoints(cellIndex,ptIndex,0);
-              double y = physicalPoints(cellIndex,ptIndex,1);
-              for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
-                double weight = getWeight(x,y);
-                testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
-              }
-            }
-          }
-        }
+	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	      double x = physicalPoints(cellIndex,ptIndex,0);
+	      double y = physicalPoints(cellIndex,ptIndex,1);
+	      for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
+		double weight = getWeight(x,y);
+		testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+	      }
+	    }
+	  }
+	}
       } else if (operatorIndex==1) { // div portion of TAU
         
-        int numCells = testValues1.dimension(0);
-        int basisCardinality = testValues1.dimension(1);
-        int numPoints = testValues1.dimension(2);
+	int numCells = testValues1.dimension(0);
+	int basisCardinality = testValues1.dimension(1);
+	int numPoints = testValues1.dimension(2);
         
-        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-          for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-              double x = physicalPoints(cellIndex,ptIndex,0);
-              double y = physicalPoints(cellIndex,ptIndex,1);
-              double weight = getWeight(x,y);
-              testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*weight;
-            }
-          }
-        }
+	for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+	  for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	      double x = physicalPoints(cellIndex,ptIndex,0);
+	      double y = physicalPoints(cellIndex,ptIndex,1);
+	      double weight = getWeight(x,y);
+	      testValues1(cellIndex,basisOrdinal,ptIndex) = testValues1(cellIndex,basisOrdinal,ptIndex)*weight;
+	    }
+	  }
+	}
       }
     }       
   }
@@ -207,5 +206,5 @@ void BurgersInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
 double BurgersInnerProduct::getWeight(double x,double y){
   
   //    return _burgersBilinearForm->getEpsilon() + x*(1.0-x)*y; // 0 at x = 0, x = 1, y = 0;
-  return 1.0; // for confection
+  return 1.0; // for the new inflow condition
 }
