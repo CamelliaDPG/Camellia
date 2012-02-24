@@ -54,7 +54,8 @@ class DofOrdering {
   map< pair<int, pair<int, int> >, pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
                                                                         // values: <sideIndex, dofOrdinal>
   map<int,int> numSidesForVarID;
-  map< pair<int,pair<int,int> >, int> indices; // keys for indices are <varID, <sideIndex, dofOrdinal> >, where sideIndex = 0 for field (volume) variables
+  map< pair<int,int>, vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
+//  map< pair<int,pair<int,int> >, int> indices; // keys for indices are <varID, <sideIndex, dofOrdinal> >, where sideIndex = 0 for field (volume) variables
   map< pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
   map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
   

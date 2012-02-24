@@ -41,14 +41,19 @@ DofOrdering::DofOrdering() { // constructor
 
 void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex) {
   // test to see if we already have one matching this.  (If so, that's an error.)
-  for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
-    pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideIndex,dofOrdinal));
-    if ( indices.find(key) != indices.end() ) {
-      TEST_FOR_EXCEPTION( true,
-                         std::invalid_argument,
-                         "Already have an entry in DofOrdering for this varID, sideIndex pair.");
-    }
-    indices[key] = _nextIndex;
+  pair<int,int> key = make_pair(varID, sideIndex);
+  if ( indices.find(key) != indices.end() ) {
+    TEST_FOR_EXCEPTION( true,
+                       std::invalid_argument,
+                       "Already have an entry in DofOrdering for this varID, sideIndex pair.");
+  } else {
+    indices[key] = vector<int>(basis->getCardinality());
+  }
+  
+  vector<int>* dofIndices = &(indices[key]);
+  
+  for (vector<int>::iterator dofEntryIt = dofIndices->begin(); dofEntryIt != dofIndices->end(); dofEntryIt++) {
+    *dofEntryIt = _nextIndex;
     _nextIndex++;
   }
   
@@ -56,7 +61,6 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
     // a convention: call with sideIndex=0 first, if there are multiple sides
     // (or at least call with sideIndex=0 at some point!)
     varIDs.push_back(varID);
-    //cout << "added varID " << varID << endl;
   }
   numSidesForVarID[varID]++;
   //cout << "numSidesForVarID[" << varID << "]" << numSidesForVarID[varID] << endl;
@@ -145,10 +149,10 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
     //cout << basisDofOrdinal << endl;
   }
   
-  pair<int,pair<int,int> > key = make_pair(varID,make_pair(sideIndex, basisDofOrdinal) );
-  map< pair<int,pair<int,int> >, int>::iterator entryIt = indices.find(key);
+  pair<int,int> key = make_pair(varID, sideIndex);
+  map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
   if ( entryIt != indices.end() ) {
-    return (*entryIt).second;
+    return ((*entryIt).second)[basisDofOrdinal];
   } else {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
     return -1;
@@ -201,16 +205,19 @@ void DofOrdering::rebuildIndex() {
       }
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
         pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideIndex,dofOrdinal));
+        pair<int, int> indexKey = make_pair(key.first,key.second.first); // key into indices container
         if ( dofIdentifications.find(key) != dofIdentifications.end() ) {
-          pair<int, pair<int,int> > earlierKey = make_pair(varID,dofIdentifications[key]);
-          if (indices[key] != indices[earlierKey]) {
-            indices[key] = indices[earlierKey];
+          int earlierSideIndex  = dofIdentifications[key].first;
+          int earlierDofOrdinal = dofIdentifications[key].second;
+          pair<int,int> earlierIndexKey = make_pair(varID,earlierSideIndex);
+          if (indices[indexKey][dofOrdinal] != indices[earlierIndexKey][earlierDofOrdinal]) {
+            indices[indexKey][dofOrdinal] = indices[earlierIndexKey][earlierDofOrdinal];
             //cout << "processed identification for varID " << varID << ": (" << sideIndex << "," << dofOrdinal << ")" << endl;
             numIdentificationsProcessed++;
           }
         } else {
           // modify the index according to the number of dofs we've consolidated
-          indices[key] -= numIdentificationsProcessed;
+          indices[indexKey][dofOrdinal] -= numIdentificationsProcessed;
         }
       }
     }
