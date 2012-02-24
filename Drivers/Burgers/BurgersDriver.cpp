@@ -5,13 +5,14 @@
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
-// added by Jesse
 #include "PenaltyMethodFilter.h"
 #include "BurgersProblem.h"
 #include "Projector.h"
 #include "BurgersInnerProduct.h"
 #include "ZeroFunction.h"
 #include "InitialGuess.h"
+
+#include "RefinementStrategy.h"
 
 // Trilinos includes
 #include "Epetra_Time.h"
@@ -59,6 +60,9 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   int horizontalCells = 2, verticalCells = 2;
   
+  // REFINEMENT STRATEGY PARAMETER
+  double energyThreshold = 0.2;
+  
   ////////////////////////////////////////////////////////////////////
   // SET UP PROBLEM 
   ////////////////////////////////////////////////////////////////////
@@ -99,6 +103,9 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
   
+  // define refinement strategy:
+  Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
+  
   // =================== END INITIALIZATION CODE ==========================
   
   //  solution->solve(false);
@@ -137,10 +144,10 @@ int main(int argc, char *argv[]) {
       }
       
       double tol = .015; // if change is less than %, solve again
-      if (relErrorDiff<tol){
+      if (relErrorDiff < tol) {
         converged = true;
       } else {
-        prevError=totalError; // reset previous error and continue
+        prevError = totalError; // reset previous error and continue
       } 
       
       double stepLength = .5;
@@ -148,42 +155,9 @@ int main(int argc, char *argv[]) {
       
       i++;            
     }
+
+    refinementStrategy->refine(rank==0); // print to console on rank 0
     
-    // greedy refinement algorithm - mark cells for refinement
-    vector<int> triangleCellsToRefine;
-    vector<int> quadCellsToRefine;
-    double maxError = 0.0;
-    double totalEnergyError = 0.0;
-    for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-      Teuchos::RCP< Element > current_element = *(activeElemIt);
-      int cellID = current_element->cellID();
-      maxError = max(energyError[cellID],maxError);
-      totalEnergyError += energyError[current_element->cellID()]*energyError[current_element->cellID()]; 
-    }
-    
-    // do refinements on cells with error above threshold
-    for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-      Teuchos::RCP< Element > current_element = *(activeElemIt);
-      int cellID = current_element->cellID();
-      if (energyError[cellID]>=.2*maxError) {
-        if (current_element->numSides()==3) {
-          triangleCellsToRefine.push_back(cellID);
-        } else if (current_element->numSides()==4) {
-          quadCellsToRefine.push_back(cellID);
-        }
-      }
-    }
-    
-    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
-    triangleCellsToRefine.clear();
-    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-    quadCellsToRefine.clear();
-    
-    mesh->enforceOneIrregularity();
-    
-    if (rank==0){
-      cout << "refined on iter " << refIter << " with energy error " << sqrt(totalEnergyError) << " and " << mesh->numGlobalDofs() << " global dofs" << endl;
-    }
     refIter++;
   }
   
@@ -193,7 +167,6 @@ int main(int argc, char *argv[]) {
     solution->solve(false);    
     backgroundFlow->addSolution(solution,1.0);
   }
-  
   
   if (rank==0){
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");

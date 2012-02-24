@@ -159,6 +159,19 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   }
 }
 
+const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) {
+  TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
+                     std::invalid_argument,
+                     "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
+  
+  pair<int,int> key = make_pair(varID, sideIndex);
+  map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
+  if ( entryIt == indices.end() ) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
+  }
+  return (*entryIt).second;
+}
+
 int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
   return getBasis(varID,sideIndex)->getCardinality();
 }
