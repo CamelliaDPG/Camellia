@@ -316,8 +316,7 @@ bool SolutionTests::testEnergyError(){
   double tol = 1e-11;
 
   bool success = true;
-  map<int, double> energyError;
-  _poissonSolution->energyError(energyError);
+  map<int, double> energyError = _poissonSolution->energyError();
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   

@@ -115,6 +115,7 @@ void Solution::initialize() {
   _solutionForCellIDGlobal.clear();
   
   _residualsComputed = false;
+  _energyErrorComputed = false;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -560,6 +561,8 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   }
   
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
+  _energyErrorComputed = false;
+  _energyErrorForCellIDGlobal.clear();
 }
 
 Teuchos::RCP<Mesh> Solution::mesh() const {
@@ -1153,16 +1156,16 @@ void Solution::rhsNorm(map<int,double> &rhsNormMap){
 
 double Solution::energyErrorTotal() {
   double energyErrorSquared = 0.0;
-  map<int,double> energyErrorPerCell;
-  energyError(energyErrorPerCell);
-  for (map<int,double>::iterator cellEnergyIt = energyErrorPerCell.begin(); 
-       cellEnergyIt != energyErrorPerCell.end(); cellEnergyIt++) {
+  const map<int,double>* energyErrorPerCell = &(energyError());
+  
+  for (map<int,double>::const_iterator cellEnergyIt = energyErrorPerCell->begin(); 
+       cellEnergyIt != energyErrorPerCell->end(); cellEnergyIt++) {
     energyErrorSquared += (cellEnergyIt->second) * (cellEnergyIt->second);
   }
   return sqrt(energyErrorSquared);
 }
 
-void Solution::energyError(map<int,double> &energyError){ //FieldContainer<double> &energyError) {
+const map<int,double> & Solution::energyError() { 
   int numProcs=1;
   int rank=0;
   
@@ -1174,6 +1177,11 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
 #else
   Epetra_SerialComm Comm;
 #endif  
+  
+  if ( _energyErrorComputed ) {
+    cout << "reusing energy error\n";
+    return _energyErrorForCellIDGlobal;
+  }
   
   /*
   // ready multivector for storage of energy errors
@@ -1248,14 +1256,17 @@ void Solution::energyError(map<int,double> &energyError){ //FieldContainer<doubl
 #ifdef HAVE_MPI
   }
 #endif
-  // copy back to energyError field container 
+  // copy back to energyError container 
   for (int procIndex=0;procIndex<numProcs;procIndex++){
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
       if (cellIDArray[procIndex][globalCellIndex]!=-1){
-        energyError[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
+        _energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
       }
     }
-  }      
+  }
+  _energyErrorComputed = true;
+  
+  return _energyErrorForCellIDGlobal;
 }
 
 void Solution::computeErrorRepresentation() {
@@ -2443,4 +2454,7 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
     _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
     projectOntoCell(functionMap,childID);
   }
+  
+  _residualsComputed = false;
+  _energyErrorComputed = false; // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }

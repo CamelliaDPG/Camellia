@@ -18,7 +18,7 @@ NonlinearSolveStrategy::NonlinearSolveStrategy(Teuchos::RCP<Solution> background
 void NonlinearSolveStrategy::solve(bool printToConsole) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
   // initialize energyError stuff
-  map<int, double> energyError;
+  const map<int, double>* energyError;
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
   
@@ -30,12 +30,13 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
     _solution->solve(false);
     
     // see if energy error has stabilized
-    _solution->energyError(energyError);    
+    energyError = &(_solution->energyError());
     double totalError = 0.0;
     
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
-      totalError += energyError[current_element->cellID()]*energyError[current_element->cellID()];
+      double cellEnergyError = energyError->find(current_element->cellID())->second;
+      totalError += cellEnergyError*cellEnergyError;
     }
     double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
     if (printToConsole){

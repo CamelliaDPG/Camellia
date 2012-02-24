@@ -16,10 +16,8 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
 void RefinementStrategy::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  map<int, double> energyError;
+  const map<int, double>* energyError = &(_solution->energyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-  
-  _solution->energyError(energyError);
   
   vector<int> triangleCellsToRefine;
   vector<int> quadCellsToRefine;
@@ -30,8 +28,9 @@ void RefinementStrategy::refine(bool printToConsole) {
        activeElemIt != activeElements.end(); activeElemIt++) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
-    maxError = max(energyError[cellID],maxError);
-    totalEnergyError += energyError[current_element->cellID()]*energyError[current_element->cellID()]; 
+    double cellEnergyError = energyError->find(cellID)->second;
+    maxError = max(cellEnergyError,maxError);
+    totalEnergyError += cellEnergyError * cellEnergyError; 
   }
   
   // record results prior to refinement
@@ -44,7 +43,8 @@ void RefinementStrategy::refine(bool printToConsole) {
        activeElemIt != activeElements.end(); activeElemIt++){
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
-    if ( energyError[cellID] >= maxError * _relativeEnergyThreshold ) {
+    double cellEnergyError = energyError->find(cellID)->second;
+    if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
       if (current_element->numSides()==3) {
         triangleCellsToRefine.push_back(cellID);
       } else if (current_element->numSides()==4) {

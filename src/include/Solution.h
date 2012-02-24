@@ -67,6 +67,7 @@ private:
   typedef Teuchos::RCP< BasisCache > BasisCachePtr;
   
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
+  map< int, double > _energyErrorForCellIDGlobal;
   
 //  map< ElementType*, FieldContainer<double> > _solutionForElementType; // for uniform mesh, just a single entry.
   map< ElementType*, FieldContainer<double> > _residualForElementType; // for uniform mesh, just a single entry.
@@ -83,6 +84,7 @@ private:
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
 
   bool _residualsComputed;
+  bool _energyErrorComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
   
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
@@ -154,7 +156,7 @@ public:
   
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
-  void energyError(map<int, double> &energyError);
+  const map<int,double> & energyError();
   void rhsNorm(map<int, double> &energyNorm);
   double totalRHSNorm();
 

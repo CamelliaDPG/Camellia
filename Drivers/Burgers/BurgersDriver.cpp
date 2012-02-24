@@ -62,8 +62,9 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   int horizontalCells = 2, verticalCells = 2;
   
-  // REFINEMENT STRATEGY PARAMETER
-  double energyThreshold = 0.2;
+  double energyThreshold = 0.2; // for mesh refinements
+  double nonlinearStepSize = 0.5;
+  double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   
   ////////////////////////////////////////////////////////////////////
   // SET UP PROBLEM 
@@ -116,22 +117,15 @@ int main(int argc, char *argv[]) {
   //  backgroundFlow->addSolution(solution,.5);
   //  return 0;
   
-  double nonlinearStepSize = 0.5;
-  double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
-  
   int numRefs = 5;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow,solution,stepSize,nonlinearRelativeEnergyTolerance)
   );
   
-  int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
     solveStrategy->solve(rank==0);
-
     refinementStrategy->refine(rank==0); // print to console on rank 0
-    
-    refIter++;
   }
   
   // one more nonlinear solve on refined mesh

@@ -107,8 +107,7 @@ int main(int argc, char *argv[]) {
   vector<double> errorVector;
   vector<int> dofVector;
   for (int i=0; i<numRefinements; i++) {
-    map<int, double> energyError;
-    solution->energyError(energyError);
+    map<int, double> energyError = solution->energyError();
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
     
