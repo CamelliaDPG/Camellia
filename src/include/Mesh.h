@@ -110,6 +110,8 @@ class Mesh {
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..  
   vector< set<int> > _partitionedGlobalDofIndices;
   
+  vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
+  
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
   void buildTypeLookups();
   void buildLocalToGlobalMap();
@@ -161,7 +163,7 @@ public:
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
   
   void enforceOneIrregularity();
-  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
+//  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
 
   vector<double> getCellCentroid(int cellID);
 
@@ -195,7 +197,7 @@ public:
   
   void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   // for the case where we want to reproject the previous mesh solution onto the new one:
-  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
+//  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
   
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
   
@@ -230,8 +232,10 @@ public:
   
   void rebuildLookups();
   
+  void registerSolution(Teuchos::RCP<Solution> solution);
+  
   void pRefine(vector<int> cellIDsForPRefinements);
-  void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
+//  void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
     
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
@@ -248,6 +252,8 @@ public:
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
+  
+  void unregisterSolution(Teuchos::RCP<Solution> solution);
   
   void writeMeshPartitionsToFile(const string & fileName);
 };

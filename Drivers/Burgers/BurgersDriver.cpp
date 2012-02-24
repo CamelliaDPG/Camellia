@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-3;
   bool useTriangles = false;
- 
+  
   FieldContainer<double> quadPoints(4,2);
   
   quadPoints(0,0) = 0.0; // x1
@@ -55,68 +55,72 @@ int main(int argc, char *argv[]) {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
-
+  
   int H1Order = polyOrder + 1;
   int horizontalCells = 2, verticalCells = 2;
-
+  
   ////////////////////////////////////////////////////////////////////
   // SET UP PROBLEM 
   ////////////////////////////////////////////////////////////////////
-
+  
   Teuchos::RCP<BurgersBilinearForm> bf = Teuchos::rcp(new BurgersBilinearForm(epsilon));
-
+  
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
   //  mesh->setPartitionPolicy(Teuchos::rcp(new MeshPartitionPolicy()));
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   //  mesh->setEnforceMultiBasisFluxContinuity(true); // experiment
-
+  
   // ==================== SET INITIAL GUESS ==========================
-
+  
   Teuchos::RCP<Solution> backgroundFlow = Teuchos::rcp(new Solution(mesh, Teuchos::rcp((BC*)NULL) , Teuchos::rcp((RHS*)NULL), Teuchos::rcp((DPGInnerProduct*)NULL))); // create null solution 
+  
+  mesh->registerSolution(backgroundFlow);
+  
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
   functionMap[BurgersBilinearForm::U] = Teuchos::rcp(new InitialGuess());
   functionMap[BurgersBilinearForm::SIGMA_1] = Teuchos::rcp(new ZeroFunction());
   functionMap[BurgersBilinearForm::SIGMA_2] = Teuchos::rcp(new ZeroFunction());
-
+  
   backgroundFlow->projectOntoMesh(functionMap);
   bf->setBackgroundFlow(backgroundFlow);
-
+  
   // ==================== END SET INITIAL GUESS ==========================
-
-
+  
+  
   // define our inner product:
   Teuchos::RCP<BurgersInnerProduct> ip = Teuchos::rcp( new BurgersInnerProduct( bf, mesh ) );
-
+  
   // create a solution object
   Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(bf) );
-
+  
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
+  mesh->registerSolution(solution);
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
-
+  
   // =================== END INITIALIZATION CODE ==========================
-
-  solution->solve(false);
-  backgroundFlow->addSolution(solution,.5);
-  solution->solve(false);
-  backgroundFlow->addSolution(solution,.5);
-  return 0;
-
+  
+  //  solution->solve(false);
+  //  backgroundFlow->addSolution(solution,.5);
+  //  solution->solve(false);
+  //  backgroundFlow->addSolution(solution,.5);
+  //  return 0;
+  
   int numRefs = 5;
   int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
-
+    
     // initialize energyError stuff
     map<int, double> energyError;
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-
+    
     int i = 0;    
     double prevError = 0.0;
     bool converged = false;
     while (!converged) { // while energy error has not stabilized
-
+      
       solution->solve(false);
       
       // see if energy error has stabilized
@@ -124,27 +128,27 @@ int main(int argc, char *argv[]) {
       double totalError = 0.0;
       
       for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-	Teuchos::RCP< Element > current_element = *(activeElemIt);
-	totalError += energyError[current_element->cellID()]*energyError[current_element->cellID()];
+        Teuchos::RCP< Element > current_element = *(activeElemIt);
+        totalError += energyError[current_element->cellID()]*energyError[current_element->cellID()];
       }
       double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
       if (rank==0){
-	cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
+        cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
       }
-
+      
       double tol = .015; // if change is less than %, solve again
       if (relErrorDiff<tol){
-	converged = true;
+        converged = true;
       } else {
-	prevError=totalError; // reset previous error and continue
+        prevError=totalError; // reset previous error and continue
       } 
-
+      
       double stepLength = .5;
       backgroundFlow->addSolution(solution,stepLength);
-
+      
       i++;            
     }
-
+    
     // greedy refinement algorithm - mark cells for refinement
     vector<int> triangleCellsToRefine;
     vector<int> quadCellsToRefine;
@@ -161,35 +165,28 @@ int main(int argc, char *argv[]) {
     for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
-      if (energyError[cellID]>=.2*maxError){
-	if (current_element->numSides()==3){
-	  triangleCellsToRefine.push_back(cellID);
-	}else if (current_element->numSides()==4){
-	  quadCellsToRefine.push_back(cellID);
-	}
+      if (energyError[cellID]>=.2*maxError) {
+        if (current_element->numSides()==3) {
+          triangleCellsToRefine.push_back(cellID);
+        } else if (current_element->numSides()==4) {
+          quadCellsToRefine.push_back(cellID);
+        }
       }
-    }  
-
-    // reinitialize both background flow/solution data structures
-    vector< Teuchos::RCP<Solution> > solutions;
-    solutions.push_back(solution);
-    solutions.push_back(backgroundFlow);
-
-    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle(),solutions);
+    }
+    
+    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
     triangleCellsToRefine.clear();
-    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
+    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
     quadCellsToRefine.clear();
-
-    mesh->enforceOneIrregularity(solutions);
-
+    
+    mesh->enforceOneIrregularity();
+    
     if (rank==0){
       cout << "refined on iter " << refIter << " with energy error " << sqrt(totalEnergyError) << " and " << mesh->numGlobalDofs() << " global dofs" << endl;
     }
     refIter++;
-
-
   }
-
+  
   // one more nonlinear solve on refined mesh
   int numNRSteps = 5;
   for (int i=0;i<numNRSteps;i++){
@@ -197,7 +194,7 @@ int main(int argc, char *argv[]) {
     backgroundFlow->addSolution(solution,1.0);
   }
   
-
+  
   if (rank==0){
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");
@@ -206,5 +203,5 @@ int main(int argc, char *argv[]) {
   }
   
   return 0;
- 
+  
 }

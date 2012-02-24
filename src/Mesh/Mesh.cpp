@@ -1047,11 +1047,11 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
   
 }
 
-void Mesh::enforceOneIrregularity() {
-  enforceOneIrregularity(vector< Teuchos::RCP<Solution> >()); 
-}
+//void Mesh::enforceOneIrregularity() {
+//  enforceOneIrregularity(vector< Teuchos::RCP<Solution> >()); 
+//}
 
-void Mesh::enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions) {
+void Mesh::enforceOneIrregularity() {
   int rank = 0;
   int numProcs = 1;
 #ifdef HAVE_MPI
@@ -1095,8 +1095,8 @@ void Mesh::enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions) {
       }
     }
     if ((irregularQuadCells.size()>0) || (irregularTriangleCells.size()>0)) {
-      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle(),solutions);
-      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad(),solutions);
+      hRefine(irregularTriangleCells,RefinementPattern::regularRefinementPatternTriangle());
+      hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
       irregularTriangleCells.clear();
       irregularQuadCells.clear();
     } else {
@@ -1373,11 +1373,11 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
-void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
-  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
-}
+//void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+//  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
+//}
 
-void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions) {
+void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   vector<int>::iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
@@ -1455,8 +1455,8 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
     
     _elements[cellID]->setRefinementPattern(refPattern);
     addChildren(_elements[cellID],children,childrenForSides);
-    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-         solutionIt != solutions.end(); solutionIt++) {
+    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+         solutionIt != _registeredSolutions.end(); solutionIt++) {
        // do projection
       int numChildren = _elements[cellID]->numChildren();
       vector<int> childIDs;
@@ -1470,8 +1470,8 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
   }
   rebuildLookups();
   // now discard any old coefficients
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-       solutionIt != solutions.end(); solutionIt++) {
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
 }
@@ -1889,11 +1889,26 @@ void Mesh::rebuildLookups() {
   //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
-void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
-  pRefine(cellIDsForPRefinements, vector< Teuchos::RCP<Solution> >());
+void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
+  _registeredSolutions.push_back( solution );
 }
 
-void Mesh::pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions) {
+void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
+  for (vector< Teuchos::RCP<Solution> >::iterator solnIt = _registeredSolutions.begin();
+       solnIt != _registeredSolutions.end(); solnIt++) {
+    if ( (*solnIt).get() == solution.get() ) {
+      _registeredSolutions.erase(solnIt);
+      return;
+    }
+  }
+  cout << "Mesh::unregisterSolution: Solution not found.\n";
+}
+
+//void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+//  pRefine(cellIDsForPRefinements, vector< Teuchos::RCP<Solution> >());
+//}
+
+void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test
@@ -1941,8 +1956,8 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solu
       }
     }
     
-    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-         solutionIt != solutions.end(); solutionIt++) {
+    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+         solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection
       vector<int> childIDs;
       childIDs.push_back(cellID);
@@ -1954,8 +1969,8 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solu
   rebuildLookups();
   
   // now discard any old coefficients
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = solutions.begin();
-       solutionIt != solutions.end(); solutionIt++) {
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
 }

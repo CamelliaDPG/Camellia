@@ -292,10 +292,9 @@ bool SolutionTests::testAddRefinedSolutions(){
   // refine the mesh
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // refine first cell
-  vector< Teuchos::RCP<Solution> > solutions;
-  solutions.push_back(_confusionSolution1_2x2);
-  solutions.push_back(_confusionSolution2_2x2);
-  _confusionSolution1_2x2->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions);
+  _confusionSolution1_2x2->mesh()->registerSolution(_confusionSolution1_2x2);
+  _confusionSolution1_2x2->mesh()->registerSolution(_confusionSolution2_2x2);
+  _confusionSolution1_2x2->mesh()->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
 
   // solve
   _confusionSolution1_2x2->solve(false); // resolve for du on new mesh
@@ -368,9 +367,10 @@ bool SolutionTests::testHRefinementInitialization(){
   _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
-  vector< Teuchos::RCP<Solution> > solutions;
-  solutions.push_back(_poissonSolution);
-  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad(),solutions); // passing in solution to reinitialize stuff
+  mesh->registerSolution(_poissonSolution);
+//  vector< Teuchos::RCP<Solution> > solutions;
+//  solutions.push_back(_poissonSolution);
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
   _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
   
   _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
@@ -418,9 +418,9 @@ bool SolutionTests::testPRefinementInitialization() {
   
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(0); // just refine first cell  
-  vector< Teuchos::RCP<Solution> > solutions;
-  solutions.push_back(_poissonSolution);
-  _poissonSolution->mesh()->pRefine(quadCellsToRefine,solutions); // passing in solution to reinitialize stuff
+  
+  _poissonSolution->mesh()->registerSolution(_poissonSolution);
+  _poissonSolution->mesh()->pRefine(quadCellsToRefine);
   
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
