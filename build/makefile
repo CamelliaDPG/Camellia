@@ -66,6 +66,7 @@ OBJ_NAMES = DofOrdering \
        DPGInnerProduct \
        ExactSolution \
        MultiOrderStudy \
+       NonlinearSolveStrategy \
        PenaltyMethodFilter \
        PoissonExactSolutionLinear \
        PoissonBCQuartic \
@@ -262,6 +263,9 @@ RefinementPattern.o: $(SRCS_DIR)/Mesh/RefinementPattern.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
   
 RefinementStrategy.o: $(SRCS_DIR)/Solution/RefinementStrategy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+  
+NonlinearSolveStrategy.o: $(SRCS_DIR)/Solution/NonlinearSolveStrategy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Boundary.o: $(SRCS_DIR)/Mesh/Boundary.cpp

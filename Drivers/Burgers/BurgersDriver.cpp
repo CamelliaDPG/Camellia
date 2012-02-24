@@ -13,6 +13,8 @@
 #include "InitialGuess.h"
 
 #include "RefinementStrategy.h"
+#include "NonlinearStepSize.h"
+#include "NonlinearSolveStrategy.h"
 
 // Trilinos includes
 #include "Epetra_Time.h"
@@ -114,47 +116,18 @@ int main(int argc, char *argv[]) {
   //  backgroundFlow->addSolution(solution,.5);
   //  return 0;
   
+  double nonlinearStepSize = 0.5;
+  double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
+  
   int numRefs = 5;
+  
+  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
+  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow,solution,stepSize,nonlinearRelativeEnergyTolerance)
+  );
+  
   int refIter = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
-    
-    // initialize energyError stuff
-    map<int, double> energyError;
-    vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-    vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-    
-    int i = 0;    
-    double prevError = 0.0;
-    bool converged = false;
-    while (!converged) { // while energy error has not stabilized
-      
-      solution->solve(false);
-      
-      // see if energy error has stabilized
-      solution->energyError(energyError);    
-      double totalError = 0.0;
-      
-      for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-        Teuchos::RCP< Element > current_element = *(activeElemIt);
-        totalError += energyError[current_element->cellID()]*energyError[current_element->cellID()];
-      }
-      double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
-      if (rank==0){
-        cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
-      }
-      
-      double tol = .015; // if change is less than %, solve again
-      if (relErrorDiff < tol) {
-        converged = true;
-      } else {
-        prevError = totalError; // reset previous error and continue
-      } 
-      
-      double stepLength = .5;
-      backgroundFlow->addSolution(solution,stepLength);
-      
-      i++;            
-    }
+    solveStrategy->solve(rank==0);
 
     refinementStrategy->refine(rank==0); // print to console on rank 0
     
