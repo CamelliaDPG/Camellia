@@ -1577,10 +1577,12 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
       transformedValues = basisCache->getTransformedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
     }
     
+    const vector<int> *dofIndices = &(trialOrder->getDofIndices(trialID,sideIndex));
+    
     // now, apply coefficient weights:
-    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
+    for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
+      int localDofIndex = (*dofIndices)[dofOrdinal];
+      for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
           values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
