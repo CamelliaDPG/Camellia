@@ -84,6 +84,7 @@ OBJ_NAMES = DofOrdering \
        BasisEvaluation \
        RefinementPattern \
        RefinementStrategy \
+       RHS \
 			 StokesBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
@@ -236,6 +237,9 @@ Basis%.o: $(SRCS_DIR)/Basis/Basis%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %InnerProduct.o: $(SRCS_DIR)/InnerProduct/%InnerProduct.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+RHS.o: $(SRCS_DIR)/Problem/RHS.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Bilinear%.o: $(SRCS_DIR)/Problem/Bilinear%.cpp

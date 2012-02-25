@@ -176,7 +176,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   // will want a CrsMatrix here in just a moment...
   
   // determine any zero-mean constraints:
-  vector< int > trialIDs = _mesh->bilinearForm().trialIDs();
+  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   vector< int > zeroMeanConstraints;
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
@@ -317,7 +317,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
   for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
     int trialID = *trialIt;
-    //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
+    //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
     FieldContainer<double> basisIntegrals;
     FieldContainer<int> globalIndices;
     integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
@@ -898,7 +898,7 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
     
-    bool boundaryIntegral = _mesh()->bilinearForm().isFluxOrTrace(trialID);
+    bool boundaryIntegral = _mesh()->bilinearForm()->isFluxOrTrace(trialID);
     if ( !boundaryIntegral ) {
       TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
     } 
@@ -1433,12 +1433,12 @@ void Solution::computeResiduals() {
     */
       
     // set up diagonal testWeights matrices so we can reuse the existing computeRHS
-    FieldContainer<double> testWeights(numCells,numTestDofs,numTestDofs);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int i=0; i<numTestDofs; i++) {
-        testWeights(cellIndex,i,i) = 1.0; 
-      }
-    }
+//    FieldContainer<double> testWeights(numCells,numTestDofs,numTestDofs);
+//    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//      for (int i=0; i<numTestDofs; i++) {
+//        testWeights(cellIndex,i,i) = 1.0; 
+//      }
+//    }
     
     // compute l(v) and store in residuals:
     FieldContainer<double> residuals(numCells,numTestDofs);
@@ -1447,8 +1447,9 @@ void Solution::computeResiduals() {
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
     bool createSideCacheToo = true;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
-                                    testWeights, testOrdering, basisCache);
+    _rhs->integrateAgainstStandardBasis(residuals, _mesh->bilinearForm(), testOrdering, basisCache);
+//    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
+//                                    testWeights, testOrdering, basisCache);
 //    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
 //                                    testWeights, testOrdering, cellTopo, physicalCellNodes);
 
@@ -1614,7 +1615,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   } else {
 
   // the following is due to the fact that we *do not* transform basis values.
-  EFunctionSpaceExtended fs = _mesh->bilinearForm().functionSpaceForTrial(trialID);
+  EFunctionSpaceExtended fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
   TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
                      std::invalid_argument,
                      "This version of solutionValues only supports HVOL and HGRAD bases.");
@@ -1706,7 +1707,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
                        std::invalid_argument,
                        "physicalPoints.dimension(1) != spaceDim.");
-    TEST_FOR_EXCEPTION( _mesh->bilinearForm().isFluxOrTrace(trialID),
+    TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
                        std::invalid_argument,
                        "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
     
@@ -1799,7 +1800,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
 		      std::invalid_argument,
 		      "physicalPoints.dimension(2) != spaceDim.");
-  TEST_FOR_EXCEPTION( _mesh->bilinearForm().isFluxOrTrace(trialID),
+  TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
 		      std::invalid_argument,
 		      "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
   
@@ -2247,7 +2248,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
           }
 	  /* // if we can figure out how to undo the parity negation on fluxes, do so here
-	  if (_mesh->bilinearForm().functionSpaceForTrial(trialID)==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL){
+	  if (_mesh->bilinearForm()->functionSpaceForTrial(trialID)==IntrepidExtendedTypes::FUNCTION_SPACE_HVOL){
 	    computedValues(cellIndex,pointIndex) *= cellParities(sideIndex);
 	  }
 	  */

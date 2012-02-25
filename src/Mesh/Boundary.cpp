@@ -122,7 +122,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
   
   // first, let's check for any singletons (one-point BCs)
   map<int,bool> isSingleton;
-  vector< int > trialIDs = _mesh->bilinearForm().trialIDs();
+  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     isSingleton[trialID] = bc.singlePointBC(trialID);
@@ -169,7 +169,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
     int trialID = *trialIt;
     if (isSingleton[trialID]) {
       // that means that it was NOT imposed: warn the user
-      cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm().trialName(trialID);
+      cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
       cout << ", but no BC was imposed for this variable (imposeHere never returned true for any point)." << endl;
     }
   }
@@ -182,7 +182,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   globalDofIndicesAndValues.clear();
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
-  vector< int > trialIDs = _mesh->bilinearForm().trialIDs();
+  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   int spaceDim = elemTypePtr->cellTopoPtr->getDimension();
   int sideDim = spaceDim - 1;
   vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
@@ -296,7 +296,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 }
                 globalDofIndicesAndValues[globalDofIndex] = value;
                 if ( ! impositionReported ) {
-                  //cout << "imposed BC values for variable " << _mesh->bilinearForm().trialName(trialID) << endl;
+                  //cout << "imposed BC values for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
                   impositionReported = true;
                 }
               }
@@ -310,11 +310,11 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     // now, deal with the singletons:
     int trialID = *trialIt;
-    TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm().isFluxOrTrace(trialID) ),
+    TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
                        std::invalid_argument,
                        "Singleton BCs on traces and fluxes unsupported...");
     
-    if ((isSingleton[trialID]) && ( ! _mesh->bilinearForm().isFluxOrTrace(trialID) ) ) {
+    if ((isSingleton[trialID]) && ( ! _mesh->bilinearForm()->isFluxOrTrace(trialID) ) ) {
       // (we only support singletons on the interior)
       shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
       // find the physical points for the vertices.
@@ -389,7 +389,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 globalDofIndicesAndValues[globalDofIndex] = dirichletValues(cellIndex,ptIndex);
                 isSingleton[trialID] = false; // we've imposed it...
 //                cout << "imposed singleton BC value " << dirichletValues(cellIndex,ptIndex);
-//                cout << " for variable " << _mesh->bilinearForm().trialName(trialID) << " at point: (";
+//                cout << " for variable " << _mesh->bilinearForm()->trialName(trialID) << " at point: (";
 //                cout << physicalCellNodes(cellIndex,ptIndex,0) << "," << physicalCellNodes(cellIndex,ptIndex,1);
 //                cout << ")" << endl;
               }

@@ -355,10 +355,10 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(conformingStiffness, *(bilinearForm.get()),
+  BilinearFormUtility::computeStiffnessMatrix(conformingStiffness, bilinearForm,
                                               conformingOrdering, testOrdering,
                                               quad_4, quadPoints,cellSideParities);
-  BilinearFormUtility::computeStiffnessMatrix(nonConformingStiffness, *(bilinearForm.get()),
+  BilinearFormUtility::computeStiffnessMatrix(nonConformingStiffness, bilinearForm,
                                               nonConformingOrdering, testOrdering,
                                               quad_4, quadPoints,cellSideParities);
   
@@ -589,7 +589,7 @@ bool DPGTests::testComputeStiffnessDx() {
   
   FieldContainer<double> stiffnessActual(numTests,4,4);
   
-  TestBilinearFormDx bilinearForm;
+  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormDx());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -714,7 +714,7 @@ bool DPGTests::testComputeStiffnessFlux() {
    }
    }*/
   
-  TestBilinearFormFlux bilinearForm;
+  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormFlux());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -813,7 +813,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   // horizontal half-slice doesn't change the x derivatives at all
   // cell measure is again half the ref cell, so 1/2 the ref cell's stiffness.
   
-  TestBilinearFormTrace bilinearForm;
+  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp(new TestBilinearFormTrace());
   
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
@@ -1115,7 +1115,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, *bilinearForm.get(),
+  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, bilinearForm,
                                               trialOrdering, cubicHGradOrdering,
                                               quad_4, quadPoints, cellSideParities);
   
@@ -1152,7 +1152,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   TestBilinearFormAnalyticBoundaryIntegral::expectedOptTestWeightsForCubicsOnQuad(ipWeightsExpected,conforming);
   
-  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), *bilinearForm.get(),
+  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), bilinearForm,
                                                            trialOrdering, cubicHGradOrdering,
                                                            quad_4, quadPoints, cellSideParities);
   
@@ -1196,7 +1196,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   }
   
   BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsExpected,
-                                                     *bilinearForm.get(),
+                                                     bilinearForm,
                                                      trialOrdering, cubicHGradOrdering,
                                                      quad_4, quadPoints, cellSideParities);
   
@@ -1223,7 +1223,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   }
   
   BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsActual,
-                                                     *bilinearForm.get(),
+                                                     bilinearForm,
                                                      trialOrdering, cubicHGradOrdering,
                                                      quad_4, quadPoints, cellSideParities);
   
@@ -1353,7 +1353,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, *bilinearForm.get(),
+  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, bilinearForm,
                                               lowestOrderHGRADOrdering, cubicHGradOrdering,
                                               quad_4, quadPoints, cellSideParities);
   
@@ -1714,7 +1714,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
     ipWeightsExpected(0,3,15) = -0.30063516261594364;
   }
   
-  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), *bilinearForm.get(),
+  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), bilinearForm,
                                                            lowestOrderHGRADOrdering, cubicHGradOrdering,
                                                            quad_4, quadPoints,cellSideParities);
   
@@ -1774,7 +1774,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   }
   
   BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsExpected,
-                                                     *bilinearForm.get(),
+                                                     bilinearForm,
                                                      lowestOrderHGRADOrdering, cubicHGradOrdering,
                                                      quad_4, quadPoints, cellSideParities);
   
@@ -1801,7 +1801,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   }
   
   BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsActual,
-                                                     *bilinearForm.get(),
+                                                     bilinearForm,
                                                      lowestOrderHGRADOrdering, cubicHGradOrdering,
                                                      quad_4, quadPoints, cellSideParities);
   
@@ -1977,7 +1977,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
     cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
     
     // determine the values to expect:
-    BilinearFormUtility::computeStiffnessMatrix(stiffness, *bilinearForm.get(),
+    BilinearFormUtility::computeStiffnessMatrix(stiffness, bilinearForm,
                                                 trialOrdering, testOrdering,
                                                 cellTopo, nodePoints, cellSideParities);
     
@@ -2010,7 +2010,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
       }
       // compute with the fake optimal test weights:
       BilinearFormUtility::computeOptimalStiffnessMatrix(actualStiffness, optimalTestWeights,
-                                                         *bilinearForm.get(),
+                                                         bilinearForm,
                                                          trialOrdering, testOrdering,
                                                          cellTopo, nodePoints, cellSideParities);
       bool localSuccess = fcsAgree(myName,expectedStiffness,actualStiffness,tol);
@@ -2027,7 +2027,7 @@ bool DPGTests::testOptimalStiffnessByIntegrating() {
      optimalTestWeights(0,trialIndex,testIndex) = 1.0;
      }*/
     BilinearFormUtility::computeOptimalStiffnessMatrix(actualStiffness, summingOptimalTestWeights,
-                                                       *bilinearForm.get(),
+                                                       bilinearForm,
                                                        trialOrdering, testOrdering,
                                                        cellTopo, nodePoints,cellSideParities);
     
@@ -2113,7 +2113,7 @@ bool DPGTests::testComputeOptimalTest() {
     FieldContainer<double> cellSideParities(numTests,numSides);
     cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
     
-    int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), *bilinearForm.get(),
+    int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
                                                           lowestOrderHGRADOrderingPtr, lowestOrderHGRADOrderingPtr,
                                                           cellTopo, nodePoints,cellSideParities);
     
@@ -2133,7 +2133,7 @@ bool DPGTests::testComputeOptimalTest() {
     BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
     
     BilinearFormUtility::computeOptimalStiffnessMatrix(expectedStiffness, optimalTestWeights,
-                                                       *bilinearForm.get(),
+                                                       bilinearForm,
                                                        lowestOrderHGRADOrderingPtr, lowestOrderHGRADOrderingPtr,
                                                        cellTopo, nodePoints, cellSideParities);
     
@@ -2156,7 +2156,7 @@ bool DPGTests::testComputeOptimalTest() {
       actualStiffness.resize(numTests, numTrialDofs, numTestDofs);
       optimalTestWeights.resize(numTests, numTrialDofs, numTestDofs);
       
-      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), *(bilinearForm.get()),
+      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
                                                         highOrderHGradOrdering, highOrderHGradOrdering,
                                                         cellTopo, nodePoints, cellSideParities);
       
@@ -2174,7 +2174,7 @@ bool DPGTests::testComputeOptimalTest() {
       BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
       
       BilinearFormUtility::computeOptimalStiffnessMatrix(expectedStiffness, optimalTestWeights,
-                                                         *bilinearForm.get(),
+                                                         bilinearForm,
                                                          highOrderHGradOrdering, highOrderHGradOrdering,
                                                          cellTopo, nodePoints, cellSideParities);
       
@@ -2198,7 +2198,7 @@ bool DPGTests::testComputeOptimalTest() {
       actualStiffness.resize(numTests, numTrialDofs, numTrialDofs);
       optimalTestWeights.resize(numTests, numTrialDofs, numTestDofs);
       
-      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), *bilinearForm.get(),
+      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
                                                         lowestOrderHGRADOrderingPtr, testOrdering,
                                                         cellTopo, nodePoints, cellSideParities);
       
@@ -2216,7 +2216,7 @@ bool DPGTests::testComputeOptimalTest() {
       BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
       
       BilinearFormUtility::computeOptimalStiffnessMatrix(expectedStiffness, optimalTestWeights,
-                                                         *bilinearForm.get(),
+                                                         bilinearForm,
                                                          lowestOrderHGRADOrderingPtr, testOrdering,
                                                          cellTopo, nodePoints, cellSideParities);
       
@@ -2429,7 +2429,7 @@ bool DPGTests::testComputeRHS() {
     
     TestRHSOne rhs; // rhs == 1 => just integrate the test functions
     // compute with the fake optimal test weights:
-    BilinearFormUtility::computeRHS(actualRHSVector, *bilinearForm.get(), rhs,
+    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, rhs,
                                     optimalTestWeights, testOrdering,
                                     cellTopo, nodePoints);
     
@@ -2469,7 +2469,7 @@ bool DPGTests::testComputeRHS() {
       for (int i=0; i<numLowOrderTrialDofs; i++) {
         lowOrderOptimalTestWeights(0,i,i) = 1.0;
       }
-      BilinearFormUtility::computeRHS(lowOrderRHSVector, *bilinearForm.get(), rhs,
+      BilinearFormUtility::computeRHS(lowOrderRHSVector, bilinearForm, rhs,
                                       lowOrderOptimalTestWeights, lowOrderTestOrdering,
                                       cellTopo, nodePoints);
       
@@ -2482,7 +2482,7 @@ bool DPGTests::testComputeRHS() {
       }
     }
     
-    BilinearFormUtility::computeRHS(actualRHSVector, *bilinearForm.get(), rhs,
+    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, rhs,
                                     optimalTestWeights, testOrdering,
                                     cellTopo, nodePoints);
     
@@ -2506,7 +2506,7 @@ bool DPGTests::testComputeRHS() {
     }
     
     TestRHSLinear linearRHS;
-    BilinearFormUtility::computeRHS(actualRHSVector, *bilinearForm.get(), linearRHS,
+    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, linearRHS,
                                     optimalTestWeights, testOrdering,
                                     cellTopo, nodePoints);
     
@@ -2533,7 +2533,7 @@ bool DPGTests::testComputeRHS() {
       nodePoints(0,3,0) = 0.0;
       nodePoints(0,3,1) = 1.0;
     }
-    BilinearFormUtility::computeRHS(actualRHSVector, *bilinearForm.get(), linearRHS,
+    BilinearFormUtility::computeRHS(actualRHSVector, bilinearForm, linearRHS,
                                     optimalTestWeights, testOrdering,
                                     cellTopo, nodePoints);
     
@@ -2609,7 +2609,7 @@ bool DPGTests::testComputeOptimalTestPoisson() {
         cout << "ipMatrix(i,j)=" << ipMatrix(cellIndex,i,j) << "; ipMatrix(j,i)=" << ipMatrix(cellIndex,j,i) << endl;
       }
       
-      int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), *bilinearForm.get(),
+      int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
                                                             trialOrdering, testOrdering,
                                                             quad_4, quadPoints, cellSideParities);
       if (success != 0) {
@@ -2618,7 +2618,7 @@ bool DPGTests::testComputeOptimalTestPoisson() {
       }
       
       // let's try to confirm that the optWeights actually fulfill the contract....
-      BilinearFormUtility::computeStiffnessMatrix(preStiffness, *bilinearForm.get(),trialOrdering, testOrdering, quad_4, quadPoints, cellSideParities);
+      BilinearFormUtility::computeStiffnessMatrix(preStiffness, bilinearForm,trialOrdering, testOrdering, quad_4, quadPoints, cellSideParities);
       if ( ! checkOptTestWeights(optimalTestWeights,ipMatrix,preStiffness,tol) ) {
         cout << myName << ": check that optWeights == ipMatrix^(-1) * preStiffness failed." << endl;
         return false;
@@ -2632,7 +2632,7 @@ bool DPGTests::testComputeOptimalTestPoisson() {
       }
       
       BilinearFormUtility::computeOptimalStiffnessMatrix(expectedStiffness, optimalTestWeights,
-                                                         *bilinearForm.get(),
+                                                         bilinearForm,
                                                          trialOrdering, testOrdering,
                                                          quad_4, quadPoints, cellSideParities);
       

@@ -770,8 +770,8 @@ void Mesh::buildTypeLookups() {
   }
 }
 
-BilinearForm & Mesh::bilinearForm() { 
-  return *(_bilinearForm.get()); 
+Teuchos::RCP<BilinearForm> Mesh::bilinearForm() { 
+  return _bilinearForm; 
 }
 
 Boundary & Mesh::boundary() { 

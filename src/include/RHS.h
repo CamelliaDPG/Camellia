@@ -51,6 +51,7 @@ using namespace std;
 using namespace Intrepid;
 
 class RHS {
+  typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 public:
   virtual bool nonZeroRHS(int testVarID) = 0;
   virtual vector<EOperatorExtended> operatorsForTestID(int testID) {
@@ -68,6 +69,9 @@ public:
   virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
   }
+  
+  virtual void integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, Teuchos::RCP<BilinearForm> bilinearForm, 
+                                             Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
 };

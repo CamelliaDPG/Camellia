@@ -350,7 +350,7 @@ bool SolutionTests::testHRefinementInitialization(){
   _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "BeforeRefinement" + fileSuffix);
   
   // test for all field variables:
-  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm().trialVolumeIDs();
+  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm()->trialVolumeIDs();
   
   map<int, FieldContainer<double> > expectedMap;
   
@@ -381,7 +381,7 @@ bool SolutionTests::testHRefinementInitialization(){
     if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
       success = false;
       cout << "testHRefinementInitialization failed: max difference in " 
-           << _poissonSolution->mesh()->bilinearForm().trialName(fieldID) << " is " << maxDiff << endl;
+           << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
 
@@ -401,7 +401,7 @@ bool SolutionTests::testPRefinementInitialization() {
   _poissonSolution->solve(false);
   
   // test for all field variables:
-  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm().trialVolumeIDs();
+  vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm()->trialVolumeIDs();
   
   map<int, FieldContainer<double> > expectedMap;
   
@@ -428,7 +428,7 @@ bool SolutionTests::testPRefinementInitialization() {
     if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
       success = false;
       cout << "testHRefinementInitialization failed: max difference in " 
-      << _poissonSolution->mesh()->bilinearForm().trialName(fieldID) << " is " << maxDiff << endl;
+      << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
   

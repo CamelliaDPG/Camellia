@@ -48,6 +48,7 @@ using namespace Intrepid;
 class DPGTests;
 
 typedef Teuchos::RCP<BasisCache> BasisCachePtr;
+typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;
 
 class BilinearFormUtility {
 private:
@@ -60,7 +61,7 @@ public:
 
   static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                 FieldContainer<double> &innerProductMatrix,
-                                BilinearForm &bilinearForm,
+                                BilinearFormPtr bilinearForm,
                                 Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                 FieldContainer<double> &cellSideParities,
                                 Teuchos::RCP<BasisCache> stiffnessBasisCache); // stiffness as opposed to the test-test cache
@@ -68,26 +69,26 @@ public:
   // deprecated computeOptimalTests:
   static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                  DPGInnerProduct &innerProduct,
-                                 BilinearForm &bilinearForm,
+                                 BilinearFormPtr bilinearForm,
                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                  shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                  FieldContainer<double> &cellSideParities);
   
   static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                 FieldContainer<double> &innerProductMatrix,
-                                BilinearForm &bilinearForm,
+                                BilinearFormPtr bilinearForm,
                                 Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                 FieldContainer<double> &cellSideParities);
   
   // the "pre-stiffness" (rectangular) matrix methods:
-  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                      FieldContainer<double> &cellSideParities);
 
   // the real one:
-  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                      FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
@@ -97,7 +98,7 @@ public:
   // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
   static void computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
                                             FieldContainer<double> &optimalTestWeights,
-                                            BilinearForm &bilinearForm,
+                                            BilinearFormPtr bilinearForm,
                                             Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                             shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                             FieldContainer<double> &cellSideParities);
@@ -106,11 +107,11 @@ public:
                                      FieldContainer<double> &optimalTestWeights);
   
   // this method is deprecated; use the next one
-  static void computeRHS(FieldContainer<double> &rhsVector, BilinearForm &bilinearForm, RHS &rhs, 
+  static void computeRHS(FieldContainer<double> &rhsVector, BilinearFormPtr bilinearForm, RHS &rhs, 
                          FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
                          shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes);
   
-  static void computeRHS(FieldContainer<double> &rhsVector, BilinearForm &bilinearForm, RHS &rhs, 
+  static void computeRHS(FieldContainer<double> &rhsVector, BilinearFormPtr bilinearForm, RHS &rhs, 
                   FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
                   BasisCachePtr basisCache);
 

@@ -128,7 +128,7 @@ void BilinearFormUtility::transposeFCMatrices(FieldContainer<double> &fcTranspos
 
 int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                             FieldContainer<double> &innerProductMatrix,
-                                            BilinearForm &bilinearForm,
+                                            BilinearFormPtr bilinearForm,
                                             Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                             shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                             FieldContainer<double> &cellSideParities) {
@@ -145,7 +145,7 @@ int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestW
 
 int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                             FieldContainer<double> &innerProductMatrix,
-                                            BilinearForm &bilinearForm,
+                                            BilinearFormPtr bilinearForm,
                                             Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                             FieldContainer<double> &cellSideParities,
                                             Teuchos::RCP<BasisCache> stiffnessBasisCache) { // as opposed to the test-test cache
@@ -246,7 +246,7 @@ int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestW
 
 int BilinearFormUtility::computeOptimalTest(FieldContainer<double> &optimalTestWeights,
                                              DPGInnerProduct &innerProduct,
-                                             BilinearForm &bilinearForm,
+                                             BilinearFormPtr bilinearForm,
                                              Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                              shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                              FieldContainer<double> &cellSideParities) {
@@ -347,7 +347,7 @@ void BilinearFormUtility::computeStiffnessMatrixForCell(FieldContainer<double> &
   computeStiffnessMatrix(stiffness,mesh->bilinearForm(),trialOrder,testOrder,cellTopo,physicalCellNodes,cellSideParities);
 }
 
-void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering, 
                                                  shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                                  FieldContainer<double> &cellSideParities) {
@@ -366,7 +366,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   computeStiffnessMatrix(stiffness,bilinearForm,trialOrdering,testOrdering,cellSideParities,basisCache);
 }
 
-void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearForm &bilinearForm,
+void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
                                                  Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                                  FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
 
@@ -414,10 +414,10 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   unsigned numSides = cellTopo.getSideCount();
   
   // 3. For each (test, trial) combination:
-  vector<int> testIDs = bilinearForm.testIDs();
+  vector<int> testIDs = bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
-  vector<int> trialIDs = bilinearForm.trialIDs();
+  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
@@ -432,7 +432,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
       int trialID = *trialIterator;
       
       vector<EOperatorExtended> trialOperators, testOperators;
-      bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
+      bilinearForm->trialTestOperators(trialID, testID, trialOperators, testOperators);
       vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
       TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
@@ -451,9 +451,9 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
         Teuchos::RCP < const FieldContainer<double> > trialValuesTransformed;
         Teuchos::RCP < const FieldContainer<double> > testValuesTransformedWeighted;
         
-        //cout << "trial is " <<  bilinearForm.trialName(trialID) << "; test is " << bilinearForm.testName(testID) << endl;
+        //cout << "trial is " <<  bilinearForm->trialName(trialID) << "; test is " << bilinearForm->testName(testID) << endl;
         
-        if (! bilinearForm.isFluxOrTrace(trialID)) {
+        if (! bilinearForm->isFluxOrTrace(trialID)) {
           trialBasis = trialOrdering->getBasis(trialID);
           testBasis = testOrdering->getBasis(testID);
           
@@ -465,7 +465,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
           FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
           FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
           FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-          bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
+          bilinearForm->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
                                              trialID,testID,operatorIndex,basisCache);
           
           //integrate:
@@ -477,8 +477,8 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
           
           //checkForZeroRowsAndColumns("miniStiffness for pre-stiffness", miniStiffness);
           
-          //cout << "trialValuesTransformed for trial " << bilinearForm.trialName(trialID) << endl << trialValuesTransformed
-          //cout << "testValuesTransformed for test " << bilinearForm.testName(testID) << ": \n" << testValuesTransformed;
+          //cout << "trialValuesTransformed for trial " << bilinearForm->trialName(trialID) << endl << trialValuesTransformed
+          //cout << "testValuesTransformed for test " << bilinearForm->testName(testID) << ": \n" << testValuesTransformed;
           //cout << "weightedMeasure:\n" << weightedMeasure;
           
           // there may be a more efficient way to do this copying:
@@ -539,7 +539,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
            
             FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
             FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-            bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
+            bilinearForm->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
                                                trialID,testID,operatorIndex,basisCache);
             
             
@@ -575,7 +575,7 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
 
 void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &stiffness, 
                                                         FieldContainer<double> &optimalTestWeights,
-                                                        BilinearForm &bilinearForm,
+                                                        BilinearFormPtr bilinearForm,
                                                         Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
                                                         shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
                                                         FieldContainer<double> &cellSideParities) {
@@ -629,10 +629,10 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   
   unsigned numSides = cellTopo.getSideCount();
 
-  vector<int> testIDs = bilinearForm.testIDs();
+  vector<int> testIDs = bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
-  vector<int> trialIDs = bilinearForm.trialIDs();
+  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
@@ -654,7 +654,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
         int testID = *testIterator;
         
         vector<EOperatorExtended> trialOperators, testOperators;
-        bilinearForm.trialTestOperators(trialID, testID, trialOperators, testOperators);
+        bilinearForm->trialTestOperators(trialID, testID, trialOperators, testOperators);
         vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
         testOpIt = testOperators.begin();
         
@@ -672,7 +672,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
           Teuchos::RCP < const FieldContainer<double> > trialValuesTransformed;
           Teuchos::RCP < const FieldContainer<double> > testValuesTransformedWeighted;
 
-          if (! bilinearForm.isFluxOrTrace(trialID)) {
+          if (! bilinearForm->isFluxOrTrace(trialID)) {
             trialBasis = trialOrdering->getBasis(trialID);
             testBasis = testOrdering->getBasis(testID);
             FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
@@ -683,7 +683,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
             FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
             FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
             FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-            bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues, 
+            bilinearForm->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues, 
                                                trialID,testID,operatorIndex,physicalCubaturePoints);
               
             int testDofOffset = testOrdering->getDofIndex(testID,0);
@@ -752,7 +752,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
               
               FieldContainer<double> cubPointsSidePhysical = basisCache.getPhysicalCubaturePointsForSide(sideOrdinal);
               FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
-              bilinearForm.applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
+              bilinearForm->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
                                                  trialID,testID,operatorIndex,cubPointsSidePhysical);              
               
               int testDofOffset = testOrdering->getDofIndex(testID,0,0);
@@ -781,7 +781,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
 }
 
 void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector, 
-                                     BilinearForm &bilinearForm, RHS &rhs, 
+                                     BilinearFormPtr bilinearForm, RHS &rhs, 
                                      FieldContainer<double> &optimalTestWeights,
                                      Teuchos::RCP<DofOrdering> testOrdering,
                                      shards::CellTopology &cellTopo, 
@@ -803,7 +803,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
 
 
 void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector, 
-                                     BilinearForm &bilinearForm, RHS &rhs, 
+                                     BilinearFormPtr bilinearForm, RHS &rhs, 
                                      FieldContainer<double> &optimalTestWeights,
                                      Teuchos::RCP<DofOrdering> testOrdering,
                                      BasisCachePtr basisCache) {
@@ -831,7 +831,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
                      std::invalid_argument,
                      "optimalTestWeights.dimension(1) (=" << optimalTestWeights.dimension(1) << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
 
-  vector<int> testIDs = bilinearForm.testIDs();
+  vector<int> testIDs = bilinearForm->testIDs();
   vector<int>::iterator testIterator;
 
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;

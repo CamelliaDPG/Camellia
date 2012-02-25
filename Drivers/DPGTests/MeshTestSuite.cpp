@@ -158,7 +158,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   FieldContainer<double> ancestorTestPointsRefCoords(testPointsRefCoords); // alloc the right size container
   
   int numElements = mesh->activeElements().size();
-  vector<int> fluxIDs = mesh->bilinearForm().trialBoundaryIDs();
+  vector<int> fluxIDs = mesh->bilinearForm()->trialBoundaryIDs();
   for (int cellIndex=0; cellIndex<numElements; cellIndex++) {
     Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
     DofOrderingPtr trialOrder = elem->elementType()->trialOrderPtr;
@@ -830,7 +830,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
     Teuchos::RCP<Element> elem = mesh->activeElements()[cellIndex];
     int cellID = elem->cellID();
     DofOrdering trialOrder = *(elem->elementType()->trialOrderPtr.get());
-    vector< int > trialIDs = mesh->bilinearForm().trialIDs();
+    vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
       int numSides = trialOrder.getNumSidesForVarID(trialID);
@@ -852,7 +852,7 @@ bool MeshTestSuite::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
           
           // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
           // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
-          if (mesh->bilinearForm().isFluxOrTrace(trialID)) {
+          if (mesh->bilinearForm()->isFluxOrTrace(trialID)) {
             Element* neighbor;
             int mySideIndexInNeighbor;
             elem->getNeighbor(neighbor,mySideIndexInNeighbor,sideIndex);

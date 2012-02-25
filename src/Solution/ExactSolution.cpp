@@ -60,7 +60,7 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
     
     int numSides;
     
-    if (! solution.mesh()->bilinearForm().isFluxOrTrace(trialID)) {
+    if (! solution.mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
       numSides = 1;
     } else {
       numSides = elemTypePtr->cellTopoPtr->getSideCount();
@@ -114,7 +114,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   FieldContainer<double> cubPointsSide;
   int numCubPoints;
   
-  bool boundaryIntegral = solution.mesh()->bilinearForm().isFluxOrTrace(trialID);
+  bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
   if ( !boundaryIntegral ) {
     if (sideIndex != 0) {
       TEST_FOR_EXCEPTION(sideIndex != 0,std::invalid_argument,
