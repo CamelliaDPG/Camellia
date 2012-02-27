@@ -28,8 +28,8 @@ void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physical
 
 // BC
 bool ConfusionProblem::bcsImposed(int varID) {
-  return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
-  //return varID == ConfusionBilinearForm::U_HAT;
+  //  return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
+  return varID == ConfusionBilinearForm::U_HAT;
 }
 
 void ConfusionProblem::imposeBC(int varID, FieldContainer<double> &physicalPoints, 

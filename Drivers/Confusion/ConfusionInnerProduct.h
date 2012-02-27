@@ -104,11 +104,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             BasisCache basisCache = BasisCache(allPhysicalNodesForType, *(elem->elementType()->cellTopoPtr), cubDegree);
             FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
 
-            double scaling = epsilon;
-	    if (operatorIndex==0){ // scale the L2 component of v 
-	      scaling = sqrt(min(epsilon/cellMeasures(cellIndex),1.0));
-	      //	      cout << "L2 coeff for cell " << elem->cellID() << " is " << epsilon/scaling << endl;
-	    } 
+            double scaling = min(epsilon/cellMeasures(cellIndex),1.0);
 	    
             //////////////////// 
 	    
@@ -122,7 +118,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
           }
         } else if (operatorIndex==1) {
           
-          _bilinearForm->multiplyFCByWeight(testValues1,sqrt(epsilon));
+          _bilinearForm->multiplyFCByWeight(testValues1,epsilon);
           //      _bilinearForm->multiplyFCByWeight(testValues2,1.0);
           
         } else if (operatorIndex==2) { // if it's the beta dot grad term
@@ -161,19 +157,43 @@ class ConfusionInnerProduct : public DPGInnerProduct {
       } else if (testID1==ConfusionBilinearForm::TAU){ // L2 portion of Tau
         
         if (operatorIndex==0) {
+
           int numCells = testValues1.dimension(0);
           int basisCardinality = testValues1.dimension(1);
           int numPoints = testValues1.dimension(2);
           int spaceDim = testValues1.dimension(3);
           
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+
+            //////////////////// 
+
+            // compute measure of current cell, scale epsilon term by this 
+            FieldContainer<double> physicalPointForCell(1,spaceDim);
+            physicalPointForCell(0,0) = physicalPoints(cellIndex,0,0); // assuming that all all pts corresponding to 1 cell index are the same...
+            physicalPointForCell(0,1) = physicalPoints(cellIndex,0,1);
+            vector<ElementPtr> elemVector = _mesh->elementsForPoints(physicalPointForCell);
+            TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
+                               "More than one element returned for a single pt!");
+            ElementPtr elem = elemVector[0];
+            
+            FieldContainer<double> allPhysicalNodesForType = _mesh->physicalCellNodes(elem->elementType());
+            
+            // create basisCache
+            int cubDegree = elem->elementType()->testOrderPtr->maxBasisDegree();
+            BasisCache basisCache = BasisCache(allPhysicalNodesForType, *(elem->elementType()->cellTopoPtr), cubDegree);
+            FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
+
+	    double tauScaling = min(1/cellMeasures(cellIndex),1.0/epsilon);
+	    
+            //////////////////// 
+
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
               for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                 double x = physicalPoints(cellIndex,ptIndex,0);
                 double y = physicalPoints(cellIndex,ptIndex,1);
                 for (int dimIndex=0; dimIndex<spaceDim; dimIndex++){
                   double weight = getWeight(x,y);
-                  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight;
+                  testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex) = testValues1(cellIndex,basisOrdinal,ptIndex,dimIndex)*weight*tauScaling;
                 }
               }
             }
@@ -202,7 +222,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   // get weight that biases the outflow over the inflow (for math stability purposes)
   double getWeight(double x,double y){
     
-    //    return _confusionBilinearForm->getEpsilon() + x*y;
+    //    return _confusionBilinearForm->getEpsilon() + x;
     return 1.0; // for the new inflow condition
   }
 };

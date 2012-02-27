@@ -44,17 +44,17 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 3; // for tests
+  int pToAdd = 1; // for tests
   
   // define our manufactured solution or problem bilinear form:
 
-  double epsilon =  1e-2;
+  double epsilon =  1e-3;
   double beta_x = 1.0, beta_y = 1.25;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   bool usePatchBasis = false;
   bool enforceMBFluxContinuity = false;
-  bool limitIrregularity = true;
+  bool limitIrregularity = false;
   
   int numRefinements = 4;
   double thresholdFactor = 0.20;  
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
   mesh->setUsePatchBasis(usePatchBasis); 
   mesh->setEnforceMultiBasisFluxContinuity(enforceMBFluxContinuity);
   
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
   Teuchos::RCP<ConfusionInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
