@@ -216,7 +216,8 @@ void ConfectionManufacturedSolution::getConstraints(FieldContainer<double> &phys
     }
   }
   outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
-  outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;	        
+  outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;
   constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
+  constraintValues.push_back(outflowValues); // only one constraint on outflow
     
 }

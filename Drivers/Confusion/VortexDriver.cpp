@@ -4,6 +4,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
+#include "RefinementStrategy.h"
 
 // added by Jesse
 #include "PenaltyMethodFilter.h"
@@ -89,7 +90,11 @@ int main(int argc, char *argv[]) {
   solution->setFilter(penaltyBC);
 
   ////////////////////////////////////////////////////////////////////
- 
+
+  // define refinement strategy:
+  double energyThreshold = .2;
+  Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
+
   solution->solve(false);
   cout << "Processor " << rank << " returned from solve()." << endl;
   if (rank==0){
@@ -100,70 +105,35 @@ int main(int argc, char *argv[]) {
   double l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,15);
   cout << " L2 error: " << l2error << endl;
 
-  return 0;
-
   bool limitIrregularity = true;
-  int numRefinements = 3;
+  int numRefinements = 2;
   double thresholdFactor = 0.2;
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<double> L2errorVector;
   vector<int> dofVector;
   for (int i=0; i<numRefinements; i++) {
-    map<int, double> energyError;
-    solution->energyError(energyError);
-    vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-    vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
-    // greedy refinement algorithm - mark cells for refinement
-    vector<int> triangleCellsToRefine;
-    vector<int> quadCellsToRefine;
-    double maxError = 0.0;
-    double totalEnergyErrorSquared=0.0;
-    for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-      Teuchos::RCP< Element > current_element = *(activeElemIt);
-      int cellID = current_element->cellID();
-      //      cout << "energy error for cellID " << cellID << " = " << energyError[cellID] << endl;      
-      maxError = max(energyError[cellID],maxError);
-      totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
+    double totalEnergyError = solution->energyErrorTotal();
+
+    if (useExactSolution){
+      // print out the L2 error of the solution:
+      int cubDegree = 20;
+      l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+      L2errorVector.push_back(l2error);
     }
+
     if (rank==0){
-      cout << "For refinement number " << refIterCount << ", energy error = " << totalEnergyErrorSquared;
       if (useExactSolution) {
-	// print out the L2 error of the solution:
-	int cubDegree = 15;
-	double l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-	cout << " and L2 error: " << l2error;
-	L2errorVector.push_back(l2error);
+	cout << "L2 error: " << l2error << endl;
       }      	
-      cout << endl;
     }
-
-    errorVector.push_back(totalEnergyErrorSquared);
+    errorVector.push_back(totalEnergyError);
     dofVector.push_back(mesh->numGlobalDofs());
-
-    // do refinements on cells with error above threshold
-    for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
-      Teuchos::RCP< Element > current_element = *(activeElemIt);
-      int cellID = current_element->cellID();
-      if (energyError[cellID]>=thresholdFactor*maxError){
-	if (current_element->numSides()==3){
-	  triangleCellsToRefine.push_back(cellID);
-	}else if (current_element->numSides()==4){
-	  quadCellsToRefine.push_back(cellID);
-	}
-      }
-    }    
-    mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
-    triangleCellsToRefine.clear();
-    mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-    quadCellsToRefine.clear();
-
-    // enforce 1-irregularity if desired
-    if (limitIrregularity){
-      mesh->enforceOneIrregularity();
-    }
     
+
+    refinementStrategy->refine(rank==0);
+
     refIterCount++;
     if (rank==0){
       cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    

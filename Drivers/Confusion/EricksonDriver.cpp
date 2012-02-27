@@ -124,8 +124,6 @@ int main(int argc, char *argv[]) {
   for (int i=0; i<numRefinements; i++) {
     map<int, double> energyError;
     double totalEnergyError = solution->energyErrorTotal();
-    vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-    vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
     if (useExactSolution){
       projectedSolution->addSolution(solution,-1.0); // subtract solution from projection

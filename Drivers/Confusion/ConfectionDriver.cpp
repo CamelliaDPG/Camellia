@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
+#include "RefinementStrategy.h"
 
 // added by Jesse
 #include "PenaltyMethodFilter.h"
@@ -75,7 +76,7 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh;
   mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
   Teuchos::RCP<ConfusionInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
@@ -96,46 +97,6 @@ int main(int argc, char *argv[]) {
   solution->setFilter(penaltyBC);
  
   solution->solve(false);
-  cout << "Processor " << rank << " returned from solve()." << endl;
-  if (rank==0){
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
-  }
-  int cubDegree = 15;
-  double l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
-
-  bf->setEpsilon(bf->getEpsilon()*.1);
-
-  solution->solve(false);
-  if (rank==0){
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
-  }
-  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
-
-  bf->setEpsilon(bf->getEpsilon()*.1);
-
-  solution->solve(false);
-  if (rank==0){
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
-  }
-  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
-
-  bf->setEpsilon(bf->getEpsilon()*.1);
-
-  solution->solve(false);
-  if (rank==0){
-    solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
-    solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
-  }
-  l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-  cout << "with epsilon " << bf->getEpsilon() << ", L2 error: " << l2error << endl;
-
-  return 0;
 
   bool limitIrregularity = true;
   int numRefinements = 4;
@@ -146,8 +107,7 @@ int main(int argc, char *argv[]) {
   vector<double> meshSizes; // assuming uniform meshes
   vector<int> dofVector;
   for (int i=0; i<numRefinements; i++) {
-    map<int, double> energyError;
-    solution->energyError(energyError);
+    map<int, double> energyError = solution->energyError();
     vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
@@ -211,8 +171,6 @@ int main(int argc, char *argv[]) {
   
   // save a data file for plotting in MATLAB
   if (rank==0){
-    //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
-    //    solution->writeToFile(ConfusionBilinearForm::U, "u.dat");
     solution->writeFieldsToFile(ConfusionBilinearForm::U, "u.m");
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
     solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "sigma_hat.dat");
