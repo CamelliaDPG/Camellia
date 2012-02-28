@@ -85,6 +85,7 @@ OBJ_NAMES = DofOrdering \
        RefinementPattern \
        RefinementStrategy \
        RHS \
+       RHSTests \
 			 StokesBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
@@ -171,6 +172,9 @@ SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ElementTests.o: $(DRIVERS_DIR)/DPGTests/ElementTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+RHSTests.o: $(DRIVERS_DIR)/DPGTests/RHSTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 PatchBasisTests.o: $(DRIVERS_DIR)/DPGTests/PatchBasisTests.cpp

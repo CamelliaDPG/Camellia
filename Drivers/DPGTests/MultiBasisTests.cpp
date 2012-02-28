@@ -452,7 +452,7 @@ void MultiBasisTests::setup() {
   
   _confusionEnergyErrorForOriginalMesh = _confusionSolution->energyErrorTotal();
   
-  _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis_before_refinement.m");
+//  _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis_before_refinement.m");
   
   _mesh->setUsePatchBasis(false);
   

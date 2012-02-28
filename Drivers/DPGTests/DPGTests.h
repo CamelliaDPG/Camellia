@@ -52,7 +52,6 @@ public:
   static bool testOptimalStiffnessByMultiplying();
   static bool testComputeOptimalTest();
   static bool testComputeOptimalTestPoisson();
-  static bool testComputeRHS();
   static bool testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   static bool testWeightBasis();
   static bool checkOptTestWeights(FieldContainer<double> &optWeights,

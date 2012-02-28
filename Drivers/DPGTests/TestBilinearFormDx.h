@@ -35,8 +35,6 @@
 
 class TestBilinearFormDx : public BilinearForm {
 private:
-  static const string & S_TEST;
-  static const string & S_TRIAL;
   
 public:
   TestBilinearFormDx() {
@@ -46,9 +44,11 @@ public:
 
   // implement the virtual methods declared in super:
   const string & testName(int testID) {
+    const static string S_TEST = "test";
     return S_TEST;
   }
   const string & trialName(int trialID) {
+    const static string S_TRIAL = "trial";
     return S_TRIAL;
   }
   
@@ -78,8 +78,5 @@ public:
   }
   
 };
-
-const string & TestBilinearFormDx::S_TEST  = "test";
-const string & TestBilinearFormDx::S_TRIAL = "trial";
 
 #endif
