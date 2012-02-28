@@ -100,12 +100,6 @@ void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight
   }
 }
 
-
-void BilinearForm::previousSolutionRequired(set<int> &trialIDs) {
-  // default: just clear the set
-  trialIDs.clear();
-}
-
 vector<int> BilinearForm::trialVolumeIDs() {
   vector<int> ids;
   for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++) {

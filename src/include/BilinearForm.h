@@ -88,11 +88,9 @@ public:
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
-  virtual void trialTestOperators(int testID1, int testID2, 
-                                  vector<EOperatorExtended> &testOp1,
-                                  vector<EOperatorExtended> &testOp2); // default implementation calls trialTestOperator
-
-  virtual void previousSolutionRequired(set<int> &trialIDs); // default: just clear the set
+  virtual void trialTestOperators(int trialID, int testID, 
+                                  vector<EOperatorExtended> &trialOps,
+                                  vector<EOperatorExtended> &testOps); // default implementation calls trialTestOperator
   
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
