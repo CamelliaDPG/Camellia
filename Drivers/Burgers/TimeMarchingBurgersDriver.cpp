@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-3;
+  double epsilon = 1e-2;
   bool useTriangles = false;
   
   FieldContainer<double> quadPoints(4,2);
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 4, verticalCells = 4;
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
@@ -77,6 +77,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(bfSteady) );
 
   Teuchos::RCP<TimeMarchingBurgersProblem> bf = Teuchos::rcp(new TimeMarchingBurgersProblem(bfSteady,problem));
+  
+  bf->setTimeStepSize(.01);
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -134,7 +136,7 @@ int main(int argc, char *argv[]) {
   //  backgroundFlow->addSolution(solution,.5);
   //  return 0;
   
-  int numRefs = 5;
+  int numRefs = 0;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow,solution,stepSize,nonlinearRelativeEnergyTolerance)
@@ -145,13 +147,21 @@ int main(int argc, char *argv[]) {
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   
-  // one more nonlinear solve on refined mesh
-  int numNRSteps = 5;
-  for (int i=0;i<numNRSteps;i++){
-    solution->solve(false);    
-    backgroundFlow->addSolution(solution,1.0);
+  int numTimeSteps = 3;
+  for (int timeStepIndex=0; timeStepIndex<numTimeSteps; timeStepIndex++) {
+    solveStrategy->solve(rank==0);
+    // hack way:
+    prevSoln->addSolution(prevSoln,-1.0);
+    prevSoln->addSolution(backgroundFlow,1.0);
+    if (timeStepIndex==0) {
+      backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref_0.m");
+      solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref_0.dat");
+    } else if (timeStepIndex==1) {
+      backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref_1.m");
+      solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref_1.dat");
+    }
   }
-  
+
   if (rank==0){
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");

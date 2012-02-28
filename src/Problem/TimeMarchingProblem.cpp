@@ -17,6 +17,8 @@ TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm
   _bilinearForm = bilinearForm;
   _rhs = rhs;
   _dt = 1.0;
+  _testIDs = bilinearForm->testIDs();
+  _trialIDs = bilinearForm->trialIDs();
 }
 
 void TimeMarchingProblem::trialTestOperators(int trialID, int testID, 
