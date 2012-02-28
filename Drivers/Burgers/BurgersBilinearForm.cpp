@@ -33,6 +33,10 @@ void BurgersBilinearForm::setBackgroundFlow(Teuchos::RCP<Solution> flow){
   _backgroundFlow = flow;
 }
 
+Teuchos::RCP<Solution> BurgersBilinearForm::getBackgroundFlow(){
+  return _backgroundFlow;
+}
+
 double BurgersBilinearForm::getEpsilon(){
   return _epsilon;
 }

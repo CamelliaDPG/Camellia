@@ -38,7 +38,7 @@ public:
   FieldContainer<double> getBeta(const FieldContainer<double> &physicalPoints); // BC depends on this version
   vector<double> getBeta(double x, double y);
   void setBackgroundFlow(Teuchos::RCP<Solution> flow);
-  Teuchos::RCP<Solution> getBackgroundFlow(){return _backgroundFlow;}
+  Teuchos::RCP<Solution> getBackgroundFlow();
   
   bool isFluxOrTrace(int trialID);
   
