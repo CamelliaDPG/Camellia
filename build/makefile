@@ -89,6 +89,7 @@ OBJ_NAMES = DofOrdering \
 			 StokesBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
+       TimeMarchingProblem \
 			 TransientConfusionBilinearForm \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
@@ -241,6 +242,9 @@ Basis%.o: $(SRCS_DIR)/Basis/Basis%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %InnerProduct.o: $(SRCS_DIR)/InnerProduct/%InnerProduct.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+TimeMarchingProblem.o: $(SRCS_DIR)/Problem/TimeMarchingProblem.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 RHS.o: $(SRCS_DIR)/Problem/RHS.cpp

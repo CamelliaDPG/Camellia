@@ -10,11 +10,15 @@
 #define Camellia_TimeMarchingProblem_h
 
 #include "BilinearForm.h"
+#include "RHS.h"
+
+class Solution;
 
 class TimeMarchingProblem : public BilinearForm, public RHS {
   Teuchos::RCP<BilinearForm> _bilinearForm;
   Teuchos::RCP<RHS> _rhs;
   double _dt;
+  Teuchos::RCP<Solution> _previousTimeSolution;
 public:
   TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm, Teuchos::RCP<RHS> rhs);
   
@@ -40,9 +44,17 @@ public:
   
   // methods that belong to the TimeMarchingProblem:
   virtual void timeLHS(FieldContainer<double> trialValues, int trialID);
+  virtual void timeRHS(FieldContainer<double> values, int trialID);
+  
   
   void setTimeStepSize(double dt);
   double timeStepSize();
+  
+  virtual bool hasTimeDerivative(int trialID, int testID) = 0;
+  bool testHasTimeDerivative(int testID);
+  
+  Teuchos::RCP<Solution> previousTimeSolution();
+  void setPreviousTimeSolution(Teuchos::RCP<Solution> previousSolution);
   
 };
 
