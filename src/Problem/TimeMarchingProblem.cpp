@@ -10,6 +10,7 @@
 
 #include "TimeMarchingProblem.h"
 #include "RHS.h"
+#include "Solution.h"
 
 TimeMarchingProblem::TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm,
                                                    Teuchos::RCP<RHS> rhs) {
@@ -41,7 +42,7 @@ void TimeMarchingProblem::applyBilinearFormData(FieldContainer<double> &trialVal
   if (operatorIndex >= 0) { // then this belongs to the non-time-marching BilinearForm
     _bilinearForm->applyBilinearFormData(trialValues,testValues,trialID,testID,operatorIndex-1,basisCache);
   } else {
-    this->timeLHS(trialValues,trialID);
+    this->timeLHS(trialValues,trialID,basisCache);
     BilinearForm::multiplyFCByWeight(trialValues, 1.0 / _dt);
   }
 }
@@ -91,7 +92,7 @@ void TimeMarchingProblem::rhs(int testID, int operatorIndex, Teuchos::RCP<BasisC
   if (operatorIndex >= 0) {
     _rhs->rhs(testID,operatorIndex,basisCache,values);
   } else {
-    this->timeRHS(values,testID);
+    this->timeRHS(values,testID,basisCache);
     BilinearForm::multiplyFCByWeight(values, 1.0 / _dt);
   }
 }
@@ -100,16 +101,24 @@ void TimeMarchingProblem::setTimeStepSize(double dt) {
   _dt = dt;
 }
 
-void TimeMarchingProblem::timeLHS(FieldContainer<double> trialValues, int trialID) {
+void TimeMarchingProblem::timeLHS(FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache) {
   // default implementation leaves trialValues as they are.
 }
 
-void TimeMarchingProblem::timeRHS(FieldContainer<double> testValues, int testID) {
+void TimeMarchingProblem::timeRHS(FieldContainer<double> testValues, int testID, Teuchos::RCP<BasisCache> basisCache) {
   // default implementation leaves testValues as they are.
 }
 
 double TimeMarchingProblem::timeStepSize() {
   return _dt;
+}
+
+const string & TimeMarchingProblem::testName(int testID) {
+  return _bilinearForm->testName(testID);
+}
+
+const string & TimeMarchingProblem::trialName(int trialID) {
+  return _bilinearForm->trialName(trialID);
 }
 
 Teuchos::RCP<Solution> TimeMarchingProblem::previousTimeSolution() {

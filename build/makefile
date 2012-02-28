@@ -90,6 +90,7 @@ OBJ_NAMES = DofOrdering \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
        TimeMarchingProblem \
+       TimeMarchingBurgersProblem \
 			 TransientConfusionBilinearForm \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
@@ -102,7 +103,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver
 ECHOES = 
 
 default: all
@@ -122,6 +123,12 @@ BurgersDriver: BurgersDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 BurgersDriver.o: $(DRIVERS_DIR)/Burgers/BurgersDriver.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+TimeMarchingBurgersDriver.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfectionDriver: ConfectionDriver.o $(OBJS)
@@ -194,6 +201,9 @@ BurgersInnerProduct.o: $(DRIVERS_DIR)/Burgers/BurgersInnerProduct.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 BurgersProblem.o: $(DRIVERS_DIR)/Burgers/BurgersProblem.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+TimeMarchingBurgersProblem.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersProblem.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp

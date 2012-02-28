@@ -15,10 +15,11 @@
 class Solution;
 
 class TimeMarchingProblem : public BilinearForm, public RHS {
-  Teuchos::RCP<BilinearForm> _bilinearForm;
   Teuchos::RCP<RHS> _rhs;
   double _dt;
   Teuchos::RCP<Solution> _previousTimeSolution;
+protected:
+  Teuchos::RCP<BilinearForm> _bilinearForm;
 public:
   TimeMarchingProblem(Teuchos::RCP<BilinearForm> bilinearForm, Teuchos::RCP<RHS> rhs);
   
@@ -31,10 +32,13 @@ public:
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
   
-  virtual EFunctionSpaceExtended functionSpaceForTest(int testID) = 0;
-  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID) = 0; 
+  virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
+  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID); 
   
-  virtual bool isFluxOrTrace(int trialID) = 0;
+  virtual bool isFluxOrTrace(int trialID);
+  
+  virtual const string & testName(int testID);
+  virtual const string & trialName(int trialID);
   
   // RHS:
   bool nonZeroRHS(int testVarID);
@@ -43,9 +47,8 @@ public:
                    FieldContainer<double> &values);
   
   // methods that belong to the TimeMarchingProblem:
-  virtual void timeLHS(FieldContainer<double> trialValues, int trialID);
-  virtual void timeRHS(FieldContainer<double> values, int trialID);
-  
+  virtual void timeLHS(FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache);
+  virtual void timeRHS(FieldContainer<double> values, int testID, Teuchos::RCP<BasisCache> basisCache);
   
   void setTimeStepSize(double dt);
   double timeStepSize();
