@@ -68,7 +68,7 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   cellTopoCub->getCubature(_cubPoints, _cubWeights);
 }
 
-BasisCache::BasisCache(ElementTypePtr elemType, bool testVsTest) {
+BasisCache::BasisCache(ElementTypePtr elemType, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
 
@@ -82,7 +82,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, bool testVsTest) {
   
   int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
 
-  init(cellTopo,trialOrdering,maxTestDegree,createSideCacheToo);
+  init(cellTopo,trialOrdering,maxTestDegree + cubatureDegreeEnrichment,createSideCacheToo);
 }
 
 

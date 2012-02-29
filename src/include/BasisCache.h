@@ -112,7 +112,7 @@ private:
   //                                                                int componentOfInterest);
   void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
 public:
-  BasisCache(ElementTypePtr elemType, bool testVsTest=false); // use testVsTest=true for test space inner product
+  BasisCache(ElementTypePtr elemType, bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
