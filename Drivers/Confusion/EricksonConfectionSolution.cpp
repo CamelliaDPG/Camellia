@@ -1,10 +1,10 @@
 #include "ConfusionBilinearForm.h"
-#include "EricksonManufacturedSolution.h"
+#include "EricksonConfectionSolution.h"
 
 typedef Sacado::Fad::SFad<double,2> F2;                          // FAD with # of independent vars fixed at 2 (x and y)
 typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, but nested so we can take 2 derivatives
 
-EricksonManufacturedSolution::EricksonManufacturedSolution(double epsilon, double beta_x, double beta_y) {
+EricksonConfectionSolution::EricksonConfectionSolution(double epsilon, double beta_x, double beta_y) {
   _epsilon = epsilon;
   _beta_x  = beta_x;
   _beta_y  = beta_y;
@@ -16,12 +16,12 @@ EricksonManufacturedSolution::EricksonManufacturedSolution(double epsilon, doubl
   _bilinearForm = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
 }
 
-int EricksonManufacturedSolution::H1Order() {
+int EricksonConfectionSolution::H1Order() {
   // -1 for non-polynomial solution...
   return -1;
 }
 
-template <typename T> const T EricksonManufacturedSolution::u(T &x, T &y) {
+template <typename T> const T EricksonConfectionSolution::u(T &x, T &y) {
   // in Bui, Demkowicz, Ghattas' paper
   double pi = acos(0.0)*2.0;
   
@@ -30,7 +30,7 @@ template <typename T> const T EricksonManufacturedSolution::u(T &x, T &y) {
   return t;
 }
 
-double EricksonManufacturedSolution::solutionValue(int trialID,
+double EricksonConfectionSolution::solutionValue(int trialID,
 						   FieldContainer<double> &physicalPoint) {
   
   double x = physicalPoint(0);
@@ -41,51 +41,14 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
   
   double pi = acos(0.0)*2.0;
 
-  double C0 = 0.0;// average of u0
-  double u = C0;
+  double u = 0.0;
   double u_x = 0.0;
-  double u_y = 0.0;  
-
-  for (int n = 1;n<20;n++){
-    double lambda = n*n*pi*pi*_epsilon;
-
-    double r1 = (1.0+sqrt(1.0+4.0*_epsilon*lambda))/(2.0*_epsilon);
-    double r2 = (1.0-sqrt(1.0+4.0*_epsilon*lambda))/(2.0*_epsilon);
-    
-    
-    double Cn = 0.0;            
-    if (n==1){
-      Cn = 1.0; // first term only
-    }        
-    /*
-    Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
-    Cn /= (n*pi);
-    Cn /= (n*pi);
-    */
-
-    // normal stress outflow
-    double Xbottom;
-    double Xtop;
-    double dXtop;
-    if (!_useWallBC){
-      Xbottom = r1*exp(-r2) - r2*exp(-r1);
-      Xtop = r1*exp(r2*(x-1.0)) - r2*exp(r1*(x-1.0));
-      dXtop = r1*r2*(exp(r2*(x-1.0)) - exp(r1*(x-1.0)));
-    }else{
-      // wall, zero outflow
-      Xtop = (exp(r2*(x-1))-exp(r1*(x-1)));
-      Xbottom = (exp(-r2)-exp(-r1));
-      dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);    
-    }
-
-    double X = Xtop/Xbottom;
-    double dX = dXtop/Xbottom;
-    double Y = Cn*cos(n*pi*y);
-    double dY = -Cn*n*pi*sin(n*pi*y);
-    
-    u += X*Y;
-    u_x += _epsilon * dX*Y;
-    u_y += _epsilon * X*dY;
+  double u_y = 0.0;
+  // discontinuous inflow, stresses undefined
+  if (y>.3){
+    u = (y-1.0);
+  }else{
+    u = y;
   }
 
   /*
@@ -126,7 +89,7 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
   return value;
 }
 
-double EricksonManufacturedSolution::solutionValue(int trialID,
+double EricksonConfectionSolution::solutionValue(int trialID,
 						   FieldContainer<double> &physicalPoint,
 						   FieldContainer<double> &unitNormal) {
   if ( trialID != ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT ) {
@@ -144,7 +107,7 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
 }
 
 /********** RHS implementation **********/
-bool EricksonManufacturedSolution::nonZeroRHS(int testVarID) {
+bool EricksonConfectionSolution::nonZeroRHS(int testVarID) {
   if (testVarID == ConfusionBilinearForm::TAU) { // the vector test function, zero RHS
     return false;
   } else if (testVarID == ConfusionBilinearForm::V) {
@@ -154,7 +117,7 @@ bool EricksonManufacturedSolution::nonZeroRHS(int testVarID) {
   }
 }
 
-void EricksonManufacturedSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void EricksonConfectionSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
@@ -190,13 +153,13 @@ void EricksonManufacturedSolution::rhs(int testVarID, const FieldContainer<doubl
 }
 
 /***************** BC Implementation *****************/
-bool EricksonManufacturedSolution::bcsImposed(int varID){
+bool EricksonConfectionSolution::bcsImposed(int varID){
   // returns true if there are any BCs anywhere imposed on varID
   //return (varID == ConfusionBilinearForm::U_HAT);
   return (varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT || (varID == ConfusionBilinearForm::U_HAT));
 }
 
-void EricksonManufacturedSolution::imposeBC(int varID, FieldContainer<double> &physicalPoints,
+void EricksonConfectionSolution::imposeBC(int varID, FieldContainer<double> &physicalPoints,
 					    FieldContainer<double> &unitNormals,
 					    FieldContainer<double> &dirichletValues,
 					    FieldContainer<bool> &imposeHere) {
@@ -237,18 +200,12 @@ void EricksonManufacturedSolution::imposeBC(int varID, FieldContainer<double> &p
 	if ( abs(x-1.0) > 1e-12) { // if not the outflow (pts on boundary already)
 	  imposeHere(cellIndex,ptIndex) = true;
 	}
-      } else if (varID==ConfusionBilinearForm::U_HAT) {
-	// wall boundary 
-	if (abs(x-1.0)<1e-12 && _useWallBC){
-	  //	  dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
-	  //	  imposeHere(cellIndex,ptIndex) = true;
-	}
       } 
     }
   }
 }
 
-void EricksonManufacturedSolution::getConstraints(FieldContainer<double> &physicalPoints, 
+void EricksonConfectionSolution::getConstraints(FieldContainer<double> &physicalPoints, 
 						  FieldContainer<double> &unitNormals,
 						  vector<map<int,FieldContainer<double > > > &constraintCoeffs,
 						  vector<FieldContainer<double > > &constraintValues){
@@ -284,27 +241,27 @@ void EricksonManufacturedSolution::getConstraints(FieldContainer<double> &physic
 	TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
 	
 	// this combo isolates sigma_n
-	uCoeffs(cellIndex,pointIndex) = 1.0;
-	//	uCoeffs(cellIndex,pointIndex) = beta_n;
-	//	beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
+	//	  uCoeffs(cellIndex,pointIndex) = 1.0;
+	uCoeffs(cellIndex,pointIndex) = beta_n;
+	beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
 	double beta_n_u_minus_sigma_n = solutionValue(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, physicalPoint, unitNormal);
 	double u_hat = solutionValue(ConfusionBilinearForm::U_HAT, physicalPoint, unitNormal);
-	//	outflowValues(cellIndex,pointIndex) = beta_n*u_hat - beta_n_u_minus_sigma_n; // sigma_n
+	outflowValues(cellIndex,pointIndex) = beta_n*u_hat - beta_n_u_minus_sigma_n; // sigma_n
       }	
     }
   }
   outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
   outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;	        
-  //  if (!_useWallBC){
+  if (!_useWallBC){
     constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
     constraintValues.push_back(outflowValues); // only one constraint on outflow
-    //  }
+  }    
 }
 
 
 // =============== ABSTRACT FUNCTION INTERFACE for trialID U  =================== 
 
-void EricksonManufacturedSolution::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints){
+void EricksonConfectionSolution::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints){
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);

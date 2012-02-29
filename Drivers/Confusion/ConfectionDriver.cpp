@@ -39,15 +39,26 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 2; // for tests
+  int pToAdd = 4; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-2;
+  // define our manufactured solution or problem bilinear form: 
+  if (argc > 1){
+    epsilon = atof(argv[1]);
+    cout << "eps set to " << epsilon << endl;
+  }
+  int numRefinements = 4;
+  if (argc > 2){
+    numRefinements = atoi(argv[2]);
+    cout << "num refinements = " << numRefinements << endl;
+  }
+
   double beta_x = .8, beta_y = .6;
   bool useTriangles = false;
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<ConfectionManufacturedSolution> exactSolution = Teuchos::rcp(new ConfectionManufacturedSolution(epsilon,beta_x,beta_y));
-  bool useExactSolution = true;
+  bool useExactSolution = false;
   
   FieldContainer<double> quadPoints(4,2);
 
@@ -99,8 +110,8 @@ int main(int argc, char *argv[]) {
   solution->solve(false);
 
   bool limitIrregularity = true;
-  int numRefinements = 4;
-  double thresholdFactor = 0.0;
+  //  int numRefinements = 4;
+  double thresholdFactor = 0.2;
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<double> L2errorVector;
@@ -189,7 +200,7 @@ int main(int argc, char *argv[]) {
     fout2.close();
 
     if (useExactSolution){
-      string epsString("1e4");
+      string epsString("NoWeight");
       string L2errorFile("L2errors");      
       L2errorFile += epsString + string(".dat");
       ofstream fout3(L2errorFile.c_str());

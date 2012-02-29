@@ -43,8 +43,8 @@ class ConfectionProblem : public RHS, public BC, public Constraints {
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     double tol = 1e-14;
-    double x_cut = .50;
-    double y_cut = .50;
+    double x_cut = 1.0;
+    double y_cut = 1.0;
     TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
@@ -58,7 +58,7 @@ class ConfectionProblem : public RHS, public BC, public Constraints {
 	  u0 = 1.0 - y/y_cut;
 	  //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-y*y)); // bump function
         } else if ( (abs(y) < 1e-14) &&  (x<x_cut) ) { // y basically 0 ==> u = 1 - x
-	  u0 = 1.0 - x/x_cut;
+	  u0 = -(x/x_cut-1.0);
 	  //          dirichletValues(cellIndex,ptIndex) = exp(-1.0/(1.0-x*x)); // bump function
         } 
 	dirichletValues(cellIndex,ptIndex) = beta_n*u0;

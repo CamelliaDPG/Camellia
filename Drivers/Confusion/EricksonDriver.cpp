@@ -14,6 +14,7 @@
 #include "ConfectionManufacturedSolution.h"
 #include "ConfusionInnerProduct.h"
 #include "EricksonManufacturedSolution.h"
+#include "EricksonConfectionSolution.h" // discontinuous hat
 #include "ZeroFunction.h"
 
 // Trilinos includes
@@ -50,13 +51,21 @@ int main(int argc, char *argv[]) {
     epsilon = atof(argv[1]);
     cout << "eps set to " << epsilon << endl;
   }
+  int numRefinements = 3;
+  if (argc > 2){
+    numRefinements = atoi(argv[2]);
+    cout << "num refinements = " << numRefinements << endl;
+  }
+
 
   double beta_x = 1.0, beta_y = 0.0;
   bool useTriangles = false;
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<EricksonManufacturedSolution> exactSolution = Teuchos::rcp(new EricksonManufacturedSolution(epsilon,beta_x,beta_y));
+  //  Teuchos::RCP<EricksonConfectionSolution> exactSolution = Teuchos::rcp(new EricksonConfectionSolution(epsilon,beta_x,beta_y));
   bool useExactSolution = true;
-  
+  int cubDegree = 20;
+
   FieldContainer<double> quadPoints(4,2);
 
   quadPoints(0,0) = 0.0; // x1
@@ -85,7 +94,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC;
   Teuchos::RCP<Solution> solution;
   Teuchos::RCP<Solution> projectedSolution;
-
   if (useExactSolution){
     solution = Teuchos::rcp(new Solution(mesh, exactSolution->bc(), exactSolution->ExactSolution::rhs(), ip));
     penaltyBC= Teuchos::rcp(new PenaltyMethodFilter(exactSolution));
@@ -94,16 +102,18 @@ int main(int argc, char *argv[]) {
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
     penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   }
+
   solution->setFilter(penaltyBC);
+
   mesh->registerSolution(solution);
-  mesh->registerSolution(projectedSolution);
 
   // also compute L2 projection of solution if exact solution given
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
-  functionMap[ConfusionBilinearForm::U] = exactSolution;
-  functionMap[ConfusionBilinearForm::SIGMA_1] = Teuchos::rcp(new ZeroFunction());
-  functionMap[ConfusionBilinearForm::SIGMA_2] = Teuchos::rcp(new ZeroFunction());  
   if (useExactSolution){
+    mesh->registerSolution(projectedSolution);
+    functionMap[ConfusionBilinearForm::U] = exactSolution;
+    functionMap[ConfusionBilinearForm::SIGMA_1] = Teuchos::rcp(new ZeroFunction());
+    functionMap[ConfusionBilinearForm::SIGMA_2] = Teuchos::rcp(new ZeroFunction());  
     projectedSolution->projectOntoMesh(functionMap);
   }
 
@@ -114,37 +124,40 @@ int main(int argc, char *argv[]) {
   solution->solve(false);
 
   bool limitIrregularity = true;
-  int numRefinements = 7;
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<double> L2errorVector;
+  vector<double> uL2errorVector;
   vector<double> projErrorVector;
   vector<int> dofVector;
   double l2error;
   for (int i=0; i<numRefinements; i++) {
-    map<int, double> energyError;
     double totalEnergyError = solution->energyErrorTotal();
-
-    if (useExactSolution){
-      projectedSolution->addSolution(solution,-1.0); // subtract solution from projection
-      double projError = projectedSolution->L2NormOfSolutionGlobal(ConfusionBilinearForm::U);
-      if (rank==0){
-	cout << "projection error: " << projError << endl;
-      }
-      projErrorVector.push_back(projError);      
-      // print out the L2 error of the solution:
-      int cubDegree = 20;
-      l2error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
-      L2errorVector.push_back(l2error);
-    }
-
-    if (rank==0){
-      if (useExactSolution) {
-	cout << "L2 error: " << l2error << endl;
-      }      	
-    }
     errorVector.push_back(totalEnergyError);
     dofVector.push_back(mesh->numGlobalDofs());
+
+    if (useExactSolution){
+      //      projectedSolution->addSolution(solution,-1.0); // subtract solution from projection
+      //      double projError = projectedSolution->L2NormOfSolutionGlobal(ConfusionBilinearForm::U);
+      double u_proj_error = exactSolution->L2NormOfError(*projectedSolution, ConfusionBilinearForm::U,cubDegree);
+      projErrorVector.push_back(u_proj_error);      
+      if (rank==0){
+	cout << "Best approximation error: " << u_proj_error << endl;      
+      }
+
+      // print out the L2 error of the solution:
+      double u_error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::U,cubDegree);
+      double s1_error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::SIGMA_1,cubDegree);
+      double s2_error = exactSolution->L2NormOfError(*solution, ConfusionBilinearForm::SIGMA_2,cubDegree);
+      l2error = u_error*u_error + s1_error*s1_error + s2_error*s2_error;
+      l2error = sqrt(l2error);
+      L2errorVector.push_back(l2error);
+      uL2errorVector.push_back(u_error);
+
+      if (rank==0){
+	cout << "L2 error: total = " << l2error << ", ratio = " << u_proj_error/u_error << ", in u = " << u_error << ", in sigma1,2 = " << s1_error << ", " << s2_error << endl;
+      }      
+    }
 
     refinementStrategy->refine(rank==0);
     
@@ -170,15 +183,20 @@ int main(int argc, char *argv[]) {
 
     solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "u_hat.dat");
     solution->writeFluxesToFile(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, "sigma_hat.dat");
-
-    ofstream fout1("errors.dat");
+    
+    string epsString("NoWeight");
+    string energyErrorFile("errors");
+    energyErrorFile+=epsString + string(".dat");
+    ofstream fout1(energyErrorFile.c_str());
     fout1 << setprecision(15);
     for (int i = 0;i<errorVector.size();i++){
       fout1 << errorVector[i] << endl;
     }
     fout1.close();
 
-    ofstream fout2("dofs.dat");
+    string dofFile("dofs");
+    dofFile+=epsString + string(".dat");
+    ofstream fout2(dofFile.c_str());
     for (int i = 0;i<dofVector.size();i++){
       fout2 << dofVector[i] << endl;
     }
@@ -189,24 +207,33 @@ int main(int argc, char *argv[]) {
       projectedSolution->addSolution(solution,-1.0);
       projectedSolution->writeFieldsToFile(ConfusionBilinearForm::U, "L2diff.m");
 
-      string epsString("");
       string L2errorFile("L2errors");      
       L2errorFile += epsString + string(".dat");
       ofstream fout3(L2errorFile.c_str());
       fout3 << setprecision(15);
-      for (int i = 0;i<errorVector.size();i++){
+      for (int i = 0;i<L2errorVector.size();i++){
 	fout3 << L2errorVector[i] << endl;
       }
       fout3.close();
 
       string projErrorFile("projErrors");      
-      projErrorFile += string(".dat");
+      projErrorFile += epsString + string(".dat");
       ofstream fout4(projErrorFile.c_str());
       fout4 << setprecision(15);
-      for (int i = 0;i<errorVector.size();i++){
+      for (int i = 0;i<projErrorVector.size();i++){
 	fout4 << projErrorVector[i] << endl;
       }
       fout4.close();
+
+      string uL2errorFile("uL2errors");      
+      uL2errorFile += epsString + string(".dat");
+      ofstream fout5(uL2errorFile.c_str());
+      fout5 << setprecision(15);
+      for (int i = 0;i<uL2errorVector.size();i++){
+	fout5 << uL2errorVector[i] << endl;
+      }
+      fout5.close();
+
 
     }
 

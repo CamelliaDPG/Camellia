@@ -1,5 +1,5 @@
-#ifndef DPG_ERICKSON_MANUFACTURED_SOLUTION
-#define DPG_ERICKSON_MANUFACTURED_SOLUTION
+#ifndef DPG_ERICKSON_CONFECTION_SOLUTION
+#define DPG_ERICKSON_CONFECTION_SOLUTION
 
 #include <Sacado.hpp>  // for automatic differentiation
 #include "ExactSolution.h"
@@ -7,7 +7,7 @@
 #include "RHS.h"
 #include "Constraints.h"
 
-class EricksonManufacturedSolution : public ExactSolution, public RHS, public BC, public Constraints, public AbstractFunction {
+class EricksonConfectionSolution : public ExactSolution, public RHS, public BC, public Constraints, public AbstractFunction {
 private:
   double _epsilon, _beta_x, _beta_y;
   bool _useWallBC;
@@ -15,7 +15,7 @@ protected:
   template <typename T>
   const T u(T &x, T &y);  // in 2 dimensions
 public:
-  EricksonManufacturedSolution(double epsilon, double beta_x, double beta_y);
+  EricksonConfectionSolution(double epsilon, double beta_x, double beta_y);
   
   // ExactSolution:
   virtual int H1Order(); // polyOrder+1, for polynomial solutions...

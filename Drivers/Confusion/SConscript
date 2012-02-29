@@ -1,6 +1,6 @@
 Import('*')
 
-src_obj_confection = env.Object(['ConfusionBilinearForm.cpp','ConfectionManufacturedSolution.cpp','VortexManufacturedSolution.cpp','EricksonManufacturedSolution.cpp'])
+src_obj_confection = env.Object(['ConfusionBilinearForm.cpp','ConfectionManufacturedSolution.cpp','VortexManufacturedSolution.cpp','EricksonManufacturedSolution.cpp','EricksonConfectionSolution.cpp'])
 
 src_obj = env.Object(['ConfusionBilinearForm.cpp','ConfusionManufacturedSolution.cpp','ConfusionProblem.cpp'])
 

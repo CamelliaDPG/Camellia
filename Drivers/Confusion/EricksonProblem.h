@@ -64,14 +64,13 @@ class EricksonProblem : public RHS, public BC, public Constraints {
 	// inflow 
 	double u0=0.0;
 	imposeHere(cellIndex,ptIndex) = false;
+	if (y>.5){
+	  u0 = 1.0;// 2.0-2.0*y;
+	} else {
+	  u0 = 0.0;// -2.0*y;
+	}
+
 	if ( (abs(x)<1e-14)) { // if not outflow
-	  if (y>.75){
-	    u0 = 2.0-2.0*y;
-	  } else {
-	    u0 = -2.0*y;
-	  }
-	  //	  u0 = sin(3.141592*y);
-	  //	  u0 = 1.0;
 	  if (varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT){
 	    dirichletValues(cellIndex,ptIndex) = beta_n*u0;
 	    imposeHere(cellIndex,ptIndex) = true;
@@ -95,7 +94,7 @@ class EricksonProblem : public RHS, public BC, public Constraints {
 	  }
 	  */	  
 	  if (varID==ConfusionBilinearForm::U_HAT){
-	    dirichletValues(cellIndex,ptIndex) = 0.0;
+	    dirichletValues(cellIndex,ptIndex) = u0;
 	    imposeHere(cellIndex,ptIndex) = true;
 	  }
 	}
