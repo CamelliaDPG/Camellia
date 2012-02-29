@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-3;
+  double epsilon = 1e-2;
   bool useTriangles = false;
   
   FieldContainer<double> quadPoints(4,2);

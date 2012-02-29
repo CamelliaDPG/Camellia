@@ -152,6 +152,10 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   }
 }
 
+void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
+  _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
+}
+
 void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();

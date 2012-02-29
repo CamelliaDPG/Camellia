@@ -65,6 +65,7 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   int horizontalCells = 4, verticalCells = 4;
   
+  double initialTimeStep = 0.01;
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
   double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<TimeMarchingBurgersProblem> bf = Teuchos::rcp(new TimeMarchingBurgersProblem(bfSteady,problem));
   
-  bf->setTimeStepSize(.01);
+  bf->setTimeStepSize(initialTimeStep);
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -92,6 +93,7 @@ int main(int argc, char *argv[]) {
   // ==================== SET INITIAL GUESS ==========================
   
   Teuchos::RCP<Solution> backgroundFlow = Teuchos::rcp(new Solution(mesh, Teuchos::rcp((BC*)NULL) , Teuchos::rcp((RHS*)NULL), Teuchos::rcp((DPGInnerProduct*)NULL))); // create null solution 
+  Teuchos::RCP<Solution> prevBackgroundFlow = Teuchos::rcp(new Solution(mesh, Teuchos::rcp((BC*)NULL) , Teuchos::rcp((RHS*)NULL), Teuchos::rcp((DPGInnerProduct*)NULL))); // create null solution 
   
   mesh->registerSolution(backgroundFlow);
   
@@ -136,29 +138,36 @@ int main(int argc, char *argv[]) {
   //  backgroundFlow->addSolution(solution,.5);
   //  return 0;
   
-  int numRefs = 0;
-  
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow,solution,stepSize,nonlinearRelativeEnergyTolerance)
   );
-  
+
+  int numRefs = 0;
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
     solveStrategy->solve(rank==0);
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   
-  int numTimeSteps = 3;
+  int numTimeSteps = 15;
+  
   for (int timeStepIndex=0; timeStepIndex<numTimeSteps; timeStepIndex++) {
+    // copy previous background flow:
+    prevBackgroundFlow->setSolution(backgroundFlow);
     solveStrategy->solve(rank==0);
-    // hack way:
-    prevSoln->addSolution(prevSoln,-1.0);
-    prevSoln->addSolution(backgroundFlow,1.0);
+//    prevSoln->setSolution(backgroundFlow);
+    prevSoln->setSolution(prevBackgroundFlow);
     if (timeStepIndex==0) {
       backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref_0.m");
       solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref_0.dat");
     } else if (timeStepIndex==1) {
       backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref_1.m");
       solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref_1.dat");
+    }
+    double newTimeStep = max(bf->timeStepSize()*2.0,1.0);
+    bf->setTimeStepSize(newTimeStep);
+    if ((timeStepIndex % 5) == 0) {
+      if (rank==0) cout << "refining mesh on time step " << timeStepIndex << endl;
+      refinementStrategy->refine(rank==0);
     }
   }
 

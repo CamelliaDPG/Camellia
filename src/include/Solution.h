@@ -112,6 +112,7 @@ public:
   void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
 #endif
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
+  void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
   
   virtual void solutionValues(FieldContainer<double> &values, 
                               ElementTypePtr elemTypePtr, 
