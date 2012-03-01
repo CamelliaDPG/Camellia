@@ -95,8 +95,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             vector<ElementPtr> elemVector = _mesh->elementsForPoints(physicalPointForCell);
             TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
                                "More than one element returned for a single pt!");
-            ElementPtr elem = elemVector[0];
-            
+            ElementPtr elem = elemVector[0];            
             FieldContainer<double> allPhysicalNodesForType = _mesh->physicalCellNodes(elem->elementType());
             
             // create basisCache
@@ -184,8 +183,8 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             BasisCache basisCache = BasisCache(allPhysicalNodesForType, *(elem->elementType()->cellTopoPtr), cubDegree);
             FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
 
-	    double tauScaling = min(1/cellMeasures(cellIndex),1.0/epsilon);
-	    //	    tauScaling = 1.0;
+	    double tauScaling = min(1.0/cellMeasures(cellIndex),1.0/epsilon);
+	    tauScaling = 1.0;
 	    
             //////////////////// 
 

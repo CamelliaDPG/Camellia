@@ -47,16 +47,16 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
   double u_y = 0.0;  
 
   for (int n = 1;n<20;n++){
-    double lambda = n*n*pi*pi*_epsilon;
 
-    double r1 = (1.0+sqrt(1.0+4.0*_epsilon*lambda))/(2.0*_epsilon);
-    double r2 = (1.0-sqrt(1.0+4.0*_epsilon*lambda))/(2.0*_epsilon);
-    
+    double lambda = n*n*pi*pi*_epsilon;
+    double d = sqrt(1.0+4.0*_epsilon*lambda);
+    double r1 = (1.0+d)/(2.0*_epsilon);
+    double r2 = (1.0-d)/(2.0*_epsilon);
     
     double Cn = 0.0;            
     if (n==1){
       Cn = 1.0; // first term only
-    }        
+    }
     /*
     Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
     Cn /= (n*pi);
@@ -87,18 +87,6 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
     u_x += _epsilon * dX*Y;
     u_y += _epsilon * X*dY;
   }
-
-  /*
-  u /= _epsilon*_epsilon;
-  u_x /= _epsilon*_epsilon;
-  u_y /= _epsilon*_epsilon;
-  */
-
-  /*
-  u = su.val();
-  u_x = _epsilon*su.dx(0);
-  u_y = _epsilon*su.dx(1);
-  */
 
   //  cout << "u = " << u << endl;
   switch(trialID) {
@@ -145,13 +133,7 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
 
 /********** RHS implementation **********/
 bool EricksonManufacturedSolution::nonZeroRHS(int testVarID) {
-  if (testVarID == ConfusionBilinearForm::TAU) { // the vector test function, zero RHS
-    return false;
-  } else if (testVarID == ConfusionBilinearForm::V) {
-    return false;
-  } else {
-    return false; // could throw an exception here
-  }
+  return false; 
 }
 
 void EricksonManufacturedSolution::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -240,8 +222,8 @@ void EricksonManufacturedSolution::imposeBC(int varID, FieldContainer<double> &p
       } else if (varID==ConfusionBilinearForm::U_HAT) {
 	// wall boundary 
 	if (abs(x-1.0)<1e-12 && _useWallBC){
-	  //	  dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
-	  //	  imposeHere(cellIndex,ptIndex) = true;
+	  dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
+	  imposeHere(cellIndex,ptIndex) = true;
 	}
       } 
     }
@@ -284,21 +266,21 @@ void EricksonManufacturedSolution::getConstraints(FieldContainer<double> &physic
 	TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
 	
 	// this combo isolates sigma_n
-	uCoeffs(cellIndex,pointIndex) = 1.0;
-	//	uCoeffs(cellIndex,pointIndex) = beta_n;
-	//	beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
+	//uCoeffs(cellIndex,pointIndex) = 1.0;
+	uCoeffs(cellIndex,pointIndex) = beta_n;
+	beta_sigmaCoeffs(cellIndex,pointIndex) = -1.0;	    
 	double beta_n_u_minus_sigma_n = solutionValue(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT, physicalPoint, unitNormal);
 	double u_hat = solutionValue(ConfusionBilinearForm::U_HAT, physicalPoint, unitNormal);
-	//	outflowValues(cellIndex,pointIndex) = beta_n*u_hat - beta_n_u_minus_sigma_n; // sigma_n
+	outflowValues(cellIndex,pointIndex) = beta_n*u_hat - beta_n_u_minus_sigma_n; // sigma_n
       }	
     }
   }
   outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
   outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;	        
-  //  if (!_useWallBC){
+  if (!_useWallBC){
     constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
     constraintValues.push_back(outflowValues); // only one constraint on outflow
-    //  }
+  }
 }
 
 

@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
     cout << "num refinements = " << numRefinements << endl;
   }
 
-
   double beta_x = 1.0, beta_y = 0.0;
   bool useTriangles = false;
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
@@ -72,13 +71,14 @@ int main(int argc, char *argv[]) {
   quadPoints(0,1) = 0.0; // y1
   quadPoints(1,0) = 1.0;
   quadPoints(1,1) = 0.0;
+
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
     
   int H1Order = polyOrder + 1;
-  int horizontalCells = 4, verticalCells = 4;
+  int horizontalCells = 2, verticalCells = 2;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh;
   mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
       uL2errorVector.push_back(u_error);
 
       if (rank==0){
-	cout << "L2 error: total = " << l2error << ", ratio = " << u_proj_error/u_error << ", in u = " << u_error << ", in sigma1,2 = " << s1_error << ", " << s2_error << endl;
+	cout << "L2 error: total = " << l2error << ", l2/err ratio " << u_error/totalEnergyError << ", proj ratio = " << u_proj_error/u_error << ", in u = " << u_error << ", in sigma1,2 = " << s1_error << ", " << s2_error << endl;
       }      
     }
 
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
     if (useExactSolution){
       projectedSolution->writeFieldsToFile(ConfusionBilinearForm::U, "projectedU.m");
       projectedSolution->addSolution(solution,-1.0);
-      projectedSolution->writeFieldsToFile(ConfusionBilinearForm::U, "L2diff.m");
+      projectedSolution->writeFieldsToFile(ConfusionBilinearForm::U, "pointdiff.m");
 
       string L2errorFile("L2errors");      
       L2errorFile += epsString + string(".dat");
