@@ -106,11 +106,11 @@ public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
   Solution(const Solution &soln);
 //  bool equals(Solution& otherSolution, double tol=0.0);
-#ifdef HAVE_MPI
-  void solve(bool useMumps=true); // could add arguments to allow different solution algorithms to be selected...
-#else
-  void solve(bool useMumps=false); // could add arguments to allow different solution algorithms to be selected...
-#endif
+
+  void solve(); // could add arguments to allow different solution algorithms to be selected...
+
+  void solve(bool useMumps);
+
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
   
@@ -158,8 +158,10 @@ public:
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
   const map<int,double> & energyError();
+  /*
   void rhsNorm(map<int, double> &energyNorm);
   double totalRHSNorm();
+  */
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
