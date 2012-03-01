@@ -1225,6 +1225,7 @@ const map<int,double> & Solution::energyError() {
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
     
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
     FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
