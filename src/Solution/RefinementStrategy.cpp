@@ -45,7 +45,7 @@ void RefinementStrategy::refine(bool printToConsole) {
     int cellID = current_element->cellID();
     double cellEnergyError = energyError->find(cellID)->second;
     if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
-      cout << "refining cellID " << cellID << endl;
+      //      cout << "refining cellID " << cellID << endl;
       if (current_element->numSides()==3) {
         triangleCellsToRefine.push_back(cellID);
       } else if (current_element->numSides()==4) {

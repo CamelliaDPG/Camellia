@@ -1205,7 +1205,6 @@ const map<int,double> & Solution::energyError() {
   cout << "Done initing mvs" << endl;
   */ 
   int numActiveElements = _mesh->activeElements().size();
-  cout << "numActive elemes = " << numActiveElements << endl;
   //  energyError.resize( numActiveElements );
   
   //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
@@ -1226,7 +1225,6 @@ const map<int,double> & Solution::energyError() {
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    cout << "elems in partition " << rank << " of type are " << elemsInPartitionOfType.size() << endl;
     
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
     FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
@@ -1243,7 +1241,6 @@ const map<int,double> & Solution::energyError() {
       localErrArray[cellIndex] = sqrt(errorSquared);
       int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
       localCellIDArray[cellIndex] = cellID; 
-      cout << "setting for cell index " << cellIndex << " the cellID = " << cellID << endl;
     }   
   } // end of loop thru element types
   
