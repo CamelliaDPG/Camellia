@@ -21,9 +21,10 @@ else
 
 end
 colorbar
-shading interp;
+% shading interp;
+shading flat
 if (nargin>1)
     A=load(fluxFilepath);
-    epsilon = .05*max(A(:,3));  
+    epsilon = 1;.05*max(A(:,3));  
     plot3(A(:,1),A(:,2),A(:,3)+epsilon,'k','linewidth',1);
 end
