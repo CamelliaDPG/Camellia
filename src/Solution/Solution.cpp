@@ -1205,6 +1205,7 @@ const map<int,double> & Solution::energyError() {
   cout << "Done initing mvs" << endl;
   */ 
   int numActiveElements = _mesh->activeElements().size();
+  cout << "numActive elemes = " << numActiveElements << endl;
   //  energyError.resize( numActiveElements );
   
   //  vector< ElementPtr > elemsInPartition = _mesh->elementsInPartition(rank);
@@ -1222,11 +1223,10 @@ const map<int,double> & Solution::energyError() {
   
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);   
   vector<ElementTypePtr>::iterator elemTypeIt;  
-  int cellIndStart = 0;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
-    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    
+    vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);    cout << "elems in partition " << rank << " of type are " << elemsInPartitionOfType.size() << endl;
     
     // for error rep v_e, residual res, energyError = sqrt ( ve_^T * res)
     FieldContainer<double> residuals = _residualForElementType[elemTypePtr.get()];
@@ -1235,7 +1235,7 @@ const map<int,double> & Solution::energyError() {
     int numCells = residuals.dimension(0);    
     TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
     
-    for (int cellIndex=cellIndStart;cellIndex<numCells;cellIndex++){
+    for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       double errorSquared = 0.0;
       for (int i=0; i<numTestDofs; i++) {      
         errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
@@ -1245,7 +1245,6 @@ const map<int,double> & Solution::energyError() {
       localCellIDArray[cellIndex] = cellID; 
       cout << "setting for cell index " << cellIndex << " the cellID = " << cellID << endl;
     }   
-    cellIndStart += numCells; // increment to go to the next set of element types
   } // end of loop thru element types
   
   // mpi communicate all energy errors
