@@ -152,6 +152,14 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   }
 }
 
+void Solution::solve(){
+#ifdef HAVE_MPI
+  solve(true);
+#else
+  solve(false);
+#endif
+}
+
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
 }
@@ -352,7 +360,7 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
   
-  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
   // determine and impose BCs
 
@@ -1064,7 +1072,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
     }
   }  
 }
-
+/*
 double Solution::totalRHSNorm(){
   vector< Teuchos::RCP< Element > > activeElements = _mesh->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
@@ -1157,6 +1165,7 @@ void Solution::rhsNorm(map<int,double> &rhsNormMap){
     }
   }      
 }
+*/
 
 double Solution::energyErrorTotal() {
   double energyErrorSquared = 0.0;
@@ -1230,13 +1239,11 @@ const map<int,double> & Solution::energyError() {
       double errorSquared = 0.0;
       for (int i=0; i<numTestDofs; i++) {      
         errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
-        //        errorSquared += errorReps(cellIndex,i) * errorReps(cellIndex,i);        
-        //        errorSquared += residuals(cellIndex,i) * residuals(cellIndex,i);
       }
       localErrArray[cellIndex] = sqrt(errorSquared);
       int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
       localCellIDArray[cellIndex] = cellID; 
-      //      cout << "energy error for cellID " << cellID << " is " << sqrt(errorSquared) << endl;
+      cout << "setting for cell index " << cellIndex << " the cellID = " << cellID << endl;
     }   
     cellIndStart += numCells; // increment to go to the next set of element types
   } // end of loop thru element types
@@ -1264,11 +1271,16 @@ const map<int,double> & Solution::energyError() {
   for (int procIndex=0;procIndex<numProcs;procIndex++){
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
       if (cellIDArray[procIndex][globalCellIndex]!=-1){
-        _energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
+	_energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
       }
     }
   }
   _energyErrorComputed = true;
+  if (rank==0){
+    for (map<int,double>::iterator mapIt=_energyErrorForCellIDGlobal.begin();mapIt!=_energyErrorForCellIDGlobal.end();mapIt++){
+      cout << "energy error for cellID " << mapIt->first << " is " << mapIt->second << endl;
+    }
+  }
   
   return _energyErrorForCellIDGlobal;
 }
@@ -1320,7 +1332,7 @@ void Solution::computeErrorRepresentation() {
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
-    FieldContainer<double> rhsRepresentation(numCells,numTestDofs);
+    //    FieldContainer<double> rhsRepresentation(numCells,numTestDofs);
     
     Epetra_SerialDenseSolver solver;
     
@@ -1337,7 +1349,7 @@ void Solution::computeErrorRepresentation() {
                                    _residualForElementType[elemTypePtr.get()].dimension(1), 1);
 
 
-      
+      /*      
       int info = rhs.Reshape(numTestDofs,2); // add an extra column
       if (info!=0){
 	cout << "could not reshape matrix - error code " << info << endl;
@@ -1345,10 +1357,10 @@ void Solution::computeErrorRepresentation() {
       for(int i = 0;i < numTestDofs; i++){
 	rhs(i,1) = _rhsForElementType[elemTypePtr.get()](localCellIndex,i);
       }
-      
       Epetra_SerialDenseMatrix representationMatrix(numTestDofs,2);
+      */    
       
-      //      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
+      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
       solver.SetMatrix(ipMatrixT);
       //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
@@ -1380,11 +1392,11 @@ void Solution::computeErrorRepresentation() {
       
       for (int i=0; i<numTestDofs; i++) {
         errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
-        rhsRepresentation(localCellIndex,i) = representationMatrix(i,1);
+	//        rhsRepresentation(localCellIndex,i) = representationMatrix(i,1);
       }
     }
     _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
-    _rhsRepresentationForElementType[elemTypePtr.get()] = rhsRepresentation;
+    //    _rhsRepresentationForElementType[elemTypePtr.get()] = rhsRepresentation;
   }
 }
 
@@ -1474,7 +1486,7 @@ void Solution::computeResiduals() {
         for (int j=0; j<numTrialDofs; j++) {      
           residuals(localCellIndex,i) -= solution(globalCellIndex,j) * preStiffness(localCellIndex,i,j);
         }         
-      }
+      } 
     }    
     _residualForElementType[elemTypePtr.get()] = residuals;
     _rhsForElementType[elemTypePtr.get()] = rhs;
