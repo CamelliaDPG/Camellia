@@ -1192,7 +1192,9 @@ const map<int,double> & Solution::energyError() {
 #endif  
   
   if ( _energyErrorComputed ) {
-    cout << "reusing energy error\n";
+    if (rank==0){
+      cout << "reusing energy error\n";
+    }
     return _energyErrorForCellIDGlobal;
   }
   
@@ -1222,6 +1224,7 @@ const map<int,double> & Solution::energyError() {
   
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);   
   vector<ElementTypePtr>::iterator elemTypeIt;  
+  int globalCellIndex = 0;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
@@ -1239,9 +1242,11 @@ const map<int,double> & Solution::energyError() {
       for (int i=0; i<numTestDofs; i++) {      
         errorSquared += residuals(cellIndex,i) * errorReps(cellIndex,i);
       }
-      localErrArray[cellIndex] = sqrt(errorSquared);
+      localErrArray[globalCellIndex] = sqrt(errorSquared);
       int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
-      localCellIDArray[cellIndex] = cellID; 
+      localCellIDArray[globalCellIndex] = cellID; 
+      //      cout << "setting energy error = " << sqrt(errorSquared) << " for cellID " << cellID << endl;
+      globalCellIndex++;
     }   
   } // end of loop thru element types
   
@@ -1273,11 +1278,13 @@ const map<int,double> & Solution::energyError() {
     }
   }
   _energyErrorComputed = true;
+  /*
   if (rank==0){
     for (map<int,double>::iterator mapIt=_energyErrorForCellIDGlobal.begin();mapIt!=_energyErrorForCellIDGlobal.end();mapIt++){
-      cout << "energy error for cellID " << mapIt->first << " is " << mapIt->second << endl;
+      cout << "Energy error for cellID " << mapIt->first << " is " << mapIt->second << endl;
     }
   }
+  */
   
   return _energyErrorForCellIDGlobal;
 }
