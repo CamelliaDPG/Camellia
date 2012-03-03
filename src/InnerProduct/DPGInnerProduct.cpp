@@ -57,7 +57,8 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
 }
 
 void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
-                                                Teuchos::RCP<DofOrdering> dofOrdering, Teuchos::RCP<BasisCache> basisCache) {
+                                                Teuchos::RCP<DofOrdering> dofOrdering, 
+                                                Teuchos::RCP<BasisCache> basisCache) {
   // much of this code is the same as what's in the volume integration in computeStiffness...
   FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
   
