@@ -83,6 +83,8 @@
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
 
+#include "Solver.h"
+
 #include "Solution.h"
 #include "Projector.h"
 

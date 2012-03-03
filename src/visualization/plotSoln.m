@@ -21,8 +21,8 @@ else
 
 end
 colorbar
-% shading interp;
-shading flat
+shading interp;
+% shading flat
 if (nargin>1)
     A=load(fluxFilepath);
     epsilon = 1;.05*max(A(:,3));  

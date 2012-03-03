@@ -11,9 +11,9 @@
 
 #include "Epetra_LinearProblem.h"
 #include "Amesos_Klu.h"
+#include "AztecOO.h"
 
 // abstract class for solving Epetra_LinearProblem problems
-
 class Solver {
 private:
   Teuchos::RCP< Epetra_LinearProblem > _problem;
@@ -25,6 +25,7 @@ public:
   virtual int solve() = 0; // solve with an error code response
 };
 
+// some concrete implementations follow…
 class KluSolver : public Solver {
 public:
   int solve() {

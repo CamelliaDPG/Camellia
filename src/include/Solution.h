@@ -55,9 +55,9 @@
 #include "BC.h"
 #include "BasisCache.h"
 #include "AbstractFunction.h"
-#include "Solver.h"
-
 #include "LocalStiffnessMatrixFilter.h"
+
+class Solver;
 
 using namespace Intrepid;
 

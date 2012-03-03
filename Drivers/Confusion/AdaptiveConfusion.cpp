@@ -6,6 +6,8 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
+#include "Solver.h"
+#include "SchwarzSolver.h"
 
 // added by Jesse
 #include "ConfusionInnerProduct.h"
@@ -44,23 +46,26 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 1; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
 
-  double epsilon =  1e-3;
-  double beta_x = 1.0, beta_y = 1.25;
+  bool useSchwarz = false;
+  double epsilon =  1e-2;
+  double beta_x = 1.0, beta_y = 1.0;
   bool useTriangles = false;
   bool useEggerSchoeberl = false;
   bool usePatchBasis = false;
   bool enforceMBFluxContinuity = false;
-  bool limitIrregularity = false;
+  bool limitIrregularity = true;
   
   int numRefinements = 4;
   double thresholdFactor = 0.20;  
 
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y); 
+//  Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
+  
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -77,7 +82,8 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 2, verticalCells = 2;  
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+pToAdd, useTriangles);
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, 
+                                                bf, H1Order, H1Order+pToAdd, useTriangles);
   mesh->setUsePatchBasis(usePatchBasis); 
   mesh->setEnforceMultiBasisFluxContinuity(enforceMBFluxContinuity);
   
@@ -95,7 +101,20 @@ int main(int argc, char *argv[]) {
     solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
   }
  
-  solution->solve(false);
+  Teuchos::RCP<Solver> solver;
+  if ( useSchwarz ) {
+    int overlapLevel = 10;
+    int maxIters = 4000;
+    double tol = 5e-7;
+    Teuchos::RCP<SchwarzSolver> schwarzSolver = Teuchos::rcp( new SchwarzSolver(overlapLevel,maxIters,tol) );
+    schwarzSolver->setPrintToConsole(rank==0);
+    solver = schwarzSolver;
+  } else {
+    // use KLU
+    solver = Teuchos::rcp( new KluSolver() );
+  }
+  
+  solution->solve(solver);
 
   if (rank==0){
     //    solution->writeFieldsToFile(ConfusionBilinearForm::U, "Confusion_u_adaptive.dat");
@@ -155,7 +174,7 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
     }
-    solution->solve(false);
+    solution->solve(solver);
     if (rank==0){
       cout << "Solved..." << endl;    
     }
