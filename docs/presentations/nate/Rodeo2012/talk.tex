@@ -182,8 +182,9 @@ The discrete spaces, in turn, are defined by mappings from variables to the base
 \begin{frame}
 \frametitle{Design Pattern: Factory}
 
-Bases are objects.  So are the discrete spaces and element types.  To minimize memory footprint (among
-other considerations), we need a mechanism to guarantee that we only create one copy of each basis, discrete
+Each element has a type; each type has a pair of discrete spaces; each discrete space is made up of several bases.  How do we keep this design from taking a prohibitive amount of memory?\\
+\vspace{3 mm}
+For this, among other considerations: want a way to guarantee that we only create one copy of each basis, discrete
 space, and element type.  This is known as a \emph{Factory} in the design pattern literature.
 
 \begin{block}{Create Factories for:}
@@ -223,14 +224,14 @@ However, when I first implemented this and used it in place of the ``mathematici
 
 The mathematician's norm for my Stokes formulation is:
 \begin{align*}
-\NVRnorm{(\NVRvect{q}_{1},\NVRvect{q}_{2},v_{1},v_{2},v_{3})}_{V}^{2}  \NVReqdef \NVRsumm{i=1}{2} ||\NVRvect{q}_{i}||_{\NVRHdiv}^{2} + \NVRsumm{i=1}{3} ||v||_{\NVRHgrad}^{2} \label{NVR:eq:genericNorm}\\
+\NVRnorm{(\NVRvect{q}_{1},\NVRvect{q}_{2},v_{1},v_{2},v_{3})}_{V}^{2}  \NVReqdef \NVRsumm{i=1}{2} ||\NVRvect{q}_{i}||_{\NVRHdiv}^{2} + \NVRsumm{i=1}{3} ||v_{i}||_{\NVRHgrad}^{2} \label{NVR:eq:genericNorm}\\
 \end{align*}
 
 Compare the quasi-optimal test norm:
 \begin{align*}
 & \NVRnorm{\frac{q_{11}}{2\mu}+\NVRpd{}{x}v_{1}}_{L^2}^{2} + \NVRnorm{\frac{q_{11}}{2\mu}+\frac{q_{22}}{2\mu}}_{L^2}^{2} + \NVRnorm{\frac{q_{12}}{2\mu}+\frac{q_{21}}{2\mu}+\NVRpd{}{y}v_{1}+\NVRpd{}{x}v_{2}}_{L^2}^{2}\\
 &\left. + \NVRnorm{\frac{q_{22}}{2\mu}+\NVRpd{}{y}v_{2}}_{L^2}^{2} + \NVRnorm{q_{12}-q_{21}}_{L^2}^{2} + \NVRnorm{\NVRdiv \NVRvect{q}_{1}-\NVRpd{}{x}v_{3}}_{L^2}^{2} \right.\\
-&+\NVRsumm{i=1}{2} ||\NVRvect{q}_{i}||_{L^{2}}^{2} + \NVRsumm{i=1}{3} ||v||_{L^{2}}^{2}\\
+&+\NVRsumm{i=1}{2} ||\NVRvect{q}_{i}||_{L^{2}}^{2} + \NVRsumm{i=1}{3} ||v_{i}||_{L^{2}}^{2}\\
 \end{align*}
 
 \end{frame}
@@ -262,7 +263,7 @@ Once implemented, the quasi-optimal test norm was nearly as fast as the mathemat
 \begin{block}{}
 \begin{itemize}
 \item Nonlinear PDE support
-\item MPI---have: distributed stiffness computation and solve (MUMPS); want: distributed storage/mesh
+\item Better scalability (distributed mesh)
 \item Application to Navier-Stokes
 \end{itemize}
 \end{block}

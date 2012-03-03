@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-1.40.11 (TeX Live 2010) (format=pdflatex 2010.7.21)  1 MAR 2012 21:06
+This is pdfTeX, Version 3.1415926-1.40.11 (TeX Live 2010) (format=pdflatex 2010.7.21)  2 MAR 2012 11:41
 entering extended mode
  \write18 enabled.
  %&-line parsing enabled.
@@ -697,8 +697,7 @@ Package: helvet 2005/04/12 PSNFSS-v9.2a (WaS)
 (/usr/local/texlive/2010/texmf-dist/tex/latex/beamer/themes/color/beamercolorth
 emestructure.sty
 Package: beamercolorthemestructure 2010/06/17  (rcs-revision d02a7cf4d8ae)
-))
-No file talk.aux.
+)) (./talk.aux)
 \openout1 = `talk.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 26.
@@ -716,6 +715,7 @@ LaTeX Font Info:    ... okay on input line 26.
 LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 26.
 LaTeX Font Info:    ... okay on input line 26.
 LaTeX Font Info:    Try loading font information for OT1+phv on input line 26.
+
 (/usr/local/texlive/2010/texmf-dist/tex/latex/psnfss/ot1phv.fd
 File: ot1phv.fd 2001/06/04 scalable font definitions for OT1/phv.
 )
@@ -800,6 +800,8 @@ Package: gettitlestring 2009/12/18 v1.3 Cleanup title references (HO)
 LaTeX Info: Redefining \ref on input line 26.
 LaTeX Info: Redefining \pageref on input line 26.
 LaTeX Info: Redefining \nameref on input line 26.
+
+(./talk.out) (./talk.out)
 \@outlinefile=\write4
 \openout4 = `talk.out'.
 
@@ -920,21 +922,16 @@ File: figs/DiscreteSpace.pdf Graphic file (type pdf)
 ]
 [13
 
-] <figs/confusionDemo.png, id=582, 463.4916pt x 370.5042pt>
+] <figs/confusionDemo.png, id=582, 603.25375pt x 488.82625pt>
 File: figs/confusionDemo.png Graphic file (type png)
 
 <use figs/confusionDemo.png>
-<figs/burgers1e4.png, id=583, 466.8642pt x 370.5042pt>
+<figs/burgers1e4.png, id=584, 466.8642pt x 370.5042pt>
 File: figs/burgers1e4.png Graphic file (type png)
 
-<use figs/burgers1e4.png>
-Overfull \vbox (4.65492pt too high) detected at line 282
- []
+<use figs/burgers1e4.png> [14
 
-[14
-
- <./figs/confusionDemo.png (PNG copy)> <./figs/burgers1e4.png (PNG copy)>]
-[15
+ <./figs/confusionDemo.png> <./figs/burgers1e4.png (PNG copy)>] [15
 
 ]
 \tf@nav=\write5
@@ -946,24 +943,17 @@ Overfull \vbox (4.65492pt too high) detected at line 282
 \tf@snm=\write7
 \openout7 = `talk.snm'.
 
-Package atveryend Info: Empty hook `BeforeClearDocument' on input line 301.
-Package atveryend Info: Empty hook `AfterLastShipout' on input line 301.
+Package atveryend Info: Empty hook `BeforeClearDocument' on input line 302.
+Package atveryend Info: Empty hook `AfterLastShipout' on input line 302.
  (./talk.aux)
-Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 301.
-
-
-Package rerunfilecheck Warning: File `talk.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `talk.out':
-(rerunfilecheck)             Before: <no file>
-(rerunfilecheck)             After:  D41D8CD98F00B204E9800998ECF8427E;0.
+Package atveryend Info: Executing hook `AtVeryEndDocument' on input line 302.
+Package rerunfilecheck Info: File `talk.out' has not changed.
+(rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 13856 strings out of 493747
- 252921 string characters out of 3143546
- 338423 words of memory out of 3000000
+ 13862 strings out of 493747
+ 252975 string characters out of 3143546
+ 338526 words of memory out of 3000000
  16698 multiletter control sequences out of 15000+200000
  24806 words of font info for 62 fonts, out of 3000000 for 9000
  714 hyphenation exceptions out of 8191
@@ -987,10 +977,10 @@ nts/type1/public/amsfonts/cm/cmsy7.pfb></usr/local/texlive/2010/texmf-dist/font
 s/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive/2010/texmf-dist/fonts/
 type1/urw/helvetic/uhvr8a.pfb></usr/local/texlive/2010/texmf-dist/fonts/type1/u
 rw/helvetic/uhvro8a.pfb>
-Output written on talk.pdf (15 pages, 647558 bytes).
+Output written on talk.pdf (15 pages, 765414 bytes).
 PDF statistics:
- 652 PDF objects out of 1000 (max. 8388607)
- 465 compressed objects within 5 object streams
+ 654 PDF objects out of 1000 (max. 8388607)
+ 466 compressed objects within 5 object streams
  32 named destinations out of 1000 (max. 500000)
  97 words of extra memory for PDF output out of 10000 (max. 10000000)
 
