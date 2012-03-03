@@ -15,14 +15,20 @@
 // abstract class for solving Epetra_LinearProblem problems
 
 class Solver {
+private:
+  Teuchos::RCP< Epetra_LinearProblem > _problem;
 public:
-  virtual int solve(Epetra_LinearProblem &problem) = 0; // solve with an error code response
+  virtual Epetra_LinearProblem & problem() { return *(_problem.get()); }
+  virtual void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
+    _problem = problem;
+  }
+  virtual int solve() = 0; // solve with an error code response
 };
 
 class KluSolver : public Solver {
 public:
-  int solve(Epetra_LinearProblem &problem) {
-    Amesos_Klu klu(problem);
+  int solve() {
+    Amesos_Klu klu(problem());
     return klu.Solve();
   }
 };
@@ -32,8 +38,8 @@ public:
 #include "Amesos_Mumps.h"
 class MumpsSolver : public Solver {
 public:
-  int solve(Epetra_LinearProblem &problem) {
-    Amesos_Mumps mumps(problem);
+  int solve() {
+    Amesos_Mumps mumps(problem());
     mumps.SymbolicFactorization();
     mumps.NumericFactorization();
     return mumps.Solve();
@@ -42,7 +48,7 @@ public:
 #else
 class MumpsSolver : public Solver {
 public:
-  int solve(Epetra_LinearProblem &problem) {
+  int solve() {
     cout << "ERROR: no MUMPS support for non-MPI runs yet (because Nate hasn't built MUMPS for his serial-debug Trilinos).\n";
     return -1;
   }

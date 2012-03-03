@@ -441,12 +441,13 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     }
   }
   
-  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
   
   rhsVector.GlobalAssemble();
 
   timer.ResetStartTime();
-  int solveSuccess = solver->solve(problem);
+  solver->setProblem(problem);
+  int solveSuccess = solver->solve();
 
   if (solveSuccess != 0 ) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
