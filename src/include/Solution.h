@@ -55,6 +55,7 @@
 #include "BC.h"
 #include "BasisCache.h"
 #include "AbstractFunction.h"
+#include "Solver.h"
 
 #include "LocalStiffnessMatrixFilter.h"
 
@@ -102,7 +103,7 @@ private:
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
-public:
+public:  
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
   Solution(const Solution &soln);
 //  bool equals(Solution& otherSolution, double tol=0.0);
@@ -110,6 +111,8 @@ public:
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
   void solve(bool useMumps);
+  
+  void solve( Teuchos::RCP<Solver> solver );
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
@@ -202,6 +205,7 @@ public:
   double minTimeDistributeSolution();
   
   void writeStatsToFile(const string &filePath, int precision=4);
+  
 };
 
 #endif

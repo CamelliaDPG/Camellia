@@ -152,7 +152,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   }
 }
 
-void Solution::solve(){
+void Solution::solve() {
 #ifdef HAVE_MPI
   solve(true);
 #else
@@ -160,11 +160,21 @@ void Solution::solve(){
 #endif
 }
 
+void Solution::solve(bool useMumps) {
+  Teuchos::RCP<Solver> solver;
+  if (useMumps) {
+    solver = Teuchos::rcp(new MumpsSolver());
+  } else {
+    solver = Teuchos::rcp(new KluSolver());
+  }
+  solve(solver);
+}
+
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
 }
 
-void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated list of choices)
+void Solution::solve(Teuchos::RCP<Solver> solver) {
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   initialize();
   
@@ -436,34 +446,12 @@ void Solution::solve(bool useMumps) { // if not, KLU (TODO: make an enumerated l
   rhsVector.GlobalAssemble();
 
   timer.ResetStartTime();
-  if ( !useMumps ) {
-    Amesos_Klu klu(problem);
-    //cout << "About to call klu.Solve()." << endl;
-    int solveSuccess = klu.Solve();
-    //cout << "klu.Solve() completed." << endl;
-    // Amesos_Utils().ComputeTrueResidual (globalStiffMatrix, lhsVector, rhsVector, false, "TrueResidual: ");
-    if (solveSuccess != 0 ) {
-      cout << "**** WARNING: in Solution.solve(), klu.Solve() failed with error code " << solveSuccess << ". ****\n";
-    }
-  } else {
-    // only use MUMPS when we have MPI
-#ifdef HAVE_MPI
-    /*
-    if (rank == 0) {
-      // cout << "USING MUMPS!\n";
-    }
-    */
-    
-    Amesos_Mumps mumps(problem);
-    mumps.SymbolicFactorization();
-    mumps.NumericFactorization();
-    mumps.Solve();
-    
+  int solveSuccess = solver->solve(problem);
 
-#else
-    cout << "MUMPS disabled for non-MPI builds!\n";
-#endif
+  if (solveSuccess != 0 ) {
+    cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
+  
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
@@ -1273,7 +1261,7 @@ const map<int,double> & Solution::energyError() {
   for (int procIndex=0;procIndex<numProcs;procIndex++){
     for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
       if (cellIDArray[procIndex][globalCellIndex]!=-1){
-	_energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
+        _energyErrorForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = errArray[procIndex][globalCellIndex];
       }
     }
   }
@@ -1546,7 +1534,7 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
     FieldContainer<double> physicalPointsForCell(numCells,numPoints,spaceDim);
     for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
       for (int dim=0; dim<spaceDim; dim++) {
-	physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
+        physicalPointsForCell(0,ptIndex,dim) = physicalPoints(cellIndex,ptIndex,dim);
       }
     }
 
