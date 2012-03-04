@@ -20,6 +20,7 @@ public:
   SchwarzSolver(int overlapLevel, int maxIters, double tol);
   void setPrintToConsole(bool printToConsole);
   int solve();
+  void setTolerance(double tol);
 };
 
 #endif

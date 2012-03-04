@@ -19,6 +19,10 @@ void SchwarzSolver::setPrintToConsole(bool printToConsole) {
   _printToConsole = printToConsole;
 }
 
+void SchwarzSolver::setTolerance(double tol) {
+  _tol = tol;
+}
+
 int SchwarzSolver::solve() {
   // compute some statistics for the original problem
   double condest = -1;
@@ -48,7 +52,8 @@ int SchwarzSolver::solve() {
   solver.SetAztecParam(AZ_drop, 0.0);                 // TODO: look these up (copied from example)
   
   
-  int solveResult = solver.AdaptiveIterate(_maxIters,1,_tol); // an experiment (was Iterate())
+  int solveResult = solver.Iterate(_maxIters,_tol);
+//  int solveResult = solver.AdaptiveIterate(_maxIters,1,_tol); // an experiment (was Iterate())
   
   norminf = A->NormInf();
   normone = A->NormOne();
