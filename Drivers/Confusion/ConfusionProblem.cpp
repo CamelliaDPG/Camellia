@@ -28,8 +28,8 @@ void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physical
 
 // BC
 bool ConfusionProblem::bcsImposed(int varID) {
-  //  return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
-  return varID == ConfusionBilinearForm::U_HAT;
+  return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
+//  return varID == ConfusionBilinearForm::U_HAT;
 }
 
 void ConfusionProblem::imposeBC(int varID, FieldContainer<double> &physicalPoints, 
@@ -47,34 +47,35 @@ void ConfusionProblem::imposeBC(int varID, FieldContainer<double> &physicalPoint
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
       double x = physicalPoints(cellIndex, ptIndex, 0);
       double y = physicalPoints(cellIndex, ptIndex, 1);
-      double beta_n = unitNormals(cellIndex, ptIndex, 0)*_cbf->getBeta(x,y)[0] + unitNormals(cellIndex, ptIndex, 1)*_cbf->getBeta(x,y)[1];
-            
+      double beta_n = unitNormals(cellIndex, ptIndex, 0)*_cbf->getBeta(x,y)[0]
+                    + unitNormals(cellIndex, ptIndex, 1)*_cbf->getBeta(x,y)[1];
+      
       double u0 = 0.0;
       if ( (abs(x) < 1e-14) && (y<y_cut) ) { // x basically 0 ==> u = 1 - y	  
-	u0 = 1.0 - y/y_cut;
+        u0 = 1.0 - y/y_cut;
       } else if ( (abs(y) < 1e-14) &&  (x<x_cut) ) { // y basically 0 ==> u = 1 - x
-	u0 = 1.0 - x/x_cut;
+        u0 = 1.0 - x/x_cut;
       } 
-
+      
       imposeHere(cellIndex,ptIndex) = false;
       if (bcsImposed(ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) && varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT){
-	dirichletValues(cellIndex,ptIndex) = beta_n*u0;
-	if (abs(y) < 1e-14 || abs(x) < 1e-14) { // only impose this var on the inflow
-	  imposeHere(cellIndex,ptIndex) = true;
-	} 
+        dirichletValues(cellIndex,ptIndex) = beta_n*u0;
+        if (abs(y) < 1e-14 || abs(x) < 1e-14) { // only impose this var on the inflow
+          imposeHere(cellIndex,ptIndex) = true;
+        } 
       } else {
-	dirichletValues(cellIndex,ptIndex) = u0;
-	imposeHere(cellIndex,ptIndex) = true;
+        dirichletValues(cellIndex,ptIndex) = u0;
+        imposeHere(cellIndex,ptIndex) = true;
       }       
-
+      
       // if outflow, always apply wall BC
       if (abs(y-1.0)<1e-14 || abs(x-1.0)<1e-14){
-	if (varID==ConfusionBilinearForm::U_HAT){
-	  dirichletValues(cellIndex,ptIndex) = 0.0;
-	  imposeHere(cellIndex,ptIndex) = true;
-	} 
+        if (varID==ConfusionBilinearForm::U_HAT){
+          dirichletValues(cellIndex,ptIndex) = 0.0;
+          imposeHere(cellIndex,ptIndex) = true;
+        } 
       }
-	
+      
     }
   }
 }
