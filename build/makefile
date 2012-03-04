@@ -88,6 +88,7 @@ OBJ_NAMES = DofOrdering \
        RefinementStrategy \
        RHS \
        RHSTests \
+       SchwarzSolver \
 			 StokesBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
@@ -221,6 +222,9 @@ TimeMarchingBurgersProblem.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersProblem.
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+SchwarzSolver.o: $(SRCS_DIR)/Solution/SchwarzSolver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 PenaltyMethodFilter.o: $(SRCS_DIR)/Solution/PenaltyMethodFilter.cpp
