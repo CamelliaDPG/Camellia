@@ -41,10 +41,10 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 3; // for tests
+  int pToAdd = 4; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-4;
+  double epsilon = 1e-5;
   bool useTriangles = false;
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon));
   Teuchos::RCP<VortexManufacturedSolution> exactSolution = Teuchos::rcp(new VortexManufacturedSolution(epsilon));
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
   cout << " L2 error: " << l2error << endl;
 
   bool limitIrregularity = true;
-  int numRefinements = 2;
+  int numRefinements = 6;
   double thresholdFactor = 0.2;
   int refIterCount = 0;  
   vector<double> errorVector;
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       cout << "Solving on refinement iteration number " << refIterCount << "..." << endl;    
     }
-    solution->solve(false);
+    solution->solve();
     if (rank==0){
       cout << "Solved..." << endl;    
     }

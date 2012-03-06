@@ -104,7 +104,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
 
             double scaling = min(epsilon/cellMeasures(cellIndex),1.0);
-	    scaling = epsilon;
+	    //	    scaling = epsilon;
 	    
             //////////////////// 
 	    
@@ -184,7 +184,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             FieldContainer<double> cellMeasures = basisCache.getCellMeasures();
 
 	    double tauScaling = min(1.0/cellMeasures(cellIndex),1.0/epsilon);
-	    tauScaling = 1.0;
+	    //	    tauScaling = 1.0;
 	    
             //////////////////// 
 

@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
     
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 4, verticalCells = 4;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh;
   mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
     if (useExactSolution){
       projectedSolution->projectOntoMesh(functionMap);
     }
-    solution->solve(false);
+    solution->solve();
     if (rank==0){
       cout << "Solved..." << endl;    
     }

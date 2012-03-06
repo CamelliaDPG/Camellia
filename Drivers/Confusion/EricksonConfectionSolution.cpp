@@ -45,7 +45,7 @@ double EricksonConfectionSolution::solutionValue(int trialID,
   double u_x = 0.0;
   double u_y = 0.0;
   // discontinuous inflow, stresses undefined
-  if (y>.3){
+  if (y>.5){
     u = (y-1.0);
   }else{
     u = y;

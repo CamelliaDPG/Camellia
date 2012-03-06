@@ -56,13 +56,13 @@ double EricksonManufacturedSolution::solutionValue(int trialID,
     double Cn = 0.0;            
     if (n==1){
       Cn = 1.0; // first term only
-    }
+    }    
     /*
+    // discontinuous hat 
     Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
     Cn /= (n*pi);
-    Cn /= (n*pi);
+    Cn /= (n*pi);    
     */
-
     // normal stress outflow
     double Xbottom;
     double Xtop;
