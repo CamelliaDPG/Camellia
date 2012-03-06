@@ -1803,6 +1803,29 @@ int Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr ) {
   return numElements;
 }
 
+int Mesh::numFluxDofs(){
+  return numGlobalDofs()-numFieldDofs();
+}
+
+int Mesh::numFieldDofs(){
+  int numFieldDofs = 0;  
+  int numActiveElems = numActiveElements();
+  for (int cellIndex = 0; cellIndex < numActiveElems; cellIndex++){
+    ElementPtr elemPtr = getActiveElement(cellIndex);
+    int cellID = elemPtr->cellID();
+    int numSides = elemPtr->numSides();
+    ElementTypePtr elemTypePtr = elemPtr->elementType();
+    vector< int > fieldIDs = _bilinearForm->trialVolumeIDs();
+    vector< int >::iterator fieldIDit;
+    for (fieldIDit = fieldIDs.begin(); fieldIDit != fieldIDs.end() ; fieldIDit++){    
+      int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(*fieldIDit,0);
+      numFieldDofs += numDofs;
+    }
+  }
+  return numFieldDofs; // don't count double - each side is shared by two elems, we count it twice
+}
+
+
 int Mesh::numGlobalDofs() {
   return _numGlobalDofs;
 }

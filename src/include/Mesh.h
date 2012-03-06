@@ -210,8 +210,11 @@ public:
   
   int numActiveElements();
   
+  int numFluxDofs();
+  int numFieldDofs();
+
   int numGlobalDofs();
-  
+
   int numElements();
   
   int numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
