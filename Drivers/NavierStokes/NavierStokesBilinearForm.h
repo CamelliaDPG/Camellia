@@ -38,9 +38,9 @@ public:
   
   enum ETestIDs {
     // TODO: edit these
-    Q_1 = 0,
-    Q_2,
-    Q_3,
+    TAU_1 = 0,
+    TAU_2,
+    TAU_3,
     V_1,
     V_2,
     V_3,
@@ -62,15 +62,20 @@ public:
     U2,  // y velocity
     RHO, // density
     T,   // temperature
-    TAU_11, // stress tensor
-    TAU_21,
-    TAU_22,
+    SIGMA_11, // stress tensor
+    SIGMA_21,
+    SIGMA_22,
     Q_1,    // heat flux (x component)
     Q_2,    // heat flux (y component)
     OMEGA   // infinitesimal strain
   };
 
-
+  bool isViscousStressVariable(int trialID);  
+  bool isHeatStressVariable(int trialID);  
+  bool isEulerianVariable(int trialID);
+  
+}
+ 
 };
 
 #endif
