@@ -44,6 +44,16 @@ NavierStokesBilinearForm::NavierStokesBilinearForm(double Reyn, double Mach) {
   _Reyn = Reyn;
   _Mach = Mach;
   
+  _gamma = 1.4;
+  _cv = 1/(_gamma*(_gamma-1.0)*_Mach*_Mach);
+  _Pr = .72;
+  double mu = 1.0;
+  double lambda = .10; // guess at bulk viscosity
+  _mu = mu/_Reyn;
+  _lambda = lambda/_Reyn;
+  _eta = _mu/(4*_mu*(_mu+_lambda));
+  _kappa = _gamma*_cv*_mu/_Pr;
+
   _testIDs.push_back(TAU_1);
   _testIDs.push_back(TAU_2);
   _testIDs.push_back(TAU_3);
@@ -257,11 +267,13 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
   case V_4:
     // if there's nothing in the Eulerian interactions matrix, there's no interaction
     trialOps.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    /*
     pair<int, int> key = make_pair(trialID,testID);
     if (   (_backFlowInteractions_x.find(key) == _backFlowInteractions_x.end() )
 	   && (_backFlowInteractions_y.find(key) == _backFlowInteractions_y.end() ) ) {
       return false;
     }    
+    */ // just forget about efficiency for now and dot the entire eulerian matrix with grad v
     returnValue = true;
     testOps.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
     break;
@@ -288,15 +300,15 @@ void NavierStokesBilinearForm::applyBilinearFormData(int trialID, int testID,
     case TAU_1: 
       
       if (trialID==SIGMA_11) {
-	multiplyFCByWeight(testValues,1.0/(2*mu())-eta());
+	multiplyFCByWeight(testValues,1.0/(2*_mu)-_eta);
       }
 
       if (trialID==SIGMA_21) {
-	multiplyFCByWeight(testValues,1.0/(2*mu());
+	multiplyFCByWeight(testValues,1.0/(2*_mu);
       }
 
       if ( trialID==SIGMA_22 ) {
-	multiplyFCByWeight(testValues,-eta());
+	multiplyFCByWeight(testValues,-_eta);
       }
 
       if (trialID == OMEGA ) {
@@ -308,15 +320,15 @@ void NavierStokesBilinearForm::applyBilinearFormData(int trialID, int testID,
     case TAU_2: 
       
       if (trialID==SIGMA_11) {
-	multiplyFCByWeight(testValues,-eta());
+	multiplyFCByWeight(testValues,-_eta);
       }
 
       if (trialID==SIGMA_21) {
-	multiplyFCByWeight(testValues,1.0/(2*mu());
+	multiplyFCByWeight(testValues,1.0/(2*_mu);
       }
 
       if ( trialID==SIGMA_22 ) {
-	multiplyFCByWeight(testValues,1.0/(2*mu())-eta());
+	multiplyFCByWeight(testValues,1.0/(2*_mu)-_eta);
       }
 
       if (trialID == OMEGA ) {
@@ -380,14 +392,151 @@ FieldContainer<double> NavierStokesBilinearForm::getValuesToDot(int trialID, int
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
   
-  FieldContainer<double> values(numCells,numPoints);
-  _backgroundFlow->solutionValues(values, BurgersBilinearForm::U, basisCache);  
+  FieldContainer<double> FC_RHO(numCells,numPoints);
+  FieldContainer<double> FC_U1(numCells,numPoints);
+  FieldContainer<double> FC_U2(numCells,numPoints);
+  FieldContainer<double> FC_T(numCells,numPoints);
+  _backgroundFlow->solutionValues(FC_RHO, NavierStokesBilinearForm::RHO, basisCache);  
+  _backgroundFlow->solutionValues(FC_U1, NavierStokesBilinearForm::U1, basisCache);  
+  _backgroundFlow->solutionValues(FC_U2, NavierStokesBilinearForm::U2, basisCache);  
+  _backgroundFlow->solutionValues(FC_T, NavierStokesBilinearForm::T, basisCache);  
+
   FieldContainer<double> beta(numCells,numPoints,spaceDim);
   for (int cellIndex=0;cellIndex<numCells;cellIndex++){
     for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
-      beta(cellIndex,ptIndex,0) = 1.0*values(cellIndex,ptIndex);
-      //      beta(cellIndex,ptIndex,0) = 1.0;
-      beta(cellIndex,ptIndex,1) = 1.0;
+      double beta_x = 0.0,beta_y = 0.0;
+      double rho = FC_RHO(cellIndex,ptIndex);
+      double u = FC_U1(cellIndex,ptIndex);
+      double v = FC_U2(cellIndex,ptIndex);
+      double T = FC_T(cellIndex,ptIndex);
+
+      if (testID==NavierStokesBilinearForm::V_1){ // conservation of mass
+	if (trialID==NavierStokesBilinearForm::RHO){
+	  beta_x = u;
+	  beta_y = v;
+	}
+
+	if (trialID==NavierStokesBilinearForm::U1){
+	  beta_x = rho;
+	  beta_y = 0.0;
+	}
+
+	if (trialID==NavierStokesBilinearForm::U2){
+	  beta_x = 0.0;
+	  beta_y = rho;
+	}
+	// do nothing for trialID == T 
+
+      } else if (testID==NavierStokesBilinearForm::V_2){ // x-momentum equation
+
+	if (trialID==NavierStokesBilinearForm::RHO){
+	  beta_x = u*u + _cv*T*(-1+_gamma);
+	  beta_y = u*v;
+	}
+
+	if (trialID==NavierStokesBilinearForm::U1){
+	  beta_x = 2*u*rho;
+	  beta_y = v*rho
+	}
+
+	if (trialID==NavierStokesBilinearForm::U2){
+	  beta_x = 0.0;
+	  beta_y = u*rho
+	}
+
+	if (trialID==NavierStokesBilinearForm::T){
+	  beta_x = _cv*(-1+_gamma)*rho;
+	  beta_y = 0.0;
+	}
+
+	if (trialID==NavierStokesBilinearForm::SIGMA_11){
+	  beta_x = -1.0;
+	  beta_y = 0.0;
+ 	}
+	if (trialID==NavierStokesBilinearForm::SIGMA_21){
+	  beta_x = 0.0;
+	  beta_y = -1.0;
+	}
+
+      } else if (testID==NavierStokesBilinearForm::V_3){ // y-momentum equation
+
+	if (trialID==NavierStokesBilinearForm::RHO){
+	  beta_x = u*v;
+	  beta_y = v*v+_cv*T*(-1+_gamma);
+	}
+
+	if (trialID==NavierStokesBilinearForm::U1){
+	  beta_x = v*rho;
+	  beta_y = 0;
+	}
+
+	if (trialID==NavierStokesBilinearForm::U2){
+	  beta_x = u*rho;
+	  beta_y = 2*v*rho;
+	}
+
+	if (trialID==NavierStokesBilinearForm::T){
+	  beta_x = 0.0;
+	  beta_y = _cv*(-1+_gamma)*rho;
+	}
+	if (trialID==NavierStokesBilinearForm::SIGMA_21){
+	  beta_x = -1.0;
+	  beta_y = 0.0;
+ 	}
+	if (trialID==NavierStokesBilinearForm::SIGMA_22){
+	  beta_x = 0.0;
+	  beta_y = -1.0;
+	}
+
+      } else if (testID==NavierStokesBilinearForm::V_4){ // energy equation
+
+	if (trialID==NavierStokesBilinearForm::RHO){
+	  double cvTgamma = 2*_cv*T*(-1 + 2*_gamma);
+	  beta_x = .5*u*(u*u + v*v + cvTgamma);
+	  beta_y = .5*v*(u*u + v*v + cvTgamma);
+	}
+
+	if (trialID==NavierStokesBilinearForm::U1){
+	  beta_x = .5*(3*u*u + v*v + cvTgamma)*rho;
+	  beta_y = u*v*rho;
+	}
+
+	if (trialID==NavierStokesBilinearForm::U2){
+	  beta_x = u*v*rho;
+	  beta_y = .5(u*u*+3*v*v + cvTgamma)*rho;
+	}
+
+	if (trialID==NavierStokesBilinearForm::T){
+	  beta_x = _cv*u*(-1+2*_gamma)*rho;
+	  beta_y = _cv*v*(-1+2*_gamma)*rho;
+	}
+
+	if (trialID==NavierStokesBilinearForm::SIGMA_11){
+	  beta_x = -u;
+	  beta_y = 0.0;
+	}
+	if (trialID==NavierStokesBilinearForm::SIGMA_21){
+	  beta_x = -v;
+	  beta_y = -u;
+ 	}
+	if (trialID==NavierStokesBilinearForm::SIGMA_22){
+	  beta_x = 0.0;
+	  beta_y = -v;
+	}
+	if (trialID==NavierStokesBilinearForm::Q_1){
+	  beta_x = 1.0; // positive on heat flux stress, due to def of kappa
+	  beta_y = 0.0;
+	}
+	if (trialID==NavierStokesBilinearForm::Q_2){
+	  beta_x = 0.0;
+	  beta_y = 1.0;
+	}
+	
+      } else {
+	TEST_FOR_EXCEPTION(false,std::invalid_argument,"Invalid testID in getValuesToDot");
+      }     
+      beta(cellIndex,ptIndex,0) = beta_x;
+      beta(cellIndex,ptIndex,1) = beta_y;
     }
   }
   return beta;
@@ -415,28 +564,40 @@ EFunctionSpaceExtended NavierStokesBilinearForm::functionSpaceForTest(int testID
 EFunctionSpaceExtended NavierStokesBilinearForm::functionSpaceForTrial(int trialID) {
   // Field variables, and fluxes, are all L2.
   // Traces (like PHI_HAT) are H1 if we use conforming traces.
-  // For now, don’t use conforming (like last summer).
+
+  if ((trialID==NavierStokesBilinearForm::U1_HAT) || 
+      (trialID==NavierStokesBilinearForm::U2_HAT) || 
+      (trialID==NavierStokesBilinearForm::T_HAT)){
+    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;    
+  }
   return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
 }
 
 bool NavierStokesBilinearForm::isFluxOrTrace(int trialID) {
-  if ((U1_HAT==trialID) || (U2_HAT==trialID) || (T_HAT==trialID) || // traces
-      (F1_N==trialID) || (F2_N==trialID) || (F3_N==trialID)|| (F4_N==trialID)){ // fluxes
+  if ((NavierStokesBilinearForm::U1_HAT==trialID) || 
+      (NavierStokesBilinearForm::U2_HAT==trialID) || 
+      (NavierStokesBilinearForm::T_HAT==trialID) || // traces
+      (NavierStokesBilinearForm::F1_N==trialID) || 
+      (NavierStokesBilinearForm::F2_N==trialID) || 
+      (NavierStokesBilinearForm::F3_N==trialID)|| 
+      (NavierStokesBilinearForm::F4_N==trialID)){ // fluxes
     return true;
   } else {
     return false;
   }
 }
  
+/*
 bool NavierStokesBilinearForm::isViscousStressVariable(int trialID) {
-  return ( (trialID==SIGMA_11) || (trialID==SIGMA_21) || (trialID==SIGMA_22) || (trialID==OMEGA) );  
+  return ( (trialID==NavierStokesBilinearForm::SIGMA_11) || (trialID==NavierStokesBilinearForm::SIGMA_21) || (trialID==NavierStokesBilinearForm::SIGMA_22) || (trialID==NavierStokesBilinearForm::OMEGA) );  
 }
+*/
 
 bool NavierStokesBilinearForm::isHeatStressVariable(int trialID) {
-  return ((trialID==Q_1) || (trialID==Q_2));
+  return ((trialID==NavierStokesBilinearForm::Q_1) || (trialID==NavierStokesBilinearForm::Q_2));
 }
  
 bool NavierStokesBilinearForm::isEulerianVariable(int trialID) {
-  return ( (trialID==U1) || (trialID==U2) || (trialID==RHO) || (trialID==T));
+  return ( (trialID==NavierStokesBilinearForm::U1) || (trialID==NavierStokesBilinearForm::U2) || (trialID==NavierStokesBilinearForm::RHO) || (trialID==NavierStokesBilinearForm::T));
 }
  

@@ -12,6 +12,8 @@
 
 class NavierStokesBilinearForm : public BilinearForm {
   double _Reyn, _Mach; // Reynolds number (constant)
+
+  double _gamma,_cv,_Pr, _mu, _eta, _kappa;
   FieldContainer<int> _EulerianMatrixEntries;
   map< pair<int, int>, vector< int > > _backFlowInteractions_x; // map from (trial,test) --> trialID involved from background flow
   map< pair<int, int>, vector< int > > _backFlowInteractions_y; // map from (trial,test) --> trialID involved from background flow
