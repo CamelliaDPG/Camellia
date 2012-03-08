@@ -1,0 +1,46 @@
+#!/bin/sh
+mkdir poisson
+./PoissonStudy 1 0 5 tri
+./PoissonStudy 2 0 5 tri
+./PoissonStudy 3 0 5 tri
+mv poisson poissonTri
+mkdir poisson
+./PoissonStudy 1 0 5 quad
+./PoissonStudy 2 0 5 quad
+./PoissonStudy 3 0 5 quad
+mv poisson poissonQuad
+mkdir poisson
+./PoissonStudy 1 0 5 hybrid
+./PoissonStudy 2 0 5 hybrid
+./PoissonStudy 3 0 5 hybrid
+mv poisson poissonHybrid
+mkdir stokes
+./StokesStudy math vvp 1 0 5 tri
+./StokesStudy math vvp 2 0 5 tri
+./StokesStudy math vvp 3 0 5 tri
+mv stokes stokesTriVVP
+mkdir stokes
+./StokesStudy math vvp 1 0 5 quad
+./StokesStudy math vvp 2 0 5 quad
+./StokesStudy math vvp 3 0 5 quad
+mv stokes stokesQuadVVP
+mkdir stokes
+./StokesStudy math original\ conforming 1 0 5 tri
+./StokesStudy math original\ conforming 2 0 5 tri
+./StokesStudy math original\ conforming 3 0 5 tri
+mv stokes stokesTriVSP
+mkdir stokes
+./StokesStudy math original\ conforming 1 0 5 quad
+./StokesStudy math original\ conforming 2 0 5 quad
+./StokesStudy math original\ conforming 3 0 5 quad
+mv stokes stokesQuadVSP
+mkdir stokesHybridMesh
+./StokesStudyHybridMesh math vvp 1 0 5
+./StokesStudyHybridMesh math vvp 2 0 5
+./StokesStudyHybridMesh math vvp 3 0 5
+mv stokesHybridMesh stokesHybridVVP
+mkdir stokesHybridMesh
+./StokesStudyHybridMesh math original\ conforming 1 0 5
+./StokesStudyHybridMesh math original\ conforming 2 0 5
+./StokesStudyHybridMesh math original\ conforming 3 0 5
+mv stokesHybridMesh stokesHybridVSP

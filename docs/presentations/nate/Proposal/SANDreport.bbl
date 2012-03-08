@@ -1,0 +1,49 @@
+\begin{thebibliography}{1}
+
+\bibitem{BochevLehoucq}
+{\sc P.~Bochev and R.~B. Lehoucq}, {\em On the finite element solution of the
+  pure {N}eumann problem}, SIAM Review, 47 (2005), pp.~55--66.
+
+\bibitem{Intrepid}
+{\sc P.~B. Bochev, R.~C. Kirby, K.~J. Peterson, and D.~Ridzal}, {\em Intrepid
+  project}, http://trilinos.sandia.gov/packages/intrepid/.
+
+\bibitem{DPG5}
+{\sc J.~Chan, L.~Demkowicz, R.~Moser, and N.~Roberts}, {\em {A new
+  discontinuous Petrov-Galerkin method with optimal test functions. Part V:
+  Solution of 1D Burgers' and Navier-Stokes equations}}, ICES Technical Report,
+   (2010).
+
+\bibitem{DPG1}
+{\sc L.~Demkowicz and J.~Gopalakrishnan}, {\em {A class of discontinuous
+  Petrov-Galerkin methods. Part I: The transport equation}}, Computer Methods
+  in Applied Mechanics and Engineering, 199 (2010), pp.~1558 -- 1572.
+
+\bibitem{DPG2}
+{\sc L.~D. Demkowicz and J.~Gopalakrishnan}, {\em {A class of discontinuous
+  Petrov-Galerkin methods. Part II: Optimal test functions.}}, ICES Technical
+  Report,  (2009).
+
+\bibitem{DPG3}
+{\sc L.~D. Demkowicz, J.~Gopalakrishnan, and A.~Niemi}, {\em {A class of
+  discontinuous Petrov-Galerkin methods. Part III: Adaptivity}},  (2010).
+
+\bibitem{Trilinos}
+{\sc M.~A. Heroux, R.~A. Bartlett, V.~E. Howle, R.~J. Hoekstra, J.~J. Hu, T.~G.
+  Kolda, R.~B. Lehoucq, K.~R. Long, R.~P. Pawlowski, E.~T. Phipps, A.~G.
+  Salinger, H.~K. Thornquist, R.~S. Tuminaro, J.~M. Willenbring, A.~Williams,
+  and K.~S. Stanley}, {\em {An overview of the Trilinos project}}, ACM Trans.
+  Math. Softw., 31 (2005), pp.~397--423.
+
+\bibitem{Hughes}
+{\sc T.~J. Hughes, G.~Scovazzi, P.~B. Bochev, and A.~Buffa}, {\em {A multiscale
+  discontinuous Galerkin method with the computational structure of a
+  continuous Galerkin method}}, Computer Methods in Applied Mechanics and
+  Engineering, 195 (2006), pp.~2761 -- 2787.
+
+\bibitem{DPG4}
+{\sc J.~Zitelli, I.~Muga, L.~Demkowicz, J.~Gopalakrishnan, D.~Pardo, and
+  V.~Calo}, {\em {A class of discontinuous Petrov-Galerkin methods. Part IV:
+  Wave propagation}},  (2010).
+
+\end{thebibliography}

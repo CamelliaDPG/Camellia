@@ -1,0 +1,6 @@
+pdflatex SIAMreport
+pdflatex SIAMreport
+bibtex SIAMreport
+bibtex SIAMreport
+pdflatex SIAMreport
+pdflatex SIAMreport
