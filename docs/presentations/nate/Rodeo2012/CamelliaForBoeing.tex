@@ -1,7 +1,7 @@
 \documentclass[mathserif]{beamer}
 \usetheme[secheader]{pecostalk}
 \graphicspath{{figs/}}                                                                                                                              
-
+\usepackage{subfigure}
 \newcommand{\eqdef}{\stackrel{\text{\tiny def}}{=}}
 
 \newcommand{\NVRvect}[1]{\ensuremath\boldsymbol{#1}}
@@ -246,6 +246,97 @@ $k=1$ & mixed $k$ & $k=1$ & mixed $k$ & $k=1$ & mixed $k$ \\
 \end{frame}
 
 %===============================================================================
+% Jesse's projects
+%===============================================================================
+
+\begin{frame}
+\frametitle{New proof of robustness in $\epsilon$}
+
+\begin{columns}[c]
+\begin{column}{5.5cm}
+\begin{block}{Solution variable $u$}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/wallBC_exact_u.png}
+\end{block}
+\end{column}
+\begin{column}{5.4cm}
+\begin{block}{$L^2$ error}
+\includegraphics[width=5.4cm]{../../jesse/FERodeo2012/figs/u_pointdiff_wallBC.png}
+\end{block}
+\end{column}
+\end{columns}
+\vspace{3 mm}
+
+Solution/pointwise error in $u$ for inflow boundary condition on $\beta_n u - \sigma_n$.  Method is provably robust (quality does not degenerate with $\epsilon \rightarrow 0$)
+
+\end{frame}
+
+\begin{frame}
+\frametitle{New proof of robustness in $\epsilon$}
+
+\begin{columns}[c]
+\begin{column}{5.5cm}
+\begin{block}{Solution variable $u$}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/errorrates_wallBC.png}
+\end{block}
+\end{column}
+\begin{column}{5.4cm}
+\begin{block}{$L^2$ error}
+\includegraphics[width=5.4cm]{../../jesse/FERodeo2012/figs/L2energyratio_wallBC.png}
+\end{block}
+\end{column}
+\end{columns}
+\vspace{3 mm}
+
+$L^2$ and energy error comparison, and the ratio of $L^2$ to energy error for inflow boundary condition on $\beta_n u - \sigma_n$.  Solution is nearly identical to the $L^2$ projection for wide range of $\epsilon$. 
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Regularization using small diffusion}
+
+\begin{columns}[c]
+\begin{column}{5.5cm}
+\begin{block}{Solution variable $u$}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/discontinuous.png}
+\end{block}
+\end{column}
+\begin{column}{5.5cm}
+\begin{block}{$L^2$ pure convection error}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/discontinuousL2rates.png}
+\end{block}
+\end{column}
+\end{columns}
+\vspace{3 mm}
+
+Convection of a discontinuous hat, regularized by small diffusion $\epsilon = 1e-5$.  Unaligned with the mesh (worst case scenario).  
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Regularization of ill-posed convection problems}
+
+\begin{columns}[c]
+\begin{column}{5.5cm}
+\begin{block}{Solution variable $u$}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/vortex.png}
+\end{block}
+\end{column}
+\begin{column}{5.5cm}
+\begin{block}{Mesh after 5 refinement steps}
+\includegraphics[width=5.5cm]{../../jesse/FERodeo2012/figs/vortexMesh.png}
+\end{block}
+\end{column}
+\end{columns}
+\vspace{3 mm}
+
+Vorticular convection problem with $\beta = (-y,x)$, regularized with $\epsilon=1e-5$.  Ill-posed in the convection setting.
+
+\end{frame}
+
+
+
+%===============================================================================
 % CURRENT AND FUTURE WORK
 %===============================================================================
 \begin{frame}
@@ -261,7 +352,7 @@ $k=1$ & mixed $k$ & $k=1$ & mixed $k$ & $k=1$ & mixed $k$ \\
 \begin{columns}[c]
 \begin{column}{5.5cm}
 \begin{block}{Convection-Diffusion, $\epsilon=10^{-2}$}
-\includegraphics[width=5.5cm]{confusionDemo.png}
+\includegraphics[width=5.5cm]{../../jesse/BoardOfVisitors/BOVslide/confusionDemo.png}
 \end{block}
 \end{column}
 \begin{column}{5.5cm}
