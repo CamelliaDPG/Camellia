@@ -174,8 +174,8 @@ void EricksonManufacturedSolution::rhs(int testVarID, const FieldContainer<doubl
 /***************** BC Implementation *****************/
 bool EricksonManufacturedSolution::bcsImposed(int varID){
   // returns true if there are any BCs anywhere imposed on varID
-  //return (varID == ConfusionBilinearForm::U_HAT);
-  return (varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT || (varID == ConfusionBilinearForm::U_HAT));
+  return (varID == ConfusionBilinearForm::U_HAT);
+  //  return (varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT || (varID == ConfusionBilinearForm::U_HAT));
 }
 
 void EricksonManufacturedSolution::imposeBC(int varID, FieldContainer<double> &physicalPoints,
@@ -212,14 +212,14 @@ void EricksonManufacturedSolution::imposeBC(int varID, FieldContainer<double> &p
       double x = physicalPoint(cellIndex,ptIndex,0);
       double y = physicalPoint(cellIndex,ptIndex,1);
       imposeHere(cellIndex,ptIndex) = false;
-      if (varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) {
-	dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint, unitNormal);
-	//      if (varID==ConfusionBilinearForm::U_HAT) {
-	//	dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
+      //      if (varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) {
+      //	dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint, unitNormal);
+      if (varID==ConfusionBilinearForm::U_HAT) {
+	dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);
 	if ( abs(x-1.0) > 1e-12) { // if not the outflow (pts on boundary already)
 	  imposeHere(cellIndex,ptIndex) = true;
 	}
-      } else if (varID==ConfusionBilinearForm::U_HAT) {
+
 	// wall boundary 
 	if (abs(x-1.0)<1e-12 && _useWallBC){
 	  dirichletValues(cellIndex,ptIndex) = solutionValue(varID, physicalPoint);

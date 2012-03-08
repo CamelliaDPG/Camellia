@@ -41,7 +41,8 @@ class EricksonProblem : public RHS, public BC, public Constraints {
   
   // BC
   bool bcsImposed(int varID) {
-    return (varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT || varID==ConfusionBilinearForm::U_HAT);
+    //    return (varID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT || varID==ConfusionBilinearForm::U_HAT);
+    return (varID==ConfusionBilinearForm::U_HAT);
   }
   
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
@@ -69,20 +70,26 @@ class EricksonProblem : public RHS, public BC, public Constraints {
 	} else {
 	  u0 = 0.0;// -2.0*y;
 	}
+	u0 = sin(3.141592*y);
 
 	if ( (abs(x)<1e-14)) { // if not outflow
+	  /*
 	  if (varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT){
 	    dirichletValues(cellIndex,ptIndex) = beta_n*u0;
 	    imposeHere(cellIndex,ptIndex) = true;
 	  }
+	  */
+	  if (varID==ConfusionBilinearForm::U_HAT){
+	    dirichletValues(cellIndex,ptIndex) = u0;
+	    imposeHere(cellIndex,ptIndex) = true;
+	  }
+
 	} else { // if outflow
-	  /*
+	  
 	  if (varID==ConfusionBilinearForm::U_HAT){
 	    dirichletValues(cellIndex,ptIndex) = 0.0;
 	    imposeHere(cellIndex,ptIndex) = true;
 	  } 
-	  */
-	  imposeHere(cellIndex,ptIndex) = false;
 	}
 	
 	// side wall condition
@@ -92,11 +99,12 @@ class EricksonProblem : public RHS, public BC, public Constraints {
 	    dirichletValues(cellIndex,ptIndex) = 0.0; // beta_n = 0, so we're setting normal stress =0
 	    imposeHere(cellIndex,ptIndex) = true;
 	  }
-	  */	  
+
 	  if (varID==ConfusionBilinearForm::U_HAT){
 	    dirichletValues(cellIndex,ptIndex) = u0;
 	    imposeHere(cellIndex,ptIndex) = true;
 	  }
+	  */	  
 	}
       }
     }
@@ -139,8 +147,8 @@ class EricksonProblem : public RHS, public BC, public Constraints {
     //    outflowConstraint[ConfusionBilinearForm::U_HAT] = beta_sigmaCoeffs;
     outflowConstraint[ConfusionBilinearForm::U_HAT] = uCoeffs;
     outflowConstraint[ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT] = beta_sigmaCoeffs;
-    constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
-    constraintValues.push_back(outflowValues); // only one constraint on outflow
+    //    constraintCoeffs.push_back(outflowConstraint); // only one constraint on outflow
+    //    constraintValues.push_back(outflowValues); // only one constraint on outflow
     
   }
 

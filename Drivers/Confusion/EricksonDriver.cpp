@@ -13,6 +13,7 @@
 #include "EricksonProblem.h"
 #include "ConfectionManufacturedSolution.h"
 #include "ConfusionInnerProduct.h"
+#include "ExperimentalInnerProduct.h"
 #include "EricksonManufacturedSolution.h"
 #include "EricksonConfectionSolution.h" // discontinuous hat
 #include "ZeroFunction.h"
@@ -43,7 +44,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 3;
-  int pToAdd = 5; // for tests  
+  int pToAdd = 3; // for tests  
 
   // define our manufactured solution or problem bilinear form: 
   double epsilon = .1;
@@ -62,7 +63,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<ConfusionBilinearForm> bf = Teuchos::rcp(new ConfusionBilinearForm(epsilon,beta_x,beta_y));
   Teuchos::RCP<EricksonManufacturedSolution> exactSolution = Teuchos::rcp(new EricksonManufacturedSolution(epsilon,beta_x,beta_y));
   //  Teuchos::RCP<EricksonConfectionSolution> exactSolution = Teuchos::rcp(new EricksonConfectionSolution(epsilon,beta_x,beta_y));
-  bool useExactSolution = true;
+  bool useExactSolution = false;
   int cubDegree = 20;
 
   FieldContainer<double> quadPoints(4,2);
@@ -85,7 +86,8 @@ int main(int argc, char *argv[]) {
   //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   // define our inner product:
-  Teuchos::RCP<ConfusionInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
+  //  Teuchos::RCP<ConfusionInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( bf, mesh ) );
+  Teuchos::RCP<ExperimentalInnerProduct> ip = Teuchos::rcp( new ExperimentalInnerProduct( bf, mesh ) );
   //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new OptimalInnerProduct( bf ) );
   //  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct( bf ) );
 
