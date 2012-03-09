@@ -43,8 +43,8 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 3;
-  int pToAdd = 3; // for tests  
+  int polyOrder = 2;
+  int pToAdd = 5; // for tests  
 
   // define our manufactured solution or problem bilinear form: 
   double epsilon = .1;
@@ -124,8 +124,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
   solution->solve(false);
-
-  bool limitIrregularity = true;
+  
   int refIterCount = 0;  
   vector<double> errorVector;
   vector<double> L2errorVector;

@@ -54,22 +54,22 @@ void ExperimentalInnerProduct::operators(int testID1, int testID2,
   
   if (testID1==ConfusionBilinearForm::TAU){
     if (testID2==ConfusionBilinearForm::V){
-      //      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_DIV); // conservation cross term 1
-      //      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_DIV); // conservation cross term 1
+      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
 
-      //      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE); // constitutive cross term 1
-      //      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE); // constitutive cross term 1
+      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
 	
     }
   }
   
   if (testID1==ConfusionBilinearForm::V){
     if (testID2==ConfusionBilinearForm::TAU){
-      //      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD); // conservation cross term 2
-      //      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD); // conservation cross term 2
+      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
 
-      //      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD); // constitutive cross term 2
-      //      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD); // constitutive cross term 2
+      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
 
     }
   }
@@ -107,7 +107,6 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	if ((testID1==ConfusionBilinearForm::TAU) && (testID2==ConfusionBilinearForm::TAU)){
 	  if (operatorIndex==0){ // L^2 of tau
 	    testValues1(cellIndex,basisOrdinal,ptIndex,0) *= (1.0+(C/epsilon)*(C/epsilon)); // scale all terms by constant
-	    testValues1(cellIndex,basisOrdinal,ptIndex,1) *= (1.0+(C/epsilon)*(C/epsilon)); // scale all terms by constant
 	  } else if (operatorIndex==1) { // div tau
 	    // do nothing, both are already correct
 	  } else {
@@ -120,8 +119,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  if (operatorIndex==0){ // L^2 of v
 	    // do nothing
 	  } else if (operatorIndex==1) { // grad v
-	    testValues1(cellIndex,basisOrdinal,ptIndex,0) *= ((C/epsilon)*(C/epsilon)); // scale all terms by constant
-	    testValues1(cellIndex,basisOrdinal,ptIndex,1) *= ((C/epsilon)*(C/epsilon)); // scale all terms by constant
+	    // do nothing
 	  } else if (operatorIndex==2) { // beta dot grad v
 	    testValues1.resize(numCells,basisCardinality,numPoints);
 	    testValues2.resize(numCells,basisCardinality,numPoints);	      
@@ -133,40 +131,78 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	    TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
 	  }
 	}
-	  
-	// tau cross v (negative conservation eq terms)
-	if ((testID1==ConfusionBilinearForm::TAU) && (testID2==ConfusionBilinearForm::V)){
-	  if (operatorIndex==0){ // beta dot grad v dot div tau
-	    if (testValues2.rank()==4){
-	      testValues2.resize(numCells,basisCardinality,numPoints);	      
-	    }
-	    //testValues2(cellIndex,basisOrdinal,ptIndex)  = -(beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0) + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1));
-	  } else if (operatorIndex==1) { 
-	    testValues1(cellIndex,basisOrdinal,ptIndex,0) *= (C/epsilon); // scale by c/eps only
-	    testValues1(cellIndex,basisOrdinal,ptIndex,1) *= (C/epsilon); // scale by c/eps only
-	  } else {
-	    TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
-	  }	    
-	}
-
-	// v cross tau (negative conservation eq terms)
-	if ((testID1==ConfusionBilinearForm::V) && (testID2==ConfusionBilinearForm::TAU)){
-	  if (operatorIndex==0){
-	    if (testValues1.rank()==4){
-	      testValues1.resize(numCells,basisCardinality,numPoints);	      
-	    }
-	    //testValues1(cellIndex,basisOrdinal,ptIndex)  = -(beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1));
-	  } else if (operatorIndex==1) { 
-	    testValues1(cellIndex,basisOrdinal,ptIndex,0) *= (C/epsilon); // scale by c/eps only
-	    testValues1(cellIndex,basisOrdinal,ptIndex,1) *= (C/epsilon); // scale by c/eps only
-	  } else {
-	    TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
-	  }
-	}
-	  
       }
     }
-  }
+       
+    int basisCardinality2 = testValues2.dimension(1);
+    
+    // tau cross v (negative conservation eq terms)
+    if ((testID1==ConfusionBilinearForm::TAU) && (testID2==ConfusionBilinearForm::V)){
+      
+      if (operatorIndex==0){ // beta dot grad v * div d_tau
+	if (testValues2.rank()==4){ 
+	  testValues2.resize(numCells,basisCardinality2,numPoints);	      
+	  TEST_FOR_EXCEPTION(testValues1.rank()!=3,std::invalid_argument,"Div tau not rank 3");
+	}
+	for (int basisOrdinal=0; basisOrdinal<basisCardinality2; basisOrdinal++) {
+	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	    double x = physicalPoints(cellIndex,ptIndex,0);
+	    double y = physicalPoints(cellIndex,ptIndex,1);
+	    double beta_x = _confusionBilinearForm->getBeta(x,y)[0];
+	    double beta_y = _confusionBilinearForm->getBeta(x,y)[1];	      
+	    double weight = getWeight(x,y);		  	    
+	    testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0) + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);
+	    testValues2(cellIndex,basisOrdinal,ptIndex) *= -1.0;
+	  }
+	}
+      } else if (operatorIndex==1) { // tau dot grad d_v
+	TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
+	TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
+
+	for (int basisOrdinal=0; basisOrdinal<basisCardinality2; basisOrdinal++) {
+	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	    testValues2(cellIndex,basisOrdinal,ptIndex,0) *= (C/epsilon); // scale by c/eps only
+	    testValues2(cellIndex,basisOrdinal,ptIndex,1) *= (C/epsilon); // scale by c/eps only
+	  }
+	}
+      } else {
+	TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+      }	    
+    }
+    
+    // v cross tau (negative conservation eq terms)
+    if ((testID1==ConfusionBilinearForm::V) && (testID2==ConfusionBilinearForm::TAU)){
+      if (operatorIndex==0){ // div tau * beta dot grad dv
+	if (testValues1.rank()==4){
+	  testValues1.resize(numCells,basisCardinality,numPoints);	      
+	}
+	for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	    double x = physicalPoints(cellIndex,ptIndex,0);
+	    double y = physicalPoints(cellIndex,ptIndex,1);
+	    double beta_x = _confusionBilinearForm->getBeta(x,y)[0];
+	    double beta_y = _confusionBilinearForm->getBeta(x,y)[1];	      
+	    
+	    testValues1(cellIndex,basisOrdinal,ptIndex) = beta_x * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,0) + beta_y * testValuesCopy1(cellIndex,basisOrdinal,ptIndex,1);
+	    testValues1(cellIndex,basisOrdinal,ptIndex) *= -1.0;
+	  }
+	}
+      } else if (operatorIndex==1) { // grad v dot d_tau
+	TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
+	TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
+
+	for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	    testValues1(cellIndex,basisOrdinal,ptIndex,0) *= (C/epsilon); // scale by c/eps only
+	    testValues1(cellIndex,basisOrdinal,ptIndex,1) *= (C/epsilon); // scale by c/eps only
+	  }
+	}
+      } else {
+	TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+      }
+    }
+  
+  } // end of cells
     
 }
   
