@@ -1,0 +1,43 @@
+\begin{thebibliography}{1}
+
+\bibitem{analysisDPG}
+L.~Demkowicz and J.~Gopalakrishnan.
+\newblock An analysis of the {DPG} method for the {P}oisson equation.
+\newblock Technical Report 10-37, ICES, 2010.
+
+\bibitem{DPG2}
+L.~Demkowicz and J.~Gopalakrishnan.
+\newblock A class of discontinuous {P}etrov-{G}alerkin methods. ii. {O}ptimal
+  test functions.
+\newblock {\em Num. Meth. for Partial Diff. Eq}, 27:70--105, 2011.
+
+\bibitem{DPGrobustness}
+L.~Demkowicz and N.~Heuer.
+\newblock {R}obust {DPG} method for convection-dominated diffusion problems.
+\newblock Technical Report 11-33, ICES, 2011.
+
+\bibitem{practicalDPG}
+J.~Gopalakrishnan and W.~Qiu.
+\newblock An analysis of the practical {DPG} method.
+\newblock Technical report, IMA, 2011.
+\newblock submitted.
+
+\bibitem{Hesthaven96astable}
+J.S. Hesthaven.
+\newblock A stable penalty method for the compressible navier-stokes equations.
+  iii. multi dimensional domain decomposition schemes.
+\newblock {\em SIAM J. SCI. COMPUT}, 17:579--612, 1996.
+
+\bibitem{DBLP:journals/procedia/NiemiCC11}
+Antti~H. Niemi, Nathan~O. Collier, and Victor~M. Calo.
+\newblock {Discontinuous} {Petrov-Galerkin} method based on the optimal test
+  space norm for one-dimensional transport problems.
+\newblock {\em Procedia CS}, 4:1862--1869, 2011.
+
+\bibitem{DPG4}
+J.~Zitelli, I.~Muga, L.~Demkowicz, J.~Gopalakrishnan, D.~Pardo, and V.~Calo.
+\newblock A {C}lass of {D}iscontinuous {Petrov-Galerkin} {M}ethods. {Part IV:}
+  {W}ave {P}ropagation {P}roblems.
+\newblock Technical Report~17, ICES, 2010.
+
+\end{thebibliography}
