@@ -501,15 +501,32 @@ We are especially interested in the ratio of energy error and $L^2$ error.  Stab
 
 The effect of the test norm on mesh dependence can be seen in the ratios of $L^2$ to energy error; as the mesh is refined, the constants in front of the $L^2$ terms for $v$ and $\tau$ converge to stationary values, and the ratio of $L^2$ to energy error transitions from a smaller to a larger value.  The transition point happens later for smaller $\epsilon$, which we expect, since the transition of the ratio corresponds to the introduction of elements of order $\epsilon$ through mesh refinement.  
 
-\subsection{Setting just $u_0$, not $u_0-\sigma_n$}
+\subsection{Neglecting $\sigma_n$} 
 
-In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible.  
+In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for, well within the range of $\epsilon$ of physical interest. However, even for large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, which is only $7%$ relative error. 
 
-\subsection{Near discontinuous hat}
+\begin{figure}[h!]
+\centering
+\subfigure{
+\includegraphics[scale=.38]{figs/rates_noSigma.png}
+}
+\subfigure{
+\includegraphics[scale=.38]{figs/ratio_noSigma.png}
+}
+\caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.005$, $\epsilon=.001$, $\epsilon=.0001$}
+\label{ratios_noSigma}
+\end{figure}
 
+\subsection{Discontinuous inflow data}
 
+We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements; as $\widehat{f}_n \in H^{-1/2}(\Omega)$, strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  We use the discontinuous inflow data
+\[
+u_0(y) = \begin{cases}
+(y-1)^2&, \quad y>.5\\
+y^2&, \quad y\leq .5 
+\end{cases}
+\]
 
-We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements; strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  
 
 \section{Conclusions}
 \bibliographystyle{plain}
