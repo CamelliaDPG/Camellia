@@ -1,5 +1,10 @@
 \begin{thebibliography}{1}
 
+\bibitem{BabuskaEquivBrezzi}
+L.~Demkowicz.
+\newblock {B}abuska $<=>$ {B}rezzi?
+\newblock Technical Report 06-08, ICES, 2006.
+
 \bibitem{analysisDPG}
 L.~Demkowicz and J.~Gopalakrishnan.
 \newblock An analysis of the {DPG} method for the {P}oisson equation.

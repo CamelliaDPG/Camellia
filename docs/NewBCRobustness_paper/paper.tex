@@ -106,6 +106,8 @@
 
 \begin{document}
 
+\tableofcontents
+
 \section{Introduction}
 
 \subsection{Introduction to DPG}
@@ -158,11 +160,11 @@ Under the assumption of injectivity of the adjoint of our variational operator $
 \[
 \|v\|_{\rm opt} = \sup_{u\in U}\frac{b(u,v)}{\|u\|_U}
 \]
-If the solution is in $U$, then choosing $\|v\|=\|v\|_{\rm opt}$ implies 
+If the solution is in $U$, then choosing $\|v\|=\|v\|_{\rm opt}$ implies $\|u\|_E = \|u\|_U$. The proof is simple; we have by definition that $b(u,v) \leq \|u\|_U\|v\|_V$. The reverse $b(u,v) \leq \|u\|_U\|v\|_V$ is proved by
 \[
-\|u\|_E = \sup_{v\in V}\frac{b(u,v)}{\|v\|_V} = \sup_{v\in V}\sup_{w\in V}\frac{b(u,v)}{b(w,v)}\|w\|_U =\sup_{w\in V}\frac{b(u,v^*)}{b(w,v^*)}\|w\|_U = \|u\|_U
+\inf_{u\in U} \frac{\|u\|_E}{\|u\|_U} = \inf_{u\in U} \sup_{v\in V}\frac{b(u,v)}{\|v\|_V\|u\|_U} = \inf_{v\in V} \sup_{u\in U}\frac{b(u,v)}{\|v\|_V\|u\|_U} = \inf_{v\in V} \frac{\|v\|_V}{\|v\|_V} = 1
 \]
-FIX ABOVE 
+where we're able to switch the order of $\inf$ and $\sup$ due to the injectivity of $B$ (see  \cite{BabuskaEquivBrezzi}).
 
 This norm is non-localizable, however - even with discontinuous test functions, solving for optimal test functions under this optimal norm will result in global problems as well, due to the coupling given by the boundary terms in our bilinear form.  The ``quasi-optimal" test norm is created by removing such boundary terms and replacing them with scaled $L^2$ norms of the field variables.  
 
@@ -187,7 +189,7 @@ with the corresponding variational form
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle
 \]
-where the above inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from the normal trace space of $H({\rm div},\Omega_h)$.  
+where the above inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
 
 To analyze the robustness of DPG, we note that 
 \[
@@ -202,7 +204,7 @@ with $g=u$ and $f=0$, and with boundary conditions such that the boundary terms 
 \begin{align*}
 \|u\|_{L^2}^2 &= b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \frac{b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right)}{\|\left(\tau, v\right)\|_V}\|\left(\tau, v\right)\|_V \leq \|u\|_E \|\left(\tau, v\right)\|_V
 \end{align*}
-We will use the notation $\lesssim$ to denote an $\epsilon$-independent bound.  If we can show $\|\left(\tau, v\right)\|_V \lesssim \| u \|_{L^2}$ for any choice of $u \in L^2$, then dividing through by $\|u\|_{L^2}$ gives
+We will use the notation $\lesssim$ to denote an $\epsilon$-independent bound.  If we can show $\|\left(\tau, v\right)\|_V \lesssim \| g \|_{L^2}$ for any choice of $g \in L^2$, then, for $g=u$, dividing through by $\|u\|_{L^2}$ gives
 \[
 \|u\|_{L^2} \lesssim \|u\|_E
 \]
@@ -214,7 +216,7 @@ For convection-diffusion, the quasi-optimal norm is
 \]
 for some choice of constants $C_1$ and $C_2$.  We note that the optimal test norm will automatically guarantee the robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.  However, use of this norm for the convection-diffusion problem is difficult - the variational problem for optimal test functions using the quasi-optimal test norm is equivalent to a reaction-diffusion system \cite{DBLP:journals/procedia/NiemiCC11}.  Transforming the problem to the reference element reveals that will induce strong boundary layers of width $\epsilon/h^2$ (in comparison, in wave propagation problems, the mesh size tends to be on the order of the wavelength/singular perturbation parameter, resulting in smooth optimal test functions that are much easier to approximate over the reference element).  As the relevant range of $\epsilon$ for physical problems is $1e-7$, solving on partially under-resolved meshes is unavoidable.  Resolving such boundary layers for an underresolved mesh has been investigated numerically using specially designed subgrid meshes by Niemi, Collier, and Calo in \cite{DBLP:journals/procedia/NiemiCC11}.  We approach this from a different perspective, looking instead for robust test norms which do not induce boundary layers in the approximation of optimal test functions.  
 
-\subsection{Boundary conditions}
+\subsection{Boundary conditions and adjoint stability}
 
 We split the boundary $\Gamma$ into three portions
 \begin{align*}
@@ -243,15 +245,54 @@ Under the new inflow conditions, the induced bilinear form is now
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+}
 \]
-The corresponding adjoint problem now has boundary conditions
+The corresponding adjoint problem for $L^2$ stability of $u$ now has boundary conditions
 \begin{align}
 \tau_n &= 0, \quad x\in \Gamma_-\cup \Gamma_0 \label{eq:adj_bc1}\\
 v &= 0, \quad x\in \Gamma_+ \label{eq:adj_bc2}
 \end{align}
-and it can be shown that DPG is robust using an unweighted version of the test norm in \cite{DPGrobustness}
+
+\subsection{Norms on $U$}
+
+Given the boundary conditions on $\widehat{u}$ and $\widehat{f}_n$, we can now also define the trace norms as (canonical) minimum energy extension norms 
+\begin{align*}
+\|\widehat{u}\| &= \inf_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+}=0, \left.w\right |_{\Gamma_h\setminus \Gamma_+ } = \widehat{u}} \|w\|_{H^1(\Omega)}\\
+\|\widehat{f}_n\| &= \inf_{q\in H({\rm div},\Omega), \left.q\cdot n\right|_{\Gamma_-}= 0, \left. q\cdot n \right |_{\Gamma_h} = \widehat{f}_n} \|q\|_{H({\rm div},\Omega)}
+\end{align*}
+We will construct norms on $U$ as combinations of norms on each variable
+\[
+\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\|_U = C_1 \|u\|_{L^2} + C_2 \|\sigma\|_{L^2} + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|
+\]
+
+\subsection{Main result}
+
+For this analysis, it will be necessary to assume certain conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume one or both of the following assumptions
+\begin{align}
+&\curl \beta = 0, \quad 0<C \leq \left | \beta\right |^2 + \frac{1}{2}\div \beta, \quad C = O(1) \label{a_req}\\
+&\grad \beta + \grad \beta ^T - \div \beta I = O(1) \label{b_req}\\
+&\div \beta = 0 \label{c_req}
+\end{align}
+
+The primary result of this paper is that, if conditions \ref{a_req},\ref{b_req}, and \ref{c_req} are all satisfied, the DPG method provides robust control over the $L^2$ error 
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{U_1} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h \right\|_{E}
+\]
+using the unweighted version of the test norm in \cite{DPGrobustness}
 \[
 \|\left(\tau, v\right)\|_{V}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \frac{1}{\epsilon}\|\tau\|
 \]
+where $\|\cdot \|_{U_1}$ is defined as
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_1}^2 \coloneqq \|u\|^2 + \|\sigma\|^2 + \epsilon^2\|\widehat{u}\|^2+\epsilon \|\widehat{f}_n\|^2.
+\]
+A second, weaker result is an upper bound on the energy norm
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{E} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h\right\|_{U_2}
+\]
+where $\|\cdot \|_{U_2}$ is defined as
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2}^2 \coloneqq \|u\|^2 + \frac{1}{\epsilon^2}\|\sigma\|^2 + \frac{1}{\epsilon}\|\widehat{u}\|^2+\frac{1}{\epsilon} \|\widehat{f}_n\|^2.
+\]
+The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on our group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
 
 \subsection{Stability of the adjoint problem (bound from below)}
 
@@ -266,13 +307,8 @@ v &= 0, \quad x\in \Gamma_+
 \end{align*}
 and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions reduce down to \eqref{eq:adj_bc1} and \eqref{eq:adj_bc2} when requesting $L^2$ robustness in $u$ ($f=0$); these more general boundary conditions are necessary for bounds involving $f \neq 0$.
 
-Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$.  $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
+Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. The normal trace $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
 
-For this analysis, it will be necessary to assume conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume one or both of the following assumptions
-\begin{align}
-&\curl \beta = 0, \quad 0<C \leq \left | \beta\right |^2 + \frac{1}{2}\div \beta, \quad C = O(1) \label{a_req}\\
-&\grad \beta + \grad \beta ^T - \div \beta I = O(1) \label{b_req}
-\end{align}
 The second lemma concerns the robust control of $u$ by the energy error; the first and third concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
 
 \begin{lemma} 
@@ -380,7 +416,7 @@ Since $C=O(1)$, an application of Young's inequality and Lemma 1 complete the es
 
 \begin{lemma}
 \label{lemma_3}
-Let $\beta$ satisfy \eqref{a_req} and $\div \beta = 0$, and $f=g=0$.  Then, there holds
+Let $\beta$ satisfy \eqref{a_req} and \eqref{c_req}, and let $f=g=0$.  Then, there holds
 \[
 \|\grad v\| = \frac{1}{\epsilon}\|\tau\| \lesssim \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
 \]
@@ -411,16 +447,17 @@ On the other hand, using the decomposition and boundary conditions directly, we 
 &=\epsilon \langle [\tau \cdot n],\psi \rangle - \epsilon  \langle n\cdot \curl z, [v]\rangle = \epsilon \langle [\tau \cdot n],\psi \rangle_{\Gamma_h \setminus \Gamma_+} - \epsilon  \langle n\cdot \curl z, [v]\rangle_{\Gamma_h \cup \Gamma_+}\\
 &\lesssim \epsilon \|[\tau \cdot n]\|_{\Gamma_h \setminus \Gamma_+} \|\psi\| + \epsilon \| [v]\|_{\Gamma_h \cup \Gamma_+}\| n\cdot \curl z \| 
 \end{align*}
-by the boundary norms, which are defined by duality
+by the boundary norms for $v$ and $\tau$, which are defined by duality
 \begin{align*}
 \|[\tau\cdot n]\|_{\Gamma_h} &\coloneqq \sup_{w\in H^1} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
 \|[v]\|_{\Gamma_h} &\coloneqq \sup_{\eta\in H({\rm div})} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
 \end{align*}
 Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
 \end{proof}
+
 \subsection{Energy norm equivalence (bound from above)}
 
-TODO: FINISH THIS.
+We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement between the energy norm and norms on $U$, we require a bound on the energy norm by some norm on $U$. 
 
 \section{Numerical experiments}
 
@@ -428,15 +465,15 @@ In our numerical experiments, we will be interested in the use of the unweighted
 \[
 \|\left(\tau, v\right)\|_{V}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \frac{1}{\epsilon}\|\tau\|
 \]
-However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and similarly $\|\div \tau\|$ and $\frac{1}{\epsilon}\|\tau\|$ terms, induces boundary layers in the optimal test functions, though only in the crosswind direction.  To avoid this effect, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ and $\tau$ such that, when transformed to the reference element, both $v$ and $\grad v$ terms are $O(1)$.  In this paper, we consider only isotropic refinements on quadrilateral elements, such that $h_1 = h_2 = h$, and $|K| = h^2$.
+However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and similarly $\|\div \tau\|$ and $\frac{1}{\epsilon}\|\tau\|$ terms, induces boundary layers in the optimal test functions, though only in the crosswind direction.  To avoid this effect, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ and $\tau$ such that, when transformed to the reference element, both $v$ and $\grad v$ terms are $O(1)$.  In this paper, we consider only isotropic refinements on quadrilateral elements, such that $h_1 = h_2 = h$, and $|K| = h^2$. Our test norm for an element $K$ is now
 \[
-\|\left(\tau, v\right)\|_{V}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|
+\|\left(\tau, v\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|
 \]
-This modified test norm avoids boundary layers, but for adaptive meshes, provides additional stability in areas of heavy refinement.  Intuitively, this is justifiable by the fact that best approximation error is typically largest near boundary layers, where refinements tend to aggregate.  Additionally, test norms that differ from element to element fit cleanly into the DPG framework - as the best approximation error tends to be negligible in areas where the solution is smooth, the finite element error will be small in those areas, even with slightly suboptimal robustness.
+This modified test norm avoids boundary layers, but for adaptive meshes, provides additional stability in areas of heavy refinement.  Intuitively, this is justifiable by the fact that best approximation error is typically largest near boundary layers, where refinements tend to aggregate.  %Additionally, test norms that differ from element to element fit cleanly into the DPG framework - as the best approximation error tends to be negligible in areas where the solution is , the finite element error will be small in those areas, even with slightly suboptimal robustness.
 
 \subsection{Erickson model problem}
 
-For the choice of $\Omega = [0,1]^2$ and $\beta = (1,0)^T$, the convection diffusion equation reduces to
+For the choice of $\Omega = (0,1)^2$ and $\beta = (1,0)^T$, the convection diffusion equation reduces to
 \[
 \pd{u}{x} - \epsilon \left(\pdd{u}{x}+ \pdd{u}{y}\right) = f
 \]
@@ -463,7 +500,7 @@ C_n = \int_0^1 u_0(y) \cos(n\pi y)
 
 We begin with the solution taken to be the first non-constant mode of the above series.  We set the inflow boundary condition to be exactly the value of $u-\sigma_x$ corresponding to the exact solution.  
 
-\begin{figure}[h]
+\begin{figure}[h!]
 \centering
 \subfigure{
 \includegraphics[scale=.37]{figs/wallBC_exact_u.png}
@@ -476,16 +513,14 @@ We begin with the solution taken to be the first non-constant mode of the above 
 }
 \caption{Solution for $u$, $\sigma_x$, and $\sigma_y$ for $\epsilon = .01$, $C_1 = 1$, $C_n=0$, $n\neq 1$}
 \end{figure}
-
 In each case, we begin with a square 4 by 4 mesh of quadrilateral elements with order $p=3$.  We choose $\Delta p = 5$, though we note that the behavior of DPG is nearly identical for any $\Delta p > 3$.  $h$-refinements are executed using a greedy refinement algorithm, where element energy error $e_K^2$ is computed for all elements $K$, and elements such that $e_K^2 \leq \alpha \max_K e_K^2$ are refined.  We make the arbitrary choice of taking $\alpha = .2$ for each of these experiments.  
 
-\begin{figure}[h]
+\begin{figure}[h!]
 \centering
 \includegraphics[scale=.4]{figs/u_pointdiff_wallBC.png}
 \caption{Adapted mesh and pointwise error for $\epsilon=.01$}
 \end{figure}
-
-We are especially interested in the ratio of energy error and $L^2$ error.  Stability estimates imply that, using the above test norm, $\|u-u_h\|_{L^2} / \|u-u_h\|_E \sim C$ independent of $\epsilon$.  Figure~\ref{ratios_simple} seems to imply that, at least for this model problem, $C=O(1)$.  
+We are especially interested in the ratio of energy error and total $L^2$ error in both $\sigma$ and $u$.  Stability estimates imply that, using the above test norm, $\|u-u_h\|_{L^2} / \|u-u_h\|_E \sim C$ independent of $\epsilon$.  Figure~\ref{ratios_simple} seems to imply that, at least for this model problem, $C=O(1)$.  
 
 \begin{figure}[h!]
 \centering
@@ -498,12 +533,11 @@ We are especially interested in the ratio of energy error and $L^2$ error.  Stab
 \caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$}
 \label{ratios_simple}
 \end{figure}
-
-The effect of the test norm on mesh dependence can be seen in the ratios of $L^2$ to energy error; as the mesh is refined, the constants in front of the $L^2$ terms for $v$ and $\tau$ converge to stationary values, and the ratio of $L^2$ to energy error transitions from a smaller to a larger value.  The transition point happens later for smaller $\epsilon$, which we expect, since the transition of the ratio corresponds to the introduction of elements of order $\epsilon$ through mesh refinement.  
+The effect of a mesh dependent test norm can be seen in the ratios of $L^2$ to energy error; as the mesh is refined, the constants in front of the $L^2$ terms for $v$ and $\tau$ converge to stationary values, and the ratio of $L^2$ to energy error transitions from a smaller to a larger value.  The transition point happens later for smaller $\epsilon$, which we expect, since the transition of the ratio corresponds to the introduction of elements of order $\epsilon$ through mesh refinement. 
 
 \subsection{Neglecting $\sigma_n$} 
 
-In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for, well within the range of $\epsilon$ of physical interest. However, even for large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, which is only $7%$ relative error. 
+In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for, well within the range of $\epsilon$ of physical interest. For large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, or about $7\%$ relative error. 
 
 \begin{figure}[h!]
 \centering
@@ -513,22 +547,49 @@ In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and w
 \subfigure{
 \includegraphics[scale=.38]{figs/ratio_noSigma.png}
 }
-\caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.005$, $\epsilon=.001$, $\epsilon=.0001$}
+\caption{$L^2$ and energy errors and their ratio when neglecting $\sigma_n$ at the inflow.}
 \label{ratios_noSigma}
 \end{figure}
 
 \subsection{Discontinuous inflow data}
 
-We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements; as $\widehat{f}_n \in H^{-1/2}(\Omega)$, strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  We use the discontinuous inflow data
+We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements; as $\widehat{f}_n \in H^{-1/2}(\Omega)$, strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  We consider the discontinuous inflow condition
 \[
 u_0(y) = \begin{cases}
 (y-1)^2&, \quad y>.5\\
-y^2&, \quad y\leq .5 
+-y^2&, \quad y\leq .5 
 \end{cases}
 \]
+as an example of a more difficult test case. 
 
+\begin{figure}[h!]
+\centering
+\subfigure{
+\includegraphics[scale=.38]{figs/disc_hat.png}
+}
+\subfigure{
+\includegraphics[scale=.38]{figs/disc_hat_surf.png}
+}
+\caption{Solution variables $u$ and $\widehat{u}$ with discontinuous inflow data $u_0$ for $\epsilon = .01$.}
+\label{disc_sol}
+\end{figure}
+Figure~\ref{disc_sol} shows the solution $u$ and overlaid trace variable $\widehat{u}$, which both demonstrate the regularizing effect of viscosity on the discontinuous boundary condition at $x=0$. In order to compare with an exact solution, we approximate $u_0$ with 20 terms of a Fourier series, giving a near-discontinuity for $u_0$.  
+
+\begin{figure}[h!]
+\centering
+\subfigure{
+\includegraphics[scale=.38]{figs/rates_disc.png}
+}
+\subfigure{
+\includegraphics[scale=.38]{figs/ratio_disc.png}
+}
+\caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$, with discontinuous $u_0$ approximated by a Fourier expansion. }
+\label{disc_sol_fourier}
+\end{figure}
+The ratios of $L^2$ to energy error are now less predictable than for the previous example, due to the ``moving target" nature of the approximation of oscillatory boundary conditions. Even so, the ratios remain bounded and close to $1$ for $\epsilon$ varying over two orders of magnitude, as predicted by theory. 
 
 \section{Conclusions}
+
 \bibliographystyle{plain}
 \bibliography{paper}
 

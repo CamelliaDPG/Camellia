@@ -3,51 +3,60 @@
 \citation{practicalDPG}
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Introduction to DPG}{1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Variational form}{1}}
+\citation{BabuskaEquivBrezzi}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Variational form}{2}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Choice of test norm}{2}}
 \citation{DPG4}
 \citation{analysisDPG}
-\@writefile{toc}{\contentsline {section}{\numberline {2}Choice of test norm}{2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Singular perturbation problems and robustness}{2}}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Model problem and robustness using DPG}{2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Singular perturbation problems and robustness}{3}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Model problem and robustness using DPG}{3}}
 \citation{DBLP:journals/procedia/NiemiCC11}
 \citation{DBLP:journals/procedia/NiemiCC11}
 \citation{DPGrobustness}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Boundary conditions}{3}}
 \citation{Hesthaven96astable}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Boundary conditions and adjoint stability}{4}}
 \citation{DPGrobustness}
-\newlabel{eq:adj_bc1}{{1}{4}}
-\newlabel{eq:adj_bc2}{{2}{4}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Stability of the adjoint problem (bound from below)}{4}}
-\newlabel{adjoint}{{3}{4}}
+\newlabel{eq:adj_bc1}{{1}{5}}
+\newlabel{eq:adj_bc2}{{2}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Norms on $U$}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Main result}{5}}
+\newlabel{a_req}{{3}{5}}
+\newlabel{b_req}{{4}{5}}
+\newlabel{c_req}{{5}{5}}
 \citation{DPGrobustness}
-\newlabel{a_req}{{4}{5}}
-\newlabel{b_req}{{5}{5}}
-\newlabel{lemma_1}{{1}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Stability of the adjoint problem (bound from below)}{6}}
+\newlabel{adjoint}{{6}{6}}
+\newlabel{lemma_1}{{1}{6}}
 \citation{DPGrobustness}
-\newlabel{lemma_2}{{2}{6}}
+\newlabel{lemma_2}{{2}{7}}
 \citation{analysisDPG}
 \citation{DPGrobustness}
-\newlabel{lemma_3}{{3}{7}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Energy norm equivalence (bound from above)}{7}}
+\newlabel{lemma_3}{{3}{8}}
 \citation{DPGrobustness}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Numerical experiments}{8}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Erickson model problem}{8}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Solution for $u$, $\sigma _x$, and $\sigma _y$ for $\epsilon = .01$, $C_1 = 1$, $C_n=0$, $n\not =1$}}{9}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Solution with $C_1 = 1, C_n = 0, n\not =1$}{9}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Adapted mesh and pointwise error for $\epsilon =.01$}}{9}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Neglecting $\sigma _n$}{9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Energy norm equivalence (bound from above)}{9}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Numerical experiments}{9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Erickson model problem}{9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Solution with $C_1 = 1, C_n = 0, n\not =1$}{10}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Solution for $u$, $\sigma _x$, and $\sigma _y$ for $\epsilon = .01$, $C_1 = 1$, $C_n=0$, $n\not =1$}}{10}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Adapted mesh and pointwise error for $\epsilon =.01$}}{11}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces $L^2$ and energy errors, and their ratio for $\epsilon =.01$, $\epsilon =.001$, $\epsilon =.0001$}}{11}}
+\newlabel{ratios_simple}{{3}{11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Neglecting $\sigma _n$}{11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Discontinuous inflow data}{11}}
 \bibstyle{plain}
 \bibdata{paper}
-\bibcite{analysisDPG}{1}
-\bibcite{DPG2}{2}
-\bibcite{DPGrobustness}{3}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces $L^2$ and energy errors, and their ratio for $\epsilon =.01$, $\epsilon =.001$, $\epsilon =.0001$}}{10}}
-\newlabel{ratios_simple}{{3}{10}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces $L^2$ and energy errors, and their ratio for $\epsilon =.01$, $\epsilon =.005$, $\epsilon =.001$, $\epsilon =.0001$}}{10}}
-\newlabel{ratios_noSigma}{{4}{10}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Discontinuous inflow data}{10}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusions}{10}}
-\bibcite{practicalDPG}{4}
-\bibcite{Hesthaven96astable}{5}
-\bibcite{DBLP:journals/procedia/NiemiCC11}{6}
-\bibcite{DPG4}{7}
+\bibcite{BabuskaEquivBrezzi}{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces $L^2$ and energy errors and their ratio when neglecting $\sigma _n$ at the inflow.}}{12}}
+\newlabel{ratios_noSigma}{{4}{12}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Solution variables $u$ and $\setbox \z@ \hbox {\frozen@everymath \@emptytoks \mathsurround \z@ $\textstyle u$}\mathaccent "0362{u}$ with discontinuous inflow data $u_0$ for $\epsilon = .01$.}}{12}}
+\newlabel{disc_sol}{{5}{12}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces $L^2$ and energy errors, and their ratio for $\epsilon =.01$, $\epsilon =.001$, $\epsilon =.0001$, with discontinuous $u_0$ approximated by a Fourier expansion. }}{12}}
+\newlabel{disc_sol_fourier}{{6}{12}}
+\bibcite{analysisDPG}{2}
+\bibcite{DPG2}{3}
+\bibcite{DPGrobustness}{4}
+\bibcite{practicalDPG}{5}
+\bibcite{Hesthaven96astable}{6}
+\bibcite{DBLP:journals/procedia/NiemiCC11}{7}
+\bibcite{DPG4}{8}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Conclusions}{13}}

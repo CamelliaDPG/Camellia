@@ -1,5 +1,6 @@
-This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2011.8.24)  19 MAR 2012 11:47
+This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2010.12.14)  19 MAR 2012 18:18
 entering extended mode
+ restricted \write18 enabled.
  %&-line parsing enabled.
 **paper.tex
 (./paper.tex
@@ -879,100 +880,142 @@ driver: pdftex
 \MPscratchDim=\dimen175
 \MPnumerator=\count157
 \everyMPtoPDFconversion=\toks42
-) ABD: EveryShipout initializing macros
-LaTeX Font Info:    Try loading font information for U+msa on input line 112.
+) ABD: EveryShipout initializing macros (./paper.toc
+Class scrartcl Info: You've told me to use the font selection of the element
+(scrartcl)           `sectioning' that is an alias of element `disposition'
+(scrartcl)            on input line 1.
+LaTeX Font Info:    Try loading font information for U+msa on input line 2.
 
 (/usr/share/texmf-texlive/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2009/06/22 v3.00 AMS symbols A
 )
-LaTeX Font Info:    Try loading font information for U+msb on input line 112.
+LaTeX Font Info:    Try loading font information for U+msb on input line 2.
 
 (/usr/share/texmf-texlive/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2009/06/22 v3.00 AMS symbols B
 )
-LaTeX Font Info:    Try loading font information for U+rsfs on input line 112.
+LaTeX Font Info:    Try loading font information for U+rsfs on input line 2.
 
 (/usr/share/texmf-texlive/tex/latex/jknapltx/ursfs.fd
 File: ursfs.fd 1998/03/24 rsfs font definition file (jk)
-) [1
+)
+Class scrartcl Info: You've told me to use the font selection of the element
+(scrartcl)           `sectioning' that is an alias of element `disposition'
+(scrartcl)            on input line 4.
+Class scrartcl Info: You've told me to use the font selection of the element
+(scrartcl)           `sectioning' that is an alias of element `disposition'
+(scrartcl)            on input line 6.
+Class scrartcl Info: You've told me to use the font selection of the element
+(scrartcl)           `sectioning' that is an alias of element `disposition'
+(scrartcl)            on input line 12.
+Class scrartcl Info: You've told me to use the font selection of the element
+(scrartcl)           `sectioning' that is an alias of element `disposition'
+(scrartcl)            on input line 17.
+)
+\tf@toc=\write4
+\openout4 = `paper.toc'.
 
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] [4] [5] [6] [7]
-<figs/wallBC_exact_u.png, id=41, 388.0899pt x 307.8702pt>
+ [1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] [4] [5] [6] [7] [8
+] [9]
+<figs/wallBC_exact_u.png, id=49, 388.0899pt x 307.8702pt>
 File: figs/wallBC_exact_u.png Graphic file (type png)
 
 <use figs/wallBC_exact_u.png>
-<figs/wallBC_exact_sigx.png, id=42, 388.0899pt x 307.8702pt>
+<figs/wallBC_exact_sigx.png, id=50, 388.0899pt x 307.8702pt>
 File: figs/wallBC_exact_sigx.png Graphic file (type png)
 
 <use figs/wallBC_exact_sigx.png>
-<figs/wallBC_exact_sigy.png, id=43, 398.2077pt x 307.8702pt>
+<figs/wallBC_exact_sigy.png, id=51, 398.2077pt x 307.8702pt>
 File: figs/wallBC_exact_sigy.png Graphic file (type png)
 
 <use figs/wallBC_exact_sigy.png>
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-[8] <figs/u_pointdiff_wallBC.png, id=47, 472.164pt x 385.9218pt>
+<figs/u_pointdiff_wallBC.png, id=52, 472.164pt x 385.9218pt>
 File: figs/u_pointdiff_wallBC.png Graphic file (type png)
 
 <use figs/u_pointdiff_wallBC.png>
-<figs/errorrates_wallBC.png, id=48, 492.8814pt x 410.0118pt>
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+<figs/errorrates_wallBC.png, id=53, 492.8814pt x 410.0118pt>
 File: figs/errorrates_wallBC.png Graphic file (type png)
 
 <use figs/errorrates_wallBC.png>
-<figs/L2energyratio_wallBC.png, id=49, 489.5088pt x 410.0118pt>
+<figs/L2energyratio_wallBC.png, id=54, 489.5088pt x 410.0118pt>
 File: figs/L2energyratio_wallBC.png Graphic file (type png)
 
 <use figs/L2energyratio_wallBC.png>
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-! Missing $ inserted.
-<inserted text> 
-                $
-l.507 
-      
-I've inserted a begin-math/end-math symbol since I think
-you left one out. Proceed, with fingers crossed.
-
-[9 <./figs/wallBC_exact_u.png (PNG copy)> <./figs/wallBC_exact_sigx.png (PNG co
-py)> <./figs/wallBC_exact_sigy.png (PNG copy)> <./figs/u_pointdiff_wallBC.png (
-PNG copy)>] <figs/rates_noSigma.png, id=55, 492.8814pt x 410.4936pt>
+[10 <./figs/wallBC_exact_u.png (PNG copy)> <./figs/wallBC_exact_sigx.png (PNG c
+opy)> <./figs/wallBC_exact_sigy.png (PNG copy)>]
+<figs/rates_noSigma.png, id=59, 492.8814pt x 410.4936pt>
 File: figs/rates_noSigma.png Graphic file (type png)
 
 <use figs/rates_noSigma.png>
-<figs/ratio_noSigma.png, id=56, 489.5088pt x 410.0118pt>
+<figs/ratio_noSigma.png, id=60, 489.5088pt x 410.0118pt>
 File: figs/ratio_noSigma.png Graphic file (type png)
 
-<use figs/ratio_noSigma.png> (./paper.bbl [10 <./figs/errorrates_wallBC.png (PN
-G copy)> <./figs/L2energyratio_wallBC.png (PNG copy)> <./figs/rates_noSigma.png
- (PNG copy)> <./figs/ratio_noSigma.png (PNG copy)>]) [11] (./paper.aux) ) 
+<use figs/ratio_noSigma.png>
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+<figs/disc_hat.png, id=61, 472.164pt x 370.5042pt>
+File: figs/disc_hat.png Graphic file (type png)
+ <use figs/disc_hat.png>
+<figs/disc_hat_surf.png, id=62, 489.027pt x 370.986pt>
+File: figs/disc_hat_surf.png Graphic file (type png)
+
+<use figs/disc_hat_surf.png>
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+<figs/rates_disc.png, id=63, 578.16pt x 433.62pt>
+File: figs/rates_disc.png Graphic file (type png)
+ <use figs/rates_disc.png>
+<figs/ratio_disc.png, id=64, 578.16pt x 433.62pt>
+File: figs/ratio_disc.png Graphic file (type png)
+ <use figs/ratio_disc.png>
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+[11 <./figs/u_pointdiff_wallBC.png (PNG copy)> <./figs/errorrates_wallBC.png (P
+NG copy)> <./figs/L2energyratio_wallBC.png (PNG copy)>] (./paper.bbl [12 <./fig
+s/rates_noSigma.png (PNG copy)> <./figs/ratio_noSigma.png (PNG copy)> <./figs/d
+isc_hat.png (PNG copy)> <./figs/disc_hat_surf.png (PNG copy)> <./figs/rates_dis
+c.png (PNG copy)> <./figs/ratio_disc.png (PNG copy)>]) [13] (./paper.aux)
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+ ) 
 Here is how much of TeX's memory you used:
- 12847 strings out of 493857
- 207994 string characters out of 1153305
- 291505 words of memory out of 3000000
- 15826 multiletter control sequences out of 15000+50000
+ 12886 strings out of 493857
+ 208783 string characters out of 1153304
+ 292534 words of memory out of 3000000
+ 15858 multiletter control sequences out of 15000+50000
  13140 words of font info for 51 fonts, out of 3000000 for 9000
  714 hyphenation exceptions out of 8191
  52i,12n,49p,1341b,259s stack positions out of 5000i,500n,10000p,200000b,50000s
-</usr/
-share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/share/texmf
--texlive/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texmf-texlive/fo
-nts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texmf-texlive/fonts/type1/p
-ublic/amsfonts/cm/cmmi12.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfo
-nts/cm/cmmi6.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi8
-.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/s
-hare/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/texmf-t
-exlive/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texmf-texlive/fonts/
-type1/public/amsfonts/cm/cmr8.pfb></usr/share/texmf-texlive/fonts/type1/public/
-amsfonts/cm/cmssbx10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/
-cm/cmsy10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy6.pf
-b></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/shar
-e/texmf-texlive/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texmf-tex
-live/fonts/type1/public/amsfonts/symbols/msam10.pfb>
-Output written on paper.pdf (11 pages, 351407 bytes).
+</usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
+re/texmf-texlive/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texmf-te
+xlive/fonts/type1/public/amsfonts/cmextra/cmex8.pfb></usr/share/texmf-texlive/f
+onts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texmf-texlive/fonts/type1/
+public/amsfonts/cm/cmmi12.pfb></usr/share/texmf-texlive/fonts/type1/public/amsf
+onts/cm/cmmi6.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi
+8.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/
+share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/texmf-
+texlive/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texmf-texlive/fonts
+/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texmf-texlive/fonts/type1/public
+/amsfonts/cm/cmssbx10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts
+/cm/cmsy10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy6.p
+fb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/sha
+re/texmf-texlive/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texmf-te
+xlive/fonts/type1/public/amsfonts/symbols/msam10.pfb>
+Output written on paper.pdf (13 pages, 460499 bytes).
 PDF statistics:
- 113 PDF objects out of 1000 (max. 8388607)
+ 128 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
- 53 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 73 words of extra memory for PDF output out of 10000 (max. 10000000)
 
