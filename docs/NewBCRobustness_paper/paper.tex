@@ -110,7 +110,7 @@
 
 \section{Introduction}
 
-\subsection{Introduction to DPG}
+\subsection{Optimal test functions}
 The idea of optimal test functions was introduced by Demkowicz and Gopalakrishnan in \cite{DPG2}.  Conceptually, these optimal test functions are the result of a minimum residual method applied to the operator form of a variational equation.  Given Hilbert spaces $U$ and $V$ and a the variational problem $b(u,v) = l(v)$, $\forall u\in U, v\in V$, we can identify $B:U\rightarrow V'$ and $l \in V'$ 
 \[
 \left.\begin{array}{c}
@@ -152,7 +152,7 @@ The DPG (discontinuous Petrov-Galerkin) method is the combination of the concept
 b\left(\left(\widehat{u},u\right),v\right) - l(v) = \langle \widehat{u}, v \rangle - (u,A^*v) - (f,v)
 \]
 
-\section{Choice of test norm}
+\subsection{Choice of test norm}
 
 Up to now, we've neglected discussion of the proper choice of inner product/norm on the space $V$.  This choice is important, as the choice of norm on $V$ determines the 
 
@@ -178,7 +178,7 @@ The growth of $C$ with $\epsilon$ is referred to as a loss of robustness, where 
 
 A well-known example is the growth of spurious oscillations in the finite element solution of the 1D convection-diffusion problem $ u'-\epsilon u'' = f$ (with Dirichlet boundary conditions) as $\epsilon\rightarrow 0$.  Another class of examples are wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$.  The lack of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths (commonly manifesting as a phase error between the FE solution and the exact solution).  The DPG method is currently being analyzed for both acoustic and elastic waves in context of the Helmholtz equation \cite{DPG4} and equations of linear elasticity.  Numerically, DPG appears to yield a ``pollution-free" method for these problems under a specific regularization of the ``quasi-optimal" test norm.  
 
-\section{Model problem and robustness using DPG}
+\section{Model problem and robustness}
 
 We consider the model convection-diffusion problem on domain $\Omega$ with boundary $\Gamma$
 \begin{align*}
@@ -215,6 +215,8 @@ For convection-diffusion, the quasi-optimal norm is
 \|\left(\tau, v\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v \|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 + C_1\|v\|_{L^2} + C_2\|\tau\|_{L^2}
 \]
 for some choice of constants $C_1$ and $C_2$.  We note that the optimal test norm will automatically guarantee the robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.  However, use of this norm for the convection-diffusion problem is difficult - the variational problem for optimal test functions using the quasi-optimal test norm is equivalent to a reaction-diffusion system \cite{DBLP:journals/procedia/NiemiCC11}.  Transforming the problem to the reference element reveals that will induce strong boundary layers of width $\epsilon/h^2$ (in comparison, in wave propagation problems, the mesh size tends to be on the order of the wavelength/singular perturbation parameter, resulting in smooth optimal test functions that are much easier to approximate over the reference element).  As the relevant range of $\epsilon$ for physical problems is $1e-7$, solving on partially under-resolved meshes is unavoidable.  Resolving such boundary layers for an underresolved mesh has been investigated numerically using specially designed subgrid meshes by Niemi, Collier, and Calo in \cite{DBLP:journals/procedia/NiemiCC11}.  We approach this from a different perspective, looking instead for robust test norms which do not induce boundary layers in the approximation of optimal test functions.  
+
+The estimates and proofs in this paper are largely based off of techniques and prior work done in \cite{DPGrobustness} and \cite{analysisDPG}; for further details, we encourage readers to consult these two publications as well.  
 
 \subsection{Boundary conditions and adjoint stability}
 
@@ -263,7 +265,7 @@ We will construct norms on $U$ as combinations of norms on each variable
 \|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\|_U = C_1 \|u\|_{L^2} + C_2 \|\sigma\|_{L^2} + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|
 \]
 
-\subsection{Main result}
+\subsection{Equivalence of energy and $U$ norms}
 
 For this analysis, it will be necessary to assume certain conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume one or both of the following assumptions
 \begin{align}
@@ -292,9 +294,9 @@ where $\|\cdot \|_{U_2}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2}^2 \coloneqq \|u\|^2 + \frac{1}{\epsilon^2}\|\sigma\|^2 + \frac{1}{\epsilon}\|\widehat{u}\|^2+\frac{1}{\epsilon} \|\widehat{f}_n\|^2.
 \]
-The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on our group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
+The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
 
-\subsection{Stability of the adjoint problem (bound from below)}
+\subsubsection{Stability of the adjoint problem (bound from below)}
 
 We reduce the adjoint problem to the scalar second order equation
 \begin{equation}
@@ -403,7 +405,7 @@ The last term can be bounded by our assumption on $\|\grad \beta - \frac{1}{2}\d
 \[
 \epsilon \int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v \leq C\frac{\epsilon}{2} \|\grad v\|^2
 \]
-For the boundary terms, on $\Gamma_-$, $\grad v\cdot n = 0$, reducing the above to $\beta_n|\grad v|^2 \leq 0$.  On $\Gamma_+$, $v=0$ implies $\grad v \cdot \tau = 0$, where $\tau$ is a tangential direction.  An orthogonal decomposition yields $\grad v = (\grad v \cdot n) n$, reducing the above to 
+For the boundary terms, on $\Gamma_-$, $\grad v\cdot n = 0$, reducing the integrand over the boundary to $\beta_n|\grad v|^2 \leq 0$.  On $\Gamma_+$, $v=0$ implies $\grad v \cdot \tau = 0$, where $\tau$ is a tangential direction.  An orthogonal decomposition yields $\grad v = (\grad v \cdot n) n$, reducing the above to 
 \[
  \epsilon\int_{\Gamma}  -\frac{1}{2}|\beta_n| (\grad v \cdot n)^2 \leq 0
 \]
@@ -440,7 +442,7 @@ By the above bound and triangle inequality,
 \[
 \|\curl z \| \leq \epsilon \|\grad \psi\| + \|\beta \psi\| + \|\tau\| \lesssim \frac{1}{\sqrt{\epsilon}}\|\tau\|
 \]
-On the other hand, using the decomposition and boundary conditions directly, we have
+On the other hand, using the decomposition and boundary conditions directly, we can integrate by parts to arrive at
 \begin{align*}
 \|\tau\|^2 &= (\tau, \epsilon \grad \psi - \beta \psi + \curl z) = (\tau, \epsilon \grad \psi) - (\tau,\beta \psi) + (\tau,\curl z)  \\
 &=(\tau, \epsilon \grad \psi) + \epsilon(\grad v,\beta \psi) - \epsilon(\grad v,\curl z)  \\
@@ -455,9 +457,17 @@ by the boundary norms for $v$ and $\tau$, which are defined by duality
 Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
 \end{proof}
 
-\subsection{Energy norm equivalence (bound from above)}
+\subsubsection{Energy norm equivalence (bound from above)}
 
-We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement between the energy norm and norms on $U$, we require a bound on the energy norm by some norm on $U$. 
+We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  We do so by taking advantage of the fact that the test norm can be recovered via duality
+\[
+\| \left(\tau,v\right) \|_V = \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E}
+\]
+The proof for this is identical to proving $\|u\|_E = \|u\|_U$ for the choice of the optimal test norm.
+
+In \cite{DPGrobustness}, the quasi-optimal test norm was shown to induce an energy norm that is equivalent from above and below with 
+
+
 
 \section{Numerical experiments}
 
@@ -469,15 +479,17 @@ However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and simil
 \[
 \|\left(\tau, v\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|
 \]
-This modified test norm avoids boundary layers, but for adaptive meshes, provides additional stability in areas of heavy refinement.  Intuitively, this is justifiable by the fact that best approximation error is typically largest near boundary layers, where refinements tend to aggregate.  %Additionally, test norms that differ from element to element fit cleanly into the DPG framework - as the best approximation error tends to be negligible in areas where the solution is , the finite element error will be small in those areas, even with slightly suboptimal robustness.
+This modified test norm avoids boundary layers, but for adaptive meshes, provides additional stability in areas of heavy refinement, where best approximation error tends to be large and stronger robustness is most needed.  %Intuitively, this is justifiable by the fact that best approximation error is typically only large near where refinements tend to aggregate.  
+
+%Additionally, test norms that differ from element to element fit cleanly into the DPG framework - as the best approximation error tends to be negligible in areas where the solution is , the finite element error will be small in those areas, even with slightly suboptimal robustness.
 
 \subsection{Erickson model problem}
 
 For the choice of $\Omega = (0,1)^2$ and $\beta = (1,0)^T$, the convection diffusion equation reduces to
 \[
-\pd{u}{x} - \epsilon \left(\pdd{u}{x}+ \pdd{u}{y}\right) = f
+\pd{u}{x} - \epsilon \left(\pdd{u}{x}+ \pdd{u}{y}\right) = 0
 \]
-which, for $f=0$, has an exact solution by separation of variables, allowing us to analyze convergence of DPG for a wide range of $\epsilon$.  For boundary conditions, we impose $u=0$ on $\Gamma_+$ and $\beta_n u - \sigma_n$ on $\Gamma_-$, which reduces to
+which has an exact solution by separation of variables, allowing us to analyze convergence of DPG for a wide range of $\epsilon$.  For boundary conditions, we impose $u=0$ on $\Gamma_+$ and $\beta_n u - \sigma_n$ on $\Gamma_-$, which reduces to
 \begin{align*}
 u-\sigma_x &= u_0-\sigma_{x,0}, \quad x=0\\
 \sigma_y &=  0, \quad y=0,1\\
@@ -496,7 +508,7 @@ The constants $C_n$ depend on a given inflow condition $u_0$ at $x=0$
 C_n = \int_0^1 u_0(y) \cos(n\pi y)
 \]
 
-\subsection{Solution with $C_1 = 1, C_n = 0, n\neq 1$}
+\subsubsection{Solution with $C_1 = 1, C_{n\neq 1} = 0$}
 
 We begin with the solution taken to be the first non-constant mode of the above series.  We set the inflow boundary condition to be exactly the value of $u-\sigma_x$ corresponding to the exact solution.  
 
@@ -535,7 +547,7 @@ We are especially interested in the ratio of energy error and total $L^2$ error 
 \end{figure}
 The effect of a mesh dependent test norm can be seen in the ratios of $L^2$ to energy error; as the mesh is refined, the constants in front of the $L^2$ terms for $v$ and $\tau$ converge to stationary values, and the ratio of $L^2$ to energy error transitions from a smaller to a larger value.  The transition point happens later for smaller $\epsilon$, which we expect, since the transition of the ratio corresponds to the introduction of elements of order $\epsilon$ through mesh refinement. 
 
-\subsection{Neglecting $\sigma_n$} 
+\subsubsection{Neglecting $\sigma_n$}
 
 In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for, well within the range of $\epsilon$ of physical interest. For large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, or about $7\%$ relative error. 
 
@@ -551,13 +563,13 @@ In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and w
 \label{ratios_noSigma}
 \end{figure}
 
-\subsection{Discontinuous inflow data}
+\subsubsection{Discontinuous inflow data}
 
 We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements; as $\widehat{f}_n \in H^{-1/2}(\Omega)$, strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  We consider the discontinuous inflow condition
 \[
 u_0(y) = \begin{cases}
-(y-1)^2&, \quad y>.5\\
--y^2&, \quad y\leq .5 
+(y-1)^2, \quad &y>.5\\
+-y^2, \quad &y\leq .5 
 \end{cases}
 \]
 as an example of a more difficult test case. 
@@ -589,7 +601,14 @@ Figure~\ref{disc_sol} shows the solution $u$ and overlaid trace variable $\wideh
 The ratios of $L^2$ to energy error are now less predictable than for the previous example, due to the ``moving target" nature of the approximation of oscillatory boundary conditions. Even so, the ratios remain bounded and close to $1$ for $\epsilon$ varying over two orders of magnitude, as predicted by theory. 
 
 \section{Conclusions}
-
+ 
+None yet.  Ideas:
+\begin{itemize}
+\item Explanation of choice of boundary condition and why it impacts stability
+\item Interpretation of weight as allowing diffusion to work on the boundary.  
+\item Note results have worked for Burgers, and expand on how they would apply to Navier-Stokes
+\end{itemize} 
+ 
 \bibliographystyle{plain}
 \bibliography{paper}
 
