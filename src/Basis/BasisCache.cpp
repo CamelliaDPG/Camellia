@@ -277,7 +277,14 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op
         break;
       case OPERATOR_VECTORIZE_VALUE:
         result = BasisEvaluation::getVectorizedValues(relatedValuesTransformed,_spaceDim);
-      default:
+        break;
+      case OPERATOR_TIMES_NORMAL_X:
+      case OPERATOR_TIMES_NORMAL_Y:
+      case OPERATOR_TIMES_NORMAL_Z:
+      {
+        int normalComponent = op - OPERATOR_TIMES_NORMAL_X;
+        result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormals,normalComponent);
+      }
         break;
     }
   }

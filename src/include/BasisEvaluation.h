@@ -75,6 +75,7 @@ public:
   static FCPtr getValuesCrossedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
   static FCPtr getValuesDottedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
   static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
+  static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent);
   static FCPtr getVectorizedValues(constFCPtr values, int spaceDim);
   static Intrepid::EOperator relatedOperator(EOperatorExtended op, EFunctionSpaceExtended fs, int &componentOfInterest);
   static FCPtr getComponentOfInterest(constFCPtr values, EOperatorExtended op, EFunctionSpaceExtended fs, int componentOfInterest);

@@ -86,6 +86,10 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, EOperatorExtended op,
       ( ( BasisFactory::getBasisRank(basis) == 0) && (op == IntrepidExtendedTypes::OPERATOR_GRAD) ) )
   {
     dimensions.push_back(spaceDim);
+  } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OPERATOR_GRAD) ) {
+    // grad of vector: a tensor
+    dimensions.push_back(spaceDim);
+    dimensions.push_back(spaceDim);
   }
   FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
   basis->getValues(*(result.get()), refPoints, (EOperator)op);
@@ -370,6 +374,31 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
         double xValue = (*values)(cellIndex,basisOrdinal,pointIndex,0);
         double yValue = (*values)(cellIndex,basisOrdinal,pointIndex,1);
         (*result)(cellIndex,basisOrdinal,pointIndex) = xValue*n1 + yValue*n2;
+      }
+    }
+  }
+  return result;
+}
+
+FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent) {
+  // values should have dimensions (C,basisCardinality,P)
+  int numCells = sideNormals.dimension(0);
+  int numPoints = sideNormals.dimension(1);
+  int spaceDim = sideNormals.dimension(2);
+  int basisCardinality = values->dimension(1);
+  
+  if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
+      || (numPoints != values->dimension(2))) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
+  }
+  
+  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
+      for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+        double n_i = sideNormals(cellIndex,pointIndex,normalComponent);
+        double value = (*values)(cellIndex,basisOrdinal,pointIndex);
+        (*result)(cellIndex,basisOrdinal,pointIndex) = value * n_i;
       }
     }
   }
