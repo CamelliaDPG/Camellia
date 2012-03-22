@@ -101,7 +101,6 @@ Solution::Solution(const Solution &soln) {
   _ip = soln.ip();
   _solutionForCellIDGlobal = soln.solutionForCellIDGlobal();
   _filter = soln.filter();
-  initialize();
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
@@ -364,7 +363,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   
   rhsVector.GlobalAssemble();
   
-  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
+//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
   
   globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
   
@@ -372,7 +371,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
   
-  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   
   // determine and impose BCs
 
@@ -467,9 +466,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-  //EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-  //EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  //EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+//  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -1836,16 +1835,32 @@ void Solution::solutionValues(FieldContainer<double> &values,
     //    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
     
     // now, apply coefficient weights:
-    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
+    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+      // local storage to accumulate solution values to:
+      double value = 0.0;
+      double vectorValue[spaceDim];
+      for (int d=0; d<spaceDim; d++) {
+        vectorValue[spaceDim] = 0.0;
+      }
       for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
         int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
-          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(cellIndex,localDofIndex);
+          // for watching in the debugger:
+          double basisValue = (*transformedValues)(0,dofOrdinal,ptIndex);
+          double weight = solnCoeffs(cellIndex,localDofIndex);
+          value += weight * basisValue;
         } else {
           for (int i=0; i<spaceDim; i++) {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
+            vectorValue[i] += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
           }
+        }
+      }
+      if (basisRank == 0) {
+        values(cellIndex,ptIndex) = value;
+      } else {
+        for (int i=0; i<spaceDim; i++) {
+          values(cellIndex,ptIndex,i) = vectorValue[i];
         }
       }
     }
@@ -1934,8 +1949,7 @@ void Solution::writeToFile(int trialID, const string &filePath) {
                   double weight = xWeights[vertexIndex] * yWeights[vertexIndex];
                   //cout << "weight for vertex " << vertexIndex << ": " << weight << endl;
                   for (int dim=0; dim<spaceDim; dim++) {
-                    physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += 
-		      weight*vertexPoints(cellIndex, vertexIndex, dim);
+                    physPoints(cellIndex,patchIndex*numVertices + patchVertexIndex, dim) += weight*vertexPoints(cellIndex, vertexIndex, dim);
                   }
                 }
                 for (int dim=0; dim<spaceDim; dim++) {
@@ -2087,6 +2101,11 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   solnCoeffs.resize(basisCardinality);
+  
+  if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+    cout << "Warning: solution for cellID " << cellID << " not found; returning 0.\n";
+    return;
+  }
   
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
