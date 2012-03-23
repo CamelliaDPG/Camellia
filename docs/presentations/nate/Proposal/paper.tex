@@ -6,21 +6,152 @@
 The strong form of the Stokes problem with which we begin is as follows:
 
 \begin{align}
-- \mu \Delta \NVRvect{u} + \NVRgrad p &= \NVRvect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst1} \\
-\NVRdiv \NVRvect{u} &= 0 & \text{ in } \Omega, \\
-\NVRvect{u} &= \NVRvect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast1}
+- \mu \Delta \vect{u} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst1} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast1}
 \end{align}
-where $\Omega \subset \mathbb{R}^{2}$, $\mu$ is viscosity, $\NVRtensor{\epsilon}=\NVRgrad^{\text{sym}} \NVRvect{u}$ is strain, $p$ is pressure, $u$ velocity, and $\NVRvect{f}$ a vector forcing function.
+where $\Omega \subset \mathbb{R}^{2}$, $\mu$ is viscosity, $p$ is pressure, $\vect{u}$ velocity, and $\vect{f}$ a vector forcing function.
 
-For DPG, we require a first-order system.  We introduce $\NVRtensor{\sigma}=\mu \NVRgrad \NVRvect{u}$:
+For DPG, we require a first-order system.  We introduce $\NVRtensor{\sigma}= \NVRgrad \vect{u}$:
 \begin{align}
-\frac{1}{\mu} \NVRtensor{\sigma} - \NVRgrad \NVRvect{u} &= 0 \\
-- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \NVRvect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst2} \\
-\NVRdiv \NVRvect{u} &= 0 & \text{ in } \Omega, \\
-\NVRvect{u} &= \NVRvect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast2}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst2} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\NVRtensor{\sigma} - \NVRgrad \vect{u} &= 0 & \text{ in } \Omega,\\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega.\label{NVR:eq:stronglast2}
 \end{align}
+
+Considering the above as a linear operator $A$ operating on a group variable $\tilde{u} = (\vect{u},p,\NVRtensor{\sigma})$, to apply the abstract theory presented above we need to establish that $A$ and $A^{*}$ are injective, and either that $||A \tilde{u}|| \geq \gamma ||\tilde{u}||$ or that $||A^{*} \tilde{v}|| \geq \gamma ||\tilde{v}||$.  Since the latter two conditions imply the injectivity of the respective operators, it will suffice to prove these.\\
+
+\subsection{$||A \tilde{u}|| \geq \gamma ||\tilde{u}||$}
+Adding right-hand sides $g$ and $\NVRtensor{h}$
+
+\begin{align}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst3} \\
+\NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+\NVRtensor{\sigma} - \NVRgrad \vect{u} &= \NVRtensor{h} & \text{ in } \Omega, \label{NVR:eq:strongsecondtolast3} \\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast3}
+\end{align}
+we have that $A \tilde{u} = (\vect{f},g,\NVRtensor{h})$.  If we can establish bounds for each of the solution variables in terms of norms on $\vect{f},g,$ and $\NVRtensor{h}$, then we will have the required lower bound $|| A \tilde{u} || \geq \gamma || \tilde{u} ||$.  For the time being we assume that $\vect{g_{D}} = 0$.\\
+
+Note that, by linearity of $A$, it suffices to consider cases in which only one of $\vect{f},g,$ and $\NVRtensor{h}$ is non-zero.\\
+
+\subsubsection{$\vect{f} \neq \vect{0}$}
+In this case, we have exactly the system (\ref{NVR:eq:strongfirst2})-(\ref{NVR:eq:stronglast2}), which reduces (in a distributional sense) to (\ref{NVR:eq:strongfirst1})-(\ref{NVR:eq:stronglast1}).  Testing the first equation with the velocity $u \in H^{1}_{0}(\Omega)$, we have
+\begin{align*}
+- (\mu \Delta \vect{u}, \vect{u})_{\Omega} + (\NVRgrad p, \vect{u})_{\Omega} &= (\vect{f},\vect{u})_{\Omega}.\\
+\end{align*}
+Integrating by parts, we obtain:
+\begin{align*}
+(\mu \NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} - \langle \NVRgrad \vect{u} \cdot \vect{n}, \vect{u} \rangle_{\partial \Omega} - (p, \NVRdiv u)_{\Omega} + \langle p, \vect{u} \cdot \vect{n} \rangle_{\partial \Omega} &= (\vect{f},\vect{u})_{\Omega}.
+\end{align*}
+
+Noting that $\vect{u} = 0$ on $\partial \Omega$ and that $\NVRdiv \vect{u} = 0 $ in $\Omega$, this reduces to:
+
+\begin{align*}
+\mu (\NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} = ||\NVRgrad \vect{u}||^{2}_{\Omega} = || \NVRtensor{ \sigma }||^{2}_{\Omega} &= (\vect{f},\vect{u})_{\Omega} \\
+&\leq || f ||_{\Omega} || \vect{u} ||_{\Omega}\\
+&\leq C_{P} || f ||_{\Omega} || \NVRgrad \vect{u} ||_{\Omega},
+\end{align*}
+where $C_{P}$ is the Poincare constant.  Thus $ || \NVRtensor{ \sigma }||_{\Omega} \leq \frac{C_{P}}{\mu} || f ||_{\Omega}$, and $|| \vect{u} || \leq \frac{C_{P}^{2}}{\mu} || f ||_{\Omega}$.
+
+To bound the pressure $p$, we require a result by Ladyzhenskaya for $p \in L^{2}_{0}$:
+\begin{align*}
+\sup_{\vect{v} \in H^{1}(\Omega)} \frac{(p, \NVRdiv \vect{v})_{\Omega}}{\norm{ \vect{v} }_{H^{1}(\Omega)} } \geq \beta \norm{p}_{\Omega}
+\end{align*}
+for some constant $\beta > 0$.  Testing equation (\ref{NVR:eq:strongfirst1}) with $\vect{v} \in \vect{H}^{1}_{0}(\Omega)$, we have
+\begin{align*}
+\NVRgrad p \cdot \vect{v} = \vect{f} \cdot \vect{v} + \mu \Delta \vect{u} \cdot \vect{v}.
+\end{align*}
+
+Integrating by parts, dividing by $\norm{ \vect{v} }_{H^{1}(\Omega)}$ and taking the supremum:
+\begin{align*}
+\sup - \frac{(p, \NVRdiv \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}} &= \sup \left\{\frac{(\vect{f}, \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}} - \frac{\mu (\NVRgrad \vect{u}, \NVRgrad \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}}\right\} \\
+&\leq \frac{\norm{\vect{f}} \norm{\vect{v}}_{L^{2}}}{\norm{ \vect{v} }_{H^{1}(\Omega)}} + \mu \norm{\NVRgrad \vect{u}} \leq \norm{\vect{f} } + \mu \frac{C_{P}}{\mu} \norm{\vect{f}} = (1 + C_{P}) \norm{\vect{f}}.
+\end{align*}
+By the Ladyzhenskaya result, we then have $\norm{p} \leq \frac{1 + C_{P}}{\beta} \norm{\vect{f}}$, bounding $p$, as required.
+
+\subsubsection{$ g \neq 0$} In this case, we have
+\begin{align}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{0} & \text{ in } \Omega, \label{NVR:eq:gstrongfirst} \\
+\NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+\NVRtensor{\sigma} - \NVRgrad \vect{u} &= 0 & \text{ in } \Omega,\\
+\vect{u} &= \vect{0} & \text{ on } \partial\Omega.\label{NVR:eq:gstronglast}
+\end{align}
+
+We must also assume compatibility between $g$ and the boundary condition on $\vect{u}$; that is, that $g$ has zero average on $\Omega$:
+\begin{align*}
+\int_{\Omega} g = \int_{\partial \Omega} \vect{u} \cdot \vect{n} = 0.
+\end{align*}
+
+Now, by surjectivity of $\NVRdiv$, 
+\begin{align*}
+\forall g \in L^{2} \quad \exists \vect{u}_{0} : \NVRdiv \vect{u}_{0} = g.
+\end{align*}
+
+By the Lax-Milgram theorem, we have $\exists ! \phi \in H^{1}_{0} : \vect{u}_{0} = \NVRgrad \phi$, so that $\Delta \phi = g$ and, assuming that $\Omega$ is convex, then by the Elliptic Regularity theorem (see \cite[p. 214]{Folland} for a proof), $\phi \in H^{2}$ and:
+\begin{align*}
+\norm{\phi}_{H^{2}} &\leq C \norm{g}\\ % SEE ARBOGAST/BONA, p. 223 (Elliptic Regularity, section 8.5.4, Theorem 8.13)---references [GT] or [Fo] for a proof
+\norm{\NVRgrad \phi}_{H^{1}} &\leq C \norm{g},
+\end{align*}
+for some $C > 0$ independent of $g$ and $\phi$.  That is, in fact $\vect{u}_{0} \in H^{1}$ and $\norm{ \vect{u}_{0} }_{H^{1}} \leq C \norm{g}$. \\
+
+Now, setting $\vect{w} = \vect{u} - \vect{u}_{0}$, we have $\NVRdiv \vect{w} = 0$.  Testing equation (\ref{NVR:eq:strongfirst1}) with $\vect{w}$ and integrating by parts, we obtain:
+\begin{align*}
+\mu (\NVRgrad \vect{u},\NVRgrad \vect{w})_{\Omega} &= 0\\
+\mu (\NVRgrad \vect{w} + \NVRgrad \vect{u}_{0},\NVRgrad \vect{w})_{\Omega} &= 0\\
+\implies \mu \norm{\NVRgrad \vect{w}}^{2} &= -(\NVRgrad \vect{u}_{0}, \NVRgrad \vect{w}) \\
+&\leq \norm{ \NVRgrad \vect{u}_{0} } \norm{ \NVRgrad \vect{w} } \\
+&\leq C \norm{g} \norm{ \NVRgrad \vect{w} },
+\end{align*}
+so that $\norm{ \NVRgrad \vect{w} } \leq  \frac{C}{\mu} \norm{ g }$, and therefore as before we obtain a bound on $\norm{\NVRtensor{\sigma}} = \norm{\NVRgrad \vect{u}} \leq \left( 1 + \frac{1}{\mu} \right) C \norm{g}$, and again by means of the Poincare inequality we may bound $\norm{\vect{u}} \leq C_{P} \norm{\NVRgrad \vect{u}} \leq \frac{C C_{P}}{\mu} \norm{ g }$ as well.\\
+
+The bound on $p$ is established exactly as before, except that now $\vect{f} = \vect{0}$, so that we obtain the bound $\norm{p} \leq \frac{\mu}{\beta} \norm{\NVRgrad \vect{u}}$.
+
+
+\subsubsection{$ \NVRtensor{h} \neq \NVRtensor{0}$}  In this case, we have
+\begin{align}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{0} & \text{ in } \Omega, \label{NVR:eq:hstrongfirst} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\NVRtensor{\sigma} - \NVRgrad \vect{u} &= \NVRtensor{h} & \text{ in } \Omega, \\
+\vect{u} &= \vect{0} & \text{ on } \partial\Omega.\label{NVR:eq:hstronglast}
+\end{align}
+
+Then, $\NVRtensor{\sigma} = \NVRgrad \vect{u} + \NVRtensor{h}$, and we have:
+\begin{align*}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= - \mu \Delta \vect{u} - \mu \NVRdiv \NVRtensor{h} + \NVRgrad p = \vect{0} \\
+- \mu \Delta \vect{u} + \NVRgrad p &= - \mu  \NVRdiv \NVRtensor{h}
+\end{align*}
+
+in a distributional sense.  Testing with $\vect{u}$, and integrating by parts, again the pressure term vanishes because $\NVRdiv \vect{u} = 0$, so that much as before, we obtain:
+
+\begin{align*}
+\mu (\NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} &= \langle \NVRdiv \NVRtensor{h}, \vect{u} \rangle_{\partial \Omega}\\
+&= -(\NVRtensor{h}, \NVRgrad \vect{u})_{\Omega} \leq \norm{\NVRtensor{h}}_{L^{2}(\Omega)} \norm{ \NVRgrad \vect{u} }_{L^{2}(\Omega)}.
+\end{align*}
+
+So $\norm{\NVRgrad \vect{u}} \leq \frac{1}{\mu} \norm{\NVRtensor{h}}$, and the bounds $\norm{\vect{u} } \leq \frac{C_{P}}{\mu} \norm{\NVRtensor{h}}$ and $\norm{p} \leq \frac{\mu}{\beta}\left( \norm{ \NVRgrad \vect{u} } + \norm{\NVRtensor{h}} \right)$ can be established in a similar fashion as above.
+
+%% ADJOINT %%
+\subsection{$||A^{*} \tilde{v}|| \geq \gamma ||\tilde{v}||$}  If we consider $(A \tilde{u}, \tilde{v})$, where $\tilde{v} = (\NVRtensor{\tau},\vect{q}, v)$, and integrate by parts (ignoring boundary terms for now), we can readily see that the adjoint equation $A^{*} \tilde{v} = \vect{F}$ takes the form:
+\begin{align}
+\NVRdiv \NVRtensor{\tau} - \NVRgrad v &= \vect{f^{*}} & \text{ in } \Omega, \\
+- \NVRdiv \vect{q} &= g^{*} & \text{ in } \Omega, \\
+\NVRtensor{\tau} + \mu \NVRgrad \vect{q} &= \NVRtensor{h^{*}} & \text{ in } \Omega.
+\end{align}
+
+If we then substitute $\NVRtensor{\tau} = - \mu \NVRtensor{\sigma}$ and $v = -p$, we have:
+\begin{align}
+- \mu \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f}^{*} & \text{ in } \Omega, \\
+\NVRdiv \vect{q} &= -g^{*} & \text{ in } \Omega, \\
+\NVRtensor{\sigma} - \NVRgrad \vect{q} &= - \frac{1}{\mu} \NVRtensor{h}^{*} & \text{ in } \Omega,
+\end{align}
+
+so that the adjoint $A^{*}$ takes exactly the same form as the original operator $A$ (compare equations (\ref{NVR:eq:strongfirst3}) - (\ref{NVR:eq:strongsecondtolast3})).  Thus our argument for $||A \tilde{u}|| \geq \gamma ||\tilde{u}||$ will also work to show that $||A^{*} \tilde{v}|| \geq \gamma ||\tilde{v}||$.
 
 %% Everything that follows is my write-up from Sandia, Summer 2011.  Kept here for reference and possibly to crib from it later.  (The tutorial-type stuff might make a nice appendix.)
+
+
+
 
 \pagebreak
 
@@ -43,11 +174,11 @@ Here, we sketch some of the main features of the DPG method.  For details, we re
 \end{align}
 We take $U$ and $V$ to be real Hilbert spaces.  We assume $b(\cdot,\cdot)$ is continuous, i.e.\
 \begin{align}
-|b(u,v)| \leq M \NVRnorm{u}_{U} \NVRnorm{v}_{V},
+|b(u,v)| \leq M \norm{u}_{U} \norm{v}_{V},
 \end{align}
 for some real $M$. We assume also that $b(\cdot,\cdot)$ is weakly coercive, that is
 \begin{align}
-\inf_{\NVRnorm{u}_{U}=1} \sup_{\NVRnorm{v}_{V}=1} b(u,v) > \gamma,
+\inf_{\norm{u}_{U}=1} \sup_{\norm{v}_{V}=1} b(u,v) > \gamma,
 \end{align}
 for some $\gamma > 0$.  If we additionally assume that
 \begin{align}
@@ -58,11 +189,11 @@ then it is well known that the problem \eqref{NVR:eq:avbvp} has a unique solutio
 \subsection{Energy Norm}
 We define an alternate norm, called the \emph{energy norm}, on the trial space $U$ by
 \begin{equation}\label{NVR:eq:energyNorm}
-\NVRnorm{u}_{E} \NVReqdef \sup_{\NVRnorm{v}_{V}=1} b(u,v).
+\norm{u}_{E} \NVReqdef \sup_{\norm{v}_{V}=1} b(u,v).
 \end{equation}
 This norm is the one in which the optimality is guaranteed by the selection of optimal test functions. It is an equivalent norm to the standard norm on $U$, i.e.\
 \begin{equation}
-\gamma \NVRnorm{u}_{U} \leq \NVRnorm{u}_{E} \leq M \NVRnorm{u}_{U} \quad \forall u \in U.
+\gamma \norm{u}_{U} \leq \norm{u}_{E} \leq M \norm{u}_{U} \quad \forall u \in U.
 \end{equation}
 
 \subsection{Optimal Test Functions}
@@ -72,7 +203,7 @@ We are now prepared to give a definition of the optimal test functions.  Define 
 \end{align*}
 By the Riesz representation theorem, $T$ is well-defined.  Note that 
 \begin{align*}
-\NVRnorm{u}_{E} = \sup_{\NVRnorm{v}_{V}=1} b(u,v) = \sup_{\NVRnorm{v}_{V}=1} (Tu,v)_{V} = \frac{1}{\NVRnorm{Tu}_{V}} (Tu, Tu)_{V} = \NVRnorm{Tu}_{V}.
+\norm{u}_{E} = \sup_{\norm{v}_{V}=1} b(u,v) = \sup_{\norm{v}_{V}=1} (Tu,v)_{V} = \frac{1}{\norm{Tu}_{V}} (Tu, Tu)_{V} = \norm{Tu}_{V}.
 \end{align*}
 Thus the energy norm is generated by the inner product on $V$, i.e.\ 
 \begin{equation}
@@ -88,7 +219,7 @@ Solve the discrete problem
 \end{equation}
 Then the error is the best approximation error in the energy norm,
 \begin{align}
-\NVRnorm{u-u_{n}}_{E} = \inf_{w_{n} \in U_{n}} \NVRnorm{u-w_{n}}_{E},\label{NVR:eq:optimalityEqn}
+\norm{u-u_{n}}_{E} = \inf_{w_{n} \in U_{n}} \norm{u-w_{n}}_{E},\label{NVR:eq:optimalityEqn}
 \end{align}
 and this is the sense in which the test space is \emph{optimal}.
 
@@ -141,18 +272,18 @@ Integrate by parts, introducing flux $\widehat{\psi}_n$ and trace $\widehat{\phi
 \section{Two Standard Choices for Test Space Norm}\label{NVR:sec:testNorms}
 In this section, we describe two commonly used norms on the test space --- recall that the choice of test space norm will determine the energy norm, and thus the sense in which test functions are optimal.  Our implementation makes usage of these norms simple.
 \subsection{Mathematician's Norm}
-In general, test functions in a variational form each belong to some functional space on which a norm is already defined.  Therefore, a mathematically natural choice for a norm on the test space will be the Euclidean combination of these norms.  In the case of our Poisson formulation, $\NVRvect{q} \in \NVRHdiv$ and $v \in \NVRHgrad$, so define
+In general, test functions in a variational form each belong to some functional space on which a norm is already defined.  Therefore, a mathematically natural choice for a norm on the test space will be the Euclidean combination of these norms.  In the case of our Poisson formulation, $\vect{q} \in \NVRHdiv$ and $v \in \NVRHgrad$, so define
 \begin{align*}
-\NVRnorm{(\NVRvect{q},v)}_{V}^{2}  \NVReqdef \int_{\Omega} &\left((\NVRdiv \NVRvect{q})^{2} + \NVRvect{q} \cdot \NVRvect{q} + \NVRgrad v \cdot \NVRgrad v + v^{2}\right)\\
+\norm{(\vect{q},v)}_{V}^{2}  \NVReqdef \int_{\Omega} &\left((\NVRdiv \vect{q})^{2} + \vect{q} \cdot \vect{q} + \NVRgrad v \cdot \NVRgrad v + v^{2}\right)\\
 \end{align*}
 as the \emph{mathematician's} norm on the test space.
 
 \subsection{Optimal and Quasi-Optimal Test Norms}
 We know from the analysis that DPG delivers the best solution in the \emph{energy norm}, and that the choice of norm on the test space determines the energy norm.  We can then ask whether it is possible to select the test space norm in such a way that the energy norm is exactly the norm of interest ($L^{2}$, in our case) --- and the answer is yes; this is given in the abstract setting by 
 \begin{align*}
-\NVRnorm{v}_{V}\NVReqdef \sup_{\NVRnorm{u}_{U}=1} b(u,v),
+\norm{v}_{V}\NVReqdef \sup_{\norm{u}_{U}=1} b(u,v),
 \end{align*}
-where $\NVRnorm{\cdot}_{U}$ is the norm of interest.  $\NVRnorm{\cdot}_{V}$ is then called the \emph{optimal test norm}.  To determine the optimal test norm, we can collect terms by trial space variable, and then take the supremum using the Cauchy-Schwarz inequality.  When we do so, we will have some element boundary terms arising from the fluxes and traces.  To make the test norm \emph{localizable}, we then replace these terms with $L^{2}$ terms on the element interior, often with some weight $\beta$.  The resultant norm we call the \emph{quasi-optimal test norm}.
+where $\norm{\cdot}_{U}$ is the norm of interest.  $\norm{\cdot}_{V}$ is then called the \emph{optimal test norm}.  To determine the optimal test norm, we can collect terms by trial space variable, and then take the supremum using the Cauchy-Schwarz inequality.  When we do so, we will have some element boundary terms arising from the fluxes and traces.  To make the test norm \emph{localizable}, we then replace these terms with $L^{2}$ terms on the element interior, often with some weight $\beta$.  The resultant norm we call the \emph{quasi-optimal test norm}.
 
 \section{Code Overview}\label{NVR:sec:codeOverview}
 The directory layout in our code repository is as follows:
@@ -681,69 +812,69 @@ We begin with the formulation we have used in previous work, a velocity-stress-p
 The strong form of the Stokes problem with which we begin is as follows:
 
 \begin{align}
-- 2 \mu \NVRdiv \NVRtensor{\epsilon} + \NVRgrad p &= \NVRvect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst} \\
-\NVRdiv \NVRvect{u} &= 0 & \text{ in } \Omega, \\
-\NVRvect{u} &= \NVRvect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast}
+- 2 \mu \NVRdiv \NVRtensor{\epsilon} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast}
 \end{align}
-where $\Omega \subset \mathbb{R}^{2}$, $\mu$ is viscosity, $\NVRtensor{\epsilon}=\NVRgrad^{\text{sym}} \NVRvect{u}$ is strain, $p$ is pressure, $u$ velocity, and $\NVRvect{f}$ a vector forcing function.
+where $\Omega \subset \mathbb{R}^{2}$, $\mu$ is viscosity, $\NVRtensor{\epsilon}=\NVRgrad^{\text{sym}} \vect{u}$ is strain, $p$ is pressure, $u$ velocity, and $\vect{f}$ a vector forcing function.
 
 We introduce stress $\sigma$ and vorticity $\omega$ by
 \begin{align*}
 \NVRtensor{\sigma} &= 2 \mu \NVRtensor{\epsilon} - p\NVRtensor{I}\\
-\NVRtensor{\omega} &= \frac{1}{2}(\NVRgrad \NVRvect{u} - \NVRgrad \NVRvect{u}^{T})
+\NVRtensor{\omega} &= \frac{1}{2}(\NVRgrad \vect{u} - \NVRgrad \vect{u}^{T})
 \end{align*}
-so that equation \eqref{NVR:eq:strongfirst} becomes simply $-\NVRdiv \NVRtensor{\sigma} = \NVRvect{f}$.
+so that equation \eqref{NVR:eq:strongfirst} becomes simply $-\NVRdiv \NVRtensor{\sigma} = \vect{f}$.
 We also have
 \begin{align*}
 \NVRtensor{\epsilon} &= \frac{1}{2 \mu}(\NVRtensor{\sigma} + p\NVRtensor{I}).
 \end{align*}
-Since $\NVRtensor{\epsilon} = \NVRgrad^{\text{sym}} \NVRvect{u} = \NVRgrad \NVRvect{u} - \NVRtensor{\omega}$, the entire system is
+Since $\NVRtensor{\epsilon} = \NVRgrad^{\text{sym}} \vect{u} = \NVRgrad \vect{u} - \NVRtensor{\omega}$, the entire system is
 
 \begin{align*}
-\frac{1}{2 \mu}(\NVRtensor{\sigma} + p\NVRtensor{I}) - \NVRgrad \NVRvect{u} + \NVRtensor{\omega} &= \NVRtensor{0}  & \text{ in } \Omega, \\
-- \NVRdiv \NVRtensor{\sigma} &= \NVRvect{f} & \text{ in } \Omega, \\
-\NVRdiv \NVRvect{u} &= 0 & \text{ in } \Omega, \\
-\NVRvect{u} &= \NVRvect{g_{D}} & \text{ on } \partial\Omega.
+\frac{1}{2 \mu}(\NVRtensor{\sigma} + p\NVRtensor{I}) - \NVRgrad \vect{u} + \NVRtensor{\omega} &= \NVRtensor{0}  & \text{ in } \Omega, \\
+- \NVRdiv \NVRtensor{\sigma} &= \vect{f} & \text{ in } \Omega, \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega.
 \end{align*}
 Note that the antisymmetric part of the first equation recovers the definition of $\NVRtensor{\omega}$, so that it need not enter the system separately.
 Define scalar $\omega = \omega_{21} = \frac{1}{2}(u_{1,2} - u_{2,1})$.  Our strong formulation is
 
 \begin{align*}
-\frac{1}{2 \mu}{\sigma_{11} + p \choose \sigma_{21}} - \NVRgrad u_{1} + {0 \choose \omega} &= \NVRvect{0} & \text{ in } \Omega, \\
-\frac{1}{2 \mu}{\sigma_{12} \choose \sigma_{22} + p} - \NVRgrad u_{2} - {\omega \choose 0} &= \NVRvect{0}  & \text{ in } \Omega, \\
+\frac{1}{2 \mu}{\sigma_{11} + p \choose \sigma_{21}} - \NVRgrad u_{1} + {0 \choose \omega} &= \vect{0} & \text{ in } \Omega, \\
+\frac{1}{2 \mu}{\sigma_{12} \choose \sigma_{22} + p} - \NVRgrad u_{2} - {\omega \choose 0} &= \vect{0}  & \text{ in } \Omega, \\
 -\NVRdiv {\sigma_{11} \choose \sigma_{21}} &= f_{1} & \text{ in } \Omega, \\
 -\NVRdiv {\sigma_{12} \choose \sigma_{22}} &= f_{2} & \text{ in } \Omega, \\
-\NVRdiv \NVRvect{u} &= 0 & \text{ in } \Omega, \\\
-\NVRvect{u} &= \NVRvect{g_{D}} & \text{ on } \partial\Omega.
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\\
+\vect{u} &= \vect{g_{D}} & \text{ on } \partial\Omega.
 \end{align*}
-Multiplying the first two equations by vector test functions $\NVRvect{q}_{i}$ and the following three by scalar test functions $v_{i}$, and integrating by parts over an element $K$, we obtain
+Multiplying the first two equations by vector test functions $\vect{q}_{i}$ and the following three by scalar test functions $v_{i}$, and integrating by parts over an element $K$, we obtain
 
 \begin{align*}
-\int_{K} \left(\frac{1}{2 \mu}{\sigma_{11} + p \choose \sigma_{21}} + {0 \choose \omega} \right) \cdot \NVRvect{q}_{1} &+ \int_{K} u_{1} \NVRdiv \NVRvect{q_{1}} &-& \int_{\partial K} \widehat{u}_{1} \NVRvect{q_{1}} \cdot n &&=\NVRvect{0} \\
-\int_{K} \left(\frac{1}{2 \mu}{\sigma_{12} \choose \sigma_{22} + p} - {\omega \choose 0}\right) \cdot \NVRvect{q}_{2} &+ \int_{K} u_{2} \NVRdiv \NVRvect{q_{2}} &-& \int_{\partial K} \widehat{u}_{2} \NVRvect{q_{2}} \cdot n &&= \NVRvect{0}\\
-\int_{K}  {\sigma_{11} \choose \sigma_{21}} \cdot \NVRgrad v_{1} &&-& \int_{\partial K} \widehat{\NVRvect{\sigma}}_{1n} v_{1} &&= \int_{K} f_{1} v_{1} \\
-\int_{K} {\sigma_{12} \choose \sigma_{22}} \cdot \NVRgrad v_{2} &&-& \int_{\partial K} \widehat{\NVRvect{\sigma}}_{2n} v_{2}  &&= \int_{K} f_{2} v_{2} \\
--\int_{K} \NVRvect{u} \cdot \NVRgrad v_{3} &&+& \int_{\partial K} \widehat{\NVRvect{u}} v_{3} \cdot n &&= 0,
+\int_{K} \left(\frac{1}{2 \mu}{\sigma_{11} + p \choose \sigma_{21}} + {0 \choose \omega} \right) \cdot \vect{q}_{1} &+ \int_{K} u_{1} \NVRdiv \vect{q_{1}} &-& \int_{\partial K} \widehat{u}_{1} \vect{q_{1}} \cdot n &&=\vect{0} \\
+\int_{K} \left(\frac{1}{2 \mu}{\sigma_{12} \choose \sigma_{22} + p} - {\omega \choose 0}\right) \cdot \vect{q}_{2} &+ \int_{K} u_{2} \NVRdiv \vect{q_{2}} &-& \int_{\partial K} \widehat{u}_{2} \vect{q_{2}} \cdot n &&= \vect{0}\\
+\int_{K}  {\sigma_{11} \choose \sigma_{21}} \cdot \NVRgrad v_{1} &&-& \int_{\partial K} \widehat{\vect{\sigma}}_{1n} v_{1} &&= \int_{K} f_{1} v_{1} \\
+\int_{K} {\sigma_{12} \choose \sigma_{22}} \cdot \NVRgrad v_{2} &&-& \int_{\partial K} \widehat{\vect{\sigma}}_{2n} v_{2}  &&= \int_{K} f_{2} v_{2} \\
+-\int_{K} \vect{u} \cdot \NVRgrad v_{3} &&+& \int_{\partial K} \widehat{\vect{u}} v_{3} \cdot n &&= 0,
 \end{align*}
 where the hatted variables ($\widehat{u}_{1}$, e.g.) are fluxes and traces introduced by relaxing the continuity requirement at element boundaries.  These differ from the \emph{numerical fluxes} that appear in other DG methods, in that they are not constructed a priori, but simply enter the variational problem as additional unknowns. We solve for them at the same time as we solve 
 the rest of the unknowns.  As in other DG methods, the fluxes will approach the corresponding unhatted solution variables (which we call \emph{field} variables) as the latter approach the exact solution.
 
-Conceptually, this requires nothing more than the Poisson formulation we described above --- in particular, the test functions $\NVRvect{q}_{i} \in \NVRHdiv$ and $v_{i} \in \NVRHgrad$, so we do not require any test spaces or operators different than discussed above.  An implementation of this bilinear form can be found in \verb=StokesBilinearForm=.
+Conceptually, this requires nothing more than the Poisson formulation we described above --- in particular, the test functions $\vect{q}_{i} \in \NVRHdiv$ and $v_{i} \in \NVRHgrad$, so we do not require any test spaces or operators different than discussed above.  An implementation of this bilinear form can be found in \verb=StokesBilinearForm=.
 
 \subsection{Stokes Formulation II: Velocity-Vorticity-Pressure Formulation}  The standard velocity-vorticity-pressure (VVP) Stokes formulation is:
 \begin{align*}
-\NVRcurl \omega + \NVRgrad P &= \NVRvect{f}\\
-\omega - \NVRcurl \NVRvect{u} &= 0\\
-\NVRdiv \NVRvect{u} &= 0.
+\NVRcurl \omega + \NVRgrad P &= \vect{f}\\
+\omega - \NVRcurl \vect{u} &= 0\\
+\NVRdiv \vect{u} &= 0.
 \end{align*}
 (Note that the value of $\omega$ here differs by a factor of $-\frac{1}{2}$ from the $\omega$ as defined in the previous formulation.)  Multiplying by test functions, integrating by parts, and substituting fluxes and traces for boundary values, we obtain:
 
 \begin{align*}
-\int_{\partial K} \widehat{\omega} \NVRvect{q} \cdot {n_{2} \choose -n_{1}} + \int_{\partial K} \widehat{P} q_{n} -  \int_{K}\omega \NVRcurl \NVRvect{q} -  \int_{K} P \NVRdiv \NVRvect{q} &= \int_{K} \NVRvect{f} \cdot \NVRvect{q}\\
-\int_{\partial K} \widehat{u}_{\times \NVRvect{n}}v_{1} -  \int_{K}\NVRvect{u} \cdot (\NVRcurl v_{1}) +  \int_{K} \omega v_{1} &= 0\\
-\int_{\partial K} \widehat{u}_{\NVRvect{n}} v_{2} -  \int_{K}\NVRvect{u} \cdot (\NVRgrad v_{2}) &= 0 \,.
+\int_{\partial K} \widehat{\omega} \vect{q} \cdot {n_{2} \choose -n_{1}} + \int_{\partial K} \widehat{P} q_{n} -  \int_{K}\omega \NVRcurl \vect{q} -  \int_{K} P \NVRdiv \vect{q} &= \int_{K} \vect{f} \cdot \vect{q}\\
+\int_{\partial K} \widehat{u}_{\times \vect{n}}v_{1} -  \int_{K}\vect{u} \cdot (\NVRcurl v_{1}) +  \int_{K} \omega v_{1} &= 0\\
+\int_{\partial K} \widehat{u}_{\vect{n}} v_{2} -  \int_{K}\vect{u} \cdot (\NVRgrad v_{2}) &= 0 \,.
 \end{align*}
-Whereas the original Stokes formulation required 7 field variables, 3 traces, and 2 fluxes, the VVP formulation requires just 4 field, 2 trace, and two flux variables.  However, there are a few new operators and spaces required.  While $v_{i} \in \NVRHgrad$ as before, now we require $\NVRvect{q} \in \NVRHdiv$ \emph{and} $\NVRvect{q} \in \NVRHcurl$.  We can support this by requiring $\NVRvect{q} \in \NVRHgrad \times \NVRHgrad$.  In the code, we define the function space for $\NVRvect{q}$ as \verb=FUNCTION_SPACE_VECTOR_HGRAD=.  The curl operator is given by \verb=OPERATOR_CURL=, and the \[ \displaystyle \cdot {n_{2} \choose -n_{1}}=\times n\] operator is given by \verb=OPERATOR_CROSS_N=.
+Whereas the original Stokes formulation required 7 field variables, 3 traces, and 2 fluxes, the VVP formulation requires just 4 field, 2 trace, and two flux variables.  However, there are a few new operators and spaces required.  While $v_{i} \in \NVRHgrad$ as before, now we require $\vect{q} \in \NVRHdiv$ \emph{and} $\vect{q} \in \NVRHcurl$.  We can support this by requiring $\vect{q} \in \NVRHgrad \times \NVRHgrad$.  In the code, we define the function space for $\vect{q}$ as \verb=FUNCTION_SPACE_VECTOR_HGRAD=.  The curl operator is given by \verb=OPERATOR_CURL=, and the \[ \displaystyle \cdot {n_{2} \choose -n_{1}}=\times n\] operator is given by \verb=OPERATOR_CROSS_N=.
 The implementation for this formulation can be found in \verb=StokesVVPBilinearForm=.
 
 \section{Numerical Results}\label{NVR:sec:numericalResults}

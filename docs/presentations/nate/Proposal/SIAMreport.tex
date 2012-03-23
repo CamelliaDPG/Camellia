@@ -21,9 +21,9 @@
 % DEFINITIONS ------------------------------------------------------------
 % ADD YOUR OWN DEFINITIONS HERE ------------------------------------------
 % BE SURE TO PREFACE LABEL WITH YOUR OWN INITIALS (NVR in this example) --
-\newcommand{\NVRvect}[1]{\ensuremath\boldsymbol{#1}}
-\newcommand{\NVRtensor}[1]{\underline{\NVRvect{#1}}}
-\newcommand{\NVRnorm}[1]{\left|\left|#1\right|\right|}
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\NVRtensor}[1]{\underline{\vect{#1}}}
+\newcommand{\norm}[1]{\left|\left|#1\right|\right|}
 \newcommand{\NVRgrad}{\nabla}
 \newcommand{\NVRdiv}{\NVRgrad \cdot}
 \newcommand{\NVRpd}[2]{\frac{\partial#1}{\partial#2}}
@@ -39,7 +39,7 @@
 % This controls the table-of-contents entry in the proceedings. Edit it
 % to include your article title followed by the authors' names, as shown.
 \addcontentsline{toc}{chapter}{Application of a Discontinuous Petrov-Galerkin Method to the Stokes Equations\\
-{\em N.V.\ Roberts, D.\ Ridzal, P.B.\ Bochev, L.D.\ Demkowicz}}
+{\em N.V.\ Roberts}}
 
 \pagestyle{myheadings}
 
@@ -48,38 +48,17 @@
 % This gives the running head. Usually you list a shortened version of
 % your article title (unless it's already very short) along with
 % the author's names, as shown.
-\markboth{DPG Trilinos Toolbox}{N.~V.\ Roberts, D.\ Ridzal, P.~B.\ Bochev, L.~D.\ Demkowicz}
+\markboth{Nathan Roberts Thesis Proposal}{N.~V.\ Roberts}
 
 % Put your article title in here
-\title{A Toolbox for a Class of Discontinuous
-       Petrov-Galerkin Methods Using Trilinos\thanks{Also available as Sandia Report SAND2011-6678.
-                 Sandia National Laboratories is a multi-program laboratory
-                 managed and operated by Sandia Corporation, a wholly owned subsidiary of
-                 Lockheed Martin Corporation, for the U.S. Department of
-                 Energy's National Nuclear Security Administration under
-                 contract DE-AC04-94AL85000.}}
+\title{Applying Discontinuous Petrov-Galerkin Methods to Fluid Problems}
 
 % List each author, their affiliation, and their e-mail address, as shown.
 \author{
 Nathan V.\ Roberts\thanks{The University of Texas at Austin,
 Institute for Computational Engineering and Science,
 201 E 24th St,
-Austin, TX 78712. E-mail: nroberts@ices.utexas.edu.  Research sponsored by The Center for Predictive Engineering and COmputational Sciences (PECOS). PECOS is a DOE-funded Center of Excellence within the Institute for Computational Engineering and Sciences (ICES) at The University of Texas at Austin.}
-\and
-Denis Ridzal\thanks{Optimization and Uncertainty Quantification, MS-1320,
-                 Sandia National Laboratories, P.O. Box 5800,
-                 Albuquerque, NM 87185-1320.  E-mail: dridzal@sandia.gov.
-                 Research sponsored by the Office of Science ASCR program.}
-\and
-Pavel B.\ Bochev\thanks{Numerical Analysis and Applications, MS-1320,
-                 Sandia National Laboratories, P.O. Box 5800,
-                 Albuquerque, NM 87185-1320.  E-mail: pbboche@sandia.gov.
-                 Research sponsored by the Office of Science ASCR program.}
-\and
-Leszek D.\ Demkowicz\thanks{The University of Texas at Austin,
-Institute for Computational Engineering and Science,
-201 E 24th St,
-Austin, TX 78712. E-mail: leszek@ices.utexas.edu.. Research sponsored by PECOS.}  }
+Austin, TX 78712. E-mail: nroberts@ices.utexas.edu.  Research sponsored by The Center for Predictive Engineering and COmputational Sciences (PECOS). PECOS is a DOE-funded Center of Excellence within the Institute for Computational Engineering and Sciences (ICES) at The University of Texas at Austin.} }
 
 \begin{document}
 
@@ -87,7 +66,7 @@ Austin, TX 78712. E-mail: leszek@ices.utexas.edu.. Research sponsored by PECOS.}
 
 % Include your abstract here.
 \begin{abstract}
-The class of discontinuous Petrov-Galerkin finite element methods (DPG) proposed by L. Demkowicz and J. Gopalakrishnan \cite{DPG1,DPG2} guarantees the optimality of the solution in an energy norm and produces a symmetric positive definite stiffness matrix, among other desirable properties.  In this paper, we describe a toolbox, implemented atop Sandia's Trilinos Project \cite{Trilinos}, for rapid development of solvers for DPG methods.  We use this toolbox to develop solvers for the Poisson and Stokes problems.
+%The class of discontinuous Petrov-Galerkin finite element methods (DPG) proposed by L. Demkowicz and J. Gopalakrishnan \cite{DPG1,DPG2} guarantees the optimality of the solution in an energy norm and produces a symmetric positive definite stiffness matrix, among other desirable properties.  In this paper, we describe Camellia, a toolbox for rapid development of solvers for DPG methods, implemented atop Sandia's Trilinos Project \cite{Trilinos}, and its application to several problems in fluid dynamics.
 \end{abstract}
 
 \input{paper.tex}
