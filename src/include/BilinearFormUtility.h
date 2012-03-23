@@ -55,7 +55,6 @@ private:
   static bool _warnAboutZeroRowsAndColumns;
   static void setWarnAboutZeroRowsAndColumns( bool value );
   static bool warnAboutZeroRowsAndColumns();
-  static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array);
 public:
   friend class DPGTests;
 
@@ -88,9 +87,9 @@ public:
                                      FieldContainer<double> &cellSideParities);
 
   // the real one:
-  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
-                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+//  static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
+//                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+//                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
   static void computeStiffnessMatrixForCell(FieldContainer<double> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
   
@@ -117,6 +116,8 @@ public:
 
   static void transposeFCMatrices(FieldContainer<double> &fcTranspose,
                                   const FieldContainer<double> &fc);
+  
+  static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array);
 private:
   static void weightCellBasisValues(FieldContainer<double> &basisValues, 
                                     const FieldContainer<double> &weights, int offset);

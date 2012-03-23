@@ -30,8 +30,13 @@
 
 #include "BilinearForm.h"
 #include "BasisCache.h"
+#include "ElementType.h"
+#include "BilinearFormUtility.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
+
+typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
+typedef Teuchos::RCP<ElementType> ElementTypePtr;
 
 static const string & S_OPERATOR_VALUE = "";
 static const string & S_OPERATOR_GRAD = "\\nabla ";
@@ -103,6 +108,228 @@ void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight
     *valuePtr *= weight;
     valuePtr++;
   }
+}
+
+void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, ElementTypePtr elemType,
+                                   FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+
+  DofOrderingPtr testOrdering  = elemType->testOrderPtr;
+  DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
+  stiffnessMatrix(stiffness,trialOrdering,testOrdering,cellSideParities,basisCache);
+
+}
+
+void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering, 
+                                     Teuchos::RCP<DofOrdering> testOrdering,
+                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+    
+  // stiffness dimensions are: (numCells, # testOrdering Dofs, # trialOrdering Dofs)
+  // (while (cell,trial,test) is more natural conceptually, I believe the above ordering makes
+  //  more sense given the inversion that we must do to compute the optimal test functions...)
+  
+  // steps:
+  // 0. Set up Cubature
+  // 1. Determine Jacobians
+  // 2. Determine quadrature points on interior and boundary
+  // 3. For each (test, trial) combination:
+  //   a. Apply the specified operators to the basis in the DofOrdering, at the cubature points
+  //   b. Multiply the two bases together, weighted with Jacobian/Piola transform and cubature weights
+  //   c. Pass the result to bilinearForm's applyBilinearFormData method
+  //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
+  
+  // check inputs
+  int numTestDofs = testOrdering->totalDofs();
+  int numTrialDofs = trialOrdering->totalDofs();
+  
+  shards::CellTopology cellTopo = basisCache->cellTopology();
+  unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  unsigned spaceDim = cellTopo.getDimension();
+  
+  //cout << "trialOrdering: " << *trialOrdering;
+  //cout << "testOrdering: " << *testOrdering;
+  
+  // check stiffness dimensions:
+  TEST_FOR_EXCEPTION( ( numCells != stiffness.dimension(0) ),
+                     std::invalid_argument,
+                     "numCells and stiffness.dimension(0) do not match.");
+  TEST_FOR_EXCEPTION( ( numTestDofs != stiffness.dimension(1) ),
+                     std::invalid_argument,
+                     "numTestDofs and stiffness.dimension(1) do not match.");
+  TEST_FOR_EXCEPTION( ( numTrialDofs != stiffness.dimension(2) ),
+                     std::invalid_argument,
+                     "numTrialDofs and stiffness.dimension(2) do not match.");
+  
+  // 0. Set up BasisCache
+  int cubDegreeTrial = trialOrdering->maxBasisDegree();
+  int cubDegreeTest = testOrdering->maxBasisDegree();
+  int cubDegree = cubDegreeTrial + cubDegreeTest;
+  
+  unsigned numSides = cellTopo.getSideCount();
+  
+  // 3. For each (test, trial) combination:
+  vector<int> testIDs = this->testIDs();
+  vector<int>::iterator testIterator;
+  
+  vector<int> trialIDs = this->trialIDs();
+  vector<int>::iterator trialIterator;
+  
+  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
+  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
+  
+  stiffness.initialize(0.0);
+  
+  for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
+    int testID = *testIterator;
+    
+    for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
+      int trialID = *trialIterator;
+      
+      vector<EOperatorExtended> trialOperators, testOperators;
+      this->trialTestOperators(trialID, testID, trialOperators, testOperators);
+      vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
+      testOpIt = testOperators.begin();
+      TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
+                         "trialOperators and testOperators must be the same length");
+      int operatorIndex = -1;
+      for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
+        operatorIndex++;
+        EOperatorExtended trialOperator = *trialOpIt;
+        EOperatorExtended testOperator = *testOpIt;
+        
+        if (testOperator==OPERATOR_TIMES_NORMAL) {
+          TEST_FOR_EXCEPTION(true,std::invalid_argument,"OPERATOR_TIMES_NORMAL not supported for tests.  Use for trial only");
+        }
+        
+        Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
+        Teuchos::RCP < const FieldContainer<double> > trialValuesTransformed;
+        Teuchos::RCP < const FieldContainer<double> > testValuesTransformedWeighted;
+        
+        //cout << "trial is " <<  this->trialName(trialID) << "; test is " << this->testName(testID) << endl;
+        
+        if (! this->isFluxOrTrace(trialID)) {
+          trialBasis = trialOrdering->getBasis(trialID);
+          testBasis = testOrdering->getBasis(testID);
+          
+          FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
+          
+          trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator);
+          testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
+          
+          FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+          FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
+          FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+          this->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
+                                              trialID,testID,operatorIndex,basisCache);
+          
+          //integrate:
+          FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
+          // place in the appropriate spot in the element-stiffness matrix
+          // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
+          
+          //cout << "miniStiffness for volume:\n" << miniStiffness;
+          
+          //checkForZeroRowsAndColumns("miniStiffness for pre-stiffness", miniStiffness);
+          
+          //cout << "trialValuesTransformed for trial " << this->trialName(trialID) << endl << trialValuesTransformed
+          //cout << "testValuesTransformed for test " << this->testName(testID) << ": \n" << testValuesTransformed;
+          //cout << "weightedMeasure:\n" << weightedMeasure;
+          
+          // there may be a more efficient way to do this copying:
+          // (one strategy would be to reimplement fst::integrate to support offsets, so that no copying needs to be done...)
+          for (int i=0; i < testBasis->getCardinality(); i++) {
+            int testDofIndex = testOrdering->getDofIndex(testID,i);
+            for (int j=0; j < trialBasis->getCardinality(); j++) {
+              int trialDofIndex = trialOrdering->getDofIndex(trialID,j);
+              for (unsigned k=0; k < numCells; k++) {
+                stiffness(k,testDofIndex,trialDofIndex) += miniStiffness(k,i,j);
+              }
+            }
+          }          
+        } else {  // boundary integral
+          int trialBasisRank = trialOrdering->getBasisRank(trialID);
+          int testBasisRank = testOrdering->getBasisRank(testID);
+          
+          TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
+                             std::invalid_argument,
+                             "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
+          
+          for (unsigned sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+            trialBasis = trialOrdering->getBasis(trialID,sideOrdinal);
+            testBasis = testOrdering->getBasis(testID);
+            
+            bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
+            const set<int> normalOperators = BilinearForm::normalOperators();
+            if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
+                && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
+              // normal not yet taken into account -- so it must be "hidden" in the trial variable
+              isFlux = true;
+            }
+            
+            FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );    
+            
+            // for trial: the value lives on the side, so we don't use the volume coords either:
+            trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator,sideOrdinal,false);
+            // for test: do use the volume coords:
+            testValuesTransformed = basisCache->getTransformedValues(testBasis,testOperator,sideOrdinal,true);
+            // 
+            testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator,sideOrdinal,true);
+            
+            // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
+            FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed;
+            
+            if (isFlux) {
+              // we need to multiply the trialValues by the parity of the normal, since
+              // the trial implicitly contains an outward normal, and we need to adjust for the fact
+              // that the neighboring cells have opposite normal
+              // trialValues should have dimensions (numCells,numFields,numCubPointsSide)
+              int numFields = trialValuesTransformed->dimension(1);
+              int numPoints = trialValuesTransformed->dimension(2);
+              for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+                double parity = cellSideParities(cellIndex,sideOrdinal);
+                if (parity != 1.0) {  // otherwise, we can just leave things be...
+                  for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                      materialDataAppliedToTrialValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                    }
+                  }
+                }
+              }
+            }
+            
+            FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
+            FieldContainer<double> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+            this->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
+                                                trialID,testID,operatorIndex,basisCache);
+            
+            
+            //cout << "sideOrdinal: " << sideOrdinal << "; cubPointsSidePhysical" << endl << cubPointsSidePhysical;
+            
+            //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
+            FunctionSpaceTools::integrate<double>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_CPP);
+            
+            //checkForZeroRowsAndColumns("side miniStiffness for pre-stiffness", miniStiffness);
+            
+            //cout << "miniStiffness for side " << sideOrdinal << "\n:" << miniStiffness;
+            // place in the appropriate spot in the element-stiffness matrix
+            // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
+            for (int i=0; i < testBasis->getCardinality(); i++) {
+              int testDofIndex = testOrdering->getDofIndex(testID,i,0);
+              for (int j=0; j < trialBasis->getCardinality(); j++) {
+                int trialDofIndex = trialOrdering->getDofIndex(trialID,j,sideOrdinal);
+                for (unsigned k=0; k < numCells; k++) {
+                  stiffness(k,testDofIndex,trialDofIndex) += miniStiffness(k,i,j);
+                }
+              }
+            }
+          }
+        }
+        testOpIt++;
+      }
+    }
+  }
+  //cout << "trialOrdering: \n" << *trialOrdering;
+  //cout << "testOrdering: \n" << *testOrdering;
+  BilinearFormUtility::checkForZeroRowsAndColumns("pre-stiffness", stiffness);
 }
 
 vector<int> BilinearForm::trialVolumeIDs() {

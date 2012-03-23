@@ -1468,8 +1468,7 @@ void Solution::computeResiduals() {
     
     // compute b(u, v):
     FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-    BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-                                                trialOrdering, testOrdering, cellSideParities, basisCache);    
+    _mesh->bilinearForm()->stiffnessMatrix(preStiffness, elemTypePtr, cellSideParities, basisCache);    
 
     // now, weight the entries in b(u,v) by the solution coefficients to compute:
     // l(v) - b(u_h,v)    

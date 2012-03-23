@@ -35,6 +35,8 @@
 #include "Intrepid_FieldContainer.hpp"
 
 class BasisCache;
+class ElementType;
+class DofOrdering;
 
 using namespace std;
 using namespace Intrepid;
@@ -109,6 +111,13 @@ public:
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
   // default implementation calls BasisCache-less version
+  
+  
+  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+                               FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  
+  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                               FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
                            
   const vector< int > & trialIDs();
   const vector< int > & testIDs();
