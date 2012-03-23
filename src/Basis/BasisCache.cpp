@@ -258,8 +258,11 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, EOperatorExtended op
   }
   constFCPtr relatedValuesTransformed = _knownValuesTransformed[relatedKey];
   constFCPtr result;
-  if (   (op != IntrepidExtendedTypes::OPERATOR_CROSS_NORMAL) && (op != IntrepidExtendedTypes::OPERATOR_DOT_NORMAL)
-      && (op != IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL) && (op != IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE) ) {
+  if (   (op != IntrepidExtendedTypes::OPERATOR_CROSS_NORMAL)   && (op != IntrepidExtendedTypes::OPERATOR_DOT_NORMAL)
+      && (op != IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL)   && (op != IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE) 
+      && (op != IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X) && (op != IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y)
+      && (op != IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Z)
+     ) {
     result = BasisEvaluation::BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
     if ( result.get() == 0 ) {
       result = relatedValuesTransformed;

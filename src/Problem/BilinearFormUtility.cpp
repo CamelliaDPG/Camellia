@@ -504,6 +504,14 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
             trialBasis = trialOrdering->getBasis(trialID,sideOrdinal);
             testBasis = testOrdering->getBasis(testID);
             
+            bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
+            const set<int> normalOperators = BilinearForm::normalOperators();
+            if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
+                && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
+              // normal not yet taken into account -- so it must be "hidden" in the trial variable
+              isFlux = true;
+            }
+            
             FieldContainer<double> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );    
 
             // for trial: the value lives on the side, so we don't use the volume coords either:
@@ -515,10 +523,8 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
             
             // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
             FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed;
-            if ((testOperator != OPERATOR_CROSS_NORMAL) && (testOperator != OPERATOR_DOT_NORMAL) 
-                && (trialOperator != OPERATOR_TIMES_NORMAL)) {
-              // we take this to be a flux: since the normal hasn't entered a boundary integral, we assume it's part of the trial variable definition
-              // this is a flux ==> take cell parity into account (because then there must be a normal folded into the flux definition)
+            
+            if (isFlux) {
               // we need to multiply the trialValues by the parity of the normal, since
               // the trial implicitly contains an outward normal, and we need to adjust for the fact
               // that the neighboring cells have opposite normal
@@ -714,6 +720,14 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
                                std::invalid_argument,
                                "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
             
+            bool isFlux = false; // i.e. the normal is "folded into" the variable definition, so that we must take parity into account
+            const set<int> normalOperators = BilinearForm::normalOperators();
+            if (   (normalOperators.find(testOperator)  == normalOperators.end() ) 
+                && (normalOperators.find(trialOperator) == normalOperators.end() ) ) {
+              // normal not yet taken into account -- so it must be "hidden" in the trial variable
+              isFlux = true;
+            }
+            
             for (unsigned sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
               trialBasis = trialOrdering->getBasis(trialID,sideOrdinal);
               testBasis = testOrdering->getBasis(testID);
@@ -728,9 +742,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
               
               // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
               FieldContainer<double> materialDataAppliedToTrialValues = *trialValuesTransformed;
-              if ((testOperator != OPERATOR_CROSS_NORMAL) && (testOperator != OPERATOR_DOT_NORMAL)
-                  && (testOperator != OPERATOR_TIMES_NORMAL)) {
-                // we take this to be a flux: since the normal hasn't entered a boundary integral, we assume it's part of the trial variable definition
+              if (isFlux) {
                 // this being a flux ==> take cell parity into account (because then there must be a normal folded into the flux definition)
                 // we need to multiply the trialValues by the parity of the normal, since
                 // the trial implicitly contains an outward normal, and we need to adjust for the fact

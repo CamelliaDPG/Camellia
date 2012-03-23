@@ -64,7 +64,10 @@ namespace IntrepidExtendedTypes {
     OPERATOR_CROSS_NORMAL,    // 20
     OPERATOR_DOT_NORMAL,      // 21
     OPERATOR_TIMES_NORMAL,    // 22
-    OPERATOR_VECTORIZE_VALUE  // 23
+    OPERATOR_TIMES_NORMAL_X,  // 23
+    OPERATOR_TIMES_NORMAL_Y,  // 24
+    OPERATOR_TIMES_NORMAL_Z,  // 25
+    OPERATOR_VECTORIZE_VALUE  // 26
   };
 
   enum EFunctionSpaceExtended { // all but the last two copied from EFunctionSpace
@@ -125,8 +128,11 @@ public:
   vector<int> trialBoundaryIDs();
   
   void printTrialTestInteractions();
+  
+  static const set<int> & normalOperators(); // the set of all operators that use the normal
 protected:
  
   vector< int > _trialIDs, _testIDs;
+  static set<int> _normalOperators;
 };
 #endif

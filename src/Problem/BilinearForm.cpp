@@ -56,8 +56,13 @@ static const string & S_OPERATOR_DZ = "\\frac{\\partial}{\\partial z} ";
 static const string & S_OPERATOR_CROSS_NORMAL = "\\times \\widehat{n} ";
 static const string & S_OPERATOR_DOT_NORMAL = "\\cdot \\widehat{n} ";
 static const string & S_OPERATOR_TIMES_NORMAL = " \\widehat{n} \\cdot ";
+static const string & S_OPERATOR_TIMES_NORMAL_X = " \\widehat{n}_x ";
+static const string & S_OPERATOR_TIMES_NORMAL_Y = " \\widehat{n}_y ";
+static const string & S_OPERATOR_TIMES_NORMAL_Z = " \\widehat{n}_z ";
 static const string & S_OPERATOR_VECTORIZE_VALUE = ""; // handle this one separately...
 static const string & S_OPERATOR_UNKNOWN = "[UNKNOWN OPERATOR] ";
+
+set<int> BilinearForm::_normalOperators;
 
 const vector< int > & BilinearForm::trialIDs() {
   return _trialIDs;
@@ -151,6 +156,12 @@ int BilinearForm::operatorRank(EOperatorExtended op, EFunctionSpaceExtended fs) 
       return SCALAR; 
     case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL:
       return VECTOR; 
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X:
+      return SCALAR; 
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y:
+      return SCALAR; 
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Z:
+      return SCALAR; 
     case IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE:
       return VECTOR;
     default:
@@ -228,6 +239,15 @@ const string & BilinearForm::operatorName(EOperatorExtended op) {
       break;
     case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL:
       return S_OPERATOR_TIMES_NORMAL; 
+      break;
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X:
+      return S_OPERATOR_TIMES_NORMAL_X; 
+      break;
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y:
+      return S_OPERATOR_TIMES_NORMAL_Y; 
+      break;
+    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Z:
+      return S_OPERATOR_TIMES_NORMAL_Z; 
       break;
     case IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE:
       return S_OPERATOR_VECTORIZE_VALUE; 
@@ -385,4 +405,16 @@ void BilinearForm::printTrialTestInteractions() {
     }
     cout << endl << "\\\\";
   }
+}
+
+const set<int> & BilinearForm::normalOperators() {
+  if (_normalOperators.size() == 0) {
+    _normalOperators.insert(OPERATOR_CROSS_NORMAL);
+    _normalOperators.insert(OPERATOR_DOT_NORMAL);
+    _normalOperators.insert(OPERATOR_TIMES_NORMAL);
+    _normalOperators.insert(OPERATOR_TIMES_NORMAL_X);
+    _normalOperators.insert(OPERATOR_TIMES_NORMAL_Y);
+    _normalOperators.insert(OPERATOR_TIMES_NORMAL_Z);
+  }
+  return _normalOperators;
 }

@@ -260,8 +260,9 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, EFunc
   } else if ((op==OPERATOR_DX) || (op==OPERATOR_DY) || (op==OPERATOR_DZ)) {
     componentOfInterest = op - OPERATOR_DX;
     relatedOp = Intrepid::OPERATOR_GRAD;
-  } else if (   (op==OPERATOR_CROSS_NORMAL) || (op==OPERATOR_DOT_NORMAL) || (op==OPERATOR_TIMES_NORMAL)
-             || (op==OPERATOR_VECTORIZE_VALUE) ) {
+  } else if (   (op==OPERATOR_CROSS_NORMAL)   || (op==OPERATOR_DOT_NORMAL)     || (op==OPERATOR_TIMES_NORMAL)
+             || (op==OPERATOR_TIMES_NORMAL_X) || (op==OPERATOR_TIMES_NORMAL_Y) || (op==OPERATOR_TIMES_NORMAL_Z) 
+             || (op==OPERATOR_VECTORIZE_VALUE)) {
     relatedOp = Intrepid::OPERATOR_VALUE;
   }
   return relatedOp;
@@ -381,6 +382,7 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
 }
 
 FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent) {
+  // TODO: write tests against this version of getValuesTimesNormals
   // values should have dimensions (C,basisCardinality,P)
   int numCells = sideNormals.dimension(0);
   int numPoints = sideNormals.dimension(1);
