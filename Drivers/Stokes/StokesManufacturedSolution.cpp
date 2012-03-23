@@ -278,12 +278,12 @@ double StokesManufacturedSolution::solutionValue(int trialID,
       double sigma11 = solutionValue(StokesMathBilinearForm::SIGMA_11,physicalPoint);
       double sigma12 = solutionValue(StokesMathBilinearForm::SIGMA_12,physicalPoint);
       double p = solutionValue(StokesMathBilinearForm::P,physicalPoint);
-      return p - (sigma11*n1 + sigma12*n2); 
+      return p*n1 - (sigma11*n1 + sigma12*n2); 
     } else if ( trialID == StokesMathBilinearForm::SIGMA2_N_HAT ) {
       double sigma21 = solutionValue(StokesMathBilinearForm::SIGMA_21,physicalPoint);
       double sigma22 = solutionValue(StokesMathBilinearForm::SIGMA_22,physicalPoint);
       double p = solutionValue(StokesMathBilinearForm::P,physicalPoint);
-      return p - (sigma21*n1 + sigma22*n2);
+      return p*n2 - (sigma21*n1 + sigma22*n2);
     }
   } else if (_formulationType == VVP_CONFORMING) {
     if (   ( trialID != StokesVVPBilinearForm::U_N_HAT )
