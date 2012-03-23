@@ -1,57 +1,27 @@
 
-// @HEADER
-//
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
-//
-// Redistribution and use in source and binary forms, with or without modification, are 
-// permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
-// conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
-// provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Nate Roberts (nate@nateroberts.com).
-//
-// @HEADER
-
 /*
- *  StokesBilinearForm.cpp
+ *  StokesMathBilinearForm.cpp
  *
- *  Created by Nathan Roberts on 7/21/11.
+ *  Created by Nathan Roberts on 3/22/12.
  *
  */
 
-#include "StokesBilinearForm.h"
+#include "StokesMathBilinearForm.h"
 
 using namespace std;
 
 // trial variable names:
 static const string & S_U1_HAT = "\\widehat{u}_1";
 static const string & S_U2_HAT = "\\widehat{u}_2";
-static const string & S_SIGMA1_N_HAT = "\\widehat{\\sigma}_{2n}";
-static const string & S_SIGMA2_N_HAT = "\\widehat{\\sigma}_{1n}";
+static const string & S_SIGMA1_N_HAT = "\\widehat{P - \\sigma_{1n}}";
+static const string & S_SIGMA2_N_HAT = "\\widehat{P - \\sigma_{2n}}";
 static const string & S_U_N_HAT = "\\widehat{u}_n";
 static const string & S_U1 = "u_1";
 static const string & S_U2 = "u_2";
 static const string & S_SIGMA_11 = "\\sigma_{11}";
+static const string & S_SIGMA_12 = "\\sigma_{12}";
 static const string & S_SIGMA_21 = "\\sigma_{21}";
 static const string & S_SIGMA_22 = "\\sigma_{22}";
-static const string & S_OMEGA = "\\omega";
 static const string & S_P = "P";
 
 static const string & S_DEFAULT_TRIAL = "invalid trial";
@@ -64,7 +34,7 @@ static const string & S_V_2 = "v_2";
 static const string & S_V_3 = "v_3";
 static const string & S_DEFAULT_TEST = "invalid test";
 
-StokesBilinearForm::StokesBilinearForm(double mu) {
+StokesMathBilinearForm::StokesMathBilinearForm(double mu) {
   _mu = mu;
   
   _testIDs.push_back(Q_1);
@@ -75,19 +45,19 @@ StokesBilinearForm::StokesBilinearForm(double mu) {
   
   _trialIDs.push_back(U1_HAT);
   _trialIDs.push_back(U2_HAT);
-  _trialIDs.push_back(SIGMA1_N_HAT);
-  _trialIDs.push_back(SIGMA2_N_HAT);
-  _trialIDs.push_back(U_N_HAT);
+  _trialIDs.push_back(SIGMA1_N_HAT); // really P - sigma_1n
+  _trialIDs.push_back(SIGMA2_N_HAT); // really P - sigma_2n
+  //  _trialIDs.push_back(U_N_HAT);  // U_N_HAT now expressed in terms of u1, u2 hat.
   _trialIDs.push_back(U1);
   _trialIDs.push_back(U2);
   _trialIDs.push_back(SIGMA_11);
+  _trialIDs.push_back(SIGMA_12);
   _trialIDs.push_back(SIGMA_21);
   _trialIDs.push_back(SIGMA_22);
-  _trialIDs.push_back(OMEGA);
-  _trialIDs.push_back(P);  
+  _trialIDs.push_back(P);
 }
 
-const string & StokesBilinearForm::testName(int testID) {
+const string & StokesMathBilinearForm::testName(int testID) {
   switch (testID) {
     case Q_1:
       return S_Q_1;
@@ -109,7 +79,7 @@ const string & StokesBilinearForm::testName(int testID) {
   }
 }
 
-const string & StokesBilinearForm::trialName(int trialID) {
+const string & StokesMathBilinearForm::trialName(int trialID) {
   switch(trialID) {
     case U1_HAT:
       return S_U1_HAT;
@@ -123,9 +93,6 @@ const string & StokesBilinearForm::trialName(int trialID) {
     case SIGMA2_N_HAT:
       return S_SIGMA2_N_HAT;
       break;
-    case U_N_HAT:
-      return S_U_N_HAT;
-      break;
     case U1:
       return S_U1;
       break;
@@ -135,14 +102,14 @@ const string & StokesBilinearForm::trialName(int trialID) {
     case SIGMA_11:
       return S_SIGMA_11;
       break;
+    case SIGMA_12:
+      return S_SIGMA_12;
+      break;
     case SIGMA_21:
       return S_SIGMA_21;
       break;
     case SIGMA_22:
       return S_SIGMA_22;
-      break;
-    case OMEGA:
-      return S_OMEGA;
       break;
     case P:
       return S_P;
@@ -152,8 +119,8 @@ const string & StokesBilinearForm::trialName(int trialID) {
   }
 }
 
-bool StokesBilinearForm::trialTestOperator(int trialID, int testID, 
-                                            EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
+bool StokesMathBilinearForm::trialTestOperator(int trialID, int testID, 
+                                               EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
   trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
@@ -165,25 +132,15 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
           break;
         case SIGMA_11:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against psi1 (dot product)
+          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against sigma1 (dot product)
           break;
-        case SIGMA_21:
+        case SIGMA_12:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against psi1 (dot product)
-          break;
-        case P:
-          returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X;
-          break;
-        case OMEGA:
-          returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y;
+          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against sigma1 (dot product)
           break;
         case U1_HAT:
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
-          break;
-        default:
           break;
       }
       break;
@@ -195,25 +152,15 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
           break;
         case SIGMA_21:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against psi1 (dot product)
+          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q2 against sigma2 (dot product)
           break;
         case SIGMA_22:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against psi1 (dot product)
-          break;
-        case P:
-          returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y;
-          break;
-        case OMEGA:
-          returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X;
+          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q2 against sigma2 (dot product)
           break;
         case U2_HAT:
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
-          break;
-        default:
           break;
       }
       break;
@@ -223,15 +170,17 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DX;
           break;
-        case SIGMA_21:
+        case SIGMA_12:
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          break;
+        case P:
+          returnValue = true;
+          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
           break;
         case SIGMA1_N_HAT:
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-          break;
-        default:
           break;
       }
       break;
@@ -245,11 +194,13 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DY;
           break;
+        case P:
+          returnValue = true;
+          testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          break;
         case SIGMA2_N_HAT:
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-          break;
-        default:
           break;
       }
       break;
@@ -263,108 +214,99 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
           returnValue = true;
           testOperator = IntrepidExtendedTypes::OPERATOR_DY;
           break;
-        case U_N_HAT:
+        case U1_HAT:
           returnValue = true;
+          // NOTE: right now, OPERATOR_TIMES_NORMAL_i doesn't seem to work for testOperators (because of assumptions built into BasisCache / BasisEvaluation, probably)
+          // but conceptually changing the trialOperator makes more sense anyway, so we do that here
+          trialOperator = IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X;
           testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
           break;
-        default:
+        case U2_HAT:
+          // NOTE: right now, OPERATOR_TIMES_NORMAL_i doesn't seem to work for testOperators (because of assumptions built into BasisCache / BasisEvaluation, probably)
+          // but conceptually changing the trialOperator makes more sense anyway, so we do that here
+          returnValue = true;
+          trialOperator = IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y;
+          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
           break;
       }
-      break;
-    default:
       break;
   }
   return returnValue;
 }
 
-void StokesBilinearForm::applyBilinearFormData(int trialID, int testID, 
-                                               FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                                               const FieldContainer<double> &points) {
+void StokesMathBilinearForm::applyBilinearFormData(int trialID, int testID, 
+                                                   FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
+                                                   const FieldContainer<double> &points) {
   
   switch (testID) {
     case Q_1:
       switch (trialID) {
         case U1:
-          // 1.0 weight -- do nothing
-          break;
         case SIGMA_11:
-        case SIGMA_21:
-        case P:
-          multiplyFCByWeight(testValues,1.0/(2.0*_mu));
-          break;
-        case OMEGA:
+        case SIGMA_12:
           // 1.0 weight -- do nothing
           break;
         case U1_HAT:
           multiplyFCByWeight(testValues,-1.0);
-          break;
-        default:
           break;
       }
       break;
     case Q_2:
       switch (trialID) {
         case U2:
-          // 1.0 weight -- do nothing
-          break;
         case SIGMA_21:
         case SIGMA_22:
-        case P:
-          multiplyFCByWeight(testValues,1.0/(2.0*_mu));
-          break;
-        case OMEGA:
-          // -1.0 weight:
-          multiplyFCByWeight(testValues,-1.0);
+          // 1.0 weight -- do nothing
           break;
         case U2_HAT:
           multiplyFCByWeight(testValues,-1.0);
-          break;
-        default:
           break;
       }
       break;
     case V_1:
       switch (trialID) {
         case SIGMA_11:
-        case SIGMA_21:
-          // 1.0 weight -- do nothing
+        case SIGMA_12:
+          multiplyFCByWeight(testValues,_mu);
           break;
-        case SIGMA1_N_HAT:
+        case P:
           multiplyFCByWeight(testValues,-1.0);
           break;
-        default:
+        case SIGMA1_N_HAT:
+          // 1.0 weight -- do nothing
           break;
       }
+      break;
     case V_2:
       switch (trialID) {
         case SIGMA_21:
         case SIGMA_22:
-          // 1.0 weight -- do nothing
+          multiplyFCByWeight(testValues,_mu);
           break;
-        case SIGMA2_N_HAT:
+        case P:
           multiplyFCByWeight(testValues,-1.0);
           break;
-        default:
+        case SIGMA2_N_HAT:
+          // 1.0 weight -- do nothing
           break;
       }
+      break;
     case V_3:
       switch (trialID) {
         case U1:
         case U2:
-          // 1.0 weight -- do nothing
-          break;
-        case U_N_HAT:
           multiplyFCByWeight(testValues,-1.0);
           break;
-        default:
+        case U1_HAT:
+        case U2_HAT:
+          // 1.0 weight -- do nothing
           break;
       }
-    default:
       break;
   }
 }
 
-EFunctionSpaceExtended StokesBilinearForm::functionSpaceForTest(int testID) {
+EFunctionSpaceExtended StokesMathBilinearForm::functionSpaceForTest(int testID) {
   switch (testID) {
     case Q_1:
     case Q_2:
@@ -380,17 +322,18 @@ EFunctionSpaceExtended StokesBilinearForm::functionSpaceForTest(int testID) {
   }
 }
 
-EFunctionSpaceExtended StokesBilinearForm::functionSpaceForTrial(int trialID) {
+EFunctionSpaceExtended StokesMathBilinearForm::functionSpaceForTrial(int trialID) {
   // Field variables, and fluxes, are all L2.
-  // Traces (like PHI_HAT) are H1 if we use conforming traces.
-  // For now, don’t use conforming (like last summer).
+  // Traces (like U_i_HAT) are H1 if we use conforming traces.
+  if ( (trialID == U1_HAT) || (trialID == U2_HAT) ) {
+    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  }
   return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
 }
 
-bool StokesBilinearForm::isFluxOrTrace(int trialID) {
+bool StokesMathBilinearForm::isFluxOrTrace(int trialID) {
   if ((U1_HAT==trialID) || (U2_HAT==trialID) 
-      || (SIGMA1_N_HAT==trialID) || (SIGMA2_N_HAT==trialID) 
-      || (U_N_HAT==trialID) ) {
+      || (SIGMA1_N_HAT==trialID) || (SIGMA2_N_HAT==trialID) ) {
     return true;
   } else {
     return false;

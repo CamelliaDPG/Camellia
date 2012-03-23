@@ -42,18 +42,26 @@
 #include "StokesBilinearFormConforming.h"
 #include "StokesVVPBilinearForm.h"
 #include "StokesManufacturedSolution.h"
+#include "StokesMathBilinearForm.h"
 
 typedef Sacado::Fad::SFad<double,2> F2; // FAD with # of ind. vars fixed at 2
 typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, but nested so we can take 2 derivatives
 //typedef Sacado::Fad::DFad< Sacado::Fad::DFad<double> > F2_2;
 
 int StokesManufacturedSolution::pressureID() {
-  return ( _formulationType == VVP_CONFORMING) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
+//  return ( _formulationType == VVP_CONFORMING) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
+  if ( _formulationType == StokesManufacturedSolution::MATH_CONFORMING ) {
+    return StokesMathBilinearForm::P;
+  } else if ( _formulationType == StokesManufacturedSolution::VVP_CONFORMING ) {
+    return StokesVVPBilinearForm::P;
+  } else {
+    return StokesBilinearForm::P;
+  } 
 }
 
 StokesManufacturedSolution::StokesManufacturedSolution(StokesManufacturedSolutionType type, 
                                                        int polyOrder, StokesFormulationType formulationType) {
-  // poly order here means that of phi
+  // poly order here means that of u1, u2
   _polyOrder = polyOrder;
   _type = type;
   ExactSolution::_bc = Teuchos::rcp(this,false); // don't let the RCP own the memory
@@ -66,6 +74,8 @@ StokesManufacturedSolution::StokesManufacturedSolution(StokesManufacturedSolutio
     _bilinearForm = Teuchos::rcp(new StokesBilinearFormConforming(_mu));
   } else if ( _formulationType == VVP_CONFORMING ) {
     _bilinearForm = Teuchos::rcp(new StokesVVPBilinearForm(_mu));
+  } else if ( _formulationType == MATH_CONFORMING ) {
+    _bilinearForm = Teuchos::rcp(new StokesMathBilinearForm(_mu));
   }
   if ( _formulationType == ORIGINAL_NON_CONFORMING ) {
     _useSinglePointBCForP = true;
@@ -76,9 +86,8 @@ StokesManufacturedSolution::StokesManufacturedSolution(StokesManufacturedSolutio
 
 void StokesManufacturedSolution::setUseSinglePointBCForP(bool value) {
   _useSinglePointBCForP = value;
-  int pressureID = ( _formulationType == VVP_CONFORMING) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
 
-  if (value && (imposeZeroMeanConstraint(pressureID) ) ) {
+  if (value && (imposeZeroMeanConstraint(pressureID()) ) ) {
     cout << "warning: imposing zero mean constraint as well as single-point BC for Stokes pressure.\n";
   }
 }
@@ -180,7 +189,7 @@ double StokesManufacturedSolution::solutionValue(int trialID,
       TEST_FOR_EXCEPTION( true,
                          std::invalid_argument,
                          "solutionValues called with unknown trialID.");
-    } else {
+    } else if ( (_formulationType == ORIGINAL_CONFORMING) || (_formulationType == ORIGINAL_NON_CONFORMING) ) {
       switch(trialID) {
         case StokesBilinearForm::U1:
         case StokesBilinearForm::U1_HAT:
@@ -216,14 +225,67 @@ double StokesManufacturedSolution::solutionValue(int trialID,
       TEST_FOR_EXCEPTION( true,
                      std::invalid_argument,
                      "solutionValues called with unknown trialID.");
+    } else if (_formulationType == MATH_CONFORMING) {
+      switch(trialID) {
+        case StokesMathBilinearForm::U1:
+        case StokesMathBilinearForm::U1_HAT:
+          return su1.val();
+          break;
+        case StokesMathBilinearForm::U2:
+        case StokesMathBilinearForm::U2_HAT:
+          return su2.val();
+          break;
+        case StokesMathBilinearForm::P:
+          return sp.val();
+          break;
+        case StokesMathBilinearForm::SIGMA_11:
+          return su1.dx(0); // SIGMA_11 == d/dx (u1)
+          break;
+        case StokesMathBilinearForm::SIGMA_12:
+          return su1.dx(1); // SIGMA_12 == d/dy (u1)
+          break;
+        case StokesMathBilinearForm::SIGMA_21:
+          return su2.dx(0); // SIGMA_21 == d/dx (u2)
+          break;
+        case StokesMathBilinearForm::SIGMA_22:
+          return su2.dx(1); // SIGMA_22 == d/dy (u2)
+          break;
+        case StokesMathBilinearForm::SIGMA1_N_HAT:
+        case StokesMathBilinearForm::SIGMA2_N_HAT:
+          TEST_FOR_EXCEPTION( true,
+                             std::invalid_argument,
+                             "for fluxes, you must call solutionValue with unitNormal argument.");
+          break;
+      }
     }
   return 0.0;
 }
 
 double StokesManufacturedSolution::solutionValue(int trialID,
-                                           FieldContainer<double> &physicalPoint,
-                                           FieldContainer<double> &unitNormal) {
-  if (_formulationType == VVP_CONFORMING) {
+                                                 FieldContainer<double> &physicalPoint,
+                                                 FieldContainer<double> &unitNormal) {
+  if (_formulationType == MATH_CONFORMING) {
+    if (   ( trialID != StokesMathBilinearForm::SIGMA1_N_HAT )
+        && ( trialID != StokesMathBilinearForm::SIGMA2_N_HAT ) )
+    {
+      return solutionValue(trialID,physicalPoint);
+    }
+    
+    double n1 = unitNormal(0);
+    double n2 = unitNormal(1);
+    
+    if ( trialID == StokesMathBilinearForm::SIGMA1_N_HAT ) {
+      double sigma11 = solutionValue(StokesMathBilinearForm::SIGMA_11,physicalPoint);
+      double sigma12 = solutionValue(StokesMathBilinearForm::SIGMA_12,physicalPoint);
+      double p = solutionValue(StokesMathBilinearForm::P,physicalPoint);
+      return p - (sigma11*n1 + sigma12*n2); 
+    } else if ( trialID == StokesMathBilinearForm::SIGMA2_N_HAT ) {
+      double sigma21 = solutionValue(StokesMathBilinearForm::SIGMA_21,physicalPoint);
+      double sigma22 = solutionValue(StokesMathBilinearForm::SIGMA_22,physicalPoint);
+      double p = solutionValue(StokesMathBilinearForm::P,physicalPoint);
+      return p - (sigma21*n1 + sigma22*n2);
+    }
+  } else if (_formulationType == VVP_CONFORMING) {
     if (   ( trialID != StokesVVPBilinearForm::U_N_HAT )
         && ( trialID != StokesVVPBilinearForm::U_CROSS_N_HAT ) )
     {
@@ -275,9 +337,12 @@ double StokesManufacturedSolution::solutionValue(int trialID,
 bool StokesManufacturedSolution::nonZeroRHS(int testVarID) {
   if (_formulationType == VVP_CONFORMING) {
     return (testVarID == StokesVVPBilinearForm::Q_1) ;
-  } else {
+  } else if ( (_formulationType == ORIGINAL_NON_CONFORMING) || (_formulationType == ORIGINAL_CONFORMING) ) {
     return (testVarID == StokesBilinearForm::V_1) || (testVarID == StokesBilinearForm::V_2);
+  } else if ( _formulationType == MATH_CONFORMING ) {
+    return (testVarID == StokesMathBilinearForm::V_1) || (testVarID == StokesMathBilinearForm::V_2);
   }
+  TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled formulation type.");
 }
 
 void StokesManufacturedSolution::f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent) { // -1 for both
@@ -333,9 +398,17 @@ void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double>
                        "for Stokes VVP, rhs called for testVarID other than Q_1" );
     f_rhs(physicalPoints,values,-1); // -1 for both components
   } else {
-    TEST_FOR_EXCEPTION( (testVarID != StokesBilinearForm::V_1) && (testVarID != StokesBilinearForm::V_2), std::invalid_argument,
+    int v1, v2;
+    if ( (_formulationType == ORIGINAL_NON_CONFORMING) || (_formulationType == ORIGINAL_CONFORMING) ) {
+      v1 = StokesBilinearForm::V_1;
+      v2 = StokesBilinearForm::V_2;
+    } else {
+      v1 = StokesMathBilinearForm::V_1;
+      v2 = StokesMathBilinearForm::V_2;
+    }
+    TEST_FOR_EXCEPTION( (testVarID != v1) && (testVarID != v2), std::invalid_argument,
                        "for Stokes (non-VVP), rhs called for testVarID other than V_1 and V_2" );
-    if ( testVarID == StokesBilinearForm::V_1 ) {
+    if ( testVarID == v1 ) {
       f_rhs(physicalPoints,values,0);
     } else {
       f_rhs(physicalPoints,values,1);
@@ -346,9 +419,17 @@ void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double>
 /***************** BC Implementation *****************/
 bool StokesManufacturedSolution::bcsImposed(int varID){
   // returns true if there are any BCs anywhere imposed on varID
-  int pressureID = ( _formulationType == VVP_CONFORMING) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
+  int pressureID = this->pressureID();
   if ( (! _useSinglePointBCForP ) && (! imposeZeroMeanConstraint(pressureID) ) )  {
-    if ( _formulationType == VVP_CONFORMING) {
+    // THIS IS A BIT WEIRD.  DO WE EVER ACTUALLY HIT THIS BLOCK?
+    // (IT LOOKS LIKE THIS IS IN CASE WE AREN'T IMPOSING ANY CONSTRAINT ON THE PRESSURE,
+    //  PROBABLY JUST SOMETHING I DID DURING DEBUGGING...)
+    cout << "WARNING: StokesManufacturedSolution: no BC set for pressure, so imposing (over-determined) BCs on other variables.\n";
+    if ( _formulationType == MATH_CONFORMING ) {
+      // then we impose BCs everywhere for velocity, plus SIGMA1_N_HAT and SIGMA2_N_HAT:
+      return (varID == StokesMathBilinearForm::U1_HAT)   || (varID == StokesMathBilinearForm::U2_HAT)
+      || (varID == StokesMathBilinearForm::SIGMA1_N_HAT) || (varID == StokesMathBilinearForm::SIGMA2_N_HAT);
+    } else if ( _formulationType == VVP_CONFORMING) {
       return (varID == StokesVVPBilinearForm::U_CROSS_N_HAT)
       || (varID == StokesVVPBilinearForm::U_N_HAT) || (varID == StokesVVPBilinearForm::P_HAT);
     } else { // original
@@ -358,7 +439,9 @@ bool StokesManufacturedSolution::bcsImposed(int varID){
       || (varID == StokesBilinearForm::SIGMA2_N_HAT);
     }
   } else {
-    if ( _formulationType == VVP_CONFORMING) {
+    if ( _formulationType == MATH_CONFORMING ) {
+      return (varID == StokesMathBilinearForm::U1_HAT) || (varID == StokesMathBilinearForm::U2_HAT);
+    } else if ( _formulationType == VVP_CONFORMING) {
       return (varID == StokesVVPBilinearForm::U_CROSS_N_HAT) || (varID == StokesVVPBilinearForm::U_N_HAT);
     } else { // original
       return (varID == StokesBilinearForm::U1_HAT) || (varID == StokesBilinearForm::U2_HAT) || (varID == StokesBilinearForm::U_N_HAT);

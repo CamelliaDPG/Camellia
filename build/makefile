@@ -50,6 +50,7 @@ OBJ_NAMES = DofOrdering \
        ElementTypeFactory \
        EricksonManufacturedSolution \
        EricksonConfectionSolution \
+       ExperimentalInnerProduct \
        Mesh \
        MeshPartitionPolicy \
        Boundary \
@@ -90,6 +91,7 @@ OBJ_NAMES = DofOrdering \
        RHSTests \
        SchwarzSolver \
 			 StokesBilinearForm \
+			 StokesMathBilinearForm \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
        TimeMarchingProblem \
@@ -132,6 +134,9 @@ EricksonDriver: EricksonDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/EricksonDriver.o -o EricksonDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 EricksonDriver.o: $(DRIVERS_DIR)/Confusion/EricksonDriver.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+ExperimentalInnerProduct.o: $(DRIVERS_DIR)/Confusion/ExperimentalInnerProduct.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS)

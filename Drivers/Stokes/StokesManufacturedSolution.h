@@ -48,7 +48,8 @@ public:
   enum StokesFormulationType {
     ORIGINAL_NON_CONFORMING,
     ORIGINAL_CONFORMING,
-    VVP_CONFORMING
+    VVP_CONFORMING,
+    MATH_CONFORMING
   };
   enum StokesManufacturedSolutionType {
     POLYNOMIAL = 0,
@@ -66,7 +67,6 @@ protected:
   template <typename T> const T  p(T &x, T &y);  // in 2 dimensions
   
   void f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent);
-  int pressureID();
 public:
   StokesManufacturedSolution(StokesManufacturedSolutionType type, 
                              int polyOrder=-2, StokesFormulationType formulationType=ORIGINAL_NON_CONFORMING); // poly order here means that of phi -- -2 for non-polynomial types
@@ -89,6 +89,8 @@ public:
   bool singlePointBC(int varID);
   bool imposeZeroMeanConstraint(int trialID);
   void setUseSinglePointBCForP(bool value);
+  
+  int pressureID();
 };
 
 #endif

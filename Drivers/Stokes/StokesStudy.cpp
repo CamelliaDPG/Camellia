@@ -44,6 +44,7 @@
 #include "OptimalInnerProduct.h"
 #include "StokesManufacturedSolution.h"
 #include "StokesVVPBilinearForm.h"
+#include "StokesMathBilinearForm.h"
 
 #include "MultiOrderStudy.h"
 
@@ -54,24 +55,40 @@
 
 using namespace std;
 
-int main(int argc, char *argv[]) {
-#ifdef HAVE_MPI
-  // TODO: figure out the right thing to do here...
-  // may want to modify argc and argv before we make the following call:
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  //rank=mpiSession.getRank();
-  //numProcs=mpiSession.getNProc();
-#else
-#endif
-  int polyOrder = 2, minLogElements = 0, maxLogElements = 4;
+void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int &maxLogElements,
+               StokesManufacturedSolution::StokesFormulationType &formulationType,
+               bool &useTriangles, bool &useMultiOrder, bool &useOptimalNorm, string &formulationTypeStr) {
+  polyOrder = 2; minLogElements = 0; maxLogElements = 4;
   
-  int pToAdd = 2; // for optimal test function approximation
-  bool useTriangles = false;
-  bool useOptimalNorm = true; 
-  StokesManufacturedSolution::StokesFormulationType formulationType=StokesManufacturedSolution::ORIGINAL_CONFORMING;
-  string formulationTypeStr = "original conforming";
+  // set up defaults:
+  useTriangles = false;
+  useOptimalNorm = true; 
+  formulationType=StokesManufacturedSolution::ORIGINAL_CONFORMING;
+  formulationTypeStr = "original conforming";
+  string multiOrderStudyType = "multiOrderQuad";
   
-  bool useMultiOrder = false;
+  useMultiOrder = false;
+  
+  string normChoice = "opt";
+  
+  /* Usage:
+   Multi-Order, math norm:
+     StokesStudy "multiOrder{Tri|Quad}" formulationTypeStr
+   Single Order, original conforming, optimal norm, quad:
+     StokesStudy polyOrder minLogElements maxLogElements
+   Single Order, original conforming, quad:
+   StokesStudy normChoice polyOrder minLogElements maxLogElements
+   Single Order, quad:
+     StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements
+   Single Order, quad:
+     StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
+   
+   where:
+   formulationTypeStr = {"original conforming"|"nonConforming"|"vvp"|"math"}
+   normChoice = {"opt"|"math"}
+   
+   */
+  
   
   if (argc == 3) {
     string multiOrderStudyType = argv[1];
@@ -84,52 +101,25 @@ int main(int argc, char *argv[]) {
     useMultiOrder = true;
     useOptimalNorm = false; // using math norm for paper
     polyOrder = 1;
-    if (formulationTypeStr == "vvp") {
-      formulationType = StokesManufacturedSolution::VVP_CONFORMING;
-    } else if (formulationTypeStr == "nonConforming") {
-      formulationType = StokesManufacturedSolution::ORIGINAL_NON_CONFORMING;
-    } else {
-      formulationType = StokesManufacturedSolution::ORIGINAL_CONFORMING;
-      formulationTypeStr = "original conforming";
-    }
-    
   } else if (argc == 4) {
     polyOrder = atoi(argv[1]);
     minLogElements = atoi(argv[2]);
     maxLogElements = atoi(argv[3]);
   } else if (argc == 5) {
-    string normChoice = argv[1];
-    if (normChoice == "math") {
-      useOptimalNorm = false; // otherwise, use math
-    }
+    normChoice = argv[1];
     polyOrder = atoi(argv[2]);
     minLogElements = atoi(argv[3]);
     maxLogElements = atoi(argv[4]);
   } else if (argc == 6) {
-    string normChoice = argv[1];
-    if (normChoice == "math") {
-      useOptimalNorm = false; // otherwise, use math
-    }
+    normChoice = argv[1];
+
     formulationTypeStr = argv[2];
-    if (formulationTypeStr == "vvp") {
-      formulationType = StokesManufacturedSolution::VVP_CONFORMING;
-    } else if (formulationTypeStr == "nonConforming") {
-      formulationType = StokesManufacturedSolution::ORIGINAL_NON_CONFORMING;
-    }
     polyOrder = atoi(argv[3]);
     minLogElements = atoi(argv[4]);
     maxLogElements = atoi(argv[5]);
   } else if (argc == 7) {
-    string normChoice = argv[1];
-    if (normChoice == "math") {
-      useOptimalNorm = false;
-    }
+    normChoice = argv[1];
     formulationTypeStr = argv[2];
-    if (formulationTypeStr == "vvp") {
-      formulationType = StokesManufacturedSolution::VVP_CONFORMING;
-    } else if (formulationTypeStr == "nonConforming") {
-      formulationType = StokesManufacturedSolution::ORIGINAL_NON_CONFORMING;
-    }
     polyOrder = atoi(argv[3]);
     minLogElements = atoi(argv[4]);
     maxLogElements = atoi(argv[5]);
@@ -140,12 +130,46 @@ int main(int argc, char *argv[]) {
       useTriangles = false;
     } // otherwise, just use whatever was defined above
   }
-  
+  if (normChoice == "math") {
+    useOptimalNorm = false; // otherwise, use math
+  }
+  if (formulationTypeStr == "math") {
+    formulationType = StokesManufacturedSolution::MATH_CONFORMING;
+  } else if (formulationTypeStr == "vvp") {
+    formulationType = StokesManufacturedSolution::VVP_CONFORMING;
+  } else if (formulationTypeStr == "nonConforming") {
+    formulationType = StokesManufacturedSolution::ORIGINAL_NON_CONFORMING;
+  } else {
+    formulationType = StokesManufacturedSolution::ORIGINAL_CONFORMING;
+    formulationTypeStr = "original conforming";
+  }
+
+}
+
+int main(int argc, char *argv[]) {
+#ifdef HAVE_MPI
+  // TODO: figure out the right thing to do here...
+  // may want to modify argc and argv before we make the following call:
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  //rank=mpiSession.getRank();
+  //numProcs=mpiSession.getNProc();
+#else
+#endif
+  int pToAdd = 2; // for optimal test function approximation
+
+  // parse args:
+  int polyOrder, minLogElements, maxLogElements;
+  bool useTriangles, useOptimalNorm, useMultiOrder;
+  StokesManufacturedSolution::StokesFormulationType formulationType;
+  string formulationTypeStr;
+  parseArgs(argc, argv, polyOrder, minLogElements, maxLogElements, formulationType, useTriangles,
+            useMultiOrder, useOptimalNorm, formulationTypeStr);
+
   Teuchos::RCP<StokesManufacturedSolution> mySolution = 
   Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
                                                polyOrder, formulationType) );
   
-  int pressureID = ( formulationType == StokesManufacturedSolution::VVP_CONFORMING ) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
+  int pressureID = mySolution->pressureID();
   bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
   
   cout << "formulationType = " << formulationTypeStr                  << "\n";
@@ -175,14 +199,25 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;
   
   int u1_trialID, u2_trialID, p_trialID;
-  if (formulationType == StokesManufacturedSolution::VVP_CONFORMING) {
+  int u1_traceID, u2_traceID;
+  if (formulationType == StokesManufacturedSolution::MATH_CONFORMING) {
+    u1_trialID = StokesMathBilinearForm::U1;
+    u2_trialID = StokesMathBilinearForm::U2;
+    p_trialID = StokesMathBilinearForm::P;
+    u1_traceID = StokesMathBilinearForm::U1_HAT;
+    u2_traceID = StokesMathBilinearForm::U2_HAT;
+  } else if (formulationType == StokesManufacturedSolution::VVP_CONFORMING) {
     u1_trialID = StokesVVPBilinearForm::U1;
     u2_trialID = StokesVVPBilinearForm::U2;
     p_trialID = StokesVVPBilinearForm::P;
+    u1_traceID = -1; // no velocity traces available in VVP formulation
+    u2_traceID = -1;
   } else {
     u1_trialID = StokesBilinearForm::U1;
     u2_trialID = StokesBilinearForm::U2;
     p_trialID =  StokesBilinearForm::P;    
+    u1_traceID = StokesBilinearForm::U1_HAT;
+    u2_traceID = StokesBilinearForm::U2_HAT;
   }
   
   if ( !useMultiOrder ) {
@@ -198,10 +233,10 @@ int main(int argc, char *argv[]) {
     ostringstream filePathPrefix;
     filePathPrefix << "stokes/u1_p" << polyOrder;
     
-    study.writeToFiles(filePathPrefix.str(),u1_trialID);
+    study.writeToFiles(filePathPrefix.str(),u1_trialID,u1_traceID);
     filePathPrefix.str("");
     filePathPrefix << "stokes/u2_p" << polyOrder;
-    study.writeToFiles(filePathPrefix.str(),u2_trialID);
+    study.writeToFiles(filePathPrefix.str(),u2_trialID,u2_traceID);
     
     filePathPrefix.str("");
     filePathPrefix << "stokes/pressure_p" << polyOrder;

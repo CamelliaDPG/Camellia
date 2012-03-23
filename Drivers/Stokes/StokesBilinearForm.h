@@ -66,8 +66,7 @@ public:
     Q_2,
     V_1,
     V_2,
-    V_3,
-    ONE
+    V_3
   };
   
   enum ETrialIDs {
