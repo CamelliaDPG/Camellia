@@ -67,7 +67,7 @@ public:
                     bool randomRefinements=false, bool useTriangles=false, bool useHybrid=false);
   void setReportRelativeErrors(bool reportRelativeErrors);
   void solve(const FieldContainer<double> &quadPoints);
-  void writeToFiles(const string & filePathPrefix, int trialID);
+  void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
 };
 
 #endif
