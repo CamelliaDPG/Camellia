@@ -260,10 +260,16 @@ Given the boundary conditions on $\widehat{u}$ and $\widehat{f}_n$, we can now a
 \|\widehat{u}\| &= \inf_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+}=0, \left.w\right |_{\Gamma_h\setminus \Gamma_+ } = \widehat{u}} \|w\|_{H^1(\Omega)}\\
 \|\widehat{f}_n\| &= \inf_{q\in H({\rm div},\Omega), \left.q\cdot n\right|_{\Gamma_-}= 0, \left. q\cdot n \right |_{\Gamma_h} = \widehat{f}_n} \|q\|_{H({\rm div},\Omega)}
 \end{align*}
+Additionally, throughout the rest of this work, we denote norms on $u$ and $\sigma$ as
+\begin{align*}
+\|u\| &= \|u\|_{L^2} \\
+\|\sigma\| &= \|\sigma\|_{L^2}
+\end{align*}
 We will construct norms on $U$ as combinations of norms on each variable
 \[
-\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\|_U = C_1 \|u\|_{L^2} + C_2 \|\sigma\|_{L^2} + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1 \|u\| + C_2 \|\sigma\| + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|
 \]
+
 
 \subsection{Equivalence of energy and $U$ norms}
 
@@ -296,6 +302,8 @@ where $\|\cdot \|_{U_2}$ is defined as
 \]
 The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
 
+The proof proceeds in two parts; the bound from below is proven by providing stability estimates for the adjoint problem, while the bound from above of the energy norm is proven separately.  
+
 \subsubsection{Stability of the adjoint problem (bound from below)}
 
 We reduce the adjoint problem to the scalar second order equation
@@ -303,10 +311,10 @@ We reduce the adjoint problem to the scalar second order equation
 - \epsilon \Delta v - \beta \cdot \grad v = g - \epsilon \div f \label{adjoint}
 \end{equation}
 with boundary conditions
-\begin{align*}
-\tau_n = - \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_-\\
-v &= 0, \quad x\in \Gamma_+ 
-\end{align*}
+\begin{align}
+\tau_n = - \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{bc_1}\\ 
+v &= 0, \quad x\in \Gamma_+ \label{bc_2}
+\end{align}
 and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions reduce down to \eqref{eq:adj_bc1} and \eqref{eq:adj_bc2} when requesting $L^2$ robustness in $u$ ($f=0$); these more general boundary conditions are necessary for bounds involving $f \neq 0$.
 
 Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. The normal trace $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
@@ -315,7 +323,7 @@ The second lemma concerns the robust control of $u$ by the energy error; the fir
 
 \begin{lemma} 
 \label{lemma_1}
-Assuming \eqref{a_req} and \eqref{adjoint} hold, for sufficiently small $\epsilon$, 
+Assume \eqref{a_req} and \eqref{adjoint} hold.  Then, for $v$ satisfying \eqref{bc_1}, \eqref{bc_2} and sufficiently small $\epsilon$, 
 \[
 \epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\| + \epsilon \| f\|
 \]
@@ -360,7 +368,7 @@ From here, the proof is identical to \cite{DPGrobustness}; an application of Pet
 
 \begin{lemma} 
 \label{lemma_2}
-Assume $v$ satisfies $\eqref{adjoint}$ and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
+Assume $v$ satisfies $\eqref{adjoint}$,\eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
 \[
 \|\beta \cdot \grad v \| \lesssim \| f\|
 \]
@@ -447,25 +455,64 @@ On the other hand, using the decomposition and boundary conditions directly, we 
 \|\tau\|^2 &= (\tau, \epsilon \grad \psi - \beta \psi + \curl z) = (\tau, \epsilon \grad \psi) - (\tau,\beta \psi) + (\tau,\curl z)  \\
 &=(\tau, \epsilon \grad \psi) + \epsilon(\grad v,\beta \psi) - \epsilon(\grad v,\curl z)  \\
 &=\epsilon \langle [\tau \cdot n],\psi \rangle - \epsilon  \langle n\cdot \curl z, [v]\rangle = \epsilon \langle [\tau \cdot n],\psi \rangle_{\Gamma_h \setminus \Gamma_+} - \epsilon  \langle n\cdot \curl z, [v]\rangle_{\Gamma_h \cup \Gamma_+}\\
-&\lesssim \epsilon \|[\tau \cdot n]\|_{\Gamma_h \setminus \Gamma_+} \|\psi\| + \epsilon \| [v]\|_{\Gamma_h \cup \Gamma_+}\| n\cdot \curl z \| 
+&\lesssim \epsilon \|[\tau \cdot n]\| \|\psi\| + \epsilon \| [v]\|\| n\cdot \curl z \| 
 \end{align*}
-by the boundary norms for $v$ and $\tau$, which are defined by duality
+where the boundary norms for $v$ and $\tau$ are defined by duality
 \begin{align*}
-\|[\tau\cdot n]\|_{\Gamma_h} &\coloneqq \sup_{w\in H^1} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
-\|[v]\|_{\Gamma_h} &\coloneqq \sup_{\eta\in H({\rm div})} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
+\|[\tau\cdot n]\| &= \|[\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} \coloneqq \sup_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+} = 0} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
+\|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
 \end{align*}
 Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
 \end{proof}
 
+With these three lemmas, we can prove the robust bound of both field variables and fluxes by the energy error.  In doing so, we take advantage of the fact that, for any choice of energy norm, the test norm $\|v\|_V$ inducing it can be recovered via duality
+\begin{align}
+\| v \|_V = \sup_{u \in U\setminus \{0\}} \frac{b\left(u,v\right)}{\left\| u \right\|_E} \label{norm_duality}
+\end{align}
+%\[
+%\| \left(\tau,v\right) \|_V = \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E}
+%\]
+The proof for this is identical to proving $\|u\|_E = \|u\|_U$ for the choice of the optimal test norm.  
+
+As a consequence of \eqref{norm_duality}, assume an energy norm $\left\| u \right\|_{E,1}$ is induced by a given test norm $\| v  \|_{V,1}$.  To bound $\|\cdot\|_E$ robustly from above or below by a given norm $\left\| u \right\|_{U,2}$ on $U$ now only requires the robust bound in the opposite direction of $\| v \|_{V,1}$ by $\|v\|_{V,2}$.  
+
+
+\begin{lemma}
+(Bound from below) If $\beta$ satisfies \eqref{a_req} and \eqref{b_req}, then for $\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U$,
+\[
+\|u\| + \|\sigma\| + \epsilon\|\widehat{u}\|+ \sqrt{\epsilon}\|\widehat{u}\| \lesssim \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E
+\]
+\end{lemma}
+\begin{proof}
+By \eqref{norm_duality}, proving the above result is equivalent to showing 
+\begin{align*}
+\|\left(v,\tau\right)\|_V &\lesssim \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\|u\| + \|\sigma\| + \epsilon\|\widehat{u}\|+ \sqrt{\epsilon}\|\widehat{u}\|}\\
+& \simeq \|g\| + \|f\| + \epsilon^{-1}\sup_{\widehat{u}\neq 0, \left.\widehat{u}\right|_{\Gamma_+} = 0} \frac{\langle [\tau\cdot n], \widehat{u}\rangle}{\|\widehat{u}\|} + \epsilon^{-1/2}\sup_{\widehat{f}_n\neq 0, \left.\widehat{f}_n\right|_{\Gamma_-}=0}\frac{\langle \widehat{f}_n, [v]\rangle}{\|\widehat{f}\|},
+\end{align*}
+which, by definition of the boundary norms, is 
+\[
+\|\left(v,\tau\right)\|_V \lesssim \|g\| + \|f\| + \epsilon^{-1}\|[\tau\cdot n]\| + \epsilon^{-1/2}\|[v]\|
+\]
+We will bound each term by first decomposing $\left(v,\tau\right) = \left(v_0,\tau_0\right) + \left(v_1,\tau_1\right) + \left(v_2,\tau_2\right)$, where $\left(v_1,\tau_1\right)$ satisfies our adjoint equation \eqref{adjoint} with $f = 0, g= \div \tau - \beta\cdot \grad v$, and $\left(v_2,\tau_2\right)$ satisfies \eqref{adjoint} with $g = 0, f= \epsilon^{-1}\tau + \grad v$.  By construction, $\left(v_0,\tau_0\right)$ must satisfy \eqref{adjoint} with $f=g=0$, and with boundary conditions
+\begin{align*}
+[v_0] &= [v], \quad x\in \Gamma_h \cup \Gamma_+\\
+[\tau_0 \cdot n] &= [\tau \cdot n]-[\tau_2 \cdot n], \quad x\in \Gamma_h\setminus \Gamma_+\\
+\end{align*}
+\textcolor{red}{not done yet}
+\end{proof}
+
 \subsubsection{Energy norm equivalence (bound from above)}
 
-We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  We do so by taking advantage of the fact that the test norm can be recovered via duality
-\[
-\| \left(\tau,v\right) \|_V = \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E}
-\]
-The proof for this is identical to proving $\|u\|_E = \|u\|_U$ for the choice of the optimal test norm.
+We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  
+\begin{lemma}
+Bound from above \textcolor{red}{not done yet}
+\end{lemma}
+\begin{proof}
+\textcolor{red}{not done yet}
+\end{proof}
 
-In \cite{DPGrobustness}, the quasi-optimal test norm was shown to induce an energy norm that is bounded from both above and below by norms on $U$ that do not grow in magnitude with $\epsilon^{-1}$.  
+
+%In \cite{DPGrobustness}, the quasi-optimal test norm was shown to induce an energy norm that is bounded from both above and below by norms on $U$ that do not grow in magnitude with $\epsilon^{-1}$.  
 
 
 
