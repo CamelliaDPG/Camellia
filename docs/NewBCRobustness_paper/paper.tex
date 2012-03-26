@@ -104,9 +104,13 @@
 \newcommand{\Gin} {\Gamma_{in}}
 \newcommand{\Gout} {\Gamma_{out}}
 
+\author{Tan Bui \and Jesse Chan \and Leszek Demkowicz \and Norbert Heuer}
+\title{Robust DPG stability II}
+\date{}
 \begin{document}
 
-\tableofcontents
+%\tableofcontents
+\maketitle
 
 \section{Introduction}
 
@@ -189,7 +193,9 @@ with the corresponding variational form
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle
 \]
-where the above inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
+where the above inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  The divergence and gradient operators are likewise understood to be taken element-wise.  
+
+Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
 
 To analyze the robustness of DPG, we note that 
 \[
@@ -235,7 +241,7 @@ where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \i
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) + \langle \widehat{f}_n, \left[v\right] \rangle
 \]
 Choosing a continuous conforming test function $v$ removes the contribution of the term $\langle \widehat{f}_n, \left[v\right] \rangle$ on the mesh skeleton; however, it is necessary to assume in addition $v=0$ on $\Gamma$ to have 
-$$b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \|u\|_{L^2}^2.$$  Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. It may be of interest to note that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow.
+$$b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \|u\|_{L^2}^2.$$  Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. It may be of interest to note that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow.  The presence of the new boundary condition relaxes the outflow boundary condition for the adjoint/dual problem, resulting in stronger stability for the primal problem.  
 
 We improve upon the result of Demkowicz and Heuer by adopting a new inflow boundary condition, given by Hesthaven et al in \cite{Hesthaven96astable}, where we set
 \[
@@ -267,9 +273,8 @@ Additionally, throughout the rest of this work, we denote norms on $u$ and $\sig
 \end{align*}
 We will construct norms on $U$ as combinations of norms on each variable
 \[
-\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1 \|u\| + C_2 \|\sigma\| + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1 \|u\| + C_2 \|\sigma\| + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|.
 \]
-
 
 \subsection{Equivalence of energy and $U$ norms}
 
@@ -286,7 +291,7 @@ The primary result of this paper is that, if conditions \ref{a_req},\ref{b_req},
 \]
 using the unweighted version of the test norm in \cite{DPGrobustness}
 \[
-\|\left(\tau, v\right)\|_{V}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \frac{1}{\epsilon}\|\tau\|
+\|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
 \]
 where $\|\cdot \|_{U_1}$ is defined as
 \[
@@ -298,7 +303,7 @@ A second, weaker result is an upper bound on the energy norm
 \]
 where $\|\cdot \|_{U_2}$ is defined as
 \[
-\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2}^2 \coloneqq \|u\|^2 + \frac{1}{\epsilon^2}\|\sigma\|^2 + \frac{1}{\epsilon}\|\widehat{u}\|^2+\frac{1}{\epsilon} \|\widehat{f}_n\|^2.
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2} \coloneqq \|u\| + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
 The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
 
@@ -312,20 +317,27 @@ We reduce the adjoint problem to the scalar second order equation
 \end{equation}
 with boundary conditions
 \begin{align}
-\tau_n = - \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{bc_1}\\ 
+%\tau \cdot n = 
+- \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{bc_1}\\ 
 v &= 0, \quad x\in \Gamma_+ \label{bc_2}
 \end{align}
 and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions reduce down to \eqref{eq:adj_bc1} and \eqref{eq:adj_bc2} when requesting $L^2$ robustness in $u$ ($f=0$); these more general boundary conditions are necessary for bounds involving $f \neq 0$.
 
 Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. The normal trace $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
 
+We will denote $\|\cdot \| = \|\cdot\|_{L^2}$ for all functions defined on $\Omega$.  The boundary norms on $\Gamma_h$ for $v$ and $\tau$ are defined by duality from the bilinear form
+\begin{align*}
+\|[\tau\cdot n]\| &= \|[\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} \coloneqq \sup_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+} = 0} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
+\|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
+\end{align*}
+
 The second lemma concerns the robust control of $u$ by the energy error; the first and third concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
 
 \begin{lemma} 
 \label{lemma_1}
-Assume \eqref{a_req} and \eqref{adjoint} hold.  Then, for $v$ satisfying \eqref{bc_1}, \eqref{bc_2} and sufficiently small $\epsilon$, 
+Assume \eqref{a_req} holds.  Then, for $v$ satisfying equation \eqref{adjoint} with boundary conditions \eqref{bc_1}, \eqref{bc_2} and sufficiently small $\epsilon$, 
 \[
-\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\| + \epsilon \| f\|
+\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\|^2 + \epsilon \| f\|^2
 \]
 \end{lemma}
 
@@ -356,7 +368,7 @@ assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ allow us 
 \]
 Interpreting $\div f$ as a functional, the right hand gives
 \begin{align*}
-\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w\\
+\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w
 \end{align*}
 The boundary integral on $\Gamma$ reduces to $\Gamma_-$, which is then nullified by the same term on the left hand side, leaving us with 
 \[
@@ -368,9 +380,9 @@ From here, the proof is identical to \cite{DPGrobustness}; an application of Pet
 
 \begin{lemma} 
 \label{lemma_2}
-Assume $v$ satisfies $\eqref{adjoint}$,\eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
+Assume $v$ satisfies $\eqref{adjoint}$, with boundary conditions \eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
 \[
-\|\beta \cdot \grad v \| \lesssim \| f\|
+\|\beta \cdot \grad v \| \lesssim \| g\|
 \]
 \end{lemma}
 
@@ -426,7 +438,7 @@ Since $C=O(1)$, an application of Young's inequality and Lemma 1 complete the es
 
 \begin{lemma}
 \label{lemma_3}
-Let $\beta$ satisfy \eqref{a_req} and \eqref{c_req}, and let $f=g=0$.  Then, there holds
+Let $\beta$ satisfy \eqref{a_req} and \eqref{c_req}, and let $v$ satisfy \eqref{adjoint} with $f=g=0$, and arbitrary boundary conditions.  Then, there holds
 \[
 \|\grad v\| = \frac{1}{\epsilon}\|\tau\| \lesssim \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
 \]
@@ -457,11 +469,8 @@ On the other hand, using the decomposition and boundary conditions directly, we 
 &=\epsilon \langle [\tau \cdot n],\psi \rangle - \epsilon  \langle n\cdot \curl z, [v]\rangle = \epsilon \langle [\tau \cdot n],\psi \rangle_{\Gamma_h \setminus \Gamma_+} - \epsilon  \langle n\cdot \curl z, [v]\rangle_{\Gamma_h \cup \Gamma_+}\\
 &\lesssim \epsilon \|[\tau \cdot n]\| \|\psi\| + \epsilon \| [v]\|\| n\cdot \curl z \| 
 \end{align*}
-where the boundary norms for $v$ and $\tau$ are defined by duality
-\begin{align*}
-\|[\tau\cdot n]\| &= \|[\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} \coloneqq \sup_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+} = 0} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
-\|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
-\end{align*}
+by definition of the boundary norms on $[\tau\cdot n]$ and $[v]$.  
+
 Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
 \end{proof}
 
@@ -469,13 +478,9 @@ With these three lemmas, we can prove the robust bound of both field variables a
 \begin{align}
 \| v \|_V = \sup_{u \in U\setminus \{0\}} \frac{b\left(u,v\right)}{\left\| u \right\|_E} \label{norm_duality}
 \end{align}
-%\[
-%\| \left(\tau,v\right) \|_V = \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E}
-%\]
 The proof for this is identical to proving $\|u\|_E = \|u\|_U$ for the choice of the optimal test norm.  
 
-As a consequence of \eqref{norm_duality}, assume an energy norm $\left\| u \right\|_{E,1}$ is induced by a given test norm $\| v  \|_{V,1}$.  To bound $\|\cdot\|_E$ robustly from above or below by a given norm $\left\| u \right\|_{U,2}$ on $U$ now only requires the robust bound in the opposite direction of $\| v \|_{V,1}$ by $\|v\|_{V,2}$.  
-
+As a consequence of \eqref{norm_duality}, assume an energy norm $\left\| u \right\|_{E,1}$ is induced by a given test norm $\| v  \|_{V,1}$.  To bound $\|\cdot\|_E$ robustly from above or below by a given norm $\left\| u \right\|_{U,2}$ on $U$ now only requires the robust bound in the opposite direction of $\| v \|_{V,1}$ by $\|v\|_{V,2}$. 
 
 \begin{lemma}
 (Bound from below) If $\beta$ satisfies \eqref{a_req} and \eqref{b_req}, then for $\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U$,
@@ -493,34 +498,129 @@ which, by definition of the boundary norms, is
 \[
 \|\left(v,\tau\right)\|_V \lesssim \|g\| + \|f\| + \epsilon^{-1}\|[\tau\cdot n]\| + \epsilon^{-1/2}\|[v]\|
 \]
-We will bound each term by first decomposing $\left(v,\tau\right) = \left(v_0,\tau_0\right) + \left(v_1,\tau_1\right) + \left(v_2,\tau_2\right)$, where $\left(v_1,\tau_1\right)$ satisfies our adjoint equation \eqref{adjoint} with $f = 0, g= \div \tau - \beta\cdot \grad v$, and $\left(v_2,\tau_2\right)$ satisfies \eqref{adjoint} with $g = 0, f= \epsilon^{-1}\tau + \grad v$.  By construction, $\left(v_0,\tau_0\right)$ must satisfy \eqref{adjoint} with $f=g=0$, and with boundary conditions
+We will bound $\|\left(v,\tau\right)\|_V$ for all $\left(v,\tau\right)$ satisfying \eqref{adjoint} by first decomposing $\left(v,\tau\right) = \left(v_0,\tau_0\right) + \left(v_1,\tau_1\right) + \left(v_2,\tau_2\right)$, where $\left(v_1,\tau_1\right)$ satisfies our adjoint equation \eqref{adjoint} with boundary conditions \eqref{bc_1} and \eqref{bc_2} and 
 \begin{align*}
-[v_0] &= [v], \quad x\in \Gamma_h \cup \Gamma_+\\
-[\tau_0 \cdot n] &= [\tau \cdot n]-[\tau_2 \cdot n], \quad x\in \Gamma_h\setminus \Gamma_+\\
+f &= 0\\
+g&= \div \tau - \beta\cdot \grad v,
+\end{align*} 
+and $\left(v_2,\tau_2\right)$ satisfies \eqref{adjoint} with boundary conditions \eqref{bc_1} and \eqref{bc_2} and 
+\begin{align*}
+g &= 0\\
+f &= \epsilon^{-1}\tau + \grad v.
 \end{align*}
-\textcolor{red}{not done yet}
+We note that, if $v_2$ satisfies $n\cdot \grad v_2 = n\cdot f$, by definition of $f$ and $v_2$,
+\begin{align*}
+\tau_2 \cdot n &= \epsilon n\cdot f - \epsilon n\cdot \grad v_2 = 0, \quad x\in \Gamma_- \cup \Gamma_0
+\end{align*}
+By construction, $\left(v_0,\tau_0\right)$ must satisfy \eqref{adjoint} with $f=g=0$, with jumps
+\begin{align*}
+[v_0] &= [v], \quad x\in \Gamma_h^0\\
+[\tau_0 \cdot n] &= [\tau \cdot n], \quad x\in \Gamma_h^0.
+\end{align*}
+By $\left(v_0,\tau_0\right) = \left(v,\tau\right) - \left(v_1,\tau_1\right) - \left(v_2,\tau_2\right)$, $\left(v_0,\tau_0\right)$ must satisfy boundary conditions
+\begin{align*}
+v_0 &= v, \quad x\in \Gamma_+\\
+\tau_0 \cdot n &= \tau \cdot n, \quad x\in \Gamma_-\cup \Gamma_0.
+\end{align*}
+Robustly bounding $\|\left(v,\tau\right)\|_V$ from above reduces to robustly bounding each component 
+\[
+\|\left(v_{0},\tau_{0}\right)\|_V, \|\left(v_{1},\tau_{1}\right)\|_V, \|\left(v_{2},\tau_{2}\right)\|_V \lesssim \|g\| + \|f\| + \epsilon^{-1}\|[\tau\cdot n]\| + \epsilon^{-1/2}\|[v]\|
+\]
+%\begin{align*}
+%\|\left(\tau, v\right)\|_{V}^2 &= \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2 \\
+%& \lesssim \|g\| + \|f\| + \epsilon^{-1}\|[\tau\cdot n]\| + \epsilon^{-1/2}\|[v]\|
+%\end{align*}
+\begin{itemize}
+\item \textbf{Bound on $\|\left(v_{0},\tau_{0}\right)\|_V$}
+ 
+Lemma 3 gives control over $\epsilon\|\grad v_0\| + \frac{1}{\epsilon}\|\tau_0\|$ through
+\[
+\|\grad v_0\| = \frac{1}{\epsilon}\|\tau_0\| \lesssim \frac{1}{\epsilon} \| [\tau_0\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v_0]\|_{\Gamma_h^0 \cup \Gamma_+} = \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
+\]
+Lemma 4.2 of \cite{analysisDPG} gives us the Poincare inequality for discontinuous functions
+\[
+\|v_0\| \lesssim \|\grad v_0\| + \|[v]\|
+\]
+%Since $f=0$, by Lemma 2, $\|\beta\cdot \grad v_0\|  \lesssim \|g\| = 0$.  
+Since $g = 0$, $\| \div \tau_0\| = \|\beta\cdot \grad v_0\|\lesssim \|\grad v_0\|$, which we've bounded previously.  
+
+\item \textbf{Bound on $\|\left(v_{1},\tau_{1}\right)\|_V$}
+
+%Given $\tau_1 \in H({\rm div};\Omega)$, $v\in H^1(\Omega)$, with boundary conditions \eqref{bc_1} and \eqref{bc_2}, $\frac{1}{\epsilon} \| [\tau_0\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v_0]\|_{\Gamma_h^0 \cup \Gamma_+}=0$.
+With $f = 0$, Lemma 2 provides the bound
+\[
+\|\beta \cdot \grad v_1 \| \lesssim \| g\|
+\]
+Noting that $\div \tau_1 = g+\beta\cdot \grad v_1$ gives $\|\div \tau_1 \| \lesssim \|g\|$ as well.  Lemma 1 gives
+\[
+\epsilon \|\grad v_1\|^2 + \|v_1\|^2 \lesssim \|g\|^2
+\]
+and noting that $\epsilon^{-1/2}\tau_1 = \epsilon^{1/2}v_1$ gives $\epsilon\|\grad v_1\|^2 = \epsilon^{-1}\|\tau_1\|^2 \lesssim \|g\|^2$ as well.
+
+\item \textbf{Bound on $\|\left(v_{2},\tau_{2}\right)\|_V$}
+
+Lemma 1 provides
+\[
+\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim  \epsilon \| f\|^2 \leq \|f\|^2
+\]
+We have $\epsilon^{-1}\tau = f - \grad v$, so $\epsilon^{-1} \|\tau\| \lesssim \|f\| + \|\grad v\|$. Lemma 1 implies $\|\grad v\|^2  \lesssim  \| f\|^2$, so for $\epsilon \leq 1$, we control $\epsilon^{-1/2}\|\tau\| \leq \epsilon^{-1}\|\tau\| \lesssim \|f\|$.  The remaining terms can be bounded by noting that, with $g = 0$, $\|\div \tau_2\| = \|\beta\cdot \grad v_2\| \lesssim \|\grad v_2\| \lesssim \|f\| $.
+\end{itemize}
 \end{proof}
 
 \subsubsection{Energy norm equivalence (bound from above)}
 
-We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  
+We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  By the duality of the energy and test norm, this is equivalent to bounding the test norm from below, using the test norm induced by the norm on $U$ bounding the energy norm.  
 \begin{lemma}
-Bound from above \textcolor{red}{not done yet}
+
+(Bound from above) For $\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U$,
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E \lesssim \|u\| + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\| + \|\widehat{u}\|+ \|\widehat{u}\|\right)
+\]
+
+%\textcolor{red}{not done yet}
 \end{lemma}
 \begin{proof}
-\textcolor{red}{not done yet}
+For any norm on $U$ of the form
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,*} = \|u\| + C_2 \|\sigma\| + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|,
+\]
+the induced test norm is  
+\begin{align*}
+\| \left(\tau,v\right) \|_{V,*} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E} \\
+& = \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U\setminus \{0\}} \frac{\left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle
+}{\|u\| + C_2 \|\sigma\| + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|} \\
+&\lesssim \|g\| + \frac{1}{C_2}\|f\| + \sup_{\widehat{u},\widehat{f}_n \neq 0}\frac{\langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle}{C_3\|\widehat{u}\| + C_4\|\widehat{f}_n\|}
+\end{align*}
+where $f$ and $g$ are again the loads of the adjoint problem \eqref{adjoint}.  By the triangle inequality, 
+\begin{align*}
+\epsilon \|f \|^2 &\leq \epsilon^{-1} \| \tau\|^2 + {\epsilon} \|\grad v\|^2 \lesssim \| \left(\tau,v\right)\|_V^2\\
+\|g \| &\leq \|\div \tau\| +  \|\beta \cdot \grad v\| \lesssim \| \left(\tau,v\right)\|_V
+\end{align*}
+We estimate the supremum by following \cite{DPGrobustness}; we begin by choosing $\eta \in H({\rm div}; \Omega)$, $w\in H^1(\Omega)$, such that $\left.\left(\eta-\beta w \right)\cdot n\right |_{\Gamma_+} = 0$ and $\left.w\right |_{\Gamma_-\cup\Gamma_0} = 0$, and integrating the boundary pairing by parts to get
+\begin{align*}
+\langle [\tau\cdot n],w\rangle + \langle [v],\left(\eta - \beta w\right)\cdot n\rangle &\lesssim \|\left(\tau,v\right)\|_V\frac{1}{\sqrt{\epsilon}}\left(\|\eta\| + \|w\|\right)\\
+%\langle [\tau\cdot n],w\rangle + \langle [v],\left(\eta - \beta w\right)\cdot n\rangle 
+&\lesssim \|\left(\tau,v\right)\|_V\frac{1}{\sqrt{\epsilon}}\left(\|\eta-\beta w\| + \|w\|\right)
+\end{align*}
+since $\|\eta\| = \|\eta - \beta w + \beta w\| \leq \|\eta - \beta w\| + \|\beta w\| \lesssim \|\eta-\beta w\| + \|w\|$.  Dividing through and taking the supremum gives
+\[
+\sup_{w,\eta \neq 0} \frac{\langle[\tau\cdot n],w\rangle + \langle [v],\left(\eta - \beta w\right)\cdot n\rangle}{\left(\|\eta-\beta w\| + \|w\|\right)} \lesssim \|\left(\tau,v\right)\|_V\frac{1}{\sqrt{\epsilon}}
+\]
+To finish the proof, define $\rho \in H^{1/2}(\Gamma_h)$ and $\phi \in H^{-1/2}(\Gamma_h)$ such that $\rho = \left.w\right|_{\Gamma_h}$ and $\phi = \left.(\eta-\beta w)\cdot n\right|_{\Gamma_h}$, and note that
+\begin{align*}
+\sup_{\rho,\phi \neq 0} \frac{\langle [\tau\cdot n],\rho\rangle + \langle [v],\phi \rangle}{\|\rho\|+\|\phi\|} &= \sup_{w,\eta \neq 0} \frac{\langle [\tau\cdot n],w\rangle + \langle [v],\left(\eta - \beta w\right)\cdot n\rangle}{ \|w\|+\|\eta-\beta w\|} 
+\end{align*}
+
+Together, the bounds on $\|g\|$ and $\|f\|$ imply $\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{E} \lesssim \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,*}$ for $C_2 = C_3 = C_4 = \frac{1}{\sqrt{\epsilon}}$.  
 \end{proof}
 
-
 %In \cite{DPGrobustness}, the quasi-optimal test norm was shown to induce an energy norm that is bounded from both above and below by norms on $U$ that do not grow in magnitude with $\epsilon^{-1}$.  
-
-
 
 \section{Numerical experiments}
 
 In our numerical experiments, we will be interested in the use of the unweighted test norm 
 \[
-\|\left(\tau, v\right)\|_{V}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\| + \| \div \tau\| + \frac{1}{\epsilon}\|\tau\|
+\|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
 \]
 However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and similarly $\|\div \tau\|$ and $\frac{1}{\epsilon}\|\tau\|$ terms, induces boundary layers in the optimal test functions, though only in the crosswind direction.  To avoid this effect, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ and $\tau$ such that, when transformed to the reference element, both $v$ and $\grad v$ terms are $O(1)$.  In this paper, we consider only isotropic refinements on quadrilateral elements, such that $h_1 = h_2 = h$, and $|K| = h^2$. Our test norm for an element $K$ is now
 \[
@@ -579,7 +679,7 @@ In each case, we begin with a square 4 by 4 mesh of quadrilateral elements with 
 \includegraphics[scale=.4]{figs/u_pointdiff_wallBC.png}
 \caption{Adapted mesh and pointwise error for $\epsilon=.01$}
 \end{figure}
-We are especially interested in the ratio of energy error and total $L^2$ error in both $\sigma$ and $u$.  Stability estimates imply that, using the above test norm, $\|u-u_h\|_{L^2} / \|u-u_h\|_E \sim C$ independent of $\epsilon$.  Figure~\ref{ratios_simple} seems to imply that, at least for this model problem, $C=O(1)$.  
+We are especially interested in the ratio of energy error and total $L^2$ error in both $\sigma$ and $u$.  Stability estimates imply that, using the above test norm, $\|u-u_h\|_{L^2} / \|u-u_h\|_E \leq C$ independent of $\epsilon$.  Figure~\ref{ratios_simple} seems to imply that, at least for this model problem, $C=O(1)$.  Additionally, while we do not have a robust lower bound (i.e.\ $\|u-u_h\|_{L^2} / \|u-u_h\|_E$ can approach $0$ as $\epsilon \rightarrow 0$), our numerical results present a robust lower bound.  
 
 \begin{figure}[h!]
 \centering
@@ -645,7 +745,7 @@ Figure~\ref{disc_sol} shows the solution $u$ and overlaid trace variable $\wideh
 \caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$, with discontinuous $u_0$ approximated by a Fourier expansion. }
 \label{disc_sol_fourier}
 \end{figure}
-The ratios of $L^2$ to energy error are now less predictable than for the previous example, due to the ``moving target" nature of the approximation of oscillatory boundary conditions. Even so, the ratios remain bounded and close to $1$ for $\epsilon$ varying over two orders of magnitude, as predicted by theory. 
+The ratios of $L^2$ to energy error are now less predictable than for the previous example, due to the ``moving target" nature of the approximation of oscillatory boundary conditions. The numerical experiments were originally performed by applying boundary conditions via interpolation; the result was that the highly oscillatory inflow boundary condition was not sampled enough to be properly resolved, causing the solution to converge to a solution different than the exact solution.  The experiments were repeated using the penalty method to enforce inflow conditions; however, we note that the proper way to do so is to use an $L^2$ projection at the boundary.  When using the penalty method, however, the ratios still remain bounded and close to $1$ for $\epsilon$ varying over two orders of magnitude, as predicted by theory. 
 
 \section{Conclusions}
  
