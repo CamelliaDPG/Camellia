@@ -1,4 +1,4 @@
-This is pdfTeXk, Version 3.141592-1.40.3 (Web2C 7.5.6) (format=pdflatex 2007.5.18)  26 MAR 2012 10:53
+This is pdfTeXk, Version 3.141592-1.40.3 (Web2C 7.5.6) (format=pdflatex 2007.5.18)  26 MAR 2012 11:09
 entering extended mode
 \write18 enabled.
  %&-line parsing enabled.
@@ -918,30 +918,28 @@ File: figs/ratio_noSigma.png Graphic file (type png)
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-<figs/disc_hat.png, id=64, 472.164pt x 370.5042pt>
+[13 <./figs/u_pointdiff_wallBC.png (PNG copy)> <./figs/errorrates_wallBC.png (P
+NG copy)> <./figs/L2energyratio_wallBC.png (PNG copy)>]
+<figs/disc_hat.png, id=68, 472.164pt x 370.5042pt>
 File: figs/disc_hat.png Graphic file (type png)
  <use figs/disc_hat.png>
-<figs/disc_hat_surf.png, id=65, 489.027pt x 370.986pt>
+<figs/disc_hat_surf.png, id=69, 489.027pt x 370.986pt>
 File: figs/disc_hat_surf.png Graphic file (type png)
 
-<use figs/disc_hat_surf.png>
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
-<figs/rates_disc.png, id=66, 578.16pt x 433.62pt>
+<use figs/disc_hat_surf.png> <figs/rates_disc.png, id=70, 578.16pt x 433.62pt>
 File: figs/rates_disc.png Graphic file (type png)
- <use figs/rates_disc.png>
-<figs/ratio_disc.png, id=67, 578.16pt x 433.62pt>
+
+<use figs/rates_disc.png> <figs/ratio_disc.png, id=71, 578.16pt x 433.62pt>
 File: figs/ratio_disc.png Graphic file (type png)
- <use figs/ratio_disc.png>
+
+<use figs/ratio_disc.png>
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-[13 <./figs/u_pointdiff_wallBC.png (PNG copy)> <./figs/errorrates_wallBC.png (P
-NG copy)> <./figs/L2energyratio_wallBC.png (PNG copy)>] [14 <./figs/rates_noSig
-ma.png (PNG copy)> <./figs/ratio_noSigma.png (PNG copy)> <./figs/disc_hat.png (
-PNG copy)> <./figs/disc_hat_surf.png (PNG copy)> <./figs/rates_disc.png (PNG co
-py)> <./figs/ratio_disc.png (PNG copy)>] (./paper.bbl) [15] (./paper.aux) ) 
+[14 <./figs/rates_noSigma.png (PNG copy)> <./figs/ratio_noSigma.png (PNG copy)>
+ <./figs/disc_hat.png (PNG copy)> <./figs/disc_hat_surf.png (PNG copy)>]
+(./paper.bbl) [15 <./figs/rates_disc.png (PNG copy)> <./figs/ratio_disc.png (PN
+G copy)>] (./paper.aux) ) 
 Here is how much of TeX's memory you used:
  9444 strings out of 94073
  145638 string characters out of 1162984
@@ -950,23 +948,23 @@ Here is how much of TeX's memory you used:
  16538 words of font info for 66 fonts, out of 1200000 for 2000
  645 hyphenation exceptions out of 8191
  50i,12n,41p,1341b,306s stack positions out of 5000i,500n,6000p,200000b,5000s
-</us
-r/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmbx10.pfb></usr/local/t
-exlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmex10.pfb></usr/local/texlive/20
-07/texmf-dist/fonts/type1/bluesky/cm/cmmi10.pfb></usr/local/texlive/2007/texmf-
-dist/fonts/type1/bluesky/cm/cmmi12.pfb></usr/local/texlive/2007/texmf-dist/font
-s/type1/bluesky/cm/cmmi6.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bl
-uesky/cm/cmmi8.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/c
-mr10.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmr12.pfb><
-/usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmr6.pfb></usr/local/
-texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmr8.pfb></usr/local/texlive/200
-7/texmf-dist/fonts/type1/bluesky/cm/cmssbx10.pfb></usr/local/texlive/2007/texmf
--dist/fonts/type1/bluesky/cm/cmsy10.pfb></usr/local/texlive/2007/texmf-dist/fon
-ts/type1/bluesky/cm/cmsy6.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/b
-luesky/cm/cmsy8.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/
-cmti10.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/public/cmex/fmex8.pf
-b></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/ams/msam10.pfb>
-Output written on paper.pdf (15 pages, 379447 bytes).
+</usr/local/texlive/2007/texmf-dist/fonts/type1/bluesk
+y/cm/cmbx10.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmex
+10.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmmi10.pfb></
+usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmmi12.pfb></usr/local
+/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmmi6.pfb></usr/local/texlive/2
+007/texmf-dist/fonts/type1/bluesky/cm/cmmi8.pfb></usr/local/texlive/2007/texmf-
+dist/fonts/type1/bluesky/cm/cmr10.pfb></usr/local/texlive/2007/texmf-dist/fonts
+/type1/bluesky/cm/cmr12.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/blu
+esky/cm/cmr6.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmr
+8.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmssbx10.pfb><
+/usr/local/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmsy10.pfb></usr/loca
+l/texlive/2007/texmf-dist/fonts/type1/bluesky/cm/cmsy6.pfb></usr/local/texlive/
+2007/texmf-dist/fonts/type1/bluesky/cm/cmsy8.pfb></usr/local/texlive/2007/texmf
+-dist/fonts/type1/bluesky/cm/cmti10.pfb></usr/local/texlive/2007/texmf-dist/fon
+ts/type1/public/cmex/fmex8.pfb></usr/local/texlive/2007/texmf-dist/fonts/type1/
+bluesky/ams/msam10.pfb>
+Output written on paper.pdf (15 pages, 380244 bytes).
 PDF statistics:
  131 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 131072)
