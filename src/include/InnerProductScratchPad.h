@@ -123,18 +123,18 @@ public:
   }
   VarPtr x() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "x() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_X ) );
+    TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "x() only supported for vars of rank 1.");
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_X ) );
   }
   VarPtr y() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "y() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_Y ) );
+    TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "y() only supported for vars of rank 1.");
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Y ) );
   }
   VarPtr z() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "z() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_Z ) );
+    TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Z ) );
   }
   
   VarPtr cross_normal() {
@@ -190,6 +190,7 @@ public:
     addVar(weight,var);
   }
   LinearTerm( VarPtr v ) {
+    _rank = -1;
     addVar( 1.0, v);
   }
   
@@ -291,7 +292,8 @@ public:
         // compute f * basisValues
         if ( ls.first->rank() == ls.second->rank() ) { // scalar result
           int entriesPerPoint = 1;
-          for (int d=0; d<ls.first->rank(); d++) {
+          int fRank = ls.first->rank();
+          for (int d=0; d<fRank; d++) {
             entriesPerPoint *= spaceDim;
           }
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -301,9 +303,15 @@ public:
               for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
                 const double *fValue = &fValues[fValues.getEnumeration(fDim)];
                 bDim[1] = fieldIndex;
-                const double *bValue = &(*basisValues)[basisValues->getEnumeration(bDim)];
-                for (int entryIndex=0; entryIndex<entriesPerPoint; entriesPerPoint++) {
-                  values(cellIndex,fieldIndex,ptIndex) += *fValue++ * *bValue++;
+                const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+                  values(cellIndex,fieldIndex,ptIndex) += *fValue * *bValue;
+                  
+//                  cout << "fValue: " << *fValue << endl;
+//                  cout << "bValue: " << *bValue << endl;
+                  
+                  fValue++;
+                  bValue++;
                 }
               }
             }
@@ -329,8 +337,10 @@ public:
                 
                 double *value = &values[values.getEnumeration(vDim)];
                 
-                for (int entryIndex=0; entryIndex<entriesPerPoint; entriesPerPoint++) {
+                for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
                   *value += *fValue * *bValue;
+//                  cout << "fValue: " << *fValue << endl;
+//                  cout << "bValue: " << *bValue << endl;
                   if (scalarF) {
                     value++; bValue++;
                   } else {
@@ -343,6 +353,7 @@ public:
         }
       }
     }
+//    cout << "values:\n" << values;
   }
   
   int rank() const { return _rank; }  // 0 for scalar, 1 for vector, etc.
@@ -388,21 +399,25 @@ public:
     int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
     _testVars[name] = Teuchos::rcp( new Var( _nextTestID++, rank, name, 
                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
+    return _testVars[name];
   }
   VarPtr fieldVar(string name, Space fs = L2) {
     int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
     _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name,
                                              IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
+    return _trialVars[name];
   }
   VarPtr fluxVar(string name, Space fs = L2) { // trace of HDIV  (implemented as L2 on boundary)
     int rank = 0;
     _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name, 
                                              IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
+    return _trialVars[name];
   }
   VarPtr traceVar(string name, Space fs = HGRAD) { // trace of HGRAD (implemented as HGRAD on boundary)
     int rank = 0;
     _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name, 
                                              IntrepidExtendedTypes::OPERATOR_VALUE, fs) );    
+    return _trialVars[name];
   }
 };
 
@@ -438,6 +453,8 @@ public:
     ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
     ltValueDim.push_back(numPoints);
     
+    innerProduct.initialize(0.0);
+    
     for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
          ltIt != _linearTerms.end(); ltIt++) {
       LinearTermPtr lt = *ltIt;
@@ -448,8 +465,6 @@ public:
       set<int>::iterator testIt2;
       
       Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > test1Basis, test2Basis;
-      
-      innerProduct.initialize(0.0);
       
       for (testIt1= testIDs.begin(); testIt1 != testIDs.end(); testIt1++) {
         int testID1 = *testIt1;
@@ -482,6 +497,8 @@ public:
           
           FunctionSpaceTools::integrate<double>(miniMatrix,test1Values,test2ValuesWeighted,COMP_CPP);
           
+//          cout << "miniMatrix:\n" << miniMatrix;
+          
           int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
           int test2DofOffset = dofOrdering->getDofIndex(testID2,0);
           
@@ -493,15 +510,21 @@ public:
               }
             }
           }
+//          cout << "innerProduct:\n" << innerProduct;
         }
       }
     }
+//    cout << "final innerProduct:\n" << innerProduct;
   }
   
   void operators(int testID1, int testID2, 
                          vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
                          vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
+  }
+  
+  void printInteractions() {
+    cout << "IP::printInteractions() not yet implemented.\n";
   }
 };
 
