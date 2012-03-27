@@ -630,7 +630,9 @@ This modified test norm avoids boundary layers, but for adaptive meshes, provide
 
 %Additionally, test norms that differ from element to element fit cleanly into the DPG framework - as the best approximation error tends to be negligible in areas where the solution is , the finite element error will be small in those areas, even with slightly suboptimal robustness.
 
-In each numerical experiment, we vary $\epsilon = .01, .001, .0001$ in order to demonstrate robustness over a range of $\epsilon$.  This is intended to mirror the numerical experiments in \cite{DPGrobustness}; for ``worst-case" linear solvers, such as LU decomposition without pivoting, the effect of roundoff error becomes evident for $\epsilon \leq O(1e-5)$.  
+In each numerical experiment, we vary $\epsilon = .01, .001, .0001$ in order to demonstrate robustness over a range of $\epsilon$.  This is intended to mirror the numerical experiments in \cite{DPGrobustness}; for ``worst-case" linear solvers, such as LU decomposition without pivoting, the effect of roundoff error becomes evident in the solving of optimal test functions for $\epsilon \leq O(1e-5)$.  The roundoff itself comes from the Gram matrix under certain test norms; for example, if the weighted $\left(H({\rm div};\Omega), H^1(\Omega)\right)$ norm is used for the test norm $\|\left(\tau,v\right)\|_V$ (as was done in \cite{DPG2}), for an element of size $h$, $\|v\|_{L^2}^2 = O(h)$, while $\|\grad v\|_{L^2}^2 = O(h^{-1})$. As $h\rightarrow 0$, the seminorm portion of the test norm dominates the Gram matrix, leading to a near-singular and ill-conditioned system. 
+
+The effect of roundoff error is often characterized by an increase in the energy error, which (assuming approximability of test functions) is proven to decrease for any series of refined meshes. These roundoff effects are dependent primarily on the mesh, appearing when trying to fully resolve boundary layers for very small $\epsilon$. 
 
 \textcolor{red}{Add figure here on convergence for smaller epsilon}
 
@@ -698,6 +700,22 @@ We are especially interested in the ratio of energy error and total $L^2$ error 
 \end{figure}
 The effect of a mesh dependent test norm can be seen in the ratios of $L^2$ to energy error; as the mesh is refined, the constants in front of the $L^2$ terms for $v$ and $\tau$ converge to stationary values, and the ratio of $L^2$ to energy error transitions from a smaller to a larger value.  The transition point happens later for smaller $\epsilon$, which we expect, since the transition of the ratio corresponds to the introduction of elements of order $\epsilon$ through mesh refinement. 
 
+We examined smaller $\epsilon$ as well. In \cite{DPGrobustness}, the smallest resolvable $\epsilon$ using only double precision arithmetic was $1e-4$. The solution of optimal test functions is now done using both pivoting and equilibration, improving conditioning. Roundoff effects still appear, but at smaller values of $\epsilon$.
+
+\begin{figure}[h!]
+\centering
+\subfigure{
+\includegraphics[scale=.38]{figs/roundoff_rates.png}
+}
+\subfigure{
+\includegraphics[scale=.38]{figs/roundoff_ratio.png}
+}
+\caption{Energy error and $L^2$/energy error ratio for $\epsilon=1e-5$, $\epsilon=1e-6$, $\epsilon=1e-7$. Non-monotonic behavior of the energy error indicates conditioning issues and roundoff effects.}
+\label{roundoff_figures}
+\end{figure}
+
+Without anisotropic refinements, it still becomes computationally difficult to fully resolve the solution for smaller $\epsilon$. Regardless, for all ranges of $\epsilon$, the robustness of DPG remains constant, as indicted by the rates and ratio between $L^2$ and energy error in Figure~\ref{roundoff_figures}. For $\epsilon = 1e-5$, we observe that the ratio of $L^2$ error increases, corresponding to the scaling of the test norm with mesh size (the transition in test norm occurs after 8 refinements, which, for an initial $4\times 4$ mesh, implies a minimum element size of about $1.5e-05$. At this point, rescaled test norm allows us to take advantage of the full magnitude of the $L^2$ term for $\|v\|$ and $\|\tau\|$ implied by our adjoint estimates). By analogy, for smaller $\epsilon = 1e-6, 1e-7$, the transition period should begin near the 10th and 11th refinement iterations; however, we do not observe such behavior. For $\epsilon=1e-6$, the ratio simply remains constant, but for $\epsilon=1e-7$, we observe roundoff effects, as the energy error increases at the 11th refinement. Since DPG is optimal in the energy norm for a fixed test norm\footnote{While the test norm changes with the mesh, it increases monotonically. A strictly stronger test norm implies $\frac{b(u,v)}{\|v\|_1} \geq \frac{b(u,v)}{\|v\|_2}$ for any $\|v\|_1 \leq \|v\|_2$}}, we expect monotonic decrease of the energy error with mesh refinement. Non-monotonic behavior indicates either approximation or roundoff error, and as there was no qualitative difference between using $\Delta p = 5$ and $\Delta p = 6$ for these experiments, we expect that the approximation error is negligible and conclude roundoff effects are at play. 
+
 \subsubsection{Neglecting $\sigma_n$}
 
 In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for, well within the range of $\epsilon$ of physical interest. For large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, or about $7\%$ relative error. 
@@ -713,8 +731,6 @@ In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and w
 \caption{$L^2$ and energy errors and their ratio when neglecting $\sigma_n$ at the inflow.}
 \label{ratios_noSigma}
 \end{figure}
-
-\pagebreak
 
 \subsubsection{Discontinuous inflow data}
 
