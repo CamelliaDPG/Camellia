@@ -51,7 +51,6 @@ using namespace std;
 using namespace Intrepid;
 
 class RHS {
-  typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 public:
   virtual bool nonZeroRHS(int testVarID) = 0;
   virtual vector<EOperatorExtended> operatorsForTestID(int testID) {

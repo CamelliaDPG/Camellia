@@ -25,6 +25,8 @@
 #include "ConfusionBilinearForm.h"
 #include "ConfusionProblem.h"
 
+#include "InnerProductScratchPad.h"
+
 void RHSTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testComputeRHSLegacy()) {
@@ -34,6 +36,12 @@ void RHSTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   setup();
   if (testIntegrateAgainstStandardBasis()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  setup();
+  if (testRHSEasy()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -66,6 +74,13 @@ void RHSTests::setup() {
   _rhs = confusionProblem;
   _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   _mesh->setUsePatchBasis(false);
+  
+  VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
+  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
+  VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
+  
+  _rhsEasy = Teuchos::rcp(new RHSEasy());
+  _rhsEasy->addTerm( v );
 }
 
 bool RHSTests::testComputeRHSLegacy() {
@@ -307,6 +322,61 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
   if ( ! fcsAgree(rhsExpected,rhsActual,tol,maxDiff) ) {
     success = false;
     cout << "Failed testIntegrateAgainstStandardBasis: maxDiff = " << maxDiff << endl;
+  }
+  
+  return success;
+}
+
+bool RHSTests::testRHSEasy() {
+  bool success = true;
+  double tol = 1e-14;
+  
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  //  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  //  Epetra_SerialComm Comm;
+#endif
+  
+  Teuchos::RCP<ElementType> elemType = _mesh->getElement(0)->elementType();
+  
+  vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemType);
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemType);
+  
+  int numCells = elemsInPartitionOfType.size();
+  int numTestDofs = elemType->testOrderPtr->totalDofs();
+  
+  FieldContainer<double> rhsExpected(numCells,numTestDofs);
+  FieldContainer<double> rhsActual(numCells,numTestDofs);
+  
+  // determine cellIDs
+  vector<int> cellIDs;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    int cellID = _mesh->cellID(elemType, cellIndex, rank);
+    cellIDs.push_back(cellID);
+  }
+  
+  // prepare basisCache and cellIDs
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType));
+  bool createSideCacheToo = true;
+  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+  
+  _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
+  _rhsEasy->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
+  
+  double maxDiff = 0.0;
+  
+  if ( ! fcsAgree(rhsExpected,rhsActual,tol,maxDiff) ) {
+    success = false;
+    cout << "Failed testRHSEasy: maxDiff = " << maxDiff << endl;
+    cout << "Expected values:\n" << rhsExpected;
+    cout << "Actual values:\n" << rhsActual;
+    cout << "Test dof ordering:\n" << *(elemType->testOrderPtr);
   }
   
   return success;

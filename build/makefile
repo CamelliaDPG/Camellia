@@ -46,7 +46,6 @@ OBJ_NAMES = DofOrdering \
        ConfusionProblem \
        MathInnerProduct \
        Element \
-       ElementTests \
        ElementTypeFactory \
        EricksonManufacturedSolution \
        EricksonConfectionSolution \
@@ -57,14 +56,8 @@ OBJ_NAMES = DofOrdering \
        PoissonBCLinear \
        PoissonRHSLinear \
        Projector \
-       MeshTestSuite \
-       MeshRefinementTests \
-       SolutionTests \
-       VectorizedBasisTestSuite \
        MultiBasis \
-       MultiBasisTests \
        PatchBasis \
-       PatchBasisTests \
        Solution \
        DPGInnerProduct \
        ExactSolution \
@@ -88,7 +81,6 @@ OBJ_NAMES = DofOrdering \
        RefinementPattern \
        RefinementStrategy \
        RHS \
-       RHSTests \
        SchwarzSolver \
 			 StokesBilinearForm \
 			 StokesMathBilinearForm \
@@ -103,8 +95,19 @@ OBJ_NAMES = DofOrdering \
 
 OBJS = $(addsuffix .o, $(OBJ_NAMES))
 # put all the object files in OBJ_DIR:
-#OBJS_IN_PLACE = $(OBJ_DIR)/$(OBJS,W $(OBJ_DIR)\/)
 OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
+
+TEST_OBJ_NAMES = ElementTests \
+       MeshTestSuite \
+       MeshRefinementTests \
+       SolutionTests \
+       VectorizedBasisTestSuite \
+       MultiBasisTests \
+       PatchBasisTests \
+       RHSTests
+TEST_OBJS = $(addsuffix .o, $(TEST_OBJ_NAMES))
+# put all the object files in OBJ_DIR:
+TEST_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
@@ -117,9 +120,10 @@ all: $(ECHOES) $(EXES)
 
 MovedObjs:
 	@echo OBJS_IN_PLACE: $(OBJS_IN_PLACE)
+  @echo TEST_OBJS_IN_PLACE: $(TEST_OBJS_IN_PLACE)
 
-DPGTests: DPGTests.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 DPGTests.o: $(DRIVERS_DIR)/DPGTests/DPGTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 

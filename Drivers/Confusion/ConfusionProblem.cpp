@@ -14,7 +14,7 @@ ConfusionProblem::ConfusionProblem(Teuchos::RCP<ConfusionBilinearForm> cbf) : RH
 
 // RHS:
 bool ConfusionProblem::nonZeroRHS(int testVarID) {
-  return false;//testVarID == ConfusionBilinearForm::V;
+  return testVarID == ConfusionBilinearForm::V;
 }
 
 void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
@@ -22,8 +22,8 @@ void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physical
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   values.resize(numCells,numPoints);
-  //values.initialize(1.0);
-  values.initialize(0.0);
+  values.initialize(1.0);
+  //values.initialize(0.0);
 }
 
 // BC

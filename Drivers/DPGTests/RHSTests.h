@@ -16,10 +16,12 @@
 
 class Mesh;
 class RHS;
+class RHSEasy;
 
 class RHSTests : public TestSuite {
   Teuchos::RCP<Mesh> _mesh;
   Teuchos::RCP<RHS> _rhs;
+  Teuchos::RCP<RHSEasy> _rhsEasy;
   
   void setup();
   void teardown();
@@ -28,6 +30,7 @@ public:
   
   bool testComputeRHSLegacy(); // test copied from DPGTests
   bool testIntegrateAgainstStandardBasis();
+  bool testRHSEasy();
   
   std::string testSuiteName();
 };

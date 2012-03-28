@@ -147,4 +147,6 @@ public:
   void setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo);
 };
 
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
+
 #endif

@@ -8,7 +8,6 @@
 
 #include "RHS.h"
 #include "BasisCache.h"
-#include "BilinearFormUtility.h" // just for the weightCellBasisValues thing -- may be better to move that here
 
 void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, 
                                         Teuchos::RCP<DofOrdering> testOrdering, 
