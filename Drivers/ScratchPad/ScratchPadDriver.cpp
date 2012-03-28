@@ -60,17 +60,19 @@ int main(int argc, char *argv[]) {
   VarPtr sigma22 = varFactory.fieldVar("\\sigma_22");
   VarPtr p = varFactory.fieldVar("p");
   
+  double mu = 1.0;
+  
   BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );  
   // q1 terms:
   stokesBFMath->addTerm(u1,q1->div());
-  stokesBFMath->addTerm(sigma11,q1->x());
-  stokesBFMath->addTerm(sigma12,q1->y());
+  stokesBFMath->addTerm(mu * sigma11,q1->x());
+  stokesBFMath->addTerm(mu * sigma12,q1->y());
   stokesBFMath->addTerm(-u1hat, q1->dot_normal());
   
   // q2 terms:
   stokesBFMath->addTerm(u2, q2->div());
-  stokesBFMath->addTerm(sigma21,q2->x());
-  stokesBFMath->addTerm(sigma22,q2->y());
+  stokesBFMath->addTerm(mu * sigma21,q2->x());
+  stokesBFMath->addTerm(mu * sigma22,q2->y());
   stokesBFMath->addTerm(-u2hat, q2->dot_normal());
   
   // v1:
@@ -88,9 +90,7 @@ int main(int argc, char *argv[]) {
   // v3:
   stokesBFMath->addTerm(-u1,v3->dx());
   stokesBFMath->addTerm(-u2,v3->dy());
-  stokesBFMath->addTerm( 1.0 * u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
-    
-  double mu = 1.0;
+  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
   int trialOrder = 1;
   int pToAdd = 0;

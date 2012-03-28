@@ -110,17 +110,16 @@ public:
                          FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
                          shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes);
   
-  static void computeRHS(FieldContainer<double> &rhsVector, BilinearFormPtr bilinearForm, RHS &rhs, 
-                  FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
-                  BasisCachePtr basisCache);
+//  static void computeRHS(FieldContainer<double> &rhsVector, BilinearFormPtr bilinearForm, RHS &rhs, 
+//                  FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
+//                  BasisCachePtr basisCache);
 
   static void transposeFCMatrices(FieldContainer<double> &fcTranspose,
                                   const FieldContainer<double> &fc);
   
   static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array);
-private:
-  static void weightCellBasisValues(FieldContainer<double> &basisValues, 
-                                    const FieldContainer<double> &weights, int offset);
   
+  static void weightCellBasisValues(FieldContainer<double> &basisValues, 
+                                    const FieldContainer<double> &weights, int offset); 
 };
 #endif

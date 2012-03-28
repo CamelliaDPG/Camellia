@@ -7,6 +7,7 @@
 #include "BilinearForm.h"
 #include "DPGInnerProduct.h"
 #include "Intrepid_Basis.hpp"
+#include "RHS.h"
 
 class Var;
 class LinearTerm;
@@ -518,6 +519,26 @@ public:
   }
 };
 
+//class RHSEasy : public RHS {
+//  vector< LinearTermPtr > _terms;
+//  set<int> _testIDs;
+//public:
+//  void addTerm( LinearTermPtr rhsTerm ) {
+//    TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
+//    _terms.push_back( rhsTerm );
+//    set<int> testIDs = _terms->varIDs();
+//    _testIDs.insert(testIDs.begin(),testIDs.end());
+//  }
+//  
+//  bool nonZeroRHS(int testVarID) {
+//    return (_testIDs.find(testVarID) != _testIDs.end());
+//  }
+//  
+//  void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values) {
+//    
+//  }
+//};
+
 class BF : public BilinearForm {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
   vector< BilinearTerm > _terms;
@@ -824,6 +845,10 @@ LinearTermPtr operator*(vector<double> weight, VarPtr v) {
 
 LinearTermPtr operator*(VarPtr v, vector<double> weight) {
   return weight * v;
+}
+
+LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
+  return 1.0 * v1 + 1.0 * v2;
 }
 
 LinearTermPtr operator/(VarPtr v, double weight) {

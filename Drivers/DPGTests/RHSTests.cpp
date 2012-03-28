@@ -299,9 +299,8 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
   bool createSideCacheToo = true;
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   
-  _rhs->integrateAgainstStandardBasis(rhsActual, _mesh->bilinearForm(), elemType->testOrderPtr, basisCache);
-  BilinearFormUtility::computeRHS(rhsExpected, _mesh->bilinearForm(), *(_rhs.get()),
-                                  testWeights, elemType->testOrderPtr, basisCache);
+  _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
+  _rhs->integrateAgainstOptimalTests(rhsExpected, testWeights, elemType->testOrderPtr, basisCache);
   
   double maxDiff = 0.0;
   

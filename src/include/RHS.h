@@ -59,6 +59,7 @@ public:
     ops.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
     return ops;
   }
+  // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)
   virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<double> &values) {
     rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
   }
@@ -69,11 +70,14 @@ public:
   virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
   }
-  
-  virtual void integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, Teuchos::RCP<BilinearForm> bilinearForm, 
-                                             Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
+  
+  virtual void integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, Teuchos::RCP<DofOrdering> testOrdering,
+                                             BasisCachePtr basisCache);
+  virtual void integrateAgainstOptimalTests(FieldContainer<double> &rhsVector, const FieldContainer<double> &optimalTestWeights,
+                                            Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
+
 };
 
 #endif

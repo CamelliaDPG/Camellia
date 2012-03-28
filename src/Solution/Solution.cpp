@@ -307,8 +307,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
       
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
-      BilinearFormUtility::computeRHS(localRHSVector, _mesh->bilinearForm(), *(_rhs.get()),
-                                      optTestCoeffs, testOrderingPtr, basisCache);
+      _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
@@ -1457,7 +1456,7 @@ void Solution::computeResiduals() {
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
     bool createSideCacheToo = true;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-    _rhs->integrateAgainstStandardBasis(residuals, _mesh->bilinearForm(), testOrdering, basisCache);
+    _rhs->integrateAgainstStandardBasis(residuals, testOrdering, basisCache);
 //    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()),
 //                                    testWeights, testOrdering, basisCache);
 //    BilinearFormUtility::computeRHS(residuals, _mesh->bilinearForm(), *(_rhs.get()), 
