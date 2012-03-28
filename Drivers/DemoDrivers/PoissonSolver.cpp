@@ -3,13 +3,36 @@
 #include "MathInnerProduct.h"
 #include "Mesh.h"
 #include "Solution.h"
+#include "Solver.h"
 
 // Trilinos includes
 #include "Intrepid_FieldContainer.hpp"
 
+// Trilinos includes
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
+#ifdef HAVE_MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  int rank=mpiSession.getRank();
+  int numProcs=mpiSession.getNProc();
+#else
+  int rank = 0;
+  int numProcs = 1;
+#endif
+  
+  bool useSchwarz = true;
   int polyOrder = 4;
   int pToAdd = 2; // for tests
   bool useConformingTraces = true;
@@ -62,7 +85,20 @@ int main(int argc, char *argv[]) {
   // create a solution object
   Solution solution(mesh, exactSolution->bc(), exactSolution->ExactSolution::rhs(), ip);
 
-  solution.solve();
+  Teuchos::RCP<Solver> solver;
+  if ( useSchwarz ) {
+    int overlapLevel = 10;
+    int maxIters = 400;
+    double tol = 5e-7;
+    Teuchos::RCP<SchwarzSolver> schwarzSolver = Teuchos::rcp( new SchwarzSolver(overlapLevel,maxIters,tol) );
+    schwarzSolver->setPrintToConsole(rank==0);
+    solver = schwarzSolver;
+  } else {
+    // use KLU
+    solver = Teuchos::rcp( new KluSolver() );
+  }
+  
+  solution.solve(solver);
   
   // print out the L2 error of the solution:
   double l2error = exactSolution->L2NormOfError(solution, PoissonBilinearForm::PHI);
