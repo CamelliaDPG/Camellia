@@ -341,7 +341,17 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
 
-void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo) {
+void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
+  _cubPoints = pointsRefCell;
+  
+  _knownValues.clear();
+  _cubWeights.resize(0); // will force an exception if you try to compute weighted values.
+  discardPhysicalNodeInfo();
+}
+
+
+void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
+                                      const vector<int> &cellIDs, bool createSideCacheToo) {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
   
   _numCells = physicalCellNodes.dimension(0);
@@ -366,8 +376,12 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
   
   // compute weighted measure
-  _weightedMeasure = FieldContainer<double>(_numCells, numCubPoints);
-  fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
+  if (_cubWeights.size() > 0) {
+    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
+    // TODO: rename _cubPoints and related methods...
+    _weightedMeasure = FieldContainer<double>(_numCells, numCubPoints);
+    fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
+  }
   
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   _physCubPoints = FieldContainer<double>(_numCells, numCubPoints, _spaceDim);

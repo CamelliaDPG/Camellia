@@ -46,6 +46,15 @@ using namespace Intrepid;
 class BC {
 public:
   virtual bool bcsImposed(int varID) = 0; // returns true if there are any BCs anywhere imposed on varID
+  virtual void imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
+                        int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
+    // by default, call legacy version:
+    // (basisCache->getPhysicalCubaturePoints() doesn't really return *cubature* points, but the boundary points
+    //  that we're interested in)
+    FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    imposeBC(varID,physicalPoints,unitNormals,dirichletValues,imposeHere);
+  }
+  
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,

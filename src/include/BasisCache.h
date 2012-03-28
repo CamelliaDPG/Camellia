@@ -116,12 +116,17 @@ public:
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
+  
   // side cache constructor:
   BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
              FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
              FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
              FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
+  
+  // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
+  // (this comes up in imposeBC)
+  void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> getCellMeasures();

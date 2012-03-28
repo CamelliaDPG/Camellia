@@ -185,6 +185,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   int spaceDim = elemTypePtr->cellTopoPtr->getDimension();
   int sideDim = spaceDim - 1;
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
   vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);
@@ -240,11 +241,12 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         int numDofs = basis->getCardinality();
         
         int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
+        vector<int> cellIDs = cellIDsPerSide[sideIndex];
         
         if (numCells > 0) {
           FieldContainer<double> dofPointsSide(numDofs, sideDim); // dof points for the basis (i.e. a 1D set)
           FieldContainer<double> dofPointsSideRefCell(numDofs, spaceDim); // dofPointsSide from the pov of the ref cell
-          FieldContainer<double> dofPointsSidePhysical(numCells, numDofs, spaceDim); // cubPointsSide from the pov of the physical cell
+//          FieldContainer<double> dofPointsSidePhysical(numCells, numDofs, spaceDim); // cubPointsSide from the pov of the physical cell
           shards::CellTopology sideTopology = basis->getBaseCellTopology();
           // CHEATING HERE: MAKING ASSUMPTIONS ABOUT THE NATURE OF THE BASIS (WARPBLEND)
           PointTools::getLattice<double,FieldContainer<double> >( dofPointsSide, sideTopology, basis->getDegree(), 0, POINTTYPE_WARPBLEND );
@@ -272,14 +274,16 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
           
           // map side cubature points in reference parent cell domain to physical space
-          CellTools<double>::mapToPhysicalFrame(dofPointsSidePhysical, dofPointsSideRefCell, physicalCellNodesPerSide[sideIndex], cellTopo);
+//          CellTools<double>::mapToPhysicalFrame(dofPointsSidePhysical, dofPointsSideRefCell, physicalCellNodesPerSide[sideIndex], cellTopo);
           
           FieldContainer<double> dirichletValues(numCells,numDofs);
           FieldContainer<bool> imposeHere(numCells,numDofs);
 
-          //cout << "dirichletValues:" << endl << dirichletValues;
+          basisCache->setRefCellPoints(dofPointsSideRefCell);
+          basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,false);
           
-          bc.imposeBC(trialID, dofPointsSidePhysical, sideNormals, dirichletValues, imposeHere);
+          //cout << "dirichletValues:" << endl << dirichletValues;
+          bc.imposeBC(dirichletValues, imposeHere, trialID, sideNormals, basisCache);
           
           for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
             for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
