@@ -108,7 +108,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver
+EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver
 ECHOES = 
 
 default: all
@@ -128,6 +128,12 @@ BurgersDriver: BurgersDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 BurgersDriver.o: $(DRIVERS_DIR)/Burgers/BurgersDriver.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+ScratchPadDriver: ScratchPadDriver.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ScratchPadDriver.o -o ScratchPadDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+ScratchPadDriver.o: $(DRIVERS_DIR)/ScratchPad/ScratchPadDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
   
 EricksonDriver: EricksonDriver.o $(OBJS)
