@@ -11,17 +11,23 @@
 #include "InnerProductScratchPad.h"
 #include "MathInnerProduct.h"
 #include "StokesBilinearForm.h"
+#include "StokesMathBilinearForm.h"
 #include "ElementType.h"
 #include "TestSuite.h"
 #include "BasisFactory.h"
+#include "DofOrderingFactory.h"
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<DPGInnerProduct> DPGInnerProductPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
+typedef Teuchos::RCP<BF> BFPtr;
 
 int main(int argc, char *argv[]) {
+  FieldContainer<double> expectedValues;
+  FieldContainer<double> actualValues;
+  
   // define nodes for test
   FieldContainer<double> quadPoints(1,4,2);
   
@@ -35,33 +41,69 @@ int main(int argc, char *argv[]) {
   quadPoints(0,3,1) = 1.0;
   
   // 1. Implement the math norm for Stokes
-  VarFactory varFactory; // provides unique IDs for test/trial functions, etc.
-  VarPtr q1 = varFactory.testVar("q_1", HDIV);
-  VarPtr q2 = varFactory.testVar("q_2", HDIV);
-  VarPtr v1 = varFactory.testVar("v_1", HGRAD);
-  VarPtr v2 = varFactory.testVar("v_2", HGRAD);
-  VarPtr v3 = varFactory.testVar("v_3", HGRAD);
+  VarFactory varFactory; 
+  VarPtr q1 = varFactory.testVar("q_1", HDIV, StokesMathBilinearForm::Q_1);
+  VarPtr q2 = varFactory.testVar("q_2", HDIV, StokesMathBilinearForm::Q_2);
+  VarPtr v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
+  VarPtr v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
+  VarPtr v3 = varFactory.testVar("v_3", HGRAD, StokesMathBilinearForm::V_3);
   
+  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
+  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
+  VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\sigma_{1n}}");
+  VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\sigma_{2n}}");
+  VarPtr u1 = varFactory.fieldVar("u_1");
+  VarPtr u2 = varFactory.fieldVar("u_2");
+  VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
+  VarPtr sigma12 = varFactory.fieldVar("\\sigma_12");
+  VarPtr sigma21 = varFactory.fieldVar("\\sigma_21");
+  VarPtr sigma22 = varFactory.fieldVar("\\sigma_22");
+  VarPtr p = varFactory.fieldVar("p");
+  
+  BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );  
+  // q1 terms:
+  stokesBFMath->addTerm(u1,q1->div());
+  stokesBFMath->addTerm(sigma11,q1->x());
+  stokesBFMath->addTerm(sigma12,q1->y());
+  stokesBFMath->addTerm(-u1hat, q1->dot_normal());
+  
+  // q2 terms:
+  stokesBFMath->addTerm(u2, q2->div());
+  stokesBFMath->addTerm(sigma21,q2->x());
+  stokesBFMath->addTerm(sigma22,q2->y());
+  stokesBFMath->addTerm(-u2hat, q2->dot_normal());
+  
+  // v1:
+  stokesBFMath->addTerm(sigma11,v1->dx());
+  stokesBFMath->addTerm(sigma12,v1->dy());
+  stokesBFMath->addTerm( - p, v1->dx() );
+  stokesBFMath->addTerm( sigma1n, v1);
+
+  // v2:
+  stokesBFMath->addTerm(sigma21,v2->dx());
+  stokesBFMath->addTerm(sigma22,v2->dy());
+  stokesBFMath->addTerm( -p, v2->dy());
+  stokesBFMath->addTerm( sigma2n, v2);
+  
+  // v3:
+  stokesBFMath->addTerm(-u1,v3->dx());
+  stokesBFMath->addTerm(-u2,v3->dy());
+  stokesBFMath->addTerm( 1.0 * u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
+    
   double mu = 1.0;
   
-  // the following should be replaced by some sort of DofOrderingFactory call or something...
-  int polyOrder = 1;
+  int trialOrder = 1;
+  int pToAdd = 0;
+  int testOrder = trialOrder + pToAdd;
   CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  BasisPtr divBasis = BasisFactory::getBasis(polyOrder, quadTopoPtr->getKey(), 
-                                             IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
-  BasisPtr gradBasis = BasisFactory::getBasis(polyOrder, quadTopoPtr->getKey(), 
-                                             IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  DofOrderingPtr testOrdering = Teuchos::rcp(new DofOrdering() );
-  testOrdering->addEntry(q1->ID(), divBasis, 1);
-  testOrdering->addEntry(q2->ID(), divBasis, 1);
-  testOrdering->addEntry(v1->ID(), gradBasis, 0);
-  testOrdering->addEntry(v2->ID(), gradBasis, 0);
-  testOrdering->addEntry(v3->ID(), gradBasis, 0);
+  DofOrderingFactory dofOrderingFactory(stokesBFMath);
+  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(testOrder, *quadTopoPtr);
+  DofOrderingPtr trialOrdering = dofOrderingFactory.trialOrdering(trialOrder, *quadTopoPtr);
   
   // just use testOrdering for both trial and test spaces (we only use to define BasisCache)
-  ElementTypePtr elemType  = Teuchos::rcp( new ElementType(testOrdering, testOrdering, quadTopoPtr) );
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
-  basisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
+  ElementTypePtr elemType  = Teuchos::rcp( new ElementType(trialOrdering, testOrdering, quadTopoPtr) );
+  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
+  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
   
   IPPtr mathIP = Teuchos::rcp(new IP());
   mathIP->addTerm(v1);
@@ -75,15 +117,15 @@ int main(int argc, char *argv[]) {
   mathIP->addTerm(q2);
   mathIP->addTerm(q2->div());
   
-  Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesBilinearForm(mu));
+  Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesMathBilinearForm(mu));
   DPGInnerProductPtr autoMathIP = Teuchos::rcp( new MathInnerProduct(stokesBF) );
   
   int numCells = quadPoints.dimension(0);
-  FieldContainer<double> expectedValues(numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
-  FieldContainer<double> actualValues  (numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
+  expectedValues.resize(numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
+  actualValues.resize  (numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
   
-  autoMathIP->computeInnerProductMatrix(expectedValues,testOrdering,basisCache);
-  mathIP->computeInnerProductMatrix(actualValues,testOrdering,basisCache);
+  autoMathIP->computeInnerProductMatrix(expectedValues,testOrdering,ipBasisCache);
+  mathIP->computeInnerProductMatrix(actualValues,testOrdering,ipBasisCache);
   
   double tol = 1e-14;
   double maxDiff = 0.0;
@@ -115,6 +157,27 @@ int main(int argc, char *argv[]) {
   
   cout << "*** Quasi-Optimal IP: ***\n";
   qoptIP->printInteractions();
+  
+  // just run the quasi-optimal (we don't have a good way of testing it right now)
+  qoptIP->computeInnerProductMatrix(actualValues,testOrdering,ipBasisCache);
+
+  // test stiffness matrix computation:
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
+  basisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),true); // true: do create side cache
+  FieldContainer<double> cellSideParities(numCells,quadTopoPtr->getSideCount());
+  cellSideParities.initialize(1.0); // not worried here about neighbors actually having opposite parity -- just want the two BF implementations to agree...
+  expectedValues.resize(numCells, testOrdering->totalDofs(), trialOrdering->totalDofs() );
+  actualValues.resize(numCells, testOrdering->totalDofs(), trialOrdering->totalDofs() );
+  stokesBF->stiffnessMatrix(expectedValues, elemType, cellSideParities, basisCache);
+  stokesBFMath->stiffnessMatrix(actualValues, elemType, cellSideParities, basisCache);
+  
+  if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
+    cout << "Old: \n" << expectedValues;
+    cout << "New: \n" << actualValues;
+  } else {
+    cout << "Old and new Stokes stiffness agree!!\n";
+  }
   
   return 0;
 }

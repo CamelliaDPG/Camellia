@@ -62,6 +62,19 @@ public:
 
 namespace FunctionSpaces {
   enum Space { HGRAD, HCURL, HDIV, L2, UNKNOWN_FS };
+  enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE };
+  
+  IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space) {
+    if (space == HGRAD)
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+    if (space == HCURL)
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
+    if (space == HDIV)
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+    if (space == L2)
+      return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+  }
 }
 
 using namespace FunctionSpaces;
@@ -72,96 +85,98 @@ class Var { // really Var x Operator
   string _name;
   Space _fs;
   EOperatorExtended _op; // default is OPERATOR_VALUE
+  VarType _varType;
 //  map< EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
 public:
   Var(int ID, int rank, string name, EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE,
-      Space fs = UNKNOWN_FS) {
+      Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE) {
     _id = ID;
     _rank = rank;
     _name = name;
     _op = op;
     _fs = fs;
+    _varType = varType;
   }
   
-  int rank() { return _rank; }  // 0 for scalar, 1 for vector, etc.
-    
   int ID() { return _id; }
+  string name() { return _name; }
   EOperatorExtended op() { return _op; }
-
+  int rank() { return _rank; }  // 0 for scalar, 1 for vector, etc.
   Space space() { return _fs; }
+  VarType varType() { return _varType; }
   
   VarPtr grad() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "grad() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank + 1, _name, IntrepidExtendedTypes::OPERATOR_GRAD ) );
+    return Teuchos::rcp( new Var(_id, _rank + 1, _name, IntrepidExtendedTypes::OPERATOR_GRAD, UNKNOWN_FS, _varType ) );
   }
   VarPtr div() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "div() only supported for vars of rank 1.");
-    return Teuchos::rcp( new Var(_id, _rank - 1, _name, IntrepidExtendedTypes::OPERATOR_DIV ) );
+    return Teuchos::rcp( new Var(_id, _rank - 1, _name, IntrepidExtendedTypes::OPERATOR_DIV, UNKNOWN_FS, _varType ) );
   }
   VarPtr curl() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( (_rank != 0) && (_rank != 1), std::invalid_argument, "curl() can only be applied to vars of ranks 0 or 1.");
     int newRank = (_rank == 0) ? 1 : 0;
-    return Teuchos::rcp( new Var(_id, newRank, _name, IntrepidExtendedTypes::OPERATOR_CURL ) );
+    return Teuchos::rcp( new Var(_id, newRank, _name, IntrepidExtendedTypes::OPERATOR_CURL, UNKNOWN_FS, _varType ) );
   }
   VarPtr dx() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dx() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DX ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DX, UNKNOWN_FS, _varType ) );
   }
   VarPtr dy() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dy() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DY ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DY, UNKNOWN_FS, _varType ) );
   }
   VarPtr dz() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dz() only supported for vars of rank 0.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DZ ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, IntrepidExtendedTypes::OPERATOR_DZ, UNKNOWN_FS, _varType ) );
   }
   VarPtr x() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "x() only supported for vars of rank 1.");
-    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_X ) );
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_X, UNKNOWN_FS, _varType ) );
   }
   VarPtr y() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "y() only supported for vars of rank 1.");
-    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Y ) );
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Y, UNKNOWN_FS, _varType ) );
   }
   VarPtr z() { 
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
-    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Z ) );
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_Z, UNKNOWN_FS, _varType ) );
   }
   
   VarPtr cross_normal() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "cross_normal() only supported for vars of rank 1.");
-    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_CROSS_NORMAL ) );
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_CROSS_NORMAL, UNKNOWN_FS, _varType ) );
   }
   VarPtr dot_normal() {
     TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "dot_normal() only supported for vars of rank 1.");
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_DOT_NORMAL ) );
+    return Teuchos::rcp( new Var(_id, _rank-1, _name, OPERATOR_DOT_NORMAL, UNKNOWN_FS, _varType ) );
   }
   VarPtr times_normal() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    return Teuchos::rcp( new Var(_id, _rank + 1, _name, OPERATOR_TIMES_NORMAL ) );
+    return Teuchos::rcp( new Var(_id, _rank + 1, _name, OPERATOR_TIMES_NORMAL, UNKNOWN_FS, _varType ) );
   }
   VarPtr times_normal_x() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_X ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_X, UNKNOWN_FS, _varType ) );
   }
   VarPtr times_normal_y() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_Y ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_Y, UNKNOWN_FS, _varType ) );
   }
   VarPtr times_normal_z() {
     TEST_FOR_EXCEPTION( _op != IntrepidExtendedTypes::OPERATOR_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_Z ) );
+    return Teuchos::rcp( new Var(_id, _rank, _name, OPERATOR_TIMES_NORMAL_Z, UNKNOWN_FS, _varType ) );
   }
   
 //  // the following will make tests with names v_i, trials with names u_i
@@ -174,27 +189,33 @@ class LinearTerm {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;
   vector< LinearSummand > _summands;
   set<int> _varIDs;
+  VarType _termType; // shouldn't mix
 protected:
   const vector< LinearSummand > & summands() const { return _summands; }
 public:
   LinearTerm(FunctionPtr weight, VarPtr var) {
     _rank = -1;
+    _termType = UNKNOWN_TYPE;
     addVar(weight,var);
   }
   LinearTerm(double weight, VarPtr var) {
     _rank = -1;
+    _termType = UNKNOWN_TYPE;
     addVar(weight,var);
   }
   LinearTerm(vector<double> weight, VarPtr var) {
     _rank = -1;
+    _termType = UNKNOWN_TYPE;
     addVar(weight,var);
   }
   LinearTerm( VarPtr v ) {
     _rank = -1;
+    _termType = UNKNOWN_TYPE;
     addVar( 1.0, v);
   }
   
   void addVar(FunctionPtr weight, VarPtr var) {
+    // check ranks:
     int rank; // rank of weight * var
     if (weight->rank() == var->rank() ) { // then we dot like terms together, getting a scalar
       rank = 0;
@@ -208,6 +229,13 @@ public:
     }
     if (_rank != rank) {
       TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of unlike rank." );
+    }
+    // check type:
+    if (_termType == UNKNOWN_TYPE) {
+      _termType = var->varType();
+    }
+    if (_termType != var->varType() ) {
+      TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
     }
     _summands.push_back( make_pair( weight, var ) );
     _varIDs.insert(var->ID());
@@ -224,14 +252,17 @@ public:
   const set<int> & varIDs() const {
     return _varIDs;
   }
+  
+  VarType termType() { return _termType; }
 //  vector< EOperatorExtended > varOps(int varID);
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-  void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, bool applyCubatureWeights = false) {
+  void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, bool applyCubatureWeights = false, int sideIndex = -1) {
     // can speed things up a lot by handling specially constant weights and 1.0 weights
     // (would need to move this logic into the Function class, and then ConstantFunction can
     //  override to provide the speedup)
+    bool boundaryTerm = (sideIndex != -1);
     
     int valuesRankExpected = _rank + 3; // 3 for scalar, 4 for vector, etc.
     TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
@@ -258,8 +289,13 @@ public:
                        std::invalid_argument, "values FC numCells disagrees with cubature points container");
     TEST_FOR_EXCEPTION( numFields != basis->getCardinality(),
                        std::invalid_argument, "values FC numFields disagrees with basis cardinality");
-    TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+    if (! boundaryTerm) {
+      TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                        std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+    } else {
+      TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1),
+                         std::invalid_argument, "values FC numPoints disagrees with cubature points container");      
+    }
     for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
       LinearSummand ls = *lsIt;
       if (ls.second->ID() == varID) {        
@@ -280,9 +316,21 @@ public:
         ls.first->values(fValues,basisCache);
         constFCPtr basisValues;
         if (applyCubatureWeights) {
-          basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op());
+          if (sideIndex == -1) {
+            basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op());
+          } else {
+            // on sides, we use volume coords for test values
+            bool useVolumeCoords = ls.second->varType() == TEST;
+            basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
+          }
         } else {
-          basisValues = basisCache->getTransformedValues(basis, ls.second->op());
+          if (sideIndex == -1) {
+            basisValues = basisCache->getTransformedValues(basis, ls.second->op());
+          } else {
+            // on sides, we use volume coords for test values
+            bool useVolumeCoords = ls.second->varType() == TEST;
+            basisValues = basisCache->getTransformedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
+          }
         }
         int numFields = basis->getCardinality();
         
@@ -306,9 +354,6 @@ public:
                 const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
                   values(cellIndex,fieldIndex,ptIndex) += *fValue * *bValue;
-                  
-//                  cout << "fValue: " << *fValue << endl;
-//                  cout << "bValue: " << *bValue << endl;
                   
                   fValue++;
                   bValue++;
@@ -339,8 +384,6 @@ public:
                 
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
                   *value += *fValue * *bValue;
-//                  cout << "fValue: " << *fValue << endl;
-//                  cout << "bValue: " << *bValue << endl;
                   if (scalarF) {
                     value++; bValue++;
                   } else {
@@ -353,7 +396,6 @@ public:
         }
       }
     }
-//    cout << "values:\n" << values;
   }
   
   int rank() const { return _rank; }  // 0 for scalar, 1 for vector, etc.
@@ -385,39 +427,262 @@ public:
 class VarFactory {
   map< string, VarPtr > _testVars;
   map< string, VarPtr > _trialVars;
+  map< int, VarPtr > _testVarsByID;
+  map< int, VarPtr > _trialVarsByID;
   int _nextTrialID;
   int _nextTestID;
+  
+  int getTestID(int IDarg) {
+    if (IDarg == -1) {
+      IDarg = _nextTestID++;
+    } else {
+      _nextTestID = max(IDarg + 1, _nextTestID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
+    }
+    return IDarg;
+  }
+  
+  int getTrialID(int IDarg) {
+    if (IDarg == -1) {
+      IDarg = _nextTrialID++;
+    } else {
+      _nextTrialID = max(IDarg + 1, _nextTrialID); // ensures that automatically assigned IDs don't conflict with manually assigned ones…
+    }
+    return IDarg;
+  }
 public:
   VarFactory() {
     _nextTestID = 0;
     _nextTrialID = 0;
   }
+  // accessors:
+  VarPtr test(int testID) {
+    return _testVarsByID[testID];
+  }
+  VarPtr trial(int trialID) {
+    return _trialVarsByID[trialID];
+  }
+  
+  vector<int> testIDs() {
+    vector<int> testIDs;
+    for ( map< int, VarPtr >::iterator testIt = _testVarsByID.begin();
+         testIt != _testVarsByID.end(); testIt++) {
+      testIDs.push_back( testIt->first );
+    }
+    return testIDs;
+  }
+  
+  vector<int> trialIDs() {
+    vector<int> trialIDs;
+    for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+         trialIt != _trialVarsByID.end(); trialIt++) {
+      trialIDs.push_back( trialIt->first );
+    }
+    return trialIDs;
+  }
+  
   // when there are other scratchpads (e.g. BilinearFormScratchPad), we'll want to share
   // the variables.  The basic function of the factory is to assign unique test/trial IDs.
   
-  VarPtr testVar(string name, Space fs) {
+  VarPtr testVar(string name, Space fs, int ID = -1) {
+    ID = getTestID(ID);
     int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
-    _testVars[name] = Teuchos::rcp( new Var( _nextTestID++, rank, name, 
-                                            IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
-    return _testVars[name];
+    
+    _testVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+                                            IntrepidExtendedTypes::OPERATOR_VALUE, fs, TEST) );
+    _testVarsByID[ID] = _testVars[name];
+    return _testVarsByID[ID];
   }
-  VarPtr fieldVar(string name, Space fs = L2) {
+  VarPtr fieldVar(string name, Space fs = L2, int ID = -1) {
+    ID = getTrialID(ID);
     int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
-    _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name,
-                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
-    return _trialVars[name];
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs, FIELD) );
+    _trialVarsByID[ID] = _trialVars[name];
+    return _trialVarsByID[ID];
   }
-  VarPtr fluxVar(string name, Space fs = L2) { // trace of HDIV  (implemented as L2 on boundary)
+  VarPtr fluxVar(string name, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
     int rank = 0;
-    _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name, 
-                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs) );
-    return _trialVars[name];
+    ID = getTrialID(ID);
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs, FLUX) );
+    _trialVarsByID[ID] = _trialVars[name];
+    return _trialVarsByID[ID];
   }
-  VarPtr traceVar(string name, Space fs = HGRAD) { // trace of HGRAD (implemented as HGRAD on boundary)
+  VarPtr traceVar(string name, Space fs = HGRAD, int ID = -1) { // trace of HGRAD (implemented as HGRAD on boundary)
     int rank = 0;
-    _trialVars[name] = Teuchos::rcp( new Var( _nextTrialID++, rank, name, 
-                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs) );    
-    return _trialVars[name];
+    ID = getTrialID(ID);
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+                                             IntrepidExtendedTypes::OPERATOR_VALUE, fs, TRACE) );
+    _trialVarsByID[ID] = _trialVars[name];
+    return _trialVarsByID[ID];
+  }
+};
+
+class BF : public BilinearForm {
+  typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
+  vector< BilinearTerm > _terms;
+  VarFactory _varFactory;
+public:
+  BF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by BF)
+    _varFactory = varFactory;
+    // set super's ID containers:
+    _trialIDs = _varFactory.trialIDs();
+    _testIDs = _varFactory.testIDs();
+  }
+  void addTerm( LinearTermPtr trialTerm, LinearTermPtr testTerm ) {
+    _terms.push_back( make_pair( trialTerm, testTerm ) );
+  }
+  void addTerm( VarPtr trialVar, LinearTermPtr testTerm ) {
+    addTerm( Teuchos::rcp( new LinearTerm(trialVar) ), testTerm );
+  }
+  void addTerm( VarPtr trialVar, VarPtr testVar ) {
+    addTerm( Teuchos::rcp( new LinearTerm(trialVar) ), Teuchos::rcp( new LinearTerm(testVar) ) );
+  }
+  void addTerm( LinearTermPtr trialTerm, VarPtr testVar) {
+    addTerm( trialTerm, Teuchos::rcp( new LinearTerm(testVar) ) );
+  }
+  
+  // BilinearForm implementation:
+  const string & testName(int testID) {
+    _varFactory.test(testID)->name();
+  }
+  const string & trialName(int trialID) {
+    _varFactory.trial(trialID)->name();
+  }
+  
+  EFunctionSpaceExtended functionSpaceForTest(int testID) {
+    return efsForSpace(_varFactory.test(testID)->space());
+  }
+  
+  EFunctionSpaceExtended functionSpaceForTrial(int trialID) {
+    return efsForSpace(_varFactory.trial(trialID)->space());
+  }
+  
+  bool isFluxOrTrace(int trialID) {
+    VarType varType = _varFactory.trial(trialID)->varType();
+    return (varType == FLUX) || (varType == TRACE);
+  }
+  
+  void printTrialTestInteractions() {
+    cout << "BF::printTrialTestInteractions() not yet implemented.\n";
+  }
+  
+  void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+                       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+    // stiffness is sized as (C, FTest, FTrial)
+    DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
+    DofOrderingPtr testOrdering = elemType->testOrderPtr;
+    FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+    
+    unsigned numCells = physicalCubaturePoints.dimension(0);
+    unsigned numPoints = physicalCubaturePoints.dimension(1);
+    unsigned spaceDim = physicalCubaturePoints.dimension(2);
+    
+    shards::CellTopology cellTopo = basisCache->cellTopology();
+    
+    Teuchos::Array<int> ltValueDim;
+    ltValueDim.push_back(numCells);
+    ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+    ltValueDim.push_back(numPoints);
+    
+    stiffness.initialize(0.0);
+    
+    for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+         btIt != _terms.end(); btIt++) {
+      BilinearTerm bt = *btIt;
+      LinearTermPtr trialTerm = btIt->first;
+      LinearTermPtr testTerm = btIt->second;
+      set<int> trialIDs = trialTerm->varIDs();
+      set<int> testIDs = testTerm->varIDs();
+      
+      int rank = trialTerm->rank();
+      TEST_FOR_EXCEPTION( rank != testTerm->rank(), std::invalid_argument, "test and trial ranks disagree." );
+      
+      set<int>::iterator trialIt;
+      set<int>::iterator testIt;
+      
+      Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis, testBasis;
+      
+      bool boundaryTerm = (trialTerm->termType() == FLUX) || (trialTerm->termType() == TRACE);
+      // num "sides" for volume integral: 1...
+      int numSides = boundaryTerm ? elemType->cellTopoPtr->getSideCount() : 1;
+      for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
+        int numPointsSide = basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
+        
+        for (testIt= testIDs.begin(); testIt != testIDs.end(); testIt++) {
+          int testID = *testIt;
+          testBasis = testOrdering->getBasis(testID);
+          int numDofsTest = testBasis->getCardinality();
+          
+          // set up values container for test
+          Teuchos::Array<int> ltValueDim1 = ltValueDim;
+          ltValueDim1[1] = numDofsTest;
+          for (int d=0; d<rank; d++) {
+            ltValueDim1.push_back(spaceDim);
+          }
+          ltValueDim1[2] = boundaryTerm ? numPointsSide : numPoints;
+          FieldContainer<double> testValues(ltValueDim1);
+          bool applyCubatureWeights = true;
+          if (! boundaryTerm) {
+            testTerm->values(testValues,testID,testBasis,basisCache,applyCubatureWeights);
+          } else {
+            testTerm->values(testValues,testID,testBasis,basisCache,applyCubatureWeights,sideIndex);
+          }
+          
+          for (trialIt= trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+            int trialID = *trialIt;
+            trialBasis = trialOrdering->getBasis(trialID);
+            int numDofsTrial = trialBasis->getCardinality();
+            
+            // set up values container for test2:
+            Teuchos::Array<int> ltValueDim2 = ltValueDim1;
+            ltValueDim2[1] = numDofsTrial;
+            
+            FieldContainer<double> trialValues(ltValueDim2);
+            
+            if (! boundaryTerm ) {
+              trialTerm->values(trialValues,trialID,trialBasis,basisCache);
+            } else {
+              trialTerm->values(trialValues,trialID,trialBasis,basisCache,false,sideIndex);
+              if ( trialTerm->termType() == FLUX ) {
+                // we need to multiply the trialValues by the parity of the normal, since
+                // the trial implicitly contains an outward normal, and we need to adjust for the fact
+                // that the neighboring cells have opposite normal
+                // trialValues should have dimensions (numCells,numFields,numCubPointsSide)
+                int numFields = trialValues.dimension(1);
+                int numPoints = trialValues.dimension(2);
+                for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+                  double parity = cellSideParities(cellIndex,sideIndex);
+                  if (parity != 1.0) {  // otherwise, we can just leave things be...
+                    for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                        trialValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            
+            FieldContainer<double> miniMatrix( numCells, numDofsTest, numDofsTrial );
+            
+            FunctionSpaceTools::integrate<double>(miniMatrix,testValues,trialValues,COMP_CPP);
+                        
+            // there may be a more efficient way to do this copying:
+            for (int i=0; i < numDofsTest; i++) {
+              int testDofIndex = testOrdering->getDofIndex(testID,i);
+              for (int j=0; j < numDofsTrial; j++) {
+                int trialDofIndex = boundaryTerm ? trialOrdering->getDofIndex(trialID,j,sideIndex)
+                                                 : trialOrdering->getDofIndex(trialID,j);
+                for (unsigned k=0; k < numCells; k++) {
+                  stiffness(k,testDofIndex,trialDofIndex) += miniMatrix(k,i,j);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 };
 
@@ -497,8 +762,6 @@ public:
           
           FunctionSpaceTools::integrate<double>(miniMatrix,test1Values,test2ValuesWeighted,COMP_CPP);
           
-//          cout << "miniMatrix:\n" << miniMatrix;
-          
           int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
           int test2DofOffset = dofOrdering->getDofIndex(testID2,0);
           
@@ -510,11 +773,9 @@ public:
               }
             }
           }
-//          cout << "innerProduct:\n" << innerProduct;
         }
       }
     }
-//    cout << "final innerProduct:\n" << innerProduct;
   }
   
   void operators(int testID1, int testID2, 
@@ -573,8 +834,41 @@ LinearTermPtr operator-(VarPtr v1, VarPtr v2) {
   return v1 + (-1.0) * v2;
 }
 
+LinearTermPtr operator-(VarPtr v) {
+  return (-1.0) * v;
+}
+
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
   return a + (-1.0) * v;
 }
+
+//vector<double> tuple(double a, double b) {
+//  vector<double> tuple;
+//  tuple.push_back(a);
+//  tuple.push_back(b);
+//  return tuple;
+//}
+//
+//vector<double> tuple(double a, double b, double c) {
+//  vector<double> tuple;
+//  tuple.push_back(a);
+//  tuple.push_back(b);
+//  tuple.push_back(c);
+//  return tuple;
+//}
+//
+//// 2D vector:
+//LinearTermPtr make_vector(double weight, VarPtr a, VarPtr b) {
+//  vector<double> x_weight = tuple(weight,0);
+//  vector<double> y_weight = tuple(0,weight);
+//  return x_weight * a + y_weight * b;
+//}
+//
+//LinearTermPtr make_vector(double weight, VarPtr a, VarPtr b, VarPtr c) { 
+//  vector<double> x_weight = tuple(weight,0,0);
+//  vector<double> y_weight = tuple(0,weight,0);
+//  vector<double> z_weight = tuple(0,0,weight);
+//  return x_weight * a + y_weight * b + z_weight * c;  
+//}
 
 #endif
