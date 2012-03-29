@@ -73,9 +73,20 @@
 #include "SimpleFunction.h"
 #include "BasisCache.h"
 
-
 using namespace std;
 using namespace Intrepid;
+
+ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, shards::CellTopology &cellTopo) {
+  Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology(cellTopo));
+  return Teuchos::rcp( new ElementType( trialOrdering, testOrdering, cellTopoPtr) );
+}
+
+BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs,
+                         bool createSideCacheToo = true) {
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
+  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+  return basisCache;
+}
 
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
@@ -157,7 +168,6 @@ void DPGTests::runTests() {
     cout << "Failed test testComputeOptimalTest." << endl;
   }
   
-  
   success = testMathInnerProductDx();
   ++numTestsTotal;
   if (success) {
@@ -222,7 +232,6 @@ void DPGTests::runTests() {
     cout << "Failed test testLowOrderTrialCubicTest." << endl;
   }
   
-  
   success = testComputeStiffnessDx();
   ++numTestsTotal;
   if (success) {
@@ -258,8 +267,7 @@ void DPGTests::runTests() {
   } else {
     cout << "Failed test ComputeStiffnessTrace." << endl;
   }
-  
-  
+
   success = testComputeStiffnessFlux();
   ++numTestsTotal;
   if (success) {
@@ -1040,8 +1048,6 @@ bool DPGTests::fcEqualsSDM(FieldContainer<double> &fc, int cellIndex,
 }
 
 bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
-  
-  
   int numTests = 1;
   
   int order = 3; // cubic
@@ -1059,6 +1065,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   quadPoints(0,2,1) = 1.0;
   quadPoints(0,3,0) = -1.0;
   quadPoints(0,3,1) = 1.0;
+  vector<int> quadCellIDs;
+  quadCellIDs.push_back(0);
   
   bool success = true;
   Teuchos::RCP<DofOrdering> trialOrdering;
@@ -1137,9 +1145,10 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   TestBilinearFormAnalyticBoundaryIntegral::expectedOptTestWeightsForCubicsOnQuad(ipWeightsExpected,conforming);
   
-  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), bilinearForm,
-                                                           trialOrdering, cubicHGradOrdering,
-                                                           quad_4, quadPoints, cellSideParities);
+  ElementTypePtr elemType = makeElemType(trialOrdering, cubicHGradOrdering, quad_4);
+  BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,quadCellIDs);
+  int optSuccess = bilinearForm->optimalTestWeights(ipWeightsActual, ipMatrixExpected,
+                                                    elemType, cellSideParities, basisCache);
   
   string myNameIPWeights = "testAnalyticBoundaryIntegral.ipWeights";
   
@@ -1243,6 +1252,8 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   quadPoints(0,2,1) = 1.0;
   quadPoints(0,3,0) = -1.0;
   quadPoints(0,3,1) = 1.0;
+  vector<int> quadCellIDs;
+  quadCellIDs.push_back(0);
   
   bool success = true;
   Teuchos::RCP<DofOrdering> lowestOrderHGRADOrdering = Teuchos::rcp(new DofOrdering());
@@ -1699,9 +1710,11 @@ bool DPGTests::testLowOrderTrialCubicTest() {
     ipWeightsExpected(0,3,15) = -0.30063516261594364;
   }
   
-  int optSuccess = BilinearFormUtility::computeOptimalTest(ipWeightsActual, *(ip.get()), bilinearForm,
-                                                           lowestOrderHGRADOrdering, cubicHGradOrdering,
-                                                           quad_4, quadPoints,cellSideParities);
+  
+  ElementTypePtr elemType = makeElemType(lowestOrderHGRADOrdering, cubicHGradOrdering, quad_4);
+  BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,quadCellIDs);
+  int optSuccess = bilinearForm->optimalTestWeights(ipWeightsActual, ipMatrixExpected,
+                                                    elemType, cellSideParities, basisCache);
   
   string myNameIPWeights = "testLowOrderTrialCubicTest.ipWeights";
   
@@ -2062,6 +2075,9 @@ bool DPGTests::testComputeOptimalTest() {
   triPoints(0,2,0) = 1.0;
   triPoints(0,2,1) = 1.0;
   
+  vector<int> cellIDs;
+  cellIDs.push_back(0);
+  
   FieldContainer<double> nodePoints;
   
   for (numSides=3; numSides <= 4; numSides++) {
@@ -2098,9 +2114,13 @@ bool DPGTests::testComputeOptimalTest() {
     FieldContainer<double> cellSideParities(numTests,numSides);
     cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
     
-    int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
-                                                          lowestOrderHGRADOrderingPtr, lowestOrderHGRADOrderingPtr,
-                                                          cellTopo, nodePoints,cellSideParities);
+    FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);
+    ip->computeInnerProductMatrix(ipMatrix,Teuchos::rcp(&lowestOrderHGRADOrdering,false), cellTopo, nodePoints);
+    
+    ElementTypePtr elemType = makeElemType(lowestOrderHGRADOrderingPtr, lowestOrderHGRADOrderingPtr, cellTopo);
+    BasisCachePtr basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
+    int success = bilinearForm->optimalTestWeights(optimalTestWeights, ipMatrix,
+                                                   elemType, cellSideParities, basisCache);
     
     if (success != 0) {
       cout << myName << ": computeOptimalTest failed." << endl;
@@ -2108,11 +2128,6 @@ bool DPGTests::testComputeOptimalTest() {
     }
     
     //cout << "optimalTestWeights:" << optimalTestWeights << endl;
-    
-    FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);
-    
-    ip->computeInnerProductMatrix(ipMatrix,Teuchos::rcp(&lowestOrderHGRADOrdering,false), cellTopo, nodePoints);
-    
     //cout << myName << ": inner product matrix-- " << endl << ipMatrix;
     
     BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
@@ -2141,20 +2156,21 @@ bool DPGTests::testComputeOptimalTest() {
       actualStiffness.resize(numTests, numTrialDofs, numTestDofs);
       optimalTestWeights.resize(numTests, numTrialDofs, numTestDofs);
       
-      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
-                                                        highOrderHGradOrdering, highOrderHGradOrdering,
-                                                        cellTopo, nodePoints, cellSideParities);
       
+      ipMatrix.resize(numTests,numTestDofs,numTestDofs);
+      ip->computeInnerProductMatrix(ipMatrix,highOrderHGradOrdering, cellTopo, nodePoints);
+      
+      elemType = makeElemType(highOrderHGradOrdering, highOrderHGradOrdering, cellTopo);
+      basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
+      success = bilinearForm->optimalTestWeights(optimalTestWeights, ipMatrix, 
+                                                 elemType, cellSideParities, basisCache);
+
       if (success != 0) {
         cout << myName << ": computeOptimalTest failed." << endl;
         bSuccess = false;
       }
       
       //cout << "optimalTestWeights:" << optimalTestWeights << endl;
-      
-      ipMatrix.resize(numTests,numTestDofs,numTestDofs);
-      
-      ip->computeInnerProductMatrix(ipMatrix,highOrderHGradOrdering, cellTopo, nodePoints);
       
       BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
       
@@ -2183,9 +2199,13 @@ bool DPGTests::testComputeOptimalTest() {
       actualStiffness.resize(numTests, numTrialDofs, numTrialDofs);
       optimalTestWeights.resize(numTests, numTrialDofs, numTestDofs);
       
-      success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
-                                                        lowestOrderHGRADOrderingPtr, testOrdering,
-                                                        cellTopo, nodePoints, cellSideParities);
+      ipMatrix.resize(numTests,numTestDofs,numTestDofs);
+      ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, nodePoints);
+      
+      elemType = makeElemType(lowestOrderHGRADOrderingPtr, testOrdering, cellTopo);
+      basisCache = makeBasisCache(elemType,nodePoints,cellIDs);
+      success = bilinearForm->optimalTestWeights(optimalTestWeights, ipMatrix,
+                                                 elemType, cellSideParities, basisCache);
       
       if (success != 0) {
         cout << myName << ": computeOptimalTest failed." << endl;
@@ -2193,10 +2213,6 @@ bool DPGTests::testComputeOptimalTest() {
       }
       
       //cout << "optimalTestWeights:" << optimalTestWeights << endl;
-      
-      ipMatrix.resize(numTests,numTestDofs,numTestDofs);
-      
-      ip->computeInnerProductMatrix(ipMatrix,testOrdering, cellTopo, nodePoints);
       
       BilinearFormUtility::computeStiffnessMatrix(actualStiffness,ipMatrix,optimalTestWeights);
       
@@ -2401,6 +2417,8 @@ bool DPGTests::testComputeOptimalTestPoisson() {
       quadPoints(0,2,1) = 1.0;
       quadPoints(0,3,0) = -1.0;
       quadPoints(0,3,1) = 1.0;
+      vector<int> cellIDs;
+      cellIDs.push_back(0);
       
       FieldContainer<double> ipMatrix(numTests,numTestDofs,numTestDofs);
       
@@ -2412,9 +2430,10 @@ bool DPGTests::testComputeOptimalTestPoisson() {
         cout << "ipMatrix(i,j)=" << ipMatrix(cellIndex,i,j) << "; ipMatrix(j,i)=" << ipMatrix(cellIndex,j,i) << endl;
       }
       
-      int success = BilinearFormUtility::computeOptimalTest(optimalTestWeights, *(ip.get()), bilinearForm,
-                                                            trialOrdering, testOrdering,
-                                                            quad_4, quadPoints, cellSideParities);
+      ElementTypePtr elemType = makeElemType(trialOrdering, testOrdering, quad_4);
+      BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,cellIDs);
+      int success = bilinearForm->optimalTestWeights(optimalTestWeights, ipMatrix,
+                                                     elemType, cellSideParities, basisCache);
       if (success != 0) {
         cout << myName << ": computeOptimalTest failed." << endl;
         return false;

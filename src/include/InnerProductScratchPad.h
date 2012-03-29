@@ -8,10 +8,12 @@
 #include "DPGInnerProduct.h"
 #include "Intrepid_Basis.hpp"
 #include "RHS.h"
+#include "BC.h"
 
 class Var;
 class LinearTerm;
 class Function;
+class SpatialFilter;
 
 typedef Teuchos::RCP<Var> VarPtr;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
@@ -20,6 +22,7 @@ typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 typedef Teuchos::RCP<DPGInnerProduct> InnerProductPtr;
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
+typedef Teuchos::RCP< SpatialFilter > SpatialFilterPtr;
 
 class BasisCache;
 class DPGInnerProduct;
@@ -27,35 +30,42 @@ class DPGInnerProduct;
 using namespace std;
 
 class Function {
+  // TODO: consider adding a double weight (will allow us to do things like "- 3.0 * mu * f" as a function)
+  //       subclasses would have to multiply by this weight inside values()...
 protected:
   int _rank;
 public:
-  Function(int rank) { _rank = rank; }
+  Function() {
+    _rank = 0;
+  }
+  Function(int rank) { 
+    _rank = rank; 
+  }
   
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
   int rank() { return _rank; }
 };
 
 class ConstantScalarFunction : public Function {
-  double _weight;
+  double _value;
 public:
-  ConstantScalarFunction(double weight) : Function(0) { _weight = weight; }
+  ConstantScalarFunction(double value) : Function(0) { _value = value; }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     for (int i=0; i < values.size(); i++) {
-      values[i] = _weight;
+      values[i] = _value;
     }
   }
 };
 
 class ConstantVectorFunction : public Function {
-  vector<double> _weight;
+  vector<double> _value;
 public:
-  ConstantVectorFunction(vector<double> weight) : Function(1) { _weight = weight; }
+  ConstantVectorFunction(vector<double> value) : Function(1) { _value = value; }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     // values are stored in (C,P,D) order, the important thing here being that we can do this:
     for (int i=0; i < values.size(); ) {
-      for (int d=0; d < _weight.size(); d++) {
-        values[i++] = _weight[d];
+      for (int d=0; d < _value.size(); d++) {
+        values[i++] = _value[d];
       }
     }
   }
@@ -191,7 +201,7 @@ class LinearTerm {
   vector< LinearSummand > _summands;
   set<int> _varIDs;
   VarType _termType; // shouldn't mix
-protected:
+public: // was protected; changed for debugging (no big deal either way, I think)
   const vector< LinearSummand > & summands() const { return _summands; }
 public:
   LinearTerm(FunctionPtr weight, VarPtr var) {
@@ -213,6 +223,12 @@ public:
     _rank = -1;
     _termType = UNKNOWN_TYPE;
     addVar( 1.0, v);
+  }
+  // copy constructor:
+  LinearTerm( const LinearTerm &a ) {
+    _rank = a.rank();
+    _termType = a.termType();
+    _summands = a.summands();
   }
   
   void addVar(FunctionPtr weight, VarPtr var) {
@@ -254,7 +270,7 @@ public:
     return _varIDs;
   }
   
-  VarType termType() { return _termType; }
+  VarType termType() const { return _termType; }
 //  vector< EOperatorExtended > varOps(int varID);
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
@@ -857,7 +873,10 @@ public:
 // operator overloading for syntax sugar:
 LinearTermPtr operator+(LinearTermPtr a1, LinearTermPtr a2) {
   LinearTermPtr sum = Teuchos::rcp( new LinearTerm(*a1) );
+//  cout << "sum->rank(): " << sum->rank() << endl;
+//  cout << "sum->summands.size() before adding a2: " << sum->summands().size() << endl;
   *sum += *a2;
+//  cout << "sum->summands.size() after adding a2: " << sum->summands().size() << endl;
   return sum;
 }
 
@@ -891,9 +910,10 @@ LinearTermPtr operator*(VarPtr v, vector<double> weight) {
   return weight * v;
 }
 
-LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
-  return 1.0 * v1 + 1.0 * v2;
-}
+//LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
+//  cout << "Warning: invoking an operator overload that appears to cause problems?\n";
+//  return 1.0 * v1 + 1.0 * v2;
+//}
 
 LinearTermPtr operator/(VarPtr v, double weight) {
   return (1.0 / weight) * v;
@@ -939,5 +959,126 @@ LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
 //  vector<double> z_weight = tuple(0,0,weight);
 //  return x_weight * a + y_weight * b + z_weight * c;  
 //}
+
+
+class SpatialFilter {
+public:
+  // just 2D for now:
+  virtual bool matchesPoint(double x, double y) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y) unimplemented.");
+  }
+  //  bool matchesPoint(double x, double y, double z) {
+  //    TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z) unimplemented.");
+  //  }
+};
+
+class BCEasy : public BC {
+  typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
+  set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
+  //  set< int > _singlePointBCs; // variables on which single-point conditions imposed
+  map< int, DirichletBC > _dirichletBCs; // key: trialID 
+public:
+  void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction ) {
+    _dirichletBCs[ traceOrFlux->ID() ] = make_pair( spatialPoints, valueFunction );
+  }
+  void addZeroMeanConstraint( VarPtr field ) {
+    _zeroMeanConstraints.insert( field->ID() );
+  }
+  //  addSinglePointBC( VarPtr field ) {
+  //    _singlePointBCs.insert( field->ID() );
+  //  }
+  bool bcsImposed(int varID) { // returns true if there are any BCs anywhere imposed on varID
+    return _dirichletBCs.find(varID) != _dirichletBCs.end();
+  }
+  void imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
+                int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
+    cout << "Warning: imposeBC not yet implemented in BCEasy.\n";
+    FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    
+    int numCells = physicalPoints.dimension(0);
+    int numPoints = physicalPoints.dimension(1);
+    int spaceDim = physicalPoints.dimension(2);
+    
+    TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+                       || ( dirichletValues.dimension(1) != numPoints ) 
+                       || ( dirichletValues.rank() != 2  ),
+                       std::invalid_argument,
+                       "dirichletValues dimensions should be (numCells,numPoints).");
+    TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+                       || ( imposeHere.dimension(1) != numPoints ) 
+                       || ( imposeHere.rank() != 2  ),
+                       std::invalid_argument,
+                       "imposeHere dimensions should be (numCells,numPoints).");
+    
+    TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument,
+                       "spaceDim != 2 not yet supported by imposeBC." );
+    
+    imposeHere.initialize(false);
+    // TODO: add exceptions for varIDs that aren't supposed to have BCs imposed...
+    
+    SpatialFilterPtr filter = _dirichletBCs[varID].first;
+    FunctionPtr f = _dirichletBCs[varID].second;
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = physicalPoints(cellIndex, ptIndex, 0);
+        double y = physicalPoints(cellIndex, ptIndex, 1);
+        
+        imposeHere(cellIndex,ptIndex) = filter->matchesPoint(x,y);
+      }
+    }
+    
+    f->values(dirichletValues,basisCache);
+    
+  }
+  
+  bool singlePointBC(int varID) {
+    // for now, these are unsupported
+    return false;
+    //    return _singlePointBCs.find(varID) != _singlePointBCs.end();
+  } 
+  
+  bool imposeZeroMeanConstraint(int varID) {
+    return _zeroMeanConstraints.find(varID) != _zeroMeanConstraints.end();
+  }
+};
+//
+//class SpatialFilterSum : SpatialFilter { // logical OR of spatial filters
+//  vector< SpatialFilterPtr > _filters;
+//public:
+//  bool matchesPoint(double x, double y) {
+//    for (vector< SpatialFilterPtr >::iterator filterIt = _filters.begin();
+//         filterIt != _filters.end(); filterIt++) {
+//      SpatialFilterPtr filter = *filterIt;
+//      if (filter->matchesPoint(x,y)) return true;
+//    }
+//    // no match
+//    return false;
+//  }
+//  bool matchesPoint(double x, double y, double z) {
+//    for (vector< SpatialFilterPtr >::iterator filterIt = _filters.begin();
+//         filterIt != _filters.end(); filterIt++) {
+//      SpatialFilterPtr filter = *filterIt;
+//      if (filter->matchesPoint(x,y,z)) return true;
+//    }
+//    // no match
+//    return false;
+//  }
+//  const vector< SpatialFilterPtr > & filters() {
+//    return _filters;
+//  }
+//  void addFilters(const vector< SpatialFilterPtr > & filters) {
+//    _filters.insert(filters.begin(),filters.end());
+//  }
+//  void addFilter(SpatialFilterPtr filter) {
+//    _filters.push_back(filter);
+//  }
+//}
+//
+//SpatialFilterSumPtr operator||(SpatialFilterSumPtr a, SpatialFilterSumPtr b) {
+//  SpatialFilterSumPtr sum = Teuchos::rcp(new SpatialFilterSum(*a));
+//  sum.addFilters(b->filters());
+//}
+
 
 #endif

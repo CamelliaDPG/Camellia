@@ -349,6 +349,13 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   discardPhysicalNodeInfo();
 }
 
+const FieldContainer<double> & BasisCache::getSideNormals() {
+  return _sideNormals;
+}
+
+void BasisCache::setSideNormals(FieldContainer<double> &sideNormals) {
+  _sideNormals = sideNormals;
+}
 
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
                                       const vector<int> &cellIDs, bool createSideCacheToo) {

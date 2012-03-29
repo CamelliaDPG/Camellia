@@ -16,6 +16,8 @@
 #include "TestSuite.h"
 #include "BasisFactory.h"
 #include "DofOrderingFactory.h"
+#include "StokesManufacturedSolution.h"
+#include "HConvergenceStudy.h"
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<DPGInnerProduct> DPGInnerProductPtr;
@@ -23,6 +25,77 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
 typedef Teuchos::RCP<BF> BFPtr;
+
+class SquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
+    return xMatch && yMatch;
+  }
+};
+
+// BC for the "exponential" manufactured solution for Stokes
+class StokesManufacturedSolutionBC_u1 : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex,0) = -exp(x) * ( y * cos(y) + sin(y) );
+      }
+    }
+  }
+};
+
+class StokesManufacturedSolutionBC_u2 : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex,0) = exp(x) * y * sin(y);
+      }
+    }
+  }
+};
+
+
+
+class beta : public Function {
+public:
+  beta() : Function(1) {
+    
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    int spaceDim = values.dimension(2);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        for (int d = 0; d < spaceDim; d++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          values(cellIndex,ptIndex,0) = y;
+          values(cellIndex,ptIndex,0) = -x;
+        }
+      }
+    }
+  }
+};
 
 int main(int argc, char *argv[]) {
   FieldContainer<double> expectedValues;
@@ -90,7 +163,7 @@ int main(int argc, char *argv[]) {
   // v3:
   stokesBFMath->addTerm(-u1,v3->dx());
   stokesBFMath->addTerm(-u2,v3->dy());
-  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
+  stokesBFMath->addTerm(1.0 * u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
   int trialOrder = 1;
   int pToAdd = 0;
@@ -149,6 +222,7 @@ int main(int argc, char *argv[]) {
   qoptIP->addTerm( q2->y() / (2.0 * mu) + v2->dy() );
   qoptIP->addTerm( q1->y() - q2->x() );
   qoptIP->addTerm( q1->div() - v3->dx() );
+  
   qoptIP->addTerm( sqrt(beta) * q1 );
   qoptIP->addTerm( sqrt(beta) * q2 );
   qoptIP->addTerm( sqrt(beta) * v1 );
@@ -175,9 +249,55 @@ int main(int argc, char *argv[]) {
     cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
     cout << "Old: \n" << expectedValues;
     cout << "New: \n" << actualValues;
+    cout << "TrialDofOrdering: \n" << *trialOrdering;
+    cout << "TestDofOrdering:\n" << *testOrdering;
   } else {
     cout << "Old and new Stokes stiffness agree!!\n";
   }
+  
+  // create BCs:
+  Teuchos::RCP<BCEasy> stokesBC = Teuchos::rcp(new BCEasy());
+  SpatialFilterPtr entireBoundary = Teuchos::rcp( new SquareBoundary() );
+  FunctionPtr u1fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u1() );
+  FunctionPtr u2fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u2() );
+  stokesBC->addDirichlet(u1hat,entireBoundary,u1fn);
+  stokesBC->addDirichlet(u2hat,entireBoundary,u2fn);
+  stokesBC->addZeroMeanConstraint(p);
+  
+  Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL) );
+  // for the above solution choice, RHS is actually zero
+  Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
+  
+  int minLogElements = 0, maxLogElements = 4;
+  int H1Order = 2;
+  pToAdd = 2;
+  HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
+                                              stokesBC, qoptIP, minLogElements, 
+                                              maxLogElements, H1Order, pToAdd);
+  quadPoints.resize(4,2);
+  
+  study.solve(quadPoints);
+  quadPoints(0,0,0) = -1.0; // x1
+  quadPoints(0,0,1) = -1.0; // y1
+  quadPoints(0,1,0) = 1.0;
+  quadPoints(0,1,1) = -1.0;
+  quadPoints(0,2,0) = 1.0;
+  quadPoints(0,2,1) = 1.0;
+  quadPoints(0,3,0) = -1.0;
+  quadPoints(0,3,1) = 1.0;
+  
+  int polyOrder = H1Order-1;
+  ostringstream filePathPrefix;
+  filePathPrefix << "stokesScratchPad/u1_p" << polyOrder;
+  
+  study.writeToFiles(filePathPrefix.str(),u1->ID(),u1hat->ID());
+  filePathPrefix.str("");
+  filePathPrefix << "stokesScratchPad/u2_p" << polyOrder;
+  study.writeToFiles(filePathPrefix.str(),u2->ID(),u2hat->ID());
+  
+  filePathPrefix.str("");
+  filePathPrefix << "stokesScratchPad/pressure_p" << polyOrder;
+  study.writeToFiles(filePathPrefix.str(),p->ID());
   
   return 0;
 }

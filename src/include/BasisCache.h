@@ -124,10 +124,6 @@ public:
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
              FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
   
-  // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
-  // (this comes up in imposeBC)
-  void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
-  
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> getCellMeasures();
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
@@ -150,6 +146,13 @@ public:
   const FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
   void setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, const vector<int> &cellIDs, bool createSideCacheToo);
+  
+  /*** Methods added for BC support below ***/
+  // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
+  // (this comes up in imposeBC)
+  void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
+  const FieldContainer<double> & getSideNormals();
+  void setSideNormals(FieldContainer<double> &sideNormals);
 };
 
 typedef Teuchos::RCP<BasisCache> BasisCachePtr;

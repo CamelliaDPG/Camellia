@@ -281,6 +281,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
 
           basisCache->setRefCellPoints(dofPointsSideRefCell);
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,false);
+          basisCache->setSideNormals(sideNormals);
           
           //cout << "dirichletValues:" << endl << dirichletValues;
           bc.imposeBC(dirichletValues, imposeHere, trialID, sideNormals, basisCache);

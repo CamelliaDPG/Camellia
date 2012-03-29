@@ -33,6 +33,10 @@
 #include "ElementType.h"
 #include "BilinearFormUtility.h"
 
+#include "Epetra_SerialDenseMatrix.h"
+#include "Epetra_SerialDenseSolver.h"
+#include "Epetra_DataAccess.h"
+
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
@@ -108,6 +112,107 @@ void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight
     *valuePtr *= weight;
     valuePtr++;
   }
+}
+
+int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
+                                     FieldContainer<double> &innerProductMatrix,
+                                     ElementTypePtr elemType,
+                                     FieldContainer<double> &cellSideParities,
+                                     Teuchos::RCP<BasisCache> stiffnessBasisCache) {
+  Teuchos::RCP<DofOrdering> trialOrdering = elemType->trialOrderPtr;
+  Teuchos::RCP<DofOrdering> testOrdering = elemType->testOrderPtr;
+  
+  // all arguments are as in computeStiffnessMatrix, except:
+  // optimalTestWeights, which has dimensions (numCells, numTrialDofs, numTestDofs)
+  // innerProduct: the inner product which defines the sense in which these test functions are optimal
+  int numCells = stiffnessBasisCache->getPhysicalCubaturePoints().dimension(0);
+  int numTestDofs = testOrdering->totalDofs();
+  int numTrialDofs = trialOrdering->totalDofs();
+  
+  // check that optimalTestWeights is properly dimensioned....
+  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
+                     std::invalid_argument,
+                     "physicalCellNodes.dimension(0) and optimalTestWeights.dimension(0) (numCells) do not match.");
+  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
+                     std::invalid_argument,
+                     "trialOrdering->totalDofs() and optimalTestWeights.dimension(1) do not match.");
+  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
+                     std::invalid_argument,
+                     "testOrdering->totalDofs() and optimalTestWeights.dimension(2) do not match.");
+  
+  FieldContainer<double> stiffnessMatrix(numCells,numTestDofs,numTrialDofs);
+  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
+  
+  // RHS:
+  this->stiffnessMatrix(stiffnessMatrix, trialOrdering, testOrdering, cellSideParities, stiffnessBasisCache);
+  
+  BilinearFormUtility::transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
+  
+  //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
+  //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
+  
+  Epetra_SerialDenseSolver solver;
+  
+  int solvedAll = 0;
+  
+  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+    // changed to Copy from View for debugging...
+    Epetra_SerialDenseMatrix ipMatrixT(Copy,
+                                       &innerProductMatrix(cellIndex,0,0),
+                                       innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
+                                       innerProductMatrix.dimension(2),innerProductMatrix.dimension(1));
+    
+    Epetra_SerialDenseMatrix stiffness(Copy,
+                                       &stiffnessMatrixT(cellIndex,0,0),
+                                       stiffnessMatrixT.dimension(2), // stride
+                                       stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
+    
+    Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
+    
+    
+    solver.SetMatrix(ipMatrixT);
+    //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
+    int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
+    
+    if (successLocal != 0) {
+      cout << "computeOptimalTest: failed to SetVectors with error " << successLocal << endl;
+    }
+    
+    bool equilibrated = false;
+    if ( solver.ShouldEquilibrate() ) {
+      solver.EquilibrateMatrix();
+      solver.EquilibrateRHS();
+      equilibrated = true;
+    }
+    
+    successLocal = solver.Solve();
+    
+    if (successLocal != 0) {
+      cout << "computeOptimalTest: Solve FAILED with error: " << successLocal << endl;
+      solvedAll = successLocal;
+    }
+    
+    if (equilibrated) {
+      successLocal = solver.UnequilibrateLHS();
+      if (successLocal != 0) {
+        cout << "computeOptimalTest: unequilibration FAILED with error: " << successLocal << endl;
+        solvedAll = successLocal;
+      }
+    }
+    
+    for (int i=0; i<optimalTestWeights.dimension(1); i++) {
+      for (int j=0; j<optimalTestWeights.dimension(2); j++) {
+        optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
+      }
+    }
+    
+    // double oneNorm = ipMatrixT.OneNorm();
+    
+    //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
+    
+  }
+  return solvedAll;
+  
 }
 
 void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, ElementTypePtr elemType,

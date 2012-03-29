@@ -104,6 +104,8 @@ TEST_OBJ_NAMES = ElementTests \
        VectorizedBasisTestSuite \
        MultiBasisTests \
        PatchBasisTests \
+       TestBilinearFormDx \
+       TestBilinearFormFlux \
        RHSTests
 TEST_OBJS = $(addsuffix .o, $(TEST_OBJ_NAMES))
 # put all the object files in OBJ_DIR:
@@ -216,6 +218,12 @@ RHSTests.o: $(DRIVERS_DIR)/DPGTests/RHSTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 PatchBasisTests.o: $(DRIVERS_DIR)/DPGTests/PatchBasisTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+TestBilinearFormDx.o: $(DRIVERS_DIR)/DPGTests/TestBilinearFormDx.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+TestBilinearFormFlux.o: $(DRIVERS_DIR)/DPGTests/TestBilinearFormFlux.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 MultiBasisTests.o: $(DRIVERS_DIR)/DPGTests/MultiBasisTests.cpp

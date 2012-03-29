@@ -45,45 +45,24 @@ private:
 //  static const string & S_TRIAL;
   
 public:
-  TestBilinearFormFlux() {
-    _testIDs.push_back(0);
-    _trialIDs.push_back(0);
-  }
+  TestBilinearFormFlux();
   
   // implement the virtual methods declared in super:
-  const string & testName(int testID) {
-    const static string S_TEST = "test";
-    return S_TEST;
-  }
-  const string & trialName(int trialID) {
-    const static string S_TRIAL = "flux";
-    return S_TRIAL;
-  }
+  const string & testName(int testID);
+  const string & trialName(int trialID);
   
   bool trialTestOperator(int trialID, int testID, 
-                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-    trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-    testOperator  = IntrepidExtendedTypes::OPERATOR_VALUE;
-    return true;
-  }
+                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator);
   
   void applyBilinearFormData(int trialID, int testID,
                            FieldContainer<double> &trialValues, FieldContainer<double> &testValues,
-                           const FieldContainer<double> &points) {
-    // leave values as they are...             
-  }
+                             const FieldContainer<double> &points);
   
-  EFunctionSpaceExtended functionSpaceForTest(int testID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  }
+  EFunctionSpaceExtended functionSpaceForTest(int testID);
   
-  EFunctionSpaceExtended functionSpaceForTrial(int trialID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
-  }
+  EFunctionSpaceExtended functionSpaceForTrial(int trialID);
   
-  bool isFluxOrTrace(int trialID) {
-    return true;
-  }
+  bool isFluxOrTrace(int trialID);
   
 };
 

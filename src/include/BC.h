@@ -58,7 +58,9 @@ public:
   virtual void imposeBC(int varID, FieldContainer<double> &physicalPoints, 
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,
-                        FieldContainer<bool> &imposeHere) = 0;
+                        FieldContainer<bool> &imposeHere) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "BC::imposeBC unimplemented.");
+  }
   
 //  virtual void imposeBC(int varID, Teuchos::RCP<BasisCache> sideBasisCache, 
 //                        FieldContainer<double> &unitNormals,

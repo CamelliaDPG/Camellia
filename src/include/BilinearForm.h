@@ -87,6 +87,7 @@ namespace IntrepidExtendedTypes {
 using namespace IntrepidExtendedTypes;
 
 class BilinearForm {
+  typedef Teuchos::RCP<ElementType> ElementTypePtr;
 public:
   virtual bool trialTestOperator(int trialID, int testID, 
                                  EOperatorExtended &trialOperator, EOperatorExtended &testOperator) { 
@@ -113,11 +114,16 @@ public:
   // default implementation calls BasisCache-less version
   
   
+  virtual int optimalTestWeights(FieldContainer<double> &optimalTestWeights, FieldContainer<double> &innerProductMatrix,
+                                 ElementTypePtr elemType, FieldContainer<double> &cellSideParities,
+                                 Teuchos::RCP<BasisCache> stiffnessBasisCache);
+  
   virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                                FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
-  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                               FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering, 
+                               Teuchos::RCP<DofOrdering> testOrdering, FieldContainer<double> &cellSideParities,
+                               Teuchos::RCP<BasisCache> basisCache);
                            
   const vector< int > & trialIDs();
   const vector< int > & testIDs();

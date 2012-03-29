@@ -62,14 +62,16 @@ protected:
   StokesFormulationType _formulationType;
   double _mu;
   bool _useSinglePointBCForP;
-  template <typename T> const T u1(T &x, T &y);  // in 2 dimensions; div(u) = d/dx (u1) + d/dy (u2) == 0 
-  template <typename T> const T u2(T &x, T &y);  // in 2 dimensions
-  template <typename T> const T  p(T &x, T &y);  // in 2 dimensions
   
   void f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent);
 public:
   StokesManufacturedSolution(StokesManufacturedSolutionType type, 
                              int polyOrder=-2, StokesFormulationType formulationType=ORIGINAL_NON_CONFORMING); // poly order here means that of phi -- -2 for non-polynomial types
+  
+  template <typename T> const T u1(T &x, T &y);  // in 2 dimensions; div(u) = d/dx (u1) + d/dy (u2) == 0 
+  template <typename T> const T u2(T &x, T &y);  // in 2 dimensions
+  template <typename T> const T  p(T &x, T &y);  // in 2 dimensions
+  
   // ExactSolution
   virtual int H1Order(); // here it means the H1 order (i.e. polyOrder+1)
   virtual double solutionValue(int trialID,

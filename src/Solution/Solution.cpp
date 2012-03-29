@@ -290,9 +290,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
       
-      int optSuccess = BilinearFormUtility::computeOptimalTest(optTestCoeffs, ipMatrix, _mesh->bilinearForm(),
-                                                               trialOrderingPtr, testOrderingPtr,
-                                                               cellSideParities, basisCache);
+      int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
+                                                                 cellSideParities, basisCache);
       
 //      cout << "optTestCoeffs:\n" << optTestCoeffs;
       

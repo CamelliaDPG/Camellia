@@ -57,28 +57,6 @@ private:
   static bool warnAboutZeroRowsAndColumns();
 public:
   friend class DPGTests;
-
-  static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
-                                FieldContainer<double> &innerProductMatrix,
-                                BilinearFormPtr bilinearForm,
-                                Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                FieldContainer<double> &cellSideParities,
-                                Teuchos::RCP<BasisCache> stiffnessBasisCache); // stiffness as opposed to the test-test cache
-  
-  // deprecated computeOptimalTests:
-  static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
-                                 DPGInnerProduct &innerProduct,
-                                 BilinearFormPtr bilinearForm,
-                                 Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                 shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
-                                 FieldContainer<double> &cellSideParities);
-  
-  static int computeOptimalTest(FieldContainer<double> &optimalTestWeights,
-                                FieldContainer<double> &innerProductMatrix,
-                                BilinearFormPtr bilinearForm,
-                                Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                shards::CellTopology &cellTopo, FieldContainer<double> &physicalCellNodes,
-                                FieldContainer<double> &cellSideParities);
   
   // the "pre-stiffness" (rectangular) matrix methods:
   static void computeStiffnessMatrix(FieldContainer<double> &stiffness, BilinearFormPtr bilinearForm,
