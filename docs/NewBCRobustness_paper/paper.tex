@@ -115,7 +115,7 @@
 \section{Introduction}
 
 \subsection{Optimal test functions}
-The idea of optimal test functions was introduced by Demkowicz and Gopalakrishnan in \cite{DPG2}.  Conceptually, these optimal test functions are the result of a minimum residual method applied to the operator form of a variational equation.  Given Hilbert spaces $U$ and $V$ and a the variational problem $b(u,v) = l(v)$, $\forall u\in U, v\in V$, we can identify $B:U\rightarrow V'$ and $l \in V'$ 
+The idea of optimal test functions was introduced by Demkowicz and Gopalakrishnan in \cite{DPG2}.  Conceptually, these optimal test functions are the result of a minimum residual method applied to the operator form of a variational equation.  Given Hilbert spaces $U$ and $V$ and a variational problem $b(u,v) = l(v)$, $\forall u\in U, v\in V$, we can identify $B:U\rightarrow V'$ and $l \in V'$ 
 \[
 \left.\begin{array}{c}
 b(u_h,v) = \langle Bu_h,v\rangle  \\
@@ -138,10 +138,10 @@ First order optimality conditions require the Gateux derivative to be zero in al
 \end{align*}
 which returns a standard variational equation $b(u_h,v_h) - l(v_h) = 0$, for the specific choice of test functions $v_h = R_V^{-1}B\delta u_h$.  We identify the \textit{trial-to-test} operator $T = R_V^{-1}B$, which maps a trial function $u_h$ to its corresponding \textit{optimal} test function $v_h = Tu_h$.  These test functions can be solved for by solving the auxiliary variational problem
 \[
-\left(v_h,\delta v\right)_V = b(u_h,v)
+\left(v_h,\delta v\right)_V = b(u_h,\delta v)
 \]
 
-Finally, while the above variational problem is a global operation for standard continuous test spaces, the use of discontinuous test spaces reduces it to an element-local problem.  In practice, this variational problem can rarely be solved exactly and it is solved approximately using the standard Bubnov-Galerkin method and an ``enriched" subspace of $V$. We assume the corresponding error in approximation of the optimal test functions is negligible for the scope of this paper.  Further work concerning the effect of approximation error in the computation of optimal test functions can be found in \cite{practicalDPG}.
+Finally, while the above variational problem is a global operation for standard continuous test spaces, the use of discontinuous test spaces reduces it to a local problem that can be solved in an element-by-element fashion.  In practice, this variational problem can rarely be solved exactly, but instead is solved approximately using the standard Bubnov-Galerkin method and an ``enriched" subspace of $V$. We assume the corresponding error in approximation of the optimal test functions is negligible for the scope of this paper.  Further work concerning the effect of approximation error in the computation of optimal test functions can be found in \cite{practicalDPG}.
 
 Under the standard conditions for well-posedness of the continuous variational problem, the discrete DPG method delivers the best approximation error in the ``energy norm" $\|u\|_E = \sup \frac{b(u,v)}{\|v\|_V}$.  Additionally, the actual energy error $\|u-u_h\|_E$ is computable through $\|e_h\|_V$, where
 \[
@@ -151,14 +151,15 @@ This is simply a consequence of the least-squares nature of DPG; the energy erro
 
 \subsection{Variational form}
 
-The DPG (discontinuous Petrov-Galerkin) method is the combination of the concept of computable optimal test functions with the so-called ``ultra-weak formulation", where every equation is relaxed.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybrid DG method with locally supported optimal test functions.  For a given operator equation $Au = f$, the ultra-weak formulation is 
+The DPG (discontinuous Petrov-Galerkin) method is the combination of the concept of computable optimal test functions with the so-called ``ultra-weak formulation", where the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybrid DG method with locally supported optimal test functions.  For a given operator equation $Au = f$, the ultra-weak formulation is 
 \[
 b\left(\left(\widehat{u},u\right),v\right) - l(v) = \langle \widehat{u}, v \rangle - (u,A^*v) - (f,v)
 \]
+where $A^*$ is the formal adjoint resulting from integration by parts.  
 
 \subsection{Choice of test norm}
 
-Up to now, we've neglected discussion of the proper choice of inner product/norm on the space $V$.  This choice is important, as the choice of norm on $V$ determines the 
+Up to now, we have neglected discussion of the proper choice of inner product/norm on the space $V$.  This choice is important, as the choice of norm on $V$ determines the 
 
 Under the assumption of injectivity of the adjoint of our variational operator $B$, we can define the optimal test norm 
 \[
@@ -170,7 +171,7 @@ If the solution is in $U$, then choosing $\|v\|=\|v\|_{\rm opt}$ implies $\|u\|_
 \]
 where we're able to switch the order of $\inf$ and $\sup$ due to the injectivity of $B$ (see  \cite{BabuskaEquivBrezzi}).
 
-This norm is non-localizable, however - even with discontinuous test functions, solving for optimal test functions under this optimal norm will result in global problems as well, due to the coupling given by the boundary terms in our bilinear form.  The ``quasi-optimal" test norm is created by removing such boundary terms and replacing them with scaled $L^2$ norms of the field variables.  
+The norm $\|v\|_{\rm opt}$ is non-localizable, however - even with discontinuous test functions, solving for optimal test functions under this optimal norm will result in global problems as well, due to the coupling given by the boundary terms in our bilinear form.  The ``quasi-optimal" test norm is created by removing such boundary terms and replacing them with scaled $L^2$ norms of the field variables.  
 
 \subsection{Singular perturbation problems and robustness}
 
@@ -178,9 +179,9 @@ Standard Bubnov-Galerkin methods tend to perform poorly for the class of partial
 \[
 \|u-u_h\|_E \leq C(\epsilon) \inf_{w_h}\|u-w_h\|_U
 \]
-The growth of $C$ with $\epsilon$ is referred to as a loss of robustness, where the bound on the error in the finite element solution by the best approximation error.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely to the best approximation error, allowing for degradation of the solution   
+The growth of $C$ with $\epsilon$ is referred to as a loss of robustness, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely to the best approximation error, allowing for degradation of the solution   
 
-A well-known example is the growth of spurious oscillations in the finite element solution of the 1D convection-diffusion problem $ u'-\epsilon u'' = f$ (with Dirichlet boundary conditions) as $\epsilon\rightarrow 0$.  Another class of examples are wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$.  The lack of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths (commonly manifesting as a phase error between the FE solution and the exact solution).  The DPG method is currently being analyzed for both acoustic and elastic waves in context of the Helmholtz equation \cite{DPG4} and equations of linear elasticity.  Numerically, DPG appears to yield a ``pollution-free" method for these problems under a specific regularization of the ``quasi-optimal" test norm.  
+A well-known example is the growth of spurious oscillations in the finite element solution of the 1D convection-diffusion problem $ u'-\epsilon u'' = f$ (with Dirichlet boundary conditions) as $\epsilon\rightarrow 0$.  Another class of examples are wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$.  The lack of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths (commonly manifesting as a phase error between the FE solution and the exact solution).  The DPG method is currently being analyzed for both acoustic and elastic waves in context of the Helmholtz equation and equations of linear elasticity.  Numerically, DPG appears to provide a ``pollution-free" method for these problems under a specific regularization of the ``quasi-optimal" test norm \cite{DPG4}.  
 
 \section{Model problem and robustness}
 
@@ -193,9 +194,16 @@ with the corresponding variational form
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle
 \]
-where the above inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  The divergence and gradient operators are likewise understood to be taken element-wise.  
+where $\left[ \tau_n \right]$ and $\left[ v\right]$ denote the jumps in $\tau_n$ and $v$, defined as
+\begin{align*}
+\left[ \tau_n \right] &= \tau^+ \cdot n^+ + \tau^-\cdot n^-\\
+\left[ v\right] &= v^+{\rm sgn}(n^+) - v^-{\rm sgn}(n^-)
+\end{align*}
+Additionally, the inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  The divergence and gradient operators are likewise understood to act element-wise. 
 
 Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
+
+\subsection{\textcolor{red}{Make new subsection on robustness here, reorganize}}
 
 To analyze the robustness of DPG, we note that 
 \[
@@ -232,7 +240,7 @@ We split the boundary $\Gamma$ into three portions
 \Gamma_{+} &\coloneqq \{x\in \Gamma; \beta_n(x) > 0\} \quad {\rm (outflow)}\\
 \Gamma_{0} &\coloneqq \{x\in \Gamma; \beta_n(x) = 0\}\\
 \end{align*}
-Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions everywhere on $\Gamma$, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
+Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
 \|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
 \]
@@ -247,11 +255,11 @@ We improve upon the result of Demkowicz and Heuer by adopting a new inflow bound
 \[
 \beta_n u - \sigma_n = f_n = u_0
 \]
-on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for most problems of interest in CFD, we expect $\grad u$ to be small near the inflow, and that the solution using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  
+on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for most problems of interest in CFD, we expect $\grad u$ to be small near the inflow, and that the solutions to \eqref{primal} using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  
 
 Under the new inflow conditions, the induced bilinear form is now
 \[
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0}
 \]
 The corresponding adjoint problem for $L^2$ stability of $u$ now has boundary conditions
 \begin{align}
@@ -278,14 +286,14 @@ We will construct norms on $U$ as combinations of norms on each variable
 
 \subsection{Equivalence of energy and $U$ norms}
 
-For this analysis, it will be necessary to assume certain conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume one or both of the following assumptions
+For this analysis, it will be necessary to assume certain conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume some or all of the following assumptions
 \begin{align}
 &\curl \beta = 0, \quad 0<C \leq \left | \beta\right |^2 + \frac{1}{2}\div \beta, \quad C = O(1) \label{a_req}\\
 &\grad \beta + \grad \beta ^T - \div \beta I = O(1) \label{b_req}\\
 &\div \beta = 0 \label{c_req}
 \end{align}
 
-The primary result of this paper is that, if conditions \ref{a_req},\ref{b_req}, and \ref{c_req} are all satisfied, the DPG method provides robust control over the $L^2$ error 
+The primary result of this paper is that, if conditions \ref{a_req},\ref{b_req}, and \ref{c_req} are all satisfied, the DPG method provides robust control over the $L^2$ error in $u$ and $\sigma$
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{U_1} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h \right\|_{E}
 \]
@@ -297,17 +305,19 @@ where $\|\cdot \|_{U_1}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_1}^2 \coloneqq \|u\|^2 + \|\sigma\|^2 + \epsilon^2\|\widehat{u}\|^2+\epsilon \|\widehat{f}_n\|^2.
 \]
+The choice of test norm \textcolor{red}{should be explained here}. 
+
 A second, weaker result is an upper bound on the energy norm
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{E} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h\right\|_{U_2}
 \]
 where $\|\cdot \|_{U_2}$ is defined as
 \[
-\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2} \coloneqq \|u\| + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2}^2 \coloneqq \|u\|^2 + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
-The upper bound on the energy norm appears to depend on $\epsilon^{-1}$, implying that, at most, we have the bound from below $\|u-u_h\|_{U} \geq \epsilon\|u-u_h\|_E$. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \lesssim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we've chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
+The upper bound on the energy norm appears to depend on $\epsilon^{-1/2}$, implying that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error. However, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we have chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
 
-The proof proceeds in two parts; the bound from below is proven by providing stability estimates for the adjoint problem, while the bound from above of the energy norm is proven separately.  
+The proof proceeds in two steps; the bound from below is proven by providing stability estimates for the adjoint problem, while the bound from above of the energy norm is proven separately.  
 
 \subsubsection{Stability of the adjoint problem (bound from below)}
 
@@ -321,7 +331,7 @@ with boundary conditions
 - \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{bc_1}\\ 
 v &= 0, \quad x\in \Gamma_+ \label{bc_2}
 \end{align}
-and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions reduce down to \eqref{eq:adj_bc1} and \eqref{eq:adj_bc2} when requesting $L^2$ robustness in $u$ ($f=0$); these more general boundary conditions are necessary for bounds involving $f \neq 0$.
+and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions simplify to \eqref{eq:adj_bc1} and \eqref{eq:adj_bc2} when requesting $L^2$ robustness in $u$ ($f=0$); these more general boundary conditions are necessary for bounds involving $f \neq 0$.
 
 Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. The normal trace $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
 
@@ -331,7 +341,7 @@ We will denote $\|\cdot \| = \|\cdot\|_{L^2}$ for all functions defined on $\Ome
 \|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
 \end{align*}
 
-The second lemma concerns the robust control of $u$ by the energy error; the first and third concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
+\textcolor{Fix ordering of lemmas} The second lemma concerns the robust control of $u$ by the energy error; the first and third concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
 
 \begin{lemma} 
 \label{lemma_1}
@@ -362,7 +372,7 @@ Noting $\int_{\Gamma_-}\beta_n w^2 \leq 0$ through $\beta_n<0$ on the inflow giv
 \[
 \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n \leq \int_\Omega e^\psi (g-\epsilon \div f) w
 \]
-assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ allow us to bound $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi \lesssim 1$. We can then bound the left hand side from below by
+assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ implies $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi = O(1)$. We can then bound from below
 \[
 \epsilon \|\grad w\|^2 + \|w\|^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n  \lesssim \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n 
 \]
@@ -380,14 +390,14 @@ From here, the proof is identical to \cite{DPGrobustness}; an application of Pet
 
 \begin{lemma} 
 \label{lemma_2}
-Assume $v$ satisfies $\eqref{adjoint}$, with boundary conditions \eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
+Assume $v$ satisfies \eqref{adjoint}, with boundary conditions \eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
 \[
 \|\beta \cdot \grad v \| \lesssim \| g\|
 \]
 \end{lemma}
 
 \begin{proof}
-Define $v_\beta = \beta\cdot \grad v$.  Multiplying by $v_\beta$ and integrating over $\Omega$ gives
+Define $v_\beta = \beta\cdot \grad v$.  Multiplying the adjoint equation \eqref{adjoint} by $v_\beta$ and integrating over $\Omega$ gives
 \[
 \|v_\beta\|^2 = -\int_\Omega g v_\beta - \epsilon \int_\Omega \Delta v v_\beta
 \]
@@ -542,7 +552,7 @@ Lemma 4.2 of \cite{analysisDPG} gives us the Poincare inequality for discontinuo
 \|v_0\| \lesssim \|\grad v_0\| + \|[v]\|
 \]
 %Since $f=0$, by Lemma 2, $\|\beta\cdot \grad v_0\|  \lesssim \|g\| = 0$.  
-Since $g = 0$, $\| \div \tau_0\| = \|\beta\cdot \grad v_0\|\lesssim \|\grad v_0\|$, which we've bounded previously.  
+Since $g = 0$, $\| \div \tau_0\| = \|\beta\cdot \grad v_0\|\lesssim \|\grad v_0\|$, which we have bounded previously.  
 
 \item \textbf{Bound on $\|\left(v_{1},\tau_{1}\right)\|_V$}
 
@@ -569,7 +579,7 @@ We have $\epsilon^{-1}\tau = f - \grad v$, so $\epsilon^{-1} \|\tau\| \lesssim \
 
 \subsubsection{Energy norm equivalence (bound from above)}
 
-We've shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  By the duality of the energy and test norm, this is equivalent to bounding the test norm from below, using the test norm induced by the norm on $U$ bounding the energy norm.  
+We have shown the robust bound of a norm on $U$ by energy error; for a full equivalence statement, we require a bound on the energy norm by some norm on $U$.  By the duality of the energy and test norm, this is equivalent to bounding the test norm from below, using the test norm induced by the norm on $U$ bounding the energy norm.  
 \begin{lemma}
 
 (Bound from above) For $\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U$,

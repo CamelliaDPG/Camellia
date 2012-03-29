@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2010.12.14)  27 MAR 2012 10:43
+This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2010.12.14)  28 MAR 2012 13:15
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -898,132 +898,143 @@ File: ursfs.fd 1998/03/24 rsfs font definition file (jk)
 ) [1
 
 
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] [4] [5] [6] [7] [8
-]
-LaTeX Font Info:    Try loading font information for OMS+cmr on input line 534.
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
 
+LaTeX Warning: Reference `primal' on page 4 undefined on input line 258.
 
-(/usr/share/texmf-texlive/tex/latex/base/omscmr.fd
+[4] [5]
+
+! Package xcolor Error: Undefined color `Fix ordering of lemmas'.
+
+See the xcolor package documentation for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.344 \textcolor{Fix ordering of lemmas} T
+                                          he second lemma concerns the robus...
+
+Try typing  <return>  to proceed.
+If that doesn't work, type  X <return>  to quit.
+
+[6] [7] [8] [9]
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 544.
+
+ (/usr/share/texmf-texlive/tex/latex/base/omscmr.fd
 File: omscmr.fd 1999/05/25 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <10.95> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 534.
- [9] [10] [11]
-<figs/wallBC_exact_u.png, id=56, 388.0899pt x 307.8702pt>
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 544.
+ [10]
+[11] [12] <figs/wallBC_exact_u.png, id=59, 388.0899pt x 307.8702pt>
 File: figs/wallBC_exact_u.png Graphic file (type png)
 
 <use figs/wallBC_exact_u.png>
-<figs/wallBC_exact_sigx.png, id=57, 388.0899pt x 307.8702pt>
+<figs/wallBC_exact_sigx.png, id=60, 388.0899pt x 307.8702pt>
 File: figs/wallBC_exact_sigx.png Graphic file (type png)
 
 <use figs/wallBC_exact_sigx.png>
-<figs/wallBC_exact_sigy.png, id=58, 398.2077pt x 307.8702pt>
+<figs/wallBC_exact_sigy.png, id=61, 398.2077pt x 307.8702pt>
 File: figs/wallBC_exact_sigy.png Graphic file (type png)
 
 <use figs/wallBC_exact_sigy.png>
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
-<figs/u_pointdiff_wallBC.png, id=59, 472.164pt x 385.9218pt>
+<figs/u_pointdiff_wallBC.png, id=62, 472.164pt x 385.9218pt>
 File: figs/u_pointdiff_wallBC.png Graphic file (type png)
 
 <use figs/u_pointdiff_wallBC.png>
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
-<figs/errorrates_wallBC.png, id=60, 492.8814pt x 410.0118pt>
+<figs/errorrates_wallBC.png, id=63, 492.8814pt x 410.0118pt>
 File: figs/errorrates_wallBC.png Graphic file (type png)
 
 <use figs/errorrates_wallBC.png>
-<figs/L2energyratio_wallBC.png, id=61, 489.5088pt x 410.0118pt>
+<figs/L2energyratio_wallBC.png, id=64, 489.5088pt x 410.0118pt>
 File: figs/L2energyratio_wallBC.png Graphic file (type png)
 
 <use figs/L2energyratio_wallBC.png>
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-[12] <figs/roundoff_rates.png, id=65, 578.16pt x 433.62pt>
+[13 <./figs/wallBC_exact_u.png (PNG copy)> <./figs/wallBC_exact_sigx.png (PNG c
+opy)> <./figs/wallBC_exact_sigy.png (PNG copy)> <./figs/u_pointdiff_wallBC.png 
+(PNG copy)>] <figs/roundoff_rates.png, id=69, 578.16pt x 433.62pt>
 File: figs/roundoff_rates.png Graphic file (type png)
 
 <use figs/roundoff_rates.png>
-<figs/roundoff_ratio.png, id=66, 578.16pt x 433.62pt>
+<figs/roundoff_ratio.png, id=70, 578.16pt x 433.62pt>
 File: figs/roundoff_ratio.png Graphic file (type png)
 
 <use figs/roundoff_ratio.png>
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
 ! Too many }'s.
-l.717 ...|v\|_2}$ for any $\|v\|_1 \leq \|v\|_2$}}
+l.727 ...|v\|_2}$ for any $\|v\|_1 \leq \|v\|_2$}}
                                                   , we expect monotonic decr...
 You've closed more groups than you opened.
 Such booboos are generally harmless, so keep going.
 
-[13 <./figs/wallBC_exact_u.png (PNG copy)> <./figs/wallBC_exact_sigx.png (PNG c
-opy)> <./figs/wallBC_exact_sigy.png (PNG copy)> <./figs/u_pointdiff_wallBC.png 
-(PNG copy)> <./figs/errorrates_wallBC.png (PNG copy)> <./figs/L2energyratio_wal
-lBC.png (PNG copy)>] <figs/rates_noSigma.png, id=71, 492.8814pt x 410.4936pt>
+[14 <./figs/errorrates_wallBC.png (PNG copy)> <./figs/L2energyratio_wallBC.png 
+(PNG copy)> <./figs/roundoff_rates.png (PNG copy)> <./figs/roundoff_ratio.png (
+PNG copy)>] <figs/rates_noSigma.png, id=74, 492.8814pt x 410.4936pt>
 File: figs/rates_noSigma.png Graphic file (type png)
 
 <use figs/rates_noSigma.png>
-<figs/ratio_noSigma.png, id=72, 489.5088pt x 410.0118pt>
+<figs/ratio_noSigma.png, id=75, 489.5088pt x 410.0118pt>
 File: figs/ratio_noSigma.png Graphic file (type png)
 
 <use figs/ratio_noSigma.png>
-
-LaTeX Warning: `!h' float specifier changed to `!ht'.
-
-<figs/disc_hat.png, id=73, 472.164pt x 370.5042pt>
+<figs/disc_hat.png, id=76, 472.164pt x 370.5042pt>
 File: figs/disc_hat.png Graphic file (type png)
  <use figs/disc_hat.png>
-<figs/disc_hat_surf.png, id=74, 489.027pt x 370.986pt>
+<figs/disc_hat_surf.png, id=77, 489.027pt x 370.986pt>
 File: figs/disc_hat_surf.png Graphic file (type png)
 
 <use figs/disc_hat_surf.png>
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-<figs/rates_disc.png, id=75, 578.16pt x 433.62pt>
+<figs/rates_disc.png, id=78, 578.16pt x 433.62pt>
 File: figs/rates_disc.png Graphic file (type png)
  <use figs/rates_disc.png>
-<figs/ratio_disc.png, id=76, 578.16pt x 433.62pt>
+<figs/ratio_disc.png, id=79, 578.16pt x 433.62pt>
 File: figs/ratio_disc.png Graphic file (type png)
  <use figs/ratio_disc.png>
-[14 <./figs/roundoff_rates.png (PNG copy)> <./figs/roundoff_ratio.png (PNG copy
-)>] [15 <./figs/rates_noSigma.png (PNG copy)> <./figs/ratio_noSigma.png (PNG co
-py)> <./figs/disc_hat.png (PNG copy)> <./figs/disc_hat_surf.png (PNG copy)> <./
-figs/rates_disc.png (PNG copy)> <./figs/ratio_disc.png (PNG copy)>]
-(./paper.bbl) [16] (./paper.aux) ) 
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+[15 <./figs/rates_noSigma.png (PNG copy)> <./figs/ratio_noSigma.png (PNG copy)>
+] (./paper.bbl [16 <./figs/disc_hat.png (PNG copy)> <./figs/disc_hat_surf.png (
+PNG copy)> <./figs/rates_disc.png (PNG copy)> <./figs/ratio_disc.png (PNG copy)
+>]) [17] (./paper.aux)
+
+LaTeX Warning: There were undefined references.
+
+ ) 
 Here is how much of TeX's memory you used:
- 12939 strings out of 493857
- 209521 string characters out of 1153304
+ 12937 strings out of 493857
+ 209520 string characters out of 1153304
  293614 words of memory out of 3000000
  15902 multiletter control sequences out of 15000+50000
- 19048 words of font info for 77 fonts, out of 3000000 for 9000
+ 18347 words of font info for 75 fonts, out of 3000000 for 9000
  714 hyphenation exceptions out of 8191
- 52i,12n,49p,1747b,279s stack positions out of 5000i,500n,10000p,200000b,50000s
-</usr/share/texmf-texlive/fonts/type1/public/
-amsfonts/cm/cmbx10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm
-/cmex10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cmextra/cmex8
-.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/
-share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi12.pfb></usr/share/texmf
--texlive/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texmf-texlive/fon
-ts/type1/public/amsfonts/cm/cmmi8.pfb></usr/share/texmf-texlive/fonts/type1/pub
-lic/amsfonts/cm/cmmi9.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts
-/cm/cmr10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr12.pf
-b></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/share
-/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texmf-texliv
-e/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texmf-texlive/fonts/type1
-/public/amsfonts/cm/cmr9.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfo
-nts/cm/cmssbx10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cm
-sy10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy6.pfb></u
-sr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/tex
-mf-texlive/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/share/texmf-texlive/f
-onts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texmf-texlive/fonts/type1/
-public/amsfonts/symbols/msam10.pfb>
-Output written on paper.pdf (16 pages, 547485 bytes).
+ 52i,12n,49p,1747b,259s stack positions out of 5000i,500n,10000p,200000b,50000s
+</usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
+re/texmf-texlive/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texmf-te
+xlive/fonts/type1/public/amsfonts/cmextra/cmex8.pfb></usr/share/texmf-texlive/f
+onts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texmf-texlive/fonts/type1/
+public/amsfonts/cm/cmmi12.pfb></usr/share/texmf-texlive/fonts/type1/public/amsf
+onts/cm/cmmi6.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi
+8.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmmi9.pfb></usr/
+share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/share/texmf-
+texlive/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/texmf-texlive/font
+s/type1/public/amsfonts/cm/cmr5.pfb></usr/share/texmf-texlive/fonts/type1/publi
+c/amsfonts/cm/cmr6.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm
+/cmr8.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr9.pfb></u
+sr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmssbx10.pfb></usr/share/
+texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texmf-texli
+ve/fonts/type1/public/amsfonts/cm/cmsy6.pfb></usr/share/texmf-texlive/fonts/typ
+e1/public/amsfonts/cm/cmsy8.pfb></usr/share/texmf-texlive/fonts/type1/public/am
+sfonts/cm/cmsy9.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cm
+ti10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/symbols/msam10.p
+fb>
+Output written on paper.pdf (17 pages, 549904 bytes).
 PDF statistics:
- 155 PDF objects out of 1000 (max. 8388607)
+ 158 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
  83 words of extra memory for PDF output out of 10000 (max. 10000000)
 
