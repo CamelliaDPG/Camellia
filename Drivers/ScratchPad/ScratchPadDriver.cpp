@@ -19,6 +19,11 @@
 #include "StokesManufacturedSolution.h"
 #include "HConvergenceStudy.h"
 
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<DPGInnerProduct> DPGInnerProductPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -48,7 +53,7 @@ public:
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
-        values(cellIndex,ptIndex,0) = -exp(x) * ( y * cos(y) + sin(y) );
+        values(cellIndex,ptIndex) = -exp(x) * ( y * cos(y) + sin(y) );
       }
     }
   }
@@ -65,7 +70,7 @@ public:
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
-        values(cellIndex,ptIndex,0) = exp(x) * y * sin(y);
+        values(cellIndex,ptIndex) = exp(x) * y * sin(y);
       }
     }
   }
@@ -98,6 +103,12 @@ public:
 };
 
 int main(int argc, char *argv[]) {
+#ifdef HAVE_MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  //rank=mpiSession.getRank();
+  //numProcs=mpiSession.getNProc();
+#else
+#endif
   FieldContainer<double> expectedValues;
   FieldContainer<double> actualValues;
   
@@ -163,7 +174,8 @@ int main(int argc, char *argv[]) {
   // v3:
   stokesBFMath->addTerm(-u1,v3->dx());
   stokesBFMath->addTerm(-u2,v3->dy());
-  stokesBFMath->addTerm(1.0 * u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
+  // MAYBE FIXED: broke the v3 term in 2 because there appear to be issues with summing LinearTerms (need to fix those!)
+  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
   int trialOrder = 1;
   int pToAdd = 0;
@@ -264,7 +276,8 @@ int main(int argc, char *argv[]) {
   stokesBC->addDirichlet(u2hat,entireBoundary,u2fn);
   stokesBC->addZeroMeanConstraint(p);
   
-  Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL) );
+  Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, -2,
+                                                                                           StokesManufacturedSolution::MATH_CONFORMING) );
   // for the above solution choice, RHS is actually zero
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
@@ -272,19 +285,19 @@ int main(int argc, char *argv[]) {
   int H1Order = 2;
   pToAdd = 2;
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              stokesBC, qoptIP, minLogElements, 
+                                              stokesBC, mathIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   
   study.solve(quadPoints);
-  quadPoints(0,0,0) = -1.0; // x1
-  quadPoints(0,0,1) = -1.0; // y1
-  quadPoints(0,1,0) = 1.0;
-  quadPoints(0,1,1) = -1.0;
-  quadPoints(0,2,0) = 1.0;
-  quadPoints(0,2,1) = 1.0;
-  quadPoints(0,3,0) = -1.0;
-  quadPoints(0,3,1) = 1.0;
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
   
   int polyOrder = H1Order-1;
   ostringstream filePathPrefix;

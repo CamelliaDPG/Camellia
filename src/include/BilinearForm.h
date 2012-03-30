@@ -142,7 +142,7 @@ public:
   vector<int> trialVolumeIDs();
   vector<int> trialBoundaryIDs();
   
-  void printTrialTestInteractions();
+  virtual void printTrialTestInteractions();
   
   static const set<int> & normalOperators(); // the set of all operators that use the normal
 protected:

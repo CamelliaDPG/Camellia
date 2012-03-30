@@ -91,6 +91,12 @@ OBJ_NAMES = DofOrdering \
 			 TransientConfusionBilinearForm \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
+			 BF \
+			 LinearTerm \
+			 Var \
+			 BCEasy \
+			 RHSEasy \
+			 IP \
 			 ZoltanMeshPartitionPolicy
 
 OBJS = $(addsuffix .o, $(OBJ_NAMES))
@@ -314,6 +320,24 @@ Mesh.o: $(SRCS_DIR)/Mesh/Mesh.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Projector.o: $(SRCS_DIR)/Projection/Projector.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+BCEasy.o: $(SRCS_DIR)/ScratchPad/BCEasy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+BF.o: $(SRCS_DIR)/ScratchPad/BF.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+IP.o: $(SRCS_DIR)/ScratchPad/IP.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+LinearTerm.o: $(SRCS_DIR)/ScratchPad/LinearTerm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+RHSEasy.o: $(SRCS_DIR)/ScratchPad/RHSEasy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Var.o: $(SRCS_DIR)/ScratchPad/Var.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 MeshPartitionPolicy.o: $(SRCS_DIR)/Mesh/MeshPartitionPolicy.cpp

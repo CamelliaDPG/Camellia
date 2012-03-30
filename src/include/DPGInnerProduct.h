@@ -98,4 +98,6 @@ public:
   // physicalCellNodes dimensions are (numCells, numNodesPerElement, spaceDim)
 };
 
+typedef Teuchos::RCP<DPGInnerProduct> InnerProductPtr;
+
 #endif
