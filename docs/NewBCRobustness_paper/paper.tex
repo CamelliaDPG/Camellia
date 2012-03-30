@@ -186,35 +186,73 @@ A well-known example is the growth of spurious oscillations in the finite elemen
 \section{Model problem and robustness}
 
 We consider the model convection-diffusion problem on domain $\Omega$ with boundary $\Gamma$
+\begin{align}
+\div (\beta u) - \epsilon\Delta v &= f  \label{primal}
+\end{align}
+in first order form
 \begin{align*}
-\div (\beta u - \sigma) &= f \\
+\div (\beta u - \sigma) &= f  \\
 \frac{1}{\epsilon}\sigma - \grad u &= 0
 \end{align*}
 with the corresponding variational form 
-\[
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle
-\]
+\begin{align*}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle 
+\end{align*}
 where $\left[ \tau_n \right]$ and $\left[ v\right]$ denote the jumps in $\tau_n$ and $v$, defined as
 \begin{align*}
 \left[ \tau_n \right] &= \tau^+ \cdot n^+ + \tau^-\cdot n^-\\
-\left[ v\right] &= v^+{\rm sgn}(n^+) - v^-{\rm sgn}(n^-)
+\left[ v\right] &= v^+{\rm sgn}(n^+) + v^-{\rm sgn}(n^-)
 \end{align*}
 Additionally, the inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  The divergence and gradient operators are likewise understood to act element-wise. 
 
 Define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$.  The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
 
-\subsection{\textcolor{red}{Make new subsection on robustness here, reorganize}}
+We split the boundary $\Gamma$ into three portions
+\begin{align*}
+\Gamma_{-} &\coloneqq \{x\in \Gamma; \beta_n(x) < 0\} \quad {\rm (inflow)}\\
+\Gamma_{+} &\coloneqq \{x\in \Gamma; \beta_n(x) > 0\} \quad {\rm (outflow)}\\
+\Gamma_{0} &\coloneqq \{x\in \Gamma; \beta_n(x) = 0\}
+\end{align*}
+We adopt a new inflow boundary condition, given by Hesthaven et al in \cite{Hesthaven96astable}, where we set
+\[
+\beta_n u - \sigma_n = f_n = u_0
+\]
+on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for most problems of interest in CFD, we expect $\grad u$ to be small near the inflow, and that the solutions to \eqref{primal} using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  Under these new boundary conditions, our variational problem $b(u,v) = l(v)$ is now defined by
+\begin{align*}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0} \\
+l\left(\left(\tau,v\right)\right) &= \left(f, v\right) + \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_+} - \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_-} 
+\end{align*}
+
+
+\subsection{Approximability of the quasi-optimal test norm}%\textcolor{red}{Make new subsection on robustness here, reorganize}}
+
+For convection-diffusion, the quasi-optimal norm is 
+\[
+\|\left(\tau, v\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v \|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 + C_1\|v\|_{L^2} + C_2\|\tau\|_{L^2}
+\]
+for some choice of constants $C_1$ and $C_2$.  We note that the optimal test norm will automatically guarantee the robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.  However, use of this norm for the convection-diffusion problem is difficult - the variational problem for optimal test functions using the quasi-optimal test norm is equivalent to a reaction-diffusion system \cite{DBLP:journals/procedia/NiemiCC11}.  Transforming the problem to the reference element reveals that will induce strong boundary layers of width $\epsilon/h^2$ (in comparison, in wave propagation problems, the mesh size tends to be on the order of the wavelength/singular perturbation parameter, resulting in smooth optimal test functions that are much easier to approximate over the reference element).  As the relevant range of $\epsilon$ for physical problems is $1e-7$, solving on partially under-resolved meshes is unavoidable.  Resolving such boundary layers for an underresolved mesh has been investigated numerically using specially designed subgrid meshes by Niemi, Collier, and Calo in \cite{DBLP:journals/procedia/NiemiCC11}.  We approach this from a different perspective, looking instead for robust test norms which do not induce boundary layers in the approximation of optimal test functions.  
+
+The estimates and proofs in this paper are largely based off of techniques and prior work done in \cite{DPGrobustness} and \cite{analysisDPG}; for further details, we encourage readers to consult these two publications as well.  The primary contributions in this paper are stronger stability estimates for a new inflow boundary condition and a slightly different test norm.  
+
+\subsection{Boundary conditions and adjoint stability}
 
 To analyze the robustness of DPG, we note that 
-\[
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \| u \|^2_{L^2}
-\]
+\begin{align*}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0} \\
+&= \| u \|^2_{L^2}
+\end{align*}
 for the specific continuous test functions $\tau$ and $v$ satisfying
 \begin{align*}
 \div \tau - \beta \cdot \grad v &= g \\
 \frac{1}{\epsilon}\tau + \grad v &= f
 \end{align*}
-with $g=u$ and $f=0$, and with boundary conditions such that the boundary terms in the bilinear form vanish.  Then, for the above choice of $\left(\tau, v\right)$, 
+with $g=u$ and $f=0$, and with boundary conditions
+with boundary conditions
+\begin{align}
+\tau_n &= 0, \quad x\in \Gamma_-\cup \Gamma_0 \label{eq:adj_bc1}\\
+v &= 0, \quad x\in \Gamma_+ \label{eq:adj_bc2}
+\end{align}
+such that the boundary terms in the bilinear form vanish.  Then, for the above choice of $\left(\tau, v\right)$, 
 \begin{align*}
 \|u\|_{L^2}^2 &= b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \frac{b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right)}{\|\left(\tau, v\right)\|_V}\|\left(\tau, v\right)\|_V \leq \|u\|_E \|\left(\tau, v\right)\|_V
 \end{align*}
@@ -224,22 +262,6 @@ We will use the notation $\lesssim$ to denote an $\epsilon$-independent bound.  
 \]
 which results in in robust control of the $L^2$ error by the error in the energy norm, in which DPG is optimal.  The study of robustness for the DPG method has now been reduced to proving stability estimates for the adjoint problem.  
 
-For convection-diffusion, the quasi-optimal norm is 
-\[
-\|\left(\tau, v\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v \|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 + C_1\|v\|_{L^2} + C_2\|\tau\|_{L^2}
-\]
-for some choice of constants $C_1$ and $C_2$.  We note that the optimal test norm will automatically guarantee the robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.  However, use of this norm for the convection-diffusion problem is difficult - the variational problem for optimal test functions using the quasi-optimal test norm is equivalent to a reaction-diffusion system \cite{DBLP:journals/procedia/NiemiCC11}.  Transforming the problem to the reference element reveals that will induce strong boundary layers of width $\epsilon/h^2$ (in comparison, in wave propagation problems, the mesh size tends to be on the order of the wavelength/singular perturbation parameter, resulting in smooth optimal test functions that are much easier to approximate over the reference element).  As the relevant range of $\epsilon$ for physical problems is $1e-7$, solving on partially under-resolved meshes is unavoidable.  Resolving such boundary layers for an underresolved mesh has been investigated numerically using specially designed subgrid meshes by Niemi, Collier, and Calo in \cite{DBLP:journals/procedia/NiemiCC11}.  We approach this from a different perspective, looking instead for robust test norms which do not induce boundary layers in the approximation of optimal test functions.  
-
-The estimates and proofs in this paper are largely based off of techniques and prior work done in \cite{DPGrobustness} and \cite{analysisDPG}; for further details, we encourage readers to consult these two publications as well.  The primary contributions in this paper are stability estimates for a new set of boundary conditions and a slightly different test norm.  
-
-\subsection{Boundary conditions and adjoint stability}
-
-We split the boundary $\Gamma$ into three portions
-\begin{align*}
-\Gamma_{-} &\coloneqq \{x\in \Gamma; \beta_n(x) < 0\} \quad {\rm (inflow)}\\
-\Gamma_{+} &\coloneqq \{x\in \Gamma; \beta_n(x) > 0\} \quad {\rm (outflow)}\\
-\Gamma_{0} &\coloneqq \{x\in \Gamma; \beta_n(x) = 0\}\\
-\end{align*}
 Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
 \|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
@@ -255,17 +277,11 @@ We improve upon the result of Demkowicz and Heuer by adopting a new inflow bound
 \[
 \beta_n u - \sigma_n = f_n = u_0
 \]
-on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for most problems of interest in CFD, we expect $\grad u$ to be small near the inflow, and that the solutions to \eqref{primal} using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  
-
-Under the new inflow conditions, the induced bilinear form is now
+on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for most problems of interest in CFD, we expect $\grad u$ to be small near the inflow, and that the solutions to \eqref{primal} using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  Using this, we can prove robust control over $\|u\|_{L^2}$ using the using the unweighted version of the test norm in \cite{DPGrobustness}
 \[
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0}
+\|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
 \]
-The corresponding adjoint problem for $L^2$ stability of $u$ now has boundary conditions
-\begin{align}
-\tau_n &= 0, \quad x\in \Gamma_-\cup \Gamma_0 \label{eq:adj_bc1}\\
-v &= 0, \quad x\in \Gamma_+ \label{eq:adj_bc2}
-\end{align}
+This test norm is implied by certain norm ``building blocks"; stability analysis of the adjoint equation allows us to bound from above norms and seminorms on $v$ and $\tau$ by $\|f\|_{L^2}$ and $\|g\|_{L^2}$ in ways that do not grow as $\epsilon \rightarrow 0$, and we assemble the test norm as combinations of such norms and seminorms on $v$ and $\tau$.  
 
 \subsection{Norms on $U$}
 
@@ -297,7 +313,7 @@ The primary result of this paper is that, if conditions \ref{a_req},\ref{b_req},
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{U_1} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h \right\|_{E}
 \]
-using the unweighted version of the test norm in \cite{DPGrobustness}
+using the test norm
 \[
 \|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
 \]
@@ -305,7 +321,7 @@ where $\|\cdot \|_{U_1}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_1}^2 \coloneqq \|u\|^2 + \|\sigma\|^2 + \epsilon^2\|\widehat{u}\|^2+\epsilon \|\widehat{f}_n\|^2.
 \]
-The choice of test norm \textcolor{red}{should be explained here}. 
+%\textcolor{red}{should be explained here}. 
 
 A second, weaker result is an upper bound on the energy norm
 \[
@@ -340,56 +356,10 @@ We will denote $\|\cdot \| = \|\cdot\|_{L^2}$ for all functions defined on $\Ome
 \|[\tau\cdot n]\| &= \|[\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} \coloneqq \sup_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+} = 0} \frac{\langle [\tau \cdot n], w\rangle}{\|w\|_{H^1(\Omega)}}\\
 \|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
 \end{align*}
-
-\textcolor{Fix ordering of lemmas} The second lemma concerns the robust control of $u$ by the energy error; the first and third concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
-
-\begin{lemma} 
-\label{lemma_1}
-Assume \eqref{a_req} holds.  Then, for $v$ satisfying equation \eqref{adjoint} with boundary conditions \eqref{bc_1}, \eqref{bc_2} and sufficiently small $\epsilon$, 
-\[
-\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\|^2 + \epsilon \| f\|^2
-\]
-\end{lemma}
-
-\begin{proof}
-Since $\curl \beta=0$, and $\Omega$ is simply connected, there exists a scalar potential $\psi$, $\grad \psi = \beta$ such that $e^\psi = O(1)$.  Take the transformed function $w = e^\psi v$; following (2.26) in \cite{DPGrobustness}, we substitute $w$ into the the left hand side of equation \eqref{adjoint}, arriving at the relation  
-\[
--\epsilon \Delta w - (1-2\epsilon) \beta \cdot \grad w + \left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w = e^\psi (g-\epsilon \div f)
-\]
-Multiplying by $w$ and integrating over $\Omega$ gives
-\[
--\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w + \int_\Omega\left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w^2 = \int_\Omega e^\psi (g-\epsilon \div f) w
-\]
-Integrating by parts gives
-\[
--\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w = \epsilon \left( \int_\Omega |\grad w|^2- \int_{\Gamma} w \grad w \cdot n  \right) + \frac{(1-2\epsilon) }{2} \left(\int_\Omega \div \beta w^2 - \int_\Gamma\beta_n w^2 \right)
-\]
-Noting that $w=0$ on $\Gamma_+$ reduces the boundary integrals over $\Gamma$ to just the inflow $\Gamma_-$.  Furthermore, we have the relation $\grad w = e^\psi(\grad v + \beta v)$.  Applying the above and boundary conditions on $\Gamma_-$, the first boundary integral becomes
-\[
-\int_{\Gamma_-} w \grad w \cdot n = \int_{\Gamma_-} we^\psi(\grad v + \beta v)\cdot n =  \int_{\Gamma_-} we^\psi(f\cdot n + \beta_n v)
-\]
-Noting $\int_{\Gamma_-}\beta_n w^2 \leq 0$ through $\beta_n<0$ on the inflow gives
-\[
-\epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n \leq \int_\Omega e^\psi (g-\epsilon \div f) w
-\]
-assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ implies $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi = O(1)$. We can then bound from below
-\[
-\epsilon \|\grad w\|^2 + \|w\|^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n  \lesssim \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n 
-\]
-Interpreting $\div f$ as a functional, the right hand gives
-\begin{align*}
-\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w
-\end{align*}
-The boundary integral on $\Gamma$ reduces to $\Gamma_-$, which is then nullified by the same term on the left hand side, leaving us with 
-\[
-\epsilon \|\grad w\|^2 + \|w\|^2 \lesssim \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) = \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot (\beta w + \grad w)
-\]
-From here, the proof is identical to \cite{DPGrobustness}; an application of Peter-Paul Young's inequality to the right hand side and bounds on $\|v\|, \|\grad v\|$ by $\|w\|,\|\grad w\|$ complete the estimate.  
-%ISSUE: REMOVE BOUNDARY TERM
-\end{proof}
+Lemma \ref{lemma_grad} concerns the robust control of $u$ by the energy error; Lemmas \ref{lemma_stream} and \ref{lemma_boundary} concern the robust control of field variable $\sigma$ and flux/trace variables, respectively.  
 
 \begin{lemma} 
-\label{lemma_2}
+\label{lemma_stream}
 Assume $v$ satisfies \eqref{adjoint}, with boundary conditions \eqref{bc_1}, and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, 
 \[
 \|\beta \cdot \grad v \| \lesssim \| g\|
@@ -446,8 +416,53 @@ leaving us with the estimate
 Since $C=O(1)$, an application of Young's inequality and Lemma 1 complete the estimate.
 \end{proof}
 
+\begin{lemma} 
+\label{lemma_grad}
+Assume \eqref{a_req} holds.  Then, for $v$ satisfying equation \eqref{adjoint} with boundary conditions \eqref{bc_1}, \eqref{bc_2} and sufficiently small $\epsilon$, 
+\[
+\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\|^2 + \epsilon \| f\|^2
+\]
+\end{lemma}
+
+\begin{proof}
+Since $\curl \beta=0$, and $\Omega$ is simply connected, there exists a scalar potential $\psi$, $\grad \psi = \beta$ such that $e^\psi = O(1)$.  Take the transformed function $w = e^\psi v$; following (2.26) in \cite{DPGrobustness}, we substitute $w$ into the the left hand side of equation \eqref{adjoint}, arriving at the relation  
+\[
+-\epsilon \Delta w - (1-2\epsilon) \beta \cdot \grad w + \left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w = e^\psi (g-\epsilon \div f)
+\]
+Multiplying by $w$ and integrating over $\Omega$ gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w + \int_\Omega\left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w^2 = \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+Integrating by parts gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w = \epsilon \left( \int_\Omega |\grad w|^2- \int_{\Gamma} w \grad w \cdot n  \right) + \frac{(1-2\epsilon) }{2} \left(\int_\Omega \div \beta w^2 - \int_\Gamma\beta_n w^2 \right)
+\]
+Noting that $w=0$ on $\Gamma_+$ reduces the boundary integrals over $\Gamma$ to just the inflow $\Gamma_-$.  Furthermore, we have the relation $\grad w = e^\psi(\grad v + \beta v)$.  Applying the above and boundary conditions on $\Gamma_-$, the first boundary integral becomes
+\[
+\int_{\Gamma_-} w \grad w \cdot n = \int_{\Gamma_-} we^\psi(\grad v + \beta v)\cdot n =  \int_{\Gamma_-} we^\psi(f\cdot n + \beta_n v)
+\]
+Noting $\int_{\Gamma_-}\beta_n w^2 \leq 0$ through $\beta_n<0$ on the inflow gives
+\[
+\epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n \leq \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ implies $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi = O(1)$. We can then bound from below
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n  \lesssim \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n 
+\]
+Interpreting $\div f$ as a functional, the right hand gives
+\begin{align*}
+\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w
+\end{align*}
+The boundary integral on $\Gamma$ reduces to $\Gamma_-$, which is then nullified by the same term on the left hand side, leaving us with 
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 \lesssim \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) = \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot (\beta w + \grad w)
+\]
+From here, the proof is identical to \cite{DPGrobustness}; an application of Peter-Paul Young's inequality to the right hand side and bounds on $\|v\|, \|\grad v\|$ by $\|w\|,\|\grad w\|$ complete the estimate.  
+%ISSUE: REMOVE BOUNDARY TERM
+\end{proof}
+
 \begin{lemma}
-\label{lemma_3}
+\label{lemma_boundary}
 Let $\beta$ satisfy \eqref{a_req} and \eqref{c_req}, and let $v$ satisfy \eqref{adjoint} with $f=g=0$, and arbitrary boundary conditions.  Then, there holds
 \[
 \|\grad v\| = \frac{1}{\epsilon}\|\tau\| \lesssim \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
@@ -460,7 +475,7 @@ We follow \cite{analysisDPG} and \cite{DPGrobustness} in decomposing $\tau$ into
 \]
 Specifically, $\psi$ is chosen as the solution to 
 \begin{align*}
--\epsilon \grad \psi + \div \left(\beta \psi\right) &= -\div \tau \\
+-\epsilon \Delta \psi + \div \left(\beta \psi\right) &= -\div \tau \\
 \epsilon \grad \psi \cdot n - \beta_n \psi - \tau\cdot n &= 0, \quad x\in \Gamma_-\\
 \psi &= 0, \quad x\in \Gamma_+ 
 \end{align*}
@@ -587,7 +602,6 @@ We have shown the robust bound of a norm on $U$ by energy error; for a full equi
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E \lesssim \|u\| + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\| + \|\widehat{u}\|+ \|\widehat{u}\|\right)
 \]
 
-%\textcolor{red}{not done yet}
 \end{lemma}
 \begin{proof}
 For any norm on $U$ of the form
@@ -644,7 +658,7 @@ In each numerical experiment, we vary $\epsilon = .01, .001, .0001$ in order to 
 
 The effect of roundoff error is often characterized by an increase in the energy error, which (assuming approximability of test functions) is proven to decrease for any series of refined meshes. These roundoff effects are dependent primarily on the mesh, appearing when trying to fully resolve boundary layers for very small $\epsilon$. 
 
-\textcolor{red}{Add figure here on convergence for smaller epsilon}
+%\textcolor{red}{Add figure here on convergence for smaller epsilon}
 
 \subsection{Erickson model problem}
 
@@ -724,7 +738,7 @@ We examined smaller $\epsilon$ as well. In \cite{DPGrobustness}, the smallest re
 \label{roundoff_figures}
 \end{figure}
 
-Without anisotropic refinements, it still becomes computationally difficult to fully resolve the solution for smaller $\epsilon$. Regardless, for all ranges of $\epsilon$, the robustness of DPG remains constant, as indicted by the rates and ratio between $L^2$ and energy error in Figure~\ref{roundoff_figures}. For $\epsilon = 1e-5$, we observe that the ratio of $L^2$ error increases, corresponding to the scaling of the test norm with mesh size (the transition in test norm occurs after 8 refinements, which, for an initial $4\times 4$ mesh, implies a minimum element size of about $1.5e-05$. At this point, rescaled test norm allows us to take advantage of the full magnitude of the $L^2$ term for $\|v\|$ and $\|\tau\|$ implied by our adjoint estimates). By analogy, for smaller $\epsilon = 1e-6, 1e-7$, the transition period should begin near the 10th and 11th refinement iterations; however, we do not observe such behavior. For $\epsilon=1e-6$, the ratio simply remains constant, but for $\epsilon=1e-7$, we observe roundoff effects, as the energy error increases at the 11th refinement. Since DPG is optimal in the energy norm for a fixed test norm\footnote{While the test norm changes with the mesh, it increases monotonically. A strictly stronger test norm implies $\frac{b(u,v)}{\|v\|_1} \geq \frac{b(u,v)}{\|v\|_2}$ for any $\|v\|_1 \leq \|v\|_2$}}, we expect monotonic decrease of the energy error with mesh refinement. Non-monotonic behavior indicates either approximation or roundoff error, and as there was no qualitative difference between using $\Delta p = 5$ and $\Delta p = 6$ for these experiments, we expect that the approximation error is negligible and conclude roundoff effects are at play. 
+Without anisotropic refinements, it still becomes computationally difficult to fully resolve the solution for smaller $\epsilon$. Regardless, for all ranges of $\epsilon$, the robustness of DPG remains constant, as indicted by the rates and ratio between $L^2$ and energy error in Figure~\ref{roundoff_figures}. For $\epsilon = 1e-5$, we observe that the ratio of $L^2$ error increases, corresponding to the scaling of the test norm with mesh size (the transition in test norm occurs after 8 refinements, which, for an initial $4\times 4$ mesh, implies a minimum element size of about $1.5e-05$. At this point, rescaled test norm allows us to take advantage of the full magnitude of the $L^2$ term for $\|v\|$ and $\|\tau\|$ implied by our adjoint estimates). By analogy, for smaller $\epsilon = 1e-6, 1e-7$, the transition period should begin near the 10th and 11th refinement iterations; however, we do not observe such behavior. For $\epsilon=1e-6$, the ratio simply remains constant, but for $\epsilon=1e-7$, we observe roundoff effects, as the energy error increases at the 11th refinement. Since DPG is optimal in the energy norm for a fixed test norm\footnote{While the test norm changes with the mesh, it increases monotonically. A strictly stronger test norm implies $\frac{b(u,v)}{\|v\|_1} \geq \frac{b(u,v)}{\|v\|_2}$ for any $\|v\|_1 \leq \|v\|_2$}, we expect monotonic decrease of the energy error with mesh refinement. Non-monotonic behavior indicates either approximation or roundoff error, and as there was no qualitative difference between using $\Delta p = 5$ and $\Delta p = 6$ for these experiments, we expect that the approximation error is negligible and conclude roundoff effects are at play. 
 
 \subsubsection{Neglecting $\sigma_n$}
 
