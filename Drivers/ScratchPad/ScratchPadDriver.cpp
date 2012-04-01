@@ -37,7 +37,7 @@ public:
     double tol = 1e-14;
     bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
     bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
-    return xMatch && yMatch;
+    return xMatch || yMatch;
   }
 };
 
@@ -268,6 +268,14 @@ int main(int argc, char *argv[]) {
   // create BCs:
   Teuchos::RCP<BCEasy> stokesBC = Teuchos::rcp(new BCEasy());
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new SquareBoundary() );
+  
+  // quick test of the boundary implementation:
+  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(-1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.0,-1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.5,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  
   FunctionPtr u1fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u1() );
   FunctionPtr u2fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u2() );
   stokesBC->addDirichlet(u1hat,entireBoundary,u1fn);
@@ -283,13 +291,8 @@ int main(int argc, char *argv[]) {
   int H1Order = 2;
   pToAdd = 2;
   // here's the line that we'd like to have working:
-//  HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-//                                              stokesBC, mathIP, minLogElements, 
-//                                              maxLogElements, H1Order, pToAdd);
-  // here's the one that is working (gradually transitioning from legacy versions of each argument...):
-  // i.e. we have trouble with BC, but that's it!
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              exactSolution->bc(), mathIP, minLogElements, 
+                                              stokesBC, mathIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   
