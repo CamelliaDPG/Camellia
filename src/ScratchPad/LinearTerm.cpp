@@ -10,32 +10,40 @@
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
-const vector< LinearSummand > & LinearTerm::summands() const { return _summands; }
+const vector< LinearSummand > & LinearTerm::summands() const { 
+  return _summands; 
+}
+
 LinearTerm::LinearTerm(FunctionPtr weight, VarPtr var) {
   _rank = -1;
   _termType = UNKNOWN_TYPE;
   addVar(weight,var);
 }
+
 LinearTerm::LinearTerm(double weight, VarPtr var) {
   _rank = -1;
   _termType = UNKNOWN_TYPE;
   addVar(weight,var);
 }
+
 LinearTerm::LinearTerm(vector<double> weight, VarPtr var) {
   _rank = -1;
   _termType = UNKNOWN_TYPE;
   addVar(weight,var);
 }
+
 LinearTerm::LinearTerm( VarPtr v ) {
   _rank = -1;
   _termType = UNKNOWN_TYPE;
   addVar( 1.0, v);
 }
+
 // copy constructor:
 LinearTerm::LinearTerm( const LinearTerm &a ) {
   _rank = a.rank();
   _termType = a.termType();
   _summands = a.summands();
+  _varIDs = a.varIDs();
 }
 
 void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
@@ -69,6 +77,7 @@ void LinearTerm::addVar(double weight, VarPtr var) {
   FunctionPtr weightFn = Teuchos::rcp( new ConstantScalarFunction(weight) );
   addVar( weightFn, var );
 }
+
 void LinearTerm::addVar(vector<double> vector_weight, VarPtr var) { // dots weight vector with vector var, makes a vector out of a scalar var
   FunctionPtr weightFn = Teuchos::rcp( new ConstantVectorFunction(vector_weight) );
   addVar( weightFn, var );
@@ -78,7 +87,10 @@ const set<int> & LinearTerm::varIDs() const {
   return _varIDs;
 }
 
-VarType LinearTerm::termType() const { return _termType; }
+VarType LinearTerm::termType() const { 
+  return _termType; 
+}
+
 //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
@@ -225,7 +237,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   }
 }
 
-int LinearTerm::rank() const { return _rank; }  // 0 for scalar, 1 for vector, etc.
+int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
+  return _rank; 
+}
 
 // operator overloading niceties:
 
@@ -238,6 +252,7 @@ LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
   _varIDs = rhs.varIDs();
   return *this;
 }    
+
 LinearTerm& LinearTerm::operator+=(const LinearTerm &rhs) {
   if (_rank == -1) { // we're empty -- adopt rhs's rank
     _rank = rhs.rank();

@@ -76,8 +76,6 @@ public:
   }
 };
 
-
-
 class beta : public Function {
 public:
   beta() : Function(1) {
@@ -281,15 +279,20 @@ int main(int argc, char *argv[]) {
   // for the above solution choice, RHS is actually zero
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
-  int minLogElements = 0, maxLogElements = 4;
+  int minLogElements = 0, maxLogElements = 2;
   int H1Order = 2;
   pToAdd = 2;
+  // here's the line that we'd like to have working:
+//  HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
+//                                              stokesBC, mathIP, minLogElements, 
+//                                              maxLogElements, H1Order, pToAdd);
+  // here's the one that is working (gradually transitioning from legacy versions of each argument...):
+  // i.e. we have trouble with BC, but that's it!
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              stokesBC, mathIP, minLogElements, 
+                                              exactSolution->bc(), mathIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   
-  study.solve(quadPoints);
   quadPoints(0,0) = -1.0; // x1
   quadPoints(0,1) = -1.0; // y1
   quadPoints(1,0) = 1.0;
@@ -298,6 +301,8 @@ int main(int argc, char *argv[]) {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
+  
+  study.solve(quadPoints);
   
   int polyOrder = H1Order-1;
   ostringstream filePathPrefix;

@@ -84,6 +84,12 @@ bool LinearTermTests::testSums() {
   
   LinearTermPtr sum = v1 + v2;
   
+  if (sum->summands().size() != 2) {
+    success = false;
+    cout << "sum has the wrong number of summands\n";
+    return success;
+  }
+  
   LinearSummand first_summand = sum->summands()[0];
   LinearSummand second_summand = sum->summands()[1];
   
@@ -111,6 +117,22 @@ bool LinearTermTests::testSums() {
   if (second_var->op() != OP_VALUE) {
     success = false;
     cout << "second op isn't VALUE.\n";
+  }
+  
+  // check that sum reports having both varIDs
+  if (sum->varIDs().find(v1->ID()) == sum->varIDs().end()) {
+    cout << "sum->varIDs() doesn't include v1.\n";
+    success = false;
+  }
+  
+  if (sum->varIDs().find(v2->ID()) == sum->varIDs().end()) {
+    cout << "sum->varIDs() doesn't include v2.\n";
+    success = false;
+  }
+  
+  if (sum->varIDs().size() != 2) {
+    cout << "sum->varIDs() doesn't have the expected size (expected 2; is " << sum->varIDs().size() << ").\n";
+    success = false;
   }
   
   // TODO: check that the sum is correct
