@@ -65,9 +65,9 @@ public:
                                    const FieldContainer<double> &cellJacobian, 
                                    const FieldContainer<double> &cellJacobianInv,
                                    const FieldContainer<double> &cellJacobianDet);
-  static FCPtr getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, EOperatorExtended op,
+  static FCPtr getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                   constFCPtr componentReferenceValuesTransformed);
-  static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, EOperatorExtended op,
+  static FCPtr getTransformedValuesWithBasisValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                    constFCPtr referenceValues,                                 
                                                    const FieldContainer<double> &cellJacobian, 
                                                    const FieldContainer<double> &cellJacobianInv,
@@ -77,8 +77,8 @@ public:
   static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals);
   static FCPtr getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent);
   static FCPtr getVectorizedValues(constFCPtr values, int spaceDim);
-  static Intrepid::EOperator relatedOperator(EOperatorExtended op, EFunctionSpaceExtended fs, int &componentOfInterest);
-  static FCPtr getComponentOfInterest(constFCPtr values, EOperatorExtended op, EFunctionSpaceExtended fs, int componentOfInterest);
+  static Intrepid::EOperator relatedOperator(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int &componentOfInterest);
+  static FCPtr getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int componentOfInterest);
 };
 
 #endif

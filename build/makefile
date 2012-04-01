@@ -105,6 +105,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 
 TEST_OBJ_NAMES = ElementTests \
        MeshTestSuite \
+       LinearTermTests \
        MeshRefinementTests \
        SolutionTests \
        VectorizedBasisTestSuite \
@@ -218,6 +219,9 @@ SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ElementTests.o: $(DRIVERS_DIR)/DPGTests/ElementTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+LinearTermTests.o: $(DRIVERS_DIR)/DPGTests/LinearTermTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 RHSTests.o: $(DRIVERS_DIR)/DPGTests/RHSTests.cpp

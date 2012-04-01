@@ -50,7 +50,7 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
     for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
          testOpIt != testOperators.end(); testOpIt++) {
       operatorIndex++;
-      EOperatorExtended testOperator = *testOpIt;
+      IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
       bool notZero = this->nonZeroRHS(testID);
       if (notZero) { // compute the integral(s)
         

@@ -48,6 +48,7 @@
 
 using namespace Intrepid;
 using namespace std;
+using namespace IntrepidExtendedTypes;
 
 /*
  NOTES on what needs to be done to support arbitrary CellTopology (e.g. curvilinear elements):
@@ -66,22 +67,22 @@ private:
   typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
   typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
   typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
-  static map< pair< pair<int,int>, EFunctionSpaceExtended >, BasisPtr >
+  static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _existingBasis; // keys are ((polyOrder,cellTopoKey),fs))
   
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
   static map< Basis<double,FieldContainer<double> >*, int > _polyOrders; // allows lookup of poly order used to create basis
   static map< Basis<double,FieldContainer<double> >*, int > _ranks; // allows lookup of basis rank
-  static map< Basis<double,FieldContainer<double> >*, EFunctionSpaceExtended > _functionSpaces; // allows lookup of function spaces
+  static map< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EFunctionSpaceExtended > _functionSpaces; // allows lookup of function spaces
   static map< Basis<double,FieldContainer<double> >*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
   static set< Basis<double,FieldContainer<double> >*> _multiBases;
   static map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > _multiBasesMap;
   static map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > _patchBases;
   static set< Basis<double,FieldContainer<double> >* > _patchBasisSet;
 public:
-  static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
-  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs);
+  static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
+  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   static MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
   static PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
@@ -90,13 +91,13 @@ public:
   
   static int basisPolyOrder(BasisPtr basis);
   static int getBasisRank(BasisPtr basis);
-  static EFunctionSpaceExtended getBasisFunctionSpace(BasisPtr basis);
+  static IntrepidExtendedTypes::EFunctionSpaceExtended getBasisFunctionSpace(BasisPtr basis);
   
   static bool basisKnown(BasisPtr basis);
   static bool isMultiBasis(BasisPtr basis);
   static bool isPatchBasis(BasisPtr basis);
   
-  static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, EFunctionSpaceExtended fs );
+  static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
 };
 
 #endif

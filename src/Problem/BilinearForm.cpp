@@ -42,34 +42,34 @@
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
 
-static const string & S_OPERATOR_VALUE = "";
-static const string & S_OPERATOR_GRAD = "\\nabla ";
-static const string & S_OPERATOR_CURL = "\\nabla \\times ";
-static const string & S_OPERATOR_DIV = "\\nabla \\cdot ";
-static const string & S_OPERATOR_D1 = "D1 ";
-static const string & S_OPERATOR_D2 = "D2 ";
-static const string & S_OPERATOR_D3 = "D3 ";
-static const string & S_OPERATOR_D4 = "D4 ";
-static const string & S_OPERATOR_D5 = "D5 ";
-static const string & S_OPERATOR_D6 = "D6 ";
-static const string & S_OPERATOR_D7 = "D7 ";
-static const string & S_OPERATOR_D8 = "D8 ";
-static const string & S_OPERATOR_D9 = "D9 ";
-static const string & S_OPERATOR_D10 = "D10 ";
-static const string & S_OPERATOR_X = "{1 \\choose 0} \\cdot ";
-static const string & S_OPERATOR_Y = "{0 \\choose 1} \\cdot ";
-static const string & S_OPERATOR_Z = "\\bf{k} \\cdot ";
-static const string & S_OPERATOR_DX = "\\frac{\\partial}{\\partial x} ";
-static const string & S_OPERATOR_DY = "\\frac{\\partial}{\\partial y} ";
-static const string & S_OPERATOR_DZ = "\\frac{\\partial}{\\partial z} ";
-static const string & S_OPERATOR_CROSS_NORMAL = "\\times \\widehat{n} ";
-static const string & S_OPERATOR_DOT_NORMAL = "\\cdot \\widehat{n} ";
-static const string & S_OPERATOR_TIMES_NORMAL = " \\widehat{n} \\cdot ";
-static const string & S_OPERATOR_TIMES_NORMAL_X = " \\widehat{n}_x ";
-static const string & S_OPERATOR_TIMES_NORMAL_Y = " \\widehat{n}_y ";
-static const string & S_OPERATOR_TIMES_NORMAL_Z = " \\widehat{n}_z ";
-static const string & S_OPERATOR_VECTORIZE_VALUE = ""; // handle this one separately...
-static const string & S_OPERATOR_UNKNOWN = "[UNKNOWN OPERATOR] ";
+static const string & S_OP_VALUE = "";
+static const string & S_OP_GRAD = "\\nabla ";
+static const string & S_OP_CURL = "\\nabla \\times ";
+static const string & S_OP_DIV = "\\nabla \\cdot ";
+static const string & S_OP_D1 = "D1 ";
+static const string & S_OP_D2 = "D2 ";
+static const string & S_OP_D3 = "D3 ";
+static const string & S_OP_D4 = "D4 ";
+static const string & S_OP_D5 = "D5 ";
+static const string & S_OP_D6 = "D6 ";
+static const string & S_OP_D7 = "D7 ";
+static const string & S_OP_D8 = "D8 ";
+static const string & S_OP_D9 = "D9 ";
+static const string & S_OP_D10 = "D10 ";
+static const string & S_OP_X = "{1 \\choose 0} \\cdot ";
+static const string & S_OP_Y = "{0 \\choose 1} \\cdot ";
+static const string & S_OP_Z = "\\bf{k} \\cdot ";
+static const string & S_OP_DX = "\\frac{\\partial}{\\partial x} ";
+static const string & S_OP_DY = "\\frac{\\partial}{\\partial y} ";
+static const string & S_OP_DZ = "\\frac{\\partial}{\\partial z} ";
+static const string & S_OP_CROSS_NORMAL = "\\times \\widehat{n} ";
+static const string & S_OP_DOT_NORMAL = "\\cdot \\widehat{n} ";
+static const string & S_OP_TIMES_NORMAL = " \\widehat{n} \\cdot ";
+static const string & S_OP_TIMES_NORMAL_X = " \\widehat{n}_x ";
+static const string & S_OP_TIMES_NORMAL_Y = " \\widehat{n}_y ";
+static const string & S_OP_TIMES_NORMAL_Z = " \\widehat{n}_z ";
+static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately...
+static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
 set<int> BilinearForm::_normalOperators;
 
@@ -96,7 +96,7 @@ void BilinearForm::applyBilinearFormData(FieldContainer<double> &trialValues, Fi
 void BilinearForm::trialTestOperators(int testID1, int testID2, 
                                       vector<EOperatorExtended> &testOps1,
                                       vector<EOperatorExtended> &testOps2) {
-  EOperatorExtended testOp1, testOp2;
+  IntrepidExtendedTypes::EOperatorExtended testOp1, testOp2;
   testOps1.clear();
   testOps2.clear();
   if (trialTestOperator(testID1,testID2,testOp1,testOp2)) {
@@ -298,11 +298,11 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
       int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
         operatorIndex++;
-        EOperatorExtended trialOperator = *trialOpIt;
-        EOperatorExtended testOperator = *testOpIt;
+        IntrepidExtendedTypes::EOperatorExtended trialOperator = *trialOpIt;
+        IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
         
-        if (testOperator==OPERATOR_TIMES_NORMAL) {
-          TEST_FOR_EXCEPTION(true,std::invalid_argument,"OPERATOR_TIMES_NORMAL not supported for tests.  Use for trial only");
+        if (testOperator==OP_TIMES_NORMAL) {
+          TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
         }
         
         Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
@@ -459,42 +459,42 @@ vector<int> BilinearForm::trialBoundaryIDs() {
   return ids;  
 }
 
-int BilinearForm::operatorRank(EOperatorExtended op, EFunctionSpaceExtended fs) {
+int BilinearForm::operatorRank(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
   // returns the rank of basis functions in the function space fs when op is applied
   // 0 scalar, 1 vector
   int SCALAR = 0, VECTOR = 1;
   switch (op) {
-    case IntrepidExtendedTypes::OPERATOR_VALUE:
+    case  IntrepidExtendedTypes::OP_VALUE:
       if (   (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) 
           || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL)
           || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) )
         return SCALAR; 
       else
         return VECTOR;
-    case IntrepidExtendedTypes::OPERATOR_GRAD:
-    case IntrepidExtendedTypes::OPERATOR_CURL:
+    case IntrepidExtendedTypes::OP_GRAD:
+    case IntrepidExtendedTypes::OP_CURL:
       return VECTOR;
-    case IntrepidExtendedTypes::OPERATOR_DIV:
-    case IntrepidExtendedTypes::OPERATOR_X:
-    case IntrepidExtendedTypes::OPERATOR_Y:
-    case IntrepidExtendedTypes::OPERATOR_Z:
-    case IntrepidExtendedTypes::OPERATOR_DX:
-    case IntrepidExtendedTypes::OPERATOR_DY:
-    case IntrepidExtendedTypes::OPERATOR_DZ:
+    case IntrepidExtendedTypes::OP_DIV:
+    case IntrepidExtendedTypes::OP_X:
+    case IntrepidExtendedTypes::OP_Y:
+    case IntrepidExtendedTypes::OP_Z:
+    case IntrepidExtendedTypes::OP_DX:
+    case IntrepidExtendedTypes::OP_DY:
+    case IntrepidExtendedTypes::OP_DZ:
       return SCALAR; 
-    case IntrepidExtendedTypes::OPERATOR_CROSS_NORMAL:
+    case IntrepidExtendedTypes::OP_CROSS_NORMAL:
       return VECTOR; 
-    case IntrepidExtendedTypes::OPERATOR_DOT_NORMAL:
+    case IntrepidExtendedTypes::OP_DOT_NORMAL:
       return SCALAR; 
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL:
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL:
       return VECTOR; 
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X:
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_X:
       return SCALAR; 
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y:
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Y:
       return SCALAR; 
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Z:
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Z:
       return SCALAR; 
-    case IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE:
+    case IntrepidExtendedTypes::OP_VECTORIZE_VALUE:
       return VECTOR;
     default:
       return -1;
@@ -503,89 +503,89 @@ int BilinearForm::operatorRank(EOperatorExtended op, EFunctionSpaceExtended fs) 
 
 const string & BilinearForm::operatorName(EOperatorExtended op) {
   switch (op) {
-    case IntrepidExtendedTypes::OPERATOR_VALUE:
-      return S_OPERATOR_VALUE; 
+    case  IntrepidExtendedTypes::OP_VALUE:
+      return S_OP_VALUE; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_GRAD:
-      return S_OPERATOR_GRAD; 
+    case IntrepidExtendedTypes::OP_GRAD:
+      return S_OP_GRAD; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_CURL:
-      return S_OPERATOR_CURL; 
+    case IntrepidExtendedTypes::OP_CURL:
+      return S_OP_CURL; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_DIV:
-      return S_OPERATOR_DIV; 
+    case IntrepidExtendedTypes::OP_DIV:
+      return S_OP_DIV; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D1:
-      return S_OPERATOR_D1; 
+    case IntrepidExtendedTypes::OP_D1:
+      return S_OP_D1; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D2:
-      return S_OPERATOR_D2; 
+    case IntrepidExtendedTypes::OP_D2:
+      return S_OP_D2; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D3:
-      return S_OPERATOR_D3; 
+    case IntrepidExtendedTypes::OP_D3:
+      return S_OP_D3; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D4:
-      return S_OPERATOR_D4; 
+    case IntrepidExtendedTypes::OP_D4:
+      return S_OP_D4; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D5:
-      return S_OPERATOR_D5; 
+    case IntrepidExtendedTypes::OP_D5:
+      return S_OP_D5; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D6:
-      return S_OPERATOR_D6; 
+    case IntrepidExtendedTypes::OP_D6:
+      return S_OP_D6; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D7:
-      return S_OPERATOR_D7; 
+    case IntrepidExtendedTypes::OP_D7:
+      return S_OP_D7; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D8:
-      return S_OPERATOR_D8; 
+    case IntrepidExtendedTypes::OP_D8:
+      return S_OP_D8; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D9:
-      return S_OPERATOR_D9; 
+    case IntrepidExtendedTypes::OP_D9:
+      return S_OP_D9; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_D10:
-      return S_OPERATOR_D10; 
+    case IntrepidExtendedTypes::OP_D10:
+      return S_OP_D10; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_X:
-      return S_OPERATOR_X; 
+    case IntrepidExtendedTypes::OP_X:
+      return S_OP_X; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_Y:
-      return S_OPERATOR_Y; 
+    case IntrepidExtendedTypes::OP_Y:
+      return S_OP_Y; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_Z:
-      return S_OPERATOR_Z; 
+    case IntrepidExtendedTypes::OP_Z:
+      return S_OP_Z; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_DX:
-      return S_OPERATOR_DX; 
+    case IntrepidExtendedTypes::OP_DX:
+      return S_OP_DX; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_DY:
-      return S_OPERATOR_DY; 
+    case IntrepidExtendedTypes::OP_DY:
+      return S_OP_DY; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_DZ:
-      return S_OPERATOR_DZ; 
+    case IntrepidExtendedTypes::OP_DZ:
+      return S_OP_DZ; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_CROSS_NORMAL:
-      return S_OPERATOR_CROSS_NORMAL; 
+    case IntrepidExtendedTypes::OP_CROSS_NORMAL:
+      return S_OP_CROSS_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_DOT_NORMAL:
-      return S_OPERATOR_DOT_NORMAL; 
+    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+      return S_OP_DOT_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL:
-      return S_OPERATOR_TIMES_NORMAL; 
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL:
+      return S_OP_TIMES_NORMAL; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_X:
-      return S_OPERATOR_TIMES_NORMAL_X; 
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_X:
+      return S_OP_TIMES_NORMAL_X; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Y:
-      return S_OPERATOR_TIMES_NORMAL_Y; 
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Y:
+      return S_OP_TIMES_NORMAL_Y; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL_Z:
-      return S_OPERATOR_TIMES_NORMAL_Z; 
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Z:
+      return S_OP_TIMES_NORMAL_Z; 
       break;
-    case IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE:
-      return S_OPERATOR_VECTORIZE_VALUE; 
+    case IntrepidExtendedTypes::OP_VECTORIZE_VALUE:
+      return S_OP_VECTORIZE_VALUE; 
       break;
     default:
-      return S_OPERATOR_UNKNOWN;
+      return S_OP_UNKNOWN;
       break;
   }
 }
@@ -610,8 +610,8 @@ void BilinearForm::printTrialTestInteractions() {
       testOpIt = testOperators.begin();
       int operatorIndex = 0;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        EOperatorExtended opTrial = *trialOpIt;
-        EOperatorExtended opTest = *testOpIt;
+        IntrepidExtendedTypes::EOperatorExtended opTrial = *trialOpIt;
+        IntrepidExtendedTypes::EOperatorExtended opTest = *testOpIt;
         int trialRank = operatorRank(opTrial, functionSpaceForTrial(trialID));
         int testRank = operatorRank(opTest, functionSpaceForTest(testID));
         trialValue = ( trialRank == 0 ) ? trialValueScalar : trialValueVector;
@@ -691,7 +691,7 @@ void BilinearForm::printTrialTestInteractions() {
           } else {
             cout << "\\int_{\\partial K} " ;
           }
-          if (opTrial != OPERATOR_TIMES_NORMAL) {
+          if (opTrial != OP_TIMES_NORMAL) {
             cout << " \\begin{bmatrix}";
             for (int dim=0; dim<spaceDim; dim++) {
               if (testWeight[dim] != 1.0) {
@@ -704,7 +704,7 @@ void BilinearForm::printTrialTestInteractions() {
             cout << "\\end{bmatrix} ";
             cout << trialName(trialID);
             cout << " \\cdot ";
-          } else if (opTrial == OPERATOR_TIMES_NORMAL) {
+          } else if (opTrial == OP_TIMES_NORMAL) {
             if (testWeight.size() == 2) {
               cout << " {";
               if (testWeight[0] != 1.0) {
@@ -724,7 +724,7 @@ void BilinearForm::printTrialTestInteractions() {
             }
           }
         }
-        if ((opTest == OPERATOR_CROSS_NORMAL) || (opTest == OPERATOR_DOT_NORMAL)) {
+        if ((opTest == OP_CROSS_NORMAL) || (opTest == OP_DOT_NORMAL)) {
           // reverse the order:
           cout << testName(testID) << operatorName(opTest);
         } else {
@@ -741,12 +741,12 @@ void BilinearForm::printTrialTestInteractions() {
 
 const set<int> & BilinearForm::normalOperators() {
   if (_normalOperators.size() == 0) {
-    _normalOperators.insert(OPERATOR_CROSS_NORMAL);
-    _normalOperators.insert(OPERATOR_DOT_NORMAL);
-    _normalOperators.insert(OPERATOR_TIMES_NORMAL);
-    _normalOperators.insert(OPERATOR_TIMES_NORMAL_X);
-    _normalOperators.insert(OPERATOR_TIMES_NORMAL_Y);
-    _normalOperators.insert(OPERATOR_TIMES_NORMAL_Z);
+    _normalOperators.insert(OP_CROSS_NORMAL);
+    _normalOperators.insert(OP_DOT_NORMAL);
+    _normalOperators.insert(OP_TIMES_NORMAL);
+    _normalOperators.insert(OP_TIMES_NORMAL_X);
+    _normalOperators.insert(OP_TIMES_NORMAL_Y);
+    _normalOperators.insert(OP_TIMES_NORMAL_Z);
   }
   return _normalOperators;
 }

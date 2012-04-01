@@ -40,7 +40,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-#include "BilinearForm.h" // defines EOperatorExtended
+#include "BilinearForm.h" // defines IntrepidExtendedTypes::EOperatorExtended
 
 #include "BasisCache.h"
 
@@ -55,7 +55,7 @@ public:
   virtual bool nonZeroRHS(int testVarID) = 0;
   virtual vector<EOperatorExtended> operatorsForTestID(int testID) {
     vector<EOperatorExtended> ops;
-    ops.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    ops.push_back( IntrepidExtendedTypes::OP_VALUE);
     return ops;
   }
   // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)

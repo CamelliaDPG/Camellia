@@ -77,8 +77,8 @@ public:
   
   bool trialTestOperator(int trialID, int testID, 
                          EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-    trialOperator = IntrepidExtendedTypes::OPERATOR_TIMES_NORMAL;
-    testOperator  = IntrepidExtendedTypes::OPERATOR_GRAD;
+    trialOperator = IntrepidExtendedTypes::OP_TIMES_NORMAL;
+    testOperator  = IntrepidExtendedTypes::OP_GRAD;
     return true;
   }
   

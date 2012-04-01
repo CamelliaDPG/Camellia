@@ -79,7 +79,7 @@ const set<int> & LinearTerm::varIDs() const {
 }
 
 VarType LinearTerm::termType() const { return _termType; }
-//  vector< EOperatorExtended > varOps(int varID);
+//  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
 // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)

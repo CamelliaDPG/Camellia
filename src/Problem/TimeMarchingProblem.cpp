@@ -28,8 +28,8 @@ void TimeMarchingProblem::trialTestOperators(int trialID, int testID,
   _bilinearForm->trialTestOperators(trialID,testID,trialOps,testOps);
   
   if (hasTimeDerivative(trialID,testID)) {
-    trialOps.insert(trialOps.begin(), IntrepidExtendedTypes::OPERATOR_VALUE);
-    testOps.insert(testOps.begin(), IntrepidExtendedTypes::OPERATOR_VALUE);
+    trialOps.insert(trialOps.begin(),  IntrepidExtendedTypes::OP_VALUE);
+    testOps.insert(testOps.begin(),  IntrepidExtendedTypes::OP_VALUE);
   }
 }
 
@@ -69,7 +69,7 @@ vector<EOperatorExtended> TimeMarchingProblem::operatorsForTestID(int testID) {
   // check whether there's time derivative-interaction with any trial function
   vector< IntrepidExtendedTypes::EOperatorExtended > ops = _rhs->operatorsForTestID(testID);
   if ( testHasTimeDerivative(testID) ) {
-    ops.insert(ops.begin(),IntrepidExtendedTypes::OPERATOR_VALUE);
+    ops.insert(ops.begin(), IntrepidExtendedTypes::OP_VALUE);
   }
 }
 

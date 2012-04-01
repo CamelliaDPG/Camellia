@@ -53,7 +53,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
   
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
-    EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
     Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis;
     int basisRank;
     basis = BasisFactory::getBasis( basisRank, polyOrder, cellTopo.getKey(), fs);
@@ -76,7 +76,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
     
-    EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTrial(trialID);
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTrial(trialID);
     
     BasisPtr basis;
     
@@ -377,7 +377,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
                          std::invalid_argument,
                          "upgradeSide requested for varID on interior.");
     }
-    EFunctionSpaceExtended fs;
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::getBasisFunctionSpace(basis);
@@ -415,7 +415,7 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
   for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    EFunctionSpaceExtended fs;
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::getBasisFunctionSpace(basis);
@@ -448,7 +448,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
   for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
-    EFunctionSpaceExtended fs;
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs;
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       if (replacePatchBasis) {

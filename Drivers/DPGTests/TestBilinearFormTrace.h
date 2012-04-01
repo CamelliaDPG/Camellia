@@ -60,8 +60,8 @@ public:
   
   bool trialTestOperator(int trialID, int testID, 
                          EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-    trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-    testOperator  = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+    trialOperator = IntrepidExtendedTypes::OP_VALUE;
+    testOperator  = IntrepidExtendedTypes::OP_DOT_NORMAL;
     return true;
   }
   

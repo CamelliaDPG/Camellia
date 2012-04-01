@@ -43,33 +43,33 @@ using namespace Intrepid;
 
 namespace IntrepidExtendedTypes {
   enum EOperatorExtended { // first 13 simply copied from EOperator
-    OPERATOR_VALUE = 0,
-    OPERATOR_GRAD,      // 1
-    OPERATOR_CURL,      // 2
-    OPERATOR_DIV,       // 3
-    OPERATOR_D1,        // 4
-    OPERATOR_D2,        // 5
-    OPERATOR_D3,        // 6
-    OPERATOR_D4,        // 7
-    OPERATOR_D5,        // 8
-    OPERATOR_D6,        // 9
-    OPERATOR_D7,        // 10
-    OPERATOR_D8,        // 11
-    OPERATOR_D9,        // 12
-    OPERATOR_D10,       // 13
-    OPERATOR_X,         // 14 (pick up where EOperator left off...)
-    OPERATOR_Y,         // 15
-    OPERATOR_Z,         // 16
-    OPERATOR_DX,        // 17
-    OPERATOR_DY,        // 18
-    OPERATOR_DZ,        // 19
-    OPERATOR_CROSS_NORMAL,    // 20
-    OPERATOR_DOT_NORMAL,      // 21
-    OPERATOR_TIMES_NORMAL,    // 22
-    OPERATOR_TIMES_NORMAL_X,  // 23
-    OPERATOR_TIMES_NORMAL_Y,  // 24
-    OPERATOR_TIMES_NORMAL_Z,  // 25
-    OPERATOR_VECTORIZE_VALUE  // 26
+    OP_VALUE = 0,
+    OP_GRAD,      // 1
+    OP_CURL,      // 2
+    OP_DIV,       // 3
+    OP_D1,        // 4
+    OP_D2,        // 5
+    OP_D3,        // 6
+    OP_D4,        // 7
+    OP_D5,        // 8
+    OP_D6,        // 9
+    OP_D7,        // 10
+    OP_D8,        // 11
+    OP_D9,        // 12
+    OP_D10,       // 13
+    OP_X,         // 14 (pick up where EOperator left off...)
+    OP_Y,         // 15
+    OP_Z,         // 16
+    OP_DX,        // 17
+    OP_DY,        // 18
+    OP_DZ,        // 19
+    OP_CROSS_NORMAL,    // 20
+    OP_DOT_NORMAL,      // 21
+    OP_TIMES_NORMAL,    // 22
+    OP_TIMES_NORMAL_X,  // 23
+    OP_TIMES_NORMAL_Y,  // 24
+    OP_TIMES_NORMAL_Z,  // 25
+    OP_VECTORIZE_VALUE  // 26
   };
 
   enum EFunctionSpaceExtended { // all but the last two copied from EFunctionSpace
@@ -90,13 +90,15 @@ class BilinearForm {
   typedef Teuchos::RCP<ElementType> ElementTypePtr;
 public:
   virtual bool trialTestOperator(int trialID, int testID, 
-                                 EOperatorExtended &trialOperator, EOperatorExtended &testOperator) { 
+                                 IntrepidExtendedTypes::EOperatorExtended &trialOperator,
+                                 IntrepidExtendedTypes::EOperatorExtended &testOperator) { 
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
   virtual void trialTestOperators(int trialID, int testID, 
-                                  vector<EOperatorExtended> &trialOps,
-                                  vector<EOperatorExtended> &testOps); // default implementation calls trialTestOperator
+                                  vector<IntrepidExtendedTypes::EOperatorExtended> &trialOps,
+                                  
+                                  vector<IntrepidExtendedTypes::EOperatorExtended> &testOps); // default implementation calls trialTestOperator
   
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
@@ -131,14 +133,15 @@ public:
   virtual const string & testName(int testID) = 0;
   virtual const string & trialName(int trialID) = 0;
   
-  virtual EFunctionSpaceExtended functionSpaceForTest(int testID) = 0;
-  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID) = 0; 
+  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID) = 0;
+  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID) = 0;
   
   virtual bool isFluxOrTrace(int trialID) = 0;
   
   static void multiplyFCByWeight(FieldContainer<double> &fc, double weight); // belongs elsewhere...
-  static const string & operatorName(EOperatorExtended op);
-  static int operatorRank(EOperatorExtended op, EFunctionSpaceExtended fs);
+  static const string & operatorName(IntrepidExtendedTypes::EOperatorExtended op);
+  static int operatorRank(IntrepidExtendedTypes::EOperatorExtended op,
+                          IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   vector<int> trialVolumeIDs();
   vector<int> trialBoundaryIDs();
   

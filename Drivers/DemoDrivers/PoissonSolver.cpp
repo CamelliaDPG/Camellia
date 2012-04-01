@@ -5,6 +5,8 @@
 #include "Solution.h"
 #include "Solver.h"
 
+#include "SchwarzSolver.h"
+
 // Trilinos includes
 #include "Intrepid_FieldContainer.hpp"
 

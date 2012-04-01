@@ -62,21 +62,21 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGI
       vector<IntrepidExtendedTypes::EOperatorExtended> testOps;
       myTestIDs.push_back(testID);
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-        EOperatorExtended op1 = *trialOpIt;
-        EOperatorExtended op2 = *testOpIt;
+        IntrepidExtendedTypes::EOperatorExtended op1 = *trialOpIt;
+        IntrepidExtendedTypes::EOperatorExtended op2 = *testOpIt;
 
         // there is a live combination
         // op1 will always be value
-        if (( op1 != IntrepidExtendedTypes::OPERATOR_VALUE)
-         && ( op1 != IntrepidExtendedTypes::OPERATOR_VECTORIZE_VALUE)
+        if (( op1 !=  IntrepidExtendedTypes::OP_VALUE)
+         && ( op1 != IntrepidExtendedTypes::OP_VECTORIZE_VALUE)
          && ( !_bilinearForm->isFluxOrTrace(trialID)) ) {
           TEST_FOR_EXCEPTION(true,
                              std::invalid_argument,
-                             "OptimalInnerProduct assumes OPERATOR_VALUE for trialIDs.")
+                             "OptimalInnerProduct assumes OP_VALUE for trialIDs.")
         }
         if ( _bilinearForm->isFluxOrTrace(trialID) ) {
           // boundary value: push inside the element (take L2 norm there)
-          op2 = IntrepidExtendedTypes::OPERATOR_VALUE;
+          op2 =  IntrepidExtendedTypes::OP_VALUE;
         }
         testOps.push_back(op2);
         testOpIt++;
@@ -99,7 +99,7 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGI
         // just take L^2 norms of each test function
         pair<int,int> key = make_pair(testID1, testID1);
         int opIndex = -1; // placeholder; should not be used
-        OpOpIndexPair opPair = make_pair(IntrepidExtendedTypes::OPERATOR_VALUE,opIndex);
+        OpOpIndexPair opPair = make_pair( IntrepidExtendedTypes::OP_VALUE,opIndex);
         pair<pair<OpOpIndexPair,OpOpIndexPair>, int> entry = make_pair( make_pair(opPair,opPair), trialID);
         _testCombos[key].push_back(entry);
         if ( ! first) cout << " + ";

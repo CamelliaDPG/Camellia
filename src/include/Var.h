@@ -28,16 +28,16 @@ class Var { // really Var x Operator
   int _id;
   string _name;
   Space _fs;
-  EOperatorExtended _op; // default is OPERATOR_VALUE
+  IntrepidExtendedTypes::EOperatorExtended _op; // default is OP_VALUE
   VarType _varType;
-  //  map< EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
+  //  map< IntrepidExtendedTypes::EOperatorExtended, VarPtr > _relatedVars; // grad, div, etc. could be cached here
 public:
-  Var(int ID, int rank, string name, EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE,
+  Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
       Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE);
   
   int ID();
   const string & name();
-  EOperatorExtended op();
+  IntrepidExtendedTypes::EOperatorExtended op();
   int rank();  // 0 for scalar, 1 for vector, etc.
   Space space();
   VarType varType();

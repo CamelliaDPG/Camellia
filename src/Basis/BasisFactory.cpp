@@ -50,30 +50,30 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
 
 //define the static maps:
-map< pair< pair<int,int>, EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
+map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_polyOrders; // allows lookup of poly order used to create basis
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_ranks; // allows lookup of basis rank
-map< Basis<double,FieldContainer<double> >*, EFunctionSpaceExtended > BasisFactory::_functionSpaces; // allows lookup of function spaces
+map< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EFunctionSpaceExtended > BasisFactory::_functionSpaces; // allows lookup of function spaces
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_cellTopoKeys; // allows lookup of cellTopoKeys
 set< Basis<double,FieldContainer<double> >* > BasisFactory::_multiBases;
 map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > BasisFactory::_multiBasesMap;
 map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBases;
 set< Basis<double,FieldContainer<double> >* > BasisFactory::_patchBasisSet;
 
-BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
+BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
   int basisRank; // to discard
   return getBasis(basisRank,polyOrder,cellTopoKey,fs);
 }
 
 BasisPtr BasisFactory::getBasis(int &basisRank,
-                                int polyOrder, unsigned cellTopoKey, EFunctionSpaceExtended fs) {
+                                int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
 
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
     TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
   
   BasisPtr basis;
-  pair< pair<int,int>, EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   
   if ( _existingBasis.find(key) != _existingBasis.end() ) {
     basis = _existingBasis[key];
@@ -196,7 +196,7 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   }
   
   int polyOrder = 0;
-  EFunctionSpaceExtended fs;
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs;
   unsigned cellTopoKey;
   int basisRank;
   
@@ -266,8 +266,8 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
 }
 
 
-void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, EFunctionSpaceExtended fs ) {
-  pair< pair<int,int>, EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   if ( _existingBasis.find(key) != _existingBasis.end() ) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument, "Can't register a basis for which there's already an entry...");
   }
@@ -280,14 +280,14 @@ void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, 
 
 BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd) {
   int polyOrder = _polyOrders[basis.get()] + pToAdd;
-  EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
   int rank;
   return getBasis(rank, polyOrder, cellTopoKey, fs);
 }
 
 BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
-  EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
   int rank;
   return getBasis(rank, pToSet, cellTopoKey, fs);

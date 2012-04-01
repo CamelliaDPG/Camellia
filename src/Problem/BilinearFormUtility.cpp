@@ -312,12 +312,12 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
         
         int operatorIndex = -1;
         for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
-          EOperatorExtended trialOperator = *trialOpIt;
-          EOperatorExtended testOperator = *testOpIt;
+          IntrepidExtendedTypes::EOperatorExtended trialOperator = *trialOpIt;
+          IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
           operatorIndex++;
           
-          if (testOperator==OPERATOR_TIMES_NORMAL) {
-            TEST_FOR_EXCEPTION(true,std::invalid_argument,"OPERATOR_TIMES_NORMAL not supported for tests.  Use for trial only");
+          if (testOperator==OP_TIMES_NORMAL) {
+            TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
           }
           
           Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
@@ -515,7 +515,7 @@ void BilinearFormUtility::computeRHS(FieldContainer<double> &rhsVector,
 //      for (vector<EOperatorExtended>::iterator testOpIt=testOperators.begin();
 //           testOpIt != testOperators.end(); testOpIt++) {
 //        operatorIndex++;
-//        EOperatorExtended testOperator = *testOpIt;
+//        IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
 //        bool notZero = rhs.nonZeroRHS(testID);
 //        if (notZero) { // compute the integral(s)
 //          

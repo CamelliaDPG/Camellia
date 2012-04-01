@@ -32,8 +32,8 @@ public:
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
   
-  virtual EFunctionSpaceExtended functionSpaceForTest(int testID);
-  virtual EFunctionSpaceExtended functionSpaceForTrial(int trialID); 
+  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID);
+  virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID); 
   
   virtual bool isFluxOrTrace(int trialID);
   

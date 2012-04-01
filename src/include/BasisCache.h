@@ -57,6 +57,7 @@
 
 using namespace Intrepid;
 using namespace std;
+using namespace IntrepidExtendedTypes;
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
@@ -92,19 +93,19 @@ private:
   
   shards::CellTopology _cellTopo;
   
-  map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
+  map< pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValues;
   
-  map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
+  map< pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformed;
   
-  map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
+  map< pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedDottedWithNormal;
   
-  map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
+  map< pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedWeighted;
   
-  map< pair< Basis<double,FieldContainer<double> >*, EOperatorExtended >,
+  map< pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
   
   // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
@@ -124,15 +125,15 @@ public:
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
              FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
   
-  Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> getCellMeasures();
-  Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   
   // side variants:
-  Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
-  Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
+  Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
   const vector<int> & cellIDs();
   

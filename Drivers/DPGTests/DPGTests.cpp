@@ -68,6 +68,7 @@
 #include "ElementTests.h"
 #include "MeshRefinementTests.h"
 #include "RHSTests.h"
+#include "LinearTermTests.h"
 
 #include "Projector.h"
 #include "SimpleFunction.h"
@@ -128,6 +129,7 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests() ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests() ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests() ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests() ) );
@@ -2511,7 +2513,7 @@ bool DPGTests::testProjection(){
   Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
 
   int numDofs = basis->getCardinality();
-  EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE;
+  EOperatorExtended op = IntrepidExtendedTypes::OP_VALUE;
   FieldContainer<double> cubPoints = basisCache.getPhysicalCubaturePoints();    
   FieldContainer<double> basisValues = *(basisCache.getTransformedValues(basis, op));
   int numPts = cubPoints.dimension(1);

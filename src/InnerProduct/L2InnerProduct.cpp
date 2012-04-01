@@ -46,8 +46,8 @@ void L2InnerProduct::operators(int testID1, int testID2,
   testOp1.clear();
   testOp2.clear();
   if (testID1 == testID2) { //decouple the test inner products for each test function
-    testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
-    testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
+    testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);
   }
 }
 
@@ -108,8 +108,8 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
       vector<EOperatorExtended>::iterator op2It = trial2Operators.begin();
       int operatorIndex = 0;
       for (op1It=trial1Operators.begin(); op1It != trial1Operators.end(); op1It++) {
-        EOperatorExtended op1 = *(op1It);
-        EOperatorExtended op2 = *(op2It);
+        IntrepidExtendedTypes::EOperatorExtended op1 = *(op1It);
+        IntrepidExtendedTypes::EOperatorExtended op2 = *(op2It);
         FieldContainer<double> trial1Values; // these will be resized inside applyOperator..
         FieldContainer<double> trial2Values; // derivative values
         
@@ -219,8 +219,8 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
       vector<EOperatorExtended>::iterator op2It = trial2Operators.begin();
       int operatorIndex = 0;
       for (op1It=trial1Operators.begin(); op1It != trial1Operators.end(); op1It++) {
-        EOperatorExtended op1 = *(op1It);
-        EOperatorExtended op2 = *(op2It);
+        IntrepidExtendedTypes::EOperatorExtended op1 = *(op1It);
+        IntrepidExtendedTypes::EOperatorExtended op2 = *(op2It);
         
         trial1Basis = dofOrdering->getBasis(trialID1);
 	//        trial2Basis = dofOrdering->getBasis(trialID2);

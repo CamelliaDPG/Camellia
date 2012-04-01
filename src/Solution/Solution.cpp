@@ -683,7 +683,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
-  trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis,IntrepidExtendedTypes::OPERATOR_VALUE);
+  trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
   
   if (trialValuesTransformedWeighted->rank() != 3) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateBasisFunctions only supports scalar-valued field variables at present.");
@@ -836,7 +836,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   
   Teuchos::RCP < const FieldContainer<double> > trialValuesTransformedWeighted;
   
-  trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis,IntrepidExtendedTypes::OPERATOR_VALUE);
+  trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
   
   if (trialValuesTransformedWeighted->rank() != 3) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateSolution only supports scalar-valued field variables at present.");
@@ -1029,7 +1029,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
     thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
     thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
     Teuchos::RCP< FieldContainer<double> > transformedValues;
-    transformedValues = BasisEvaluation::getTransformedValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, 
+    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, 
                                                               sideRefCellPoints, thisCellJacobian, 
                                                               thisCellJacobInv, thisCellJacobDet);
     
@@ -1552,7 +1552,7 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP< FieldContainer<double> > basisValues;
-    basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoints);
+    basisValues = BasisEvaluation::getValues(basis,  OP_VALUE, refElemPoints);
     
     // now, apply coefficient weights:
     for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
@@ -1591,9 +1591,9 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 
     Teuchos::RCP<const FieldContainer<double> > transformedValues;
     if (weightForCubature) {
-      transformedValues = basisCache->getTransformedWeightedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+      transformedValues = basisCache->getTransformedWeightedValues(basis, OP_VALUE);
     } else {
-      transformedValues = basisCache->getTransformedValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE);
+      transformedValues = basisCache->getTransformedValues(basis, OP_VALUE);
     }
     
     const vector<int> *dofIndices = &(trialOrder->getDofIndices(trialID,sideIndex));
@@ -1622,7 +1622,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
   } else {
 
   // the following is due to the fact that we *do not* transform basis values.
-  EFunctionSpaceExtended fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
   TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
                      std::invalid_argument,
                      "This version of solutionValues only supports HVOL and HGRAD bases.");
@@ -1719,7 +1719,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
                        "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
     
     Teuchos::RCP< FieldContainer<double> > basisValues;
-    basisValues = BasisEvaluation::getValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, refElemPoint);
+    basisValues = BasisEvaluation::getValues(basis,  OP_VALUE, refElemPoint);
     
     // now, apply coefficient weights:
     for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
@@ -1824,7 +1824,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
     thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
     thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
     Teuchos::RCP< FieldContainer<double> > transformedValues;
-    transformedValues = BasisEvaluation::getTransformedValues(basis, IntrepidExtendedTypes::OPERATOR_VALUE, 
+    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, 
                                                               thisRefElemPoints, thisCellJacobian, 
                                                               thisCellJacobInv, thisCellJacobDet);
     

@@ -31,7 +31,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
 
   unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 
-  EOperatorExtended trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+  IntrepidExtendedTypes::EOperatorExtended trialOperator =  IntrepidExtendedTypes::OP_VALUE;
 	
   // loop over sides first 
   for (unsigned int sideIndex = 0; sideIndex<numSides; sideIndex++){

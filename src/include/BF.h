@@ -30,8 +30,8 @@ public:
   const string & testName(int testID);
   const string & trialName(int trialID);
   
-  EFunctionSpaceExtended functionSpaceForTest(int testID);
-  EFunctionSpaceExtended functionSpaceForTrial(int trialID);
+  IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID);
+  IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID);
   
   bool isFluxOrTrace(int trialID);
   

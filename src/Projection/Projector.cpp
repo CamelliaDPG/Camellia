@@ -38,7 +38,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   // do not build side caches - no projections for sides supported at the moment
   BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
   // assume only L2 projections
-  EOperatorExtended op = IntrepidExtendedTypes::OPERATOR_VALUE;
+  IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE;
 
   // have information, build inner product matrix
   int numDofs = basis->getCardinality();

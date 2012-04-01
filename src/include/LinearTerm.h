@@ -9,6 +9,7 @@
 #ifndef Camellia_LinearTerm_h
 #define Camellia_LinearTerm_h
 
+#include "Intrepid_Utils.hpp"
 #include "Intrepid_Basis.hpp"
 #include "Function.h"
 #include "Var.h"
@@ -42,7 +43,7 @@ public:
   const set<int> & varIDs() const;
   
   VarType termType() const;
-  //  vector< EOperatorExtended > varOps(int varID);
+  //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)

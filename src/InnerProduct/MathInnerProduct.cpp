@@ -44,25 +44,25 @@ void MathInnerProduct::operators(int testID1, int testID2,
   testOp1.clear();
   testOp2.clear();
   if (testID1 == testID2) {
-    EOperatorExtended dOperator;
+    IntrepidExtendedTypes::EOperatorExtended dOperator;
     if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
-      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
-      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+      testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
+      testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);
     } else {
       if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
-        dOperator = IntrepidExtendedTypes::OPERATOR_GRAD;
+        dOperator = IntrepidExtendedTypes::OP_GRAD;
       } else if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
-        dOperator = IntrepidExtendedTypes::OPERATOR_DIV;
+        dOperator = IntrepidExtendedTypes::OP_DIV;
       } else if (_bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
-        dOperator = IntrepidExtendedTypes::OPERATOR_CURL;
+        dOperator = IntrepidExtendedTypes::OP_CURL;
       } else if ( _bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD ) {
-        dOperator = IntrepidExtendedTypes::OPERATOR_GRAD; // will the integration routine do the right thing here??
+        dOperator = IntrepidExtendedTypes::OP_GRAD; // will the integration routine do the right thing here??
       } else {
         TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown test space.");
       }
-      testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+      testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
       testOp1.push_back(dOperator);
-      testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+      testOp2.push_back( IntrepidExtendedTypes::OP_VALUE);
       testOp2.push_back(dOperator);
     }
   }

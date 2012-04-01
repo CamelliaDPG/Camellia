@@ -94,8 +94,8 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
       vector<EOperatorExtended>::iterator op2It = test2Operators.begin();
       int operatorIndex = 0;
       for (op1It=test1Operators.begin(); op1It != test1Operators.end(); op1It++) {
-        EOperatorExtended op1 = *(op1It);
-        EOperatorExtended op2 = *(op2It);
+        IntrepidExtendedTypes::EOperatorExtended op1 = *(op1It);
+        IntrepidExtendedTypes::EOperatorExtended op2 = *(op2It);
         FieldContainer<double> test1Values; // these will be resized inside applyOperator..
         FieldContainer<double> test2Values; // derivative values
         
