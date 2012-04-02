@@ -433,7 +433,7 @@ Similarly, from $\div \tau - \beta\cdot \grad v = g$, we get $\|\div \tau\| \les
 \|\grad v\| = \frac{1}{\epsilon}\|\tau\| &\lesssim \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
 \end{align*}
 \end{itemize}
-Together, these estimates will be sufficient to complete the first step and demonstrate bounds on induced test norms for different scalings of norms on $U$.  
+Together, these estimates will be sufficient to construct a norm on $V$ and demonstrate bounds on induced test norms for different scalings of norms on $U$.  
 
 \section{Relations between energy and $U$ norms}
 
@@ -460,7 +460,7 @@ where $\|\cdot \|_{U_2}$ is defined as
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U_2}^2 \coloneqq \|u\|^2 + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
 While the upper bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U_2}$.  This implying that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error.  However, \textcolor{red}{explain why this is OK practically.}
-Additionally, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to the canonical norms we have chosen on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$. 
+Additionally, numerical experiments demonstrate much better results, and suggest that, at least for our examples, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
 
 \subsection{Bound from below}
 
@@ -778,8 +778,6 @@ It's worth addressing the effect of boundary conditions on stability.  Specifica
 \|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
 \]
 where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \in (0,1)$ is required to vanish on $\Gamma_-$ and satisfy $\grad w = O(1)$.  
-
-\textcolor{red}{Explain how energy norm convergence in $\|u\| + \epsilon \|u'\|$ returns bad results, and the need for an $O(1)$ term in the test norm.}	
 
 The need for the weight is intuitively explained by the induced adjoint problem.  The bilinear form for the Dirichlet case is 
 \[
