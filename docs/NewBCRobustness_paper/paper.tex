@@ -120,11 +120,11 @@ Standard Bubnov-Galerkin methods tend to perform poorly for the class of partial
 \[
 \|u-u_h\|_E \leq C(\epsilon) \inf_{w_h}\|u-w_h\|_U
 \]
-The growth of $C$ with $\epsilon$ is referred to as a loss of robustness, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely to the best approximation error, allowing for degradation of the solution   
+The growth of $C$ with $\epsilon$ is referred to as a loss of robustness, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely by the best approximation error, allowing for degradation of the solution for very small $\epsilon$.  
 
 A well-known example is the growth of spurious oscillations in the finite element solution of the 1D convection-diffusion problem $ u'-\epsilon u'' = f$ (with Dirichlet boundary conditions) as $\epsilon\rightarrow 0$.  Another class of examples are wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$.  The lack of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths (commonly manifesting as a phase error between the FE solution and the exact solution).  
 
-Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form $b(u,v) - l(v)=0$, the problem is modified by adding to the bilinear form a factor of the residual $r(v) = b(u,v) - l(v)=0$, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  
+Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form, the problem is modified by adding to the bilinear form a factor of the residual, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  
 
 The addition of residual-based stabilization terms can also be interpreted as a modification of the test functions - in other words, stabilization can be achieved by changing the test space for a given problem.  This idea can be generalized under the idea of \textit{optimal test functions}.  
 
@@ -167,7 +167,7 @@ This is simply a consequence of the least-squares nature of DPG; the energy erro
 
 \subsection{Variational form}
 
-The DPG (discontinuous Petrov-Galerkin) method is the combination of the concept of computable optimal test functions with the so-called ``ultra-weak formulation", where the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybridized DG method with locally supported optimal test functions.  For a given operator equation $Au = f$, the ultra-weak formulation is 
+The DPG (discontinuous Petrov-Galerkin) method is the pairing of the concept of computable optimal test functions with the so-called ``ultra-weak formulation", where the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybridized DG method with locally supported optimal test functions.  For a given operator equation $Au = f$, the ultra-weak formulation is 
 \[
 b\left(\left(\widehat{u},u\right),v\right) - l(v) = \langle \widehat{u}, [v] \rangle - (u,A^*v) - (f,v) = 0
 \]
@@ -206,7 +206,7 @@ where the norm on $\widehat{u}$ is taken to be the minimum energy extension norm
 \]
 Then, the induced test norm is 
 \begin{align*}
-\|v\|_{\rm opt} &= \sup_{u,\widehat{u}} \frac{\langle \widehat{u}, [v] \rangle - (u,A^*v)}{C_1\|u\|_{L^2} + C_2\|\widehat{u}\|} \\
+\|v\| &= \sup_{u,\widehat{u}} \frac{\langle \widehat{u}, [v] \rangle - (u,A^*v)}{C_1\|u\|_{L^2} + C_2\|\widehat{u}\|} \\
 &\leq \frac{1}{C_1}\sup_{u} \frac{(u,A^*v)}{\|u\|_{L^2}} + \frac{1}{C_2}\sup_{\widehat{u}} \frac{\langle \widehat{u}, [v] \rangle}{\|\widehat{u}\|}\\
 &= \frac{1}{C_1}\|A^*v\|_{L^2} + \frac{1}{C_2}\sup_{\widehat{u}} \frac{\langle \widehat{u}, [v] \rangle}{\|\widehat{u}\|}
 \end{align*}
@@ -214,9 +214,13 @@ where we have used the Cauchy-Schwarz inequality, and eliminated the supremum by
 \[
 \|u\|_{\rm opt} = \|u\|_{L^2} + \|\widehat{u}\|.
 \]
-This is, in some sense, the ideal or ``optimal" test norm; given any particular norm $\|u\|_U$, DPG under the optimal test norm will return the best finite element approximation in both field and flux variables, independently of any parameters
+which induces the so-called ``optimal test norm"
+\[
+\|v\|_{\rm opt} = \|A^*v\|_{L^2} + \left(\sup_{\widehat{u}} \frac{\langle \widehat{u}, [v] \rangle}{\|\widehat{u}\|}\right)
+\]
+This is, in some sense, the canonical or ideal test norm; given any well-posed variational problem, DPG under the optimal test norm will return the best finite element approximation in both field and flux variables. 
 
-The norm $\|v\|_{\rm opt}$ is non-localizable, however - the above ``optimal" test norm is induced by an inner product; however, this inner product is a global one due to the presence of the jump terms.  Solving for optimal test functions under this optimal norm through inversion of this inner product  will result in expensive global problems, making this an impractical norm to work with.  
+The norm $\|v\|_{\rm opt}$ is non-localizable, however - the optimal test norm is induced by a global inner product due to the presence of the jump terms.  Solving for optimal test functions under this optimal norm (through inversion of Riesz map correspdongin to this inner product) will result in expensive global problems, making this an impractical norm to work with.  
 
 In practice, an approximation is made by removing such boundary terms and replacing them with scaled $L^2$ norms of the field variables, producing so-called \textit{quasi-optimal} test norm
 \[
@@ -773,7 +777,9 @@ Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting 
 
 \subsection{Comparison of boundary conditions}
 
-It's worth addressing the effect of boundary conditions on stability.  Specifically, a test norm that provides stability for one set of boundary conditions may perform poorly for another set of boundary conditions.  The bilinear form for the case of Dirichlet boundary conditions is 
+It's worth addressing the effect of boundary conditions on stability.  Specifically, a test norm that provides stability for one set of boundary conditions may perform poorly for another set.  Take, for example, the test norm defined in Section~\ref{sec:main_bounds} and the convection-diffusion problem with Dirichlet boundary conditions. 
+
+The bilinear form for the case of Dirichlet boundary conditions is 
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) + \langle \widehat{u}, \left[\tau \cdot n\right] \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h}
 \]
@@ -837,7 +843,11 @@ implying that
 \begin{align*}
 \frac{\epsilon}{2} v'(0)^2 + \|v'\|_{L^2}^2 & \lesssim \|g\| 
 \end{align*}
-Let us restrict ourselves to the cases where $v$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$, we can solve \eqref{adjoint_1D} exactly to see that $\epsilon v'(0)^2 = O(\epsilon^{-1})$, indicating a lack of robustness\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}.
+Let us restrict ourselves to the cases where $v$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$ (corresponding to a piecewise constant approximation) we can solve \eqref{adjoint_1D} exactly to see that 
+\[
+v = \frac{e^{-\frac{x}{\epsilon}}}{e^{\frac{1}{\epsilon}}-1}\left(e^{\frac{1}{\epsilon}}\left(e^{\frac{x}{\epsilon}}-1\right) + \left(e^{\frac{1}{\epsilon}}-1\right)e^{\frac{x}{\epsilon}}x\right)
+\]
+Consequently, $\frac{\epsilon}{2} v'(0)^2 \approx \epsilon^{-1}$, indicating already a lack of robustness in the bound of $\|v'\|$ by $\|g\|$ for constant data\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}. The robust bound from below of $g$ constant corresponds to the robust control of the approximation of field variable $u$ by piecewise constant trial functions. More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and also indicate a lack of robustness when using the standard broken Sobolev norm as the test norm on $\tau$ and $v$. 
 
 Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. An interesting phenomenon observed is that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
