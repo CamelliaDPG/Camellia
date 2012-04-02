@@ -152,7 +152,9 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   pair<int,int> key = make_pair(varID, sideIndex);
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
   if ( entryIt != indices.end() ) {
-    return ((*entryIt).second)[basisDofOrdinal];
+    int dofIndex = ((*entryIt).second)[basisDofOrdinal];
+    TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
+    return dofIndex;
   } else {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
     return -1;
