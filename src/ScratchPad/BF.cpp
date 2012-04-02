@@ -121,7 +121,7 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
         
         for (trialIt= trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
           int trialID = *trialIt;
-          trialBasis = trialOrdering->getBasis(trialID);
+          trialBasis = trialOrdering->getBasis(trialID,sideIndex);
           int numDofsTrial = trialBasis->getCardinality();
           
           // set up values container for test2:
