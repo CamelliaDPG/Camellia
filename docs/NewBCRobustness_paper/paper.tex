@@ -436,7 +436,7 @@ Similarly, from $\div \tau - \beta\cdot \grad v = g$, we get $\|\div \tau\| \les
 Together, these estimates will be sufficient to construct a norm on $V$ and demonstrate bounds on induced test norms for different scalings of norms on $U$.  
 
 \section{Relations between energy and $U$ norms}
-
+\label{sec:main_bounds}
 The primary result of this paper is that, if $\beta$ satisfies \ref{a_req},\ref{b_req}, and \ref{c_req}, the DPG method provides robust control over the $L^2$ error in $u$ and $\sigma$
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{U_1} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h \right\|_{E}
@@ -773,37 +773,32 @@ Applying the above estimates for $\|\psi\|$ and $\|n\cdot \curl z\|$ and noting 
 
 \subsection{Comparison of boundary conditions}
 
-It's worth addressing the effect of boundary conditions on stability.  Specifically, a test norm that provides stability for one set of boundary conditions may perform poorly for another set of boundary conditions.  Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
+It's worth addressing the effect of boundary conditions on stability.  Specifically, a test norm that provides stability for one set of boundary conditions may perform poorly for another set of boundary conditions.  The bilinear form for the case of Dirichlet boundary conditions is 
 \[
-\|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) + \langle \widehat{u}, \left[\tau \cdot n\right] \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h}
 \]
-where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \in (0,1)$ is required to vanish on $\Gamma_-$ and satisfy $\grad w = O(1)$.  
+Notice that the final bilinear form is different; hence, the adjoint problems associated with Section~\ref{sec:strategy3} will now carry different boundary conditions as well.  The stability properties proven here 
+%We note that 
+%\begin{align*}
+%b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h} 
+%&= \| u \|^2_{L^2}
+%\end{align*}
+%for the specific continuous test functions $\tau$ and $v$ satisfying
+%\begin{align*}
+%\div \tau - \beta \cdot \grad v &= u \\
+%\frac{1}{\epsilon}\tau + \grad v &= 0
+%\end{align*}
+%with boundary condition $\left.v\right|_\Gamma = 0$. Choosing a continuous conforming test function $v$ removes the contribution of the term $\langle \widehat{f}_n, \left[v\right] \rangle$ on the mesh skeleton, while the boundary conditions remove the contribution of boundary terms from the bilinear form.  Then, for this specific choice of $\left(\tau, v\right)$, 
+%\begin{align*}
+%\|u\|_{L^2}^2 &= b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \frac{b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right)}{\|\left(\tau, v\right)\|_V}\|\left(\tau, v\right)\|_V \leq \|u\|_E \|\left(\tau, v\right)\|_V
+%\end{align*}
+%At minimum, we want $\|u\|_{L^2} \lesssim \|u\|_E$, which requires 
+%\[
+%\|\left(\tau, v\right)\|_V \lesssim \| u \|_{L^2}
+%\]
+%for any choice of $u \in L^2$ (dividing through by $\|u\|_{L^2}$ gives the desired result).  This can be considered a ``sanity check"; at the minimum, we at least want control over the behavior of the single field variable $u$.  However, we are unable to prove this in the case of Dirichlet boundary conditions. 
+The robust bounds given in Section~\ref{sec:main_bounds} hold in arbitrary dimension; however, we can show that for the case of Dirichlet boundary conditions, the same results will not hold, even in 1D.  
 
-The need for the weight is intuitively explained by the induced adjoint problem.  The bilinear form for the Dirichlet case is 
-\[
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) + \langle \widehat{f}_n, \left[v\right] \rangle
-\]
-We note that 
-\begin{align*}
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h} 
-&= \| u \|^2_{L^2}
-\end{align*}
-for the specific continuous test functions $\tau$ and $v$ satisfying
-\begin{align*}
-\div \tau - \beta \cdot \grad v &= u \\
-\frac{1}{\epsilon}\tau + \grad v &= 0
-\end{align*}
-with boundary condition $\left.v\right|_\Gamma = 0$. Choosing a continuous conforming test function $v$ removes the contribution of the term $\langle \widehat{f}_n, \left[v\right] \rangle$ on the mesh skeleton, while the boundary conditions remove the contribution of boundary terms from the bilinear form.  Then, for this specific choice of $\left(\tau, v\right)$, 
-\begin{align*}
-\|u\|_{L^2}^2 &= b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \frac{b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right)}{\|\left(\tau, v\right)\|_V}\|\left(\tau, v\right)\|_V \leq \|u\|_E \|\left(\tau, v\right)\|_V
-\end{align*}
-At minimum, we want $\|u\|_{L^2} \lesssim \|u\|_E$, which requires 
-\[
-\|\left(\tau, v\right)\|_V \lesssim \| u \|_{L^2}
-\]
-for any choice of $u \in L^2$ (dividing through by $\|u\|_{L^2}$ gives the desired result).  This can be considered a ``sanity check"; at the minimum, we at least want control over the behavior of the single field variable $u$.  However, we are unable to prove this in the case of Dirichlet boundary conditions. Consider the convection-diffusion problem in 1D
-
-\textcolor{red}{add 1D issue with control over $\|v'\|$ here}
 In 1D, the problem reduces to 
 \begin{align*}
 \frac{1}{\epsilon}\sigma - u' &= 0\\
@@ -814,24 +809,49 @@ with bilinear form
 b\left(\left(u,\sigma,\widehat{u},\widehat{f}\right),\left(\tau,v\right)\right) &= \sum_{k=1}^N \left(\left.\widehat{u}(x) \tau(x)\right |^{x_k}_{x_{k-1}} + \left.\widehat{f}(x) v(x)\right |^{x_k}_{x_{k-1}}\right) \\
 &+ \left(\sigma,\epsilon^{-1}\tau\right)_{\Omega_h} + (u,\tau')_{\Omega_h}- \left(u - \epsilon \sigma,v'\right)_{\Omega_h}
 \end{align*}
-where $\widehat{u}(x), \widehat{f}(x) \in \mathbb{R}$ are now point values defined on mesh points $x_k$ for $k=1,\ldots,N$, where there are $N$ elements.
-A norm for $\|u\|_U = \|u\|_{L^2} + \|\sigma\|_{L^2} + \|\widehat{u}\|+ \|\widehat{f}\|$, as the fluxes are simply point values in 1D.  
+where $\widehat{u}(x), \widehat{f}(x) \in \mathbb{R}$ are now point values defined on mesh points $x_k$ for $k=1,\ldots,N$, where there are $N$ elements.  We can assume without loss of generality that $\Omega_h$ is the unit interval $(0,1)$.  A norm for can be defined through $$\|u\|_U = C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right),$$ as the fluxes are simply point values in 1D.  
 The induced norm $\|\left(\tau,v\right)\|_{V,U}$ is
 \begin{align*}
-\|\left(\tau,v\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}\right)} \frac{ \sum_k \left(\widehat{u}(x_k) [\tau(x_k)] + \widehat{f}(x_k) [v(x_k)]\right)+ \left(\sigma,\epsilon^{-1}\tau + v'\right)_{\Omega_h} + (u,\tau'-v')_{\Omega_h}}{\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right) + \|u\|_{L^2} + \|\sigma\|_{L^2} }
+\|\left(\tau,v\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}\right)} \frac{ (u,\tau'-v')_{\Omega_h}+ \left(\sigma,\epsilon^{-1}\tau + v'\right)_{\Omega_h}+\sum_k \left(\widehat{u}(x_k) [\tau(x_k)] + \widehat{f}(x_k) [v(x_k)]\right)}{C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right)}\\
+&\leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sum_k \left([\tau(x_k)] +[v(x_k)]\right)
 \end{align*}
+for $f = \epsilon^{-1}\tau + v'$ and $g = \tau'-v'$.
 
-
-
-Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. It may be of interest to note that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow.  The presence of the new boundary condition relaxes the outflow boundary condition for the adjoint/dual problem, resulting in stronger stability for the primal problem.  
-
-We improve upon the result of Demkowicz and Heuer not by modifying the test norm, but by adopting a new inflow boundary condition, which changes the stability properties of the corresponding adjoint equation. Under these new boundary conditions, we can prove robust control over $\|u\|_{L^2}$ using the unweighted version of the test norm in \cite{DPGrobustness}
+Consider now the 1D analogue of the estimate given by Lemma~\ref{lemma_stream}, which is necessary for robust control over the error in $\|u\|_{L^2}$.  In 1D, $\|\beta\cdot\grad v\| \lesssim \|g\|$ reduces to the inequality 
 \[
-\|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
+\|v'\|\lesssim \|g\|, \quad g\in L^2{\Omega_h}
 \]
-This test norm is implied by certain norm ``building blocks"; stability analysis of the adjoint equation allows us to bound from above norms and seminorms on $v$ and $\tau$ by $\|f\|_{L^2}$ and $\|g\|_{L^2}$ in ways that do not grow as $\epsilon \rightarrow 0$, and we assemble the test norm as combinations of such norms and seminorms on $v$ and $\tau$.  
+The adjoint problem corresponding to Lemma~\ref{lemma_stream} in section~\ref{sec:strategy3} is likewise reduced in 1D to the scalar equation
+\begin{align}
+\epsilon v'' + v' &= -g \label{adjoint_1D}
+\end{align}
+with $v\in H^1_0\left((0,1)\right)$.  Multiplying this equation by $v'$ and integrating over $\Omega_h$ gives
+\[
+\int_0^1 \epsilon v''v' + \|v'\|_{L^2}^2 = -\int_0^1 g v'
+\]
+Integrating by parts and Young's inequality give
+\begin{align*}
+-\left.\frac{\epsilon}{2} v'^2\right|_0^1 + \|v'\|_{L^2}^2 &\leq \frac{1}{2}\|g\| + \frac{1}{2}\|v'\|
+\end{align*}
+implying that
+\begin{align*}
+\frac{\epsilon}{2} v'(0)^2 + \|v'\|_{L^2}^2 & \lesssim \|g\| 
+\end{align*}
+Let us restrict ourselves to the cases where $v$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$, we can solve \eqref{adjoint_1D} exactly to see that $\epsilon v'(0)^2 = O(\epsilon^{-1})$, indicating a lack of robustness\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}.
 
-\textcolor{red}{Move this to after the proof of the streamline gradient lemma.}	
+Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. An interesting phenomenon observed is that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
+\[
+\|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
+\]
+where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \in (0,1)$ is required to vanish on $\Gamma_-$ and satisfy $\grad w = O(1)$. The need for the weight is necessary to account for the loss of robustness at the inflow.}.  The presence of the new boundary condition relaxes the outflow boundary condition for the adjoint/dual problem, resulting in stronger stability estimates for the adjoint, and a better robustness result for the primal problem.  
+
+
+
+%We improve upon the result of Demkowicz and Heuer not by modifying the test norm, but by adopting a new inflow boundary condition, which changes the stability properties of the corresponding adjoint equation. Under these new boundary conditions, we can prove robust control over $\|u\|_{L^2}$ using the unweighted version of the test norm in \cite{DPGrobustness}
+%\[
+%\|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
+%\]
+%This test norm is implied by certain norm ``building blocks"; stability analysis of the adjoint equation allows us to bound from above norms and seminorms on $v$ and $\tau$ by $\|f\|_{L^2}$ and $\|g\|_{L^2}$ in ways that do not grow as $\epsilon \rightarrow 0$, and we assemble the test norm as combinations of such norms and seminorms on $v$ and $\tau$.  
 
 \section{Numerical experiments}
 
