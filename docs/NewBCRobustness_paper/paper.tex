@@ -130,7 +130,7 @@ where $C(\epsilon)$ grows as $\epsilon$ approaches its limiting case. The growth
 
 Another example of a singular perturbation problem which experiences loss of robustness is high frequency wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$. The loss of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths for high wavenumbers (commonly manifesting as a phase error between the FE solution and the exact solution).  
 
-Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form, the problem is modified by adding to the bilinear form a factor of the residual, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  \textcolor{red}{TO DO: give motivations for consistency (converges to same solution) of stabilization terms vs artificial diffusion type stabilization and, show how consistency gives a Petrov-Galerkin method}
+Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form, the problem is modified by adding to the bilinear form a factor of the residual, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  An important difference between residual-based stabilization techniques and other stabilizations is the idea of \textit{consistency} - by adding stabilization terms based on the residual, the exact solution still satisfies the same variational problem (i.e Galerkin orthogonality still holds)\footnote{Contrast this to an artificial diffusion method, where a specific amount of additional viscosity is added based on the interplay between the convection and diffusion terms. The exact solution to the original equation no longer satisfies the new stabilized formulation.}.
 
 The addition of residual-based stabilization terms can also be interpreted as a modification of the test functions - in other words, stabilization can be achieved by changing the test space for a given problem.  This idea can be generalized under the idea of \textit{optimal test functions}.  
 
@@ -276,7 +276,7 @@ where $\left[ \tau_n \right]$ and $\left[ v\right]$ denote the jumps in $\tau_n$
 \left[ \tau_n \right] &= \tau^+ \cdot n^+ + \tau^-\cdot n^-\\
 \left[ v\right] &= v^+{\rm sgn}(n^+) + v^-{\rm sgn}(n^-)
 \end{align*}
-where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a preset global orientation, and $-1$ otherwise. \textcolor{red}{I need to find more simple way to explain sgn}.
+where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a given global orientation, and $-1$ otherwise. \textcolor{red}{I need to find more simple way to explain sgn}.
 
 Additionally, the inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Similarly, we define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$. The divergence and gradient operators are likewise understood to act element-wise. 
 
@@ -357,18 +357,14 @@ The main goal of this paper is to derive a test norm that \textit{does not induc
 %\left\|\left(\tau,v\right)\right\|_V = \|\tau\|_{H({\rm div},\Omega_h)} +  \|v\|_{H^1(\Omega_h)}.
 %\]
 %where $\|\tau\|_{H({\rm div},\Omega_h)}$ and $ \|v\|_{H^1(\Omega_h)}$ are both constructed as the sum of norm and seminorms on each respective space.  Ensuring that each seminorm/normed term is of the same order will allow for smooth solutions (under some assumptions on $\beta$).  
-The avoidance of boundary layers in the test norm will be described in more detail in the section detailing numerical experiments.  
-\textcolor{red}{Why are we allowed to have $\beta\cdot \grad v$ of order 1 while we have other terms of order $O({\rm Pe})$?  Why does this term not induce boundary layers?}. We focus first on showing the condition on robustness. Such a condition is equivalent to showing the robust boundedness of the energy error from above and below by norms on $U$ 
+The avoidance of boundary layers in the test norm will be described in more detail in the section detailing numerical experiments. We focus first on quantifying the condition on robustness. Such a condition is equivalent to showing the robust boundedness of the energy error from above and below by norms on $U$ 
 \[
 \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}
 \]
-where $\lesssim$ denotes a bound by a constant that will not grow as $\epsilon \rightarrow 0$.  
-%$\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_U \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E$.
-
-Intuitively, 
-  
+where $\lesssim$ denotes a bound by a constant that will not grow as $\epsilon \rightarrow 0$. %The robust bound on the error in $\|\cdot\|_E$ from below by error in $\|\cdot\|_{U,1}$ is crucial to avoiding the instabilities associated with loss of robustness - 
 \textcolor{red}{Explain in intuitive terms what the bounds above and below mean.}
 Our goal is to explicitly derive the norms $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ that characterize this relation, taking into account the limiting case of $\epsilon \rightarrow 0$. 
+
 Our strategy for doing so is broken down into three parts.  
 
 \subsection{Equate relations between norms on $U$ and norms on $V$}
@@ -506,8 +502,7 @@ where $\|\cdot \|_{U,2}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,2}^2 \coloneqq \|u\|^2 + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
-While the upper bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error.  However, \textcolor{red}{explain why this is OK practically.}
-Additionally, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm is equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
+While the upper bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error (in this sense, DPG may lose some efficiency for small $\epsilon$, though it is still guaranteed against losing robustness and stability). However, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm may be equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
 
 \subsection{Bound from below}
 
@@ -826,7 +821,7 @@ The bilinear form for the case of Dirichlet boundary conditions is
 \[
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) + \langle \widehat{u}, \left[\tau \cdot n\right] \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h}
 \]
-Notice that the boundary terms in the final bilinear form are different; hence, the adjoint problems associated with Section~\ref{sec:strategy3} will now carry different boundary conditions as well. Likewise, the stability properties proven previously will not hold under a different set of boundary conditions.  
+%Notice that the boundary terms in the final bilinear form are different; hence, the adjoint problems associated with Section~\ref{sec:strategy3} will now carry different boundary conditions as well. Likewise, the stability properties proven previously will not hold under a different set of boundary conditions.  
 %We note that 
 %\begin{align*}
 %b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_h} 
@@ -846,6 +841,7 @@ Notice that the boundary terms in the final bilinear form are different; hence, 
 %\|\left(\tau, v\right)\|_V \lesssim \| u \|_{L^2}
 %\]
 %for any choice of $u \in L^2$ (dividing through by $\|u\|_{L^2}$ gives the desired result).  This can be considered a ``sanity check"; at the minimum, we at least want control over the behavior of the single field variable $u$.  However, we are unable to prove this in the case of Dirichlet boundary conditions. 
+
 The robust bounds given in Section~\ref{sec:main_bounds} hold in arbitrary dimension; however, we can show that for the case of Dirichlet boundary conditions, the same results will not hold, even in 1D.  
 
 In 1D, the problem reduces to 
@@ -858,13 +854,15 @@ with bilinear form
 b\left(\left(u,\sigma,\widehat{u},\widehat{f}\right),\left(\tau,v\right)\right) &= \sum_{k=1}^N \left(\left.\widehat{u}(x) \tau(x)\right |^{x_k}_{x_{k-1}} + \left.\widehat{f}(x) v(x)\right |^{x_k}_{x_{k-1}}\right) \\
 &+ \left(\sigma,\epsilon^{-1}\tau\right)_{\Omega_h} + (u,\tau')_{\Omega_h}- \left(u - \epsilon \sigma,v'\right)_{\Omega_h}
 \end{align*}
-where $\widehat{u}(x), \widehat{f}(x) \in \mathbb{R}$ are now point values defined on mesh points $x_k$ for $k=1,\ldots,N$, where there are $N$ elements.  We can assume without loss of generality that $\Omega_h$ is the unit interval $(0,1)$.  A norm for can be defined through $$\|u\|_U = C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right),$$ as the fluxes are simply point values in 1D.  
-The induced norm $\|\left(\tau,v\right)\|_{V,U}$ is
-\begin{align*}
-\|\left(\tau,v\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}\right)} \frac{ (u,\tau'-v')_{\Omega_h}+ \left(\sigma,\epsilon^{-1}\tau + v'\right)_{\Omega_h}+\sum_k \left(\widehat{u}(x_k) [\tau(x_k)] + \widehat{f}(x_k) [v(x_k)]\right)}{C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right)}\\
-&\leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sum_k \left([\tau(x_k)] +[v(x_k)]\right)
-\end{align*}
-for $f = \epsilon^{-1}\tau + v'$ and $g = \tau'-v'$.
+where $\widehat{u}(x), \widehat{f}(x) \in \mathbb{R}$ are now point values defined on mesh points $x_k$ for $k=1,\ldots,N$, where there are $N$ elements.  We can assume without loss of generality that $\Omega_h$ is the unit interval $(0,1)$.  
+
+%A norm for can be defined through $$\|u\|_U = C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right),$$ as the fluxes are simply point values in 1D.  
+%The induced norm $\|\left(\tau,v\right)\|_{V,U}$ is
+%\begin{align*}
+%\|\left(\tau,v\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}\right)} \frac{ (u,\tau'-v')_{\Omega_h}+ \left(\sigma,\epsilon^{-1}\tau + v'\right)_{\Omega_h}+\sum_k \left(\widehat{u}(x_k) [\tau(x_k)] + \widehat{f}(x_k) [v(x_k)]\right)}{C_1\|u\|_{L^2} + C_2\|\sigma\|_{L^2} + C_3\sum_k \left(|\widehat{u}|+ |\widehat{f}|\right)}\\
+%&\leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sum_k \left([\tau(x_k)] +[v(x_k)]\right)
+%\end{align*}
+%for $f = \epsilon^{-1}\tau + v'$ and $g = \tau'-v'$.
 
 Consider now the 1D analogue of the estimate given by Lemma~\ref{lemma_stream}, which is necessary for robust control over the error in $\|u\|_{L^2}$.  In 1D, $\|\beta\cdot\grad v\| \lesssim \|g\|$ reduces to the inequality 
 \[
@@ -892,13 +890,11 @@ v(x) = \frac{e^{-\frac{x}{\epsilon}}}{e^{\frac{1}{\epsilon}}-1}\left(e^{\frac{1}
 \]
 Plotting the solution shows that $v$ develops strong boundary layers of width $\epsilon$ near the inflow. Consequently, $\frac{\epsilon}{2} v'(0)^2 \approx \epsilon^{-1}$, indicating already a lack of robustness in the bound of $\|v'\|$ by $\|g\|$ for constant data\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}. The robust bound from below of $g$ constant corresponds to the robust control of the approximation of field variable $u$ by piecewise constant trial functions. More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and also indicate a lack of robustness when using the standard broken Sobolev norm as the test norm on $\tau$ and $v$. 
 
-Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx O(\epsilon^{-1})$. An interesting phenomenon observed is that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
+Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx \epsilon \|\grad v\|^2 \approx O(\epsilon^{-1})$. An interesting phenomenon observed is that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
 \|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
 \]
 where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \in (0,1)$ is required to vanish on $\Gamma_-$ and satisfy $\grad w = O(1)$. The need for the weight is necessary to account for the loss of robustness at the inflow.}.  The presence of the new boundary condition relaxes the outflow boundary condition for the adjoint/dual problem, resulting in stronger stability estimates for the adjoint, and a better robustness result for the primal problem.  
-
-
 
 %We improve upon the result of Demkowicz and Heuer not by modifying the test norm, but by adopting a new inflow boundary condition, which changes the stability properties of the corresponding adjoint equation. Under these new boundary conditions, we can prove robust control over $\|u\|_{L^2}$ using the unweighted version of the test norm in \cite{DPGrobustness}
 %\[
@@ -912,7 +908,20 @@ In our numerical experiments, we will be interested in the use of the unweighted
 \[
 \|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2
 \]
-However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and similarly $\|\div \tau\|$ and $\frac{1}{\epsilon}\|\tau\|$ terms, induces boundary layers in the optimal test functions, though only in the crosswind direction.  To avoid this effect, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ and $\tau$ such that, when transformed to the reference element, both $v$ and $\grad v$ terms are $O(1)$.  In this paper, we consider only isotropic refinements on quadrilateral elements, such that $h_1 = h_2 = h$, and $|K| = h^2$. Our test norm for an element $K$ is now
+However, the presence of both $\|v\|$ and $\epsilon\|\grad v\|$ terms, and similarly $\|\div \tau\|$ and $\frac{1}{\epsilon}\|\tau\|$ terms, induces boundary layers in the optimal test functions. We can see this by recovering the strong form of the variational problem defining test functions. Assume first that $\tau = 0$. Then, assuming $\div \beta = 0$ for illustrative purposes, we have 
+\begin{align*}
+\left(\left(0,v\right),\left(\delta\tau,\delta v\right)\right)_{V} &= (v,\delta v) + \epsilon \left(\grad v,\grad \delta v\right) + \left(\beta \cdot \grad v, \beta \cdot \grad \delta v\right)\\
+&= \left(v - \epsilon \Delta v - \div \left(\left(\beta \otimes \beta\right) \grad v\right), \delta v\right)_{L^2} + \langle \epsilon \grad v\cdot n, \delta v\rangle + \langle n\cdot \left(\beta\otimes\beta\right) \grad v , \delta v\rangle
+\end{align*}
+after integration by parts, recovering the strong form of the operator $L$ inducing such a variational problem 
+\[
+Lv \coloneqq v - \epsilon \Delta v - \div \left(\left(\beta \otimes \beta\right) \grad v\right)
+\]
+The streamline direction $\beta$ induces an anisotropic diffusion, while the $\epsilon\|\grad v\|_{L^2}$ term induces a small isotropic diffusion contribution everywhere. Any vector in the cross-stream direction is in the null space of the anisotropic diffusion tensor, such that in the cross-stream directions, the optimal test function is governed only by the cross-stream part of the operator $L$
+\[
+L_{\rm cross} \coloneqq v - \epsilon \Delta v 
+\]
+and may develop boundary layers of width $\epsilon$ in those directions. To avoid boundary layers in the optimal test functions, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ and $\tau$ such that, when transformed to the reference element, both $v$ and $\grad v$ terms are $O(1)$.  In this paper, we consider only isotropic refinements on quadrilateral elements in 2D, such that $h_1 = h_2 = h$, and $|K| = h^2$. Our test norm for an element $K$ is now
 \[
 \|\left(\tau, v\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|^2
 \]
