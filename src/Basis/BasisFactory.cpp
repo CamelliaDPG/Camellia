@@ -108,7 +108,6 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             basisRank = 1;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
-            //TODO: ask Denis about this choice: implement L2 by taking H1 of one smaller order....
             basis = Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL) );
             basisRank = 0;
           break;
