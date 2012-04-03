@@ -67,6 +67,7 @@ public:
                     bool randomRefinements=false, bool useTriangles=false, bool useHybrid=false);
   void setReportRelativeErrors(bool reportRelativeErrors);
   void solve(const FieldContainer<double> &quadPoints);
+  Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
 };
 

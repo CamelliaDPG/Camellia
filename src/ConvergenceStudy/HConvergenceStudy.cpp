@@ -54,13 +54,17 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _maxLogElements = maxLogElements;
   _H1Order = H1Order;
   _pToAdd = pToAdd;
-  _bilinearForm->printTrialTestInteractions();
   _randomRefinements = randomRefinements;
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
   if (_useTriangles)
     cout << "HConvergenceStudy: Using triangles\n" << endl;
+}
+
+Teuchos::RCP<Solution> HConvergenceStudy::getSolution(int logElements) {
+  int index = logElements - _minLogElements;
+  return _solutions[index];
 }
 
 void HConvergenceStudy::randomlyRefine(Teuchos::RCP<Mesh> mesh) {
@@ -184,13 +188,16 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     
     string spaces = (numElements > 10) ? " " : "   ";
     
-    cout << numElements << "x" << numElements << " mesh:" << spaces << l2error;
-    
-    fout << numElements << "x" << numElements << "\t" << l2error;
+    cout << scientific;
+    fout << scientific;
+    cout << numElements << "x" << numElements << " mesh:" << spaces << setprecision(1) <<  l2error;
+    fout << numElements << "x" << numElements << "\t" << setprecision(1) << l2error;
     if (previousL2Error >= 0.0) {
       double rate = - log(l2error/previousL2Error) / log(2.0);
-      cout << "\t(rate: " << rate << ")";
-      fout << "\t(rate: " << rate << ")"; 
+//      cout.unsetf(ios::floatfield); // don't show rates with exponents (they'll be 0 anyway)
+//      fout.unsetf(ios::floatfield);
+      cout << "\t(rate: " << setprecision(2) << fixed << rate << ")";
+      fout << "\t(rate: " << setprecision(2) << fixed << rate << ")"; 
     }
     cout << endl;
     fout << endl;
