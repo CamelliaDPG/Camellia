@@ -154,34 +154,34 @@ const string & StokesBilinearForm::trialName(int trialID) {
 
 bool StokesBilinearForm::trialTestOperator(int trialID, int testID, 
                                             EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-  trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+  trialOperator = OP_VALUE;
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
     case Q_1:
       switch (trialID) {
         case U1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DIV;
+          testOperator = OP_DIV;
           break;
         case SIGMA_11:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against psi1 (dot product)
+          testOperator = OP_X; // x component of q1 against psi1 (dot product)
           break;
         case SIGMA_21:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against psi1 (dot product)
+          testOperator = OP_Y; // y component of q1 against psi1 (dot product)
           break;
         case P:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X;
+          testOperator = OP_X;
           break;
         case OMEGA:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y;
+          testOperator = OP_Y;
           break;
         case U1_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+          testOperator = OP_DOT_NORMAL;
           break;
         default:
           break;
@@ -191,27 +191,27 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case U2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DIV;
+          testOperator = OP_DIV;
           break;
         case SIGMA_21:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against psi1 (dot product)
+          testOperator = OP_X; // x component of q1 against psi1 (dot product)
           break;
         case SIGMA_22:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against psi1 (dot product)
+          testOperator = OP_Y; // y component of q1 against psi1 (dot product)
           break;
         case P:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y;
+          testOperator = OP_Y;
           break;
         case OMEGA:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X;
+          testOperator = OP_X;
           break;
         case U2_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+          testOperator = OP_DOT_NORMAL;
           break;
         default:
           break;
@@ -221,15 +221,15 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case SIGMA_11:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
+          testOperator = OP_DX;
           break;
         case SIGMA_21:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          testOperator = OP_DY;
           break;
         case SIGMA1_N_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         default:
           break;
@@ -239,15 +239,15 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case SIGMA_21:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
+          testOperator = OP_DX;
           break;
         case SIGMA_22:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          testOperator = OP_DY;
           break;
         case SIGMA2_N_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         default:
           break;
@@ -257,15 +257,15 @@ bool StokesBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case U1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
+          testOperator = OP_DX;
           break;
         case U2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          testOperator = OP_DY;
           break;
         case U_N_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         default:
           break;

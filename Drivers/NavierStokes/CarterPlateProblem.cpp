@@ -21,9 +21,9 @@ CarterPlateProblem::CarterPlateProblem( Teuchos::RCP<NavierStokesBilinearForm> b
 vector<EOperatorExtended> CarterPlateProblem::operatorsForTestID(int testID){
   vector<EOperatorExtended> ops;    
   if (testID==NavierStokesBilinearForm::V){
-    ops.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+    ops.push_back(OP_GRAD);
   } else if (testID==NavierStokesBilinearForm::TAU){
-    ops.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+    ops.push_back(OP_DIV);
   }
   return ops;    
 }

@@ -35,8 +35,8 @@ TransientConfusionBilinearForm::TransientConfusionBilinearForm(double epsilon, d
   _trialIDs.push_back(SIGMA_2);
 
   // define multiple
-  _uvTestOperators.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
-  _uvTestOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+  _uvTestOperators.push_back(OP_GRAD);
+  _uvTestOperators.push_back(OP_VALUE);
 }
 
 const string & TransientConfusionBilinearForm::testName(int testID) {
@@ -81,7 +81,7 @@ void TransientConfusionBilinearForm::trialTestOperators(int trialID, int testID,
   trialOperators.clear();
   testOperators.clear();
   // being DPG, trialOperator will always be OPERATOR_VALUE 
-  trialOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+  trialOperators.push_back(OP_VALUE);
   
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
@@ -89,19 +89,19 @@ void TransientConfusionBilinearForm::trialTestOperators(int trialID, int testID,
     switch (trialID) {
     case U:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+      testOperators.push_back(OP_DIV);
       break;
     case SIGMA_1:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_X); // x component of tau against sigma (dot product)
+      testOperators.push_back(OP_X); // x component of tau against sigma (dot product)
       break;
     case SIGMA_2:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_Y); // y component of tau against sigma (dot product)
+      testOperators.push_back(OP_Y); // y component of tau against sigma (dot product)
       break;
     case U_HAT:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_DOT_NORMAL);
+      testOperators.push_back(OP_DOT_NORMAL);
       break;
     default:
       trialOperators.clear(); //necessary to have empty pair if no testOperator def'd
@@ -113,19 +113,19 @@ void TransientConfusionBilinearForm::trialTestOperators(int trialID, int testID,
     case U:
       returnValue = true;
       testOperators = _uvTestOperators;
-      trialOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE); // add one more to trial
+      trialOperators.push_back(OP_VALUE); // add one more to trial
       break;
     case SIGMA_1:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_DX); // dot sigma with grad v
+      testOperators.push_back(OP_DX); // dot sigma with grad v
       break;
     case SIGMA_2:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_DY); // dot sigma with grad v
+      testOperators.push_back(OP_DY); // dot sigma with grad v
       break;
     case BETA_N_U_MINUS_SIGMA_HAT:
       returnValue = true;
-      testOperators.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+      testOperators.push_back(OP_VALUE);
       break;
     default:
       trialOperators.clear(); //necessary to have empty pair if no testOperator def'd
@@ -177,7 +177,7 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
         int basisCardinality = testValues.dimension(1);
         int numPoints = testValues.dimension(2);
 
-        if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_GRAD) {
+        if (_uvTestOperators[operatorIndex]==OP_GRAD) {
           int spaceDim = testValues.dimension(3);
           //cout << "Space dim = " << spaceDim << endl;
           
@@ -186,7 +186,7 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
           FieldContainer<double> testValuesCopy = testValues;
           testValues.resize(numCells,basisCardinality,numPoints);
           
-          // cout << (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) << endl;
+          // cout << (_uvTestOperators[operatorIndex]==OP_VALUE) << endl;
           TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                  "TransientConfusionBilinearForm only supports 2 dimensions right now.");	  
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -197,7 +197,7 @@ void TransientConfusionBilinearForm::applyBilinearFormData(FieldContainer<double
               }
             }
           }
-        } else if (_uvTestOperators[operatorIndex]==IntrepidExtendedTypes::OPERATOR_VALUE) {       // also now have a reaction term. 
+        } else if (_uvTestOperators[operatorIndex]==OP_VALUE) {       // also now have a reaction term. 
           multiplyFCByWeight(testValues,1.0/get_dt());
           // cout << "dt = "<<get_dt()<<endl;
         } else {

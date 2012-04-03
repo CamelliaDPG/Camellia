@@ -189,7 +189,7 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
 
   // each test function only has one trace/flux involved
   if ( isFluxOrTrace(trialID) ) {
-    testOps.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    testOps.push_back(OP_VALUE);
     switch (testID) {
     case V_1:
       return (trialID == F1_N);
@@ -200,7 +200,7 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
     case V_4:
       return (trialID == F4_N);
     }
-    testOps.push_back(IntrepidExtendedTypes::OPERATOR_DOT_NORMAL);
+    testOps.push_back(OP_DOT_NORMAL);
     switch (testID) {
     case TAU_1:
       return (trialID == U1_HAT);
@@ -218,15 +218,15 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
 
     if ((trialID==SIGMA_11) || (trialID==SIGMA_22) ){
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_X);// x component of test fxn
+      testOps.push_back(OP_X);// x component of test fxn
     }
     if ( (trialID==SIGMA_21) || (trialID ==OMEGA)){
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_Y);
+      testOps.push_back(OP_Y);
     }
     if ( trialID==U1){
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+      testOps.push_back(OP_DIV);
     }
     break;
 
@@ -234,15 +234,15 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
 
     if ((trialID== SIGMA_11) || (trialID== SIGMA_22) ){
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_Y);// x component of test fxn
+      testOps.push_back(OP_Y);// x component of test fxn
     }
     if ( (trialID== SIGMA_21) || (trialID ==  OMEGA)){
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_X);
+      testOps.push_back(OP_X);
     }
     if ((trialID== U2) ){ // stresses are gradients of U1, U2
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+      testOps.push_back(OP_DIV);
     }
     break;
 
@@ -250,15 +250,15 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
 
     if (trialID== Q_1) {
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_X);// x component of test fxn
+      testOps.push_back(OP_X);// x component of test fxn
     } 
     if (trialID== Q_2) {
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_Y);// y component of test fxn
+      testOps.push_back(OP_Y);// y component of test fxn
     }
     if ( (trialID== T) ) { // heat is gradient of temp
       returnValue = true;
-      testOps.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+      testOps.push_back(OP_DIV);
     }
     
   case V_1: // all constitutive law equations
@@ -266,7 +266,7 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
   case V_3:
   case V_4:
     // if there's nothing in the Eulerian interactions matrix, there's no interaction
-    trialOps.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+    trialOps.push_back(OP_VALUE);
     /*
     pair<int, int> key = make_pair(trialID,testID);
     if (   (_backFlowInteractions_x.find(key) == _backFlowInteractions_x.end() )
@@ -275,7 +275,7 @@ bool NavierStokesBilinearForm::trialTestOperators(int testID1, int testID2,
     }    
     */ // just forget about efficiency for now and dot the entire eulerian matrix with grad v
     returnValue = true;
-    testOps.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+    testOps.push_back(OP_GRAD);
     break;
   default:
     break;

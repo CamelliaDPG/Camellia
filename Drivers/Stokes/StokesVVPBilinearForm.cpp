@@ -128,26 +128,26 @@ const string & StokesVVPBilinearForm::trialName(int trialID) {
 
 bool StokesVVPBilinearForm::trialTestOperator(int trialID, int testID, 
                                             EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-  trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+  trialOperator = OP_VALUE;
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
     case Q_1:
       switch (trialID) {
         case OMEGA_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_CROSS_NORMAL;
+          testOperator = OP_CROSS_NORMAL;
           break;
         case P_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+          testOperator = OP_DOT_NORMAL;
           break;
         case OMEGA:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_CURL; // with -1.0 weight
+          testOperator = OP_CURL; // with -1.0 weight
           break;
         case P:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DIV; // with -1.0 weight
+          testOperator = OP_DIV; // with -1.0 weight
           break;
         default:
           break;
@@ -157,19 +157,19 @@ bool StokesVVPBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case U_CROSS_N_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         case U1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY; // with -1.0 weight
+          testOperator = OP_DY; // with -1.0 weight
           break;
         case U2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
+          testOperator = OP_DX;
           break;
         case OMEGA:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         default:
           break;
@@ -179,15 +179,15 @@ bool StokesVVPBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case U_N_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         case U1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX; // -1.0 weight
+          testOperator = OP_DX; // -1.0 weight
           break;
         case U2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY; // -1.0 weight
+          testOperator = OP_DY; // -1.0 weight
           break;
         default:
           break;

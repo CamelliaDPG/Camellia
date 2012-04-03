@@ -23,8 +23,8 @@ const string & TestBilinearFormFlux::trialName(int trialID) {
   
 bool TestBilinearFormFlux::trialTestOperator(int trialID, int testID, 
                                              EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-  trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
-  testOperator  = IntrepidExtendedTypes::OPERATOR_VALUE;
+  trialOperator = OP_VALUE;
+  testOperator  = OP_VALUE;
   return true;
 }
   

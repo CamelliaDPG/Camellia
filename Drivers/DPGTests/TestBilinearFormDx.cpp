@@ -17,8 +17,8 @@ const string & TestBilinearFormDx::trialName(int trialID) {
 
 bool TestBilinearFormDx::trialTestOperator(int trialID, int testID, 
                                            EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-  trialOperator = IntrepidExtendedTypes::OPERATOR_DX;
-  testOperator  = IntrepidExtendedTypes::OPERATOR_DX;
+  trialOperator = OP_DX;
+  testOperator  = OP_DX;
   return true;
 }
 

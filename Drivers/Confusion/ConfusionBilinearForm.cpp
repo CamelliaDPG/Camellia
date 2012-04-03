@@ -103,26 +103,26 @@ const string & ConfusionBilinearForm::trialName(int trialID) {
 bool ConfusionBilinearForm::trialTestOperator(int trialID, int testID, 
                                             EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
   // being DPG, trialOperator will always be OPERATOR_VALUE
-  trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+  trialOperator = OP_VALUE;
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
     case TAU:
       switch (trialID) {
         case U:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DIV;
+          testOperator = OP_DIV;
           break;
         case SIGMA_1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of tau against sigma (dot product)
+          testOperator = OP_X; // x component of tau against sigma (dot product)
           break;
         case SIGMA_2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of tau against sigma (dot product)
+          testOperator = OP_Y; // y component of tau against sigma (dot product)
           break;
         case U_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+          testOperator = OP_DOT_NORMAL;
           break;
         default:
           break;
@@ -132,19 +132,19 @@ bool ConfusionBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case U:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_GRAD;
+          testOperator = OP_GRAD;
           break;
         case SIGMA_1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX; // dot sigma with grad v
+          testOperator = OP_DX; // dot sigma with grad v
           break;
         case SIGMA_2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY; // dot sigma with grad v
+          testOperator = OP_DY; // dot sigma with grad v
           break;
         case BETA_N_U_MINUS_SIGMA_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = OP_VALUE;
           break;
         default:
           break;

@@ -147,46 +147,32 @@ int main(int argc, char *argv[]) {
   BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );  
   // q1 terms:
   stokesBFMath->addTerm(u1,q1->div());
-  stokesBFMath->addTerm(mu * sigma11,q1->x());
+  stokesBFMath->addTerm(mu * sigma11,q1->x()); // (mu sigma1, q1)
   stokesBFMath->addTerm(mu * sigma12,q1->y());
   stokesBFMath->addTerm(-u1hat, q1->dot_normal());
   
   // q2 terms:
   stokesBFMath->addTerm(u2, q2->div());
-  stokesBFMath->addTerm(mu * sigma21,q2->x());
+  stokesBFMath->addTerm(mu * sigma21,q2->x()); // (mu sigma2, q2)
   stokesBFMath->addTerm(mu * sigma22,q2->y());
   stokesBFMath->addTerm(-u2hat, q2->dot_normal());
   
   // v1:
-  stokesBFMath->addTerm(sigma11,v1->dx());
+  stokesBFMath->addTerm(sigma11,v1->dx()); // (sigma1, grad v1) 
   stokesBFMath->addTerm(sigma12,v1->dy());
   stokesBFMath->addTerm( - p, v1->dx() );
   stokesBFMath->addTerm( sigma1n, v1);
 
   // v2:
-  stokesBFMath->addTerm(sigma21,v2->dx());
+  stokesBFMath->addTerm(sigma21,v2->dx()); // (sigma2, grad v2)
   stokesBFMath->addTerm(sigma22,v2->dy());
   stokesBFMath->addTerm( -p, v2->dy());
   stokesBFMath->addTerm( sigma2n, v2);
   
   // v3:
-  stokesBFMath->addTerm(-u1,v3->dx());
+  stokesBFMath->addTerm(-u1,v3->dx()); // (-u, grad v3)
   stokesBFMath->addTerm(-u2,v3->dy());
-  // MAYBE FIXED: broke the v3 term in 2 because there appear to be issues with summing LinearTerms (need to fix those!)
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
-  
-  int trialOrder = 1;
-  int pToAdd = 0;
-  int testOrder = trialOrder + pToAdd;
-  CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  DofOrderingFactory dofOrderingFactory(stokesBFMath);
-  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(testOrder, *quadTopoPtr);
-  DofOrderingPtr trialOrdering = dofOrderingFactory.trialOrdering(trialOrder, *quadTopoPtr);
-  
-  // just use testOrdering for both trial and test spaces (we only use to define BasisCache)
-  ElementTypePtr elemType  = Teuchos::rcp( new ElementType(trialOrdering, testOrdering, quadTopoPtr) );
-  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
-  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
   
   IPPtr mathIP = Teuchos::rcp(new IP());
   mathIP->addTerm(v1);
@@ -203,6 +189,21 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesMathBilinearForm(mu));
   DPGInnerProductPtr autoMathIP = Teuchos::rcp( new MathInnerProduct(stokesBF) );
   
+  
+  // compute and compare inner products...
+  int trialOrder = 1;
+  int pToAdd = 0;
+  int testOrder = trialOrder + pToAdd;
+  CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  DofOrderingFactory dofOrderingFactory(stokesBFMath);
+  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(testOrder, *quadTopoPtr);
+  DofOrderingPtr trialOrdering = dofOrderingFactory.trialOrdering(trialOrder, *quadTopoPtr);
+  
+  // just use testOrdering for both trial and test spaces (we only use to define BasisCache)
+  ElementTypePtr elemType  = Teuchos::rcp( new ElementType(trialOrdering, testOrdering, quadTopoPtr) );
+  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
+  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
+
   int numCells = quadPoints.dimension(0);
   expectedValues.resize(numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
   actualValues.resize  (numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
@@ -226,12 +227,14 @@ int main(int argc, char *argv[]) {
   IPPtr qoptIP = Teuchos::rcp(new IP());
                                                
   double beta = 1e-1;
-  qoptIP->addTerm( q1->x() / mu + v1->dx() );
+  // this is the quasi-optimal norm for the VSP Stokes formulation (not likely quite right for the stokesBFMath)
+  qoptIP->addTerm( q1->x() / (2.0 * mu) + v1->dx() );
+  qoptIP->addTerm( q2->y() / (2.0 * mu) + v2->dy() );
   qoptIP->addTerm( q1->x() / (2.0 * mu) + q2->y() / (2.0 * mu) );
   qoptIP->addTerm( q1->y() / (2.0 * mu) + q2->x() / (2.0 * mu) + v1->dy() + v2->dx() );
-  qoptIP->addTerm( q2->y() / (2.0 * mu) + v2->dy() );
   qoptIP->addTerm( q1->y() - q2->x() );
   qoptIP->addTerm( q1->div() - v3->dx() );
+  qoptIP->addTerm( q2->div() - v3->dy() );
   
   qoptIP->addTerm( sqrt(beta) * q1 );
   qoptIP->addTerm( sqrt(beta) * q2 );
@@ -290,9 +293,8 @@ int main(int argc, char *argv[]) {
   int minLogElements = 0, maxLogElements = 2;
   int H1Order = 2;
   pToAdd = 2;
-  // here's the line that we'd like to have working:
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              stokesBC, mathIP, minLogElements, 
+                                              stokesBC, qoptIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   

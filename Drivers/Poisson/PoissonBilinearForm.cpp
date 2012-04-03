@@ -91,27 +91,27 @@ const string & PoissonBilinearForm::trialName(int trialID) {
 
 bool PoissonBilinearForm::trialTestOperator(int trialID, int testID, 
                          EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-  // being DPG, trialOperator will always be OPERATOR_VALUE
-  trialOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+  // being DPG, trialOperator will always be OP_VALUE
+  trialOperator = IntrepidExtendedTypes::OP_VALUE;
   bool returnValue = false; // unless we specify otherwise, trial and test don't interact
   switch (testID) {
     case Q_1:
       switch (trialID) {
         case PSI_1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_X; // x component of q1 against psi1 (dot product)
+          testOperator = IntrepidExtendedTypes::OP_X; // x component of q1 against psi1 (dot product)
           break;
         case PSI_2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_Y; // y component of q1 against psi1 (dot product)
+          testOperator = IntrepidExtendedTypes::OP_Y; // y component of q1 against psi1 (dot product)
           break;
         case PHI:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DIV;
+          testOperator = IntrepidExtendedTypes::OP_DIV;
           break;
         case PHI_HAT:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DOT_NORMAL;
+          testOperator = IntrepidExtendedTypes::OP_DOT_NORMAL;
           break;
         default:
           break;
@@ -121,15 +121,15 @@ bool PoissonBilinearForm::trialTestOperator(int trialID, int testID,
       switch (trialID) {
         case PSI_1:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DX;
+          testOperator = IntrepidExtendedTypes::OP_DX;
           break;
         case PSI_2:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_DY;
+          testOperator = IntrepidExtendedTypes::OP_DY;
           break;
         case PSI_HAT_N:
           returnValue = true;
-          testOperator = IntrepidExtendedTypes::OPERATOR_VALUE;
+          testOperator = IntrepidExtendedTypes::OP_VALUE;
           break;
         default:
           break;

@@ -21,9 +21,9 @@ BurgersProblem::BurgersProblem( Teuchos::RCP<BurgersBilinearForm> bf) : RHS(), B
 vector<EOperatorExtended> BurgersProblem::operatorsForTestID(int testID){
   vector<EOperatorExtended> ops;    
   if (testID==BurgersBilinearForm::V){
-    ops.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+    ops.push_back(OP_GRAD);
   } else if (testID==BurgersBilinearForm::TAU){
-    ops.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+    ops.push_back(OP_DIV);
   }
   return ops;    
 }

@@ -38,26 +38,26 @@ class ConfusionInnerProduct : public DPGInnerProduct {
       if (ConfusionBilinearForm::TAU==testID1) {
         
         // L2 portion of tau
-        testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
-        testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+        testOp1.push_back(OP_VALUE);
+        testOp2.push_back(OP_VALUE);
         
         // div portion of tau
-        testOp1.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
-        testOp2.push_back(IntrepidExtendedTypes::OPERATOR_DIV);
+        testOp1.push_back(OP_DIV);
+        testOp2.push_back(OP_DIV);
         
       } else if (ConfusionBilinearForm::V==testID1) {
         
         // L2 portion of v (should be scaled by epsilon/h later)
-        testOp1.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
-        testOp2.push_back(IntrepidExtendedTypes::OPERATOR_VALUE);
+        testOp1.push_back(OP_VALUE);
+        testOp2.push_back(OP_VALUE);
         
         // grad portion of v (should be scaled by epsilon later);
-        testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
-        testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+        testOp1.push_back(OP_GRAD);
+        testOp2.push_back(OP_GRAD);
         
         // grad dotted with beta for v (applied in next routine)
-        testOp1.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
-        testOp2.push_back(IntrepidExtendedTypes::OPERATOR_GRAD);
+        testOp1.push_back(OP_GRAD);
+        testOp2.push_back(OP_GRAD);
         
       }
     }

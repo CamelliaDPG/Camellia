@@ -346,8 +346,8 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
           elem->getSidePointsInParentRefCoords(parentTestPoints,sideIndex,_testPoints1D);
           
           // evaluate testPoints and parentTestPoints in respective bases
-          FCPtr parentValues = BasisEvaluation::getValues(parentBasis,IntrepidExtendedTypes::OPERATOR_VALUE,parentTestPoints);
-          FCPtr childValues =  BasisEvaluation::getValues(basis,IntrepidExtendedTypes::OPERATOR_VALUE,_testPoints1D);
+          FCPtr parentValues = BasisEvaluation::getValues(parentBasis,OP_VALUE,parentTestPoints);
+          FCPtr childValues =  BasisEvaluation::getValues(basis,OP_VALUE,_testPoints1D);
           
           // check that they agree
           TEST_FOR_EXCEPTION(parentValues->size() != childValues->size(), std::invalid_argument,
