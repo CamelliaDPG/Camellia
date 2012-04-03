@@ -116,19 +116,19 @@
 
 \subsection{Singular perturbation problems and robustness}
 
-The finite element/Galerkin method has been widely utilized in engineering to solve partial differential equations related to simulation of solid mechanics problems. For many problems in engineering, the bilinear forms resulting from these partial differential equations are symmetric and coercive (positive-definite), and it is well known that the finite element method produces near-optimal results for such problems. However, standard Bubnov-Galerkin methods tend to perform poorly for the class of partial-differential equations known as singularly perturbed problems. Singularly perturbed problems are problems where a given parameter may be either very small or very large in the context of physical problems.  An additional complication of singularly perturbed problems is that very often, in the limiting case of the parameter blowing up or decreasing to zero, the partial differential equation itself will change form. A canonical example is the convection-diffusion equation. In 1D, this equation is
-\[
-u'-\epsilon u'' = f.
-\]
-The equation represents the change in the concentration of some quantity $u$ in some medium from both convective and diffusive effects. The parameter $\epsilon$ represents the diffusivity, and in the limit of an inviscid medium as $\epsilon\rightarrow 0$, the partial differential equation changes types, going from a parabolic to a hyperbolic equation. 
+The finite element/Galerkin method has been widely utilized in engineering to solve partial differential equations related to simulation of solid mechanics problems. For many problems in engineering, the bilinear forms resulting from these partial differential equations are symmetric and coercive (positive-definite), and it is well known that the finite element method produces near-optimal results for such problems. However, standard Bubnov-Galerkin methods tend to perform poorly for the class of partial-differential equations known as singularly perturbed problems. Singularly perturbed problems are problems where a given parameter may be either very small or very large in the context of physical problems.  An additional complication of singularly perturbed problems is that very often, in the limiting case of the parameter blowing up or decreasing to zero, the partial differential equation itself will change form. A canonical example is the convection-diffusion equation with Dirichlet boundary conditions. In 1D, this equation is
+\begin{align*}
+u'-\epsilon u'' &= f
+\end{align*}
+The equation represents the change in the concentration of some quantity $u$ in some medium from both convective and diffusive effects. The parameter $\epsilon$ represents the diffusivity, and in the limit of an inviscid medium as $\epsilon\rightarrow 0$, the partial differential equation changes types, going from a parabolic to a hyperbolic equation. For Dirichlet boundary conditions $u(0)=u_0$ and $u(1)= u_1$, the solution can develop sharp boundary layers of order $\epsilon$ near the outflow. 
 
-The finite element method has notoriously performed poorly for this example, and for many other singularly perturbed equations. This poor performance is captured by the error bound for the finite element method applied to convection-diffusion equations
+The finite element method has notoriously performed poorly for both this example, and for many other singularly perturbed problems. This poor performance is captured by the error bound for the finite element method applied to convection-diffusion equations
 \[
 \|u-u_h\|_E \leq C(\epsilon) \inf_{w_h}\|u-w_h\|_U,
 \]
-where $C(\epsilon)$ grows as $\epsilon$ approaches its limiting case. The growth of $C$ with $\epsilon$ is referred to as a \textit{loss of robustness} in $\epsilon$, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely by the best approximation error, allowing for more and more error in the finite element solution for as $\epsilon$ shrinks.  
+where $C(\epsilon)$ grows as $\epsilon$ approaches its limiting case. The growth of $C$ with $\epsilon$ is referred to as a \textit{loss of robustness} in $\epsilon$, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely by the best approximation error, allowing for more and more error in the finite element solution for as $\epsilon$ shrinks. The manifestation of this loss of robustness in the finite element solution of the 1D convection-diffusion problem is the growth of spurious oscillations as $\epsilon\rightarrow 0$.  For a coarse mesh and small values of $\epsilon$, the Galerkin approximation of the solution to the convection-diffusion equation develops oscillations of magnitude $O(\epsilon^{-1})$. 
 
-A well-known example of this loss of robustness is the growth of spurious oscillations in the finite element solution of the 1D convection-diffusion problem $ u'-\epsilon u'' = f$ (with Dirichlet boundary conditions) as $\epsilon\rightarrow 0$.  For small values of $\epsilon$, the Galerkin approximation of the solution to the convection-diffusion equation develops oscillations of magnitude $O(\epsilon^{-1})$. Another class of examples are wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$.  The lack of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths for high wavenumbers (commonly manifesting as a phase error between the FE solution and the exact solution).  
+Another example of a singular perturbation problem which experiences loss of robustness is high frequency wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$. The loss of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths for high wavenumbers (commonly manifesting as a phase error between the FE solution and the exact solution).  
 
 Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form, the problem is modified by adding to the bilinear form a factor of the residual, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  \textcolor{red}{TO DO: give motivations for consistency (converges to same solution) of stabilization terms vs artificial diffusion type stabilization and, show how consistency gives a Petrov-Galerkin method}
 
@@ -176,19 +176,25 @@ The above norm can be determined via $\|u\|_E = \|v_u\|_V$, where $v_u$ solves
 \[
 (v_u,\delta v)_V = b(u,\delta v), \quad \forall v \in V
 \]
-As a consequence of this fact, without knowing the exact solution, the actual energy error $\|u-u_h\|_E$ is computable through $\|e_h\|_V$, where
+Due to the isometry of the Riesz map, this is equivalent to measuring the norm of the functional $b(u,v) = l_u(v)\in V'$ in the dual norm. An additional consequence of adopting such an energy norm is that, without knowing the exact solution, the actual energy error $\|u-u_h\|_E$ is computable through $\|e_h\|_V$, where
 \[
-\left(e_h,\delta v\right)_V = b(u-u_h,v) = b(u_h,v)-l(v)
+\left(e_h,\delta v\right)_V = b(u-u_h,\delta v) = b(u_h,\delta v)-l(\delta v)
 \]
-This is simply a consequence of the least-squares nature of DPG; the energy error is simply the measure of the residual in the proper norm.  
+This is simply a consequence of the least-squares nature of DPG; the energy error is simply the measure of the residual in the proper norm - the dual norm on $V$.  
 
 \subsection{Variational form}
 
-The DPG (discontinuous Petrov-Galerkin) method is the pairing of the concept of locally computable optimal test functions with the so-called ``ultra-weak formulation". For a given operator equation $Au = f$, the ultra-weak formulation is 
+The DPG (discontinuous Petrov-Galerkin) method is the pairing of the concept of locally computable optimal test functions with the so-called ``ultra-weak formulation". For a given operator equation in strong form $Au = f$, the ultra-weak formulation is
 \[
 b\left(\left(\widehat{u},u\right),v\right) - l(v) = \langle \widehat{u}, [v] \rangle - (u,A^*v) - (f,v) = 0
 \]
-where $A^*$ is the formal adjoint resulting from integration by parts, and $[v]$ is the jump of $v$ across element boundaries.  Under the ultra-weak formulation, the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybridized DG method with locally supported optimal test functions.  
+where $A^*$ is the formal adjoint resulting from integration by parts, and $[v]$ is the jump of the test function $v$ across element boundaries.  Both the inner product and formal adjoint are understood in an element-wise fashion. Under the ultra-weak formulation, the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybridized DG method with locally supported optimal test functions, with energy setting 
+\begin{align*}
+u&\in L^2(\Omega)\\
+v&\in V=D(A^*) \\
+\widehat{u}&\in T(D(A))
+\end{align*}
+where $D(A^*)$ is the domain of the formal adjoint $A^*$, and $T(D(A))$ is the trace space of the domain of the operator $A$ in its strong form. A more comprehensive discussion of the abstract setting of DPG, as well as a proof of well-posedness, is developed using the graph norm in \cite{DPGFriedrichs}.
 
 \subsection{Induced norms}
 
@@ -216,7 +222,7 @@ In other words, showing an inequality between two norms on $U$ is equivalent to 
 
 \subsection{Optimal and quasi-optimal test norms}
 
-The duality between test norm and variational form holds for any particular variational form, though it is often difficult to determine analytically the form of $\|v\|_{V,U}$.  Whether a particular choice of norm on $V$ norm is ``good" or not is problem-dependent; however, for the DPG ultra-weak formulation, there is an important canonical test norm that results from a specific induced norm on $U$.  
+The duality between test norm and variational form holds for any particular variational form, though it is often difficult to determine analytically the form of $\|v\|_{V,U}$.  Whether a particular choice of norm on $V$ norm is ``good" or not is problem-dependent; however, for the DPG ultra-weak formulation, there is an important canonical test norm that is induced by a specific norm on $U$.  
 
 Define the norm on $U$
 \[
@@ -261,7 +267,7 @@ in first order form
 \div (\beta u - \sigma) &= f  \\
 \frac{1}{\epsilon}\sigma - \grad u &= 0
 \end{align*}
-with the corresponding variational form (modulo application of boundary conditions)
+with the corresponding variational form (prior to the application of boundary conditions)
 \begin{align*}
 b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) = \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle + \langle \widehat{f}_n, \left[v\right] \rangle 
 \end{align*}
@@ -357,7 +363,10 @@ The avoidance of boundary layers in the test norm will be described in more deta
 \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}
 \]
 where $\lesssim$ denotes a bound by a constant that will not grow as $\epsilon \rightarrow 0$.  
-%$\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_U \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E$.  
+%$\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_U \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E$.
+
+Intuitively, 
+  
 \textcolor{red}{Explain in intuitive terms what the bounds above and below mean.}
 Our goal is to explicitly derive the norms $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ that characterize this relation, taking into account the limiting case of $\epsilon \rightarrow 0$. 
 Our strategy for doing so is broken down into three parts.  
