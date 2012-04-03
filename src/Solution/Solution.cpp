@@ -266,7 +266,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,false);
+      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
       
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -1320,7 +1320,7 @@ void Solution::computeErrorRepresentation() {
       cellIDs.push_back(cellID);
     }
     
-    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,false);
+    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms());
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
