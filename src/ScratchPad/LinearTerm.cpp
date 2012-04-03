@@ -132,7 +132,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
     
     for (otherIt= otherIDs.begin(); otherIt != otherIDs.end(); otherIt++) {
       int otherID = *otherIt;
-      otherBasis = otherOrdering->getBasis(otherID);
+      otherBasis = otherFluxOrTrace ? otherOrdering->getBasis(otherID,sideIndex) : otherOrdering->getBasis(otherID);
       int numDofsOther = otherBasis->getCardinality();
       
       // set up values container for other
@@ -152,7 +152,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       
       for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
         int thisID = *thisIt;
-        thisBasis = thisOrdering->getBasis(thisID,sideIndex);
+        thisBasis = thisFluxOrTrace ? thisOrdering->getBasis(thisID,sideIndex) : thisOrdering->getBasis(thisID);
         int numDofsThis = thisBasis->getCardinality();
         
         // set up values container this term:

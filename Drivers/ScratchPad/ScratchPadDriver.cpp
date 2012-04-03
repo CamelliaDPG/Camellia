@@ -101,12 +101,17 @@ public:
 };
 
 int main(int argc, char *argv[]) {
+  int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  //rank=mpiSession.getRank();
-  //numProcs=mpiSession.getNProc();
+  rank=mpiSession.getRank();
+  numProcs=mpiSession.getNProc();
 #else
 #endif
+  int H1Order = 2;
+  if (argc > 1) {
+    H1Order = atoi(argv[1]);
+  }
   FieldContainer<double> expectedValues;
   FieldContainer<double> actualValues;
   
@@ -132,8 +137,8 @@ int main(int argc, char *argv[]) {
   
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
-  VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\sigma_{1n}}");
-  VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\sigma_{2n}}");
+  VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
+  VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
   VarPtr u1 = varFactory.fieldVar("u_1");
   VarPtr u2 = varFactory.fieldVar("u_2");
   VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
@@ -147,25 +152,25 @@ int main(int argc, char *argv[]) {
   BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );  
   // q1 terms:
   stokesBFMath->addTerm(u1,q1->div());
-  stokesBFMath->addTerm(mu * sigma11,q1->x()); // (mu sigma1, q1)
-  stokesBFMath->addTerm(mu * sigma12,q1->y());
+  stokesBFMath->addTerm(sigma11,q1->x()); // (sigma1, q1)
+  stokesBFMath->addTerm(sigma12,q1->y());
   stokesBFMath->addTerm(-u1hat, q1->dot_normal());
   
   // q2 terms:
   stokesBFMath->addTerm(u2, q2->div());
-  stokesBFMath->addTerm(mu * sigma21,q2->x()); // (mu sigma2, q2)
-  stokesBFMath->addTerm(mu * sigma22,q2->y());
+  stokesBFMath->addTerm(sigma21,q2->x()); // (sigma2, q2)
+  stokesBFMath->addTerm(sigma22,q2->y());
   stokesBFMath->addTerm(-u2hat, q2->dot_normal());
   
   // v1:
-  stokesBFMath->addTerm(sigma11,v1->dx()); // (sigma1, grad v1) 
-  stokesBFMath->addTerm(sigma12,v1->dy());
+  stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+  stokesBFMath->addTerm(mu * sigma12,v1->dy());
   stokesBFMath->addTerm( - p, v1->dx() );
   stokesBFMath->addTerm( sigma1n, v1);
 
   // v2:
-  stokesBFMath->addTerm(sigma21,v2->dx()); // (sigma2, grad v2)
-  stokesBFMath->addTerm(sigma22,v2->dy());
+  stokesBFMath->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+  stokesBFMath->addTerm(mu * sigma22,v2->dy());
   stokesBFMath->addTerm( -p, v2->dy());
   stokesBFMath->addTerm( sigma2n, v2);
   
@@ -189,7 +194,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BilinearForm> stokesBF = Teuchos::rcp(new StokesMathBilinearForm(mu));
   DPGInnerProductPtr autoMathIP = Teuchos::rcp( new MathInnerProduct(stokesBF) );
   
-  
   // compute and compare inner products...
   int trialOrder = 1;
   int pToAdd = 0;
@@ -202,7 +206,7 @@ int main(int argc, char *argv[]) {
   // just use testOrdering for both trial and test spaces (we only use to define BasisCache)
   ElementTypePtr elemType  = Teuchos::rcp( new ElementType(trialOrdering, testOrdering, quadTopoPtr) );
   BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
-  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
+  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),true); // true: DO create side cache (because of boundary terms)
 
   int numCells = quadPoints.dimension(0);
   expectedValues.resize(numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
@@ -213,37 +217,57 @@ int main(int argc, char *argv[]) {
   
   double tol = 1e-14;
   double maxDiff = 0.0;
-  if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Test failed: automatic mathematician's inner product differs from new IP; maxDiff " << maxDiff << ".\n";
-    cout << "Automatic: \n" << expectedValues;
-    cout << "New IP: \n" << actualValues;
-  } else {
-    cout << "Automatic mathematician's inner product and new IP agree!!\n";
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: automatic mathematician's inner product differs from new IP; maxDiff " << maxDiff << ".\n";
+      cout << "Automatic: \n" << expectedValues;
+      cout << "New IP: \n" << actualValues;
+    } else {
+      cout << "Automatic mathematician's inner product and new IP agree!!\n";
+    }
+  
+    cout << "*** Math IP: ***\n";
+    mathIP->printInteractions();
   }
   
-  cout << "*** Math IP: ***\n";
-  mathIP->printInteractions();
-  
+  // an experiment: using integral of terms on the boundary instead of the usual weighted volume integral
+  // as the approximation for the flux/trace contributions to the quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP());
                                                
   double beta = 1e-1;
+  qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
+  qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
+  qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
+  qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
+  qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+  qoptIP->addTerm( q1->div() - v3->dx() );    // u1
+  qoptIP->addTerm( q2->div() - v3->dy() );    // u2
+  // boundary terms:
+  qoptIP->addBoundaryTerm( v1 );
+  qoptIP->addBoundaryTerm( v2 );
+  qoptIP->addBoundaryTerm( v3 );
+  qoptIP->addBoundaryTerm( q1 );
+  qoptIP->addBoundaryTerm( q2 );
+  
   // this is the quasi-optimal norm for the VSP Stokes formulation (not likely quite right for the stokesBFMath)
-  qoptIP->addTerm( q1->x() / (2.0 * mu) + v1->dx() );
-  qoptIP->addTerm( q2->y() / (2.0 * mu) + v2->dy() );
-  qoptIP->addTerm( q1->x() / (2.0 * mu) + q2->y() / (2.0 * mu) );
-  qoptIP->addTerm( q1->y() / (2.0 * mu) + q2->x() / (2.0 * mu) + v1->dy() + v2->dx() );
-  qoptIP->addTerm( q1->y() - q2->x() );
-  qoptIP->addTerm( q1->div() - v3->dx() );
-  qoptIP->addTerm( q2->div() - v3->dy() );
+//  qoptIP->addTerm( q1->x() / (2.0 * mu) + v1->dx() );
+//  qoptIP->addTerm( q2->y() / (2.0 * mu) + v2->dy() );
+//  qoptIP->addTerm( q1->x() / (2.0 * mu) + q2->y() / (2.0 * mu) );
+//  qoptIP->addTerm( q1->y() / (2.0 * mu) + q2->x() / (2.0 * mu) + v1->dy() + v2->dx() );
+//  qoptIP->addTerm( q1->y() - q2->x() );
+//  qoptIP->addTerm( q1->div() - v3->dx() );
+//  qoptIP->addTerm( q2->div() - v3->dy() );
+//  
+//  qoptIP->addTerm( sqrt(beta) * q1 );
+//  qoptIP->addTerm( sqrt(beta) * q2 );
+//  qoptIP->addTerm( sqrt(beta) * v1 );
+//  qoptIP->addTerm( sqrt(beta) * v2 );
+//  qoptIP->addTerm( sqrt(beta) * v3 );
   
-  qoptIP->addTerm( sqrt(beta) * q1 );
-  qoptIP->addTerm( sqrt(beta) * q2 );
-  qoptIP->addTerm( sqrt(beta) * v1 );
-  qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * v3 );
-  
-  cout << "*** Quasi-Optimal IP: ***\n";
-  qoptIP->printInteractions();
+  if (rank == 0) {
+    cout << "*** Quasi-Optimal IP: ***\n";
+    qoptIP->printInteractions();
+  }
   
   // just run the quasi-optimal (we don't have a good way of testing it right now)
   qoptIP->computeInnerProductMatrix(actualValues,testOrdering,ipBasisCache);
@@ -258,14 +282,16 @@ int main(int argc, char *argv[]) {
   stokesBF->stiffnessMatrix(expectedValues, elemType, cellSideParities, basisCache);
   stokesBFMath->stiffnessMatrix(actualValues, elemType, cellSideParities, basisCache);
   
-  if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-    cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
-    cout << "Old: \n" << expectedValues;
-    cout << "New: \n" << actualValues;
-    cout << "TrialDofOrdering: \n" << *trialOrdering;
-    cout << "TestDofOrdering:\n" << *testOrdering;
-  } else {
-    cout << "Old and new Stokes stiffness agree!!\n";
+  if (rank == 0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New: \n" << actualValues;
+      cout << "TrialDofOrdering: \n" << *trialOrdering;
+      cout << "TestDofOrdering:\n" << *testOrdering;
+    } else {
+      cout << "Old and new Stokes stiffness agree!!\n";
+    }
   }
   
   // create BCs:
@@ -290,8 +316,8 @@ int main(int argc, char *argv[]) {
   // for the above solution choice, RHS is actually zero
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
-  int minLogElements = 0, maxLogElements = 2;
-  int H1Order = 2;
+  int minLogElements = 0, maxLogElements = 5;
+//  int H1Order = 3;
   pToAdd = 2;
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
                                               stokesBC, qoptIP, minLogElements, 
@@ -309,18 +335,24 @@ int main(int argc, char *argv[]) {
   
   study.solve(quadPoints);
   
-  int polyOrder = H1Order-1;
-  ostringstream filePathPrefix;
-  filePathPrefix << "stokesScratchPad/u1_p" << polyOrder;
-  
-  study.writeToFiles(filePathPrefix.str(),u1->ID(),u1hat->ID());
-  filePathPrefix.str("");
-  filePathPrefix << "stokesScratchPad/u2_p" << polyOrder;
-  study.writeToFiles(filePathPrefix.str(),u2->ID(),u2hat->ID());
-  
-  filePathPrefix.str("");
-  filePathPrefix << "stokesScratchPad/pressure_p" << polyOrder;
-  study.writeToFiles(filePathPrefix.str(),p->ID());
+  if (rank == 0) {
+    Teuchos::RCP<Solution> finalSolution = study.getSolution(maxLogElements);
+    double pressureIntegral = finalSolution->integrateSolution(p->ID());
+    cout << "for most refined solution, integral of the pressure is " << pressureIntegral << endl;
+    
+    int polyOrder = H1Order-1;
+    ostringstream filePathPrefix;
+    filePathPrefix << "scratchPad/u1_p" << polyOrder;
+    
+    study.writeToFiles(filePathPrefix.str(),u1->ID(),u1hat->ID());
+    filePathPrefix.str("");
+    filePathPrefix << "scratchPad/u2_p" << polyOrder;
+    study.writeToFiles(filePathPrefix.str(),u2->ID(),u2hat->ID());
+    
+    filePathPrefix.str("");
+    filePathPrefix << "scratchPad/pressure_p" << polyOrder;
+    study.writeToFiles(filePathPrefix.str(),p->ID());
+  }
   
   return 0;
 }

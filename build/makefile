@@ -120,7 +120,7 @@ TEST_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver
+EXES = DPGTests StokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver
 ECHOES = 
 
 default: all
@@ -181,6 +181,9 @@ EricksonConfectionSolution.o: $(DRIVERS_DIR)/Confusion/EricksonConfectionSolutio
 
 StokesStudy: StokesStudy.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+
+StokesMathStudy: StokesMathStudy.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesMathStudy.o -o StokesMathStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesStudyHybridMesh: StokesStudyHybridMesh.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudyHybridMesh.o -o StokesStudyHybridMesh $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@

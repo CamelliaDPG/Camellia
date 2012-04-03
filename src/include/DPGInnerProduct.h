@@ -91,6 +91,8 @@ public:
                                      FieldContainer<double> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
+  
+  virtual bool hasBoundaryTerms(); // used for deciding whether to create side caches or not.
                          
   // equivalent to calling computeInnerProduct but with just one dof lit up per function
   // (and can be more efficiently implemented than actually calling computeInnerProduct with such arguments)

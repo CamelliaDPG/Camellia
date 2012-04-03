@@ -142,6 +142,10 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   }
 }
 
+bool DPGInnerProduct::hasBoundaryTerms() {
+  return false;
+}
+
 void DPGInnerProduct::printInteractions() {
   cout << "Inner product: test interactions\n";
   vector<int> testIDs = _bilinearForm->testIDs();

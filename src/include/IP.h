@@ -15,6 +15,7 @@
 
 class IP : public DPGInnerProduct {
   vector< LinearTermPtr > _linearTerms;
+  vector< LinearTermPtr > _boundaryTerms;
 public:
   IP();
   
@@ -22,9 +23,14 @@ public:
   void addTerm( LinearTermPtr a);
   void addTerm( VarPtr v );
   
+  void addBoundaryTerm( LinearTermPtr a );
+  void addBoundaryTerm( VarPtr v );
+  
   void computeInnerProductMatrix(FieldContainer<double> &innerProduct, 
                                  Teuchos::RCP<DofOrdering> dofOrdering,
                                  Teuchos::RCP<BasisCache> basisCache);
+  
+  bool hasBoundaryTerms();
   
   void operators(int testID1, int testID2, 
                  vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
