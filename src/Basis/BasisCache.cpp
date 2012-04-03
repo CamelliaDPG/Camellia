@@ -357,6 +357,14 @@ void BasisCache::setSideNormals(FieldContainer<double> &sideNormals) {
   _sideNormals = sideNormals;
 }
 
+const FieldContainer<double> & BasisCache::getCellSideParities() {
+  return _cellSideParities;
+}
+
+void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParities) {
+  _cellSideParities = cellSideParities;
+}
+
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
                                       const vector<int> &cellIDs, bool createSideCacheToo) {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid

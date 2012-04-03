@@ -75,6 +75,7 @@ private:
   FieldContainer<double> _cellJacobDet;
   FieldContainer<double> _weightedMeasure;
   FieldContainer<double> _physCubPoints;
+  FieldContainer<double> _cellSideParities;
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   DofOrdering _trialOrdering;
@@ -143,6 +144,7 @@ public:
   
   const FieldContainer<double> & getPhysicalCubaturePoints();
   const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
+  const FieldContainer<double> & getCellSideParities();
   
   const FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
   
@@ -154,6 +156,7 @@ public:
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
+  void setCellSideParities(const FieldContainer<double> &cellSideParities);
 };
 
 typedef Teuchos::RCP<BasisCache> BasisCachePtr;

@@ -91,6 +91,136 @@ VarType LinearTerm::termType() const {
   return _termType; 
 }
 
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
+                           LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
+                           BasisCachePtr basisCache, bool forceBoundaryTerm) {
+  // values has dimensions (numCells, thisFields, otherFields)
+  
+  int numCells = values.dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  
+  set<int> otherIDs = otherTerm->varIDs();
+  
+  int rank = this->rank();
+  TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
+  
+  set<int>::iterator thisIt;
+  set<int>::iterator otherIt;
+  
+  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > thisBasis, otherBasis;
+  
+  bool thisFluxOrTrace  = (     this->termType() == FLUX) || (     this->termType() == TRACE);
+  bool otherFluxOrTrace = (otherTerm->termType() == FLUX) || (otherTerm->termType() == TRACE);
+
+  bool boundaryTerm = thisFluxOrTrace || otherFluxOrTrace || forceBoundaryTerm;
+  
+  Teuchos::Array<int> ltValueDim;
+  ltValueDim.push_back(numCells);
+  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+  ltValueDim.push_back(numPoints);
+  
+  // num "sides" for volume integral: 1...
+  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
+  for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
+    int numPointsSide;
+    if (boundaryTerm) { 
+      numPointsSide = basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
+    } else {
+      numPointsSide = -1;      
+    }
+    
+    for (otherIt= otherIDs.begin(); otherIt != otherIDs.end(); otherIt++) {
+      int otherID = *otherIt;
+      otherBasis = otherOrdering->getBasis(otherID);
+      int numDofsOther = otherBasis->getCardinality();
+      
+      // set up values container for other
+      Teuchos::Array<int> ltValueDim1 = ltValueDim;
+      ltValueDim1[1] = numDofsOther;
+      for (int d=0; d<rank; d++) {
+        ltValueDim1.push_back(spaceDim);
+      }
+      ltValueDim1[2] = boundaryTerm ? numPointsSide : numPoints;
+      FieldContainer<double> otherValues(ltValueDim1);
+      bool applyCubatureWeights = true;
+      if (! boundaryTerm) {
+        otherTerm->values(otherValues,otherID,otherBasis,basisCache,applyCubatureWeights);
+      } else {
+        otherTerm->values(otherValues,otherID,otherBasis,basisCache,applyCubatureWeights,sideIndex);
+      }
+      
+      for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
+        int thisID = *thisIt;
+        thisBasis = thisOrdering->getBasis(thisID,sideIndex);
+        int numDofsThis = thisBasis->getCardinality();
+        
+        // set up values container this term:
+        Teuchos::Array<int> ltValueDim2 = ltValueDim1;
+        ltValueDim2[1] = numDofsThis;
+        
+        FieldContainer<double> thisValues(ltValueDim2);
+        
+        if (! boundaryTerm ) {
+          this->values(thisValues,thisID,thisBasis,basisCache);
+        } else {
+          this->values(thisValues,thisID,thisBasis,basisCache,false,sideIndex); // false: don't apply cubature weights
+          if ( this->termType() == FLUX ) {
+            // we need to multiply thisValues' entries by the parity of the normal, since
+            // the trial implicitly contains an outward normal, and we need to adjust for the fact
+            // that the neighboring cells have opposite normal
+            // thisValues should have dimensions (numCells,numFields,numCubPointsSide)
+            int numFields = thisValues.dimension(1);
+            int numPoints = thisValues.dimension(2);
+            for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              if (parity != 1.0) {  // otherwise, we can just leave things be...
+                for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                    thisValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                  }
+                }
+              }
+            }
+          }
+          // same thing, for otherTerm:
+          if ( otherTerm->termType() == FLUX ) {
+            int numFields = otherValues.dimension(1);
+            int numPoints = otherValues.dimension(2);
+            for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              if (parity != 1.0) {  // otherwise, we can just leave things be...
+                for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                    otherValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        FieldContainer<double> miniMatrix( numCells, numDofsOther, numDofsThis );
+        
+        FunctionSpaceTools::integrate<double>(miniMatrix,otherValues,thisValues,COMP_CPP);
+        
+        // there may be a more efficient way to do this copying:
+        for (int i=0; i < numDofsOther; i++) {
+          int otherDofIndex = otherFluxOrTrace ? otherOrdering->getDofIndex(otherID,i,sideIndex)
+                                               : otherOrdering->getDofIndex(otherID,i);
+          for (int j=0; j < numDofsThis; j++) {
+            int thisDofIndex = thisFluxOrTrace ? thisOrdering->getDofIndex(thisID,j,sideIndex)
+                                               : thisOrdering->getDofIndex(thisID,j);
+            for (unsigned k=0; k < numCells; k++) {
+              values(k,otherDofIndex,thisDofIndex) += miniMatrix(k,i,j);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis

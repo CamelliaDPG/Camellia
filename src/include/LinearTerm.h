@@ -45,6 +45,11 @@ public:
   VarType termType() const;
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
+  // integrate into values:
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
+                 LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+  
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
   void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
