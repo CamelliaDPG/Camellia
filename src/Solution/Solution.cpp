@@ -1612,15 +1612,15 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (rank == 0) {
-          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
+          values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
         } else if (rank == 1) {
           for (int i=0; i<spaceDim; i++) {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
+            values(cellIndex,ptIndex,i) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
           }
         } else if (rank == 2) {
           for (int i=0; i<spaceDim; i++) {
             for (int j=0; j<spaceDim; j++) {
-              values(cellIndex,ptIndex,i,j) += (*transformedValues)(0,dofOrdinal,ptIndex,i,j) * solnCoeffs(localDofIndex);
+              values(cellIndex,ptIndex,i,j) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i,j) * solnCoeffs(localDofIndex);
             }
           }
         } else {
@@ -1860,12 +1860,12 @@ void Solution::solutionValues(FieldContainer<double> &values,
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
           // for watching in the debugger:
-          double basisValue = (*transformedValues)(0,dofOrdinal,ptIndex);
+          double basisValue = (*transformedValues)(cellIndex,dofOrdinal,ptIndex);
           double weight = solnCoeffs(cellIndex,localDofIndex);
           value += weight * basisValue;
         } else {
           for (int i=0; i<spaceDim; i++) {
-            vectorValue[i] += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
+            vectorValue[i] += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
           }
         }
       }
