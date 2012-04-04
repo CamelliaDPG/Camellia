@@ -46,6 +46,8 @@ public:
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
   // integrate into values:
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);

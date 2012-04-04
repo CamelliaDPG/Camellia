@@ -91,6 +91,76 @@ VarType LinearTerm::termType() const {
   return _termType; 
 }
 
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                           BasisCachePtr basisCache, bool forceBoundaryTerm) {
+  // values has dimensions (numCells, thisFields)
+  set<int> varIDs = this->varIDs();
+  
+  int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  
+  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > basis;
+  
+  Teuchos::Array<int> ltValueDim;
+  ltValueDim.push_back(numCells);
+  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+  ltValueDim.push_back(numPoints);
+  FieldContainer<double> ltValues;
+  
+  bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
+  bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm;
+  
+  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
+  
+  for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
+    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
+      basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex)
+                              : thisOrdering->getBasis(varID);
+      int basisCardinality = basis->getCardinality();
+      ltValueDim[1] = basisCardinality;
+      ltValues.resize(ltValueDim);
+      
+      this->values(ltValues, varID, basis, basisCache, true); // true: applyCubatureWeights
+      if (! boundaryTerm ) {
+        this->values(ltValues, varID, basis, basisCache, true); // true: applyCubatureWeights
+      } else {
+        this->values(ltValues, varID, basis, basisCache, true, sideIndex); // true: applyCubatureWeights
+        if ( this->termType() == FLUX ) {
+          // we need to multiply ltValues' entries by the parity of the normal, since
+          // the trial implicitly contains an outward normal, and we need to adjust for the fact
+          // that the neighboring cells have opposite normal
+          // thisValues should have dimensions (numCells,numFields,numCubPointsSide)
+          int numFields = ltValues.dimension(1);
+          int numPoints = ltValues.dimension(2);
+          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+            if (parity != 1.0) {  // otherwise, we can just leave things be...
+              for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                  ltValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      vector<int> varDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(varID,sideIndex)
+                                                  : thisOrdering->getDofIndices(varID);
+      // compute integrals:
+      for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
+        for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+          int varDofIndex = varDofIndices[basisOrdinal];
+          for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+            values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex);
+          }
+        }
+      }
+    }
+  }
+}
+
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
                            LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
@@ -133,11 +203,11 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
     for (otherIt= otherIDs.begin(); otherIt != otherIDs.end(); otherIt++) {
       int otherID = *otherIt;
       otherBasis = otherFluxOrTrace ? otherOrdering->getBasis(otherID,sideIndex) : otherOrdering->getBasis(otherID);
-      int numDofsOther = otherBasis->getCardinality();
+      int otherBasisCardinality = otherBasis->getCardinality();
       
       // set up values container for other
       Teuchos::Array<int> ltValueDim1 = ltValueDim;
-      ltValueDim1[1] = numDofsOther;
+      ltValueDim1[1] = otherBasisCardinality;
       for (int d=0; d<rank; d++) {
         ltValueDim1.push_back(spaceDim);
       }
@@ -153,11 +223,11 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
         int thisID = *thisIt;
         thisBasis = thisFluxOrTrace ? thisOrdering->getBasis(thisID,sideIndex) : thisOrdering->getBasis(thisID);
-        int numDofsThis = thisBasis->getCardinality();
+        int thisBasisCardinality = thisBasis->getCardinality();
         
         // set up values container this term:
         Teuchos::Array<int> ltValueDim2 = ltValueDim1;
-        ltValueDim2[1] = numDofsThis;
+        ltValueDim2[1] = thisBasisCardinality;
         
         FieldContainer<double> thisValues(ltValueDim2);
         
@@ -200,17 +270,25 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
           }
         }
         
-        FieldContainer<double> miniMatrix( numCells, numDofsOther, numDofsThis );
+        FieldContainer<double> miniMatrix( numCells, otherBasisCardinality, thisBasisCardinality );
         
         FunctionSpaceTools::integrate<double>(miniMatrix,otherValues,thisValues,COMP_CPP);
         
+        vector<int> thisDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(thisID,sideIndex)
+                                                     : thisOrdering->getDofIndices(thisID);
+        
+        vector<int> otherDofIndices = otherFluxOrTrace ? otherOrdering->getDofIndices(otherID,sideIndex)
+                                                       : otherOrdering->getDofIndices(otherID);
+        
         // there may be a more efficient way to do this copying:
-        for (int i=0; i < numDofsOther; i++) {
-          int otherDofIndex = otherFluxOrTrace ? otherOrdering->getDofIndex(otherID,i,sideIndex)
-                                               : otherOrdering->getDofIndex(otherID,i);
-          for (int j=0; j < numDofsThis; j++) {
-            int thisDofIndex = thisFluxOrTrace ? thisOrdering->getDofIndex(thisID,j,sideIndex)
-                                               : thisOrdering->getDofIndex(thisID,j);
+        for (int i=0; i < otherBasisCardinality; i++) {
+//          int otherDofIndex = otherFluxOrTrace ? otherOrdering->getDofIndex(otherID,i,sideIndex)
+//                                               : otherOrdering->getDofIndex(otherID,i);
+          int otherDofIndex = otherDofIndices[i];
+          for (int j=0; j < thisBasisCardinality; j++) {
+            int thisDofIndex = thisDofIndices[j];
+//            int thisDofIndex = thisFluxOrTrace ? thisOrdering->getDofIndex(thisID,j,sideIndex)
+//                                               : thisOrdering->getDofIndex(thisID,j);
             for (unsigned k=0; k < numCells; k++) {
               values(k,otherDofIndex,thisDofIndex) += miniMatrix(k,i,j);
             }

@@ -71,7 +71,7 @@ public:
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=0, int subSideIndex = -1);
   
-  const vector<int> & getDofIndices(int varID, int sideIndex);
+  const vector<int> & getDofIndices(int varID, int sideIndex=0);
   
   const vector<int> & getVarIDs();
   
