@@ -184,11 +184,20 @@ This is simply a consequence of the least-squares nature of DPG; the energy erro
 
 \subsection{Variational form}
 
-The DPG (discontinuous Petrov-Galerkin) method is the pairing of the concept of locally computable optimal test functions with the so-called ``ultra-weak formulation". For a given operator equation in strong form $Au = f$, the ultra-weak formulation is
+The discontinuous Petrov-Galerkin (DPG) method is the pairing of the concept of locally computable optimal test functions with the so-called ``ultra-weak formulation". For a given operator equation in strong form $Au = f$, the ultra-weak formulation is
 \[
 b\left(\left(\widehat{u},u\right),v\right) - l(v) = \langle \widehat{u}, [v] \rangle - (u,A^*v) - (f,v) = 0
 \]
-where $A^*$ is the formal adjoint resulting from integration by parts, and $[v]$ is the jump of the test function $v$ across element boundaries.  Both the inner product and formal adjoint are understood in an element-wise fashion. Under the ultra-weak formulation, the regularity requirement on each solution variable is relaxed through integration by parts.  Moreover, to maintain conformity while seeking an $L^2$ setting on interior ``field" variables, boundary terms are identified as additional new unknowns.  The result is a hybridized DG method with locally supported optimal test functions, with energy setting 
+where $A^*$ is the formal adjoint resulting from integration by parts,
+and $[v]$ is the jump of the test function $v$ across element
+boundaries.  Both the inner product and formal adjoint are understood
+in an element-wise fashion. Under the ultra-weak formulation, the
+regularity requirement on each solution variable is relaxed through
+integration by parts.  Moreover, to maintain conformity while seeking
+an $L^2$ setting on interior ``field" variables, boundary terms are
+identified as additional new unknowns.  The result is a hybridized DG \textcolor{blue}{TB: This is not true, the hybridized DG method does not hybridize both traces/fluxes}
+method with locally supported optimal test functions, with energy
+setting
 \begin{align*}
 u&\in L^2(\Omega)\\
 v&\in V=D(A^*) \\
@@ -200,9 +209,9 @@ where $D(A^*)$ is the domain of the formal adjoint $A^*$, and $T(D(A))$ is the t
 
 Up to now, we have neglected discussion of the proper choice of inner product/norm on the space $V$.  The energy norm in which DPG is optimal 
 \[
-\|u\|_E = \sup \frac{b(u,v)}{\|v\|_V}.
+\|u\|_E = \sup_{v \in V\setminus \{0\}} \frac{b(u,v)}{\|v\|_{V,E}}.
 \]
-depends heavily on our choice of norm on the test space $\|v\|_V$. 
+depends heavily on our choice of norm on the test space $\|v\|_{V,E}$. 
 
 An important relationship is the duality of the energy norm and test norm; under the assumption of injectivity of the adjoint of our variational 	operator $B$, for any choice of energy norm on $U$, the test norm $\|v\|_V$ inducing it can be recovered via duality
 \begin{align}
@@ -276,11 +285,11 @@ where $\left[ \tau_n \right]$ and $\left[ v\right]$ denote the jumps in $\tau_n$
 \left[ \tau_n \right] &= \tau^+ \cdot n^+ + \tau^-\cdot n^-\\
 \left[ v\right] &= v^+{\rm sgn}(n^+) + v^-{\rm sgn}(n^-)
 \end{align*}
-where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a given global orientation, and $-1$ otherwise. \textcolor{red}{I need to find more simple way to explain sgn}.
+where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a given global orientation, and $-1$ otherwise. \textcolor{red}{I need to find more simple way to explain sgn} \textcolor{blue}{TB: see my DPG Friedrichs paper for the explanation}.
 
 Additionally, the inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Similarly, we define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$. The divergence and gradient operators are likewise understood to act element-wise. 
 
- The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are element-wise ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
+ The functional setting is now well understood as well (see \cite{analysisDPG} for details) - $u,\sigma \in L^2(\Omega)$, $v \in H^1(\Omega_h)$, $\tau \in H({\rm div},\Omega_h)$, where $H^1(\Omega_h)$ and $H({\rm div},\Omega_h)$ are ``broken" Sobolev spaces.  By duality, $\widehat{u}$ lives in $H^{1/2}(\Gamma_h)$, the trace space of $H^1(\Omega_h)$, while $\widehat{f}_n$ comes from $H^{-1/2}(\Gamma_h)$, the normal trace space of $H({\rm div},\Omega_h)$.  
 
 Finally, we split the boundary $\Gamma$ into three portions
 \begin{align*}
@@ -292,18 +301,40 @@ We adopt a new inflow boundary condition, given by Hesthaven et al in \cite{Hest
 \[
 \beta_n u - \sigma_n = f_n = u_0
 \]
-on $\Gamma_-$, and continue with the wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem, as for many problems of interest in computational fluid dynamics, we expect $\grad u$ to be small near the inflow, and that the solutions to \eqref{primal} using $u=u_0$ and $\beta_n u - \sigma_n = f_n = u_0$ should converge to each other for sufficiently small $\epsilon$.  Under these new boundary conditions, our variational problem $b(u,v) = l(v)$ is now defined by
+on $\Gamma_-$, and continue \textcolar{blue}{TB: from where?} with the
+wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem,
+as for many problems of interest in computational fluid dynamics, we
+expect $\grad u$ to be small near the inflow, and that the solutions
+to \eqref{primal} using $\beta_n u - \sigma_n = f_n = u_0$ on $\Gamma_-$
+will converge to that using $u=u_0$ on $\Gamma_-$  for sufficiently small $\epsilon$.
+Under these new boundary conditions, our variational problem $b(u,v) =
+l(v)$ is now defined by
 \begin{align*}
-b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right), \left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0} \\
-l\left(\left(\tau,v\right)\right) &= \left(f, v\right) + \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_+} - \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_-} 
+b\left(\left(u,\sigma, \widehat{u}, \widehat{\sigma}_n\right),
+\left(\tau, v\right)\right) &= \left(u,\div \tau - \beta \cdot \grad
+v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle
+\left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} +
+\langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup
+  \Gamma_h^0} \\ l\left(\left(\tau,v\right)\right) &= \left(f,
+v\right) %+ \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_+}
+- \langle u_0, v \rangle_{\Gamma_-}
 \end{align*}
 
 \subsection{Norms on $U$}
 
-Given the boundary conditions on $\widehat{u}$ and $\widehat{f}_n$, we can now also define the trace norms as (canonical) minimum energy extension norms (taking into account the respective lifts/boundary conditions on $\widehat{u}$ and $\widehat{f}_n$ on $\Gamma_+$ and $\Gamma_-$, respectively)
+Given the boundary conditions on $\widehat{u}$ and $\widehat{f}_n$, we
+can now also define the trace norms as (canonical) minimum energy
+extension norms (taking into account the respective lifts/boundary
+conditions on $\widehat{u}$ and $\widehat{f}_n$ on $\Gamma_+$ and
+$\Gamma_-$, respectively)
 \begin{align*}
-\|\widehat{u}\| &= \inf_{w\in H^1(\Omega), \left.w\right|_{\Gamma_+}=0, \left.w\right |_{\Gamma_h\setminus \Gamma_+ } = \widehat{u}} \|w\|_{H^1(\Omega)}\\
-\|\widehat{f}_n\| &= \inf_{q\in H({\rm div},\Omega), \left.q\cdot n\right|_{\Gamma_-}= 0, \left. q\cdot n \right |_{\Gamma_h} = \widehat{f}_n} \|q\|_{H({\rm div},\Omega)}
+\|\widehat{u}\| &= \inf_{w\in H^1(\Omega),
+  \left.w\right|_{\Gamma_+}=0, \left.w\right |_{\Gamma_h\setminus
+    \Gamma_+ } = \widehat{u}} \|w\|_{H^1(\Omega)}\\ \|\widehat{f}_n\|
+&= \inf_{q\in H({\rm div},\Omega), \left.q\cdot n\right|_{\Gamma_-}=
+  0, \left. q\cdot n \right |_{\Gamma_h\setminus
+    \Gamma_-} = \widehat{f}_n}
+\|q\|_{H({\rm div},\Omega)}
 \end{align*}
 %Additionally, throughout the rest of this work, we denote norms on $u$ and $\sigma$ as
 %\begin{align*}
@@ -312,18 +343,27 @@ Given the boundary conditions on $\widehat{u}$ and $\widehat{f}_n$, we can now a
 %\end{align*}
 We will construct norms on $U$ as combinations of norms on each variable
 \[
-\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1 \|u\|_{L^2(\Omega_h)} + C_2 \|\sigma\|_{L^2(\Omega_h)} + C_3 \|\widehat{u}\| + C_4 \|\widehat{f}_n\|.
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1
+\|u\|_{L^2(\Omega_h)} + C_2 \|\sigma\|_{L^2(\Omega_h)} + C_3
+\|\widehat{u}\| + C_4 \|\widehat{f}_n\|.
 \]
 \subsection{Norms on $V$}
 
 %We will denote $\|\cdot \| = \|\cdot\|_{L^2}$ for all functions defined on $\Omega_h$. 
-As $\tau \in H({\rm div},\Omega_h)$ and $v \in H^1(\Omega_h)$, we will construct norms on $v$ and $\tau$ using some combination of terms which are equivalent to the canonical $H^1(K) \times H({\rm div},K)$ norm over a single element
+As $\tau \in H({\rm div},\Omega_h)$ and $v \in H^1(\Omega_h)$, we will
+construct norms on $v$ and $\tau$ using some combination of terms
+which are equivalent to the canonical $H^1(K) \times H({\rm div},K)$
+norm over a single element
 \[
-\|\left(\tau,v\right)\|_{H^1(K) \times H({\rm div},K)} = \|v\|_{L^2(K)}^2 + \|\grad v\|_{L^2(K)}^2  + \|\tau\|_{L^2(K)}^2 + \|\div \tau\|_{L^2(K)}^2
+\|\left(\tau,v\right)\|_{H^1(K) \times H({\rm div},K)}^2 =
+\|v\|_{L^2(K)}^2 + \|\grad v\|_{L^2(K)}^2 + \|\tau\|_{L^2(K)}^2 +
+\|\div \tau\|_{L^2(K)}^2
 \]
 The squared norm over the entire triangulation $\Omega_h$ is defined to be the squared sum of contributions from each element
 \[
-\|\left(\tau,v\right)\|_{H^1(\Omega_h) \times H({\rm div},\Omega_h)} = \sum_{K\in \Omega_h} \|\left(\tau,v\right)\|_{H^1(K) \times H({\rm div},K)}
+\|\left(\tau,v\right)\|_{H^1(\Omega_h) \times H({\rm div},\Omega_h)}^2
+= \sum_{K\in \Omega_h} \|\left(\tau,v\right)\|_{H^1(K) \times H({\rm
+    div},K)}^2
 \]
 The exact norms that we will specify on $V$ will be determined later. 
 
@@ -333,21 +373,65 @@ The norms on the skeleton $\Gamma_h$ for $v$ and $\tau$ are defined by duality f
 \|[v]\|&=\|[v]\|_{\Gamma_h^0 \cup \Gamma_+} \coloneqq \sup_{\eta\in H({\rm div};\Omega), \left.\eta\cdot n\right|_{\Gamma_- \cup \Gamma_0} = 0} \frac{\langle v, \eta\cdot n\rangle}{\|\eta\|_{H({\rm div},\Omega)}}
 \end{align*}
 
-\subsection{Approximability of the quasi-optimal test norm}%\textcolor{red}{Make new subsection on robustness here, reorganize}}
+\subsection{Approximability of the quasi-optimal test norm}
+\textcolor{blue}{need to define what we mean by robustness. perharps the best place is in the introduction}
 
 For convection-diffusion, the quasi-optimal test norm is 
 \[
-\|\left(\tau, v\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v \|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 + C_1\|v\|_{L^2} + C_2\|\tau\|_{L^2}
+\|\left(\tau, v\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v
+\|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 +
+C_1\|v\|_{L^2}^2 + C_2\|\tau\|_{L^2}^2
 \]
 for some choice of constants $C_1$ and $C_2$.  
-%We note that the optimal test norm will automatically guarantee the robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.  
-However, use of this norm for the convection-diffusion problem is difficult - the variational problem for optimal test functions using the quasi-optimal test norm is equivalent to a reaction-diffusion system \cite{DBLP:journals/procedia/NiemiCC11}.  Such systems also develop strong boundary layers for small diffusion, and transforming the problem to the reference element reveals that the inversion of the inner product associated with the optimal test norm will induce strong boundary layers of width $\epsilon/h^2$ in the optimal test functions.  In comparison, the quasi-optimal norm has yielded fantastic results for the Helmholtz equation and other wave propagation problems. The difference between the two problems lies in the fact that, for wave propagation problems, the mesh size tends to be on the order of the wavenumber $k$/singular perturbation parameter. Transforming the variational problem using the quasi-optimal test norm for wave propagation yields smooth optimal test functions that are much easier to approximate over the reference element. Typically, the wavenumbers $k$ of physical interest are $O(100)-O(1000)$ with respect to a unit domain. The corresponding finite element problems will typically be solved on meshes containing approximately $O(k^d)$ elements in $\mathbb{R}^d$, well within the range of a computationally tractable simulation. However, for convection diffusion problems, the relevant range of $\epsilon$ for physical problems can be as small as $1e-7$. Solving on partially under-resolved meshes is thus unavoidable, and the approximability of the optimal test functions must be addressed in order to take advantage of the properties of DPG.  
+%We note that the optimal test norm will automatically guarantee the
+%robust bound $\|\left(\tau, v\right)\|_V \leq \|u\|_{L^2}$.
+However, use of this norm for the convection-diffusion problem is
+difficult - the variational problem for optimal test functions using
+the quasi-optimal test norm is equivalent to a reaction-diffusion
+system \cite{DBLP:journals/procedia/NiemiCC11}.  Such systems also
+develop strong boundary layers for small diffusion, and transforming
+the problem to the reference element reveals that the inversion of the
+inner product associated with the optimal test norm will induce strong
+boundary layers of width $\epsilon/h^2$ in the optimal test functions.
+In comparison, the quasi-optimal norm has yielded fantastic
+\textcolor{blue}{we don't use fantastic in technical English, replace
+  it with excellent, for example} results for the Helmholtz equation
+and other wave propagation problems. The difference between the two
+problems lies in the fact that, for wave propagation problems, the
+mesh size tends to be on the order of the wavenumber $k$/singular
+perturbation parameter. Transforming the variational problem using the
+quasi-optimal test norm for wave propagation yields smooth optimal
+test functions that are much easier to approximate over the reference
+element. Typically, the wavenumbers $k$ of physical interest are
+$O(100)-O(1000)$ with respect to a unit domain. The corresponding
+finite element problems will typically be solved on meshes containing
+approximately $O(k^d)$ elements in $\mathbb{R}^d$, well within the
+range of a computationally tractable simulation. However, for
+convection diffusion problems, the relevant range of $\epsilon$ for
+physical problems can be as small as $1e-7$. Solving on partially
+under-resolved meshes is thus unavoidable, and the approximability of
+the optimal test functions must be addressed in order to take
+advantage of the properties of DPG.
 
 In the application of DPG in \cite{DPG1,DPG2,DPG3,DPG4}, the approximation of optimal test functions is done using the enriched test space $V = \cup_{K} P^{p+\Delta p}(K)$, where $p$ is the polynomial order of the trial space on a given element $K$.  In other words, optimal test functions are approximated element-by-element using polynomials whose order is $\Delta p$ more than the local order of approximation.  Under this scheme, the approximation of optimal test functions is tied to the effectiveness of the $p$-method.  Unfortunately, for problems with boundary layers - including the approximation of optimal test functions under the quasi-optimal test norm - the $p$-method performs very poorly.  
 
-Resolving such boundary layers present in quasi-optimal test functions has been investigated numerically using specially designed (Shishkin) subgrid meshes by Niemi, Collier, and Calo in \cite{DBLP:journals/procedia/NiemiCC11}.  However, even with Shishkin meshes, the approximation of optimal test functions under the quasi-optimal norm is difficult and far more expensive and complex to implement than approximation of test functions using a simple $p$-enriched space for $V$. We approach this from a different perspective, looking instead for robust test norms which do not induce boundary layers in the approximation of optimal test functions, and do so by formulating a general approach to analyzing the behavior of DPG under a given test norm.  
+Resolving such boundary layers present in quasi-optimal test functions
+has been investigated numerically using specially designed (Shishkin)
+subgrid meshes by Niemi, Collier, and Calo in
+\cite{DBLP:journals/procedia/NiemiCC11}.  However, even with Shishkin
+meshes, the approximation of optimal test functions under the
+quasi-optimal norm is difficult and far more expensive and complex to
+implement than approximation of test functions using a simple
+$p$-enriched space for $V$. We approach this from a different
+perspective, looking instead for robust test norms which do not induce
+boundary layers in the approximation of optimal test functions, and do
+so by formulating a general approach to analyzing the behavior of DPG
+under a given test norm.
 
-The estimates and proofs in this paper are largely based off of techniques and prior work done in \cite{DPGrobustness} and \cite{analysisDPG}; for further details, we encourage readers to consult these two publications as well\footnote{The primary contributions in this paper are stronger stability estimates for a new inflow boundary condition and a slightly different test norm.}.  
+The estimates and proofs in this paper are largely based on previous
+work done in \cite{DPGrobustness} and \cite{analysisDPG}. Our primary
+contributions in this paper are stronger stability estimates for a new
+inflow boundary condition and a slightly different test norm.
 
 \section{Strategy for proving robustness under a given test norm}
 
@@ -361,6 +445,7 @@ The avoidance of boundary layers in the test norm will be described in more deta
 \[
 \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}
 \]
+\textcolor{blue}{As a reader, up to this point, I don't understand what robustness means and why the above double inequalities is the condition for robustness?}
 where $\lesssim$ denotes a bound by a constant that will not grow as $\epsilon \rightarrow 0$. %The robust bound on the error in $\|\cdot\|_E$ from below by error in $\|\cdot\|_{U,1}$ is crucial to avoiding the instabilities associated with loss of robustness - 
 \textcolor{red}{Explain in intuitive terms what the bounds above and below mean.}
 Our goal is to explicitly derive the norms $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ that characterize this relation, taking into account the limiting case of $\epsilon \rightarrow 0$. 
