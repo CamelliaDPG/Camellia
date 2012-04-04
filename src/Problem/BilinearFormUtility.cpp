@@ -61,6 +61,7 @@ bool BilinearFormUtility::warnAboutZeroRowsAndColumns() {
 bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array) {
   // for now, only support rank 3 FCs 
   double tol = 1e-15;
+  static int warningsIssued = 0; // max of 20
   if ( array.rank() != 3) {
     TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 FieldContainers.");
   }
@@ -78,7 +79,13 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
       }
       if ( ! nonZeroFound ) {
         if (_warnAboutZeroRowsAndColumns) {
+          warningsIssued++;
           cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
+          
+          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
+            _warnAboutZeroRowsAndColumns = false;
+          }
         }
         zeroRowOrColFound = true;
       }
@@ -92,7 +99,13 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
       }
       if ( ! nonZeroFound ) {
         if (_warnAboutZeroRowsAndColumns) {
+          warningsIssued++;
           cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+          
+          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
+            _warnAboutZeroRowsAndColumns = false;
+          }
         }
         zeroRowOrColFound = true;
       }
