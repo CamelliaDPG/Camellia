@@ -1565,14 +1565,18 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
   
 }
 
-void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, bool weightForCubature) {
+void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, 
+                              bool weightForCubature, int sideIndex, EOperatorExtended op) {
   vector<int> cellIDs = basisCache->cellIDs();
+  bool boundaryValue = (sideIndex != -1);
+  
   int numCells = cellIDs.size();
   if (numCells != values.dimension(0)) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
   }
   int spaceDim = values.dimension(1);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = boundaryValue ? basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1)
+                                : basisCache->getPhysicalCubaturePoints().dimension(1);
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     int cellID = cellIDs[cellIndex];
     
@@ -1584,31 +1588,43 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
     
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
     
-    int sideIndex = 0; // assume field variable
-    BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
+    BasisPtr basis = boundaryValue ? trialOrder->getBasis(trialID, sideIndex)
+                                   : trialOrder->getBasis(trialID);
     int basisCardinality = basis->getCardinality();
-    int basisRank = trialOrder->getBasisRank(trialID);
 
     Teuchos::RCP<const FieldContainer<double> > transformedValues;
     if (weightForCubature) {
-      transformedValues = basisCache->getTransformedWeightedValues(basis, OP_VALUE);
+      transformedValues = boundaryValue ? basisCache->getTransformedWeightedValues(basis, op, sideIndex)
+                                        : basisCache->getTransformedWeightedValues(basis, op);
     } else {
-      transformedValues = basisCache->getTransformedValues(basis, OP_VALUE);
+      transformedValues = boundaryValue ? basisCache->getTransformedValues(basis, op, sideIndex)
+                                        : basisCache->getTransformedValues(basis, op);
     }
     
-    const vector<int> *dofIndices = &(trialOrder->getDofIndices(trialID,sideIndex));
+    const vector<int> *dofIndices = boundaryValue ? &(trialOrder->getDofIndices(trialID,sideIndex))
+                                                  : &(trialOrder->getDofIndices(trialID));
+    
+    int rank = transformedValues->rank() - 3; // 3 ==> scalar valued, 4 ==> vector, etc.
     
     // now, apply coefficient weights:
     for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
       int localDofIndex = (*dofIndices)[dofOrdinal];
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
-        if (basisRank == 0) {
+        if (rank == 0) {
           values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
-        } else {
+        } else if (rank == 1) {
           for (int i=0; i<spaceDim; i++) {
             values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
           }
+        } else if (rank == 2) {
+          for (int i=0; i<spaceDim; i++) {
+            for (int j=0; j<spaceDim; j++) {
+              values(cellIndex,ptIndex,i,j) += (*transformedValues)(0,dofOrdinal,ptIndex,i,j) * solnCoeffs(localDofIndex);
+            }
+          }
+        } else {
+          TEST_FOR_EXCEPTION(true, std::invalid_argument, "solutionValues doesn't support values with rank > 2.");
         }
       }
     }
