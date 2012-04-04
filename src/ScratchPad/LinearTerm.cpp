@@ -299,12 +299,124 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   }
 }
 
-//  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
+// compute the value of linearTerm for solution at the BasisCache points
+// values shape: (C,P), (C,P,D), or (C,P,D,D)
+void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
+                          bool applyCubatureWeights, int sideIndex) {
+  bool boundaryTerm = (sideIndex != -1);
+  
+  int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
+  TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
+                     "values FC does not have the expected rank" );
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  
+  values.initialize(0.0);
+  Teuchos::Array<int> scalarFunctionValueDim;
+  scalarFunctionValueDim.append(numCells);
+  scalarFunctionValueDim.append(numPoints);
+  
+  // (could tune things by pre-allocating this storage)
+  FieldContainer<double> fValues;
+  FieldContainer<double> solnValues;
+  
+  Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
+  vectorFunctionValueDim.append(spaceDim);
+  Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
+  tensorFunctionValueDim.append(spaceDim);
+  
+  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+                     std::invalid_argument, "values FC numCells disagrees with cubature points container");
+  if (! boundaryTerm) {
+    TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+                       std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+  } else {
+    TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1),
+                       std::invalid_argument, "values FC numPoints disagrees with cubature points container");      
+  }
+  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    FunctionPtr f = ls.first;
+    VarPtr var = ls.second;
+    if (f->rank() == 0) {
+      fValues.resize(scalarFunctionValueDim);
+    } else if (f->rank() == 1) {
+      fValues.resize(vectorFunctionValueDim);
+    } else if (f->rank() == 2) {
+      fValues.resize(tensorFunctionValueDim);
+    } else {
+      Teuchos::Array<int> fDim = tensorFunctionValueDim;
+      for (int d=3; d < f->rank(); d++) {
+        fDim.append(spaceDim);
+      }
+      fValues.resize(fDim);
+    }
+    
+    if (var->rank() == 0) {
+      solnValues.resize(scalarFunctionValueDim);
+    } else if (var->rank() == 1) {
+      solnValues.resize(vectorFunctionValueDim);
+    } else if (var->rank() == 2) {
+      solnValues.resize(tensorFunctionValueDim);
+    } else {
+      Teuchos::Array<int> solnDim = tensorFunctionValueDim;
+      for (int d=3; d < var->rank(); d++) {
+        solnDim.append(spaceDim);
+      }
+      solnValues.resize(solnDim);
+    }
+      
+    f->values(fValues,basisCache);
+    // the following will fail with an exception if sideIndex != -1 and var is a field variable
+    // (i.e. evaluate() doesn't support the kind of boundary-forcing idea that integrate() does.)
+    solution->solutionValues(solnValues,var->ID(),basisCache,
+                             applyCubatureWeights,sideIndex,var->op());
+    
+    Teuchos::Array<int> fDim(fValues.rank());
+    Teuchos::Array<int> solnDim(solnValues.rank());
+
+    int entriesPerPoint = 1;
+    bool scalarF = f->rank() == 0;
+    int resultRank = scalarF ? var->rank() : f->rank();
+    for (int d=0; d<resultRank; d++) {
+      entriesPerPoint *= spaceDim;
+    }
+    Teuchos::Array<int> vDim( values.rank() );
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      fDim[0] = cellIndex; solnDim[0] = cellIndex; vDim[0] = cellIndex;
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        fDim[1] = ptIndex; solnDim[1] = ptIndex; vDim[1] = ptIndex;
+        const double *fValue = &fValues[fValues.getEnumeration(fDim)];
+        const double *solnValue = &solnValues[solnValues.getEnumeration(solnDim)];
+        
+        double *value = &values[values.getEnumeration(vDim)];
+        
+        for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+          *value += *fValue * *solnValue;
+          value++;
+          if (resultRank == 0) {
+            // resultRank == 0 --> "dot" product; march along both f and soln
+            fValue++;
+            solnValue++;
+          } else {
+            // resultRank != 0 --> scalar guy stays fixed while we march over the higher-rank values
+            if (scalarF) {
+              solnValue++;
+            } else {
+              fValue++;
+            }
+          }
+        }
+      }
+    }
+  }
+}
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
 // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
 void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
-            bool applyCubatureWeights, int sideIndex) {
+                        bool applyCubatureWeights, int sideIndex) {
   // can speed things up a lot by handling specially constant weights and 1.0 weights
   // (would need to move this logic into the Function class, and then ConstantFunction can
   //  override to provide the speedup)

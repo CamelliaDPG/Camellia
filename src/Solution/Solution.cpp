@@ -1568,6 +1568,10 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, 
                               bool weightForCubature, int sideIndex, EOperatorExtended op) {
   vector<int> cellIDs = basisCache->cellIDs();
+  if ( ( sideIndex != -1 ) && !_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
+                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
+  }
   bool boundaryValue = (sideIndex != -1);
   
   int numCells = cellIDs.size();

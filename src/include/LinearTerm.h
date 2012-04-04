@@ -14,6 +14,7 @@
 #include "Function.h"
 #include "Var.h"
 #include "BasisCache.h"
+#include "Solution.h"
 
 class LinearTerm;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
@@ -44,6 +45,9 @@ public:
   
   VarType termType() const;
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
+  
+  void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
+                bool applyCubatureWeights = false, int sideIndex = -1);
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,

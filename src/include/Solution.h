@@ -209,4 +209,6 @@ public:
   
 };
 
+typedef Teuchos::RCP<Solution> SolutionPtr;
+
 #endif
