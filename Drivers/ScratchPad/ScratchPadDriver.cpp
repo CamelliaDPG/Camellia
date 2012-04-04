@@ -76,6 +76,43 @@ public:
   }
 };
 
+
+class hFunction : public Function {
+public:
+  virtual double value(double x, double y, double h) {
+    return h;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      double h = sqrt(cellMeasures(cellIndex));
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex) = value(x,y,h);
+      }
+    }
+  }
+};
+
+class hSquaredFunction : public hFunction {
+public:
+  double value(double x, double y, double h) {
+    return h * h;
+  }
+};
+
+class hInverseFunction : public hFunction {
+public:
+  double value(double x, double y, double h) {
+    return 1.0 / h;
+  }
+};
+
 class beta : public Function {
 public:
   beta() : Function(1) {
@@ -179,13 +216,14 @@ int main(int argc, char *argv[]) {
   stokesBFMath->addTerm(-u2,v3->dy());
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
+  double weight_v3 = 100.0; // v3 is dual to p
   IPPtr mathIP = Teuchos::rcp(new IP());
   mathIP->addTerm(v1);
   mathIP->addTerm(v1->grad());
   mathIP->addTerm(v2);
   mathIP->addTerm(v2->grad());
-  mathIP->addTerm(v3);
-  mathIP->addTerm(v3->grad());
+  mathIP->addTerm(weight_v3 * v3);
+  mathIP->addTerm(weight_v3 * v3->grad());
   mathIP->addTerm(q1);
   mathIP->addTerm(q1->div());
   mathIP->addTerm(q2);
@@ -243,11 +281,12 @@ int main(int argc, char *argv[]) {
   qoptIP->addTerm( q1->div() - v3->dx() );    // u1
   qoptIP->addTerm( q2->div() - v3->dy() );    // u2
   // boundary terms:
-  qoptIP->addBoundaryTerm( v1 );
-  qoptIP->addBoundaryTerm( v2 );
-  qoptIP->addBoundaryTerm( v3 );
-  qoptIP->addBoundaryTerm( q1 );
-  qoptIP->addBoundaryTerm( q2 );
+  FunctionPtr hSquared = Teuchos::rcp( new hSquaredFunction );
+  qoptIP->addBoundaryTerm( hSquared * v1 );
+  qoptIP->addBoundaryTerm( hSquared * v2 );
+  qoptIP->addBoundaryTerm( hSquared * v3 );
+  qoptIP->addBoundaryTerm( hSquared * q1 );
+  qoptIP->addBoundaryTerm( hSquared * q2 );
   
   // this is the quasi-optimal norm for the VSP Stokes formulation (not likely quite right for the stokesBFMath)
 //  qoptIP->addTerm( q1->x() / (2.0 * mu) + v1->dx() );
@@ -317,10 +356,9 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
   int minLogElements = 0, maxLogElements = 5;
-//  int H1Order = 3;
   pToAdd = 2;
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              stokesBC, qoptIP, minLogElements, 
+                                              stokesBC, mathIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   

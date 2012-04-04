@@ -136,6 +136,9 @@ public:
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
+  // side cache accessor: (new, pretty untested!)
+  Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
+  
   const vector<int> & cellIDs();
   
   shards::CellTopology cellTopology();

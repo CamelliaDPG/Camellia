@@ -14,22 +14,19 @@ PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
   _constraints = constraints;
 }
 void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
-                                 const FieldContainer<double> &physicalCellNodes,vector<int> &cellIDs, 
-                                 Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){ 
+                                 BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){ 
   
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
   
   // assumption: filter gets elements of all the same type  
-  TEST_FOR_EXCEPTION(cellIDs.size()==0,std::invalid_argument,"no cell IDs given to filter");
+  TEST_FOR_EXCEPTION(basisCache->cellIDs().size()==0,std::invalid_argument,"no cell IDs given to filter");
   
-  ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); 
-  int numCells = physicalCellNodes.dimension(0);
+  ElementTypePtr elemTypePtr = mesh->elements()[basisCache->cellIDs()[0]]->elementType(); 
+  int numCells = localStiffnessMatrix.dimension(0);
   
   DofOrderingPtr trialOrderPtr = elemTypePtr->trialOrderPtr;
-  int maxTrialDegree = trialOrderPtr->maxBasisDegree();
-  BasisCache basisCache(physicalCellNodes, *(elemTypePtr->cellTopoPtr), *(trialOrderPtr), maxTrialDegree, true);
   
   unsigned numSides = elemTypePtr->cellTopoPtr->getSideCount();
   // only allows for L2 inner products at the moment. 
@@ -39,8 +36,8 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
   for (unsigned int sideIndex = 0; sideIndex<numSides; sideIndex++){
     
     // GET INTEGRATION INFO - get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
-    FieldContainer<double> sideCubPoints = basisCache.getPhysicalCubaturePointsForSide(sideIndex);
-    FieldContainer<double> sideNormals = basisCache.getSideUnitNormals(sideIndex);        
+    FieldContainer<double> sideCubPoints = basisCache->getPhysicalCubaturePointsForSide(sideIndex);
+    FieldContainer<double> sideNormals = basisCache->getSideUnitNormals(sideIndex);        
     
     int numPts = sideCubPoints.dimension(1);
     
@@ -67,7 +64,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         
         // get basis to integrate for testing fxns
         Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
-        FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache.getTransformedWeightedValues(testTrialBasis,trialOperator,
+        FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache->getTransformedWeightedValues(testTrialBasis,trialOperator,
                                                                                                               sideIndex,false));
         // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
         FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
@@ -90,7 +87,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
           // get basis to integrate
           Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);
           // for trial: the value lives on the side, so we don't use the volume coords either:
-          FieldContainer<double> trialValuesTransformed = *(basisCache.getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
+          FieldContainer<double> trialValuesTransformed = *(basisCache->getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
           // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
           FieldContainer<double> trialValuesCopy = trialValuesTransformed;
           

@@ -5,6 +5,8 @@
 
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
+#include "Constraint.h"
+#include "PenaltyConstraints.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -18,6 +20,16 @@ class EntireBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     return true;
+  }
+};
+
+class UnitSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
+    return xMatch || yMatch;
   }
 };
 
@@ -137,9 +149,12 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+  SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
-  bc->addDirichlet(uhat, entireBoundary, u0);
+//  bc->addDirichlet(uhat, entireBoundary, u0);
+  
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  pc->addConstraint(uhat==u0,entireBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
@@ -154,14 +169,15 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 2, verticalCells = 2;
+  int H1Order = 1, pToAdd = 0;
+  int horizontalCells = 1, verticalCells = 1;
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
+  solution->setFilter(pc);
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );

@@ -310,7 +310,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
-        _filter->filter(finalStiffness,localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
+        _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
 	//        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       } 
       

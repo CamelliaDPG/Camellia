@@ -14,6 +14,11 @@ const vector< LinearSummand > & LinearTerm::summands() const {
   return _summands; 
 }
 
+LinearTerm::LinearTerm() {
+  _rank = -1;
+  _termType = UNKNOWN_TYPE;
+}
+
 LinearTerm::LinearTerm(FunctionPtr weight, VarPtr var) {
   _rank = -1;
   _termType = UNKNOWN_TYPE;
@@ -92,27 +97,109 @@ VarType LinearTerm::termType() const {
 }
 
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                           FunctionPtr scalarWeight, BasisCachePtr basisCache,
+                           bool forceBoundaryTerm) {
+  // values has dimensions (numCells, thisFields)
+  set<int> varIDs = this->varIDs();
+  
+  bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
+  bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm;
+  
+  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
+
+  for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
+  
+    int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = boundaryTerm ? basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1)
+                                 : basisCache->getPhysicalCubaturePoints().dimension(1);
+    
+    Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > basis;
+    
+    Teuchos::Array<int> ltValueDim;
+    ltValueDim.push_back(numCells);
+    ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+    ltValueDim.push_back(numPoints);
+    FieldContainer<double> ltValues;
+    
+    TEST_FOR_EXCEPTION(scalarWeight->rank() != 0, std::invalid_argument, "scalarWeight must be scalar!");
+    
+    FieldContainer<double> scalarWeightValues(numCells,numPoints);
+    if (boundaryTerm) {
+      scalarWeight->values(scalarWeightValues,basisCache->getSideBasisCache(sideIndex));
+    } else {
+      scalarWeight->values(scalarWeightValues,basisCache);
+    }
+  
+    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
+      basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex)
+      : thisOrdering->getBasis(varID);
+      int basisCardinality = basis->getCardinality();
+      ltValueDim[1] = basisCardinality;
+      ltValues.resize(ltValueDim);
+      
+      if (! boundaryTerm ) {
+        this->values(ltValues, varID, basis, basisCache, true); // true: applyCubatureWeights
+      } else {
+        this->values(ltValues, varID, basis, basisCache, true, sideIndex); // true: applyCubatureWeights
+        if ( this->termType() == FLUX ) {
+          // we need to multiply ltValues' entries by the parity of the normal, since
+          // the trial implicitly contains an outward normal, and we need to adjust for the fact
+          // that the neighboring cells have opposite normal
+          // thisValues should have dimensions (numCells,numFields,numCubPointsSide)
+          int numFields = ltValues.dimension(1);
+          int numPoints = ltValues.dimension(2);
+          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+            if (parity != 1.0) {  // otherwise, we can just leave things be...
+              for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                  ltValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      vector<int> varDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(varID,sideIndex)
+      : thisOrdering->getDofIndices(varID);
+      // compute integrals:
+      for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
+        for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+          int varDofIndex = varDofIndices[basisOrdinal];
+          for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+            values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex) * scalarWeightValues(cellIndex,ptIndex);
+          }
+        }
+      }
+    }
+  }
+}
+
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
   set<int> varIDs = this->varIDs();
   
   int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > basis;
-  
-  Teuchos::Array<int> ltValueDim;
-  ltValueDim.push_back(numCells);
-  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
-  ltValueDim.push_back(numPoints);
-  FieldContainer<double> ltValues;
-  
   bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
   bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm;
   
   int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
   
   for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
+    int numPoints = boundaryTerm ? basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1)
+                                 : basisCache->getPhysicalCubaturePoints().dimension(1);
+    
+    Teuchos::Array<int> ltValueDim;
+    ltValueDim.push_back(numCells);
+    ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+    ltValueDim.push_back(numPoints);
+    FieldContainer<double> ltValues;
+
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
       int varID = *varIt;
       basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex)
@@ -121,7 +208,6 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       ltValueDim[1] = basisCardinality;
       ltValues.resize(ltValueDim);
       
-      this->values(ltValues, varID, basis, basisCache, true); // true: applyCubatureWeights
       if (! boundaryTerm ) {
         this->values(ltValues, varID, basis, basisCache, true); // true: applyCubatureWeights
       } else {
@@ -471,7 +557,11 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         fValues.resize(fDim);
       }
       
-      ls.first->values(fValues,basisCache);
+      if (sideIndex == -1) {
+        ls.first->values(fValues,basisCache);
+      } else {
+        ls.first->values(fValues,basisCache->getSideBasisCache(sideIndex));
+      }
       constFCPtr basisValues;
       if (applyCubatureWeights) {
         if (sideIndex == -1) {

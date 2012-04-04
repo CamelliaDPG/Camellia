@@ -31,6 +31,7 @@ class LinearTerm {
 public: // was protected; changed for debugging (no big deal either way, I think)
   const vector< LinearSummand > & summands() const;
 public:
+  LinearTerm();
   LinearTerm(FunctionPtr weight, VarPtr var);
   LinearTerm(double weight, VarPtr var);
   LinearTerm(vector<double> weight, VarPtr var);
@@ -52,6 +53,9 @@ public:
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+                 FunctionPtr scalarWeight, BasisCachePtr basisCache,
+                 bool forceBoundaryTerm = false);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);

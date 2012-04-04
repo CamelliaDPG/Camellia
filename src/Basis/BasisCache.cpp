@@ -337,6 +337,10 @@ const FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int 
   return _basisCacheSides[sideOrdinal]->getPhysicalCubaturePoints();
 }
 
+Teuchos::RCP<BasisCache> BasisCache::getSideBasisCache(int sideOrdinal) {
+  return _basisCacheSides[sideOrdinal];
+}
+
 const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){  
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
