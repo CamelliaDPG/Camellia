@@ -1864,12 +1864,12 @@ void Solution::solutionValues(FieldContainer<double> &values,
         //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (basisRank == 0) {
           // for watching in the debugger:
-          double basisValue = (*transformedValues)(cellIndex,dofOrdinal,ptIndex);
+          double basisValue = (*transformedValues)(0,dofOrdinal,ptIndex);
           double weight = solnCoeffs(cellIndex,localDofIndex);
           value += weight * basisValue;
         } else {
           for (int i=0; i<spaceDim; i++) {
-            vectorValue[i] += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
+            vectorValue[i] += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
           }
         }
       }
