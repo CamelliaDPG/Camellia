@@ -116,19 +116,35 @@
 
 \subsection{Singular perturbation problems and robustness}
 
-The finite element/Galerkin method has been widely utilized in engineering to solve partial differential equations related to simulation of solid mechanics problems. For many problems in engineering, the bilinear forms resulting from these partial differential equations are symmetric and coercive (positive-definite), and it is well known that the finite element method produces near-optimal results for such problems. However, standard Bubnov-Galerkin methods tend to perform poorly for the class of partial-differential equations known as singularly perturbed problems. Singularly perturbed problems are problems where a given parameter may be either very small or very large in the context of physical problems.  An additional complication of singularly perturbed problems is that very often, in the limiting case of the parameter blowing up or decreasing to zero, the partial differential equation itself will change form. A canonical example is the convection-diffusion equation with Dirichlet boundary conditions. In 1D, this equation is
+The finite element/Galerkin method has been widely utilized in engineering to solve partial differential equations related to simulation of solid mechanics problems. For many problems in engineering, the bilinear forms resulting from these partial differential equations are symmetric and coercive (positive-definite), and it is well known that the finite element method produces near-optimal results for such problems. However, standard Bubnov-Galerkin methods tend to perform poorly for the class of partial-differential equations known as singularly perturbed problems. Singularly perturbed problems are problems where a given parameter may be either very small or very large in the context of physical problems.  An additional complication of singularly perturbed problems is that very often, in the limiting case of the parameter blowing up or decreasing to zero, the partial differential equation itself will change types (i.e from parabolic to hyperbolic). A canonical example is the convection-diffusion equation with Dirichlet boundary conditions. 
+
+\subsubsection{Convection-diffusion}
+
+In 1D, the convection-diffusion equation is
 \begin{align*}
 u'-\epsilon u'' &= f
 \end{align*}
 The equation represents the change in the concentration of some quantity $u$ in some medium from both convective and diffusive effects. The parameter $\epsilon$ represents the diffusivity, and in the limit of an inviscid medium as $\epsilon\rightarrow 0$, the partial differential equation changes types, going from a parabolic to a hyperbolic equation. For Dirichlet boundary conditions $u(0)=u_0$ and $u(1)= u_1$, the solution can develop sharp boundary layers of order $\epsilon$ near the outflow. 
 
-The finite element method has notoriously performed poorly for both this example, and for many other singularly perturbed problems. This poor performance is captured by the error bound for the finite element method applied to convection-diffusion equations
+The finite element method has notoriously performed poorly for both this example, and for many other singularly perturbed problems. This poor performance is captured by the error bound for the finite element method applied to convection-diffusion equations - for the standard Bubnov-Galerkin method with $u\in H^1(0,1)$, we have the bound given in \cite{roos2008robust}
 \[
-\|u-u_h\|_E \leq C(\epsilon) \inf_{w_h}\|u-w_h\|_U,
+\|u-u_h\|_\epsilon \leq C \inf_{w_h}\|u-w_h\|_{H^1(0,1)},
 \]
-where $C(\epsilon)$ grows as $\epsilon$ approaches its limiting case. The growth of $C$ with $\epsilon$ is referred to as a \textit{loss of robustness} in $\epsilon$, where the bound on the error in the finite element solution by the best approximation error increases as $\epsilon\rightarrow 0$.  Intuitively, as our singular perturbation parameter changes, our finite element error is bounded more and more loosely by the best approximation error, allowing for more and more error in the finite element solution for as $\epsilon$ shrinks. The manifestation of this loss of robustness in the finite element solution of the 1D convection-diffusion problem is the growth of spurious oscillations as $\epsilon\rightarrow 0$.  For a coarse mesh and small values of $\epsilon$, the Galerkin approximation of the solution to the convection-diffusion equation develops oscillations of magnitude $O(\epsilon^{-1})$. 
+for $C$ independent of $\epsilon$, and for $\|u\|_\epsilon \coloneqq \|u\|_{L^2} + \epsilon \|u'\|_{L^2}$. An alternative formulation of the above bound is 
+\[
+\|u-u_h\|_{H^1(0,1)} \leq C(\epsilon) \inf_{w_h}\|u-w_h\|_{H^1(0,1)},
+\]
+where $C(\epsilon)$ grows as $\epsilon\rightarrow 0$. 
+
+The dependence on $\epsilon$ in the bound of our finite element error by best approximation error is referred to as a \textit{loss of robustness}.  As our singular perturbation parameter changes, our finite element error is bounded more and more loosely by the best approximation error, allowing for more and more error in the finite element solution for as $\epsilon$ shrinks. 
+
+Intuitively, a non-robustness method will perform increasingly worse as $\epsilon$ decreases, independently of the best approximation error. For example, for a coarse mesh and small values of $\epsilon$, the Galerkin approximation of the solution to the convection-diffusion equation with a boundary layer develops spurious oscillations of magnitude $O(\epsilon^{-1})$ everywhere in the domain, even where best approximation error is small.  
+
+\subsubsection{Wave propagation}
 
 Another example of a singular perturbation problem which experiences loss of robustness is high frequency wave propagation problems, in which the singular perturbation parameter is the wavenumber, $k\rightarrow \infty$. The loss of robustness in this case manifests as ``pollution" error, a phenomenon where the finite element solution degrades over many wavelengths for high wavenumbers (commonly manifesting as a phase error between the FE solution and the exact solution).  
+
+\subsubsection{Stabilization terms}
 
 Traditionally, instability/loss of robustness has been dealt with using residual-based stabilization.  Given some variational form, the problem is modified by adding to the bilinear form a factor of the residual, scaled by a stabilization constant $\tau$.  The most well-known example of this is the streamline-upwind Petrov-Galerkin method, which is a stabilized method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  An important difference between residual-based stabilization techniques and other stabilizations is the idea of \textit{consistency} - by adding stabilization terms based on the residual, the exact solution still satisfies the same variational problem (i.e Galerkin orthogonality still holds)\footnote{Contrast this to an artificial diffusion method, where a specific amount of additional viscosity is added based on the interplay between the convection and diffusion terms. The exact solution to the original equation no longer satisfies the new stabilized formulation.}.
 
@@ -195,9 +211,8 @@ in an element-wise fashion. Under the ultra-weak formulation, the
 regularity requirement on each solution variable is relaxed through
 integration by parts.  Moreover, to maintain conformity while seeking
 an $L^2$ setting on interior ``field" variables, boundary terms are
-identified as additional new unknowns.  The result is a hybridized DG \textcolor{blue}{TB: This is not true, the hybridized DG method does not hybridize both traces/fluxes}
-method with locally supported optimal test functions, with energy
-setting
+identified as additional new unknowns.  The result is a DG
+method with locally supported optimal test functions, where both fluxes and traces are hybridized.  The energy setting is
 \begin{align*}
 u&\in L^2(\Omega)\\
 v&\in V=D(A^*) \\
@@ -285,7 +300,7 @@ where $\left[ \tau_n \right]$ and $\left[ v\right]$ denote the jumps in $\tau_n$
 \left[ \tau_n \right] &= \tau^+ \cdot n^+ + \tau^-\cdot n^-\\
 \left[ v\right] &= v^+{\rm sgn}(n^+) + v^-{\rm sgn}(n^-)
 \end{align*}
-where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a given global orientation, and $-1$ otherwise. \textcolor{red}{I need to find more simple way to explain sgn} \textcolor{blue}{TB: see my DPG Friedrichs paper for the explanation}.
+where $n$ is the outward normal vector to an element edge, and ${\rm sgn}(n)$ is 1 if $n$ aligns with a given normal orientation $n_e$ on each edge, and $-1$ otherwise (see Examples in \cite{DPGFriedrichs} for a more detailed explanation).  
 
 Additionally, the inner products are taken element-wise over the finite element mesh $\Omega_h$, and the duality pairings are taken on $\Gamma_h$, the mesh ``skeleton", or union of edges of elements $K$ in $\Omega_h$.  Similarly, we define the interior skeleton $\Gamma_h^0 = \Gamma_h \setminus \Gamma$. The divergence and gradient operators are likewise understood to act element-wise. 
 
@@ -301,8 +316,7 @@ We adopt a new inflow boundary condition, given by Hesthaven et al in \cite{Hest
 \[
 \beta_n u - \sigma_n = f_n = u_0
 \]
-on $\Gamma_-$, and continue \textcolar{blue}{TB: from where?} with the
-wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem,
+on $\Gamma_-$, and use the standard wall boundary condition $u=0$ on $\Gamma_+$.  For our model problem,
 as for many problems of interest in computational fluid dynamics, we
 expect $\grad u$ to be small near the inflow, and that the solutions
 to \eqref{primal} using $\beta_n u - \sigma_n = f_n = u_0$ on $\Gamma_-$
@@ -374,7 +388,9 @@ The norms on the skeleton $\Gamma_h$ for $v$ and $\tau$ are defined by duality f
 \end{align*}
 
 \subsection{Approximability of the quasi-optimal test norm}
-\textcolor{blue}{need to define what we mean by robustness. perharps the best place is in the introduction}
+%\textcolor{blue}{need to define what we mean by robustness. perharps the best place is in the introduction}
+
+An ideal choice for the test norm would be the quasi-optimal norm; however, the form of the optimal test norm for convection-diffusion problems turns out to be quite problematic in the small diffusion limit.  
 
 For convection-diffusion, the quasi-optimal test norm is 
 \[
@@ -393,9 +409,7 @@ develop strong boundary layers for small diffusion, and transforming
 the problem to the reference element reveals that the inversion of the
 inner product associated with the optimal test norm will induce strong
 boundary layers of width $\epsilon/h^2$ in the optimal test functions.
-In comparison, the quasi-optimal norm has yielded fantastic
-\textcolor{blue}{we don't use fantastic in technical English, replace
-  it with excellent, for example} results for the Helmholtz equation
+In comparison, the quasi-optimal norm has yielded excellent results for the Helmholtz equation
 and other wave propagation problems. The difference between the two
 problems lies in the fact that, for wave propagation problems, the
 mesh size tends to be on the order of the wavenumber $k$/singular
@@ -423,17 +437,29 @@ meshes, the approximation of optimal test functions under the
 quasi-optimal norm is difficult and far more expensive and complex to
 implement than approximation of test functions using a simple
 $p$-enriched space for $V$. We approach this from a different
-perspective, looking instead for robust test norms which do not induce
-boundary layers in the approximation of optimal test functions, and do
-so by formulating a general approach to analyzing the behavior of DPG
-under a given test norm.
+perspective, aiming instead to design a test norm that does not induce boundary layers, yet still maintains what we will define as \textit{robustness} - approximation properties that do not change over a range of $\epsilon$.  
+
+\subsection{Alternatives to the quasi-optimal test norm}
+
+We expect the quasi-optimal test norm to deliver results that are close to the optimal test norm; namely, that the DPG finite element solution minimizes error a norm equivalent to
+\[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = \|u\|_{L^2(\Omega_h)} + \|\sigma\|_{L^2(\Omega_h)} +
+\|\widehat{u}\| + \|\widehat{f}_n\|.
+\]
+This is an example of a \textit{robust} error bound - under the optimal test norm, we will return the best approximation error in the same norm \textit{independently} of $\epsilon$.  The precise definition of robustness for singularly perturbed problems can be given as follows - for a problem with singular perturbation parameter $\epsilon\rightarrow 0$ and exact solution $u$, a \textit{robust} method will return a solution $u_h$ such that
+\[
+\|u-u_h\|_U \lesssim  \inf_{w_h\in U}\|u-w_h\|_U
+\]
+where $\|\cdot \|_U$ is some norm and $\lesssim$ is a bound by a constant, both of which are independent of  $\epsilon$.  
+
+We expect a similar bound to hold under the quasi-optimal norm; however, it is not clear what to expect for other choices of test norms on $V$.  In particular, it is not clear whether it is possible to achieve a completely robust bound under alternative norms, especially ones that generate easily approximated test functions.  
 
 The estimates and proofs in this paper are largely based on previous
 work done in \cite{DPGrobustness} and \cite{analysisDPG}. Our primary
 contributions in this paper are stronger stability estimates for a new
 inflow boundary condition and a slightly different test norm.
 
-\section{Strategy for proving robustness under a given test norm}
+\section{Strategy for estimating the DPG energy norm}
 
 The main goal of this paper is to derive a test norm that \textit{does not induce boundary layers in the optimal test functions}, but still induces an energy norm \textit{that does not lose robustness as $\epsilon \rightarrow 0$}.  
 %The first condition is satisfied by first decoupling norms on $\left(\tau,v\right)$ such that
@@ -441,16 +467,23 @@ The main goal of this paper is to derive a test norm that \textit{does not induc
 %\left\|\left(\tau,v\right)\right\|_V = \|\tau\|_{H({\rm div},\Omega_h)} +  \|v\|_{H^1(\Omega_h)}.
 %\]
 %where $\|\tau\|_{H({\rm div},\Omega_h)}$ and $ \|v\|_{H^1(\Omega_h)}$ are both constructed as the sum of norm and seminorms on each respective space.  Ensuring that each seminorm/normed term is of the same order will allow for smooth solutions (under some assumptions on $\beta$).  
-The avoidance of boundary layers in the test norm will be described in more detail in the section detailing numerical experiments. We focus first on quantifying the condition on robustness. Such a condition is equivalent to showing the robust boundedness of the energy error from above and below by norms on $U$ 
-\[
-\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}
-\]
-\textcolor{blue}{As a reader, up to this point, I don't understand what robustness means and why the above double inequalities is the condition for robustness?}
-where $\lesssim$ denotes a bound by a constant that will not grow as $\epsilon \rightarrow 0$. %The robust bound on the error in $\|\cdot\|_E$ from below by error in $\|\cdot\|_{U,1}$ is crucial to avoiding the instabilities associated with loss of robustness - 
-\textcolor{red}{Explain in intuitive terms what the bounds above and below mean.}
-Our goal is to explicitly derive the norms $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ that characterize this relation, taking into account the limiting case of $\epsilon \rightarrow 0$. 
+The avoidance of boundary layers in the test norm will be described in more detail in the section detailing numerical experiments. 
 
-Our strategy for doing so is broken down into three parts.  
+Instead, the goal of this paper will to be derive $\epsilon$-explicit bounds on the finite element error by the best approximation error, and to characterize the dependence of such bounds upon the test norm.  We seek to derive an estimate
+\[
+\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}
+\]
+where both $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ are characterized using
+\[
+\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,i} \coloneqq C_1^i\|u\| + C_2^i\|\sigma\| + C_3^i\|\widehat{u}\| + C_4^i\|\widehat{f}_n\|,\quad i = 1,2
+\]
+As it may not be possible to derive $O(1)$ constants for each $C_j^i$, we will aim instead for a quasi-robust estimate, where some constants are allowed to depend on $\epsilon$.  \textcolor{red}{Not sure if I need this sentence here.}
+
+To derive the above $\epsilon$-explicit bounds on the finite element error in norm $U,1$ by the best approximation error in norm $U,2$, we need to show that the DPG energy norm (in which our finite element solution is optimal), is bounded from above and below 
+\[
+\left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}.
+\]
+Our goal is to explicitly derive the constants $C^1_1,\ldots C^1_4$ and $C^2_1,\ldots C^2_4$ that define the norms $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ respectively, taking into account any dependence of such $C^i_j$ on $\epsilon$.  Our strategy for doing so is broken down into three parts.  
 
 \subsection{Equate relations between norms on $U$ and norms on $V$}
 \label{sec:strategy1}
@@ -587,7 +620,7 @@ where $\|\cdot \|_{U,2}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,2}^2 \coloneqq \|u\|^2 + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
-While the upper bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error (in this sense, DPG may lose some efficiency for small $\epsilon$, though it is still guaranteed against losing robustness and stability). However, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm may be equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
+While the second bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error (in this sense, DPG may lose some efficiency for small $\epsilon$). However, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm may be equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
 
 \subsection{Bound from below}
 
