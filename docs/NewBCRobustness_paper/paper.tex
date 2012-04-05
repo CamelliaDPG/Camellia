@@ -105,7 +105,7 @@
 \newcommand{\Gout} {\Gamma_{out}}
 
 \author{Tan Bui-Thanh \and Jesse Chan \and Leszek Demkowicz \and Norbert Heuer}
-\title{Robust DPG stability II}
+\title{Robust DPG II}
 \date{}
 \begin{document}
 
@@ -461,7 +461,7 @@ inflow boundary condition and a slightly different test norm.
 
 \section{Strategy for estimating the DPG energy norm}
 
-The main goal of this paper is to derive a test norm that \textit{does not induce boundary layers in the optimal test functions}, but still induces an energy norm \textit{that does not lose robustness as $\epsilon \rightarrow 0$}.  
+The main goal of this paper is to derive a test norm that \textit{does not induce boundary layers in the optimal test functions}, but still induces an energy norm performs well for $\epsilon \ll 1$.  
 %The first condition is satisfied by first decoupling norms on $\left(\tau,v\right)$ such that
 %\[
 %\left\|\left(\tau,v\right)\right\|_V = \|\tau\|_{H({\rm div},\Omega_h)} +  \|v\|_{H^1(\Omega_h)}.
@@ -477,8 +477,7 @@ where both $\|\cdot\|_{U,1}$ and $\|\cdot\|_{U,2}$ are characterized using
 \[
 \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,i} \coloneqq C_1^i\|u\| + C_2^i\|\sigma\| + C_3^i\|\widehat{u}\| + C_4^i\|\widehat{f}_n\|,\quad i = 1,2
 \]
-As it may not be possible to derive $O(1)$ constants for each $C_j^i$, we will aim instead for a quasi-robust estimate, where some constants are allowed to depend on $\epsilon$.  \textcolor{red}{Not sure if I need this sentence here.}
-
+%As it may not be possible to derive $O(1)$ constants for each $C_j^i$, we will aim instead for a quasi-robust estimate, where some constants are allowed to depend on $\epsilon$.  \textcolor{red}{Not sure if I need this sentence here.}
 To derive the above $\epsilon$-explicit bounds on the finite element error in norm $U,1$ by the best approximation error in norm $U,2$, we need to show that the DPG energy norm (in which our finite element solution is optimal), is bounded from above and below 
 \[
 \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,1} \lesssim  \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_E \lesssim \left\| \left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right \|_{U,2}.
@@ -562,7 +561,7 @@ for any choice of data $f, g\in L^2({\Omega_h})$ and boundary conditions $\left.
 \subsection{Deriving adjoint estimates}
 \label{sec:strategy3}
 
-The final step to constructing a robust, localizable test norm on $V$ that does not generate boundary layers is to derive adjoint stability estimates on $\tau$ and $v$ in terms of localizable normed quantities.  These normed quantities will create ``building-blocks" through which we can construct test norms, where each building block will correspond roughly to robustness estimates for $\|u\|_{L^2}$, $\|\sigma\|_{L^2}$, $\|\widehat{u}\|$, or $\|\widehat{f}_n\|$.  
+The final step to estimating the induced norm on $U$ by a given localizable test norm on $V$ is to derive adjoint stability estimates on $\tau$ and $v$ in terms of localizable normed quantities.  These normed quantities will create ``building-blocks" through which we can construct test norms, where each building block will correspond roughly to estimates for $\|u\|_{L^2}$, $\|\sigma\|_{L^2}$, $\|\widehat{u}\|$, or $\|\widehat{f}_n\|$.  
 
 We introduce first the bounds derived; the proofs will be given later. For this analysis, it will be necessary to assume certain technical conditions on $\beta$.  For each proof, we require $\beta \in C^2(\bar{\Omega})$ and $\beta, \div \beta = O(1)$.  Additionally, we will assume some or all of the following assumptions hold
 \begin{align}
