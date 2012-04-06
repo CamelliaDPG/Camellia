@@ -105,7 +105,7 @@
 \newcommand{\Gout} {\Gamma_{out}}
 
 \author{Tan Bui-Thanh \and Jesse Chan \and Leszek Demkowicz \and Norbert Heuer}
-\title{$\epsilon$-explicit analysis of DPG}
+\title{$\epsilon$-explicit analysis of DPG for convection-dominated diffusion}
 \date{}
 \begin{document}
 
@@ -781,10 +781,9 @@ with boundary conditions
 - \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{reducedbc_1}\\ 
 v &= 0, \quad x\in \Gamma_+ \label{reducedbc_2}
 \end{align}
-and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions are the reduced form of boundary conditions \eqref{bc_1} and \eqref{bc_2} corresponding to $\left.\tau\cdot n\right|_{\Gamma_-}=0$ and $\left.v\right|_{\Gamma_+}=0$. 
+and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions are the reduced form of boundary conditions \eqref{bc_1} and \eqref{bc_2} corresponding to $\left.\tau\cdot n\right|_{\Gamma_-}=0$ and $\left.v\right|_{\Gamma_+}=0$. Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. 
 
-Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. The normal trace $f\cdot n$ is understood as a limit; smooth functions are dense in $H^1(\Omega)$, and we define $f\cdot n$ as the limit of $f_i\cdot n$, where $f_i \in C^\infty(\Omega)$, $f_i \rightarrow f$.
-\textcolor{red}{clearly define what we mean here with the density argument}
+The appearance of the normal trace $f\cdot n$ necessitates the use of a smooth dense subset of $L^2$.  Formally speaking, we define the adjoint equation \eqref{adjoint} for $f\in C^\infty(\Omega)$.  In doing so, we are allowed to speak of the normal trace $f\cdot n$ on the boundary.  We derive inequalities that are independent of $f\cdot n$ and $\div f$ (quantities that are ill-defined for $L^2(\Omega)$ functions), and note that, since smooth functions are dense in $L^2(\Omega)$, we can take any $L^2$ function to be the limit of $C^\infty(\Omega)$ functions.  Since the inequality holds for all smooth functions and is well-defined for $L^2(\Omega)$ functions, the inequality holds for $L^2(\Omega)$ functions in the limit as well.
 
 \begin{lemma} 
 \label{lemma_stream}
