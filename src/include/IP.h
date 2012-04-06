@@ -39,4 +39,6 @@ public:
   void printInteractions();
 };
 
+typedef Teuchos::RCP<IP> IPPtr;
+
 #endif

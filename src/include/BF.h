@@ -41,4 +41,6 @@ public:
                        FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
 };
 
+typedef Teuchos::RCP<BF> BFPtr;
+
 #endif

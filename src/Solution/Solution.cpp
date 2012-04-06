@@ -464,9 +464,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+//  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -1512,8 +1512,8 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
   int spaceDim = physicalPoints.dimension(2);
   for (int cellIndex=0;cellIndex<numTotalCells;cellIndex++){
 
-    FieldContainer<double> cellPoint(1,1,spaceDim); // a single point to find elem we're in
-    for (int i=0;i<spaceDim;i++){cellPoint(0,0,i) = physicalPoints(cellIndex,0,i);}
+    FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
+    for (int i=0;i<spaceDim;i++){cellPoint(0,i) = physicalPoints(cellIndex,0,i);}
     vector< ElementPtr > elements = _mesh->elementsForPoints(cellPoint); // operate under assumption that all points for a given cell index are in that cell
     ElementPtr elem = elements[0];
     ElementTypePtr elemTypePtr = elem->elementType();

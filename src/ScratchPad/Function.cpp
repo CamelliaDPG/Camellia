@@ -23,6 +23,16 @@ int Function::rank() {
   return _rank; 
 }
 
+void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
+  Teuchos::Array<int> dim;
+  valuesToAddTo.dimensions(dim);
+  FieldContainer<double> myValues(dim);
+  this->values(myValues,basisCache);
+  for (int i=0; i<myValues.size(); i++) {
+    valuesToAddTo[i] += myValues[i];
+  }
+}
+
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
 void Function::scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache) {
   // functionValues has dimensions (C,P,...)
@@ -208,8 +218,16 @@ void ConstantScalarFunction::scalarDivideBasisValues(FieldContainer<double> &bas
   scalarDivideFunctionValues(basisValues,basisCache);
 }
 
+double ConstantScalarFunction::value() {
+  return _value;
+}
+
 ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) { 
   _value = value; 
+}
+
+vector<double> ConstantVectorFunction::value() {
+  return _value;
 }
 
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -260,10 +278,86 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
   _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
 }
 
+SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  _f1 = f1;
+  _f2 = f2;
+}
+void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  _f1->values(values,basisCache);
+  _f2->addToValues(values,basisCache);
+}
+
+double hFunction::value(double x, double y, double h) {
+    return h;
+}
+void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  
+  FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+  const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    double h = sqrt(cellMeasures(cellIndex));
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex) = value(x,y,h);
+    }
+  }
+}
+
 Teuchos::RCP<ProductFunction> operator*(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new ProductFunction(f1,f2) );
 }
 
 Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
+}
+
+//ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+//  return Teuchos::rcp( new ConstantScalarFunction(f1->value() * f2->value()) );
+//}
+//
+//ConstantScalarFunctionPtr operator/(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+//  return Teuchos::rcp( new ConstantScalarFunction(f1->value() / f2->value()) );  
+//}
+
+//ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+//  vector<double> value = f1->value();
+//  for (int d=0; d<value.size(); d++) {
+//    value[d] *= f2->value();
+//  }
+//  return Teuchos::rcp( new ConstantVectorFunction(value) );  
+//}
+//
+//ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2) {
+//  return f2 * f1;
+//}
+//
+//ConstantVectorFunctionPtr operator/(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2) {
+//  vector<double> value = f1->value();
+//  for (int d=0; d<value.size(); d++) {
+//    value[d] /= f2->value();
+//  }
+//  return Teuchos::rcp( new ConstantVectorFunction(value) );  
+//}
+
+FunctionPtr operator*(double weight, FunctionPtr f) {
+  return Teuchos::rcp( new ConstantScalarFunction(weight) ) * f;
+}
+
+FunctionPtr operator*(FunctionPtr f, double weight) {
+  return weight * f;
+}
+
+FunctionPtr operator*(vector<double> weight, FunctionPtr f) {
+  return Teuchos::rcp( new ConstantVectorFunction(weight) ) * f;
+}
+
+FunctionPtr operator*(FunctionPtr f, vector<double> weight) {
+  return weight * f;
+}
+
+SumFunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new SumFunction(f1, f2) );
 }

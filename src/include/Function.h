@@ -16,7 +16,7 @@ typedef Teuchos::RCP<Function> FunctionPtr;
 
 class Function {
 private:
-  enum FunctionModificationType{ MULTIPLY, DIVIDE }; // private, used 
+  enum FunctionModificationType{ MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
 protected:
   int _rank;
 public:
@@ -25,6 +25,8 @@ public:
   
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
   int rank();
+  
+  virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
   
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
@@ -41,6 +43,7 @@ public:
   virtual void valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache);
+  
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
@@ -59,6 +62,7 @@ public:
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  double value();
 };
 
 class ConstantVectorFunction : public Function {
@@ -66,6 +70,7 @@ class ConstantVectorFunction : public Function {
 public:
   ConstantVectorFunction(vector<double> value);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  vector<double> value();
 };
 
 class ProductFunction : public Function {
@@ -84,7 +89,38 @@ public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
+class SumFunction : public Function {
+  FunctionPtr _f1, _f2;
+public:
+  SumFunction(FunctionPtr f1, FunctionPtr f2);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class hFunction : public Function {
+public:
+  virtual double value(double x, double y, double h);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+typedef Teuchos::RCP<ConstantScalarFunction> ConstantScalarFunctionPtr;
+typedef Teuchos::RCP<ConstantVectorFunction> ConstantVectorFunctionPtr;
+typedef Teuchos::RCP<SumFunction> SumFunctionPtr;
+
+//ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
+//ConstantScalarFunctionPtr operator/(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
+
 Teuchos::RCP<ProductFunction> operator*(FunctionPtr f1, FunctionPtr f2);
 Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
+
+//ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
+//ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2);
+//ConstantVectorFunctionPtr operator/(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
+
+FunctionPtr operator*(double weight, FunctionPtr f);
+FunctionPtr operator*(FunctionPtr f, double weight);
+FunctionPtr operator*(vector<double> weight, FunctionPtr f);
+FunctionPtr operator*(FunctionPtr f, vector<double> weight);
+
+SumFunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
 
 #endif
