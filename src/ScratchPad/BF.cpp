@@ -8,6 +8,7 @@
 
 #include "BF.h"
 #include "VarFactory.h"
+#include "BilinearFormUtility.h"
 
 BF::BF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by BF)
   _varFactory = varFactory;
@@ -71,4 +72,5 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     trialTerm->integrate(stiffness, elemType->trialOrderPtr,
                          testTerm,  elemType->testOrderPtr, basisCache);
   }
+  BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness);
 }

@@ -464,9 +464,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-//  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();

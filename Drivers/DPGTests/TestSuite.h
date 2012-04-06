@@ -23,7 +23,7 @@ public:
     for (int i=0; i<fc1.size(); i++) {
       maxDiff = max(maxDiff, abs(fc1[i] - fc2[i]));
     }
-    return (maxDiff < tol);
+    return (maxDiff <= tol);
   }
 
 };

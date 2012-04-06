@@ -69,6 +69,7 @@
 #include "MeshRefinementTests.h"
 #include "RHSTests.h"
 #include "LinearTermTests.h"
+#include "ScratchPadTests.h"
 
 #include "Projector.h"
 #include "SimpleFunction.h"
@@ -129,6 +130,7 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests() ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests() ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests() ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests() ) );

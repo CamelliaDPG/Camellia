@@ -92,6 +92,8 @@ LinearTermPtr operator*(vector<double> weight, VarPtr v);
 
 LinearTermPtr operator*(VarPtr v, vector<double> weight);
 
+LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a);
+
 LinearTermPtr operator+(VarPtr v1, VarPtr v2);
 
 LinearTermPtr operator/(VarPtr v, double weight);

@@ -95,6 +95,7 @@ OBJ_NAMES = DofOrdering \
 			 LinearTerm \
 			 Var \
 			 BCEasy \
+			 Function \
 			 RHSEasy \
 			 IP \
 			 ZoltanMeshPartitionPolicy
@@ -107,6 +108,7 @@ TEST_OBJ_NAMES = ElementTests \
        MeshTestSuite \
        LinearTermTests \
        MeshRefinementTests \
+       ScratchPadTests \
        SolutionTests \
        VectorizedBasisTestSuite \
        MultiBasisTests \
@@ -224,6 +226,9 @@ MeshRefinementTests.o: $(DRIVERS_DIR)/DPGTests/MeshRefinementTests.cpp
 SolutionTests.o: $(DRIVERS_DIR)/DPGTests/SolutionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
+ScratchPadTests.o: $(DRIVERS_DIR)/DPGTests/ScratchPadTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
 ElementTests.o: $(DRIVERS_DIR)/DPGTests/ElementTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
@@ -336,6 +341,9 @@ Projector.o: $(SRCS_DIR)/Projection/Projector.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 BCEasy.o: $(SRCS_DIR)/ScratchPad/BCEasy.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+Function.o: $(SRCS_DIR)/ScratchPad/Function.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 BF.o: $(SRCS_DIR)/ScratchPad/BF.cpp

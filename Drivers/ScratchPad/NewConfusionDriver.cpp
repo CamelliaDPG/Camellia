@@ -33,6 +33,26 @@ public:
   }
 };
 
+class InflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) ;
+    bool yMatch = (abs(y) < tol) ;
+    return xMatch || yMatch;
+  }
+};
+
+class OutflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0) < tol);
+    bool yMatch = (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
+};
+
 // boundary value for u
 class U0 : public Function {
 public:
@@ -149,12 +169,13 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
-//  bc->addDirichlet(uhat, entireBoundary, u0);
+  bc->addDirichlet(uhat, outflowBoundary, u0);
   
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  pc->addConstraint(uhat==u0,entireBoundary);
+  pc->addConstraint(uhat==u0,inflowBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
@@ -169,8 +190,8 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  int H1Order = 1, pToAdd = 0;
-  int horizontalCells = 1, verticalCells = 1;
+  int H1Order = 3, pToAdd = 2;
+  int horizontalCells = 2, verticalCells = 1;
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);
@@ -184,7 +205,7 @@ int main(int argc, char *argv[]) {
   
   int numRefs = 6;
     
-  for (int refIndex=0;refIndex<numRefs;refIndex++){    
+  for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve();
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }

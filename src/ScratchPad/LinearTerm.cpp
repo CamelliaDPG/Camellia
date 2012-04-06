@@ -376,7 +376,8 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 //            int thisDofIndex = thisFluxOrTrace ? thisOrdering->getDofIndex(thisID,j,sideIndex)
 //                                               : thisOrdering->getDofIndex(thisID,j);
             for (unsigned k=0; k < numCells; k++) {
-              values(k,otherDofIndex,thisDofIndex) += miniMatrix(k,i,j);
+              double value = miniMatrix(k,i,j); // separate line for debugger inspection
+              values(k,otherDofIndex,thisDofIndex) += value;
             }
           }
         }
@@ -503,9 +504,6 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
 // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
 void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
                         bool applyCubatureWeights, int sideIndex) {
-  // can speed things up a lot by handling specially constant weights and 1.0 weights
-  // (would need to move this logic into the Function class, and then ConstantFunction can
-  //  override to provide the speedup)
   bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 3; // 3 for scalar, 4 for vector, etc.
@@ -542,7 +540,40 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   }
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
-    if (ls.second->ID() == varID) {        
+    if (ls.second->ID() == varID) {
+      constFCPtr basisValues;
+      if (applyCubatureWeights) {
+        if (sideIndex == -1) {
+          basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op());
+        } else {
+          // on sides, we use volume coords for test values
+          bool useVolumeCoords = ls.second->varType() == TEST;
+          basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
+        }
+      } else {
+        if (sideIndex == -1) {
+          basisValues = basisCache->getTransformedValues(basis, ls.second->op());
+        } else {
+          // on sides, we use volume coords for test values
+          bool useVolumeCoords = ls.second->varType() == TEST;
+          basisValues = basisCache->getTransformedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
+        }
+      }
+
+      if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
+        // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+        FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
+        if (sideIndex == -1) {
+          ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
+        } else {
+          ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache->getSideBasisCache(sideIndex));
+        }
+        for (int i=0; i<values.size(); i++) {
+          values[i] += weightedBasisValues[i];
+        }
+        continue;
+      }
+      
       if (ls.first->rank() == 0) {
         fValues.resize(scalarFunctionValueDim);
       } else if (ls.first->rank() == 1) {
@@ -561,24 +592,6 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         ls.first->values(fValues,basisCache);
       } else {
         ls.first->values(fValues,basisCache->getSideBasisCache(sideIndex));
-      }
-      constFCPtr basisValues;
-      if (applyCubatureWeights) {
-        if (sideIndex == -1) {
-          basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op());
-        } else {
-          // on sides, we use volume coords for test values
-          bool useVolumeCoords = ls.second->varType() == TEST;
-          basisValues = basisCache->getTransformedWeightedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
-        }
-      } else {
-        if (sideIndex == -1) {
-          basisValues = basisCache->getTransformedValues(basis, ls.second->op());
-        } else {
-          // on sides, we use volume coords for test values
-          bool useVolumeCoords = ls.second->varType() == TEST;
-          basisValues = basisCache->getTransformedValues(basis, ls.second->op(), sideIndex, useVolumeCoords);
-        }
       }
       int numFields = basis->getCardinality();
       
@@ -613,6 +626,8 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         // could pretty easily fold the scalar case above into the code below
         // (just change the logic in the pointer increments)
         int entriesPerPoint = 1;
+        // now that we've changed so that we handle scalar function multiplication separately,
+        // we don't hit this code for scalar functions.  I.e. scalarF == false always.
         bool scalarF = ls.first->rank() == 0;
         int resultRank = scalarF ? ls.second->rank() : ls.first->rank();
         for (int d=0; d<resultRank; d++) {
@@ -724,6 +739,32 @@ LinearTermPtr operator*(vector<double> weight, VarPtr v) {
 
 LinearTermPtr operator*(VarPtr v, vector<double> weight) {
   return weight * v;
+}
+
+LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a) {
+  LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
+  
+  for (vector< LinearSummand >::const_iterator lsIt = lt->summands().begin(); lsIt != lt->summands().end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    FunctionPtr lsWeight = ls.first;
+    FunctionPtr newWeight = f * lsWeight;
+    VarPtr var = ls.second;
+    *lt += *(newWeight * var);
+  }
+  return lt;
+}
+
+LinearTermPtr operator/(LinearTermPtr a, FunctionPtr f) {
+  LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
+  
+  for (vector< LinearSummand >::const_iterator lsIt = lt->summands().begin(); lsIt != lt->summands().end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    FunctionPtr lsWeight = ls.first;
+    FunctionPtr newWeight = lsWeight / f;
+    VarPtr var = ls.second;
+    *lt += *(newWeight * var);
+  }
+  return lt;
 }
 
 LinearTermPtr operator+(VarPtr v1, VarPtr v2) {

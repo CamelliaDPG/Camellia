@@ -216,14 +216,13 @@ int main(int argc, char *argv[]) {
   stokesBFMath->addTerm(-u2,v3->dy());
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
-  double weight_v3 = 100.0; // v3 is dual to p
   IPPtr mathIP = Teuchos::rcp(new IP());
   mathIP->addTerm(v1);
   mathIP->addTerm(v1->grad());
   mathIP->addTerm(v2);
   mathIP->addTerm(v2->grad());
-  mathIP->addTerm(weight_v3 * v3);
-  mathIP->addTerm(weight_v3 * v3->grad());
+  mathIP->addTerm(v3);
+  mathIP->addTerm(v3->grad());
   mathIP->addTerm(q1);
   mathIP->addTerm(q1->div());
   mathIP->addTerm(q2);
@@ -260,6 +259,7 @@ int main(int argc, char *argv[]) {
       cout << "Test failed: automatic mathematician's inner product differs from new IP; maxDiff " << maxDiff << ".\n";
       cout << "Automatic: \n" << expectedValues;
       cout << "New IP: \n" << actualValues;
+      cout << "testOrdering: \n" << *testOrdering;
     } else {
       cout << "Automatic mathematician's inner product and new IP agree!!\n";
     }
