@@ -54,6 +54,37 @@ public:
   }
 };
 
+bool functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache) {
+  if (f2->rank() != f1->rank() ) {
+    cout << "f1->rank() " << f1->rank() << " != f2->rank() " << f2->rank() << endl;
+    return false;
+  }
+  int rank = f1->rank();
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  Teuchos::Array<int> dim;
+  dim.append(numCells);
+  dim.append(numPoints);
+  for (int i=0; i<rank; i++) {
+    dim.append(spaceDim);
+  }
+  FieldContainer<double> f1Values(dim);
+  FieldContainer<double> f2Values(dim);
+  f1->values(f1Values,basisCache);
+  f2->values(f2Values,basisCache);
+  
+  double tol = 1e-14;
+  double maxDiff;
+  if ( ! TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff) ) {
+    cout << "Test failed: f1 and f2 disagree; maxDiff " << maxDiff << ".\n";
+    cout << "f1Values: \n" << f1Values;
+    cout << "f2Values: \n" << f2Values;
+  } else {
+    cout << "f1 and f2 agree!" << endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -238,21 +269,90 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   // the RHS as implemented by BurgersProblem divides the first component of beta by 2.0
   // so we follow that.  I've not done the math; just imitating the code...
-//  vector<double> e1_div2 = e1;
-//  e1_div2[0] /= 2.0;
-//  FunctionPtr rhsBeta = (e1_div2 * beta * e1 + Teuchos::rcp( new ConstantVectorFunction( e2 ) )) * u_prev;
-//  rhs->addTerm( rhsBeta * v->grad() - u_prev * tau->div() );
+  Teuchos::RCP<RHSEasy> otherRHS = Teuchos::rcp( new RHSEasy );
+  vector<double> e1_div2 = e1;
+  e1_div2[0] /= 2.0;
+  FunctionPtr rhsBeta = (e1_div2 * beta * e1 + Teuchos::rcp( new ConstantVectorFunction( e2 ) )) * u_prev;
+  otherRHS->addTerm( rhsBeta * v->grad() - u_prev * tau->div() );
 
+  Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(oldBurgersBF) );
+  
+  expectedValues.resize(numCells, testOrdering->totalDofs() );
+  actualValues.resize  (numCells, testOrdering->totalDofs() );
+
+  problem->integrateAgainstStandardBasis(expectedValues,testOrdering,basisCache);
+  otherRHS->integrateAgainstStandardBasis(actualValues,testOrdering,basisCache);
+  
+  tol = 1e-14;
+  maxDiff = 0.0;
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: old RHS differs from new (\"otherRHS\"); maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New: \n" << actualValues;
+      cout << "testOrdering: \n" << *testOrdering;
+    } else {
+      cout << "Old and new RHS (\"otherRHS\") agree!!\n";
+    }
+  }
+  
   // the below should be equivalent to the above commented-out code
   // it's probably a little more efficient this way, but the real
   // reason for trying this is because the other one isn't working just yet
   // TODO: write a test asserting that these two ways of specifying the RHS are equivalent...
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   rhs->addTerm( (e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
-
-  // create a solution object
-  Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(oldBurgersBF) );
   
+  if (! functionsAgree(e2 * u_prev, 
+                       Teuchos::rcp( new ConstantVectorFunction( e2 ) ) * u_prev,
+                       basisCache) ) {
+    cout << "two like functions differ...\n";
+  }
+  
+  FunctionPtr e1_f = Teuchos::rcp( new ConstantVectorFunction( e1 ) );
+  FunctionPtr e2_f = Teuchos::rcp( new ConstantVectorFunction( e2 ) );
+  FunctionPtr one  = Teuchos::rcp( new ConstantScalarFunction( 1.0 ) );
+  if (! functionsAgree( Teuchos::rcp( new ProductFunction(e1_f, (e1_f + e2_f)) ), // e1_f * (e1_f + e2_f)
+                        one,
+                        basisCache) ) {
+    cout << "two like functions differ...\n";
+  }
+  
+  if (! functionsAgree(u_prev_squared_div2, 
+                       (e1_div2 * beta) * u_prev,
+                       basisCache) ) {
+    cout << "two like functions differ...\n";
+  }
+  
+  if (! functionsAgree(e1 * u_prev_squared_div2, 
+                       (e1_div2 * beta * e1) * u_prev,
+                       basisCache) ) {
+    cout << "two like functions differ...\n";
+  }
+  
+  if (! functionsAgree(e1 * u_prev_squared_div2 + e2 * u_prev, 
+                       (e1_div2 * beta * e1 + Teuchos::rcp( new ConstantVectorFunction( e2 ) )) * u_prev,
+                       basisCache) ) {
+    cout << "two like functions differ...\n";
+  }
+  
+  problem->integrateAgainstStandardBasis(expectedValues,testOrdering,basisCache);
+  rhs->integrateAgainstStandardBasis(actualValues,testOrdering,basisCache);
+  
+  tol = 1e-14;
+  maxDiff = 0.0;
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: old RHS differs from new (\"rhs\"); maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New: \n" << actualValues;
+      cout << "testOrdering: \n" << *testOrdering;
+    } else {
+      cout << "Old and new RHS (\"rhs\") agree!!\n";
+    }
+  }
+  
+  // create a solution object  
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, rhs, ip));
   mesh->registerSolution(solution);
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));

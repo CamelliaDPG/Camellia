@@ -95,7 +95,6 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
   for (int d=0; d<_rank; d++) {
     entriesPerPoint *= spaceDim;
   }
-  this->values(values,basisCache);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     tensorValueIndex[0] = cellIndex;
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
