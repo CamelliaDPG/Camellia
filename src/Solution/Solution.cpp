@@ -2478,6 +2478,10 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   vector<int> trialIDs = oldTrialOrdering->getVarIDs();
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   
+  if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
+    // they're implicit 0s, then: projection will also be implicit 0s...
+    return;
+  }
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
   

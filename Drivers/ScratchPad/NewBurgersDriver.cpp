@@ -33,6 +33,7 @@
 #include "InnerProductScratchPad.h"
 #include "PreviousSolutionFunction.h"
 #include "TestSuite.h"
+#include "RefinementPattern.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
@@ -47,7 +48,9 @@ public:
   double value(double x, double y, double h) {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
-    return min(sqrt(_epsilon)/ h, 1.0);
+    double scaling = min(sqrt(_epsilon)/ h, 1.0);
+    // since this is used in inner product term a like (a,a), take square root
+    return sqrt(scaling);
   }
 };
 
@@ -79,7 +82,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 1, verticalCells = 1;
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
@@ -112,8 +115,8 @@ int main(int argc, char *argv[]) {
   
   // tau parts:
   // 1/eps (sigma, tau)_K + (u, div tau)_K - (u_hat, tau_n)_dK
-  bf->addTerm(sigma1 * epsilon, tau->x()); // hmm... should be "/ epsilon", not "* epsilon"
-  bf->addTerm(sigma2 * epsilon, tau->y()); // but this is what gets us past the comparison with oldBurgersBF...
+  bf->addTerm(sigma1 / epsilon, tau->x()); 
+  bf->addTerm(sigma2 / epsilon, tau->y()); 
   bf->addTerm(u, tau->div());
   bf->addTerm( - uhat, tau->dot_normal() );
 
@@ -132,9 +135,6 @@ int main(int argc, char *argv[]) {
   bf->addTerm( -u, beta * v->grad());
   bf->addTerm( beta_n_u_minus_sigma_hat, v);
 
-
-  
-  
   // ==================== SET INITIAL GUESS ==========================
   mesh->registerSolution(backgroundFlow);
   
@@ -203,15 +203,37 @@ int main(int argc, char *argv[]) {
   
   // function to scale the squared guy by epsilon/h
   FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-//  IPPtr ip = Teuchos::rcp( new IP );
-//  ip->addTerm(tau);
-//  ip->addTerm(tau->div());
-//  ip->addTerm( epsilonOverHScaling * v );
-//  ip->addTerm( sqrt(epsilon) * v);
-//  ip->addTerm( beta * v->grad() );
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(tau);
+  ip->addTerm(tau->div());
+  ip->addTerm( epsilonOverHScaling * v );
+  ip->addTerm( sqrt(sqrt(epsilon)) * v->grad() );
+  ip->addTerm( beta * v->grad() );
 
   // use old IP instead, for now...
-  Teuchos::RCP<BurgersInnerProduct> ip = Teuchos::rcp( new BurgersInnerProduct( oldBurgersBF, mesh ) );
+  Teuchos::RCP<BurgersInnerProduct> oldIP = Teuchos::rcp( new BurgersInnerProduct( oldBurgersBF, mesh ) );
+  
+  expectedValues.resize(numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
+  actualValues.resize  (numCells, testOrdering->totalDofs(), testOrdering->totalDofs() );
+  
+  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
+  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),false); // false: don't create side cache
+
+  oldIP->computeInnerProductMatrix(expectedValues,testOrdering,ipBasisCache);
+  ip->computeInnerProductMatrix(actualValues,testOrdering,ipBasisCache);
+  
+  tol = 1e-14;
+  maxDiff = 0.0;
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: old inner product differs from new IP; maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New IP: \n" << actualValues;
+      cout << "testOrdering: \n" << *testOrdering;
+    } else {
+      cout << "Old inner product and new IP agree!!\n";
+    }
+  }
 
   // create a solution object
   Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(oldBurgersBF) );
@@ -231,6 +253,9 @@ int main(int argc, char *argv[]) {
   //  solution->solve(false);
   //  backgroundFlow->addSolution(solution,.5);
   //  return 0;
+  
+  // refine the spectral mesh, for comparability with the original Burgers' driver
+  mesh->hRefine(vector<int>(1),RefinementPattern::regularRefinementPatternQuad());
   
   int numRefs = 5;
   

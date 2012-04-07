@@ -76,29 +76,6 @@ public:
   }
 };
 
-
-class hFunction : public Function {
-public:
-  virtual double value(double x, double y, double h) {
-    return h;
-  }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-    
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      double h = sqrt(cellMeasures(cellIndex));
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        values(cellIndex,ptIndex) = value(x,y,h);
-      }
-    }
-  }
-};
-
 class hSquaredFunction : public hFunction {
 public:
   double value(double x, double y, double h) {
