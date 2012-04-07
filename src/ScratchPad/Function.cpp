@@ -60,7 +60,7 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
 }
 
 // note that valuesDottedWithTensor isn't called by anything right now
-// (it's totally untried!!)
+// (it's totally untried!! -- trying for first time with NewBurgersDriver, in RHS)
 void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache) {
@@ -279,6 +279,7 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
 }
 
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
+  TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
   _f1 = f1;
   _f2 = f2;
 }
@@ -312,6 +313,10 @@ Teuchos::RCP<ProductFunction> operator*(FunctionPtr f1, FunctionPtr f2) {
 
 Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
+}
+
+Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, double divisor) {
+  return f1 / Teuchos::rcp( new ConstantScalarFunction(divisor) );
 }
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {

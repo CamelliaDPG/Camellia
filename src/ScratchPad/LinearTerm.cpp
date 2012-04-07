@@ -744,7 +744,7 @@ LinearTermPtr operator*(VarPtr v, vector<double> weight) {
 LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a) {
   LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
   
-  for (vector< LinearSummand >::const_iterator lsIt = lt->summands().begin(); lsIt != lt->summands().end(); lsIt++) {
+  for (vector< LinearSummand >::const_iterator lsIt = a->summands().begin(); lsIt != a->summands().end(); lsIt++) {
     LinearSummand ls = *lsIt;
     FunctionPtr lsWeight = ls.first;
     FunctionPtr newWeight = f * lsWeight;
@@ -783,6 +783,14 @@ LinearTermPtr operator-(VarPtr v) {
   return (-1.0) * v;
 }
 
+LinearTermPtr operator-(LinearTermPtr a) {
+  return Teuchos::rcp( new ConstantScalarFunction(-1.0) ) * a;
+}
+
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
   return a + (-1.0) * v;
+}
+
+LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2) {
+  return a1 + -a2;
 }

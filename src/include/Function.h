@@ -111,6 +111,7 @@ typedef Teuchos::RCP<SumFunction> SumFunctionPtr;
 
 Teuchos::RCP<ProductFunction> operator*(FunctionPtr f1, FunctionPtr f2);
 Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
+Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, double divisor);
 
 //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
 //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2);

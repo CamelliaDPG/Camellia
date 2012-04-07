@@ -234,11 +234,30 @@ int main(int argc, char *argv[]) {
       cout << "Old inner product and new IP agree!!\n";
     }
   }
+  
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  // the RHS as implemented by BurgersProblem divides the first component of beta by 2.0
+  // so we follow that.  I've not done the math; just imitating the code...
+  // this is also not 
+  vector<double> e1_div2 = e1;
+  e1_div2[0] /= 2.0;
+  FunctionPtr rhsBeta = (e1_div2 * beta * e1 + Teuchos::rcp( new ConstantVectorFunction( e2 ) )) * u_prev;
+
+  // this should be equivalent to rhsBeta * v->grad()
+  // it's probably a little more efficient this way, but the real
+  // reason for trying this is because the other one isn't working just yet
+  // TODO: write a test asserting that these two ways of specifying the RHS are equivalent...
+  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
+  rhs->addTerm( u_prev_squared_div2 * v->dx() );
+  rhs->addTerm( u_prev * v->dy() );
+  rhs->addTerm( - (u_prev * tau->div()) );
+  
+//  rhs->addTerm( rhsBeta * v->grad() - u_prev * tau->div() );
 
   // create a solution object
   Teuchos::RCP<BurgersProblem> problem = Teuchos::rcp( new BurgersProblem(oldBurgersBF) );
   
-  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, problem, ip));
+  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, rhs, ip));
   mesh->registerSolution(solution);
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
@@ -260,7 +279,8 @@ int main(int argc, char *argv[]) {
   int numRefs = 5;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow,solution,stepSize,nonlinearRelativeEnergyTolerance)
+  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( 
+       new NonlinearSolveStrategy(backgroundFlow, solution, stepSize, nonlinearRelativeEnergyTolerance)
                                                                     );
   
   for (int refIndex=0;refIndex<numRefs;refIndex++){    

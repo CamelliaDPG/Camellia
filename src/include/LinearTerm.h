@@ -102,6 +102,10 @@ LinearTermPtr operator-(VarPtr v1, VarPtr v2);
 
 LinearTermPtr operator-(VarPtr v);
 
+LinearTermPtr operator-(LinearTermPtr a);
+
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v);
+
+LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2);
 
 #endif

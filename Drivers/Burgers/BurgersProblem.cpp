@@ -97,39 +97,39 @@ void BurgersProblem::imposeBC(int varID, FieldContainer<double> &physicalPoints,
                               FieldContainer<double> &unitNormals,
                               FieldContainer<double> &dirichletValues,
                               FieldContainer<bool> &imposeHere) {
-
+  
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   double tol = 1e-14;
   TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
-    
+  
   FieldContainer<double> beta = _bf->getBeta(physicalPoints);
   for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
       double x = physicalPoints(cellIndex, ptIndex, 0);
       double y = physicalPoints(cellIndex, ptIndex, 1);
-
+      
       //	double beta_n = _bf->getBeta(x,y)[0]*unitNormals(cellIndex,ptIndex,0)+_bf->getBeta(x,y)[1]*unitNormals(cellIndex,ptIndex,1);
       double beta_n = 0;
       for (int i = 0;i<spaceDim;i++){
-	beta_n += beta(cellIndex,ptIndex,i)*unitNormals(cellIndex,ptIndex,i);
+        beta_n += beta(cellIndex,ptIndex,i)*unitNormals(cellIndex,ptIndex,i);
       }
-
+      
       double u0;	
       if (abs(y-1.0)>tol){ // if we're not at the top outflow boundary
-	u0 = 1.0-2.0*x;
+        u0 = 1.0-2.0*x;
       }	
       if (abs(y-1.0)>tol){ // if not at top boundary
-	dirichletValues(cellIndex,ptIndex) = u0*u0/2.0*unitNormals(cellIndex,ptIndex,0) + u0*unitNormals(cellIndex,ptIndex,1); // enforcing flux, not trace at inflow
-	if (!bcsImposed(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) && varID==BurgersBilinearForm::U_HAT){
-	  dirichletValues(cellIndex,ptIndex) = u0;
-	}
-	imposeHere(cellIndex,ptIndex) = true; // test by imposing all zeros
+        dirichletValues(cellIndex,ptIndex) = u0*u0/2.0*unitNormals(cellIndex,ptIndex,0) + u0*unitNormals(cellIndex,ptIndex,1); // enforcing flux, not trace at inflow
+        if (!bcsImposed(BurgersBilinearForm::BETA_N_U_MINUS_SIGMA_HAT) && varID==BurgersBilinearForm::U_HAT){
+          dirichletValues(cellIndex,ptIndex) = u0;
+        }
+        imposeHere(cellIndex,ptIndex) = true; // test by imposing all zeros
       }
     }
   }
-
+  
 }
 
 void BurgersProblem::getConstraints(FieldContainer<double> &physicalPoints, 
