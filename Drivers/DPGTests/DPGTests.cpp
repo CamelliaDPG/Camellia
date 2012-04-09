@@ -68,6 +68,7 @@
 #include "ElementTests.h"
 #include "MeshRefinementTests.h"
 #include "RHSTests.h"
+#include "FunctionTests.h"
 #include "LinearTermTests.h"
 #include "ScratchPadTests.h"
 
@@ -130,16 +131,17 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests() ) );
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests() ) );
-  testSuites.push_back( Teuchos::rcp( new RHSTests() ) );
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests() ) );
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests() ) );
-  testSuites.push_back( Teuchos::rcp( new PatchBasisTests() ) );
-  testSuites.push_back( Teuchos::rcp( new ElementTests() ) );
-  testSuites.push_back( Teuchos::rcp( new SolutionTests() ) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite() ) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite() ) );
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
   for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin();
        testSuiteIt != testSuites.end(); testSuiteIt++) {
