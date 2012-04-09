@@ -37,9 +37,6 @@ OBJ_NAMES = DofOrdering \
        BilinearFormUtility \
        BasisFactory \
        BasisSumFunction \
-       BurgersBilinearForm \
-       BurgersInnerProduct \
-       BurgersProblem \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
@@ -87,7 +84,6 @@ OBJ_NAMES = DofOrdering \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
        TimeMarchingProblem \
-       TimeMarchingBurgersProblem \
 			 TransientConfusionBilinearForm \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
@@ -115,10 +111,18 @@ TEST_OBJ_NAMES = ElementTests \
        PatchBasisTests \
        TestBilinearFormDx \
        TestBilinearFormFlux \
-       RHSTests
+       RHSTests 
 TEST_OBJS = $(addsuffix .o, $(TEST_OBJ_NAMES))
 # put all the object files in OBJ_DIR:
 TEST_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS))
+
+BURGERS_OBJ_NAMES = BurgersBilinearForm \
+       BurgersInnerProduct \
+       BurgersProblem \
+       TimeMarchingBurgersProblem
+BURGERS_OBJS = $(addsuffix .o, $(BURGERS_OBJ_NAMES))
+# put all the object files in OBJ_DIR:
+BURGERS_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(BURGERS_OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
@@ -132,15 +136,16 @@ all: $(ECHOES) $(EXES)
 MovedObjs:
 	@echo OBJS_IN_PLACE: $(OBJS_IN_PLACE)
   @echo TEST_OBJS_IN_PLACE: $(TEST_OBJS_IN_PLACE)
+  @echo BURGERS_OBJS_IN_PLACE: $(BURGERS_OBJS_IN_PLACE)
 
-DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS) $(BURGERS_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 DPGTests.o: $(DRIVERS_DIR)/DPGTests/DPGTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
-BurgersDriver: BurgersDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+BurgersDriver: BurgersDriver.o $(OBJS) $(BURGERS_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 BurgersDriver.o: $(DRIVERS_DIR)/Burgers/BurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
@@ -160,8 +165,8 @@ EricksonDriver.o: $(DRIVERS_DIR)/Confusion/EricksonDriver.cpp
 ExperimentalInnerProduct.o: $(DRIVERS_DIR)/Confusion/ExperimentalInnerProduct.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
-TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 TimeMarchingBurgersDriver.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
@@ -199,8 +204,8 @@ ScalingExperiment: ScalingExperiment.o $(OBJS)
 NewConfusionDriver: NewConfusionDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewConfusionDriver.o -o NewConfusionDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
-NewBurgersDriver: NewBurgersDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+NewBurgersDriver: NewBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
@@ -395,4 +400,4 @@ DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 clean:
-	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(OBJ_DIR)/ScratchPadDriver.o $(EXES)
+	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(OBJ_DIR)/ScratchPadDriver.o $(EXES)
