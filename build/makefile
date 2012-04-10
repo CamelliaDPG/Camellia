@@ -128,6 +128,8 @@ BURGERS_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(BURGERS_OBJS))
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
 EXES = DPGTests StokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver
+EXE_OBJS = $(addsuffix .o, $(EXES))
+
 ECHOES = 
 
 default: all
@@ -404,4 +406,4 @@ DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 clean:
-	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(OBJ_DIR)/ScratchPadDriver.o $(EXES)
+	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(OBJ_DIR)/ScratchPadDriver.o $(EXES) $(EXE_OBJS)
