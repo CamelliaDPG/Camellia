@@ -10,7 +10,26 @@
 #include "PoissonExactSolution.h"
 
 #include "MathInnerProduct.h"
-#include "SimpleFunction.h"
+
+class SimpleFunction : public AbstractFunction {
+public:    
+  void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
+    int numCells = physicalPoints.dimension(0);
+    int numPoints = physicalPoints.dimension(1);
+    int spaceDim = physicalPoints.dimension(2);
+    functionValues.resize(numCells,numPoints);
+    for (int i=0;i<numCells;i++){
+      for (int j=0;j<numPoints;j++){
+        double x = physicalPoints(i,j,0);
+        double y = physicalPoints(i,j,1);
+        functionValues(i,j) = x*y + 3.0*x*x;
+      }
+    }  
+  }
+  
+};
+
+typedef Teuchos::RCP<Element> ElementPtr;
 
 // unclear on why these initializers are necessary but others (e.g. _confusionSolution1_2x2) are not
 // maybe a bug in Teuchos::RCP?
@@ -41,13 +60,13 @@ void SolutionTests::setup() {
   _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(epsilon,beta_x,beta_y) ); 
   
   bool useConformingTraces = true;
-  int polyOrder = 2;
+  int polyOrder = 2; // 2 is minimum for projecting SimpleFunction exactly
   _poissonExactSolution = 
     Teuchos::rcp( new PoissonExactSolution(PoissonExactSolution::POLYNOMIAL, 
 					   polyOrder, useConformingTraces) );  
   _poissonExactSolution->setUseSinglePointBCForPHI(false); // impose zero-mean constraint
 
-  int H1Order = 3;
+  int H1Order = polyOrder+1;
   int horizontalCells = 2; int verticalCells = 2;
   
   // before we hRefine, compute a solution for comparison after refinement
@@ -55,16 +74,19 @@ void SolutionTests::setup() {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _confusionExactSolution->bilinearForm(), H1Order, H1Order+1);
 
   Teuchos::RCP<Mesh> poissonMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
-  Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
+  Teuchos::RCP<Mesh> poissonMesh1x1 = Mesh::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
+Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
 
   _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _poissonSolution_1x1 = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
   _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
 
   _confusionSolution1_2x2->solve();
   _confusionSolution2_2x2->solve();
   _poissonSolution->solve();
+  _poissonSolution_1x1->solve();
   
   // setup test points:
   static const int NUM_POINTS_1D = 10;
@@ -75,7 +97,7 @@ void SolutionTests::setup() {
   for (int i=0; i<NUM_POINTS_1D; i++) {
     for (int j=0; j<NUM_POINTS_1D; j++) {
       _testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
-      _testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
+      _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
   }
 }
@@ -87,6 +109,13 @@ void SolutionTests::teardown() {
 }
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testSolutionEvaluationBasisCache() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testAddSolution()) {
     numTestsPassed++;
@@ -128,7 +157,6 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
 }
 
 bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
@@ -431,6 +459,66 @@ bool SolutionTests::testPRefinementInitialization() {
       << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
+  
+  return success;
+}
+
+bool SolutionTests::testSolutionEvaluationBasisCache() {
+  bool success = true;
+  double tol = 1e-12;
+  
+  // remap _testPoints from (0,1)^2 to (-1,1)^2:
+  int numPoints = _testPoints.dimension(0);
+  for (int i=0; i<numPoints; i++) {
+    double x = _testPoints(i,0);
+    double y = _testPoints(i,1);
+    _testPoints(i,0) = x * 2.0 - 1.0;
+    _testPoints(i,1) = y * 2.0 - 1.0;
+  }
+  
+  ElementPtr elem = _poissonSolution_1x1->mesh()->getElement(0); // "spectral" mesh--just one element
+  int cellID = elem->cellID();
+  vector<int> cellIDs(1,cellID);
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType()) );
+  
+  basisCache->setRefCellPoints( _testPoints ); // don't use cubature points...
+//  cout << "physicalCellNodes:\n" << _poissonSolution_1x1->mesh()->physicalCellNodesForCell(cellID);
+  basisCache->setPhysicalCellNodes( _poissonSolution_1x1->mesh()->physicalCellNodesForCell(cellID),
+                                   cellIDs, true); // true: create side cache, too
+
+  FieldContainer<double> testPoints = basisCache->getPhysicalCubaturePoints();
+  
+  map<int, FieldContainer<double> > expectedMap;
+  
+  int numCells = testPoints.dimension(0);
+  
+  FieldContainer<double> expectedValues(numCells,numPoints); 
+  FieldContainer<double> actualValues(numCells,numPoints); 
+  
+  vector<int> fieldIDs = _poissonSolution_1x1->mesh()->bilinearForm()->trialVolumeIDs();
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonExactSolution->solutionValues(expectedValues,fieldID,testPoints);
+    expectedMap[fieldID] = expectedValues;
+  }
+    
+  // test for all field variables:
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    _poissonSolution_1x1->solutionValues(actualValues,fieldID,basisCache);
+    double maxDiff;
+    expectedValues = expectedMap[fieldID];
+    if ( ! fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      success = false;
+      cout << "testSolutionEvaluationBasisCache failed: max difference in " 
+      << _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
+      
+      cout << "Expected:\n" << expectedValues;
+      cout << "Actual:\n" << actualValues;
+    }
+  }
+  
+  // TODO: test for side caches, too (both traces & fluxes and fields restricted to sides...)
   
   return success;
 }

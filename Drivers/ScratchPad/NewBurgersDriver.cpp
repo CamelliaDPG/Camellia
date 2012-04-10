@@ -34,6 +34,7 @@
 #include "PreviousSolutionFunction.h"
 #include "TestSuite.h"
 #include "RefinementPattern.h"
+#include "PenaltyConstraints.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
@@ -51,6 +52,16 @@ public:
     double scaling = min(sqrt(_epsilon)/ h, 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
+  }
+};
+
+class OutflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0) < tol);
+    bool yMatch = (abs(y-1.0) < tol);
+    return xMatch || yMatch;
   }
 };
 
@@ -76,13 +87,15 @@ bool functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache) {
   
   double tol = 1e-14;
   double maxDiff;
-  if ( ! TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff) ) {
+  bool functionsAgree = TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff);
+  if ( ! functionsAgree ) {
     cout << "Test failed: f1 and f2 disagree; maxDiff " << maxDiff << ".\n";
     cout << "f1Values: \n" << f1Values;
     cout << "f2Values: \n" << f2Values;
   } else {
     cout << "f1 and f2 agree!" << endl;
   }
+  return functionsAgree;
 }
 
 int main(int argc, char *argv[]) {
@@ -355,6 +368,15 @@ int main(int argc, char *argv[]) {
   // create a solution object  
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, rhs, ip));
   mesh->registerSolution(solution);
+  
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  pc->addConstraint(sigma_hat==zero,outflowBoundary);
+//  solution->setFilter(pc);
+  
+  // old penalty filter:
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
   solution->setFilter(penaltyBC);
   
@@ -362,12 +384,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
   // =================== END INITIALIZATION CODE ==========================
-  
-  //  solution->solve(false);
-  //  backgroundFlow->addSolution(solution,.5);
-  //  solution->solve(false);
-  //  backgroundFlow->addSolution(solution,.5);
-  //  return 0;
   
   // refine the spectral mesh, for comparability with the original Burgers' driver
   mesh->hRefine(vector<int>(1),RefinementPattern::regularRefinementPatternQuad());

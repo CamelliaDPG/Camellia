@@ -59,8 +59,11 @@ using namespace Intrepid;
 using namespace std;
 using namespace IntrepidExtendedTypes;
 
+class BasisCache;
+
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
@@ -68,7 +71,9 @@ private:
   int _numCells, _spaceDim;
   int _numSides;
   bool _isSideCache;
+  int _sideIndex;
   vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
+  Teuchos::RCP<BasisCache> _basisCacheVolume;
   FieldContainer<double> _cubPoints, _cubWeights;
   FieldContainer<double> _cellJacobian;
   FieldContainer<double> _cellJacobInv;
@@ -113,6 +118,7 @@ private:
   //  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
   //                                                                int componentOfInterest);
   void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
+  
 public:
   BasisCache(ElementTypePtr elemType, bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
@@ -120,11 +126,12 @@ public:
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
   // side cache constructor:
-  BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
+  BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
              FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
              FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell);
+             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
+             const vector<int> &cellIDs, BasisCachePtr volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> getCellMeasures();
@@ -138,6 +145,7 @@ public:
   
   // side cache accessor: (new, pretty untested!)
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
+  Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
   
   const vector<int> & cellIDs();
   
@@ -160,8 +168,10 @@ public:
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
+  
+  int getSideIndex(); // -1 if not sideCache
 };
 
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
+
 
 #endif

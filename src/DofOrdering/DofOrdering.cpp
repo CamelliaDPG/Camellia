@@ -249,11 +249,10 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
   
   os.setf(std::ios_base::scientific, std::ios_base::floatfield);
   os.setf(std::ios_base::right);
-  int myprec = os.precision();
   
   vector< int > varIDs = dofOrdering.getVarIDs();
   
-  int numVarIDs = varIDs.size();
+  unsigned numVarIDs = varIDs.size();
   
   os<< "===============================================================================\n"\
   << "\t Number of varIDs = " << numVarIDs << "\n";

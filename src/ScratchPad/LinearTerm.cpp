@@ -389,7 +389,8 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 // compute the value of linearTerm for solution at the BasisCache points
 // values shape: (C,P), (C,P,D), or (C,P,D,D)
 void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
-                          bool applyCubatureWeights, int sideIndex) {
+                          bool applyCubatureWeights) {
+  int sideIndex = basisCache->getSideIndex();
   bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
@@ -415,13 +416,8 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
   
   TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  if (! boundaryTerm) {
-    TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
-                       std::invalid_argument, "values FC numPoints disagrees with cubature points container");
-  } else {
-    TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1),
-                       std::invalid_argument, "values FC numPoints disagrees with cubature points container");      
-  }
+  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+                     std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     FunctionPtr f = ls.first;
@@ -455,10 +451,8 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
     }
       
     f->values(fValues,basisCache);
-    // the following will fail with an exception if sideIndex != -1 and var is a field variable
-    // (i.e. evaluate() doesn't support the kind of boundary-forcing idea that integrate() does.)
     solution->solutionValues(solnValues,var->ID(),basisCache,
-                             applyCubatureWeights,sideIndex,var->op());
+                             applyCubatureWeights,var->op());
     
     Teuchos::Array<int> fDim(fValues.rank());
     Teuchos::Array<int> solnDim(solnValues.rank());

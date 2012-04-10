@@ -173,6 +173,8 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   bc->addDirichlet(uhat, outflowBoundary, u0);
+
+  // bc->addDirichlet(uhat, inflowBoundary, u0);
   
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   pc->addConstraint(uhat==u0,inflowBoundary);

@@ -122,7 +122,15 @@ VarPtr Var::dot_normal() {
 
 VarPtr Var::times_normal() {
   TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank + 1, _name, OP_TIMES_NORMAL, UNKNOWN_FS, _varType ) );
+  VarType newType;
+  if (_varType == TRACE)
+    newType = FLUX;
+  else if (_varType == FLUX) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "fluxes can't be multiplied by normal (they already implicitly contain a normal).");
+  } else { // tests and field variables, restricted to the boundary, can be multiplied by normal--and are considered of the same type as before.
+    newType = _varType;
+  }
+  return Teuchos::rcp( new Var(_id, _rank + 1, _name, OP_TIMES_NORMAL, UNKNOWN_FS, newType ) );
 }
 
 VarPtr Var::times_normal_x() {

@@ -73,7 +73,6 @@
 #include "ScratchPadTests.h"
 
 #include "Projector.h"
-#include "SimpleFunction.h"
 #include "BasisCache.h"
 
 using namespace std;
@@ -90,6 +89,24 @@ BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<doubl
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   return basisCache;
 }
+
+class SimpleQuadraticFunction : public AbstractFunction {
+public:    
+  void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
+    int numCells = physicalPoints.dimension(0);
+    int numPoints = physicalPoints.dimension(1);
+    int spaceDim = physicalPoints.dimension(2);
+    functionValues.resize(numCells,numPoints);
+    for (int i=0;i<numCells;i++){
+      for (int j=0;j<numPoints;j++){
+        double x = physicalPoints(i,j,0);
+        double y = physicalPoints(i,j,1);
+        functionValues(i,j) = x*y + 3.0*x*x;
+      }
+    }  
+  }
+  
+};
 
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
@@ -131,6 +148,7 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
@@ -139,7 +157,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   
@@ -2512,7 +2529,7 @@ bool DPGTests::testProjection(){
   BasisCache basisCache(physicalCellNodes, cellTopo, *(dofOrderPtr), maxTrialDegree, false);
 
   // simple function f(x,y) = x;
-  Teuchos::RCP<SimpleFunction> simpleFunction = Teuchos::rcp(new SimpleFunction());
+  Teuchos::RCP<SimpleQuadraticFunction> simpleFunction = Teuchos::rcp(new SimpleQuadraticFunction());
 
   Projector::projectFunctionOntoBasis(basisCoefficients, simpleFunction, basis, physicalCellNodes);      
 

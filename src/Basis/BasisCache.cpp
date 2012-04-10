@@ -45,8 +45,10 @@ typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorB
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
+// init is for volume caches.
 void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering,
                       int maxTestDegree, bool createSideCacheToo) {
+  _sideIndex = -1;
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
@@ -100,13 +102,16 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDim, 
+BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, 
                        FieldContainer<double> &cubPointsSidePhysical,
                        FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
                        FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                        FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-                       FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell) {
+                       FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
+                       const vector<int> &cellIDs, BasisCachePtr volumeCache) {
   _isSideCache = true; // this is the SIDE constructor: we don't have sides here!  (// TODO: think about 3D here)
+  _sideIndex = sideIndex;
+  _basisCacheVolume = volumeCache;
   
   _cellTopo = cellTopo;
   _numCells = numCells;
@@ -124,7 +129,8 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int numCells, int spaceDi
   _cellJacobian = jacobianSideRefCell;
   _cellJacobInv = jacobianInvSideRefCell;
   _cellJacobDet = jacobianDetSideRefCell;
-  
+ 
+  _cellIDs = cellIDs;
 }
 
 const vector<int> & BasisCache::cellIDs() {
@@ -141,9 +147,9 @@ void BasisCache::discardPhysicalNodeInfo() {
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
-  _cellIDs.clear();
   
   // resize all the related fieldcontainers to reclaim their memory
+  _cellIDs.clear();
   _cellJacobian.resize(0);
   _cellJacobInv.resize(0);
   _cellJacobDet.resize(0);
@@ -337,8 +343,16 @@ const FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int 
   return _basisCacheSides[sideOrdinal]->getPhysicalCubaturePoints();
 }
 
-Teuchos::RCP<BasisCache> BasisCache::getSideBasisCache(int sideOrdinal) {
+BasisCachePtr BasisCache::getSideBasisCache(int sideOrdinal) {
   return _basisCacheSides[sideOrdinal];
+}
+
+BasisCachePtr BasisCache::getVolumeBasisCache() {
+  return _basisCacheVolume;
+}
+
+int BasisCache::getSideIndex() {
+  return _sideIndex;
 }
 
 const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){  
@@ -485,12 +499,12 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
       FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
       
       // values we want to keep around: cubPointsSide, cubPointsSideRefCell, sideNormals, jacobianSideRefCell, jacobianInvSideRefCell, jacobianDetSideRefCell
-      BasisCache* sideCache = new BasisCache(_cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
+      BasisCachePtr thisPtr = Teuchos::rcp(this, false); // sideCache won't outlive us, so this is safe...
+      BasisCache* sideCache = new BasisCache(sideOrdinal, _cellTopo, _numCells, _spaceDim, cubPointsSidePhysical,
                                              cubPointsSide, cubPointsSideRefCell, 
                                              cubWeightsSide, weightedMeasureSideRefCell,
                                              sideNormals, jacobianSideRefCell,
-                                             jacobianInvSideRefCell, jacobianDetSideRefCell);
-      
+                                             jacobianInvSideRefCell, jacobianDetSideRefCell, cellIDs, thisPtr);
       _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
     }
   }

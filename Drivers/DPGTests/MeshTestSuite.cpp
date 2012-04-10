@@ -299,8 +299,8 @@ bool MeshTestSuite::testFluxIntegration() {
   // for p=0, phi=1, so the integral around the unit square is its perimeter (4)
   //expectedValues.push_back(4.0);
   polyOrders.push_back(1);
-  // for p=1, phi=x+2y, and the integral around the perimeter is 6
-  expectedValues.push_back(6.0);
+  // for p=1, phi=x+2y-1.5, and the integral around the perimeter is 0
+  expectedValues.push_back(0.0);
   
   for (int i=0; i<expectedValues.size(); i++) {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);
@@ -356,8 +356,8 @@ bool MeshTestSuite::testFluxNorm() {
   //expectedValues.push_back(4.0);
   polyOrders.push_back(1);
   int p = 1;
-  // for p=1, phi=x+2y, and the L2 norm around the perimeter is sqrt(37/3)
-  expectedValues.push_back(sqrt(37.0/3.0));
+  // for p=1, phi=x+2y-1.5, and the L2 norm around the perimeter is sqrt(10/3)
+  expectedValues.push_back(sqrt(10.0/3.0));
   
   for (int i=0; i<expectedValues.size(); i++) {
     PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrders[i]);

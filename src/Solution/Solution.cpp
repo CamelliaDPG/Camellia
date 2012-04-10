@@ -1566,21 +1566,28 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, 
-                              bool weightForCubature, int sideIndex, EOperatorExtended op) {
+                              bool weightForCubature, EOperatorExtended op) {
+  values.initialize(0.0);
   vector<int> cellIDs = basisCache->cellIDs();
+  int sideIndex = basisCache->getSideIndex();
+  bool forceVolumeCoords = false; // used for evaluating fields on sides...
   if ( ( sideIndex != -1 ) && !_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
-                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
+    forceVolumeCoords = true;
+//    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
+//                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
   }
-  bool boundaryValue = (sideIndex != -1);
+  if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) ) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
+                       "solutionValues doesn't support evaluation of fields and fluxes variables on element interiors.");
+  }
+  bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
   
   int numCells = cellIDs.size();
   if (numCells != values.dimension(0)) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
   }
   int spaceDim = values.dimension(1);
-  int numPoints = boundaryValue ? basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1)
-                                : basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     int cellID = cellIDs[cellIndex];
     
@@ -1592,29 +1599,35 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
     
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
     
-    BasisPtr basis = boundaryValue ? trialOrder->getBasis(trialID, sideIndex)
-                                   : trialOrder->getBasis(trialID);
+    BasisPtr basis = fluxOrTrace ? trialOrder->getBasis(trialID, sideIndex)
+                                 : trialOrder->getBasis(trialID);
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP<const FieldContainer<double> > transformedValues;
     if (weightForCubature) {
-      transformedValues = boundaryValue ? basisCache->getTransformedWeightedValues(basis, op, sideIndex)
-                                        : basisCache->getTransformedWeightedValues(basis, op);
+      if (forceVolumeCoords) {
+        transformedValues = basisCache->getVolumeBasisCache()->getTransformedWeightedValues(basis,op,sideIndex,true);
+      } else {
+        transformedValues = basisCache->getTransformedWeightedValues(basis, op);
+      }
     } else {
-      transformedValues = boundaryValue ? basisCache->getTransformedValues(basis, op, sideIndex)
-                                        : basisCache->getTransformedValues(basis, op);
+      if (forceVolumeCoords) {
+        transformedValues = basisCache->getVolumeBasisCache()->getTransformedValues(basis, op, sideIndex, true);
+      } else {
+        transformedValues = basisCache->getTransformedValues(basis, op);
+      }
     }
     
-    const vector<int> *dofIndices = boundaryValue ? &(trialOrder->getDofIndices(trialID,sideIndex))
-                                                  : &(trialOrder->getDofIndices(trialID));
+    const vector<int> *dofIndices = fluxOrTrace ? &(trialOrder->getDofIndices(trialID,sideIndex))
+                                                : &(trialOrder->getDofIndices(trialID));
     
     int rank = transformedValues->rank() - 3; // 3 ==> scalar valued, 4 ==> vector, etc.
     
     // now, apply coefficient weights:
     for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
       int localDofIndex = (*dofIndices)[dofOrdinal];
+//      cout << "localDofIndex " << localDofIndex << " solnCoeffs(localDofIndex): " << solnCoeffs(localDofIndex) << endl;
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
-        //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
         if (rank == 0) {
           values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
         } else if (rank == 1) {

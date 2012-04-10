@@ -65,28 +65,39 @@ int PoissonExactSolution::H1Order() {
 template <typename T> const T PoissonExactSolution::phi(T &x, T &y) {
   // simple solution choice: let phi = (x + 2y)^_polyOrder
   T t;
+  T integral; // over (0,1)^2 -- want to subtract this to make the average 0
   switch (_type) {
     case POLYNOMIAL:
+    {
       t = 1;
       if (_polyOrder == 0) {
-        t = 1;
+        t = 0;
+        integral = 0;
+        break;
       }
       for (int i=0; i<_polyOrder; i++) {
         t *= x + 2 * y;
       }
+      T two_to_power = 1; // power = _polyOrder + 2
+      T three_to_power = 1;
+      for (int i=0; i<_polyOrder+2; i++) {
+        two_to_power *= 2.0;
+        three_to_power *= 3.0;
+      }
+      integral = (three_to_power - two_to_power - 1) / (2 * (_polyOrder + 2) * (_polyOrder + 1) );
+    }
       break;
     case TRIGONOMETRIC:
       t = sin(x) * y + 3.0 * cos(y) * x * x;
+      integral = 0;
       break;
     case EXPONENTIAL:
     {
-      T avg = 4.18597023381589 / 4.0; // solution average as reported by Mathematica
-      t = exp(x * sin(y) ) - avg;
+      integral = 4.18597023381589 / 4.0; // solution average as reported by Mathematica
+      t = exp(x * sin(y) );
     }
-      break;
-    default:
-      break;
-  } 
+  }
+  t -= integral;
   return t;
 }
 
@@ -107,18 +118,14 @@ double PoissonExactSolution::solutionValue(int trialID,
     case PoissonBilinearForm::PHI:
     case PoissonBilinearForm::PHI_HAT:
       return sphi.val();
-      break;
     case PoissonBilinearForm::PSI_1:
       return sphi.dx(0); // PSI_1 == d/dx (phi)
-      break;
     case PoissonBilinearForm::PSI_2:
       return sphi.dx(1); // PSI_2 == d/dy (phi)
-      break;
     case PoissonBilinearForm::PSI_HAT_N:
       TEST_FOR_EXCEPTION( trialID == PoissonBilinearForm::PSI_HAT_N,
                          std::invalid_argument,
                          "for fluxes, you must call solutionValue with unitNormal argument.");
-      break;
   }
   TEST_FOR_EXCEPTION( true,
                      std::invalid_argument,

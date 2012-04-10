@@ -48,7 +48,7 @@ public:
   //  vector< IntrepidExtendedTypes::EOperatorExtended > varOps(int varID);
   
   void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
-                bool applyCubatureWeights = false, int sideIndex = -1);
+                bool applyCubatureWeights = false);
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
