@@ -23,7 +23,14 @@ int Function::rank() {
   return _rank; 
 }
 
+void Function::CHECK_VALUES_RANK(FieldContainer<double> &values) { // throws exception on bad values rank
+  // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
+  TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
+}
+
+
 void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(valuesToAddTo);
   Teuchos::Array<int> dim;
   valuesToAddTo.dimensions(dim);
   FieldContainer<double> myValues(dim);
@@ -190,7 +197,8 @@ ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) {
   _value = value; 
 }
 
-void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {\
+  CHECK_VALUES_RANK(values);
   for (int i=0; i < values.size(); i++) {
     values[i] = _value;
   }
@@ -230,6 +238,7 @@ vector<double> ConstantVectorFunction::value() {
 }
 
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
   // values are stored in (C,P,D) order, the important thing here being that we can do this:
   for (int i=0; i < values.size(); ) {
     for (int d=0; d < _value.size(); d++) {
@@ -257,6 +266,7 @@ ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( pro
   }
 }
 void ProductFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
   if (( _f2->rank() > 0) && (this->rank() == 0)) { // tensor product resulting in scalar value
     _f2->valuesDottedWithTensor(values, _f1, basisCache);
   } else { // scalar multiplication by f1, then
@@ -273,6 +283,7 @@ QuotientFunction::QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor) : F
   _scalarDivisor = scalarDivisor;
 }
 void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
   _f->values(values,basisCache);
   _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
 }
@@ -283,6 +294,7 @@ SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) 
   _f2 = f2;
 }
 void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
   _f1->values(values,basisCache);
   _f2->addToValues(values,basisCache);
 }
@@ -291,6 +303,7 @@ double hFunction::value(double x, double y, double h) {
     return h;
 }
 void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   
@@ -302,6 +315,38 @@ void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
       double x = (*points)(cellIndex,ptIndex,0);
       double y = (*points)(cellIndex,ptIndex,1);
       values(cellIndex,ptIndex) = value(x,y,h);
+    }
+  }
+}
+
+void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  
+  const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex) = value(x,y);
+    }
+  }
+}
+
+UnitNormalFunction::UnitNormalFunction() : Function(1) {}
+
+void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex,0) = n1;
+      values(cellIndex,ptIndex,1) = n2;
     }
   }
 }

@@ -23,4 +23,19 @@ public:
   //  }
 };
 
+class NegatedSpatialFilter : public SpatialFilter {
+  SpatialFilterPtr _filterToNegate;
+public:
+  NegatedSpatialFilter(SpatialFilterPtr filterToNegate) {
+    _filterToNegate = filterToNegate;
+  }
+  bool matchesPoint(double x, double y) {
+    return ! _filterToNegate->matchesPoint(x,y);
+  }
+};
+//
+//SpatialFilterPtr operator!(SpatialFilterPtr sf) {
+//  return Teuchos::rcp( new NegatedSpatialFilter(sf) );
+//}
+
 #endif

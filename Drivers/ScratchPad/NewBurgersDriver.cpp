@@ -55,13 +55,19 @@ public:
   }
 };
 
-class OutflowSquareBoundary : public SpatialFilter {
+class U0 : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return 1 - 2 * x;
+  }
+};
+
+class TopBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (abs(x-1.0) < tol);
     bool yMatch = (abs(y-1.0) < tol);
-    return xMatch || yMatch;
+    return yMatch;
   }
 };
 
@@ -240,8 +246,7 @@ int main(int argc, char *argv[]) {
       cout << "Old and new Burgers stiffness agree!!\n";
     }
   }
-  
-  
+
   // define our inner product:
   // Teuchos::RCP<BurgersInnerProduct> ip = Teuchos::rcp( new BurgersInnerProduct( bf, mesh ) );
   
@@ -309,10 +314,6 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  // the below should be equivalent to the above commented-out code
-  // it's probably a little more efficient this way, but the real
-  // reason for trying this is because the other one isn't working just yet
-  // TODO: write a test asserting that these two ways of specifying the RHS are equivalent...
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   rhs->addTerm( (e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
   
@@ -365,20 +366,66 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  // create a solution object  
-  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, problem, rhs, ip));
-  mesh->registerSolution(solution);
-  
-  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   pc->addConstraint(sigma_hat==zero,outflowBoundary);
-//  solution->setFilter(pc);
+  
+  FunctionPtr u0 = Teuchos::rcp( new U0 );
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
+  FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
+  inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, ( e1 * u0_squared_div_2 + e2 * u0) * n );
+  
+  // create a solution object  
+  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
+  mesh->registerSolution(solution);
+  
+  solution->setFilter(pc);
   
   // old penalty filter:
   Teuchos::RCP<LocalStiffnessMatrixFilter> penaltyBC = Teuchos::rcp(new PenaltyMethodFilter(problem));
-  solution->setFilter(penaltyBC);
+//  solution->setFilter(penaltyBC);
+  
+  // compare old and new filters
+  elemType = mesh->getElement(0)->elementType();
+  trialOrdering = elemType->trialOrderPtr;
+  testOrdering = elemType->testOrderPtr;
+  // stiffness
+  expectedValues.resize(numCells, trialOrdering->totalDofs(), trialOrdering->totalDofs() );
+  actualValues.resize  (numCells, trialOrdering->totalDofs(), trialOrdering->totalDofs() );
+  expectedValues.initialize(0.0);
+  actualValues.initialize(0.0);
+  // load
+  FieldContainer<double> expectedLoad(numCells, trialOrdering->totalDofs() );
+  FieldContainer<double> actualLoad(numCells, trialOrdering->totalDofs() );
+    
+  penaltyBC->filter(expectedValues,expectedLoad,basisCache,mesh,problem);
+  pc->filter(actualValues,actualLoad,basisCache,mesh,problem);
+  
+  maxDiff = 0.0;
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+      cout << "Test failed: old penalty stiffness differs from new; maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New: \n" << actualValues;
+      cout << "trialOrdering: \n" << *trialOrdering;
+    } else {
+      cout << "Old and new penalty stiffness agree!!\n";
+    }
+  }
+  if (rank==0) {
+    if ( ! TestSuite::fcsAgree(expectedLoad,actualLoad,tol,maxDiff) ) {
+      cout << "Test failed: old penalty load differs from new; maxDiff " << maxDiff << ".\n";
+      cout << "Old: \n" << expectedValues;
+      cout << "New: \n" << actualValues;
+      cout << "trialOrdering: \n" << *trialOrdering;
+    } else {
+      cout << "Old and new penalty load agree!!\n";
+    }
+  }
   
   // define refinement strategy:
   Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));

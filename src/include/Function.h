@@ -19,6 +19,7 @@ private:
   enum FunctionModificationType{ MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
 protected:
   int _rank;
+  void CHECK_VALUES_RANK(FieldContainer<double> &values); // throws exception on bad values rank
 public:
   Function();
   Function(int rank);
@@ -99,6 +100,18 @@ public:
 class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class SimpleFunction : public Function {
+public:
+  virtual double value(double x, double y) = 0;
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class UnitNormalFunction : public Function {
+public:
+  UnitNormalFunction();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 

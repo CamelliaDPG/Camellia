@@ -117,7 +117,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
                                  += penaltyParameter*unweightedPenaltyMatrix(cellIndex,trialDofIndex,testDofIndex);
               }
             }
-          }	  	  	  
+          }
         }
         
         /////////////////////////////////////////////////////////////////////////////////////

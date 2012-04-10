@@ -303,7 +303,7 @@ ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp
 ScalingExperiment.o: $(DRIVERS_DIR)/ScalingExperiment/ScalingExperiment.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
-NewConfusionDriver.o: $(DRIVERS_DIR)/ScratchPad/NewConfusionDriver.cpp
+NewConfusionDriver.o: $(DRIVERS_DIR)/ScratchPad/NewConfusionDriver.cpp $(SRCS_DIR)/include/PreviousSolutionFunction.h
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 NewBurgersDriver.o: $(DRIVERS_DIR)/ScratchPad/NewBurgersDriver.cpp
