@@ -2457,6 +2457,47 @@ void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, Element
   }
 }
 
+void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap){
+  vector< ElementPtr > activeElems = _mesh->activeElements();
+  for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    projectOntoCell(functionMap,cellID);
+  }
+}
+
+void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int cellID){
+  typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  vector<int> cellIDs(1,cellID);
+  
+  for (map<int, FunctionPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
+    int trialID = functionIt->first;
+    bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+    FunctionPtr function = functionIt->second;
+    ElementPtr element = _mesh->getElement(cellID);
+    ElementTypePtr elemTypePtr = element->elementType();
+    
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
+    
+    if (fluxOrTrace) {
+      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+        Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
+        FieldContainer<double> basisCoefficients(1,basis->getCardinality());
+        Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
+        setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,sideIndex);
+      }
+    } else {
+      Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      FieldContainer<double> basisCoefficients(1,basis->getCardinality());
+      Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
+      setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
+    }
+  }
+}
+
 void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
 
   vector< ElementPtr > activeElems = _mesh->activeElements();

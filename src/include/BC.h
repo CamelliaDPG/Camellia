@@ -79,4 +79,6 @@ public:
   // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
 };
 
+typedef Teuchos::RCP<BC> BCPtr;
+
 #endif

@@ -79,4 +79,6 @@ public:
 
 };
 
+typedef Teuchos::RCP<RHS> RHSPtr;
+
 #endif

@@ -123,16 +123,19 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, bf,
-                                                H1Order, H1Order+pToAdd, useTriangles);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, 
+                                                verticalCells, bf, H1Order, 
+                                                H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
-  Teuchos::RCP<Solution> backgroundFlow = Teuchos::rcp(new Solution(mesh, Teuchos::rcp((BC*)NULL) , 
-                                                                    Teuchos::rcp((RHS*)NULL), 
-                                                                    Teuchos::rcp((DPGInnerProduct*)NULL)));
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
+                                                         nullRHS, nullIP) );
   
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
@@ -220,28 +223,29 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
   ////////////////////////////////////////////////////////////////////
-  Teuchos::RCP<RefinementStrategy> refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
+  Teuchos::RCP<RefinementStrategy> refinementStrategy;
+  refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
   int numRefs = 5;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp( 
-       new NonlinearSolveStrategy(backgroundFlow, solution, stepSize, nonlinearRelativeEnergyTolerance)
-                                                                    );
+  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
+  solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
+                                                           nonlinearRelativeEnergyTolerance));
 
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
   ////////////////////////////////////////////////////////////////////
   
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
-    solveStrategy->solve(rank==0);
+    solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   
   // one more nonlinear solve on refined mesh
   int numNRSteps = 5;
   for (int i=0;i<numNRSteps;i++){
-    solution->solve(false);    
+    solution->solve(false); // false: don't use MUMPS
     backgroundFlow->addSolution(solution,1.0);
   }
   

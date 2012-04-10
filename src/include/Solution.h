@@ -55,6 +55,7 @@
 #include "BC.h"
 #include "BasisCache.h"
 #include "AbstractFunction.h"
+#include "Function.h"
 #include "LocalStiffnessMatrixFilter.h"
 
 class Solver;
@@ -150,6 +151,12 @@ public:
   double L2NormOfSolutionGlobal(int trialID);
 
   void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades );
+  
+  // new projectOnto* methods:
+  void projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap);
+  void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, int cellID);
+  
+  // old projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
   void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);
