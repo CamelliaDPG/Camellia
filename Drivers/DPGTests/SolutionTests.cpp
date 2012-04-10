@@ -316,14 +316,18 @@ bool SolutionTests::testNewProjectFunction() {
   bool success = true;
   double tol = 1e-14;
   
+  Teuchos::RCP<BilinearForm> bf = _confusionUnsolved->mesh()->bilinearForm();
+  
+  vector<int> trialIDs = bf->trialIDs();
+  
   FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
   map<int, FunctionPtr > functionMap;
-  functionMap[ConfusionBilinearForm::U]       = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_1] = quadraticFunction;
-  functionMap[ConfusionBilinearForm::SIGMA_2] = quadraticFunction;
+  for (int i=0; i<trialIDs.size(); i++) {
+    int trialID = trialIDs[i];
+    functionMap[trialID] = quadraticFunction;
+  }
   
-  _confusionUnsolved->projectOntoMesh(functionMap);  
-  int numPoints = _testPoints.dimension(0);
+  _confusionUnsolved->projectOntoMesh(functionMap);
   
   for (int i=0; i<_confusionUnsolved->mesh()->numElements(); i++) {
     int numCells = 1;
@@ -331,40 +335,40 @@ bool SolutionTests::testNewProjectFunction() {
     int cellID = elem->cellID();
     vector<int> cellIDs(1,cellID);
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType()) );
-    
-    basisCache->setRefCellPoints( _testPoints ); // don't use cubature points...
-    
+        
     basisCache->setPhysicalCellNodes( _confusionUnsolved->mesh()->physicalCellNodesForCell(cellID),
                                      cellIDs, true); // true: create side cache, too
-    
-    FieldContainer<double> valuesU(numCells, numPoints);
-    FieldContainer<double> valuesSIGMA1(numCells, numPoints);
-    FieldContainer<double> valuesSIGMA2(numCells, numPoints);
-    
-    _confusionUnsolved->solutionValues(valuesU, ConfusionBilinearForm::U, basisCache);
-    _confusionUnsolved->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1, basisCache);
-    _confusionUnsolved->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2, basisCache);
-    
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int sideToTest = 2;
+    int numPointsSide = basisCache->getSideBasisCache(sideToTest)->getPhysicalCubaturePoints().dimension(1);
+
     FieldContainer<double> functionValues(numCells, numPoints);
     quadraticFunction->values(functionValues,basisCache);
-    int numValues = functionValues.size();
-    for (int valueIndex = 0;valueIndex<numValues;valueIndex++){
-      double diff = abs(functionValues[valueIndex]-valuesU[valueIndex]);
-      if (diff>tol){
-        success = false;
-        cout << "Test failed: difference in projected and computed values is " << diff << endl;
+    
+    FieldContainer<double> functionValuesSide(numCells, numPointsSide);
+    quadraticFunction->values(functionValuesSide,basisCache->getSideBasisCache(sideToTest));
+    
+    for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++) {
+      int trialID = trialIDs[trialIndex];
+      FieldContainer<double> valuesExpected;
+      FieldContainer<double> valuesActual;
+      if ( bf->isFluxOrTrace(trialID) ) {
+        FieldContainer<double> values(numCells, numPointsSide);
+        _confusionUnsolved->solutionValues(values, trialID, basisCache->getSideBasisCache(sideToTest));
+        valuesActual = values;
+        valuesExpected = functionValuesSide;
+      } else { // volume
+        FieldContainer<double> values(numCells, numPoints);
+        _confusionUnsolved->solutionValues(values, trialID, basisCache);
+        valuesActual = values;
+        valuesExpected = functionValues;
       }
-      diff = abs(functionValues[valueIndex]-valuesSIGMA1[valueIndex]);
-      if (diff>tol){
+      double maxDiff;
+      if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
+        cout << "testNewProjectFunction() failure: maxDiff is " << maxDiff << " for trialID " << trialID << endl;
         success = false;
-        cout << "Test failed: difference in projected and computed values is " << diff << endl;
       }
-      diff = abs(functionValues[valueIndex]-valuesSIGMA2[valueIndex]);
-      if (diff>tol){
-        success = false;
-        cout << "Test failed: difference in projected and computed values is " << diff << endl;
-      }
-    }      
+    }
   }
   return success;  
 }

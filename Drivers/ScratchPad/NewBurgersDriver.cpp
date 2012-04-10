@@ -5,9 +5,6 @@
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
-#include "ZeroFunction.h"
-#include "../Burgers/InitialGuess.h"
-
 #include "RefinementStrategy.h"
 #include "NonlinearStepSize.h"
 #include "NonlinearSolveStrategy.h"
@@ -165,12 +162,14 @@ int main(int argc, char *argv[]) {
 
   // ==================== SET INITIAL GUESS ==========================
   mesh->registerSolution(backgroundFlow);
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr u0 = Teuchos::rcp( new U0 );
   
-  map<int, Teuchos::RCP<AbstractFunction> > functionMap;
-  functionMap[BurgersBilinearForm::U] = Teuchos::rcp(new InitialGuess());
-  functionMap[BurgersBilinearForm::SIGMA_1] = Teuchos::rcp(new ZeroFunction());
-  functionMap[BurgersBilinearForm::SIGMA_2] = Teuchos::rcp(new ZeroFunction());
-  
+  map<int, Teuchos::RCP<Function> > functionMap;
+  functionMap[BurgersBilinearForm::U] = u0;
+  functionMap[BurgersBilinearForm::SIGMA_1] = zero;
+  functionMap[BurgersBilinearForm::SIGMA_2] = zero;
+ 
   backgroundFlow->projectOntoMesh(functionMap);
   // ==================== END SET INITIAL GUESS ==========================
 
@@ -200,13 +199,11 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   pc->addConstraint(sigma_hat==zero,outflowBoundary);
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE DIRICHLET BC
   ////////////////////////////////////////////////////////////////////
-  FunctionPtr u0 = Teuchos::rcp( new U0 );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
   FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
