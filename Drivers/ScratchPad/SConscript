@@ -1,0 +1,8 @@
+Import('*')
+
+#src_obj = env.Object([''])
+
+#env.Program('exec/Burgers',['NewBurgersDriver.cpp',src_obj])
+env.Program('exec/Burgers',['NewBurgersDriver.cpp'])
+
+
