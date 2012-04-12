@@ -67,11 +67,20 @@ public:
   }
 };
 
-class TopBoundary : public SpatialFilter {
+class InflowBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool yMatch = (abs(y-1.0) < tol);
+    bool yMatch = (abs(x) < tol);
+    return yMatch;
+  }
+};
+
+class WallBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = ((abs(y) < tol) && (x>1.0));
     return yMatch;
   }
 };
@@ -103,15 +112,15 @@ int main(int argc, char *argv[]) {
   
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
+  quadPoints(1,0) = 2.0;
   quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
+  quadPoints(2,0) = 2.0;
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
+  int horizontalCells = 2, verticalCells = 1;
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
@@ -242,36 +251,47 @@ int main(int argc, char *argv[]) {
   bf->addTerm(T, tau3->div());
   
   // ==================== SET INITIAL GUESS ==========================
+
   mesh->registerSolution(backgroundFlow);
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   
   map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[BurgersBilinearForm::U] = u0;
-  functionMap[BurgersBilinearForm::SIGMA_1] = zero;
-  functionMap[BurgersBilinearForm::SIGMA_2] = zero;
-  
+  functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  functionMap[u2->ID()] = zero;
+  functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  double T0 = .50;
+  functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T0) );
+ 
   backgroundFlow->projectOntoMesh(functionMap);
+
   // ==================== END SET INITIAL GUESS ==========================
-//  
-//  ////////////////////////////////////////////////////////////////////
-//  // DEFINE INNER PRODUCT
-//  ////////////////////////////////////////////////////////////////////
-//  // function to scale the squared guy by epsilon/h
-//  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-//  IPPtr ip = Teuchos::rcp( new IP );
-//  ip->addTerm(tau);
-//  ip->addTerm(tau->div());
-//  ip->addTerm( epsilonOverHScaling * v );
-//  ip->addTerm( sqrt(sqrt(epsilon)) * v->grad() );
-//  ip->addTerm( beta * v->grad() );
-//  
+  
+  ////////////////////////////////////////////////////////////////////
+  // DEFINE INNER PRODUCT
+  ////////////////////////////////////////////////////////////////////
+  // function to scale the squared guy by epsilon/h
+  //  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(tau1);
+  ip->addTerm(tau2);
+  ip->addTerm(tau3);
+  ip->addTerm(tau1->div());
+  ip->addTerm(tau2->div());
+  ip->addTerm(tau3->div());
+  ip->addTerm( v1->grad() );
+  ip->addTerm( v2->grad() );
+  ip->addTerm( v3->grad() );
+  ip->addTerm( v4->grad() );
+  ip->addTerm( v1 );
+  ip->addTerm( v2 );
+  ip->addTerm( v3 );
+  ip->addTerm( v4 );
+  
 //  ////////////////////////////////////////////////////////////////////
 //  // DEFINE RHS
 //  ////////////////////////////////////////////////////////////////////
-//  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-//  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
-//  rhs->addTerm( (e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE PENALTY BC
@@ -282,58 +302,82 @@ int main(int argc, char *argv[]) {
 ////  LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
 //  pc->addConstraint(sigma_hat==zero,outflowBoundary);
 //  
-//  ////////////////////////////////////////////////////////////////////
-//  // DEFINE DIRICHLET BC
-//  ////////////////////////////////////////////////////////////////////
-//  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-//  Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
-//  FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
-//  inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, 
-//                         ( e1 * u0_squared_div_2 + e2 * u0) * n );
-//  
-//  ////////////////////////////////////////////////////////////////////
-//  // CREATE SOLUTION OBJECT
-//  ////////////////////////////////////////////////////////////////////
-////  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
-//  mesh->registerSolution(solution);
-//  solution->setFilter(pc);
-//  
-//  ////////////////////////////////////////////////////////////////////
-//  // DEFINE REFINEMENT STRATEGY
-//  ////////////////////////////////////////////////////////////////////
-//  Teuchos::RCP<RefinementStrategy> refinementStrategy;
-//  refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
-//  
-//  int numRefs = 5;
-//  
-//  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-//  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
-//  solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
-//                                                           nonlinearRelativeEnergyTolerance));
-//  
-//  ////////////////////////////////////////////////////////////////////
-//  // SOLVE 
-//  ////////////////////////////////////////////////////////////////////
-//  
-//  for (int refIndex=0;refIndex<numRefs;refIndex++){    
-//    solveStrategy->solve(rank==0);       // print to console on rank 0
-//    refinementStrategy->refine(rank==0); // print to console on rank 0
-//  }
-//  
-//  // one more nonlinear solve on refined mesh
-//  int numNRSteps = 5;
-//  for (int i=0;i<numNRSteps;i++){
-//    solution->solve(false); // false: don't use MUMPS
-//    backgroundFlow->addSolution(solution,1.0);
-//  }
-//  
-//  if (rank==0){
-//    backgroundFlow->writeToFile(BurgersBilinearForm::U, "u_ref_old_plotSolution.dat");
-//    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
-//    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");
-//    backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigmay.m");
-//    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
-//  }
-//  
+  ////////////////////////////////////////////////////////////////////
+  // DEFINE DIRICHLET BC
+  ////////////////////////////////////////////////////////////////////
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary());
+  SpatialFilterPtr wallBoundary = Teuchos::rcp( new WallBoundary());
+
+  // mass contributions
+  FunctionPtr mass_1 = rho_prev*u1_prev;
+  FunctionPtr mass_2 = rho_prev*u2_prev;
+
+  FunctionPtr u1_squared = u1_prev * u1_prev;
+  FunctionPtr u2_squared = u2_prev * u2_prev;
+  FunctionPtr p = ((GAMMA-1.0) * cv) * rho_prev * T_prev;
+
+  // inviscid momentum contributions
+  FunctionPtr momentum_x_1 = rho_prev * u1_squared + p;
+  FunctionPtr momentum_x_2 = rho_prev * u1_prev * u2_prev;
+  FunctionPtr momentum_y_1 = rho_prev * u1_prev * u2_prev;
+  FunctionPtr momentum_y_2 = rho_prev * u2_squared + p;
+
+  FunctionPtr unorm = u1_squared + u2_squared;
+  FunctionPtr e = .5*( unorm ) + (GAMMA*cv) * T_prev;
+  FunctionPtr rho_e_p = rho_prev * e + p;
+  FunctionPtr energy_1 = rho_e_p * u1_prev;
+  FunctionPtr energy_2 = rho_e_p * u2_prev;
+
+  // inflow BCs
+  bc->addDirichlet(F1nhat, inflowBoundary, ( e1 * mass_1 + e2 * mass_2) * n );
+  bc->addDirichlet(F2nhat, inflowBoundary, ( e1 * momentum_x_1 + e2 * momentum_x_2) * n );
+  bc->addDirichlet(F3nhat, inflowBoundary, ( e1 * momentum_y_1 + e2 * momentum_y_2) * n );
+  bc->addDirichlet(F4nhat, inflowBoundary, ( e1 * energy_1 + e2 * energy_2) * n );
+
+  // wall BCs
+  bc->addDirichlet(u1hat, wallBoundary, zero);
+  bc->addDirichlet(u2hat, wallBoundary, zero);
+  bc->addDirichlet(That,  wallBoundary, zero);
+  
+
+  ////////////////////////////////////////////////////////////////////
+  // CREATE SOLUTION OBJECT
+  ////////////////////////////////////////////////////////////////////
+  Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
+  mesh->registerSolution(solution);
+  //  solution->setFilter(pc);
+  
+  ////////////////////////////////////////////////////////////////////
+  // DEFINE REFINEMENT STRATEGY
+  ////////////////////////////////////////////////////////////////////
+  Teuchos::RCP<RefinementStrategy> refinementStrategy;
+  refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
+  
+  int numRefs = 0;
+  
+  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
+  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
+  solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
+                                                           nonlinearRelativeEnergyTolerance));
+  
+  ////////////////////////////////////////////////////////////////////
+  // SOLVE 
+  ////////////////////////////////////////////////////////////////////
+  solution->solve(false); // false: don't use MUMPS
+
+  for (int refIndex=0;refIndex<numRefs;refIndex++){    
+    solveStrategy->solve(rank==0);       // print to console on rank 0
+    refinementStrategy->refine(rank==0); // print to console on rank 0
+  }
+  
+  // one more nonlinear solve on refined mesh
+  int numNRSteps = 0;
+  for (int i=0;i<numNRSteps;i++){
+    solution->solve(false); // false: don't use MUMPS
+    backgroundFlow->addSolution(solution,1.0);
+  }
+   
   return 0;
 }

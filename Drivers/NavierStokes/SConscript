@@ -1,0 +1,6 @@
+Import('*')
+
+#src_obj = env.Object([''])
+
+env.Program('exec/NavierStokes',['NavierStokesDriver.cpp'])
+
