@@ -127,10 +127,10 @@ int main(int argc, char *argv[]) {
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr That = varFactory.traceVar("\\widehat{T}");
   
-  VarPtr F1hat = varFactory.fluxVar("\\widehat{F}_1");
-  VarPtr F2hat = varFactory.fluxVar("\\widehat{F}_2");
-  VarPtr F3hat = varFactory.fluxVar("\\widehat{F}_3");
-  VarPtr F4hat = varFactory.fluxVar("\\widehat{F}_4");
+  VarPtr F1nhat = varFactory.fluxVar("\\widehat{F}_1n");
+  VarPtr F2nhat = varFactory.fluxVar("\\widehat{F}_2n");
+  VarPtr F3nhat = varFactory.fluxVar("\\widehat{F}_3n");
+  VarPtr F4nhat = varFactory.fluxVar("\\widehat{F}_4n");
   
   VarPtr u1 = varFactory.fieldVar("u_1");
   VarPtr u2 = varFactory.fieldVar("u_2");
@@ -189,15 +189,19 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // Eulerian terms:
+  // TODO: remember to negate RHS!! (since the Eulerian terms should be negated after integration by parts...)
   bf->addTerm(u1_prev * rho + rho_prev * u1, v1->dx()); 
   bf->addTerm(u2_prev * rho + rho_prev * u2, v1->dy());
+  bf->addTerm(- F1nhat, v1);
   
   double cv_gamma_minus_one = cv * (GAMMA - 1);
   bf->addTerm( (u1_prev * u1_prev + cv_gamma_minus_one * T_prev) * rho + 2.0 * u1_prev * rho_prev * u1 + cv_gamma_minus_one * rho_prev * T, v2->dx() ) ;
   bf->addTerm( u1_prev * u2_prev * rho + u2_prev * rho_prev * u1 + u1_prev * rho_prev * u2, v2->dy() ) ;
+  bf->addTerm(- F2nhat, v2);
   
   bf->addTerm( u1_prev * u2_prev * rho + u2_prev * rho_prev * u1 + u1_prev * rho_prev * u2, v3->dx() ) ;
   bf->addTerm( (u2_prev * u2_prev + cv_gamma_minus_one * T_prev) * rho + 2.0 * u2_prev * rho_prev * u2 + cv_gamma_minus_one * rho_prev * T, v3->dy() ) ;
+  bf->addTerm(- F3nhat, v3);
   
   FunctionPtr u_T_fxn = Teuchos::rcp (new SumFunction(u1_prev * u1_prev, u2_prev * u2_prev) ) + (2.0 * cv * (2.0 * GAMMA - 1) ) * T_prev;
   
@@ -216,6 +220,7 @@ int main(int argc, char *argv[]) {
   
   bf->addTerm( rho_v4_dx_weight * rho + u1_v4_dx_weight * u1 + u2_v4_dx_weight * u2 + T_v4_dx_weight * T, v4->dx() );
   bf->addTerm( rho_v4_dy_weight * rho + u1_v4_dy_weight * u1 + u2_v4_dy_weight * u2 + T_v4_dy_weight * T, v4->dy() );
+  bf->addTerm(- F4nhat, v4);
   
   // viscous terms:
   double lambda_factor = lambda / (4.0 * mu * (mu + lambda) );
