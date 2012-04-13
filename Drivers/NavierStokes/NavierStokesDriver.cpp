@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 3;
+  int polyOrder = 1;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
   functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
   functionMap[u2->ID()] = zero;
   functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  double T0 = .50;
+  double T0 = 0.5;
   functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T0) );
  
   backgroundFlow->projectOntoMesh(functionMap);
@@ -379,5 +379,11 @@ int main(int argc, char *argv[]) {
     backgroundFlow->addSolution(solution,1.0);
   }
    
+  if (rank==0){
+    solution->writeFieldsToFile(u1->ID(), "du1.m");
+    solution->writeFieldsToFile(u2->ID(), "du2.m");
+    solution->writeFieldsToFile(rho->ID(), "rho.m");
+  }
+  
   return 0;
 }
