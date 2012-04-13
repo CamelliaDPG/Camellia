@@ -6,9 +6,6 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
-
-#include "../Burgers/BurgersBilinearForm.h"
-
 #include "OptimalInnerProduct.h"
 #include "Mesh.h"
 #include "Solution.h"
@@ -85,6 +82,24 @@ public:
   }
 };
 
+class FreeStreamBoundaryBottom : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = ((abs(y) < tol) && (x<1.0));
+    return yMatch;
+  }
+};
+
+class FreeStreamBoundaryTop : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = (abs(y-1.0) < tol);
+    return yMatch;
+  }
+};
+
 
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
@@ -95,7 +110,7 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 1;
+  int polyOrder = 3;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
@@ -106,7 +121,7 @@ int main(int argc, char *argv[]) {
   double lambda = 0.5 / Re;
   double kappa = GAMMA * cv * mu / PRANDTL;
   
-  bool useTriangles = true;
+  bool useTriangles = false;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -120,7 +135,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;  
   
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 1;
+  int horizontalCells = 8, verticalCells = 4;
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
@@ -238,8 +253,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm(sigma11 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau1->x());
   bf->addTerm(sigma12 / two_mu - omega,tau1->y());
   bf->addTerm( u1, tau1->div() );
-  
-  
+    
   bf->addTerm(-u2hat, tau2->dot_normal() );
   bf->addTerm(sigma12 / two_mu + omega,tau2->x());
   bf->addTerm(sigma22 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau2->y());
@@ -331,15 +345,30 @@ int main(int argc, char *argv[]) {
   FunctionPtr energy_2 = rho_e_p * u2_prev;
 
   // inflow BCs
+  /*
   bc->addDirichlet(F1nhat, inflowBoundary, ( e1 * mass_1 + e2 * mass_2) * n );
   bc->addDirichlet(F2nhat, inflowBoundary, ( e1 * momentum_x_1 + e2 * momentum_x_2) * n );
   bc->addDirichlet(F3nhat, inflowBoundary, ( e1 * momentum_y_1 + e2 * momentum_y_2) * n );
   bc->addDirichlet(F4nhat, inflowBoundary, ( e1 * energy_1 + e2 * energy_2) * n );
+  */
+
+  bc->addDirichlet(F1nhat, inflowBoundary, zero);
+  bc->addDirichlet(F2nhat, inflowBoundary, zero);
+  bc->addDirichlet(F3nhat, inflowBoundary, zero);
+  bc->addDirichlet(F4nhat, inflowBoundary, zero);
+
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   // wall BCs
-  bc->addDirichlet(u1hat, wallBoundary, zero);
-  bc->addDirichlet(u2hat, wallBoundary, zero);
-  bc->addDirichlet(That,  wallBoundary, zero);
+  bc->addDirichlet(u1hat, wallBoundary, one);
+  bc->addDirichlet(u2hat, wallBoundary, one);
+  bc->addDirichlet(That,  wallBoundary, one);
+
+  SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
+  SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
+  // wall BCs
+  bc->addDirichlet(u2hat, freeTop, zero);
+  //  bc->addDirichlet(u2hat, freeBottom, zero);
   
 
   ////////////////////////////////////////////////////////////////////
@@ -355,7 +384,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
-  int numRefs = 0;
+  int numRefs = 3;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -365,10 +394,10 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
   ////////////////////////////////////////////////////////////////////
-  solution->solve(false); // false: don't use MUMPS
 
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
-    solveStrategy->solve(rank==0);       // print to console on rank 0
+    solution->solve(false); // false: don't use MUMPS
+    //    solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   
@@ -377,6 +406,12 @@ int main(int argc, char *argv[]) {
   for (int i=0;i<numNRSteps;i++){
     solution->solve(false); // false: don't use MUMPS
     backgroundFlow->addSolution(solution,1.0);
+  }
+
+  if (rank==0){
+    backgroundFlow->writeFieldsToFile(u1->ID(), "u1_prev.m");
+    backgroundFlow->writeFieldsToFile(u2->ID(), "u2_prev.m");
+    backgroundFlow->writeFieldsToFile(rho->ID(), "rho_prev.m");
   }
    
   if (rank==0){
