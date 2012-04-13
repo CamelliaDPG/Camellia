@@ -489,8 +489,8 @@ We begin with a given norm on $U$
 \]
 By \eqref{norm_duality}, the duality of test norm and energy norm, a norm of this form induces the test norm
 \begin{align*}
-\|\left(v,\tau\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\in U}\frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{C_1\|u\| + C_2\|\sigma\| + C_3\epsilon\|\widehat{u}\|+ C_4\sqrt{\epsilon}\|\widehat{u}\|}\\
-&= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\in U}\frac{\left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0}}{C_1\|u\| + C_2\|\sigma\| + C_3\epsilon\|\widehat{u}\|+ C_4\sqrt{\epsilon}\|\widehat{u}\|}\\
+\|\left(v,\tau\right)\|_{V,U} &= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\in U}\frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{C_1\|u\| + C_2\|\sigma\| + C_3\|\widehat{u}\|+ C_4\|\widehat{u}\|}\\
+&= \sup_{\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\in U}\frac{\left(u,\div \tau - \beta \cdot \grad v\right) + \left(\sigma, \epsilon^{-1} \tau + \grad v\right) - \langle \left[\tau_n\right], \widehat{u} \rangle_{\Gamma_-\cup \Gamma_h^0} + \langle \widehat{f}_n, \left[v\right] \rangle_{\Gamma_+ \cup \Gamma_h^0}}{C_1\|u\| + C_2\|\sigma\| + C_3\|\widehat{u}\|+ C_4\|\widehat{u}\|}\\
 & \leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sup_{\widehat{u}\neq 0, \left.\widehat{u}\right|_{\Gamma_+} = 0} \frac{\langle [\tau\cdot n], \widehat{u}\rangle}{\|\widehat{u}\|} +\frac{1}{C_4}\sup_{\widehat{f}_n\neq 0, \left.\widehat{f}_n\right|_{\Gamma_-}=0}\frac{\langle \widehat{f}_n, [v]\rangle}{\|\widehat{f}\|}
 \end{align*}
 where $f$ and $g$ are defined as 
@@ -502,7 +502,7 @@ which, by definition of the boundary norms on $[\tau\cdot n]$ and $[v]$, gives t
 \[
 \|\left(v,\tau\right)\|_{V,U} \leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\|[\tau\cdot n]\| + \frac{1}{C_4}\|[v]\|
 \]
-\textcolor{red}{is this an equality? Is the inequality attainable, and thus attained in the supremum?} We can now use this relation to compare two different norms on $U$ by comparing their induced norms on $V$ - recall that showing a robust inequality between two norms on $U$ is similarly equivalent to showing the robust reverse inequality in the induced norms on $V$.  
+We can now use this relation to compare two different norms on $U$ by comparing their induced norms on $V$ - recall that showing a robust inequality between two norms on $U$ is similarly equivalent to showing the robust reverse inequality in the induced norms on $V$.  
 
 \subsection{Decomposition into analyzable components}
 \label{sec:strategy2}
@@ -526,7 +526,7 @@ We will additionally require both $\left(\tau_1,v_1\right)$ and $\left(\tau_2,v_
 \tau_i\cdot n &= 0, \quad x \in \Gamma_- \label{bc_1}\\
 v_i &= 0, \quad x \in \Gamma_+ \label{bc_2}
 \end{align}
-for $i = 1, 2$.  The selection of $H({\rm div}, \Omega)\times H^1(\Omega)$ conforming test functions satisfying the specific above boundary conditions removes the contribution of the jump terms over the skeleton $\Gamma_h$ in the bilinear form, allowing us to bound components of the induced test norm separately from each other.   
+for $i = 1, 2$.  \tanbui{}{Need to prove or argue that $(v_i, \tau_i)$ exist}. The selection of $H({\rm div}, \Omega)\times H^1(\Omega)$ conforming test functions satisfying the specific above boundary conditions removes the contribution of the jump terms over the skeleton $\Gamma_h$ in the bilinear form, allowing us to bound components of the induced test norm separately from each other.   
 
 Finally, by construction, $\left(v_0,\tau_0\right)$ must satisfy 
 \begin{align*}
@@ -548,12 +548,19 @@ We have now decomposed any arbitrary test function $\left(\tau,v\right)$ into a 
 \[
 \|\left(\tau,v\right)\|_{V,1} \lesssim \|\left(v_{0},\tau_{0}\right)\|_V, \|\left(v_{1},\tau_{1}\right)\|_V, \|\left(v_{2},\tau_{2}\right)\|_V \lesssim \|\left(\tau,v\right)\|_{V,2}
 \]
-Bounding $\|\left(\tau_0,v_0\right)\|$ requires the use of techniques and decompositions first developed in \cite{analysisDPG} and adapted to convection-diffusion in \cite{DPGrobustness}.  However, due to the $H({\rm div}, \Omega)\times H^1(\Omega)$ conforming nature of $\left(\tau_1,v_1\right)$ and $\left(\tau_2,v_2\right)$, the bound from above of test functions $\|\left(v_{1},\tau_{1}\right)\|_V, \|\left(v_{2},\tau_{2}\right)\|_V \lesssim \|g\|$ is reduced to proving classical error estimates for the adjoint equations
+Bounding $\|\left(\tau_0,v_0\right)\|$ requires the use of techniques and decompositions first developed in \cite{analysisDPG} and adapted to convection-diffusion in \cite{DPGrobustness}.  However, due to the $H({\rm div}, \Omega)\times H^1(\Omega)$ conforming nature of $\left(\tau_1,v_1\right)$ and $\left(\tau_2,v_2\right)$, the bound from above of test functions $\|\left(v_{1},\tau_{1}\right)\|_V, \|\left(v_{2},\tau_{2}\right)\|_V$ is reduced to proving classical error estimates for the adjoint equations
 \begin{align}
-\epsilon^{-1}\tau + \grad v &= f \label{adjoint1}\\
-\div \tau - \beta\cdot \grad v &=  g, \label{adjoint2}
+\epsilon^{-1}\tau_1 + \grad {v_1} &= 0 \\
+\div {\tau_1} - \beta\cdot \grad {v_1} &=  g, \label{adjoint2}
 \end{align} 
-for any choice of data $f, g\in L^2({\Omega_h})$ and boundary conditions $\left.\tau\cdot n\right|_{\Gamma_-} = 0$ and $\left.v\right|_{\Gamma_+} = 0$ 
+and 
+\begin{align}
+\epsilon^{-1}\tau_2 + \grad {v_2} &= f \label{adjoint1}\\
+\div {\tau_2} - \beta\cdot \grad {v_2} &= 0, 
+\end{align} 
+for any choice of data $f, g\in L^2({\Omega})$ and boundary conditions $\left.\tau\cdot n\right|_{\Gamma_-} = 0$ and $\left.v\right|_{\Gamma_+} = 0$.  In other words, we want to bound the solutions $\|\left(\tau_1,v_1\right)\|_V\lesssim \|g\|_{L^2}$ and $\|\left(\tau_2,v_2\right)\|_V \lesssim \|f\|_{L^2}$.  
+
+%\tanbui{}{very confusing to reuse $\tau, v$ notations here.}
 
 \subsection{Deriving adjoint estimates}
 \label{sec:strategy3}
@@ -570,21 +577,31 @@ We also require $\epsilon$ sufficiently small in Lemma \ref{lemma_grad}.
 
 Under proper assumptions on $\beta$, we have the robust bounds
 \begin{itemize}
-\item \textbf{Lemma \ref{lemma_stream}}: For $\beta$ satisfying \eqref{a_req} and \eqref{b_req}, $f=0$ and $v \in H^1(\Omega_h)$, satisfying boundary conditions \eqref{bc_1} and \eqref{bc_2}
+\item \textbf{Lemma \ref{lemma_stream}}: For $\beta$ satisfying \eqref{a_req} and \eqref{b_req}, %$f=0$ 
+and $v_1 \in H^1(\Omega)$, satisfying boundary conditions \eqref{bc_1} and \eqref{bc_2}
 \begin{align*}
-\|\beta \cdot \grad v \| &\lesssim \| g\| 
+\|\beta \cdot \grad v_1 \| &\lesssim \| g\| 
 \end{align*}
-Similarly, from $\div \tau - \beta\cdot \grad v = g$, we get $\|\div \tau\| \lesssim \|g\|$ as well.  
-\item \textbf{Lemma \ref{lemma_grad}}: For $\beta$ satisfying \eqref{a_req}, and $v \in H^1(\Omega_h)$ satisfying boundary conditions \eqref{bc_1} and \eqref{bc_2}, and for sufficiently small $\epsilon$
+Similarly, from $\div \tau_1 - \beta\cdot \grad v_1 = g$, we get $\|\div \tau_1\| \lesssim \|g\|$ as well.  
+\item \textbf{Lemma \ref{lemma_grad}}: For $\beta$ satisfying \eqref{a_req}, and $v_1,v_2 \in H^1(\Omega)$ satisfying boundary conditions \eqref{bc_1} and \eqref{bc_2}, and for sufficiently small $\epsilon$
+\begin{align*}
+\epsilon \|\grad v_1\|^2 + \|v_1\|^2 &\lesssim \|g\|^2\\
+\epsilon \|\grad v_2\|^2 + \|v_2\|^2 &\lesssim \epsilon \| f\|^2.
+\end{align*}
+By the triangle inequality, this implies for $v=v_1+v_2$ that
 \begin{align*}
 \epsilon \|\grad v\|^2 + \|v\|^2 &\lesssim \|g\|^2 + \epsilon \| f\|^2
 \end{align*}
-\item \textbf{Lemma \ref{lemma_boundary}}: For $\beta$ satisfying \eqref{a_req}, \eqref{c_req}, and $f=g=0$, 
+\item \textbf{Lemma \ref{lemma_boundary}}: For $\beta$ satisfying \eqref{a_req}, \eqref{c_req}, %and $f=g=0$, 
 \begin{align*}
-\|\grad v\| = \frac{1}{\epsilon}\|\tau\| &\lesssim \frac{1}{\epsilon} \| [\tau\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v]\|_{\Gamma_h^0 \cup \Gamma_+}
+\|\grad v_0\| = \frac{1}{\epsilon}\|\tau_0\| &\lesssim \frac{1}{\epsilon} \| [\tau_0\cdot n]\|_{\Gamma_h \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| [v_0]\|_{\Gamma_h^0 \cup \Gamma_+}
 \end{align*}
 \end{itemize}
 Together, these estimates will be sufficient to construct a complete norm on $V$ and demonstrate bounds on induced test norms for different scalings of norms on $U$.  
+%\tanbui{}{again, using the same notation
+%  $(v, \tau)$ for all three problems is not a good idea. Why don't we
+%  use $(v_i,\tau_i)$ introduced above? Things are much clearer this
+%  way?}
 
 \section{Relations between energy and $U$ norms}
 \label{sec:main_bounds}
@@ -598,7 +615,7 @@ be defined as the energy norm induced by DPG under the specific test norm
 \|\left(\tau, v\right)\|_{V}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2.
 \]
 
-The primary result of this paper is that, if $\beta$ satisfies \ref{a_req},\ref{b_req}, and \ref{c_req}, the DPG method provides robust control over the $L^2$ error in $u$ and $\sigma$
+The primary result of this paper is that, if $\beta$ satisfies \eqref{a_req},\eqref{b_req}, and \eqref{c_req}, the DPG method provides robust control over the $L^2$ error in $u$ and $\sigma$
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-\left(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h}\right)\right\|_{U,1} \lesssim \inf_{w\in U_h}\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)-w_h \right\|_{E}
 \]
@@ -616,7 +633,11 @@ where $\|\cdot \|_{U,2}$ is defined as
 \[
 \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,2}^2 \coloneqq \|u\|^2 + \frac{1}{\sqrt{\epsilon}}\left(\|\sigma\|^2 + \|\widehat{u}\|^2+ \|\widehat{f}_n\|^2\right).
 \]
-While the second bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error (in this sense, DPG may lose some efficiency for small $\epsilon$). However, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, $\|u-u_h\|_E \sim \|u-u_h\|_{U}$, implying that the induced energy norm may be equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  
+While the second bound is robust, we have derived such a bound only by explicitly accounting for a factor of $\epsilon^{-1/2}$ in the bounding norm $\|\cdot \|_{U,2}$.  This implies that for very small $\epsilon$, the $L^2$ error may be much smaller than the energy error (in this sense, DPG may lose some efficiency for small $\epsilon$). However, numerical experiments demonstrate much better results, and suggest that, at least for our example problems, 
+\[
+\|u-u_h\|_E \sim \|u\|_{L^2}+\|\sigma\|_{L^2} + \|\widehat{u}\| + \|\widehat{f}_n\|
+\]
+In other words, we observe that the induced energy norm may be equivalent to a norm on the group variable $\left(u,\sigma,\widehat{u},\widehat{f}_n\right)$ that does not grow with $\epsilon$.  %\tanbui{}{What is the norm $\|\cdot\|_U$ here?}
 
 \subsection{Bound from below}
 
@@ -628,6 +649,7 @@ As a consequence of the duality of norms \eqref{norm_duality}, we know that the 
 \label{bound_from_below}
 (Bound from below) If $\beta$ satisfies \eqref{a_req} and \eqref{b_req}, then for $\left(u,\sigma,\widehat{u},\widehat{f}_n\right) \in U$,
 \[
+\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,1} =
 \|u\| + \|\sigma\| + \epsilon\|\widehat{u}\|+ \sqrt{\epsilon}\|\widehat{u}\| \lesssim \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E
 %\|u\| + \frac{1}{\sqrt{\epsilon}}\|\sigma\| + \epsilon\|\widehat{u}\|+ \sqrt{\epsilon}\|\widehat{u}\| \lesssim \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_E
 \]
@@ -640,14 +662,16 @@ g &=\div \tau - \beta\cdot \grad v,
 \end{align*} 
 we can characterize the test norm for $\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_U = C_1\|u\| + C_2\|\sigma\| + C_3\|\widehat{u}\|+ C_4\|\widehat{u}\|$ as
 \begin{align*}
-\|\left(v,\tau\right)\|_V &\lesssim \frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{C_1\|u\| + C_2\|\sigma\| + C_3\|\widehat{u}\|+ C_4\|\widehat{u}\|}\\
-& \simeq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sup_{\widehat{u}\neq 0, \left.\widehat{u}\right|_{\Gamma_+} = 0} \frac{\langle [\tau\cdot n], \widehat{u}\rangle}{\|\widehat{u}\|} + \frac{1}{C_4}\sup_{\widehat{f}_n\neq 0, \left.\widehat{f}_n\right|_{\Gamma_-}=0}\frac{\langle \widehat{f}_n, [v]\rangle}{\|\widehat{f}\|},
+\|\left(v,\tau\right)\|_V &= \sup_{u,\sigma,\widehat{u},\widehat{f}_n}\frac{b\left(\left(u,\sigma,\widehat{u},\widehat{f}_n\right),\left(\tau,v\right)\right)}{C_1\|u\| + C_2\|\sigma\| + C_3\|\widehat{u}\|+ C_4\|\widehat{u}\|}\\
+& \leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\sup_{\widehat{u}\neq 0, \left.\widehat{u}\right|_{\Gamma_+} = 0} \frac{\langle [\tau\cdot n], \widehat{u}\rangle}{\|\widehat{u}\|} + \frac{1}{C_4}\sup_{\widehat{f}_n\neq 0, \left.\widehat{f}_n\right|_{\Gamma_-}=0}\frac{\langle \widehat{f}_n, [v]\rangle}{\|\widehat{f}\|},
 \end{align*}
 which, by definition of the boundary norms, is 
 \[
-\|\left(v,\tau\right)\|_V \lesssim \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\|[\tau\cdot n]\| + \frac{1}{C_4}\|[v]\|
+\|\left(v,\tau\right)\|_V \leq \frac{1}{C_1}\|g\| + \frac{1}{C_2}\|f\| + \frac{1}{C_3}\|[\tau\cdot n]\| + \frac{1}{C_4}\|[v]\|
 \]
-We will bound $\|\left(v,\tau\right)\|_V$ for all $\left(v,\tau\right)$ satisfying \eqref{adjoint} by decomposing $\left(v,\tau\right) = \left(v_0,\tau_0\right) + \left(v_1,\tau_1\right) + \left(v_2,\tau_2\right)$ as described in section~\ref{sec:strategy2}.  
+We will bound $\|\left(v,\tau\right)\|_V$ for all $\left(v,\tau\right)$ satisfying \eqref{adjoint} by decomposing $\left(v,\tau\right) = \left(v_0,\tau_0\right) + \left(v_1,\tau_1\right) + \left(v_2,\tau_2\right)$ as described in section~\ref{sec:strategy2}.  tanbui{}{Need to tell
+  the readers where this equation comes from, particularly its boundary
+  conditions}
 %where $\left(v_1,\tau_1\right)$ satisfies our adjoint equation \eqref{adjoint} with boundary conditions \eqref{bc_1} and \eqref{bc_2} and 
 %\begin{align*}
 %f &= 0\\
@@ -997,11 +1021,11 @@ implying that
 \begin{align*}
 \frac{\epsilon}{2} v'(0)^2 + \|v'\|_{L^2}^2 & \lesssim \|g\| 
 \end{align*}
-Let us restrict ourselves to the cases where $v$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$ (corresponding to a constant approximation) we can solve \eqref{adjoint_1D} exactly to see that 
+Let us restrict ourselves to the cases where $v$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$ (corresponding to a piecewise constant approximation) we can solve \eqref{adjoint_1D} exactly to see that 
 \[
 v(x) = \frac{e^{-\frac{x}{\epsilon}}}{e^{\frac{1}{\epsilon}}-1}\left(e^{\frac{1}{\epsilon}}\left(e^{\frac{x}{\epsilon}}-1\right) + \left(e^{\frac{1}{\epsilon}}-1\right)e^{\frac{x}{\epsilon}}x\right)
 \]
-Plotting the solution shows that $v$ develops strong boundary layers of width $\epsilon$ near the inflow. Consequently, $\frac{\epsilon}{2} v'(0)^2 \approx \epsilon^{-1}$, indicating already a lack of robustness in the bound of $\|v'\|$ by $\|g\|$ for constant data\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}. The robust bound from below of $g$ constant corresponds to the robust control of the approximation of field variable $u$ by a constant. More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and also indicate a lack of robustness when using the standard broken Sobolev norm as the test norm on $\tau$ and $v$. 
+Plotting the solution shows that $v$ develops strong boundary layers of width $\epsilon$ near the inflow. Consequently, $\frac{\epsilon}{2} v'(0)^2 \approx \epsilon^{-1}$, indicating already a lack of robustness in the bound of $\|v'\|$ by $\|g\|$ for constant data\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f} = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.}. The robust bound from below of $g$ constant corresponds to the robust control of the approximation of field variable $u$ by piecewise constant trial functions. More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and also indicate a lack of robustness when using the standard broken Sobolev norm as the test norm on $\tau$ and $v$. 
 
 Intuitively, the adjoint problem is similar to the primal problem with the direction of inflow reversed, such that the inflow becomes the outflow, and outflow inflow.  The need for the weight arises due to the presence of the Dirichlet boundary condition on $v$ near the inflow; this induces strong boundary layers at the inflow such that $\grad v \approx \epsilon \|\grad v\|^2 \approx O(\epsilon^{-1})$. An interesting phenomenon observed is that, for sufficiently small $\epsilon$, these issues manifest themselves in numerical experiments as additional refinements near the inflow\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
