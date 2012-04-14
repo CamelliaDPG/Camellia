@@ -247,6 +247,7 @@ int main(int argc, char *argv[]) {
   }
   
   if (rank==0){
+    backgroundFlow->writeToFile(BurgersBilinearForm::U, "u_ref_old_plotSolution.dat"); // useful for triangles...
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigmay.m");
