@@ -11,6 +11,11 @@
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold) {
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;
+  _enforceOneIrregularity = true;
+}
+
+void RefinementStrategy::setEnforceOneIrregurity(bool value) {
+  _enforceOneIrregularity = value;
 }
 
 void RefinementStrategy::refine(bool printToConsole) {
@@ -57,7 +62,8 @@ void RefinementStrategy::refine(bool printToConsole) {
   mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
   
-  mesh->enforceOneIrregularity();
+  if (_enforceOneIrregularity)
+    mesh->enforceOneIrregularity();
 
   if (printToConsole) {
     cout << "Prior to refinement, energy error: " << sqrt(totalEnergyError) << endl;

@@ -10,6 +10,7 @@
 #define Camellia_Function_h
 
 #include "BasisCache.h"
+class Mesh;
 class ExactSolution;
 
 class Function;
@@ -45,6 +46,8 @@ public:
   virtual void valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache);
+  
+  void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
@@ -117,10 +120,17 @@ public:
   virtual double value(double x, double y) = 0;
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
+typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 
 class UnitNormalFunction : public Function {
 public:
   UnitNormalFunction();
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class ScalarFunctionOfNormal : public Function { // 2D for now
+public:
+  virtual double value(double x, double y, double n1, double n2) = 0;
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 

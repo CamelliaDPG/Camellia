@@ -9,6 +9,7 @@
 #include "Function.h"
 #include "BasisCache.h"
 #include "ExactSolution.h"
+#include "Mesh.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
@@ -194,6 +195,81 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
 //  cout << "scalarModifyBasisValues: values:\n" << values;
 }
 
+void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
+  // MATLAB format, supports scalar functions defined inside 2D volume right now...
+  typedef CellTools<double>  CellTools;
+  
+  ofstream fout(filePath.c_str());
+  fout << setprecision(15);
+  int spaceDim = 2; // TODO: generalize to 3D...
+  int num1DPts = 5;
+  
+  int numPoints = num1DPts * num1DPts;
+  FieldContainer<double> refPoints(numPoints,spaceDim);
+  for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+    for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+      int ptIndex = xPointIndex * num1DPts + yPointIndex;
+      double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
+      double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
+      refPoints(ptIndex,0) = x;
+      refPoints(ptIndex,1) = y;
+    }
+  }
+  
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  
+  fout << "numCells = " << mesh->activeElements().size() << endl;
+  fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
+  
+  // initialize storage
+  fout << "for i = 1:numCells" << endl;
+  fout << "x{i} = zeros(" << num1DPts << ",1);"<<endl;
+  fout << "y{i} = zeros(" << num1DPts << ",1);"<<endl;
+  fout << "z{i} = zeros(" << num1DPts << ");"<<endl;
+  fout << "end" << endl;
+  int globalCellInd = 1; //matlab indexes from 1
+  BasisCachePtr basisCache;
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    basisCache->setRefCellPoints(refPoints);
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    
+    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
+    int numCells = physicalCellNodes.dimension(0);
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      cellIDs.push_back(cellID);
+    }
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, false); // false: don't create side cache
+
+    FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+    
+    FieldContainer<double> computedValues(numCells,numPoints);
+    this->values(computedValues, basisCache);	
+    
+    // NOW loop over all cells to write solution to file
+    for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+        int ptIndex = xPointIndex*num1DPts + yPointIndex;
+        for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
+          fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,ptIndex,0) << ";" << endl;
+          fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,ptIndex,1) << ";" << endl;
+          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,ptIndex) << ";" << endl;	  
+        }
+      }
+    }
+    globalCellInd+=numCells;
+    
+  } //end of element type loop 
+  fout.close();
+}
+
+
 ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) { 
   _value = value; 
 }
@@ -345,6 +421,23 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
       double x = (*points)(cellIndex,ptIndex,0);
       double y = (*points)(cellIndex,ptIndex,1);
       values(cellIndex,ptIndex) = value(x,y);
+    }
+  }
+}
+
+void ScalarFunctionOfNormal::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+      values(cellIndex,ptIndex) = value(x,y,n1,n2);
     }
   }
 }

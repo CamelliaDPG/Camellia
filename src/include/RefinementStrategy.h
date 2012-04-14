@@ -23,10 +23,12 @@ class RefinementStrategy {
   static void setResults(RefinementResults &solnResults, int numElements, int numDofs, double totalEnergyError);
   SolutionPtr _solution;
   double _relativeEnergyThreshold;
+  bool _enforceOneIrregularity;
   
   vector< RefinementResults > _results;
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
+  void setEnforceOneIrregurity(bool value);
   void refine(bool printToConsole=false);
 };
 
