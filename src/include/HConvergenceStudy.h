@@ -41,6 +41,9 @@
 #include "Mesh.h"
 #include "ExactSolution.h"
 
+class Function;
+typedef Teuchos::RCP<Function> FunctionPtr;
+
 using namespace std;
 
 class HConvergenceStudy {
@@ -50,13 +53,27 @@ class HConvergenceStudy {
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<DPGInnerProduct> _ip;
   int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
-  vector< Teuchos::RCP<Solution> > _solutions;
+  vector< SolutionPtr > _solutions;
+  vector< SolutionPtr > _bestApproximations;
+  
+  map< int, FunctionPtr > _exactSolutionFunctions;
+  
   Teuchos::RCP<Solution> _fineZeroSolution;
   bool _randomRefinements;
   bool _useTriangles;
   bool _useHybrid;
   void randomlyRefine(Teuchos::RCP<Mesh> mesh);
   bool _reportRelativeErrors;
+  map< int, vector<double> > _bestApproximationErrors;
+  map< int, vector<double> > _solutionErrors;
+  
+  map< int, vector<double> > _bestApproximationRates;
+  map< int, vector<double> > _solutionRates;
+  
+  map< int, double > _exactSolutionNorm;
+  
+  void computeErrors();
+  int minNumElements();
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                     Teuchos::RCP<BilinearForm> bilinearForm,
@@ -69,6 +86,23 @@ public:
   void solve(const FieldContainer<double> &quadPoints);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
+  
+  Teuchos::RCP<BilinearForm> bilinearForm();
+  
+  vector<int> meshSizes();
+  map< int, vector<double> > bestApproximationErrors();
+  map< int, vector<double> > solutionErrors();
+  
+  map< int, vector<double> > bestApproximationRates();
+  map< int, vector<double> > solutionRates();
+  
+  map< int, double > exactSolutionNorm();
+
+  string TeXErrorRateTable();
+  string TeXErrorRateTable(const vector<int> &trialIDs);
+  string TeXBestApproximationComparisonTable();
+  string TeXBestApproximationComparisonTable(const vector<int> &trialIDs);
+  
 };
 
 #endif

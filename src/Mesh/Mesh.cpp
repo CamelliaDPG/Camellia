@@ -164,7 +164,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
       vertex(0) = southWest_x + elemWidth*i;
       vertex(1) = southWest_y + elemHeight*j;
       vertices.push_back(vertex);
-      //cout << "Mesh: vertex " << _vertices.size() - 1 << ": (" << vertex(0) << "," << vertex(1) << ")\n";
+//      cout << "Mesh: vertex " << vertices.size() - 1 << ": (" << vertex(0) << "," << vertex(1) << ")\n";
     }
   }
   

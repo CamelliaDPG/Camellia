@@ -10,6 +10,7 @@
 #define Camellia_Function_h
 
 #include "BasisCache.h"
+class ExactSolution;
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
@@ -72,6 +73,14 @@ public:
   ConstantVectorFunction(vector<double> value);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
+};
+
+class ExactSolutionFunction : public Function { // for scalars, for now
+  Teuchos::RCP<ExactSolution> _exactSolution;
+  int _trialID;
+public:
+  ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class ProductFunction : public Function {

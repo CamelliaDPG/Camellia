@@ -112,6 +112,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   FieldContainer<double> weightedErrorSquared;
   FieldContainer<double> physCubPoints;
   FieldContainer<double> cubPointsSide;
+  FieldContainer<double> sideNormals;
   int numCubPoints;
   
   bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
@@ -175,6 +176,14 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
     weightedMeasure.resize(numCells, numCubPoints);
     FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
                                                    cubWeightsSide, sideIndex, cellTopo);
+    
+    sideNormals.resize(numCells, numCubPoints, spaceDim);
+    FieldContainer<double> normalLengths(numCells, numCubPoints);
+    CellTools::getPhysicalSideNormals(sideNormals, jacobianSideRefCell, sideIndex, cellTopo);
+    
+    // make unit length
+    RealSpaceTools<double>::vectorNorm(normalLengths, sideNormals, NORM_TWO);
+    FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
   }
   Teuchos::Array<int> dimensions;
   dimensions.push_back(numCells);
@@ -195,10 +204,11 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   
   if ( ! boundaryIntegral) {
     solution.solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);
+    this->solutionValues(exactValues,trialID, physCubPoints);
   } else {
     solution.solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
+    this->solutionValues(exactValues,trialID, physCubPoints, sideNormals);
   }
-  this->solutionValues(exactValues,trialID, physCubPoints);
   
 //  cout << "ExactSolution: exact values:\n" << exactValues;
 //  cout << "ExactSolution: computed values:\n" << computedValues;
@@ -271,6 +281,29 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
       double value = solutionValue(trialID, point);
+      values(cellIndex,ptIndex) = value;
+    }
+  }
+}
+
+void ExactSolution::solutionValues(FieldContainer<double> &values, 
+                                   int trialID,
+                                   FieldContainer<double> &physicalPoints,
+                                   FieldContainer<double> &unitNormals) {
+  int numCells = physicalPoints.dimension(0);
+  int numPoints = physicalPoints.dimension(1);
+  int spaceDim = physicalPoints.dimension(2);
+  
+  Teuchos::Array<int> pointDimensions;
+  pointDimensions.push_back(spaceDim);
+  
+  //  cout << "ExactSolution: physicalPoints:\n" << physicalPoints;
+  
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
+      FieldContainer<double> unitNormal(pointDimensions,&unitNormals(cellIndex,ptIndex,0));
+      double value = solutionValue(trialID, point, unitNormal);
       values(cellIndex,ptIndex) = value;
     }
   }

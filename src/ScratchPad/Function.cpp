@@ -8,6 +8,7 @@
 
 #include "Function.h"
 #include "BasisCache.h"
+#include "ExactSolution.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
@@ -247,6 +248,20 @@ void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePt
   }
 }
 
+ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID) : Function(0) {
+  _exactSolution = exactSolution;
+  _trialID = trialID;
+}
+void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  // TODO: change ExactSolution::solutionValues to take a *const* points FieldContainer, to avoid this copy:
+  FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+  if (basisCache->getSideIndex() >= 0) {
+    FieldContainer<double> unitNormals = basisCache->getSideNormals();
+    _exactSolution->solutionValues(values,_trialID,points,unitNormals);
+  } else {
+    _exactSolution->solutionValues(values,_trialID,points);
+  }
+}
 
 int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
   if (f1->rank() == f2->rank()) return 0;

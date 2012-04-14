@@ -66,6 +66,10 @@ public:
   void solutionValues(FieldContainer<double> &values, 
                       int trialID,
                       FieldContainer<double> &physicalPoints);
+  void solutionValues(FieldContainer<double> &values, 
+                      int trialID,
+                      FieldContainer<double> &physicalPoints,
+                      FieldContainer<double> &unitNormals);
   virtual double solutionValue(int trialID,
                               FieldContainer<double> &physicalPoint) = 0;
   virtual double solutionValue(int trialID,
