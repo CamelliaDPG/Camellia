@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
   IPPtr qoptIP = Teuchos::rcp(new IP);
   qoptIP->addTerm( v );
   qoptIP->addTerm( tau / eps + v->grad() );
-  qoptIP->addTerm( beta_const * v->grad() - tau->div() ); // term negated because we don't have a convenient way to do "- beta * v->grad()"
+  qoptIP->addTerm( beta_const * v->grad() - tau->div() );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -196,7 +196,8 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 2, verticalCells = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                confusionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
