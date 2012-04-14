@@ -90,6 +90,27 @@ public:
   }
 };
 
+
+class Normal_Component : public Function {
+  int _component;
+public:
+  Normal_Component(int whichComponent) : Function(0) {
+    _component = whichComponent;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double n_i = (*sideNormals)(cellIndex,ptIndex,_component);
+        values(cellIndex,ptIndex) = n_i;
+      }
+    }
+  }
+};
+
 class beta : public Function {
 public:
   beta() : Function(1) {
@@ -151,6 +172,7 @@ int main(int argc, char *argv[]) {
   
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
+//  VarPtr uhatn = varFactory.fluxVar("\\widehat{u}_n");
   VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
   VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
   VarPtr u1 = varFactory.fieldVar("u_1");
@@ -191,6 +213,7 @@ int main(int argc, char *argv[]) {
   // v3:
   stokesBFMath->addTerm(-u1,v3->dx()); // (-u, grad v3)
   stokesBFMath->addTerm(-u2,v3->dy());
+//  stokesBFMath->addTerm(uhatn, v3);
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
   
   IPPtr mathIP = Teuchos::rcp(new IP());
@@ -245,8 +268,6 @@ int main(int argc, char *argv[]) {
     mathIP->printInteractions();
   }
   
-  // an experiment: using integral of terms on the boundary instead of the usual weighted volume integral
-  // as the approximation for the flux/trace contributions to the quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP());
                                                
   double beta = 1e-1;
@@ -257,13 +278,11 @@ int main(int argc, char *argv[]) {
   qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
   qoptIP->addTerm( q1->div() - v3->dx() );    // u1
   qoptIP->addTerm( q2->div() - v3->dy() );    // u2
-  // boundary terms:
-  FunctionPtr hSquared = Teuchos::rcp( new hSquaredFunction );
-  qoptIP->addBoundaryTerm( hSquared * v1 );
-  qoptIP->addBoundaryTerm( hSquared * v2 );
-  qoptIP->addBoundaryTerm( hSquared * v3 );
-  qoptIP->addBoundaryTerm( hSquared * q1 );
-  qoptIP->addBoundaryTerm( hSquared * q2 );
+  qoptIP->addTerm( sqrt(beta) * v1 );
+  qoptIP->addTerm( sqrt(beta) * v2 );
+  qoptIP->addTerm( sqrt(beta) * v3 );
+  qoptIP->addTerm( sqrt(beta) * q1 );
+  qoptIP->addTerm( sqrt(beta) * q2 );
   
   // this is the quasi-optimal norm for the VSP Stokes formulation (not likely quite right for the stokesBFMath)
 //  qoptIP->addTerm( q1->x() / (2.0 * mu) + v1->dx() );
@@ -295,20 +314,20 @@ int main(int argc, char *argv[]) {
   cellSideParities.initialize(1.0); // not worried here about neighbors actually having opposite parity -- just want the two BF implementations to agree...
   expectedValues.resize(numCells, testOrdering->totalDofs(), trialOrdering->totalDofs() );
   actualValues.resize(numCells, testOrdering->totalDofs(), trialOrdering->totalDofs() );
-  stokesBF->stiffnessMatrix(expectedValues, elemType, cellSideParities, basisCache);
-  stokesBFMath->stiffnessMatrix(actualValues, elemType, cellSideParities, basisCache);
-  
-  if (rank == 0) {
-    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
-      cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
-      cout << "Old: \n" << expectedValues;
-      cout << "New: \n" << actualValues;
-      cout << "TrialDofOrdering: \n" << *trialOrdering;
-      cout << "TestDofOrdering:\n" << *testOrdering;
-    } else {
-      cout << "Old and new Stokes stiffness agree!!\n";
-    }
-  }
+//  stokesBF->stiffnessMatrix(expectedValues, elemType, cellSideParities, basisCache);
+//  stokesBFMath->stiffnessMatrix(actualValues, elemType, cellSideParities, basisCache);
+//  
+//  if (rank == 0) {
+//    if ( ! TestSuite::fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+//      cout << "Test failed: old Stokes stiffness differs from new; maxDiff " << maxDiff << ".\n";
+//      cout << "Old: \n" << expectedValues;
+//      cout << "New: \n" << actualValues;
+//      cout << "TrialDofOrdering: \n" << *trialOrdering;
+//      cout << "TestDofOrdering:\n" << *testOrdering;
+//    } else {
+//      cout << "Old and new Stokes stiffness agree!!\n";
+//    }
+//  }
   
   // create BCs:
   Teuchos::RCP<BCEasy> stokesBC = Teuchos::rcp(new BCEasy());
@@ -323,8 +342,12 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr u1fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u1() );
   FunctionPtr u2fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u2() );
+//  FunctionPtr n1   = Teuchos::rcp( new Normal_Component(0) );
+//  FunctionPtr n2   = Teuchos::rcp( new Normal_Component(1) );
+//  FunctionPtr unfn = Teuchos::rcp( new SumFunction(u1fn * n1,u2fn * n2) );
   stokesBC->addDirichlet(u1hat,entireBoundary,u1fn);
   stokesBC->addDirichlet(u2hat,entireBoundary,u2fn);
+//  stokesBC->addDirichlet(uhatn,entireBoundary,unfn);
   stokesBC->addZeroMeanConstraint(p);
   
   Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, -2,
@@ -332,10 +355,10 @@ int main(int argc, char *argv[]) {
   // for the above solution choice, RHS is actually zero
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
-  int minLogElements = 0, maxLogElements = 5;
+  int minLogElements = 0, maxLogElements = 2;
   pToAdd = 2;
   HConvergenceStudy study = HConvergenceStudy(exactSolution, stokesBFMath, zeroRHS,
-                                              stokesBC, mathIP, minLogElements, 
+                                              stokesBC, qoptIP, minLogElements, 
                                               maxLogElements, H1Order, pToAdd);
   quadPoints.resize(4,2);
   
