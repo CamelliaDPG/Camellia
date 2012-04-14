@@ -46,6 +46,8 @@
 #include "StokesVVPBilinearForm.h"
 #include "StokesMathBilinearForm.h"
 
+#include "InnerProductScratchPad.h"
+
 #include "MultiOrderStudy.h"
 
 #ifdef HAVE_MPI
@@ -147,15 +149,16 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
 }
 
 int main(int argc, char *argv[]) {
+  int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
   // TODO: figure out the right thing to do here...
   // may want to modify argc and argv before we make the following call:
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  //rank=mpiSession.getRank();
-  //numProcs=mpiSession.getNProc();
+  rank=mpiSession.getRank();
+  numProcs=mpiSession.getNProc();
 #else
 #endif
-  int pToAdd = 2; // for optimal test function approximation
+  int pToAdd = 1; // for optimal test function approximation
 
   // parse args:
   int polyOrder, minLogElements, maxLogElements;
@@ -165,6 +168,29 @@ int main(int argc, char *argv[]) {
   parseArgs(argc, argv, polyOrder, minLogElements, maxLogElements, formulationType, useTriangles,
             useMultiOrder, useOptimalNorm, formulationTypeStr);
 
+  /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
+  VarFactory varFactory; 
+  VarPtr q1 = varFactory.testVar("q_1", HDIV, StokesMathBilinearForm::Q_1);
+  VarPtr q2 = varFactory.testVar("q_2", HDIV, StokesMathBilinearForm::Q_2);
+  VarPtr v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
+  VarPtr v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
+  VarPtr v3 = varFactory.testVar("v_3", HGRAD, StokesMathBilinearForm::V_3);
+  
+  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
+  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
+  //  VarPtr uhatn = varFactory.fluxVar("\\widehat{u}_n");
+  VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
+  VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
+  VarPtr u1 = varFactory.fieldVar("u_1");
+  VarPtr u2 = varFactory.fieldVar("u_2");
+  VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
+  VarPtr sigma12 = varFactory.fieldVar("\\sigma_12");
+  VarPtr sigma21 = varFactory.fieldVar("\\sigma_21");
+  VarPtr sigma22 = varFactory.fieldVar("\\sigma_22");
+  VarPtr p = varFactory.fieldVar("p");
+  
+  ///////////////////////////////////////////////////////////////////////////
+  
   Teuchos::RCP<StokesManufacturedSolution> mySolution = 
   Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
                                                polyOrder, formulationType) );
@@ -172,20 +198,52 @@ int main(int argc, char *argv[]) {
   int pressureID = mySolution->pressureID();
   bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
   
-  cout << "formulationType = " << formulationTypeStr                  << "\n";
-  cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
-  cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
-  cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
+  if (rank == 0) {
+    cout << "pToAdd = " << pToAdd << endl;
+    cout << "formulationType = " << formulationTypeStr                  << "\n";
+    cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
+    cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
+    cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
+  }
   
   mySolution->setUseSinglePointBCForP(singlePointBCs);
   Teuchos::RCP<DPGInnerProduct> ip;
   if (useOptimalNorm) {
-    ip = Teuchos::rcp( new OptimalInnerProduct( mySolution->bilinearForm() ) );
+    if (formulationType == StokesManufacturedSolution::MATH_CONFORMING ) {
+      
+      double mu = 1.0;
+      
+      IPPtr qoptIP = Teuchos::rcp(new IP());
+      
+      double beta = 1.0;
+      qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
+      qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
+      qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
+      qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
+      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+      qoptIP->addTerm( q1->div() - v3->dx() );    // u1
+      qoptIP->addTerm( q2->div() - v3->dy() );    // u2
+      qoptIP->addTerm( sqrt(beta) * v1 );
+      qoptIP->addTerm( sqrt(beta) * v2 );
+      qoptIP->addTerm( sqrt(beta) * v3 );
+      qoptIP->addTerm( sqrt(beta) * q1 );
+      qoptIP->addTerm( sqrt(beta) * q2 );
+      
+      ip = qoptIP;
+      
+      if (rank==0)
+        cout << "Stokes Math formulation: using quasi-optimal IP with beta=" << beta << endl;
+    } else {
+      ip = Teuchos::rcp( new OptimalInnerProduct( mySolution->bilinearForm() ) );
+    }
+    
+    
   } else {
     ip = Teuchos::rcp( new    MathInnerProduct( mySolution->bilinearForm() ) );
   }
   
-  ip->printInteractions();
+  if (rank==0) 
+    ip->printInteractions();
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -230,17 +288,54 @@ int main(int argc, char *argv[]) {
     
     study.solve(quadPoints);
     
-    ostringstream filePathPrefix;
-    filePathPrefix << "stokes/u1_p" << polyOrder;
-    
-    study.writeToFiles(filePathPrefix.str(),u1_trialID,u1_traceID);
-    filePathPrefix.str("");
-    filePathPrefix << "stokes/u2_p" << polyOrder;
-    study.writeToFiles(filePathPrefix.str(),u2_trialID,u2_traceID);
-    
-    filePathPrefix.str("");
-    filePathPrefix << "stokes/pressure_p" << polyOrder;
-    study.writeToFiles(filePathPrefix.str(),p_trialID);
+    if (rank == 0) {
+      if ( formulationType != StokesManufacturedSolution::MATH_CONFORMING) {
+        ostringstream filePathPrefix;
+        filePathPrefix << "stokes/u1_p" << polyOrder;
+        
+        study.writeToFiles(filePathPrefix.str(),u1_trialID,u1_traceID);
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/u2_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),u2_trialID,u2_traceID);
+        
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/pressure_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),p_trialID);
+      } else {
+        cout << study.TeXErrorRateTable();
+        vector<int> primaryVariables;
+        primaryVariables.push_back(u1->ID());
+        primaryVariables.push_back(u2->ID());
+        primaryVariables.push_back(p->ID());
+        cout << "******** Best Approximation comparison: ********\n";
+        cout << study.TeXBestApproximationComparisonTable(primaryVariables);
+        
+        ostringstream filePathPrefix;
+        filePathPrefix << "stokes/u1_p" << polyOrder;
+        
+        study.writeToFiles(filePathPrefix.str(),u1_trialID,u1_traceID);
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/u2_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),u2_trialID,u2_traceID);
+        
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/pressure_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),p_trialID);
+        
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/sigma11_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),sigma11->ID());
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/sigma12_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),sigma12->ID());
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/sigma21_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),sigma21->ID());
+        filePathPrefix.str("");
+        filePathPrefix << "stokes/sigma22_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),sigma22->ID());
+      }
+    }
   } else {
     cout << "Generating mixed-order 16x16 mesh" << endl;
     Teuchos::RCP<Mesh> mesh = MultiOrderStudy::makeMultiOrderMesh16x16(quadPoints,

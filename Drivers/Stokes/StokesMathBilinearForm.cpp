@@ -22,7 +22,7 @@ static const string & S_SIGMA_11 = "\\sigma_{11}";
 static const string & S_SIGMA_12 = "\\sigma_{12}";
 static const string & S_SIGMA_21 = "\\sigma_{21}";
 static const string & S_SIGMA_22 = "\\sigma_{22}";
-static const string & S_P = "P";
+static const string & S_P = "p";
 
 static const string & S_DEFAULT_TRIAL = "invalid trial";
 
