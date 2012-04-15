@@ -1,0 +1,26 @@
+#!/bin/bash
+# 
+# Script for invoking CMake using the above CMakeLists.txt.  Invoke
+# this script in the source directory containing CMakeLists.txt:
+#
+# $ ./do-configure
+# $ make
+#
+# You will need to change the TRILINOS_PATH variable below to point to
+# the location of your Trilinos install.  Other variables that you may
+# need or want to change:
+#
+# CMAKE_BUILD_TYPE: "DEBUG" or "RELEASE".
+#
+# BUILD_SHARED_LIBS: If your build of Trilinos includes shared /
+# dynamic libraries, you can save build time by linking against them
+# instead of static libraries.  Otherwise, set this to OFF.
+#
+# CMAKE_VERBOSE_MAKEFILE: Set to ON if you prefer verbose Make output.
+#
+cmake \
+  -G "Xcode" \
+  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/serial-debug" \
+  -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Documents/camellia/src" \
+  -D CAMELLIA_BUILD_TYPE:STRING="debug" \
+  .

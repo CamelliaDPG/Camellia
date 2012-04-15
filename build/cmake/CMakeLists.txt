@@ -1,0 +1,184 @@
+#
+# CMake example that uses FIND_PACKAGE(Trilinos ...) to build your C++
+# application with Trilinos.  You should know a little bit about CMake
+# before reading this example; in particular, you should know how to
+# add C++ source files and header files to your project.
+#
+
+# You need CMake version >= 2.8 to use this example.
+cmake_minimum_required(VERSION 2.8)
+
+# Your "do-configure" script that invokes CMake should set
+# TRILINOS_PATH to the path to your Trilinos install.
+# You do _not_ need to edit this line.
+FIND_PACKAGE(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
+
+# If FIND_PACKAGE successfully found your Trilinos install, it will
+# set the Boolean flag Trilinos_FOUND.  The following IF statement
+# fails with a FATAL_ERROR if Trilinos was not found.  If it _was_
+# found, it prints out the values of some Trilinos configuration
+# details.  You may find them useful for building your application
+# that uses Trilinos.
+IF(Trilinos_FOUND)
+   MESSAGE("\nFound Trilinos!  Here are the details: ")
+   MESSAGE("   Trilinos_DIR = ${Trilinos_DIR}")
+   MESSAGE("   Trilinos_VERSION = ${Trilinos_VERSION}")
+   MESSAGE("   Trilinos_PACKAGE_LIST = ${Trilinos_PACKAGE_LIST}")
+   MESSAGE("   Trilinos_LIBRARIES = ${Trilinos_LIBRARIES}")
+   MESSAGE("   Trilinos_INCLUDE_DIRS = ${Trilinos_INCLUDE_DIRS}")
+   MESSAGE("   Trilinos_TPL_LIST = ${Trilinos_TPL_LIST}")
+   MESSAGE("   Trilinos_TPL_INCLUDE_DIRS = ${Trilinos_TPL_INCLUDE_DIRS}")
+   MESSAGE("   Trilinos_TPL_LIBRARIES = ${Trilinos_TPL_LIBRARIES}")
+   MESSAGE("   Trilinos_BUILD_SHARED_LIBS = ${Trilinos_BUILD_SHARED_LIBS}")
+   MESSAGE("   Trilinos_CXX_COMPILER = ${Trilinos_CXX_COMPILER}")
+   MESSAGE("   Trilinos_C_COMPILER = ${Trilinos_C_COMPILER}")
+   MESSAGE("   Trilinos_Fortran_COMPILER = ${Trilinos_Fortran_COMPILER}")
+   MESSAGE("   Trilinos_CXX_COMPILER_FLAGS = ${Trilinos_CXX_COMPILER_FLAGS}")
+   MESSAGE("   Trilinos_C_COMPILER_FLAGS = ${Trilinos_C_COMPILER_FLAGS}")
+   MESSAGE("   Trilinos_Fortran_COMPILER_FLAGS =
+     ${Trilinos_Fortran_COMPILER_FLAGS}")
+   MESSAGE("   Trilinos_LINKER = ${Trilinos_LINKER}")
+   MESSAGE("   Trilinos_EXTRA_LD_FLAGS = ${Trilinos_EXTRA_LD_FLAGS}")
+   MESSAGE("   Trilinos_AR = ${Trilinos_AR}")
+   MESSAGE("End of Trilinos details\n")
+ELSE()
+  MESSAGE(FATAL_ERROR "Could not find Trilinos!")
+ENDIF()
+
+# If you haven't already set the C++ compiler, use the same compiler
+# that was used to build Trilinos on your machine.  You do _not_ need
+# to edit this line.
+IF(NOT CMAKE_CXX_COMPILER)
+  MESSAGE("Setting CXX compiler.")
+  SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
+ENDIF()
+
+# If you haven't already set the C compiler, use the same compiler
+# that was used to build Trilinos on your machine.  You do _not_ 
+# need to edit this line.
+IF(NOT CMAKE_C_COMPILER)
+  MESSAGE("Setting C compiler.")
+  SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
+ENDIF()
+
+# If you haven't already set the Fortran compiler, use the same compiler
+# that was used to build Trilinos on your machine.  You do _not_ 
+# need to edit this line.
+IF(NOT CMAKE_Fortran_COMPILER)
+  MESSAGE("Setting Fortran compiler.")
+  SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
+ENDIF()
+
+#
+# EDIT HERE: Replace TrilinosExample with your project's name.
+#
+IF( ${CAMELLIA_BUILD_TYPE} MATCHES "debug" ) 
+    MESSAGE("Building Camellia-debug project.")
+    project(Camellia-debug)
+    set(CAMELLIA_LIBRARY_NAME "Camellia-debug")
+ELSE( )
+    MESSAGE("Building Camellia project.")
+    project(Camellia)
+    set(CAMELLIA_LIBRARY_NAME "Camellia")
+ENDIF( ${CAMELLIA_BUILD_TYPE} MATCHES "debug" )
+# 
+# EDIT HERE: 
+#
+# Source file(s) in your project.  Here, we include one source file, 
+# main.cpp, which contains the main() function.  You may also want to 
+# set HEADERS to the list of header files in your project, if there 
+# are any.
+#
+MESSAGE("CAMELLIA_SOURCE_DIR = ${CAMELLIA_SOURCE_DIR} ")
+FILE(GLOB_RECURSE SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
+
+set(DRIVERS_DIR "../../Drivers" )
+
+set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
+
+set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
+FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
+
+set( BURGERS_SOURCES
+  "${BURGERS_DIR}/BurgersBilinearForm.cpp"
+  "${BURGERS_DIR}/BurgersInnerProduct.cpp"
+  "${BURGERS_DIR}/BurgersProblem.cpp"
+  "${BURGERS_DIR}/TimeMarchingBurgersProblem.cpp"
+)
+
+set( BURGERS_DRIVER
+  "${BURGERS_DIR}/BurgersDriver.cpp"
+  )
+
+set( POISSON_SOURCES
+  "${DRIVERS_DIR}/Poisson/PoissonBilinearForm.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonExactSolution.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionLinear.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionCubic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionQuadratic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonExactSolutionQuartic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonRHSLinear.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonRHSQuadratic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonRHSCubic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonRHSQuartic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonBCLinear.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonBCQuadratic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonBCCubic.cpp"
+  "${DRIVERS_DIR}/Poisson/PoissonBCQuartic.cpp"
+)
+
+set( CONFUSION_SOURCES
+  "${DRIVERS_DIR}/Confusion/ConfusionManufacturedSolution.cpp"
+  "${DRIVERS_DIR}/Confusion/ConfusionProblem.cpp"
+  "${DRIVERS_DIR}/Confusion/ConfusionBilinearForm.cpp"
+)
+
+set(HEADERS 
+  )
+
+# 
+# EDIT HERE:
+#
+# Add to the header include path the current directory, Trilinos'
+# include directory, and the include directories of the third-party
+# libraries (TPLs) with which Trilinos was built.
+#
+include_directories("../../src/include")
+include_directories("${DRIVERS_DIR}/Poisson") # for certain tests in DPGTests
+include_directories("${DRIVERS_DIR}/Confusion") # for certain tests in DPGTests
+include_directories("${DRIVERS_DIR}/Stokes") # for certain tests in DPGTests
+include_directories(${Trilinos_TPL_INCLUDE_DIRS})
+include_directories(${Trilinos_INCLUDE_DIRS})
+
+# Add to the library path Trilinos' library path, and the library
+# paths of the third-party libraries (TPLs) with which Trilinos was
+# built.  
+link_directories(${Trilinos_LIBRARY_DIRS})
+link_directories(${Trilinos_TPL_LIBRARY_DIRS})
+
+# 
+# EDIT HERE: Change trilinosExample to the name of the executable
+# file that you want to build.  This line tells CMake which source
+# file(s) to use to build the executable.
+#
+MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
+add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES})
+add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
+add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
+
+#
+# EDIT HERE: Change trilinosExample to the name of the executable
+# file, as above.  This line tells the linker to link the executable 
+# with the Trilinos libraries, and with the third-party libraries 
+# (TPLs) with which Trilinos was built.
+#
+target_link_libraries(BurgersDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(DPGTests
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
