@@ -23,6 +23,18 @@ public:
   //  }
 };
 
+class SpatialFilterLogicalOr : public SpatialFilter {
+  SpatialFilterPtr _sf1, _sf2;
+public:
+  SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2) {
+    _sf1 = sf1;
+    _sf2 = sf2;
+  }
+  bool matchesPoint( double x, double y ) {
+    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
+  }
+};
+
 class NegatedSpatialFilter : public SpatialFilter {
   SpatialFilterPtr _filterToNegate;
 public:
