@@ -9,7 +9,79 @@
 #include "BCEasy.h"
 #include "Var.h"
 
+class BCLogicalOrFunction : public Function {
+  FunctionPtr _f1, _f2;
+  SpatialFilterPtr _sf1, _sf2;
+  
+public:
+  BCLogicalOrFunction(FunctionPtr f1, SpatialFilterPtr sf1, FunctionPtr f2, SpatialFilterPtr sf2) : Function(f1->rank()) {
+    _f1 = f1;
+    _sf1 = sf1;
+    _f2 = f2;
+    _sf2 = sf2;
+  }
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    values.initialize(0.0);
+    
+    Teuchos::Array<int> dim;
+    values.dimensions(dim);
+    Teuchos::Array<int> valuesDim = dim;
+    FieldContainer<double> f1Values;
+    FieldContainer<double> f2Values;
+
+    int entriesPerPoint = 1;
+    for (int d=2; d<values.rank(); d++) {
+      entriesPerPoint *= dim[d];
+      dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
+    }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      dim[0] = cellIndex;
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        dim[1] = ptIndex;
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (_sf1->matchesPoint(x,y)) {
+          if (f1Values.size() == 0) {
+            // resize, and compute f1
+            f1Values.resize(valuesDim);
+            _f1->values(f1Values,basisCache);
+          }
+          double* value = &values[values.getEnumeration(dim)];
+          double* f1Value = &f1Values[f1Values.getEnumeration(dim)];
+          for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+            *value++ = *f1Value++;
+          }
+        } else if (_sf2->matchesPoint(x,y)) {
+          if (f2Values.size() == 0) {
+            // resize, and compute f2
+            f2Values.resize(valuesDim);
+            _f2->values(f2Values,basisCache);
+          }
+          double* value = &values[values.getEnumeration(dim)];
+          double* f2Value = &f2Values[f2Values.getEnumeration(dim)];
+          for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+            *value++ = *f2Value++;
+          }
+        }
+      }
+    }
+  }
+};
+
+
 void BCEasy::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction ) {
+  if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() ) {
+    // "or" the existing condition with the new one:
+    SpatialFilterPtr existingFilter = _dirichletBCs[ traceOrFlux->ID() ].first;
+    FunctionPtr existingFunction = _dirichletBCs[ traceOrFlux->ID() ].second;
+    valueFunction = Teuchos::rcp( new BCLogicalOrFunction(existingFunction, existingFilter,
+                                                          valueFunction, spatialPoints) );
+    spatialPoints = Teuchos::rcp( new SpatialFilterLogicalOr( existingFilter, spatialPoints ) );
+//    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only one Dirichlet condition is allowed per variable.");
+  }
   _dirichletBCs[ traceOrFlux->ID() ] = make_pair( spatialPoints, valueFunction );
 }
 
@@ -48,16 +120,18 @@ void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bo
                      "spaceDim != 2 not yet supported by imposeBC." );
   
   imposeHere.initialize(false);
-  // TODO: add exceptions for varIDs that aren't supposed to have BCs imposed...
+  if ( _dirichletBCs.find(varID) == _dirichletBCs.end() ) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
+  }
   
-  SpatialFilterPtr filter = _dirichletBCs[varID].first;
-  FunctionPtr f = _dirichletBCs[varID].second;
+  DirichletBC bc = _dirichletBCs[varID];
+  SpatialFilterPtr filter = bc.first;
+  FunctionPtr f = bc.second;
   
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       double x = physicalPoints(cellIndex, ptIndex, 0);
-      double y = physicalPoints(cellIndex, ptIndex, 1);
-      
+      double y = physicalPoints(cellIndex, ptIndex, 1);      
       imposeHere(cellIndex,ptIndex) = filter->matchesPoint(x,y);
     }
   }
