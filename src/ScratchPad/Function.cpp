@@ -195,93 +195,56 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
 //  cout << "scalarModifyBasisValues: values:\n" << values;
 }
 
-//void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
-//  void Solution::writeFluxesToFile(int trialID, const string &filePath){
-//    typedef CellTools<double>  CellTools;
-//    
-//    ofstream fout(filePath.c_str());
-//    fout << setprecision(15);
-//    vector< ElementTypePtr > elementTypes = mesh->elementTypes();
-//    vector< ElementTypePtr >::iterator elemTypeIt;
-//    int spaceDim = 2; // TODO: generalize to 3D...
-//    
-//    BasisCachePtr basisCache;
-//    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
-//      
-//      ElementTypePtr elemTypePtr = *(elemTypeIt);
-//      shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-//      int numSides = cellTopo.getSideCount();
-//      
-//      FieldContainer<double> vertexPoints, physPoints;    
-//      mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-//      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
-//      basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
-//
-//      int numCells = physicalCellNodes.dimension(0);       
-//      // takes centroid of all cells
-//      int numVertices = vertexPoints.dimension(1);
-//      FieldContainer<double> cellIDs(numCells);
-//      for (int cellIndex=0;cellIndex<numCells;cellIndex++){
-//        FieldContainer<double> cellCentroid(spaceDim);
-//        cellCentroid.initialize(0.0);
-//        for (int vertIndex=0;vertIndex<numVertices;vertIndex++){	
-//          for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-//            cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
-//          }
-//        }
-//        for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-//          cellCentroid(dimIndex) /= numVertices;
-//        }
-//        cellCentroid.resize(1,spaceDim); // only one cell
-//        int cellID = _mesh->elementsForPoints(cellCentroid)[0]->cellID();      
-//        cellIDs(cellIndex) = cellID;
-//      }
-//      
-//      for (int sideIndex=0; sideIndex < numSides; sideIndex++){     
-//        
-//        DefaultCubatureFactory<double>  cubFactory;
-//        int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
-//        shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); 
-//        int sideDim = side.getDimension();                              
-//        Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
-//        int numCubPoints = sideCub->getNumPoints();
-//        FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // just need the reference cell cubature points - map to physical space in n-D space
-//        FieldContainer<double> cubPointsSide(numCubPoints, sideDim); 
-//        FieldContainer<double> cubWeightsSide(numCubPoints);// dummy for now
-//        
-//        sideCub->getCubature(cubPointsSide, cubWeightsSide);       
-//        
-//        // compute geometric cell information
-//        CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, sideIndex, cellTopo);
-//        
-//        // map side cubature points in reference parent cell domain to physical space	
-//        FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-//        CellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-//        
-//        // we now have cubPointsSideRefCell
-//        FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
-//        solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);	
-//        
-//        // NOW loop over all cells to write solution to file
-//        for (int cellIndex=0;cellIndex < numCells;cellIndex++){
-//          FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
-//          for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
-//            for (int dimInd=0;dimInd<spaceDim;dimInd++){
-//              fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
-//            }
-//            fout << computedValues(cellIndex,pointIndex) << endl;
-//          }
-//          // insert NaN for matlab to plot discontinuities - WILL NOT WORK IN 3D
-//          for (int dimInd=0;dimInd<spaceDim;dimInd++){
-//            fout << "NaN" << " ";
-//          }
-//          fout << "NaN" << endl;
-//        }
-//      }
-//    }
-//    fout.close();
-//  }
-//}
+void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
+  typedef CellTools<double>  CellTools;
+  
+  ofstream fout(filePath.c_str());
+  fout << setprecision(15);
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  int spaceDim = 2; // TODO: generalize to 3D...
+  
+  BasisCachePtr basisCache;
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    int numSides = cellTopo.getSideCount();
+    
+    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
+    int numCells = physicalCellNodes.dimension(0);
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      cellIDs.push_back(cellID);
+    }
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
+
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++){
+      int numCubPoints = basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1);
+      FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
+      this->values(computedValues,basisCache->getSideBasisCache(sideIndex));
+      
+      // NOW loop over all cells to write solution to file
+      for (int cellIndex=0;cellIndex < numCells;cellIndex++){
+        FieldContainer<double> cellParities = mesh->cellSideParitiesForCell( cellIDs[cellIndex] );
+        for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
+          for (int dimInd=0;dimInd<spaceDim;dimInd++){
+            fout << (basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints())(cellIndex,pointIndex,dimInd) << " ";
+          }
+          fout << computedValues(cellIndex,pointIndex) << endl;
+        }
+        // insert NaN for matlab to plot discontinuities - WILL NOT WORK IN 3D
+        for (int dimInd=0;dimInd<spaceDim;dimInd++){
+          fout << "NaN" << " ";
+        }
+        fout << "NaN" << endl;
+      }
+    }
+  }
+  fout.close();
+}
 
 void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
   // MATLAB format, supports scalar functions defined inside 2D volume right now...
