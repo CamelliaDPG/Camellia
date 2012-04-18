@@ -762,6 +762,9 @@ LinearTermPtr operator/(LinearTermPtr a, FunctionPtr f) {
 }
 
 LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
+  Space v1Space = v1->space();
+  Space v2Space = v2->space();
+  
   return 1.0 * v1 + 1.0 * v2;
 }
 

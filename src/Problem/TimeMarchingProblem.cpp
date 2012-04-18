@@ -71,6 +71,7 @@ vector<EOperatorExtended> TimeMarchingProblem::operatorsForTestID(int testID) {
   if ( testHasTimeDerivative(testID) ) {
     ops.insert(ops.begin(), IntrepidExtendedTypes::OP_VALUE);
   }
+  return ops;
 }
 
 bool TimeMarchingProblem::testHasTimeDerivative(int testID) {

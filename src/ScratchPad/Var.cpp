@@ -17,6 +17,8 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
     return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
   if (space == L2)
     return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+  if (space == CONSTANT_SCALAR)
+    return IntrepidExtendedTypes::FUNCTION_SPACE_ONE;
   TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
 }
 

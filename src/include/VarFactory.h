@@ -72,7 +72,7 @@ public:
   
   VarPtr testVar(string name, Space fs, int ID = -1) {
     ID = getTestID(ID);
-    int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
+    int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
     
     _testVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
                                              IntrepidExtendedTypes::OP_VALUE, fs, TEST) );

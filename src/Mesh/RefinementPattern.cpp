@@ -299,6 +299,7 @@ vector< vector< pair< int, int> > > & RefinementPattern::childrenForSides() {
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternTriangle() {
   // TODO: implement this
+  return Teuchos::rcp( (RefinementPattern*) NULL );
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternQuad() {

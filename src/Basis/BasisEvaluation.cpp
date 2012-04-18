@@ -150,6 +150,8 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   switch(relatedOp) {
     case(Intrepid::OPERATOR_VALUE):
       switch(fs) {
+        case IntrepidExtendedTypes::FUNCTION_SPACE_ONE:
+//          cout << "Reference values for FUNCTION_SPACE_ONE: " << *referenceValues;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
           break;
@@ -174,6 +176,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
       break;
     case(IntrepidExtendedTypes::OP_GRAD):
       switch(fs) {
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD: // HGRAD is the only space that supports the GRAD operator...
           fst::HGRADtransformGRAD<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;

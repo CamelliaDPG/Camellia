@@ -134,16 +134,12 @@ public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
-typedef Teuchos::RCP<ConstantScalarFunction> ConstantScalarFunctionPtr;
-typedef Teuchos::RCP<ConstantVectorFunction> ConstantVectorFunctionPtr;
-typedef Teuchos::RCP<SumFunction> SumFunctionPtr;
-
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
 //ConstantScalarFunctionPtr operator/(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
 
-Teuchos::RCP<ProductFunction> operator*(FunctionPtr f1, FunctionPtr f2);
-Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
-Teuchos::RCP<QuotientFunction> operator/(FunctionPtr f1, double divisor);
+FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
+FunctionPtr operator/(FunctionPtr f1, double divisor);
 
 //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
 //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2);
@@ -154,6 +150,6 @@ FunctionPtr operator*(FunctionPtr f, double weight);
 FunctionPtr operator*(vector<double> weight, FunctionPtr f);
 FunctionPtr operator*(FunctionPtr f, vector<double> weight);
 
-SumFunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
 
 #endif
