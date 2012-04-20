@@ -39,7 +39,7 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 static const double GAMMA = 1.4;
 static const double PRANDTL = 0.72;
-static const double YTOP = 1.0;
+static const double YTOP = 2.0;
 
 using namespace std;
 
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
   double mu = 1.0 / Re;
   double lambda = -.66 / Re;
-  double kappa = - GAMMA * cv * mu / PRANDTL; // double check sign - may be positive
+  double kappa =  - GAMMA * cv * mu / PRANDTL; // double check sign - may be positive
   
   bool useTriangles = false;
   
@@ -189,6 +189,8 @@ int main(int argc, char *argv[]) {
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
                                                          nullRHS, nullIP) );  
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
+						       nullRHS, nullIP) );  
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
   vector<double> e2(2); // (0,1)
@@ -202,13 +204,59 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma11) );
   FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma12) );
   FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma22) );
+
+  FunctionPtr u1_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u1) );
+  FunctionPtr u2_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u2) );
+  FunctionPtr rho_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, rho) );
+  FunctionPtr T_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, T) );
+
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+
+  // ==================== SET INITIAL GUESS ==========================
+
+  mesh->registerSolution(backgroundFlow);
+  mesh->registerSolution(prevTimeFlow);
+  double T0 = 1;
+
+  map<int, Teuchos::RCP<Function> > functionMap;
+  functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  functionMap[u2->ID()] = zero;
+  functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T0) );
+  functionMap[sigma11->ID()] = zero;
+  functionMap[sigma12->ID()] = zero;
+  functionMap[sigma22->ID()] = zero;
+  // everything else = 0; previous stresses sigma_ij = 0 as well
+  backgroundFlow->projectOntoMesh(functionMap);
+  prevTimeFlow->projectOntoMesh(functionMap);
+
+  // ==================== END SET INITIAL GUESS ==========================
   
+  ////////////////////////////////////////////////////////////////////
+  // DEFINE INNER PRODUCT
+  ////////////////////////////////////////////////////////////////////
+  // function to scale the squared guy by epsilon/h
+  //  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(tau1);
+  ip->addTerm(tau2);
+  ip->addTerm(tau3);
+  ip->addTerm(tau1->div());
+  ip->addTerm(tau2->div());
+  ip->addTerm(tau3->div());
+  ip->addTerm( v1->grad() );
+  ip->addTerm( v2->grad() );
+  ip->addTerm( v3->grad() );
+  ip->addTerm( v4->grad() );
+  ip->addTerm( v1 );
+  ip->addTerm( v2 );
+  ip->addTerm( v3 );
+  ip->addTerm( v4 );  
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
   ////////////////////////////////////////////////////////////////////
   
-  //Conservation laws
-
   // mass conservation ( no stress )
   bf->addTerm(u1_prev * rho + rho_prev * u1, -v1->dx()); 
   bf->addTerm(u2_prev * rho + rho_prev * u2, -v1->dy());
@@ -232,18 +280,13 @@ int main(int argc, char *argv[]) {
   bf->addTerm ( -sigma22,-v3->dy() );
   bf->addTerm( F3nhat, v3);
   
-  FunctionPtr u_T_fxn = Teuchos::rcp (new SumFunction(u1_prev * u1_prev, u2_prev * u2_prev) ) + (2.0 * cv * (2.0 * GAMMA - 1) ) * T_prev;
-  
+  FunctionPtr u_T_fxn = Teuchos::rcp (new SumFunction(u1_prev * u1_prev, u2_prev * u2_prev) ) + (2.0 * cv * (2.0 * GAMMA - 1) ) * T_prev;  
   FunctionPtr rho_v4_dx_weight = 0.5 * u1_prev * u_T_fxn;
-  FunctionPtr sum = u_T_fxn + 2.0 * u1_prev * u1_prev; // temporary to avoid compiler complaints about ambiguous operators
-  FunctionPtr u1_v4_dx_weight = 0.5 * sum * rho_prev;
-  
+  FunctionPtr u1_v4_dx_weight = 0.5 * u_T_fxn + 2.0 * u1_prev * u1_prev * rho_prev;  
   FunctionPtr u2_v4_dx_weight = u1_prev * u2_prev * rho_prev;
-  FunctionPtr T_v4_dx_weight = cv * (2.0 * GAMMA - 1) * u1_prev * rho_prev;
-  
+  FunctionPtr T_v4_dx_weight = cv * (2.0 * GAMMA - 1) * u1_prev * rho_prev;  
   FunctionPtr rho_v4_dy_weight = 0.5 * u2_prev * u_T_fxn;
-  sum = u_T_fxn + 2.0 * u2_prev * u2_prev;
-  FunctionPtr u2_v4_dy_weight = 0.5 * sum * rho_prev;
+  FunctionPtr u2_v4_dy_weight = 0.5 * u_T_fxn + 2.0 * u2_prev * u2_prev * rho_prev;
   FunctionPtr u1_v4_dy_weight = u1_prev * u2_prev * rho_prev;
   FunctionPtr T_v4_dy_weight = cv * (2.0 * GAMMA - 1) * u2_prev * rho_prev;
     
@@ -257,14 +300,13 @@ int main(int argc, char *argv[]) {
   
   // viscous terms:
   double lambda_factor = lambda / (4.0 * mu * (mu + lambda) );
-  double two_mu = 2 * mu;
-  bf->addTerm(sigma11 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau1->x());
-  bf->addTerm(sigma12 / two_mu - omega, tau1->y());
+  bf->addTerm(sigma11 / (2*mu) - lambda_factor * sigma11 - lambda_factor * sigma22,tau1->x());
+  bf->addTerm(sigma12 / (2*mu) - omega, tau1->y());
   bf->addTerm( u1, tau1->div() );
   bf->addTerm(u1hat, -tau1->dot_normal() );    
 
-  bf->addTerm(sigma12 / two_mu + omega, tau2->x());
-  bf->addTerm(sigma22 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau2->y());
+  bf->addTerm(sigma12 / (2*mu) + omega, tau2->x());
+  bf->addTerm(sigma22 / (2*mu) - lambda_factor * sigma11 - lambda_factor * sigma22,tau2->y());
   bf->addTerm( u2, tau2->div() );
   bf->addTerm(u2hat, -tau2->dot_normal() );
   
@@ -272,47 +314,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm(q2 / kappa, tau3->y());
   bf->addTerm(T, tau3->div());
   bf->addTerm(That, -tau3->dot_normal() );
-  
-  // ==================== SET INITIAL GUESS ==========================
-
-  mesh->registerSolution(backgroundFlow);
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  double T0 = 1;
-
-  map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  functionMap[u2->ID()] = zero;
-  functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T0) );
-  functionMap[sigma11->ID()] = zero;
-  functionMap[sigma12->ID()] = zero;
-  functionMap[sigma22->ID()] = zero;
-  // everything else = 0; previous stresses sigma_ij = 0 as well
-  backgroundFlow->projectOntoMesh(functionMap);
-
-  // ==================== END SET INITIAL GUESS ==========================
-  
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE INNER PRODUCT
-  ////////////////////////////////////////////////////////////////////
-  // function to scale the squared guy by epsilon/h
-  //  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  IPPtr ip = Teuchos::rcp( new IP );
-  ip->addTerm(tau1);
-  ip->addTerm(tau2);
-  ip->addTerm(tau3);
-  ip->addTerm(tau1->div());
-  ip->addTerm(tau2->div());
-  ip->addTerm(tau3->div());
-  ip->addTerm( v1->grad() );
-  ip->addTerm( v2->grad() );
-  ip->addTerm( v3->grad() );
-  ip->addTerm( v4->grad() );
-  ip->addTerm( v1 );
-  ip->addTerm( v2 );
-  ip->addTerm( v3 );
-  ip->addTerm( v4 );
-  
+ 
 //  ////////////////////////////////////////////////////////////////////
 //  // DEFINE RHS
 //  ////////////////////////////////////////////////////////////////////
@@ -340,32 +342,17 @@ int main(int argc, char *argv[]) {
   FunctionPtr energy_2 = rho_e_p * u2_prev;
 
   // viscous contributions
-  FunctionPtr s1 = sigma11_prev * u1_prev;
-  FunctionPtr s2 = sigma12_prev * u2_prev;
-  FunctionPtr s3 = sigma12_prev * u1_prev;
-  FunctionPtr s4 = sigma22_prev * u2_prev;
-  FunctionPtr viscousEnergy1 = s1 + s2;
-  FunctionPtr viscousEnergy2 = s3 + s4;
+  FunctionPtr viscousEnergy1 = sigma11_prev * u1_prev + sigma12_prev * u2_prev;
+  FunctionPtr viscousEnergy2 = sigma12_prev * u1_prev + sigma22_prev * u2_prev;
     
   FunctionPtr sigmaTrace = sigma11_prev + sigma22_prev;
-  FunctionPtr sig11mu = sigma11_prev/two_mu;
-  FunctionPtr sig12mu = sigma12_prev/two_mu;
-  FunctionPtr sig22mu = sigma22_prev/two_mu;
+  FunctionPtr sig11mu = sigma11_prev/(2*mu);
+  FunctionPtr sig12mu = sigma12_prev/(2*mu);
+  FunctionPtr sig22mu = sigma22_prev/(2*mu);
   FunctionPtr sig11lambda = - lambda_factor * sigma11_prev;
   FunctionPtr sig22lambda = - lambda_factor * sigma22_prev;
-  FunctionPtr viscous1 = e1 * sig11mu + e2 * sig12mu + e1 * sig11lambda + e1 * sig22lambda;
-  FunctionPtr viscous2 = e1 * sig12mu + e2 * sig22mu + e2 * sig11lambda + e2 * sig22lambda;
-
-  /*
-  bf->addTerm(sigma11 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau1->x());
-  bf->addTerm(sigma12 / two_mu - omega, tau1->y());
-  bf->addTerm( u1, tau1->div() );
-  bf->addTerm(u1hat, -tau1->dot_normal() );    
-
-  bf->addTerm(sigma12 / two_mu + omega, tau2->x());
-  bf->addTerm(sigma22 / two_mu - lambda_factor * sigma11 - lambda_factor * sigma22,tau2->y());
-  bf->addTerm( u2, tau2->div() );
-  */
+  FunctionPtr viscous1 = e1 * sig11mu + e2 * sig12mu + e1 * sigmaTrace;
+  FunctionPtr viscous2 = e1 * sig12mu + e2 * sig22mu + e2 * sigmaTrace;
 
   rhs->addTerm( (e1 * mass_1 + e2 *mass_2) * v1->grad());
   rhs->addTerm( (e1 * momentum_x_1 + e2 *momentum_x_2 + e1 * sigma11_prev + e2 * sigma12_prev) * v2->grad());
@@ -416,19 +403,11 @@ int main(int argc, char *argv[]) {
   // DEFINE PENALTY BC
   ////////////////////////////////////////////////////////////////////
 
-//  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary );
-//  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
-  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  //  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   //    LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
   //    pc->addConstraint(sigma_hat==zero,outflowBoundary);
-  /*
-  LinearTermPtr q_n_plus_inviscid = F4nhat - u1_prev * (sigma11 + sigma12_prev) - u2_prev * (;
-  FunctionPtr inviscid = (e1*energy_1 + e2*energy_2)*n; // just inviscid portion, assumes q_n = 0
-  pc->addConstraint(q_n_plus_inviscid == inviscid, freeTop);
-  pc->addConstraint(q_n_plus_inviscid == inviscid, freeBottom);
-  */
   //    pc->addConstraint(q_n == 0, wallBoundary);
-
+  
   
   ////////////////////////////////////////////////////////////////////
   // CREATE SOLUTION OBJECT
@@ -444,8 +423,9 @@ int main(int argc, char *argv[]) {
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
   int numRefs = 0;
-  int numNRSteps = 15;
-
+  int numNRSteps = 1;
+  int numTimeSteps = 10;
+  double dt = .01;
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
   solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
@@ -454,31 +434,91 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
   ////////////////////////////////////////////////////////////////////
-  if (numNRSteps==0){
-    if (numRefs==0){ //just do one solve
-      solution->solve(); // false: don't use MUMPS
-    }else{
-      for (int refIndex=0;refIndex<numRefs;refIndex++){    
-	solution->solve(false); // false: don't use MUMPS
-	//    solveStrategy->solve(rank==0);       // print to console on rank 0
-	refinementStrategy->refine(rank==0); // print to console on rank 0	
-      }
-      solution->solve(false); // false: don't use MUMPS
+
+  if (numTimeSteps>0){
+    FunctionPtr u1_prev_squared = u1_prev_time * u1_prev_time;
+    FunctionPtr u2_prev_squared = u2_prev_time * u2_prev_time;   
+    FunctionPtr e_prev_time = .5*( u1_prev_squared + u2_prev_squared ) + (GAMMA * cv) * T_prev_time;
+
+    // mass 
+    bf->addTerm(rho,v1/dt);
+    FunctionPtr time_res_1 = rho_time_prev - rho_prev;  // the offending line
+    rhs->addTerm( rho_prev/dt * v1);
+
+    // x momentum
+    bf->addTerm(u1_prev * rho + rho_prev * u1, v2/dt);
+    rhs->addTerm((rho_prev * u1_prev/dt) * v2);
+
+    // y momentum
+    bf->addTerm(u2_prev/dt * rho + rho_prev/dt * u2, v3/dt);
+    rhs->addTerm((rho_prev*u2_prev/dt) * v3);
+
+    // energy
+    bf->addTerm(e*rho + u1_prev*rho_prev*u1 + u2_prev*rho_prev*u2 + cv * GAMMA * rho_prev * T, v4/dt);
+    rhs->addTerm((rho_prev*e/dt) * v4);
+
+    // needs prev time solution (u_t(i-1) - u_t(i))/dt
+  }
+
+  for (int i = 0;i<numTimeSteps;i++){
+    solution->solve(); // false: don't use MUMPS
+    backgroundFlow->addSolution(solution,1.0);
+    cout << "on timestep " << i << endl;
+
+    std::string s;
+    std::stringstream rho_out;
+    std::stringstream u1_out;
+    std::stringstream u2_out;
+    std::stringstream T_out;
+    rho_out << "rho" <<i << ".m";
+    u1_out << "u1"<< i << ".m";
+    u2_out << "u2" << i << ".m";
+    T_out << "T" << i << ".m";
+    s = rho_out.str();
+    if (rank==0){
+      backgroundFlow->writeFieldsToFile(u1->ID(), u1_out.str().c_str());
+      backgroundFlow->writeFieldsToFile(u2->ID(), u2_out.str().c_str());
+      backgroundFlow->writeFieldsToFile(rho->ID(), rho_out.str().c_str());
+      backgroundFlow->writeFieldsToFile(T->ID(), T_out.str().c_str());
     }
   }
+  //  backgroundFlow->addSolution(solution,1.0);
+
+  /*
+  if (numRefs==0){ //just do one solve
+    solution->solve(); // false: don't use MUMPS
+  }else{
+    for (int refIndex=0;refIndex<numRefs;refIndex++){    
+      solution->solve(false); // false: don't use MUMPS
+      //    solveStrategy->solve(rank==0);       // print to console on rank 0
+      refinementStrategy->refine(rank==0); // print to console on rank 0	
+    }
+    solution->solve(false); // false: don't use MUMPS
+  }
+
+  int numPreRefs = 0;
+  for (int refIndex=0;refIndex<numPreRefs;refIndex++){    
+    solution->solve(false); // false: don't use MUMPS
+    //    solveStrategy->solve(rank==0);       // print to console on rank 0
+    refinementStrategy->refine(rank==0); // print to console on rank 0	
+  }
+
+  solution->solve(false); // false: don't use MUMPS 
   
   // one more nonlinear solve on refined mesh
   double factor = 1/Re;
+  factor = .5;
   for (int i=0;i<numNRSteps;i++){
-    solution->solve(false); // false: don't use MUMPS
+    solution->solve(); // false: don't use MUMPS
     backgroundFlow->addSolution(solution,factor);
     factor *= 1.5;
-    factor = min(factor,.25);
+    factor = min(factor,.5);
     double err = solution->energyErrorTotal();
     if (rank==0){
       cout << "NR step " << i << " with energy error " << err << " and factor = " << factor << endl;
     }
   }
+  */
 
   if (rank==0){
     backgroundFlow->writeFieldsToFile(u1->ID(), "u1_prev.m");
