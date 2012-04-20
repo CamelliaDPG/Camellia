@@ -569,3 +569,11 @@ FunctionPtr operator*(FunctionPtr f, vector<double> weight) {
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new SumFunction(f1, f2) );
 }
+
+FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2) {
+  return f1 + -f2;
+}
+
+FunctionPtr operator-(FunctionPtr f) {
+  return -1.0 * f;
+}

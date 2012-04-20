@@ -152,5 +152,7 @@ FunctionPtr operator*(vector<double> weight, FunctionPtr f);
 FunctionPtr operator*(FunctionPtr f, vector<double> weight);
 
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator-(FunctionPtr f);
 
 #endif

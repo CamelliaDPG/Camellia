@@ -422,7 +422,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numRefs = 0;
+  int numRefs = 3;
   int numNRSteps = 1;
   int numTimeSteps = 10;
   double dt = .01;
@@ -442,7 +442,7 @@ int main(int argc, char *argv[]) {
 
     // mass 
     bf->addTerm(rho,v1/dt);
-    FunctionPtr time_res_1 = rho_time_prev - rho_prev;  // the offending line
+    FunctionPtr time_res_1 = rho_prev_time - rho_prev;  // the offending line
     rhs->addTerm( rho_prev/dt * v1);
 
     // x momentum
@@ -486,7 +486,7 @@ int main(int argc, char *argv[]) {
 
   /*
   if (numRefs==0){ //just do one solve
-    solution->solve(); // false: don't use MUMPS
+    solution->solve(false); // false: don't use MUMPS
   }else{
     for (int refIndex=0;refIndex<numRefs;refIndex++){    
       solution->solve(false); // false: don't use MUMPS
@@ -499,7 +499,7 @@ int main(int argc, char *argv[]) {
   int numPreRefs = 0;
   for (int refIndex=0;refIndex<numPreRefs;refIndex++){    
     solution->solve(false); // false: don't use MUMPS
-    //    solveStrategy->solve(rank==0);       // print to console on rank 0
+    //solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0	
   }
 
