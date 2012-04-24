@@ -157,6 +157,9 @@ void BasisCache::discardPhysicalNodeInfo() {
   _physCubPoints.resize(0);
 }
 
+FieldContainer<double> & BasisCache::getCubatureWeights() {
+  return _cubWeights;
+}
 
 const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints() {
   return _physCubPoints;
