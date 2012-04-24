@@ -116,6 +116,10 @@ int Mesh::numInitialElements(){
   return _numInitialElements;
 }
 
+int Mesh::activeCellOffset() {
+  return _activeCellOffset;
+}
+
 vector< Teuchos::RCP< Element > > & Mesh::activeElements() {
   return _activeElements;
 }
@@ -1165,6 +1169,12 @@ vector<double> Mesh::getCellCentroid(int cellID){
 }
 
 void Mesh::determineActiveElements() {
+#ifdef HAVE_MPI
+  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+#else
+  int partitionNumber     = 0;
+#endif
+  
   _activeElements.clear();
   vector<ElementPtr>::iterator elemIterator;
   
@@ -1178,6 +1188,7 @@ void Mesh::determineActiveElements() {
   _partitionForCellID.clear();
   FieldContainer<int> partitionedMesh(_numPartitions,_activeElements.size());
   _partitionPolicy->partitionMesh(this,_numPartitions,partitionedMesh);
+  _activeCellOffset = 0;
   for (int i=0; i<_numPartitions; i++) {
     vector<ElementPtr> partition;
     for (int j=0; j<_activeElements.size(); j++) {
@@ -1187,6 +1198,9 @@ void Mesh::determineActiveElements() {
       _partitionForCellID[cellID] = i;
     }
     _partitions.push_back( partition );
+    if (partitionNumber > i) {
+      _activeCellOffset += partition.size();
+    }
   }
 }
 

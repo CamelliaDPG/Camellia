@@ -27,8 +27,6 @@ public:
 
     Teuchos::Array<int> dim;
     values.dimensions(dim);
-    FieldContainer<double> fValues(dim);
-    _f->values(fValues,basisCache); // inefficient: we compute this even if the spatial filter doesn't match...
     int entriesPerPoint = 1;
     for (int d=2; d<values.rank(); d++) {
       entriesPerPoint *= dim[d];
@@ -36,7 +34,10 @@ public:
     }
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     FieldContainer<bool> pointsMatch(numCells,numPoints);
-    if (_sf->matchPoints(pointsMatch,basisCache)) { // SOME point matches
+    if (_sf->matchesPoints(pointsMatch,basisCache)) { // SOME point matches
+//      cout << "pointsMatch:\n" << pointsMatch;
+      FieldContainer<double> fValues(dim);
+      _f->values(fValues,basisCache);
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         dim[0] = cellIndex;
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {

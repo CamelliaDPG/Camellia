@@ -48,6 +48,7 @@ OBJ_NAMES = DofOrdering \
        EricksonManufacturedSolution \
        EricksonConfectionSolution \
        ExperimentalInnerProduct \
+       LagrangeConstraints \
        Mesh \
        MeshPartitionPolicy \
        Boundary \
@@ -356,6 +357,9 @@ Bilinear%.o: $(SRCS_DIR)/Problem/Bilinear%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %olution.o: $(SRCS_DIR)/Solution/%olution.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+LagrangeConstraints.o: $(SRCS_DIR)/Solution/LagrangeConstraints.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 Elem%.o: $(SRCS_DIR)/Mesh/Elem%.cpp

@@ -103,6 +103,7 @@ Solution::Solution(const Solution &soln) {
   _ip = soln.ip();
   _solutionForCellIDGlobal = soln.solutionForCellIDGlobal();
   _filter = soln.filter();
+  _lagrangeConstraints = soln.lagrangeConstraints();
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
@@ -110,6 +111,7 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
   _bc = bc;
   _rhs = rhs;
   _ip = ip;
+  _lagrangeConstraints = Teuchos::rcp( new LagrangeConstraints ); // empty
   initialize();
 }
 
@@ -336,27 +338,47 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   Epetra_Vector timeLocalStiffnessVector(timeMap);
   timeLocalStiffnessVector[0] = timeLocalStiffness;
   
-  // impose zero mean constraints:
-  int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
-  for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
-    int trialID = *trialIt;
-    //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-    FieldContainer<double> basisIntegrals;
-    FieldContainer<int> globalIndices;
-    integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-    int numValues = globalIndices.size();
-    // insert row:
-    globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-    // insert column:
-    globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-    // insert stabilizing parameter -- for now, just the sum of the entries in the extra row/column
-    double rho = 0.0;
-    for (int i=0; i<numValues; i++) {
-      rho += basisIntegrals[i];
+  int localRowIndex = myGlobalIndicesSet.size(); // starts where the dofs left off
+  
+  // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
+  for (int elementConstraintIndex = 0; elementConstraintIndex < _lagrangeConstraints->numElementConstraints();
+       elementConstraintIndex++) {
+    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+      ElementTypePtr elemTypePtr = *(elemTypeIt);
+      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
+      
     }
-    //rho /= numValues;
-    globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
-    zmcIndex++;
+  }
+  
+  if (rank == 0) {
+    int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
+    TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
+    for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
+      
+    }
+    
+    // impose zero mean constraints:
+    int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
+    for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
+      int trialID = *trialIt;
+      //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+      FieldContainer<double> basisIntegrals;
+      FieldContainer<int> globalIndices;
+      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+      int numValues = globalIndices.size();
+      // insert row:
+      globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+      // insert column:
+      globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+      // insert stabilizing parameter -- for now, just the sum of the entries in the extra row/column
+      double rho = 0.0;
+      for (int i=0; i<numValues; i++) {
+        rho += basisIntegrals[i];
+      }
+      //rho /= numValues;
+      globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
+      zmcIndex++;
+    }
   }
   
   timer.ResetStartTime();
@@ -803,6 +825,10 @@ double Solution::L2NormOfSolution(int trialID){
   
   return value;
 
+}
+
+Teuchos::RCP<LagrangeConstraints> Solution::lagrangeConstraints() const {
+  return _lagrangeConstraints;
 }
 
 double Solution::integrateSolution(int trialID) {
@@ -2411,18 +2437,31 @@ double Solution::minTimeDistributeSolution() {
   return _minTimeDistributeSolution;
 }
 
-Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
+Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, 
+                                     int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
+  int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
+  vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
+  int numMyElements = elements.size();
+  int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
+  int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numElements();
+  
+  // ordering is:
+  // - regular dofs
+  // - element lagrange
+  // - global lagrange
+  // - zero-mean constraints
+  
   // determine the local dofs we have, and what their global indices are:
-  int localDofsSize;
+  int localDofsSize = myGlobalIndicesSet.size() + numElementLagrange;
   if (rank == 0) {
-    localDofsSize = myGlobalIndicesSet.size() + zeroMeanConstraintsSize;
-  } else {
-    localDofsSize = myGlobalIndicesSet.size();
+    // global Lagrange and zero-mean constraints belong to rank 0
+    localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
   }
+  
   int *myGlobalIndices;
   if (localDofsSize!=0){
     myGlobalIndices = new int[ localDofsSize ];      
-  }else{
+  } else {
     myGlobalIndices = NULL;
   }
     
@@ -2431,17 +2470,30 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   for (set<int>::iterator indexIt = myGlobalIndicesSet.begin(); indexIt != myGlobalIndicesSet.end(); indexIt++ ) {
     myGlobalIndices[offset++] = *indexIt;
   }
-  if ( rank == 0 ) {
-    // set up the zmcs, which come at the end...
-    for (int i=0; i<zeroMeanConstraintsSize; i++) {
-      myGlobalIndices[offset++] = i + numGlobalDofs;
+  int cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
+  int globalIndex = cellOffset + numGlobalDofs;
+  for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++) {
+    for (int cellIndex=0; cellIndex<numMyElements; cellIndex++) {
+      myGlobalIndices[offset++] = globalIndex++;
     }
   }
+  
+  if ( rank == 0 ) {
+    // set up the zmcs and global Lagrange constraints, which come at the end...
+    for (int i=0; i<numGlobalLagrange; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange;
+    }
+    for (int i=0; i<zeroMeanConstraintsSize; i++) {
+      myGlobalIndices[offset++] = i + numGlobalDofs + globalNumElementLagrange + numGlobalLagrange;
+    }
+  }
+  
+  int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
     
   int indexBase = 0;
   //cout << "process " << rank << " about to construct partMap.\n";
   //Epetra_Map partMap(-1, localDofsSize, myGlobalIndices, indexBase, Comm);
-  Epetra_Map partMap(numGlobalDofs+zeroMeanConstraintsSize, localDofsSize, myGlobalIndices, indexBase, *Comm);
+  Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
 
   if (localDofsSize!=0){
     delete myGlobalIndices;

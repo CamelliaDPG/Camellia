@@ -69,6 +69,9 @@ class Mesh {
   bool _usePatchBasis; // use MultiBasis if this is false.
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
+  
+  int _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
+  
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
   Teuchos::RCP< BilinearForm > _bilinearForm;
@@ -147,6 +150,8 @@ public:
   static void quadMeshCellIDs(FieldContainer<int> &cellIDs, 
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
+  
+  int activeCellOffset();
   
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr);
   FieldContainer<double> cellSideParitiesForCell( int cellID );

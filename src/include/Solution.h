@@ -151,6 +151,8 @@ public:
 
   double L2NormOfSolution(int trialID);
   double L2NormOfSolutionGlobal(int trialID);
+  
+  Teuchos::RCP<LagrangeConstraints> lagrangeConstraints() const;
 
   void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades );
   

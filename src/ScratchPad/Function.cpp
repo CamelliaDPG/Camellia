@@ -30,7 +30,6 @@ void Function::CHECK_VALUES_RANK(FieldContainer<double> &values) { // throws exc
   TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
 }
 
-
 void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(valuesToAddTo);
   Teuchos::Array<int> dim;
@@ -39,6 +38,21 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   this->values(myValues,basisCache);
   for (int i=0; i<myValues.size(); i++) {
     valuesToAddTo[i] += myValues[i];
+  }
+}
+
+void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache) {
+  TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
+  int numCells = cellIntegrals.dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  FieldContainer<double> values(numCells,numPoints);
+  this->values(values,basisCache);
+  FieldContainer<double>* cubatureWeights = &(basisCache->getCubatureWeights());
+  cellIntegrals.initialize(0);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*cubatureWeights)(ptIndex);
+    }
   }
 }
 

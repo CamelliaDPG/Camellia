@@ -134,6 +134,7 @@ public:
              const vector<int> &cellIDs, BasisCachePtr volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
+  FieldContainer<double> &getCubatureWeights();
   FieldContainer<double> getCellMeasures();
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);

@@ -9,8 +9,13 @@
 #ifndef Camellia_SpatialFilter_h
 #define Camellia_SpatialFilter_h
 
+#include "BasisCache.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
+#include "Intrepid_FieldContainer.hpp"
+
+using namespace Intrepid;
 
 class SpatialFilter;
 typedef Teuchos::RCP< SpatialFilter > SpatialFilterPtr;
@@ -21,8 +26,9 @@ public:
   virtual bool matchesPoint(double x, double y) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y) unimplemented.");
   }
-  virtual bool matchesPoints(FieldContainer<bool> pointsMatch, BasisCachePtr basisCache) {
+  virtual bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+//    cout << "points:\n" << *points;
     int numCells = points->dimension(0);
     int numPoints = points->dimension(1);
     int spaceDim = points->dimension(2);
@@ -32,7 +38,7 @@ public:
     pointsMatch.initialize(false);
     bool somePointMatches = false;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numCells; ptIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         if (matchesPoint(x,y)) {
