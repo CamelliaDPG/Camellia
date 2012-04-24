@@ -59,6 +59,7 @@
 #include "LocalStiffnessMatrixFilter.h"
 
 class Solver;
+class LagrangeConstraints;
 
 using namespace Intrepid;
 
@@ -84,6 +85,7 @@ private:
   Teuchos::RCP<RHS> _rhs;
   Teuchos::RCP<DPGInnerProduct> _ip;
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
+  Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
   bool _residualsComputed;
   bool _energyErrorComputed;
@@ -161,6 +163,7 @@ public:
   void projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID);
   void projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs);
 
+  void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
   
   void computeResiduals();

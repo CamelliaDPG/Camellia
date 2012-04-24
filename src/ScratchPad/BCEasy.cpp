@@ -37,33 +37,47 @@ public:
       dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
     }
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      dim[0] = cellIndex;
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        dim[1] = ptIndex;
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        if (_sf1->matchesPoint(x,y)) {
-          if (f1Values.size() == 0) {
-            // resize, and compute f1
-            f1Values.resize(valuesDim);
-            _f1->values(f1Values,basisCache);
-          }
-          double* value = &values[values.getEnumeration(dim)];
-          double* f1Value = &f1Values[f1Values.getEnumeration(dim)];
-          for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
-            *value++ = *f1Value++;
-          }
-        } else if (_sf2->matchesPoint(x,y)) {
-          if (f2Values.size() == 0) {
-            // resize, and compute f2
-            f2Values.resize(valuesDim);
-            _f2->values(f2Values,basisCache);
-          }
-          double* value = &values[values.getEnumeration(dim)];
-          double* f2Value = &f2Values[f2Values.getEnumeration(dim)];
-          for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
-            *value++ = *f2Value++;
+    FieldContainer<bool> pointsMatch1(numCells,numPoints);
+    FieldContainer<bool> pointsMatch2(numCells,numPoints);
+    
+    bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
+    bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
+    
+    if ( somePointMatches1 ) {
+      f1Values.resize(valuesDim);
+      _f1->values(f1Values,basisCache);
+    }
+    if ( somePointMatches2) {
+      f2Values.resize(valuesDim);
+      _f2->values(f2Values,basisCache);
+    }
+    if (somePointMatches1 || somePointMatches2) {
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        dim[0] = cellIndex;
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          dim[1] = ptIndex;
+          if ( pointsMatch1(cellIndex,ptIndex) ) {
+            if (f1Values.size() == 0) {
+              // resize, and compute f1
+              f1Values.resize(valuesDim);
+              _f1->values(f1Values,basisCache);
+            }
+            double* value = &values[values.getEnumeration(dim)];
+            double* f1Value = &f1Values[f1Values.getEnumeration(dim)];
+            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+              *value++ = *f1Value++;
+            }
+          } else if ( pointsMatch2(cellIndex,ptIndex) ) {
+            if (f2Values.size() == 0) {
+              // resize, and compute f2
+              f2Values.resize(valuesDim);
+              _f2->values(f2Values,basisCache);
+            }
+            double* value = &values[values.getEnumeration(dim)];
+            double* f2Value = &f2Values[f2Values.getEnumeration(dim)];
+            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+              *value++ = *f2Value++;
+            }
           }
         }
       }
@@ -128,13 +142,7 @@ void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bo
   SpatialFilterPtr filter = bc.first;
   FunctionPtr f = bc.second;
   
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      double x = physicalPoints(cellIndex, ptIndex, 0);
-      double y = physicalPoints(cellIndex, ptIndex, 1);      
-      imposeHere(cellIndex,ptIndex) = filter->matchesPoint(x,y);
-    }
-  }
+  filter->matchesPoints(imposeHere,basisCache);
   
   f->values(dirichletValues,basisCache);
 }

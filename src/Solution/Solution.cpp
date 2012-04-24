@@ -83,6 +83,8 @@
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
 
+#include "LagrangeConstraints.h"
+
 #include "Solver.h"
 
 #include "Solution.h"
@@ -2145,6 +2147,10 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
 
 void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
+}
+
+void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
+  _lagrangeConstraints = lagrangeConstraints;
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {

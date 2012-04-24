@@ -41,6 +41,7 @@ OBJ_NAMES = DofOrdering \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
        ConfusionProblem \
+       Constraint \
        MathInnerProduct \
        Element \
        ElementTypeFactory \
@@ -127,7 +128,7 @@ BURGERS_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(BURGERS_OBJS))
 
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/TransientConfusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
 
-EXES = DPGTests StokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver NavierStokesDriver
+EXES = DPGTests StokesCavityFlowDriver StokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion AdaptiveTransientConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver NavierStokesDriver
 EXE_OBJS = $(addsuffix .o, $(EXES))
 
 ECHOES = 
@@ -188,6 +189,9 @@ EricksonManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/EricksonManufacturedSol
 
 EricksonConfectionSolution.o: $(DRIVERS_DIR)/Confusion/EricksonConfectionSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+StokesCavityFlowDriver: StokesCavityFlowDriver.o $(OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesCavityFlowDriver.o -o StokesCavityFlowDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesStudy: StokesStudy.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
@@ -366,6 +370,9 @@ Projector.o: $(SRCS_DIR)/Projection/Projector.cpp
 BCEasy.o: $(SRCS_DIR)/ScratchPad/BCEasy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
+Constraint.o: $(SRCS_DIR)/ScratchPad/Constraint.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+  
 Function.o: $(SRCS_DIR)/ScratchPad/Function.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
@@ -412,4 +419,4 @@ DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 clean:
-	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o $(OBJ_DIR)/PoissonStudy.o $(OBJ_DIR)/StokesStudy.o $(OBJ_DIR)/StokesStudyHybridMesh.o $(OBJ_DIR)/ScratchPadDriver.o $(EXES) $(EXE_OBJS)
+	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(EXES) $(EXE_OBJS)
