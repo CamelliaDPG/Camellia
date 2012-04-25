@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = YTOP;  
   
   int H1Order = polyOrder + 1;
-  int nCells = 4;
+  int nCells = 1;
   int horizontalCells = (2.0/YTOP)*nCells, verticalCells = nCells;
   
   double energyThreshold = 0.25; // for mesh refinements
