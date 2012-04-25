@@ -96,7 +96,7 @@ public:
   NegatedSpatialFilter(SpatialFilterPtr filterToNegate) {
     _filterToNegate = filterToNegate;
   }
-  bool matchesPoints(FieldContainer<bool> pointsMatch, BasisCachePtr basisCache) {
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
     int numCells = points->dimension(0);
     int numPoints = points->dimension(1);
