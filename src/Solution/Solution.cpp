@@ -380,12 +380,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         }
         // rhs:
         globalDofIndices(nnz) = globalRowIndex;
-        nonzeroValues(nnz) = rhs(cellIndex);
+        if (nnz!=0)
+          nonzeroValues(nnz) = -rhs(cellIndex); // minus because moving from rhs to lhs
+        else // no nonzero weights
+          nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
         // insert row:
-        globalStiffMatrix.InsertGlobalValues(1,&globalRowIndex,nnz,&globalDofIndices(0),
+        globalStiffMatrix.InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
                                              &nonzeroValues(0));
         // insert column:
-        globalStiffMatrix.InsertGlobalValues(nnz,&globalDofIndices(0),1,&globalRowIndex,
+        globalStiffMatrix.InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
                                              &nonzeroValues(0));
         localRowIndex++;
       }
