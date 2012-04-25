@@ -96,6 +96,8 @@ set(DRIVERS_DIR "../../Drivers" )
 
 set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
 
+set(SCRATCHPAD_DRIVER_DIR "${DRIVERS_DIR}/ScratchPad" )
+
 set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
 FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
 
@@ -109,6 +111,10 @@ set( BURGERS_SOURCES
 set( BURGERS_DRIVER
   "${BURGERS_DIR}/BurgersDriver.cpp"
   )
+
+set( NEW_CONFUSION_DRIVER
+  "${SCRATCHPAD_DRIVER_DIR}/NewConfusionDriver.cpp"
+)
 
 set( POISSON_SOURCES
   "${DRIVERS_DIR}/Poisson/PoissonBilinearForm.cpp"
@@ -134,6 +140,7 @@ set( CONFUSION_SOURCES
 )
 
 set(HEADERS 
+  "${CAMELLIA_SOURCE_DIR}/include"
   )
 
 # 
@@ -143,7 +150,7 @@ set(HEADERS
 # include directory, and the include directories of the third-party
 # libraries (TPLs) with which Trilinos was built.
 #
-include_directories("../../src/include")
+include_directories("${CAMELLIA_SOURCE_DIR}/include")
 include_directories("${DRIVERS_DIR}/Poisson") # for certain tests in DPGTests
 include_directories("${DRIVERS_DIR}/Confusion") # for certain tests in DPGTests
 include_directories("${DRIVERS_DIR}/Stokes") # for certain tests in DPGTests
@@ -164,6 +171,7 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES})
 add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
+add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 
 #
@@ -172,7 +180,13 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 # with the Trilinos libraries, and with the third-party libraries 
 # (TPLs) with which Trilinos was built.
 #
+
 target_link_libraries(BurgersDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NewConfusionDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
