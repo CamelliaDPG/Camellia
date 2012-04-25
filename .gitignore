@@ -1,0 +1,15 @@
+.DS_Store
+
+build/cmake/CMakeCache.txt
+
+build/cmake/CMakeFiles/*
+
+build/cmake/CMakeScripts/*
+
+build/cmake/Debug/*
+
+build/mpi-release-trimmed/*
+
+build/Camellia-debug.build/*
+
+
