@@ -12,8 +12,9 @@ build/mpi-release-trimmed/*
 
 build/Camellia-debug.build/*
 
-############## ignore all .o files
+############## ignore these files
 *.o
+*.dat
 
 ############## ignore all compressed files
 *.gz
