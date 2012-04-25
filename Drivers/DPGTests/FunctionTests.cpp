@@ -48,7 +48,7 @@ void FunctionTests::setup() {
   
   double eps = 1e-2;
   
-  _confusionBF; // standard confusion bilinear form
+  // standard confusion bilinear form
   _confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   _confusionBF->addTerm(sigma1 / eps, tau->x());
@@ -103,8 +103,7 @@ void FunctionTests::setup() {
   _basisCache = Teuchos::rcp( new BasisCache( _elemType ) );
   _basisCache->setRefCellPoints(_testPoints);
   
-  _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodes(_elemType), cellIDs, true );
-  
+  _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {

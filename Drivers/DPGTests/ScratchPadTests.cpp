@@ -103,7 +103,7 @@ void ScratchPadTests::setup() {
   _basisCache = Teuchos::rcp( new BasisCache( _elemType ) );
   _basisCache->setRefCellPoints(_testPoints);
   
-  _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodes(_elemType), cellIDs, true );
+  _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );
 
 }
 
@@ -142,7 +142,8 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   vector<int> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
-  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodes(_elemType), cellIDs, true );
+  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), 
+                                   cellIDs, true );
   
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
