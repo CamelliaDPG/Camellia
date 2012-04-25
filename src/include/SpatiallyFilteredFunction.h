@@ -27,6 +27,7 @@ public:
 
     Teuchos::Array<int> dim;
     values.dimensions(dim);
+    Teuchos::Array<int> fValuesDim = dim;
     int entriesPerPoint = 1;
     for (int d=2; d<values.rank(); d++) {
       entriesPerPoint *= dim[d];
@@ -36,7 +37,7 @@ public:
     FieldContainer<bool> pointsMatch(numCells,numPoints);
     if (_sf->matchesPoints(pointsMatch,basisCache)) { // SOME point matches
 //      cout << "pointsMatch:\n" << pointsMatch;
-      FieldContainer<double> fValues(dim);
+      FieldContainer<double> fValues(fValuesDim);
       _f->values(fValues,basisCache);
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         dim[0] = cellIndex;
