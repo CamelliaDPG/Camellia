@@ -18,10 +18,13 @@ private:
   vector< Constraint > _globalConstraints;
 public: 
   void addConstraint(const Constraint &c);
+  void addConstraint(const Constraint &c, SpatialFilterPtr sf);
   void addGlobalConstraint(const Constraint &c);
+  void getCoefficients(FieldContainer<double> &lhs, FieldContainer<double> &rhs,
+                       int elemConstraintIndex, DofOrderingPtr trialOrdering,
+                       BasisCachePtr basisCache);
   int numElementConstraints();
   int numGlobalConstraints();
-//  void addConstraint(const Constraint &c, SpatialFilterPtr sf);
 };
 
 #endif

@@ -347,6 +347,48 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       ElementTypePtr elemTypePtr = *(elemTypeIt);
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
       
+      // get cellIDs for basisCache
+      vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
+      int numCells = cells.size();      
+      vector<int> cellIDs;
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        int cellID = cells[cellIndex]->cellID();
+        cellIDs.push_back(cellID);
+      }
+      // set physical cell nodes:
+      FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+      bool createSideCacheToo = true;
+      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+      
+      int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
+      FieldContainer<double> lhs(numCells,numTrialDofs);
+      FieldContainer<double> rhs(numCells);
+      _lagrangeConstraints->getCoefficients(lhs,rhs,elementConstraintIndex,
+                                            elemTypePtr->trialOrderPtr,basisCache);
+      
+      FieldContainer<int> globalDofIndices(numTrialDofs+1); // max size
+      FieldContainer<double> nonzeroValues(numTrialDofs+1);
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {        
+        int globalRowIndex = partMap.GID(localRowIndex);
+        int nnz = 0;
+        for (int i=0; i<numTrialDofs; i++) {
+          if (lhs(cellIndex,i) != 0.0) {
+	          globalDofIndices(nnz) = _mesh->globalDofIndex(cellIDs[cellIndex],i);
+            nonzeroValues(nnz) = lhs(cellIndex,i);
+            nnz++;
+          }
+        }
+        // rhs:
+        globalDofIndices(nnz) = globalRowIndex;
+        nonzeroValues(nnz) = rhs(cellIndex);
+        // insert row:
+        globalStiffMatrix.InsertGlobalValues(1,&globalRowIndex,nnz,&globalDofIndices(0),
+                                             &nonzeroValues(0));
+        // insert column:
+        globalStiffMatrix.InsertGlobalValues(nnz,&globalDofIndices(0),1,&globalRowIndex,
+                                             &nonzeroValues(0));
+        localRowIndex++;
+      }
     }
   }
   
@@ -354,13 +396,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
     for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
+      int globalRowIndex = partMap.GID(localRowIndex);
       
+      localRowIndex++;
     }
     
     // impose zero mean constraints:
-    int zmcIndex = numGlobalDofs; // start zmc indices just after the regular dof indices
     for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
       int trialID = *trialIt;
+      int zmcIndex = partMap.GID(localRowIndex);
       //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
       FieldContainer<double> basisIntegrals;
       FieldContainer<int> globalIndices;
@@ -377,7 +421,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       }
       //rho /= numValues;
       globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
-      zmcIndex++;
+      localRowIndex++;
     }
   }
   
@@ -452,15 +496,20 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   // debug: check the consistency of the mesh's global -> partitionLocal index map
   for (int localIndex = partMap.MinLID(); localIndex < partMap.MaxLID(); localIndex++) {
     int globalIndex = partMap.GID(localIndex);
-    int meshPartitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex(globalIndex);
-    if (meshPartitionLocalIndex != localIndex) {
-      cout << "meshPartitionLocalIndex != localIndex (" << meshPartitionLocalIndex << " != " << localIndex << ")\n";
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
-    }
-    int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
-    if (partition != rank) {
-      cout << "partition != rank (" << partition << " != " << rank << ")\n";
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+    if ( localIndex < myGlobalIndicesSet.size() ) { // a real dof
+      int meshPartitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex(globalIndex);
+      if (meshPartitionLocalIndex != localIndex) {
+        cout << "meshPartitionLocalIndex != localIndex (" << meshPartitionLocalIndex << " != " << localIndex << ")\n";
+        TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+      }
+      int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
+      if (partition != rank) {
+        cout << "partition != rank (" << partition << " != " << rank << ")\n";
+        TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+      }
+    } else {
+      // a Lagrange constraint or a ZMC
+      // TODO: write some check on the map here...
     }
   }
   
@@ -2443,7 +2492,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
   int numMyElements = elements.size();
   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
-  int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numElements();
+  int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
   
   // ordering is:
   // - regular dofs

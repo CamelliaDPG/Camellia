@@ -41,14 +41,17 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   }
 }
 
-void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache) {
+void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache,
+                         bool sumInto) {
   TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
   int numCells = cellIntegrals.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   FieldContainer<double> values(numCells,numPoints);
   this->values(values,basisCache);
   FieldContainer<double>* cubatureWeights = &(basisCache->getCubatureWeights());
-  cellIntegrals.initialize(0);
+  if ( !sumInto ) {
+    cellIntegrals.initialize(0);
+  }
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*cubatureWeights)(ptIndex);

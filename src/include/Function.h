@@ -31,7 +31,7 @@ public:
   
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
   
-  void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache);
+  void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
