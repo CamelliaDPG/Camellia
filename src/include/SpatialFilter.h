@@ -61,7 +61,7 @@ public:
     _sf1 = sf1;
     _sf2 = sf2;
   }
-  bool matchesPoints(FieldContainer<bool> pointsMatch, BasisCachePtr basisCache) {
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
     int numCells = points->dimension(0);
     int numPoints = points->dimension(1);
