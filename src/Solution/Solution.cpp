@@ -359,6 +359,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+      basisCache->setCellSideParities(_mesh->cellSideParities(elemTypePtr));
       
       int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
       FieldContainer<double> lhs(numCells,numTrialDofs);
