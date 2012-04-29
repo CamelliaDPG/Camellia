@@ -161,6 +161,10 @@ FieldContainer<double> & BasisCache::getCubatureWeights() {
   return _cubWeights;
 }
 
+FieldContainer<double> & BasisCache::getWeightedMeasures() {
+  return _weightedMeasure;
+}
+
 const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints() {
   return _physCubPoints;
 }

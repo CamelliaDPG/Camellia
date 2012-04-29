@@ -48,15 +48,44 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   FieldContainer<double> values(numCells,numPoints);
   this->values(values,basisCache);
-  FieldContainer<double>* cubatureWeights = &(basisCache->getCubatureWeights());
   if ( !sumInto ) {
     cellIntegrals.initialize(0);
   }
+  FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*cubatureWeights)(ptIndex);
+      cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
   }
+}
+
+double Function::integrate(Teuchos::RCP<Mesh> mesh) {
+  double integral = 0;
+  
+  // TODO: rewrite this to compute in distributed fashion
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes();
+  
+  for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
+    ElementTypePtr elemType = *typeIt;
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType ) ); // all elements of same type
+    typedef Teuchos::RCP< Element > ElementPtr;
+    vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
+
+    int numCells = cells.size();
+    vector<int> cellIDs;
+    for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+      cellIDs.push_back( cells[cellIndex]->cellID() );
+    }
+    // TODO: replace with non-global variant...
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false);
+    FieldContainer<double> cellIntegrals(numCells);
+    this->integrate(cellIntegrals, basisCache);
+    for (int cellID = 0; cellID < numCells; cellID++) {
+      integral += cellIntegrals(cellID);
+    }
+    
+  }
+  return integral;
 }
 
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)

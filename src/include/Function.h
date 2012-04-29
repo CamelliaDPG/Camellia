@@ -33,6 +33,8 @@ public:
   
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
+  double integrate(Teuchos::RCP<Mesh> mesh);
+  
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
   

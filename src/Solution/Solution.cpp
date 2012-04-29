@@ -261,6 +261,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
         cellIDs.push_back(cellID);
       }
+      
       //cout << "testDofOrdering: " << *testOrderingPtr;
       //cout << "trialDofOrdering: " << *trialOrderingPtr;
       nodeDimensions[0] = numCells;
@@ -1864,12 +1865,12 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // 2. Compute each basis on those points
   // 3. Transform those basis evaluations back into the physical space
   // 4. Multiply by the solnCoeffs
-  
+    
   int numCells = physicalCellNodes.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
   int spaceDim = cellTopo.getDimension();
-  
+    
   // TODO: add TEST_FOR_EXCEPTIONs to make sure all the FC dimensions/ranks agree with expectations
   // TODO: work out what to do for boundary.  (May need to separate out into separate function: how do we
   //       figure out what side we're on, e.g.?)
@@ -1879,10 +1880,10 @@ void Solution::solutionValues(FieldContainer<double> &values,
   // 1. compute refElemPoints, the evaluation points mapped to reference cell:
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,physicalCellNodes,cellTopo);
-  
+    
   //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
   //  cout << "physicalPoints: " << endl << physicalPoints;
-  //  cout << "refElemPoints: " << endl << refElemPoints;
+//  cout << "refElemPoints: " << endl << refElemPoints;
   
   // Containers for Jacobian
   FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
@@ -1896,7 +1897,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
   
   Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
-  
+    
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   //cout << "num Cells = " << numCells << endl;
@@ -1933,10 +1934,15 @@ void Solution::solutionValues(FieldContainer<double> &values,
   values.initialize(0.0);
   
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//    cout << "cellIndex: " << cellIndex << endl;
     thisRefElemPoints.setValues(&refElemPoints(cellIndex,0,0),numPoints*spaceDim);
+//    cout << "line 5.01" << endl;
     thisCellJacobian.setValues(&cellJacobian(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
+//    cout << "line 5.02" << endl;
     thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
+//    cout << "line 5.03" << endl;
     thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
+//    cout << "line 5.1" << endl;
     Teuchos::RCP< FieldContainer<double> > transformedValues;
     transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, 
                                                               thisRefElemPoints, thisCellJacobian, 
@@ -2261,6 +2267,8 @@ const map< int, FieldContainer<double> > & Solution::solutionForCellIDGlobal() c
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
   typedef CellTools<double>  CellTools;
   
+//  cout << "writeFieldsToFile for trialID: " << trialID << endl;
+  
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
@@ -2287,34 +2295,85 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     
-    int numCells = vertexPoints.dimension(0);       
+    int numCells = physicalCellNodes.dimension(0);
+    bool createSideCacheToo = false;
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, createSideCacheToo));
     
-    // NOW loop over all cells to write solution to file
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      cellIDs.push_back(cellID);
+    }
+
+    int numPoints = num1DPts * num1DPts;
+    FieldContainer<double> refPoints(numPoints,spaceDim);
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
-
-        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point at a time
-        int numPoints = 1;
-        FieldContainer<double> refPoints(numPoints,spaceDim);
+        int pointIndex = xPointIndex*num1DPts + yPointIndex;
         double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
         double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
-        refPoints(0,0) = x;
-        refPoints(0,1) = y;
-        
-        // map side cubature points in reference parent cell domain to physical space	
-        FieldContainer<double> physCubPoints(numCells, numPoints, spaceDim);
-        CellTools::mapToPhysicalFrame(physCubPoints, refPoints, physicalCellNodes, cellTopo);
-        
-        FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
-        solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);	
-        
-        for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
-          fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,0,0) << ";" << endl;
-          fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,0,1) << ";" << endl;
-          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,0) << ";" << endl;	  
+        refPoints(pointIndex,0) = x;
+        refPoints(pointIndex,1) = y;
+      }
+    }
+    
+    basisCache->setRefCellPoints(refPoints);
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
+    FieldContainer<double> computedValues(numCells,numPoints);
+    
+    this->solutionValues(computedValues, trialID, basisCache);
+    const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++ ) {
+      for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+        int yPointIndex = 0;
+        int pointIndex = xPointIndex*num1DPts + yPointIndex;
+        fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << (*physicalPoints)(cellIndex,pointIndex,0) << ";" << endl;
+      }
+      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+        int xPointIndex = 0;
+        int pointIndex = xPointIndex*num1DPts + yPointIndex;
+        fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << (*physicalPoints)(cellIndex,pointIndex,1) << ";" << endl;
+      }
+    }
+    
+    for (int cellIndex=0;cellIndex < numCells;cellIndex++){
+      for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+        for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+          int ptIndex = xPointIndex*num1DPts + yPointIndex;
+          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,ptIndex) << ";" << endl;	  
         }
       }
     }
+    
+//    // NOW loop over all cells to write solution to file
+//    for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+//      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+//
+//        // for some odd reason, I cannot compute the ref-to-phys map for more than 1 point at a time
+//        int numPoints = 1;
+//        FieldContainer<double> refPoints(numPoints,spaceDim);
+//        double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
+//        double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
+//        refPoints(0,0) = x;
+//        refPoints(0,1) = y;
+//        
+//        // map side cubature points in reference parent cell domain to physical space	
+//        FieldContainer<double> physicalPoints(numCells, numPoints, spaceDim);
+//        CellTools::mapToPhysicalFrame(physicalPoints, refPoints, physicalCellNodes, cellTopo);
+//        
+//        cout << "physicalPoints:\n" <<  physicalPoints;
+//        
+//        FieldContainer<double> computedValues(numCells,numPoints); // first arg = 1 cell only
+//        solutionValues(computedValues, elemTypePtr, trialID, physicalPoints);	
+//        
+//        for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
+//          fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physicalPoints(cellIndex,0,0) << ";" << endl;
+//          fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physicalPoints(cellIndex,0,1) << ";" << endl;
+//          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,0) << ";" << endl;	  
+//        }
+//      }
+//    }
     globalCellInd+=numCells;
     
   } //end of element type loop 
