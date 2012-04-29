@@ -11,6 +11,8 @@
 #include "Function.h"
 #include "MathInnerProduct.h"
 
+#include "InnerProductScratchPad.h"
+
 class NewQuadraticFunction : public SimpleFunction {
 public:
   double value(double x, double y) {
@@ -376,7 +378,6 @@ bool SolutionTests::testNewProjectFunction() {
 
 bool SolutionTests::testAddRefinedSolutions(){
   bool success = true;
-  double tol = 1e-14;
 
   Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
@@ -418,6 +419,7 @@ bool SolutionTests::testEnergyError(){
   double tol = 1e-11;
 
   bool success = true;
+  // First test: exact solution has zero energy error:
   map<int, double> energyError = _poissonSolution->energyError();
   vector< Teuchos::RCP< Element > > activeElements = _poissonSolution->mesh()->activeElements();
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
@@ -433,6 +435,86 @@ bool SolutionTests::testEnergyError(){
     cout << "testEnergyError failed: energy error is " << totalEnergyErrorSquared << endl;
   }
   
+  // second test: test and trial spaces the same, define b(u,v) = (u,v)
+  // then the energy norm of u = (u,u)^1/2
+  VarFactory varFactory;
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr v = varFactory.testVar("v", L2); // L2 so that the orders for u and v can match
+
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  bf->addTerm(u,v); // L2 norm
+  
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr uSoln = Teuchos::rcp( new ConstantScalarFunction(3.0) );
+  rhs->addTerm(uSoln * v);
+  
+  BCPtr bc = Teuchos::rcp( new BCEasy ); // no bcs
+  
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(v); // L^2
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;  
+    
+  int horizontalElements = 10, verticalElements = 5;
+  int H1Order = 3;
+  int pTest = H1Order;
+  
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, pTest);
+  
+  SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  
+  double expectedEnergyError = sqrt( (uSoln * uSoln )->integrate(mesh) ); // integral of a constant
+  
+  double actualEnergyError = soln->energyErrorTotal();
+  
+  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+    cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
+    success = false;
+  }
+  
+  // 3rd test: much the same, but different RHS
+  uSoln = Teuchos::rcp( new NewQuadraticFunction );
+  
+  rhs = Teuchos::rcp( new RHSEasy );
+  rhs->addTerm(uSoln * v);
+  
+  soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  
+  // compute the L^2 norm of uSoln:
+  expectedEnergyError = sqrt( (uSoln * uSoln)->integrate(mesh) );
+  
+  actualEnergyError = soln->energyErrorTotal();
+  
+  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+    cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
+    success = false;
+  }
+  
+  // 4th test: try a non-zero solution, zero RHS
+  rhs = Teuchos::rcp( new RHSEasy );
+  soln = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  map<int, FunctionPtr > functionMap;
+  functionMap[u->ID()] = uSoln;
+  soln->projectOntoMesh(functionMap);
+  
+  // compute the L^2 norm of uSoln:
+  expectedEnergyError = sqrt( (uSoln * uSoln)->integrate(mesh) );
+  actualEnergyError = soln->energyErrorTotal();
+  
+  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+    cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
+    success = false;
+  }
   
   return success;
 }
@@ -446,10 +528,10 @@ bool SolutionTests::testHRefinementInitialization(){
   Teuchos::RCP< Mesh > mesh = _poissonSolution->mesh();
   
   _poissonSolution->solve(false);
-  int trialIDToWrite = PoissonBilinearForm::PHI;
+//  int trialIDToWrite = PoissonBilinearForm::PHI;
   string filePrefix = "phi";
   string fileSuffix = ".m";
-  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "BeforeRefinement" + fileSuffix);
+//  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "BeforeRefinement" + fileSuffix);
   
   // test for all field variables:
   vector<int> fieldIDs = _poissonSolution->mesh()->bilinearForm()->trialVolumeIDs();
@@ -465,16 +547,16 @@ bool SolutionTests::testHRefinementInitialization(){
     expectedMap[fieldID] = expectedValues;
   }
   
-  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
+//  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_preRef.m");
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(1);
   mesh->registerSolution(_poissonSolution);
 //  vector< Teuchos::RCP<Solution> > solutions;
 //  solutions.push_back(_poissonSolution);
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
+//  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
   
-  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
+//  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
   
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
@@ -488,7 +570,7 @@ bool SolutionTests::testHRefinementInitialization(){
   }
 
   _poissonSolution->solve(false);
-  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postSolve.m");
+//  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postSolve.m");
   
   return success;
 }
