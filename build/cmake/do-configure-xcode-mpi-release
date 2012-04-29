@@ -20,7 +20,7 @@
 #
 cmake \
   -G "Xcode" \
-  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-release" \
+  -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-release-trimmed" \
   -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Documents/camellia/src" \
-  -D CAMELLIA_BUILD_TYPE:STRING="mpi-release" \
+  -D CAMELLIA_BUILD_TYPE:STRING="mpi-release-trimmed" \
   .
