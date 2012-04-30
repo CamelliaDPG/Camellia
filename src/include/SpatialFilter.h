@@ -68,7 +68,7 @@ public:
     int spaceDim = points->dimension(2);
     FieldContainer<bool> pointsMatch2(pointsMatch);
     bool somePointMatches1 = _sf1->matchesPoints(pointsMatch,basisCache);
-    bool somePointMatches2 = _sf1->matchesPoints(pointsMatch2,basisCache);
+    bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
     if ( !somePointMatches2 ) {
       // then what's in pointsMatch is exactly right
       return somePointMatches1;
