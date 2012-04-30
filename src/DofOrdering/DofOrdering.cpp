@@ -261,7 +261,7 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
     os << varIDs[i] << " (" << dofOrdering.getNumSidesForVarID(varIDs[i]) << " sides)" << endl;
   }
   
-  if( (numVarIDs == 0) ) {
+  if( numVarIDs == 0 ) {
     os<< "====================================================================================\n"\
     << "|                        *** This is an empty DofOrdering ****                       |\n";
   }
