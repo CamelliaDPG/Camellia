@@ -83,8 +83,11 @@ public:
           pointsMatch(cellIndex,ptIndex) |= pointsMatch2(cellIndex,ptIndex);
         }
       }
+      // if we're here, then some point matched: return true:
+      return true;
     }
   }
+  
 //  bool matchesPoint( double x, double y ) {
 //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
 //  }
@@ -109,6 +112,7 @@ public:
         somePointMatches |= pointsMatch(cellIndex,ptIndex);
       }
     }
+    return somePointMatches;
   }
 };
 //
