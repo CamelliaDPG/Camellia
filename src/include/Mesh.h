@@ -114,6 +114,7 @@ class Mesh {
   vector< set<int> > _partitionedGlobalDofIndices;
   
   vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
+  vector< Teuchos::RCP<Mesh> > _registeredMeshes; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
   void buildTypeLookups();
@@ -240,6 +241,8 @@ public:
   
   void rebuildLookups();
   
+  void registerMesh(Teuchos::RCP<Mesh> mesh);
+  
   void registerSolution(Teuchos::RCP<Solution> solution);
   
   void pRefine(vector<int> cellIDsForPRefinements);
@@ -260,7 +263,8 @@ public:
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
-  
+
+  void unregisterMesh(Teuchos::RCP<Mesh> mesh);
   void unregisterSolution(Teuchos::RCP<Solution> solution);
   
   void writeMeshPartitionsToFile(const string & fileName);

@@ -943,9 +943,9 @@ double Mesh::distance(double x0, double y0, double x1, double y1) {
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<ElementPtr> elemsForPoints;
+//  cout << "entered elementsForPoints: \n" << physicalPoints;
   int numPoints = physicalPoints.dimension(0);
   // TODO: work out what to do here for 3D
-  int spaceDim = physicalPoints.dimension(1);
   // figure out the last element of the original mesh:
   int lastCellID = 0;
   while ((_elements.size() > lastCellID) && ! _elements[lastCellID]->isChild()) {
@@ -967,17 +967,24 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
     if (elem.get() != NULL) {
       while ( elem->isParent() ) {
         int numChildren = elem->numChildren();
+        bool foundMatchingChild = false;
         for (int childIndex = 0; childIndex < numChildren; childIndex++) {
           ElementPtr child = elem->getChild(childIndex);
           if ( elementContainsPoint(child,x,y) ) {
             elem = child;
+            foundMatchingChild = true;
             break;
           }
+        }
+        if (!foundMatchingChild) {
+          cout << "parent matches (" << x << ", " << y << "), but none of its children do...\n";
+          TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent matches, but none of its children do...");
         }
       }
     }
     elemsForPoints.push_back(elem);
   }
+//  cout << "Returning from elementsForPoints\n";
   return elemsForPoints;
 }
 
@@ -997,6 +1004,16 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
 //    maxY = max(maxY,_vertices[vertexIndices[vertexIndex]](1));
 //  }
   
+  // and here's an initial effort at a pure Intrepid solution to this problem
+  // (nice thing is that it will work with little modification in 3D; bad thing is that
+  //  it's inefficient in this context, and also so far it crashes on me...)
+//  FieldContainer<double> nodes = physicalCellNodesForCell(elem->cellID());
+//  FieldContainer<double> point(1,2);
+//  point(0,0) = x; point(0,1) = y;
+//  FieldContainer<int> inCell(1);
+//  int cellIndex = 0;
+//  CellTools<double>::checkPointwiseInclusion(inCell, point, nodes, *(elem->elementType()->cellTopoPtr),cellIndex);
+//  return inCell(0) == 1;
   
   // first, check whether x or y is outside the axis-aligned bounding box for the element
   int numVertices = elem->numSides();
@@ -1047,8 +1064,7 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
     }
   }
   
-  return result;
-  
+  return result;  
 }
 
 //void Mesh::enforceOneIrregularity() {
@@ -1392,6 +1408,12 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 //}
 
 void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+  // refine any registered meshes
+  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
+       meshIt != _registeredMeshes.end(); meshIt++) {
+    (*meshIt)->hRefine(cellIDs,refPattern);
+  }
+  
   vector<int>::iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
@@ -1926,8 +1948,23 @@ void Mesh::rebuildLookups() {
   //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
+void Mesh::registerMesh(Teuchos::RCP<Mesh> mesh) {
+  _registeredMeshes.push_back(mesh);
+}
+
 void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
   _registeredSolutions.push_back( solution );
+}
+
+void Mesh::unregisterMesh(Teuchos::RCP<Mesh> mesh) {
+  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
+       meshIt != _registeredMeshes.end(); meshIt++) {
+    if ( (*meshIt).get() == mesh.get() ) {
+      _registeredMeshes.erase(meshIt);
+      return;
+    }
+  }
+  cout << "Mesh::unregisterMesh: Mesh not found.\n";
 }
 
 void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
@@ -1946,6 +1983,12 @@ void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
 //}
 
 void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+  // refine any registered meshes
+  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
+       meshIt != _registeredMeshes.end(); meshIt++) {
+    (*meshIt)->pRefine(cellIDsForPRefinements);
+  }
+  
   // p-refinements:
   // 1. Loop through cellIDsForPRefinements:
   //   a. create new DofOrderings for trial and test
