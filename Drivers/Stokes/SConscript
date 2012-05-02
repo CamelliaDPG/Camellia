@@ -1,0 +1,5 @@
+Import('*')
+
+src_obj = env.Object(['StokesManufacturedSolution.cpp','StokesBilinearForm.cpp','StokesMathBilinearForm.cpp', 'StokesVVPBilinearForm.cpp'])
+
+env.Program('exec/StokesCavityFlowDriver',['StokesCavityFlowDriver.cpp',src_obj])
