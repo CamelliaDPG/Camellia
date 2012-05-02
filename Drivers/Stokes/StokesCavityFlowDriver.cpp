@@ -153,6 +153,7 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   FieldContainer<double> values2(numPoints*numPoints);
   solution->solutionValues(values1, u1->ID(), points);
   ofstream fout(filename.c_str());
+  fout << setprecision(15);
   
   fout << "X = zeros(" << numPoints << ",1);\n";
   //    fout << "Y = zeros(numPoints);\n";
@@ -195,6 +196,7 @@ void writeStreamlines(double xMin, double xMax, double yMin, double yMax,
   solution->solutionValues(values1, u1->ID(), points);
   solution->solutionValues(values2, u2->ID(), points);
   ofstream fout(filename.c_str());
+  fout << setprecision(15);
   
   fout << "X = zeros(" << numPoints << ",1);\n";
   //    fout << "Y = zeros(numPoints);\n";
@@ -227,13 +229,16 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int pToAdd = 1; // for optimal test function approximation
+  int pToAddForStreamFunction = 3;
   bool weightTestNormDerivativesByH = false;
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
-//  double eps = 0.0; // John Evans's problem: not in H^1
-  bool induceCornerRefinements = true;
+  //  double eps = 0.0; // John Evans's problem: not in H^1
+  bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
+  bool compareWithOverkillMesh = true;
+  int overkillMeshSize = 16; // increase for the real run...
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -332,9 +337,7 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 2, verticalCells = 2;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles | singularityAvoidingInitialMesh;
-  Teuchos::RCP<Mesh> mesh, streamMesh;
-  
-  if ( ! singularityAvoidingInitialMesh ) {
+  Teuchos::RCP<Mesh> mesh, streamMesh, overkillMesh;
     FieldContainer<double> quadPoints(4,2);
     
     quadPoints(0,0) = 0.0; // x1
@@ -345,12 +348,13 @@ int main(int argc, char *argv[]) {
     quadPoints(2,1) = 1.0;
     quadPoints(3,0) = 0.0;
     quadPoints(3,1) = 1.0;
-    
+  
+  if ( ! singularityAvoidingInitialMesh ) {
     // create a pointer to a new mesh:
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                stokesBFMath, H1Order, H1Order+pToAdd, useTriangles);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                     streamBF, H1Order+2, H1Order+pToAdd+2, useTriangles);
+                                     streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
     // outer square
@@ -388,49 +392,60 @@ int main(int argc, char *argv[]) {
     elementVertices.push_back(el3);
     elementVertices.push_back(el4);
     elementVertices.push_back(el5);
-
+    
     mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
-    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+2, pToAdd+2) );
+    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+pToAddForStreamFunction, pToAdd) );
     
     // trapezoidal singularity-avoiding mesh below.  (triangular above)
-//    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-//    // outer square
-//    A(0) = 0.0; A(1) = 0.0;
-//    B(0) = 1.0; B(1) = 0.0;
-//    C(0) = 1.0; C(1) = 1.0;
-//    D(0) = 0.0; D(1) = 1.0;
-//    // inner square:
-//    E(0) = 0.25; E(1) = 0.25;
-//    F(0) = 0.75; F(1) = 0.25;
-//    G(0) = 0.75; G(1) = 0.75;
-//    H(0) = 0.25; H(1) = 0.75;
-//    vector<FieldContainer<double> > vertices;
-//    vertices.push_back(A); int A_index = 0;
-//    vertices.push_back(B); int B_index = 1;
-//    vertices.push_back(C); int C_index = 2;
-//    vertices.push_back(D); int D_index = 3;
-//    vertices.push_back(E); int E_index = 4;
-//    vertices.push_back(F); int F_index = 5;
-//    vertices.push_back(G); int G_index = 6;
-//    vertices.push_back(H); int H_index = 7;
-//    vector< vector<int> > elementVertices;
-//    vector<int> el1, el2, el3, el4, el5;
-//    // outside trapezoidal elements:
-//    el1.push_back(A_index); el1.push_back(B_index); el1.push_back(F_index); el1.push_back(E_index);
-//    el2.push_back(B_index); el2.push_back(C_index); el2.push_back(G_index); el2.push_back(F_index);
-//    el3.push_back(C_index); el3.push_back(D_index); el3.push_back(H_index); el3.push_back(G_index);
-//    el4.push_back(D_index); el4.push_back(A_index); el4.push_back(E_index); el4.push_back(H_index);
-//    // interior square element
-//    el5.push_back(E_index); el5.push_back(F_index); el5.push_back(G_index); el5.push_back(H_index);
-//    elementVertices.push_back(el1);
-//    elementVertices.push_back(el2);
-//    elementVertices.push_back(el3);
-//    elementVertices.push_back(el4);
-//    elementVertices.push_back(el5);
-//    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
+    //    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+    //    // outer square
+    //    A(0) = 0.0; A(1) = 0.0;
+    //    B(0) = 1.0; B(1) = 0.0;
+    //    C(0) = 1.0; C(1) = 1.0;
+    //    D(0) = 0.0; D(1) = 1.0;
+    //    // inner square:
+    //    E(0) = 0.25; E(1) = 0.25;
+    //    F(0) = 0.75; F(1) = 0.25;
+    //    G(0) = 0.75; G(1) = 0.75;
+    //    H(0) = 0.25; H(1) = 0.75;
+    //    vector<FieldContainer<double> > vertices;
+    //    vertices.push_back(A); int A_index = 0;
+    //    vertices.push_back(B); int B_index = 1;
+    //    vertices.push_back(C); int C_index = 2;
+    //    vertices.push_back(D); int D_index = 3;
+    //    vertices.push_back(E); int E_index = 4;
+    //    vertices.push_back(F); int F_index = 5;
+    //    vertices.push_back(G); int G_index = 6;
+    //    vertices.push_back(H); int H_index = 7;
+    //    vector< vector<int> > elementVertices;
+    //    vector<int> el1, el2, el3, el4, el5;
+    //    // outside trapezoidal elements:
+    //    el1.push_back(A_index); el1.push_back(B_index); el1.push_back(F_index); el1.push_back(E_index);
+    //    el2.push_back(B_index); el2.push_back(C_index); el2.push_back(G_index); el2.push_back(F_index);
+    //    el3.push_back(C_index); el3.push_back(D_index); el3.push_back(H_index); el3.push_back(G_index);
+    //    el4.push_back(D_index); el4.push_back(A_index); el4.push_back(E_index); el4.push_back(H_index);
+    //    // interior square element
+    //    el5.push_back(E_index); el5.push_back(F_index); el5.push_back(G_index); el5.push_back(H_index);
+    //    elementVertices.push_back(el1);
+    //    elementVertices.push_back(el2);
+    //    elementVertices.push_back(el3);
+    //    elementVertices.push_back(el4);
+    //    elementVertices.push_back(el5);
+    //    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
   }
   
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+  
+  Teuchos::RCP<Solution> overkillSolution;
+  map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
+  vector< VarPtr > fields;
+  fields.push_back(u1);
+  fields.push_back(u2);
+  fields.push_back(sigma11);
+  fields.push_back(sigma12);
+  fields.push_back(sigma21);
+  fields.push_back(sigma22);
+  fields.push_back(p);
   
   if (rank == 0) {
     if ( ! singularityAvoidingInitialMesh )
@@ -498,7 +513,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
   FunctionPtr un_0 = Teuchos::rcp( new Un_0(eps) );
   FunctionPtr u0_cross_n = Teuchos::rcp( new U0_cross_n(eps) );
-
+  
   bc->addDirichlet(u1hat, entireBoundary, u1_0);
   bc->addDirichlet(u2hat, entireBoundary, u2_0);
   bc->addZeroMeanConstraint(p);
@@ -506,11 +521,23 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
   
+  /////////////////// SOLVE OVERKILL //////////////////////
+  if (compareWithOverkillMesh) {
+    if (rank == 0)
+      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements).\n";
+    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
+                                       stokesBFMath, H1Order, H1Order+pToAdd, useTriangles);
+    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+    overkillSolution->solve();
+    if (rank == 0)
+      cout << "...solved.\n";
+  }
+  
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-
+  
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dy() - u2->dx() ) );
-//  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
+  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
   
@@ -542,7 +569,7 @@ int main(int argc, char *argv[]) {
   bottomCornerPoints(0,1) = 1e-10;
   bottomCornerPoints(1,0) = 1 - 1e-10;
   bottomCornerPoints(1,1) = 1e-10;
-
+  
   FieldContainer<double> topCornerPoints(4,2);
   topCornerPoints(0,0) = 1e-10;
   topCornerPoints(0,1) = 1 - 1e-12;
@@ -567,6 +594,23 @@ int main(int argc, char *argv[]) {
         cout << "other top-left corner ID: " << topCorners[2]->cellID() << endl;
         cout << "other top-right corner ID: " << topCorners[3]->cellID() << endl;
       }
+    }
+    if (compareWithOverkillMesh) {
+      Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
+
+      projectedSoln->addSolution(overkillSolution,-1.0);
+      double L2errorSquared = 0.0;
+      for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
+        VarPtr var = *fieldIt;
+        int fieldID = var->ID();
+        double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
+        cout << "L2error for " << var->name() << ": " << L2error << endl;
+        L2errorSquared += L2error * L2error;
+      }
+      int numGlobalDofs = mesh->numGlobalDofs();
+      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
     }
     if (induceCornerRefinements) {
       // induce refinements in bottom corners:
@@ -620,7 +664,7 @@ int main(int argc, char *argv[]) {
       cellIDs.push_back(elems[i]->cellID());
     }
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
     FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
@@ -669,21 +713,20 @@ int main(int argc, char *argv[]) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
-//  mesh->unregisterMesh(streamMesh);
-//  streamMesh->registerMesh(mesh);
-//  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
-//  for (int refIndex=0; refIndex < 3; refIndex++) {
-//    streamSolution->solve(false);
-//    streamRefinementStrategy.refine(rank==0);
-//  }
-
+  //  mesh->unregisterMesh(streamMesh);
+  //  streamMesh->registerMesh(mesh);
+  //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
+  //  for (int refIndex=0; refIndex < 3; refIndex++) {
+  //    streamSolution->solve(false);
+  //    streamRefinementStrategy.refine(rank==0);
+  //  }
+  
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();
   if (rank == 0) {  
     cout << "...solved.\n";
     cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
   }
-
   
   if (rank==0){
     if (! meshHasTriangles ) {
@@ -718,5 +761,16 @@ int main(int argc, char *argv[]) {
     writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
     writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
   }
+  
+  if (compareWithOverkillMesh) {
+    cout << "******* Adaptivity Convergence Report *******\n";
+    cout << "dofs\tL2 error\n";
+    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+      int dofs = entryIt->first;
+      double err = entryIt->second;
+      cout << dofs << "\t" << err << endl;
+    }
+  }
+  
   return 0;
 }
