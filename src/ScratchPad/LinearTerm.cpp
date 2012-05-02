@@ -391,7 +391,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
                           bool applyCubatureWeights) {
   int sideIndex = basisCache->getSideIndex();
-  bool boundaryTerm = (sideIndex != -1);
+//  bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
   TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,

@@ -293,6 +293,25 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs ) {
   return texString.str();
 }
 
+string HConvergenceStudy::convergenceDataMATLAB(int trialID) {
+  ostringstream ss;
+  int k = _H1Order - 1; // order of the solution
+  ss << scientific;
+  ss << _bilinearForm->trialName(trialID) << "Error{" << k << "} = [";
+
+  vector<int> meshSizes = this->meshSizes();
+  for (int i=0; i<meshSizes.size(); i++) {
+    int size = meshSizes[i];
+    double h = 1.0 / size;
+    ss << k << " " << h << " ";
+    double l2error = _solutionErrors[trialID][i];
+    ss << l2error << "\n";
+  }
+  
+  ss << "];\n";
+  return ss.str();
+}
+
 string HConvergenceStudy::TeXBestApproximationComparisonTable() {
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
   return this->TeXBestApproximationComparisonTable(trialIDs);

@@ -35,6 +35,7 @@
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
+#include "Mesh.h"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
@@ -70,9 +71,11 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   cellTopoCub->getCubature(_cubPoints, _cubWeights);
 }
 
-BasisCache::BasisCache(ElementTypePtr elemType, bool testVsTest, int cubatureDegreeEnrichment) {
+BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
+  
+  _mesh = mesh;
 
   DofOrdering trialOrdering;
   if (testVsTest)
@@ -139,6 +142,14 @@ const vector<int> & BasisCache::cellIDs() {
 
 shards::CellTopology BasisCache::cellTopology() {
   return _cellTopo;
+}
+
+Teuchos::RCP<Mesh> BasisCache::mesh() {
+  if ( ! _isSideCache ) {
+    return _mesh;
+  } else {
+    return _basisCacheVolume->mesh();
+  }
 }
 
 void BasisCache::discardPhysicalNodeInfo() {
@@ -366,8 +377,18 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
   
   _knownValues.clear();
+  _knownValuesTransformed.clear();
+  _knownValuesTransformedWeighted.clear();
+  _knownValuesTransformedDottedWithNormal.clear();
+  _knownValuesTransformedWeighted.clear();
+  
   _cubWeights.resize(0); // will force an exception if you try to compute weighted values.
-  discardPhysicalNodeInfo();
+//  discardPhysicalNodeInfo();
+  // experimental/new: allow reuse of physicalNode info; just map the new points...
+  if (_physCubPoints.size() > 0) {
+    determinePhysicalPoints();
+    determineJacobian();
+  }
 }
 
 const FieldContainer<double> & BasisCache::getSideNormals() {
@@ -386,10 +407,34 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
   _cellSideParities = cellSideParities;
 }
 
+void BasisCache::determinePhysicalPoints() {
+  int numPoints = _cubPoints.dimension(0);
+  _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
+  CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+}
+
+void BasisCache::determineJacobian() {
+  // Compute cell Jacobians, their inverses and their determinants
+  
+  int numCubPoints = _cubPoints.dimension(0);
+  
+  // Containers for Jacobian
+  _cellJacobian.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobInv.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobDet.resize(_numCells, numCubPoints);
+  
+  typedef CellTools<double>  CellTools;
+  
+  CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
+  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+}
+
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes, 
                                       const vector<int> &cellIDs, bool createSideCacheToo) {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
   
+  _physicalCellNodes = physicalCellNodes;
   _numCells = physicalCellNodes.dimension(0);
   _spaceDim = physicalCellNodes.dimension(2);
   
@@ -400,16 +445,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   int numCubPoints = _cubPoints.dimension(0);
   
-  // Containers for Jacobian
-  _cellJacobian = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobInv = FieldContainer<double>(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobDet = FieldContainer<double>(_numCells, numCubPoints);
-  
-  typedef CellTools<double>  CellTools;
-  
-  CellTools::setJacobian(_cellJacobian, _cubPoints, physicalCellNodes, _cellTopo);
-  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
-  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+  determineJacobian();
   
   // compute weighted measure
   if (_cubWeights.size() > 0) {
@@ -420,8 +456,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   }
   
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
-  _physCubPoints = FieldContainer<double>(_numCells, numCubPoints, _spaceDim);
-  CellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,physicalCellNodes,_cellTopo);
+  determinePhysicalPoints();
   
   if ( createSideCacheToo ) {
     _numSides = _cellTopo.getSideCount();
@@ -476,6 +511,8 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
       
       // compute geometric cell information
       //cout << "computing geometric cell info for boundary integral." << endl;
+      typedef CellTools<double>  CellTools;
+
       CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideOrdinal, _cellTopo);
       CellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, _cellTopo);
       

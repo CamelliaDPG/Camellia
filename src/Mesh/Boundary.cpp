@@ -185,7 +185,8 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   int spaceDim = elemTypePtr->cellTopoPtr->getDimension();
   int sideDim = spaceDim - 1;
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+  Teuchos::RCP<Mesh> meshPtr = Teuchos::rcp(_mesh,false); // create an RCP that doesn't own the memory....
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, meshPtr) );
   vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);

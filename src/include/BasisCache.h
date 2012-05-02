@@ -60,6 +60,7 @@ using namespace std;
 using namespace IntrepidExtendedTypes;
 
 class BasisCache;
+class Mesh;
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
@@ -72,6 +73,7 @@ private:
   int _numSides;
   bool _isSideCache;
   int _sideIndex;
+  Teuchos::RCP<Mesh> _mesh;
   vector< Teuchos::RCP<BasisCache> > _basisCacheSides;
   Teuchos::RCP<BasisCache> _basisCacheVolume;
   FieldContainer<double> _cubPoints, _cubWeights;
@@ -81,6 +83,7 @@ private:
   FieldContainer<double> _weightedMeasure;
   FieldContainer<double> _physCubPoints;
   FieldContainer<double> _cellSideParities;
+  FieldContainer<double> _physicalCellNodes;
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   DofOrdering _trialOrdering;
@@ -118,9 +121,12 @@ private:
   //  Teuchos::RCP< const FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const FieldContainer<double> > values,
   //                                                                int componentOfInterest);
   void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
+
+  void determineJacobian();
+  void determinePhysicalPoints();
   
 public:
-  BasisCache(ElementTypePtr elemType, bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
@@ -151,6 +157,8 @@ public:
   const vector<int> & cellIDs();
   
   shards::CellTopology cellTopology();
+  
+  Teuchos::RCP<Mesh> mesh();
   
   void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
   

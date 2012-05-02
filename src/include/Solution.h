@@ -68,6 +68,7 @@ private:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   typedef Teuchos::RCP< BasisCache > BasisCachePtr;
+  typedef Teuchos::RCP<Solution> SolutionPtr;
   
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
   map< int, double > _energyErrorForCellIDGlobal;
@@ -159,6 +160,7 @@ public:
   // new projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap);
   void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, int cellID);
+  void projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln);
   
   // old projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap);

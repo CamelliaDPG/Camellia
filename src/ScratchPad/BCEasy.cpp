@@ -100,6 +100,9 @@ void BCEasy::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, F
 }
 
 void BCEasy::addZeroMeanConstraint( VarPtr field ) {
+  if ( field->varType() != FIELD ) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraints only supported for field vars");
+  }
   _zeroMeanConstraints.insert( field->ID() );
 }
 

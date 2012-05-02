@@ -83,6 +83,7 @@
 #include "BasisCache.h"
 #include "BasisSumFunction.h"
 
+#include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
 
 #include "Solver.h"
@@ -232,8 +233,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,true));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
     
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -346,7 +347,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
        elementConstraintIndex++) {
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *(elemTypeIt);
-      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
+      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
       
       // get cellIDs for basisCache
       vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
@@ -754,6 +755,8 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+//  int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(trialID);
+  
   
   int cubDegree = trialBasis->getDegree();
   
@@ -848,7 +851,7 @@ double Solution::L2NormOfSolution(int trialID){
     int numCells = cells.size();
     // note: basisCache below will use a greater cubature degree than strictly necessary
     //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr)); 
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh)); 
     
     // get cellIDs for basisCache
     vector<int> cellIDs;
@@ -1381,7 +1384,7 @@ void Solution::computeErrorRepresentation() {
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,true));
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
     
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
@@ -1534,7 +1537,7 @@ void Solution::computeResiduals() {
     FieldContainer<double> residuals(numCells,numTestDofs);
     
     // prepare basisCache and cellIDs
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
     bool createSideCacheToo = true;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
     _rhs->integrateAgainstStandardBasis(residuals, testOrdering, basisCache);
@@ -1699,6 +1702,8 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
         transformedValues = basisCache->getTransformedValues(basis, op);
       }
     }
+    
+//    cout << "solnCoeffs:\n" << solnCoeffs;
     
     const vector<int> *dofIndices = fluxOrTrace ? &(trialOrder->getDofIndices(trialID,sideIndex))
                                                 : &(trialOrder->getDofIndices(trialID));
@@ -2297,7 +2302,7 @@ void Solution::writeFieldsToFile(int trialID, const string &filePath){
     
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = false;
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, createSideCacheToo));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
     
     vector<int> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -2648,7 +2653,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
     
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
     
     if (fluxOrTrace) {
@@ -2669,13 +2674,25 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
 }
 
 void Solution::projectOntoMesh(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap){
-
   vector< ElementPtr > activeElems = _mesh->activeElements();
   for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
     projectOntoCell(functionMap,cellID);
   }
+}
+
+void Solution::projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln) {
+  vector< int > fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  vector< VarPtr > fieldVars;
+  for (vector<int>::iterator fieldIt = fieldIDs.begin(); fieldIt != fieldIDs.end(); fieldIt++) {
+    int fieldID = *fieldIt;
+    VarPtr var = Teuchos::rcp( new Var(fieldID, 0, "unspecified") );
+    fieldVars.push_back(var);
+  }
+  Teuchos::RCP<Solution> thisPtr = Teuchos::rcp(this, false);
+  map<int, FunctionPtr > solnMap = PreviousSolutionFunction::functionMap(fieldVars, thisPtr);
+  otherSoln->projectOntoMesh(solnMap);
 }
 
 void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &functionMap, int cellID){

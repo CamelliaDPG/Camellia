@@ -98,6 +98,7 @@ public:
   
   map< int, double > exactSolutionNorm();
 
+  string convergenceDataMATLAB(int trialID);
   string TeXErrorRateTable();
   string TeXErrorRateTable(const vector<int> &trialIDs);
   string TeXBestApproximationComparisonTable();

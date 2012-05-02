@@ -81,9 +81,10 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   Teuchos::Array<int> dimensions;
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
-  if ( ( ( BasisFactory::getBasisRank(basis) == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) )
+  int basisRank = BasisFactory::getBasisRank(basis);
+  if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) )
       ||
-      ( ( BasisFactory::getBasisRank(basis) == 0) && (op == IntrepidExtendedTypes::OP_GRAD) ) )
+      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) ) )
   {
     dimensions.push_back(spaceDim);
   } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
@@ -136,6 +137,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
                                                            const FieldContainer<double> &cellJacobianDet) {
   typedef FunctionSpaceTools fst;
   int numCells = cellJacobian.dimension(0);
+  int spaceDim = cellJacobian.dimension(2);
   int componentOfInterest;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
@@ -215,7 +217,17 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(IntrepidExtendedTypes::OP_CURL):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
-          fst::HCURLtransformCURL<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
+          if (spaceDim == 2) {
+            // TODO: confirm that this is correct
+//            static bool warningIssued = false;
+//            if ( ! warningIssued ) {
+//              cout << "WARNING: for HCURL in 2D, transforming with HVOLtransformVALUE. Need to confirm this is correct.\n";
+//              warningIssued = true;
+//            }
+            fst::HVOLtransformVALUE<double>(*transformedValues, cellJacobianDet, *referenceValues);
+          } else {
+            fst::HCURLtransformCURL<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
+          }
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
           // in 2D, HGRADtransformCURL == HDIVtransformVALUE (because curl(H1) --> H(div))

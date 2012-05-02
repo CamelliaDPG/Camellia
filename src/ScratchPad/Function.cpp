@@ -67,7 +67,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh) {
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType ) ); // all elements of same type
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh ) ); // all elements of same type
     typedef Teuchos::RCP< Element > ElementPtr;
     vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
 
@@ -253,7 +253,7 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
   BasisCachePtr basisCache;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     int numSides = cellTopo.getSideCount();
     
@@ -329,7 +329,7 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
   BasisCachePtr basisCache;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) { //thru quads/triangles/etc
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
     basisCache->setRefCellPoints(refPoints);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
