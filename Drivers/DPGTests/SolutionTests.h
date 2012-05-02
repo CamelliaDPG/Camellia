@@ -17,6 +17,7 @@ private:
   FieldContainer<double> _testPoints;
   Teuchos::RCP< Solution > _confusionSolution1_2x2, _confusionSolution2_2x2, _poissonSolution, _confusionUnsolved;
   Teuchos::RCP< Solution > _poissonSolution_1x1; // single-element mesh
+  Teuchos::RCP< Solution > _poissonSolution_1x1_unsolved; // single-element mesh, zero
   Teuchos::RCP< PoissonExactSolution > _poissonExactSolution;
   Teuchos::RCP< ConfusionManufacturedSolution > _confusionExactSolution;
   
@@ -30,12 +31,12 @@ public:
   bool testAddSolution();
   bool testProjectFunction();
   bool testNewProjectFunction();
+  bool testProjectSolutionOntoOtherMesh();
   bool testAddRefinedSolutions();
   bool testEnergyError();
   bool testHRefinementInitialization();
   bool testPRefinementInitialization();
   bool testSolutionEvaluationBasisCache();
-
 };
 
 

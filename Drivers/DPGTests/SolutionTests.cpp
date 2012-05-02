@@ -84,12 +84,14 @@ void SolutionTests::setup() {
 
   Teuchos::RCP<Mesh> poissonMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
   Teuchos::RCP<Mesh> poissonMesh1x1 = Mesh::buildQuadMesh(quadPoints, 1, 1, _poissonExactSolution->bilinearForm(), H1Order, H1Order+2);
-Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
+  Teuchos::RCP<DPGInnerProduct> poissonIp = Teuchos::rcp(new MathInnerProduct(_poissonExactSolution->bilinearForm()));
 
   _confusionSolution1_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _confusionSolution2_2x2 = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
   _poissonSolution = Teuchos::rcp( new Solution(poissonMesh, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
   _poissonSolution_1x1 = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  _poissonSolution_1x1_unsolved = Teuchos::rcp( new Solution(poissonMesh1x1, _poissonExactSolution->bc(),_poissonExactSolution->ExactSolution::rhs(), ip));
+  
   _confusionUnsolved = Teuchos::rcp( new Solution(mesh, _confusionExactSolution->bc(), _confusionExactSolution->ExactSolution::rhs(), ip) );
 
   _confusionSolution1_2x2->solve();
@@ -118,6 +120,13 @@ void SolutionTests::teardown() {
 }
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testProjectSolutionOntoOtherMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testNewProjectFunction()) {
     numTestsPassed++;
@@ -336,7 +345,7 @@ bool SolutionTests::testNewProjectFunction() {
     ElementPtr elem = _confusionUnsolved->mesh()->getElement(i);
     int cellID = elem->cellID();
     vector<int> cellIDs(1,cellID);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType()) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),_confusionUnsolved->mesh()) );
         
     basisCache->setPhysicalCellNodes( _confusionUnsolved->mesh()->physicalCellNodesForCell(cellID),
                                      cellIDs, true); // true: create side cache, too
@@ -375,6 +384,31 @@ bool SolutionTests::testNewProjectFunction() {
   return success;  
 }
 
+bool SolutionTests::testProjectSolutionOntoOtherMesh() {
+  bool success = true;
+  double tol = 1e-14;
+  _poissonSolution_1x1->projectFieldVariablesOntoOtherSolution(_poissonSolution);
+  _poissonSolution_1x1->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1.m");
+  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1_projected.m");
+  _poissonSolution->projectFieldVariablesOntoOtherSolution(_poissonSolution_1x1_unsolved);
+  // difference should be zero:
+  _poissonSolution_1x1_unsolved->addSolution(_poissonSolution_1x1,-1.0);
+  // test for all field variables:
+  vector<int> fieldIDs = _poissonSolution_1x1->mesh()->bilinearForm()->trialVolumeIDs();
+  
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+    int fieldID = *fieldIDIt;
+    double diffL2 = _poissonSolution_1x1_unsolved->L2NormOfSolutionGlobal(fieldID);
+    if (diffL2 > tol) {
+      string varName = _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID);
+      cout << "testProjectSolutionOntoOtherMesh: Failure for trial ID " << varName << ": ";
+      cout << "coarse solution projected onto fine mesh then back onto coarse differs from original by L2 norm of " << diffL2 << endl;
+      cout << "L2 norm of original solution: " << _poissonSolution_1x1->L2NormOfSolutionGlobal(fieldID) << endl;
+      success = false;
+    }
+  }
+  return success;
+}
 
 bool SolutionTests::testAddRefinedSolutions(){
   bool success = true;
@@ -635,7 +669,7 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   ElementPtr elem = _poissonSolution_1x1->mesh()->getElement(0); // "spectral" mesh--just one element
   int cellID = elem->cellID();
   vector<int> cellIDs(1,cellID);
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType()) );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(), _poissonSolution_1x1->mesh()) );
   
   basisCache->setRefCellPoints( _testPoints ); // don't use cubature points...
 //  cout << "physicalCellNodes:\n" << _poissonSolution_1x1->mesh()->physicalCellNodesForCell(cellID);
