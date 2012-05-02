@@ -12,6 +12,7 @@
 #include "MathInnerProduct.h"
 #include "StokesBilinearForm.h"
 #include "StokesMathBilinearForm.h"
+#include "Mesh.h"
 #include "ElementType.h"
 #include "TestSuite.h"
 #include "BasisFactory.h"
@@ -242,7 +243,8 @@ int main(int argc, char *argv[]) {
   
   // just use testOrdering for both trial and test spaces (we only use to define BasisCache)
   ElementTypePtr elemType  = Teuchos::rcp( new ElementType(trialOrdering, testOrdering, quadTopoPtr) );
-  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, true) ); // true: test vs. test
+  Teuchos::RCP<Mesh> nullMesh = Teuchos::rcp( (Mesh*) NULL );
+  BasisCachePtr ipBasisCache = Teuchos::rcp( new BasisCache(elemType, nullMesh, true) ); // true: test vs. test
   ipBasisCache->setPhysicalCellNodes(quadPoints,vector<int>(1),true); // true: DO create side cache (because of boundary terms)
 
   int numCells = quadPoints.dimension(0);

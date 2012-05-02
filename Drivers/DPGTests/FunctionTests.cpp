@@ -100,7 +100,7 @@ void FunctionTests::setup() {
   vector<int> cellIDs;
   int cellID = 0;
   cellIDs.push_back(cellID);
-  _basisCache = Teuchos::rcp( new BasisCache( _elemType ) );
+  _basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
   _basisCache->setRefCellPoints(_testPoints);
   
   _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );

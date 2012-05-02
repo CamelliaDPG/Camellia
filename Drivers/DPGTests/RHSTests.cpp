@@ -310,7 +310,7 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
   }
   
   // prepare basisCache and cellIDs
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
   bool createSideCacheToo = true;
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   
@@ -362,7 +362,7 @@ bool RHSTests::testRHSEasy() {
   }
   
   // prepare basisCache and cellIDs
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
   bool createSideCacheToo = true;
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   
