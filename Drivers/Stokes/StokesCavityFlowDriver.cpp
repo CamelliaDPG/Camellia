@@ -237,8 +237,8 @@ int main(int argc, char *argv[]) {
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
-  bool compareWithOverkillMesh = true;
-  int overkillMeshSize = 256; // increase for the real run...
+  bool compareWithOverkillMesh = false;
+  int overkillMeshSize = 256;
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -323,14 +323,14 @@ int main(int argc, char *argv[]) {
   VarPtr q_s = streamVarFactory.testVar("q_s", HGRAD);
   VarPtr v_s = streamVarFactory.testVar("v_s", HDIV);
   BFPtr streamBF = Teuchos::rcp( new BF(streamVarFactory) );
-  streamBF->addTerm(-psi_1, q_s->dx());
-  streamBF->addTerm(-psi_2, q_s->dy());
-  streamBF->addTerm(psin_hat, q_s);
+  streamBF->addTerm(psi_1, q_s->dx());
+  streamBF->addTerm(psi_2, q_s->dy());
+  streamBF->addTerm(-psin_hat, q_s);
   
-  streamBF->addTerm(-psi_1, v_s->x());
-  streamBF->addTerm(-psi_2, v_s->y());
-  streamBF->addTerm(-phi, v_s->div());
-  streamBF->addTerm(phi_hat, v_s->dot_normal());
+  streamBF->addTerm(psi_1, v_s->x());
+  streamBF->addTerm(psi_2, v_s->y());
+  streamBF->addTerm(phi, v_s->div());
+  streamBF->addTerm(-phi_hat, v_s->dot_normal());
   
   // define meshes:
   int H1Order = polyOrder + 1;
@@ -523,10 +523,13 @@ int main(int argc, char *argv[]) {
   
   /////////////////// SOLVE OVERKILL //////////////////////
   if (compareWithOverkillMesh) {
-    if (rank == 0)
-      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements).\n";
     overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
                                        stokesBFMath, H1Order, H1Order+pToAdd, useTriangles);
+    
+    if (rank == 0) {
+      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
+      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
+    }
     overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
     overkillSolution->solve();
     if (rank == 0)
@@ -536,15 +539,16 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dy() - u2->dx() ) );
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
   
   Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
-  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
-  streamBC->addZeroMeanConstraint(phi);
+//  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
+  streamBC->addDirichlet(phi_hat, entireBoundary, zero);
+//  streamBC->addZeroMeanConstraint(phi);
   
   IPPtr streamIP = Teuchos::rcp( new IP );
   streamIP->addTerm(q_s);
