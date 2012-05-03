@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
   bool compareWithOverkillMesh = true;
-  int overkillMeshSize = 16; // increase for the real run...
+  int overkillMeshSize = 4; // increase for the real run...
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -582,6 +582,27 @@ int main(int argc, char *argv[]) {
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
+    if (compareWithOverkillMesh) {
+      Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
+
+      projectedSoln->addSolution(overkillSolution,-1.0);
+      double L2errorSquared = 0.0;
+      for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
+        VarPtr var = *fieldIt;
+        int fieldID = var->ID();
+        double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
+        cout << "L2error for " << var->name() << ": " << L2error << endl;
+        L2errorSquared += L2error * L2error;
+        // debugging:
+//        solution->writeFieldsToFile(fieldID, "solution_field.m");
+//        projectedSoln->writeFieldsToFile(fieldID, "proj_solution_field.m");
+//        cout << "wrote files.\n";
+      }
+      int numGlobalDofs = mesh->numGlobalDofs();
+      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
+    }
     refinementStrategy.refine(rank==0); // print to console on rank 0
     // find top corner cells:
     vector< Teuchos::RCP<Element> > topCorners = mesh->elementsForPoints(topCornerPoints);
@@ -595,23 +616,6 @@ int main(int argc, char *argv[]) {
         cout << "other top-right corner ID: " << topCorners[3]->cellID() << endl;
       }
     }
-    if (compareWithOverkillMesh) {
-      Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-      solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
-
-      projectedSoln->addSolution(overkillSolution,-1.0);
-      double L2errorSquared = 0.0;
-      for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
-        VarPtr var = *fieldIt;
-        int fieldID = var->ID();
-        double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-        cout << "L2error for " << var->name() << ": " << L2error << endl;
-        L2errorSquared += L2error * L2error;
-      }
-      int numGlobalDofs = mesh->numGlobalDofs();
-      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
-      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-    }
     if (induceCornerRefinements) {
       // induce refinements in bottom corners:
       vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
@@ -623,6 +627,24 @@ int main(int argc, char *argv[]) {
   }
   // one more solve on the final refined mesh:
   solution->solve(false);
+  if (compareWithOverkillMesh) {
+    Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+    solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
+    
+    projectedSoln->addSolution(overkillSolution,-1.0);
+    double L2errorSquared = 0.0;
+    for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
+      VarPtr var = *fieldIt;
+      int fieldID = var->ID();
+      double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
+      cout << "L2error for " << var->name() << ": " << L2error << endl;
+      L2errorSquared += L2error * L2error;
+    }
+    int numGlobalDofs = mesh->numGlobalDofs();
+    cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+    dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
+  }
+  
   double energyErrorTotal = solution->energyErrorTotal();
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
