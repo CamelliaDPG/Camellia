@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
   bool compareWithOverkillMesh = true;
-  int overkillMeshSize = 4; // increase for the real run...
+  int overkillMeshSize = 256; // increase for the real run...
   
   // usage: polyOrder [numRefinements]
   // parse args:
