@@ -48,7 +48,7 @@
 
 #include "InnerProductScratchPad.h"
 
-#include "MultiOrderStudy.h"
+#include "../MultiOrderStudy/MultiOrderStudy.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -74,7 +74,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
   string normChoice = "opt";
   
   /* Usage:
-   Multi-Order, math norm:
+   Multi-Order, naive norm:
      StokesStudy "multiOrder{Tri|Quad}" formulationTypeStr
    Single Order, original conforming, optimal norm, quad:
      StokesStudy polyOrder minLogElements maxLogElements
@@ -87,7 +87,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
    
    where:
    formulationTypeStr = {"original conforming"|"nonConforming"|"vvp"|"math"}
-   normChoice = {"opt"|"math"}
+   normChoice = {"opt"|"naive"}
    
    */
   
@@ -101,7 +101,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
       useTriangles = false;
     }
     useMultiOrder = true;
-    useOptimalNorm = false; // using math norm for paper
+    useOptimalNorm = false; // using naive norm for paper
     polyOrder = 1;
   } else if (argc == 4) {
     polyOrder = atoi(argv[1]);
@@ -132,8 +132,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
       useTriangles = false;
     } // otherwise, just use whatever was defined above
   }
-  if (normChoice == "math") {
-    useOptimalNorm = false; // otherwise, use math
+  if (normChoice == "naive") {
+    useOptimalNorm = false; // otherwise, use naive
   }
   if (formulationTypeStr == "math") {
     formulationType = StokesManufacturedSolution::MATH_CONFORMING;
@@ -334,6 +334,12 @@ int main(int argc, char *argv[]) {
         filePathPrefix.str("");
         filePathPrefix << "stokes/sigma22_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),sigma22->ID());
+        
+        cout << study.convergenceDataMATLAB(u1->ID());
+        
+        cout << study.convergenceDataMATLAB(u2->ID());
+        
+        cout << study.convergenceDataMATLAB(p->ID());
       }
     }
   } else {
