@@ -285,6 +285,7 @@ int main(int argc, char *argv[]) {
                             mySolution->bc(), ip, 
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
+    study.setReportRelativeErrors(false);
     
     study.solve(quadPoints);
     
