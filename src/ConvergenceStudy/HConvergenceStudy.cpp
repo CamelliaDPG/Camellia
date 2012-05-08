@@ -305,6 +305,9 @@ string HConvergenceStudy::convergenceDataMATLAB(int trialID) {
     double h = 1.0 / size;
     ss << k << " " << h << " ";
     double l2error = _solutionErrors[trialID][i];
+    if (_reportRelativeErrors) {
+      l2error /= _exactSolutionNorm[trialID];
+    }
     ss << l2error << "\n";
   }
   
