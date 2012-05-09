@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
       cellIDs.push_back(elems[i]->cellID());
     }
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
     FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
