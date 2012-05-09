@@ -531,6 +531,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
   
+  double oneNorm = globalStiffMatrix.NormOne();
+  if (rank == 0) {
+    cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+  }
+  
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
