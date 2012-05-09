@@ -230,14 +230,15 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   int pToAddForStreamFunction = 3;
-  bool weightTestNormDerivativesByH = false;
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
+  bool enforceOneIrregularity = false;
   bool compareWithOverkillMesh = false;
+  bool weightTestNormDerivativesByH = false;
   int overkillMeshSize = 256;
   
   // usage: polyOrder [numRefinements]
@@ -256,11 +257,11 @@ int main(int argc, char *argv[]) {
   
   /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
-  VarPtr q1 = varFactory.testVar("q_1", HDIV);
-  VarPtr q2 = varFactory.testVar("q_2", HDIV);
-  VarPtr v1 = varFactory.testVar("v_1", HGRAD);
-  VarPtr v2 = varFactory.testVar("v_2", HGRAD);
-  VarPtr v3 = varFactory.testVar("v_3", HGRAD);
+  VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
+  VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2
+  VarPtr v1 = varFactory.testVar("v_1", HGRAD); // v_1
+  VarPtr v2 = varFactory.testVar("v_2", HGRAD); // v_2
+  VarPtr q = varFactory.testVar("q", HGRAD); // q
   //  VarPtr testOne; // used for local conservation, if requested
   //  if (enforceLocalConservation) {
   //    testOne = varFactory.testVar("1", CONSTANT_SCALAR);
@@ -282,17 +283,17 @@ int main(int argc, char *argv[]) {
   double mu = 1;
   
   BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );  
-  // q1 terms:
-  stokesBFMath->addTerm(u1,q1->div());
-  stokesBFMath->addTerm(sigma11,q1->x()); // (sigma1, q1)
-  stokesBFMath->addTerm(sigma12,q1->y());
-  stokesBFMath->addTerm(-u1hat, q1->dot_normal());
+  // tau1 terms:
+  stokesBFMath->addTerm(u1,tau1->div());
+  stokesBFMath->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+  stokesBFMath->addTerm(sigma12,tau1->y());
+  stokesBFMath->addTerm(-u1hat, tau1->dot_normal());
   
-  // q2 terms:
-  stokesBFMath->addTerm(u2, q2->div());
-  stokesBFMath->addTerm(sigma21,q2->x()); // (sigma2, q2)
-  stokesBFMath->addTerm(sigma22,q2->y());
-  stokesBFMath->addTerm(-u2hat, q2->dot_normal());
+  // tau2 terms:
+  stokesBFMath->addTerm(u2, tau2->div());
+  stokesBFMath->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+  stokesBFMath->addTerm(sigma22,tau2->y());
+  stokesBFMath->addTerm(-u2hat, tau2->dot_normal());
   
   // v1:
   stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
@@ -306,10 +307,10 @@ int main(int argc, char *argv[]) {
   stokesBFMath->addTerm( -p, v2->dy());
   stokesBFMath->addTerm( sigma2n, v2);
   
-  // v3:
-  stokesBFMath->addTerm(-u1,v3->dx()); // (-u, grad v3)
-  stokesBFMath->addTerm(-u2,v3->dy());
-  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), v3);
+  // q:
+  stokesBFMath->addTerm(-u1,q->dx()); // (-u, grad q)
+  stokesBFMath->addTerm(-u2,q->dy());
+  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
   
   ///////////////////////////////////////////////////////////////////////////
   
@@ -469,6 +470,11 @@ int main(int argc, char *argv[]) {
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
     }
+    if (enforceOneIrregularity) {
+      cout << "Enforcing 1-irregularity.\n";
+    } else {
+      cout << "NOT enforcing 1-irregularity.\n";
+    }
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;
@@ -479,27 +485,27 @@ int main(int argc, char *argv[]) {
   FunctionPtr h = Teuchos::rcp( new hFunction() );
   
   if (weightTestNormDerivativesByH) {
-    qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
-    qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
-    qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
-    qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
-    qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-    qoptIP->addTerm( h * q1->div() - v3->dx() );    // u1
-    qoptIP->addTerm( h * q2->div() - v3->dy() );    // u2
+    qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
+    qoptIP->addTerm( h * tau1->div() - q->dx() ); // u1
+    qoptIP->addTerm( h * tau2->div() - q->dy() ); // u2
   } else {
-    qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
-    qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
-    qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
-    qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
-    qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-    qoptIP->addTerm( q1->div() - v3->dx() );    // u1
-    qoptIP->addTerm( q2->div() - v3->dy() );    // u2
+    qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
+    qoptIP->addTerm( tau1->div() - q->dx() );     // u1
+    qoptIP->addTerm( tau2->div() - q->dy() );     // u2
   }
   qoptIP->addTerm( sqrt(beta) * v1 );
   qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * v3 );
-  qoptIP->addTerm( sqrt(beta) * q1 );
-  qoptIP->addTerm( sqrt(beta) * q2 );
+  qoptIP->addTerm( sqrt(beta) * q );
+  qoptIP->addTerm( sqrt(beta) * tau1 );
+  qoptIP->addTerm( sqrt(beta) * tau2 );
   
   ip = qoptIP;
   
@@ -566,7 +572,7 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   // just an experiment:
-  //  refinementStrategy.setEnforceOneIrregurity(false);
+  refinementStrategy.setEnforceOneIrregurity(enforceOneIrregularity);
   
   FieldContainer<double> bottomCornerPoints(2,2);
   bottomCornerPoints(0,0) = 1e-10;
