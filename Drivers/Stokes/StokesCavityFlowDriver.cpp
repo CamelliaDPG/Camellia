@@ -43,6 +43,7 @@ using namespace std;
 //  }
 //};
 
+// trying a smoother version
 class U1_0 : public SimpleFunction {
   double _eps;
 public:
@@ -53,9 +54,11 @@ public:
     double tol = 1e-14;
     if (abs(y-1.0) < tol) { // top boundary
       if ( (abs(x) < _eps) ) { // top left
-        return x / _eps;
+        double x_s = x / _eps; // x_s: scaled x
+        return 3 * x_s * x_s - 2 * x_s * x_s * x_s;
       } else if ( abs(1.0-x) < _eps) { // top right
-        return (1.0-x) / _eps;
+        double x_s = (1 - x) / _eps;
+        return 3 * x_s * x_s - 2 * x_s * x_s * x_s;
       } else { // top middle
         return 1;
       }
@@ -64,6 +67,28 @@ public:
     }
   }
 };
+
+//class U1_0 : public SimpleFunction {
+//  double _eps;
+//public:
+//  U1_0(double eps) {
+//    _eps = eps;
+//  }
+//  double value(double x, double y) {
+//    double tol = 1e-14;
+//    if (abs(y-1.0) < tol) { // top boundary
+//      if ( (abs(x) < _eps) ) { // top left
+//        return x / _eps;
+//      } else if ( abs(1.0-x) < _eps) { // top right
+//        return (1.0-x) / _eps;
+//      } else { // top middle
+//        return 1;
+//      }
+//    } else { // not top boundary: 0.0
+//      return 0.0;
+//    }
+//  }
+//};
 
 class U2_0 : public SimpleFunction {
 public:
