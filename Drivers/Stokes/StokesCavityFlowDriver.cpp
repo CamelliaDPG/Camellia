@@ -237,6 +237,7 @@ int main(int argc, char *argv[]) {
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
   bool enforceOneIrregularity = false;
+  bool reportPerCellErrors  = true;
   bool compareWithOverkillMesh = false;
   bool weightTestNormDerivativesByH = false;
   int overkillMeshSize = 256;
@@ -549,6 +550,9 @@ int main(int argc, char *argv[]) {
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+  ((PreviousSolutionFunction*) u1.get())->setOverrideMeshCheck(true);
+  ((PreviousSolutionFunction*) u2.get())->setOverrideMeshCheck(true);
   
   Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
@@ -573,6 +577,7 @@ int main(int argc, char *argv[]) {
   
   // just an experiment:
   refinementStrategy.setEnforceOneIrregurity(enforceOneIrregularity);
+  refinementStrategy.setReportPerCellErrors(reportPerCellErrors);
   
   FieldContainer<double> bottomCornerPoints(2,2);
   bottomCornerPoints(0,0) = 1e-10;
