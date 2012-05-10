@@ -24,12 +24,14 @@ class RefinementStrategy {
   SolutionPtr _solution;
   double _relativeEnergyThreshold;
   bool _enforceOneIrregularity;
+  bool _reportPerCellErrors;
   
   vector< RefinementResults > _results;
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
   void setEnforceOneIrregurity(bool value);
   void refine(bool printToConsole=false);
+  void setReportPerCellErrors(bool value);
 };
 
 #endif

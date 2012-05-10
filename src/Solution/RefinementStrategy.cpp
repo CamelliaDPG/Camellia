@@ -12,10 +12,15 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
+  _reportPerCellErrors = false;
 }
 
 void RefinementStrategy::setEnforceOneIrregurity(bool value) {
   _enforceOneIrregularity = value;
+}
+
+void RefinementStrategy::setReportPerCellErrors(bool value) {
+  _reportPerCellErrors = value;
 }
 
 void RefinementStrategy::refine(bool printToConsole) {
@@ -36,6 +41,20 @@ void RefinementStrategy::refine(bool printToConsole) {
     double cellEnergyError = energyError->find(cellID)->second;
     maxError = max(cellEnergyError,maxError);
     totalEnergyError += cellEnergyError * cellEnergyError; 
+  }
+  if ( printToConsole && _reportPerCellErrors ) {
+    totalEnergyError = sqrt(totalEnergyError);
+    cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
+    for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
+         activeElemIt != activeElements.end(); activeElemIt++) {
+      Teuchos::RCP< Element > current_element = *(activeElemIt);
+      int cellID = current_element->cellID();
+      double cellEnergyError = energyError->find(cellID)->second;
+      double percent = (cellEnergyError*cellEnergyError) / (totalEnergyError*totalEnergyError) * 100;
+      if (percent > 0.1) {
+        cout << cellID << ": " << cellEnergyError*cellEnergyError << " ( " << percent << " %)\n";
+      }
+    }
   }
   
   // record results prior to refinement
@@ -66,7 +85,7 @@ void RefinementStrategy::refine(bool printToConsole) {
     mesh->enforceOneIrregularity();
 
   if (printToConsole) {
-    cout << "Prior to refinement, energy error: " << sqrt(totalEnergyError) << endl;
+    cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
     cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
   }
 }
