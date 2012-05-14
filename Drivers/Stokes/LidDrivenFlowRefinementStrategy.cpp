@@ -16,6 +16,7 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
   vector<int> quadCellsToRefine;
   vector<int> pCellsToRefine;
   
+  int maxPolyOrder = 11; // corresponds to L^2 (field) order of 10
   int spaceDim = 2;
   FieldContainer<double> triangleVertices(3,spaceDim);
   FieldContainer<double> quadVertices(4,spaceDim);
@@ -47,7 +48,7 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
       }
     }
     
-    if (!cornerCell) {
+    if (!cornerCell && (_mesh->cellPolyOrder(cellID) < maxPolyOrder)) {
       pCellsToRefine.push_back(cellID);
     } else {
       if (mesh->getElement(cellID)->numSides()==3) {
