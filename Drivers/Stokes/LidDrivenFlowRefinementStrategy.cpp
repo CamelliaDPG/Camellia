@@ -32,8 +32,17 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
       double tol = 1e-14;
       double x = quadVertices(i,0);
       double y = quadVertices(i,1);
-      if ((abs(1-abs(x)) < tol) && (abs(1-abs(y)) < tol)) {
-        // corner cell
+      if ((abs(1-x) < tol) && (abs(1-y) < tol)) {
+        // top right
+        cornerCell = true;
+      } else if ((abs(x) < tol) && (abs(y) < tol)) {
+        // bottom left
+        cornerCell = true;
+      } else if ((abs(1-x) < tol) && (abs(y) < tol)) {
+        // bottom right
+        cornerCell = true;
+      } else if ((abs(x) < tol) && (abs(1-y) < tol)) {
+        // top left
         cornerCell = true;
       }
     }
