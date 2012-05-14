@@ -62,6 +62,8 @@ void RefinementStrategy::refine(bool printToConsole) {
   setResults(results, mesh->numElements(), mesh->numGlobalDofs(), sqrt(totalEnergyError));
   _results.push_back(results);
   
+  vector<int> cellsToRefine;
+  
   // do refinements on cells with error above threshold
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
        activeElemIt != activeElements.end(); activeElemIt++){
@@ -70,24 +72,39 @@ void RefinementStrategy::refine(bool printToConsole) {
     double cellEnergyError = energyError->find(cellID)->second;
     if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
       //      cout << "refining cellID " << cellID << endl;
-      if (current_element->numSides()==3) {
-        triangleCellsToRefine.push_back(cellID);
-      } else if (current_element->numSides()==4) {
-        quadCellsToRefine.push_back(cellID);
-      }
+      cellsToRefine.push_back(cellID);
+    }
+  }
+  
+  refineCells(cellsToRefine);
+  
+  if (_enforceOneIrregularity)
+    mesh->enforceOneIrregularity();
+  
+  if (printToConsole) {
+    cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
+    cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
+  }
+}
+
+void RefinementStrategy::refineCells(vector<int> &cellIDs) {
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  vector<int> triangleCellsToRefine;
+  vector<int> quadCellsToRefine;
+  
+  for (vector< int >::iterator cellIDIt = cellIDs.begin();
+       cellIDIt != cellIDs.end(); cellIDIt++){
+    int cellID = *cellIDIt;
+    
+    if (mesh->getElement(cellID)->numSides()==3) {
+      triangleCellsToRefine.push_back(cellID);
+    } else if (mesh->getElement(cellID)->numSides()==4) {
+      quadCellsToRefine.push_back(cellID);
     }
   }
   
   mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-  
-  if (_enforceOneIrregularity)
-    mesh->enforceOneIrregularity();
-
-  if (printToConsole) {
-    cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
-    cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
-  }
 }
 
 void RefinementStrategy::setResults(RefinementResults &solnResults, int numElements, int numDofs,

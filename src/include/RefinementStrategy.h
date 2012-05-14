@@ -12,6 +12,7 @@
 #include "Solution.h"
 
 class RefinementStrategy {
+protected:
   typedef Teuchos::RCP<Solution> SolutionPtr;
   
   struct RefinementResults {
@@ -30,7 +31,8 @@ class RefinementStrategy {
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
   void setEnforceOneIrregurity(bool value);
-  void refine(bool printToConsole=false);
+  virtual void refine(bool printToConsole=false);
+  virtual void refineCells(vector<int> &cellIDs);
   void setReportPerCellErrors(bool value);
 };
 
