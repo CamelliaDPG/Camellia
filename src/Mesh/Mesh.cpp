@@ -803,6 +803,10 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+int Mesh::cellPolyOrder(int cellID) {
+  return _dofOrderingFactory.polyOrder(_elements[cellID]->elementType()->trialOrderPtr);
+}
+
 bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
   double tol = 1e-14;
   double d1 = distance(x0,y0,x1,y1);

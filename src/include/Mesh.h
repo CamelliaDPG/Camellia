@@ -168,6 +168,8 @@ public:
   
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
   
+  int cellPolyOrder(int cellID);
+  
   void enforceOneIrregularity();
 //  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
 
