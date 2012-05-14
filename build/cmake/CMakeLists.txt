@@ -141,6 +141,7 @@ set( STOKES_SOURCES
   "${STOKES_DIR}/StokesBilinearForm.cpp"
   "${STOKES_DIR}/StokesMathBilinearForm.cpp"
   "${STOKES_DIR}/StokesVVPBilinearForm.cpp"
+  "${STOKES_DIR}/LidDrivenFlowRefinementStrategy.cpp"
 )
 
 set( NAVIER_STOKES_DRIVER
