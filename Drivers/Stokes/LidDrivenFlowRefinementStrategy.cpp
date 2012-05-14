@@ -48,7 +48,7 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
       }
     }
     
-    if (!cornerCell && (_mesh->cellPolyOrder(cellID) < maxPolyOrder)) {
+    if (!cornerCell && (mesh->cellPolyOrder(cellID) < maxPolyOrder)) {
       pCellsToRefine.push_back(cellID);
     } else {
       if (mesh->getElement(cellID)->numSides()==3) {
