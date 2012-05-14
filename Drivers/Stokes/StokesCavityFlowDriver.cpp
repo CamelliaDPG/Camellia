@@ -8,9 +8,11 @@
 
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
+#include "LidDrivenFlowRefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
+#include "MeshPolyOrderFunction.h"
 
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -597,8 +599,10 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
+  FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
+  
   double energyThreshold = 0.20; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
+  LidDrivenFlowRefinementStrategy refinementStrategy( solution, energyThreshold );
   
   // just an experiment:
   refinementStrategy.setEnforceOneIrregurity(enforceOneIrregularity);
@@ -814,6 +818,8 @@ int main(int argc, char *argv[]) {
       solution->writeToFile(u2->ID(), "p.dat");
       cout << "wrote files: u1.dat, u2.dat, p.dat\n";
     }
+    polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
+    
     writeStreamlines(0, 1, 0, 1, solution, u1, u2, "u_streamlines.m");
     // corner detail
     writeStreamlines(0, .1, 0, .1, solution, u1, u2, "u_detail_streamlines.m");
@@ -822,7 +828,8 @@ int main(int argc, char *argv[]) {
     writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
     writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
     writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-  }
+    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+}
   
   if (compareWithOverkillMesh) {
     cout << "******* Adaptivity Convergence Report *******\n";
