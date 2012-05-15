@@ -263,11 +263,12 @@ int main(int argc, char *argv[]) {
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = true;
-  bool enforceOneIrregularity = false;
+  bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool compareWithOverkillMesh = false;
+  bool compareWithOverkillMesh = true;
   bool weightTestNormDerivativesByH = false;
-  int overkillMeshSize = 256;
+  int overkillMeshSize = 64;
+  int overkillPolyOrder = 6; // H1 order
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -497,6 +498,8 @@ int main(int argc, char *argv[]) {
     }
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
+    } else {
+      cout << "NOT enforcing local conservation.\n";
     }
     if (enforceOneIrregularity) {
       cout << "Enforcing 1-irregularity.\n";
@@ -558,7 +561,7 @@ int main(int argc, char *argv[]) {
   /////////////////// SOLVE OVERKILL //////////////////////
   if (compareWithOverkillMesh) {
     overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
-                                       stokesBFMath, H1Order, H1Order+pToAdd, useTriangles);
+                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
     
     if (rank == 0) {
       cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
@@ -839,6 +842,15 @@ int main(int argc, char *argv[]) {
       double err = entryIt->second;
       cout << dofs << "\t" << err << endl;
     }
+    ofstream fout("overkillComparison.txt");
+    fout << "******* Adaptivity Convergence Report *******\n";
+    fout << "dofs\tL2 error\n";
+    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+      int dofs = entryIt->first;
+      double err = entryIt->second;
+      fout << dofs << "\t" << err << endl;
+    }
+    fout.close();
   }
   
   return 0;
