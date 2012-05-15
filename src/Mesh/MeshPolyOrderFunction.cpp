@@ -14,9 +14,9 @@ void MeshPolyOrderFunction::values(FieldContainer<double> &values, BasisCachePtr
   int numPoints = values.dimension(1);
   for (vector<int>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++, cellIndex++) {
     int cellID = *cellIDIt;
-    int polyOrder = _mesh->cellPolyOrder(cellID);
+    int polyOrder = _mesh->cellPolyOrder(cellID); // H1 order
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      values(cellIndex, ptIndex) = polyOrder;
+      values(cellIndex, ptIndex) = polyOrder-1;
     }
   }
 }
