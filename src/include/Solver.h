@@ -43,6 +43,24 @@ public:
     Amesos_Mumps mumps(problem());
     mumps.SymbolicFactorization();
     mumps.NumericFactorization();
+    int relaxationParam = 0; // the default
+    int* info = mumps.GetINFO();
+    int numErrors = 0;
+    while (info[0] < 0) { // error occurred on another processor
+      numErrors++;
+      if (info[0] == -9) { // out of memory
+        // mumps_par%ICNTL(14) = mumps_par%ICNTL(14) + 20
+        relaxationParam += 20;
+        mumps.SetICNTL(14, relaxationParam);
+        cout << "MUMPS memory allocation too small.  Relaxation Param: " << relaxationParam << endl;
+      }
+      mumps.SymbolicFactorization();
+      mumps.NumericFactorization();
+      if (numErrors > 20) {
+        cout << "Too many errors in MUMPS factorization.\n";
+        break;
+      }
+    }
     return mumps.Solve();
   }
 };
