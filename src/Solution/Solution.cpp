@@ -833,6 +833,40 @@ double Solution::L2NormOfSolutionGlobal(int trialID){
   return globalL2Norm;  
 }
 
+double Solution::L2NormOfSolutionInCell(int trialID, int cellID) {
+  double value = 0.0;
+  ElementTypePtr elemTypePtr = _mesh->getElement(cellID);
+  int numCells = 1;
+  // note: basisCache below will use a greater cubature degree than strictly necessary
+  //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh)); 
+  
+  // get cellIDs for basisCache
+  vector<int> cellIDs;
+  cellIDs.push_back(cellID);
+  
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  
+  bool createSideCacheToo = false;
+  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+  
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  FieldContainer<double> values(numCells,numPoints);
+  bool weightForCubature = false;
+  solutionValues(values, trialID, basisCache, weightForCubature);
+  FieldContainer<double> weightedValues(numCells,numPoints);
+  weightForCubature = true;
+  solutionValues(weightedValues, trialID, basisCache, weightForCubature);
+  
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
+    }
+  }
+  
+  return value;  
+}
+
 double Solution::L2NormOfSolution(int trialID){
 
   int numProcs=1;

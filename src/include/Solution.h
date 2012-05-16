@@ -152,6 +152,7 @@ public:
 
   double L2NormOfSolution(int trialID);
   double L2NormOfSolutionGlobal(int trialID);
+  double L2NormOfSolutionInCell(int trialID, int cellID);
   
   Teuchos::RCP<LagrangeConstraints> lagrangeConstraints() const;
 
