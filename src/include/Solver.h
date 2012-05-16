@@ -34,6 +34,8 @@ public:
   }
 };
 
+using namespace std;
+
 // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
 #include "Amesos_Mumps.h"
@@ -63,7 +65,7 @@ public:
         if (infog[0] == -9) {
           int minSize = infog[26-1];
           // want to set ICNTL 23 to a size "significantly larger" than minSize
-          int sizeToSet = min(10 * minSize, previousSize*2);
+          int sizeToSet = max(10 * minSize, previousSize*2);
           mumps.SetICNTL(23, sizeToSet);
           cout << "MUMPS memory allocation too small.  Set size to: " << sizeToSet << endl;
           previousSize = sizeToSet;
