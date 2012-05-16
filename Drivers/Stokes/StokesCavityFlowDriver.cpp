@@ -639,7 +639,8 @@ int main(int argc, char *argv[]) {
         VarPtr var = *fieldIt;
         int fieldID = var->ID();
         double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-        cout << "L2error for " << var->name() << ": " << L2error << endl;
+        if (rank==0)
+          cout << "L2error for " << var->name() << ": " << L2error << endl;
         L2errorSquared += L2error * L2error;
       }
 //      double maxError = 0.0;
@@ -653,7 +654,8 @@ int main(int argc, char *argv[]) {
 //      }
       
       int numGlobalDofs = mesh->numGlobalDofs();
-      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+      if (rank==0)
+        cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
       dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
     }
     refinementStrategy.refine(rank==0); // print to console on rank 0
@@ -690,11 +692,13 @@ int main(int argc, char *argv[]) {
       VarPtr var = *fieldIt;
       int fieldID = var->ID();
       double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-      cout << "L2error for " << var->name() << ": " << L2error << endl;
+      if (rank==0)
+        cout << "L2error for " << var->name() << ": " << L2error << endl;
       L2errorSquared += L2error * L2error;
     }
     int numGlobalDofs = mesh->numGlobalDofs();
-    cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+    if (rank==0)
+      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
     dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
   }
   
@@ -715,7 +719,8 @@ int main(int argc, char *argv[]) {
   // check that the zero mean pressure is being correctly imposed:
   FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
   double p_avg = p_prev->integrate(mesh);
-  cout << "Integral of pressure: " << p_avg << endl;
+  if (rank==0)
+    cout << "Integral of pressure: " << p_avg << endl;
   
   // integrate massFlux over each element (a test):
   // fake a new bilinear form so we can integrate against 1 
