@@ -46,18 +46,33 @@ public:
     int relaxationParam = 0; // the default
     int* info = mumps.GetINFO();
     int numErrors = 0;
-    while (info[0] < 0) { // error occurred on another processor
+    int numProcs=1;
+    int rank=0;
+    
+#ifdef HAVE_MPI
+    rank     = Teuchos::GlobalMPISession::getRank();
+    numProcs = Teuchos::GlobalMPISession::getNProc();
+#else
+#endif
+    int previousSize = 0;
+    while (info[0] < 0) { // error occurred
+      
       numErrors++;
-      if (info[0] == -9) { // out of memory
-        // mumps_par%ICNTL(14) = mumps_par%ICNTL(14) + 20
-        relaxationParam += 20;
-        mumps.SetICNTL(14, relaxationParam);
-        cout << "MUMPS memory allocation too small.  Relaxation Param: " << relaxationParam << endl;
+      if (rank == 0) {
+        int* infog = mumps.GetINFOG();
+        if (infog[0] == -9) {
+          int minSize = infog[26-1];
+          // want to set ICNTL 23 to a size "significantly larger" than minSize
+          int sizeToSet = min(10 * minSize, previousSize*2);
+          mumps.SetICNTL(23, sizeToSet);
+          cout << "MUMPS memory allocation too small.  Set size to: " << sizeToSet << endl;
+          previousSize = sizeToSet;
+        }
       }
       mumps.SymbolicFactorization();
       mumps.NumericFactorization();
       if (numErrors > 20) {
-        cout << "Too many errors in MUMPS factorization.\n";
+        cout << "Too many errors during MUMPS factorization.  Quitting.\n";
         break;
       }
     }
