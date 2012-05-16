@@ -642,16 +642,15 @@ int main(int argc, char *argv[]) {
         cout << "L2error for " << var->name() << ": " << L2error << endl;
         L2errorSquared += L2error * L2error;
       }
-      double maxError = 0.0;
-      int maxErrorCellID = 0;
-      for (int i=0; i<overkillMesh->numElements(); i++) {
-        double error = projectedSoln->L2NormOfSolutionInCell(p->ID(),i);
-        if (error > maxError) {
-          if (rank == 0)
-            cout << "New maxError for pressure found in cell " << i << ": " << error << endl;
-          maxError = error;
-        }
-      }
+//      double maxError = 0.0;
+//      for (int i=0; i<overkillMesh->numElements(); i++) {
+//        double error = projectedSoln->L2NormOfSolutionInCell(p->ID(),i);
+//        if (error > maxError) {
+//          if (rank == 0)
+//            cout << "New maxError for pressure found in cell " << i << ": " << error << endl;
+//          maxError = error;
+//        }
+//      }
       
       int numGlobalDofs = mesh->numGlobalDofs();
       cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
@@ -712,6 +711,11 @@ int main(int argc, char *argv[]) {
   FunctionPtr u_mag = Teuchos::rcp( new SqrtFunction( u_dot_u ) );
   FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
   FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
+  
+  // check that the zero mean pressure is being correctly imposed:
+  FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
+  double p_avg = p_prev->integrate(mesh);
+  cout << "Integral of pressure: " << p_avg << endl;
   
   // integrate massFlux over each element (a test):
   // fake a new bilinear form so we can integrate against 1 
