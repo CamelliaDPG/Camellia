@@ -835,7 +835,7 @@ double Solution::L2NormOfSolutionGlobal(int trialID){
 
 double Solution::L2NormOfSolutionInCell(int trialID, int cellID) {
   double value = 0.0;
-  ElementTypePtr elemTypePtr = _mesh->getElement(cellID);
+  ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
   int numCells = 1;
   // note: basisCache below will use a greater cubature degree than strictly necessary
   //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
