@@ -641,11 +641,18 @@ int main(int argc, char *argv[]) {
         double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
         cout << "L2error for " << var->name() << ": " << L2error << endl;
         L2errorSquared += L2error * L2error;
-        // debugging:
-//        solution->writeFieldsToFile(fieldID, "solution_field.m");
-//        projectedSoln->writeFieldsToFile(fieldID, "proj_solution_field.m");
-//        cout << "wrote files.\n";
       }
+      double maxError = 0.0;
+      int maxErrorCellID = 0;
+      for (int i=0; i<overkillMesh->numElements(); i++) {
+        double error = projectedSoln->L2NormOfSolutionInCell(p->ID(),i);
+        if (error > maxError) {
+          if (rank == 0)
+            cout << "New maxError for pressure found in cell " << i << ": " << error << endl;
+          maxError = error;
+        }
+      }
+      
       int numGlobalDofs = mesh->numGlobalDofs();
       cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
       dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
