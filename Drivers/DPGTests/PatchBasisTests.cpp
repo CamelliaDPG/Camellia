@@ -16,7 +16,8 @@
 #include "ConfusionInnerProduct.h"
 #include "MathInnerProduct.h"
 
-#include "MeshTestSuite.h" // used for checkMeshConsistency
+#include "MeshTestUtility.h" // used for checkMeshConsistency
+#include "MeshTestSuite.h"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 
@@ -253,8 +254,8 @@ bool PatchBasisTests::meshLooksGood() {
     cout << "patchBasesAgreeWithParentInMesh returned false.\n";
     looksGood = false;
   }
-  if ( !MeshTestSuite::checkMeshConsistency(_mesh) ) {
-    cout << "MeshTestSuite::checkMeshConsistency() returned false.\n";
+  if ( !MeshTestUtility::checkMeshConsistency(_mesh) ) {
+    cout << "MeshTestUtility::checkMeshConsistency() returned false.\n";
     looksGood = false;
   }
   if ( !basisValuesAgreeWithPermutedNeighbor(_mesh) ) {
