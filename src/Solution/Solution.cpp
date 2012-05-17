@@ -219,6 +219,21 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
+  if (zeroMeanConstraints.size() > 0) {
+      vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
+    int numEntries = 1; // 1 for the diagonal (stab. parameter)
+    int trialID = zeroMeanConstraints[0];
+    int sideIndex = 0; // zmc's are "inside" the cells
+    for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+      ElementTypePtr elemTypePtr = *(elemTypeIt);
+      int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
+      int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
+      numEntries += basisCardinality * numCellsOfType;
+      FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
+    }
+    maxRowSize = max(numEntries,maxRowSize);
+  }
+
   //cout << "max row size for mesh: " << maxRowSize << endl;
   //cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
   Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, maxRowSize);
@@ -398,6 +413,32 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     }
   }
   
+  // compute max, min h
+  // TODO: get rid of the Global calls below (MPI-enable this code)
+/*  double maxCellMeasure = 0;
+  double minCellMeasure = 1e300;
+  vector< ElementTypePtr > elemTypes = _mesh->elementTypes(); // global element types
+  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemType = *elemTypeIt;
+    vector< ElementPtr > elems = _mesh->elementsOfTypeGlobal(elemType);
+    vector<int> cellIDs;
+    for (int i=0; i<elems.size(); i++) {
+      cellIDs.push_back(elems[i]->cellID());
+    }
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemType);
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,_mesh) );
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+
+    for (int i=0; i<elems.size(); i++) {
+      int cellID = cellIDs[i];
+      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
+      minCellMeasure = min(minCellMeasure,cellMeasures(i));
+    }
+  }
+  double min_h = sqrt(minCellMeasure); 
+  double max_h = sqrt(maxCellMeasure);
+*/
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
@@ -422,9 +463,12 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
       // insert stabilizing parameter -- for now, just the sum of the entries in the extra row/column
       double rho = 0.0;
-      for (int i=0; i<numValues; i++) {
-        rho += basisIntegrals[i];
-      }
+//      for (int i=0; i<numValues; i++) {
+//        rho += basisIntegrals[i];
+//      }
+//      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
+      rho = 1.0;
+      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
       localRowIndex++;
@@ -531,11 +575,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
   
-//  double oneNorm = globalStiffMatrix.NormOne();
-//  if (rank == 0) {
-//    cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
-//  }
-  
+  double oneNorm = globalStiffMatrix.NormOne();
+  if (rank == 0) {
+    cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+  }
+ 
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
