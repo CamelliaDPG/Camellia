@@ -37,9 +37,37 @@
 #include "Intrepid_PointTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Mesh.h"
+#include "Function.h"
+#include "Projector.h"
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
+
+class BCFunction : public Function {
+  FieldContainer<bool> _imposeHere;
+  int _varID;
+  BCPtr _bc;
+public:
+  BCFunction(BCPtr bc, int varID) : Function(0) {
+    _bc = bc;
+    _varID = varID;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = basisCache->cellIDs().size();
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    _imposeHere.resize(numCells,numPoints);
+    FieldContainer<double> unitNormals = basisCache->getSideNormals();
+    _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
+  }
+  bool imposeOnCell(int cellIndex) {
+    // returns true if at least one cubature point lies within the SpatialFilter or equivalent
+    int numPoints = _imposeHere.dimension(1);
+    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+      if (_imposeHere(cellIndex,ptIndex)) return true;
+    }
+    return false;
+  }
+};
 
 Boundary::Boundary() {
   
@@ -280,16 +308,20 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           FieldContainer<double> dirichletValues(numCells,numDofs);
           FieldContainer<bool> imposeHere(numCells,numDofs);
 
-          basisCache->setRefCellPoints(dofPointsSideRefCell);
-          basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,false);
-          basisCache->setSideNormals(sideNormals);
+          // commenting out because we're now *projecting* instead of nodally interpolating
+          // TODO: clean up the above code to get rid of stuff rendered unnecessary by this change
+//          basisCache->setRefCellPoints(dofPointsSideRefCell);
+          basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
+          BCPtr bcPtr = Teuchos::rcp(&bc, false);
+          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
+          Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           
           //cout << "dirichletValues:" << endl << dirichletValues;
-          bc.imposeBC(dirichletValues, imposeHere, trialID, sideNormals, basisCache);
+//          bc.imposeBC(dirichletValues, imposeHere, trialID, sideNormals, basisCache);
           
           for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
-            for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
-              if (imposeHere(localCellIndex,dofOrdinal)) {
+            if (bcFunction->imposeOnCell(localCellIndex)) {
+              for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
                 int cellID = cellIDsPerSide[sideIndex][localCellIndex];
                 double value = dirichletValues(localCellIndex,dofOrdinal);
                 int localDofIndex = trialOrderingPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
