@@ -56,10 +56,10 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
     }
     
     int polyOrder = mesh->cellPolyOrder(cellID);
-    if ((!cornerCell || (h <= 1.0 / 64.0)) && (polyOrder < maxPolyOrder) ) {
+    if ((!cornerCell || (h <= _hmin)) && (polyOrder < maxPolyOrder) ) {
       pCellsToRefine.push_back(cellID);
 //      cout << "p-refining " << cellID << endl;
-    } else if (h - tol > 1.0 / 64.0) {
+    } else if (h - tol > _hmin) {
       //cout << "h-refining " << cellID << " (h: " << h << ")" << endl;
       //cout << "cornerCell: " << cornerCell << endl;
       //cout << "polyOrder: " << polyOrder << endl;
