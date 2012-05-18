@@ -167,7 +167,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
   // -- the ones inside the (convex hull of the) appropriate entry in subRefNodes
   int numPoints = inputPoints.dimension(0);
   int numSubRefCells = _subRefNodes.dimension(0);
-  int numNodesPerCell = _subRefNodes.dimension(1);
+//  int numNodesPerCell = _subRefNodes.dimension(1);
   int spaceDim = inputPoints.dimension(1);
   if (spaceDim != _cellTopo.getDimension() ) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo.getDimension()");
@@ -399,8 +399,34 @@ int MultiBasis::numLeafNodes() {
   return _numLeaves;
 }
 
+int MultiBasis::numSubBases() {
+  return _bases.size();
+}
+
 BasisPtr MultiBasis::getSubBasis(int basisIndex) {
   return _bases[basisIndex];
+}
+
+BasisPtr MultiBasis::getLeafBasis(int leafOrdinal) {
+  int leafOrdinalOffset = 0;
+  for (int subBasisIndex=0; subBasisIndex < _bases.size(); subBasisIndex++) {
+    BasisPtr subBasis = _bases[subBasisIndex];
+    int numLeaves = 1; // 1 if not MultiBasis
+    if (BasisFactory::isMultiBasis(subBasis)) {
+      numLeaves = ((MultiBasis*) subBasis.get())->numLeafNodes();
+    }
+    if (leafOrdinal < leafOrdinalOffset + numLeaves) {
+      // reachable by (or identical to) this subBasis
+      if (BasisFactory::isMultiBasis(subBasis)) {
+        int relativeLeafOrdinal = leafOrdinalOffset + numLeaves - leafOrdinal - 1; // -1 for 0-based index
+        return ((MultiBasis*) subBasis.get())->getLeafBasis(relativeLeafOrdinal);
+      } else {
+        return subBasis;
+      }
+    }
+    leafOrdinalOffset += numLeaves;
+  }
+  TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
 }
 
 vector< pair<int,int> > MultiBasis::adjacentVertexOrdinals() { // NOTE: prototype, untested code!
