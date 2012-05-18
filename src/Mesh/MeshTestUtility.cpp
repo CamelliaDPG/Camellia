@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "MeshTestUtility.h"
+#include "MultiBasis.h"
 
 bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
@@ -120,83 +121,141 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
           } else {
             globalDofIndexHitCount[globalDofIndex]++;
           }
-          
-          // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
-          // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
-          if (mesh->bilinearForm()->isFluxOrTrace(trialID)) {
-            Element* neighbor;
-            int mySideIndexInNeighbor;
-            elem->getNeighbor(neighbor,mySideIndexInNeighbor,sideIndex);
-            if (neighbor->cellID() != -1) { // not boundary...
-              Teuchos::RCP<DofOrdering> neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
-              int neighborNumBasisDofs = neighborTrialOrder->getBasisCardinality(trialID,mySideIndexInNeighbor);
-              if (neighborNumBasisDofs != numBasisDofs) {
-                if ( mesh->usePatchBasis() ) {
-                  cout << "FAILURE: usePatchBasis==true, but neighborNumBasisDofs != numBasisDofs.\n";
-                  success = false;
-                  continue;
-                }
-                if ( neighbor->isParent() ) {
-                  // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
-                  //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
-                  int numDofs = min(neighborNumBasisDofs,numBasisDofs); // if there IS a multi-basis, we match the smaller basis with it...
-                  vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
-                  vector< pair<int,int> >:: iterator entryIt;
-                  int descendantIndex = -1;
-                  for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
-                    descendantIndex++;
-                    int neighborSubSideIndexInMe = mesh->neighborChildPermutation(descendantIndex, descendantsForSide.size());
-                    int neighborCellID = (*entryIt).first;
-                    mySideIndexInNeighbor = (*entryIt).second;
-                    neighbor = mesh->elements()[neighborCellID].get();
-                    for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
-                      int myLocalDofIndex;
-                      if ((descendantsForSide.size() > 1) && !mesh->usePatchBasis()) {
-                        myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,neighborSubSideIndexInMe);
-                      } else {
-                        myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
-                      }
-                      globalDofIndex = mesh->globalDofIndex(cellID,myLocalDofIndex);
+        }
+        
+        // now a more subtle check: given the mesh layout (that all vertices are specified CCW),
+        // the dofs for boundary variables (fluxes & traces) should be reversed between element and its neighbor
+        if (mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+          if (! mesh->boundary().boundaryElement(cellID, sideIndex)) { // not boundary...
+            //            if (neighbor->cellID() != -1) { // not boundary...
+            int ancestralSideIndexInNeighbor;
+            Teuchos::RCP<Element> neighbor = mesh->ancestralNeighborForSide(elem, sideIndex, ancestralSideIndexInNeighbor);
+            
+            Teuchos::RCP<DofOrdering> neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
+            int neighborNumBasisDofs = neighborTrialOrder->getBasisCardinality(trialID,ancestralSideIndexInNeighbor);
+            if (neighborNumBasisDofs != numBasisDofs) {
+              if ( mesh->usePatchBasis() ) {
+                cout << "FAILURE: usePatchBasis==true, but neighborNumBasisDofs != numBasisDofs.\n";
+                success = false;
+                continue;
+              }
+              if ( neighbor->isParent() ) {
+                // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
+                //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
+                vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(ancestralSideIndexInNeighbor);
+                vector< pair<int,int> >:: iterator entryIt;
+                int descendantIndex = -1;
+                for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
+                  descendantIndex++;
+                  int neighborSubSideIndexInMe = mesh->neighborChildPermutation(descendantIndex, descendantsForSide.size());
+                  int neighborCellID = (*entryIt).first;
+                  int mySideIndexInNeighbor = (*entryIt).second;
+                  neighbor = mesh->elements()[neighborCellID];
+                  int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
+                  
+                  for (int dofOrdinal=0; dofOrdinal<neighborNumDofs; dofOrdinal++) {
+                    int myLocalDofIndex;
+                    if ((descendantsForSide.size() > 1) && !mesh->usePatchBasis()) {
+                      myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex,neighborSubSideIndexInMe);
+                    } else {
+                      myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID,dofOrdinal,sideIndex);
+                    }
+                    int globalDofIndex = mesh->globalDofIndex(cellID,myLocalDofIndex);
+                    
+                    // neighbor's dofs are in reverse order from mine along each side
+                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,neighborNumDofs);
+                    
+                    int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
+                    int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
+                    if (neighborsGlobalDofIndex != globalDofIndex) {
                       
-                      // neighbor's dofs are in reverse order from mine along each side
-                      int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numDofs);
-                      
-                      int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
-                      int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborLocalDofIndex);                
-                      if (neighborsGlobalDofIndex != globalDofIndex) {
-                        
-                        cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
-                        cout << neighborCellID << ", " << neighborLocalDofIndex << ") -- ";
-                        cout << globalDofIndex << " != " << neighborsGlobalDofIndex << "\n";
-                        success = false;
-                      }
+                      cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", " << myLocalDofIndex << ") != (";
+                      cout << neighborCellID << ", " << neighborLocalDofIndex << ") -- ";
+                      cout << globalDofIndex << " != " << neighborsGlobalDofIndex << "\n";
+                      success = false;
                     }
                   }
-                } else {
+                }
+              } else if (neighbor->getNeighborCellID(ancestralSideIndexInNeighbor) != cellID) {
+                // elem is small, neighbor big
+                // first, find my leaf index in neighbor:
+                int ancestorCellID = neighbor->getNeighborCellID(ancestralSideIndexInNeighbor);
+                Teuchos::RCP<Element> ancestor = mesh->getElement(ancestorCellID);
+                int ancestorSideIndex = neighbor->getSideIndexInNeighbor(ancestralSideIndexInNeighbor);
+                vector< pair<int,int> > descendantsForSide = ancestor->getDescendantsForSide(ancestorSideIndex);
+                int descendantIndex = 0;
+                int leafIndexInNeighbor = -1;
+                for (vector< pair<int,int> >::iterator entryIt = descendantsForSide.begin(); 
+                     entryIt != descendantsForSide.end();  entryIt++, descendantIndex++) {
+                  if (entryIt->first == cellID) {
+                    leafIndexInNeighbor = Mesh::neighborChildPermutation(descendantIndex, descendantsForSide.size());
+                    break;
+                  }
+                }
+                if (leafIndexInNeighbor == -1) {
+                  TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not determine leafIndexInNeigbor.");
+                }
+                // check whether the basis is the right size:
+                MultiBasis* neighborMultiBasis = (MultiBasis*) neighbor->elementType()->trialOrderPtr->getBasis(trialID,ancestralSideIndexInNeighbor).get();
+                BasisPtr neighborLeafBasis = neighborMultiBasis->getLeafBasis(leafIndexInNeighbor);
+                if (numBasisDofs != neighborLeafBasis->getCardinality()) {
+                  success = false;
                   cout << "FAILURE: cellID " << cellID << "'s basis for trialID " << trialID;
                   cout << " along sideIndex " << sideIndex << " has cardinality " << numBasisDofs;
-                  cout << ", but neighbor along that side (cellID " << neighbor->cellID();
-                  cout << ", sideIndex " << mySideIndexInNeighbor << ") has cardinality " << neighborNumBasisDofs << endl;
-                  success = false;
+                  cout << ", but neighbor leaf basis along that side (cellID " << neighbor->cellID();
+                  cout << ", sideIndex " << ancestralSideIndexInNeighbor;
+                  cout << ", leaf node " << leafIndexInNeighbor;
+                  cout << ") has cardinality " << neighborLeafBasis->getCardinality() << endl;
+                } else {
+                  // cardinalities match, check that global dofs line up
+                  for (int dofOrdinal = 0; dofOrdinal < numBasisDofs; dofOrdinal++) {
+                    int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal, numBasisDofs);
+                    int neighborDofOrdinal = neighborMultiBasis->relativeToAbsoluteDofOrdinal(permutedDofOrdinal, 
+                                                                                              leafIndexInNeighbor);
+                    int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID, neighborDofOrdinal,ancestralSideIndexInNeighbor);
+                    int neighborGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(), neighborLocalDofIndex);
+                    int myLocalDofIndex = elem->elementType()->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideIndex);
+                    int myGlobalDofIndex = mesh->globalDofIndex(cellID, myLocalDofIndex);
+                    if (neighborGlobalDofIndex != myGlobalDofIndex) {
+                      success = false;
+                      cout << "FAILURE: checkDofConnectivities--(cellID, localDofIndex) : (" << cellID << ", ";
+                      cout << myLocalDofIndex << ") != (";
+                      cout << neighbor->cellID() << ", " << neighborLocalDofIndex << ") -- ";
+                      cout << myGlobalDofIndex << " != " << neighborGlobalDofIndex << "\n";
+                    }
+                  }
                 }
-              } else { // (neighborNumBasisDofs == numBasisDofs)
-                if (! neighbor->isParent() ) { 
+              } else {
+                cout << "FAILURE: cellID " << cellID << "'s basis for trialID " << trialID;
+                cout << " along sideIndex " << sideIndex << " has cardinality " << numBasisDofs;
+                cout << ", but neighbor along that side (cellID " << neighbor->cellID();
+                cout << ", sideIndex " << ancestralSideIndexInNeighbor << ") has cardinality " << neighborNumBasisDofs << endl;
+                success = false;
+              }
+            } else { // (neighborNumBasisDofs == numBasisDofs)
+              if (! neighbor->isParent() ) { 
+                for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
                   int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
-                  int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
-                  int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex);                
+                  int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, ancestralSideIndexInNeighbor);
+                  int neighborsGlobalDofIndex = mesh->globalDofIndex(neighbor->cellID(),neighborsLocalDofIndex); 
+                  int localDofIndex = trialOrder.getDofIndex(trialID, dofOrdinal, sideIndex);
+                  int globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
                   if (neighborsGlobalDofIndex != globalDofIndex) {
                     cout << "FAILURE: cellID " << cellID << "'s neighbor " << sideIndex << "'s globalDofIndex " << neighborsGlobalDofIndex << " doesn't match element globalDofIndex " << globalDofIndex << ". (trialID, element dofOrdinal)=(" << trialID << "," << dofOrdinal << ")" << endl;
                     success = false;
                   }
-                } else { // neighbor->isParent()
-                  // for PatchBasis:
-                  vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
+                }
+              } else { // neighbor->isParent()
+                // for PatchBasis:
+                for (int dofOrdinal=0; dofOrdinal<numBasisDofs; dofOrdinal++) {
+                  int localDofIndex = trialOrder.getDofIndex(trialID, dofOrdinal, sideIndex);
+                  int globalDofIndex = mesh->globalDofIndex(cellID,localDofIndex);
+                  vector< pair<int,int> > descendantsForSide = neighbor->getDescendantsForSide(ancestralSideIndexInNeighbor);
                   vector< pair<int,int> >:: iterator entryIt;
-                  int descendantIndex = -1;
                   for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++) {
                     int neighborCellID = (*entryIt).first;
-                    mySideIndexInNeighbor = (*entryIt).second;
-                    neighbor = mesh->elements()[neighborCellID].get();
+                    int mySideIndexInNeighbor = (*entryIt).second;
+                    neighbor = mesh->elements()[neighborCellID];
                     neighborTrialOrder = neighbor->elementType()->trialOrderPtr;
                     int permutedDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,numBasisDofs);
                     int neighborsLocalDofIndex = neighborTrialOrder->getDofIndex(trialID, permutedDofOrdinal, mySideIndexInNeighbor);
