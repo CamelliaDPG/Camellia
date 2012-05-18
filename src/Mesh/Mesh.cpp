@@ -155,9 +155,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   
   double elemWidth = (southEast_x - southWest_x) / horizontalElements;
   double elemHeight = (northWest_y - southWest_y) / verticalElements;
-  
-  int cellID = 0;
-  
+    
   // set up vertices:
   // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
   vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
@@ -820,19 +818,12 @@ void Mesh::determineDofPairings() {
   _dofPairingIndex.clear();
   vector<ElementPtr>::iterator elemIterator;
   
-  int globalIndex = 0;
   vector< int > trialIDs = _bilinearForm->trialIDs();
   
   for (elemIterator = _activeElements.begin(); elemIterator != _activeElements.end(); elemIterator++) {
     ElementPtr elemPtr = *(elemIterator);
     ElementTypePtr elemTypePtr = elemPtr->elementType();
     int cellID = elemPtr->cellID();
-    
-    // DEBUG code:
-//    cout << "cellID " << cellID << " trialOrdering:\n";
-//    cout << *(elemTypePtr->trialOrderPtr);
-//    cout << "cellID " << cellID << " testOrdering:\n";
-//    cout << *(elemTypePtr->testOrderPtr);
     
     if ( elemPtr->isParent() ) {
       TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
@@ -843,7 +834,7 @@ void Mesh::determineDofPairings() {
       if (_bilinearForm->isFluxOrTrace(trialID) ) {
         int numSides = elemPtr->numSides();
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
+          int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
           Element* neighborPtr;
           int mySideIndexInNeighbor;
           elemPtr->getNeighbor(neighborPtr, mySideIndexInNeighbor, sideIndex);
@@ -852,16 +843,17 @@ void Mesh::determineDofPairings() {
           if (neighborCellID != -1) {
             Teuchos::RCP<Element> neighbor = _elements[neighborCellID];
             // check that the bases agree in #dofs:
-            int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
             
             bool hasMultiBasis = neighbor->isParent() && !_usePatchBasis;
             
-            if ( !hasMultiBasis && (numDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
-              TEST_FOR_EXCEPTION(numDofs != neighborNumDofs,
-                                 std::invalid_argument,
-                                 "Element and neighbor don't agree on basis along shared side.");              
+            if ( ! neighbor->isParent() ) {
+              int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
+              if ( !hasMultiBasis && (myNumDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
+                TEST_FOR_EXCEPTION(myNumDofs != neighborNumDofs,
+                                   std::invalid_argument,
+                                   "Element and neighbor don't agree on basis along shared side.");              
+              }
             }
-            numDofs = min(neighborNumDofs,numDofs); // if there IS a multi-basis, we match the smaller basis with it...
             
             // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
             //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
@@ -874,7 +866,9 @@ void Mesh::determineDofPairings() {
               neighborCellID = (*entryIt).first;
               mySideIndexInNeighbor = (*entryIt).second;
               neighbor = _elements[neighborCellID];
-              for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++) {
+              int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
+              
+              for (int dofOrdinal=0; dofOrdinal<neighborNumDofs; dofOrdinal++) {
                 int myLocalDofIndex;
                 if ( (descendantsForSide.size() > 1) && ( !_usePatchBasis ) ) {
                   // multi-basis
@@ -885,7 +879,7 @@ void Mesh::determineDofPairings() {
                 
                 // neighbor's dofs are in reverse order from mine along each side
                 // TODO: generalize this to some sort of permutation for 3D meshes...
-                int permutedDofOrdinal = neighborDofPermutation(dofOrdinal,numDofs);
+                int permutedDofOrdinal = neighborDofPermutation(dofOrdinal,neighborNumDofs);
                 
                 int neighborLocalDofIndex = neighbor->elementType()->trialOrderPtr->getDofIndex(trialID,permutedDofOrdinal,mySideIndexInNeighbor);
                 addDofPairing(cellID, myLocalDofIndex, neighborCellID, neighborLocalDofIndex);
@@ -1539,7 +1533,6 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     return; // no change
   }
   ElementPtr neighborRCP = _elements[neighborCellID];
-  bool matchPOrder = true;
   // h-refinement handling:
   bool neighborIsBroken = (neighbor->isParent() && (neighbor->childIndicesForSide(mySideIndexInNeighbor).size() > 1));
   bool elementIsBroken  = (elem->isParent() && (elem->childIndicesForSide(sideIndex).size() > 1));
