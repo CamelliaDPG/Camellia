@@ -273,51 +273,15 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         vector<int> cellIDs = cellIDsPerSide[sideIndex];
         
         if (numCells > 0) {
-          FieldContainer<double> dofPointsSide(numDofs, sideDim); // dof points for the basis (i.e. a 1D set)
-          FieldContainer<double> dofPointsSideRefCell(numDofs, spaceDim); // dofPointsSide from the pov of the ref cell
-//          FieldContainer<double> dofPointsSidePhysical(numCells, numDofs, spaceDim); // cubPointsSide from the pov of the physical cell
-          shards::CellTopology sideTopology = basis->getBaseCellTopology();
-          // CHEATING HERE: MAKING ASSUMPTIONS ABOUT THE NATURE OF THE BASIS (WARPBLEND)
-          PointTools::getLattice<double,FieldContainer<double> >( dofPointsSide, sideTopology, basis->getDegree(), 0, POINTTYPE_WARPBLEND );
-          
-          // in 1D, these should be in the same order as the dofs.  In 2D, they won't necessarily be...
-          if (sideDim >= 2) {
-            cout << "Warning: imposing BCs on 2D boundary, but haven't yet accounted for the permutation of lattice points." << endl;
-          }
-          
-          shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-          CellTools<double>::mapToReferenceSubcell(dofPointsSideRefCell, dofPointsSide, sideDim, sideIndex, cellTopo );
-          
-          FieldContainer<double> jacobianSideRefCell(numCells, numDofs, spaceDim, spaceDim);
-          CellTools<double>::setJacobian(jacobianSideRefCell, dofPointsSideRefCell, physicalCellNodesPerSide[sideIndex], cellTopo);
-          
-          // get normals
-          FieldContainer<double> sideNormals(numCells, numDofs, spaceDim);
-          FieldContainer<double> normalLengths(numCells, numDofs);
-          CellTools<double>::getPhysicalSideNormals(sideNormals, jacobianSideRefCell, sideIndex, cellTopo);
-          
-          //cout << "sideNormals:" << endl << sideNormals;
-          
-          // make unit length
-          RealSpaceTools<double>::vectorNorm(normalLengths, sideNormals, NORM_TWO);
-          FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
-          
-          // map side cubature points in reference parent cell domain to physical space
-//          CellTools<double>::mapToPhysicalFrame(dofPointsSidePhysical, dofPointsSideRefCell, physicalCellNodesPerSide[sideIndex], cellTopo);
-          
           FieldContainer<double> dirichletValues(numCells,numDofs);
-          FieldContainer<bool> imposeHere(numCells,numDofs);
 
-          // commenting out because we're now *projecting* instead of nodally interpolating
-          // TODO: clean up the above code to get rid of stuff rendered unnecessary by this change
-//          basisCache->setRefCellPoints(dofPointsSideRefCell);
+          // project bc function onto side basis:
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
           Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
           Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           
           //cout << "dirichletValues:" << endl << dirichletValues;
-//          bc.imposeBC(dirichletValues, imposeHere, trialID, sideNormals, basisCache);
           
           for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
             if (bcFunction->imposeOnCell(localCellIndex)) {

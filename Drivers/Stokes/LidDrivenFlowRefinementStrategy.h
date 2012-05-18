@@ -13,9 +13,10 @@
 #include "RefinementStrategy.h"
 
 class LidDrivenFlowRefinementStrategy : public RefinementStrategy {
+  double _hmin;
 public:
-  LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold) 
-  : RefinementStrategy(solution,  relativeEnergyThreshold) {}
+  LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin) 
+  : RefinementStrategy(solution,  relativeEnergyThreshold) { _hmin = hmin; }
   virtual void refineCells(vector<int> &cellsToRefine);
 };
 

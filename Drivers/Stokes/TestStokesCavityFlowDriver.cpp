@@ -258,7 +258,7 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   int pToAddForStreamFunction = 3;
-  double eps = 1.0/8.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  double eps = 1.0/2.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
   bool compareWithOverkillMesh = true;
   bool weightTestNormDerivativesByH = false;
   bool useAdHocHPRefinements = true;
-  int overkillMeshSize = 8;
+  int overkillMeshSize = 2;
   int overkillPolyOrder = 6; // H1 order
   
   // usage: polyOrder [numRefinements]
@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
   
   // define meshes:
   int H1Order = polyOrder + 1;
-  int horizontalCells = 8, verticalCells = 8;
+  int horizontalCells = 2, verticalCells = 1;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles | singularityAvoidingInitialMesh;
   Teuchos::RCP<Mesh> mesh, streamMesh, overkillMesh;
@@ -468,6 +468,11 @@ int main(int argc, char *argv[]) {
   }
   
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+
+  // for test, induce a hanging node:
+  vector<int> quadCellsToRefine;
+  quadCellsToRefine.push_back(0);
+  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -610,8 +615,7 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize ));
+    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 )); // no h-refinements allowed
   else
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   

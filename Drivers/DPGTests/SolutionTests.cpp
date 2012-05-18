@@ -556,7 +556,7 @@ bool SolutionTests::testEnergyError(){
 
 bool SolutionTests::testHRefinementInitialization(){
 
-  double tol = 1e-14;
+  double tol = 2e-14;
 
   bool success = true;
   Teuchos::RCP< Mesh > mesh = _poissonSolution->mesh();
