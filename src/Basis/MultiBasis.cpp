@@ -190,7 +190,8 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
       if ( (x >= xMin) && (x <= xMax) ) {
         //subRefCellForPoint[pointIndex] = cellIndex;
         pointsForSubRefCell[cellIndex].push_back(pointIndex);
-        break; // we've found our match, so break out of cellIndex for loop
+        // break; // we've found our match, so break out of cellIndex for loop
+        // (commented out the above, because vertex points may lie on *two* sub-elements)
       }
     }
   }
