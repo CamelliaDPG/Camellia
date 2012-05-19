@@ -162,7 +162,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
                            const EOperator operatorType) const {
   // compute cellJacobian, etc. for inputPoints:
   // inputPoints dimensions (P, D)
-  // outputPoints dimensions (F,P), (F,P,D), or (F,P,D,D)
+  // outputValues dimensions (F,P), (F,P,D), or (F,P,D,D)
   // each basis is nonzero for just some of the points 
   // -- the ones inside the (convex hull of the) appropriate entry in subRefNodes
   int numPoints = inputPoints.dimension(0);
@@ -216,6 +216,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
     // collect input points and map them to the ref cell for basis
     int numPointsForSubRefCell = pointsForSubRefCell[refCellIndex].size();
     if (numPointsForSubRefCell == 0) {
+      outputValueLocation[0] += basis->getCardinality();
       continue; // next basisIndex
     }
     FieldContainer<double> inputPointsQuasiPhysical(numPointsForSubRefCell,spaceDim);
@@ -245,7 +246,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
                                                                     inputPointsRefCell,
                                                                     cellJacobian, cellJacobInv, cellJacobDet);
       
-//    cout << "transformedValues:\n" << *transformedValues;
+//    cout << "transformedValues for basis " << basisIndex << ":\n" << *transformedValues;
     Teuchos::Array<int> basisValueLocation = outputValueLocation;
     basisValueLocation.insert(basisValueLocation.begin(),0); // cell dimension
     // copy the values to the right spot in outputValues
