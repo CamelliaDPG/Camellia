@@ -152,6 +152,9 @@ public:
   double meanValue(int trialID);
   double meshMeasure();
 
+  double InfNormOfSolution(int trialID);
+  double InfNormOfSolutionGlobal(int trialID);
+
   double L2NormOfSolution(int trialID);
   double L2NormOfSolutionGlobal(int trialID);
   double L2NormOfSolutionInCell(int trialID, int cellID);
