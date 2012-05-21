@@ -122,6 +122,7 @@ void Solution::initialize() {
   
   _residualsComputed = false;
   _energyErrorComputed = false;
+  _reportConditionNumber = false;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -575,11 +576,13 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
   
-  double oneNorm = globalStiffMatrix.NormOne();
-  if (rank == 0) {
-    cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+  if (_reportConditionNumber) {
+    double oneNorm = globalStiffMatrix.NormOne();
+    if (rank == 0) {
+      cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+    }
   }
- 
+  
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
@@ -2324,6 +2327,10 @@ void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
 
 void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
   _lagrangeConstraints = lagrangeConstraints;
+}
+
+void Solution::setReportConditionNumber(bool value) {
+  _reportConditionNumber = value;
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
