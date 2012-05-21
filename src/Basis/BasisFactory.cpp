@@ -287,15 +287,18 @@ BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd) {
 
 BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
   if (isMultiBasis(basis)) {
-    // set each sub-basis to pToSet:
-    MultiBasis* mb = (MultiBasis*) basis.get();
-    int numSubBases = mb->numSubBases();
-    vector< BasisPtr > upgradedSubBases;
-    for (int basisIndex=0; basisIndex<numSubBases; basisIndex++) {
-      BasisPtr subBasis = mb->getSubBasis(basisIndex);
-      upgradedSubBases.push_back( BasisFactory::setPolyOrder(subBasis, pToSet) );
-    }
-    return getMultiBasis(upgradedSubBases);
+    // for now anyway, we don't set poly order for MultiBasis
+    // (the rule now is that MultiBasis is exactly the broken neighbor's "natural" bases)
+    return basis;
+//    // set each sub-basis to pToSet:
+//    MultiBasis* mb = (MultiBasis*) basis.get();
+//    int numSubBases = mb->numSubBases();
+//    vector< BasisPtr > upgradedSubBases;
+//    for (int basisIndex=0; basisIndex<numSubBases; basisIndex++) {
+//      BasisPtr subBasis = mb->getSubBasis(basisIndex);
+//      upgradedSubBases.push_back( BasisFactory::setPolyOrder(subBasis, pToSet) );
+//    }
+//    return getMultiBasis(upgradedSubBases);
   }
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];

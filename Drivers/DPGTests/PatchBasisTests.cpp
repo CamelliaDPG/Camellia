@@ -260,6 +260,7 @@ bool PatchBasisTests::meshLooksGood() {
   }
   if ( !basisValuesAgreeWithPermutedNeighbor(_mesh) ) {
     cout << "basisValuesAgreeWithPermutedNeighbor returned false.\n";
+    looksGood = false;
   }
   return looksGood;
 }

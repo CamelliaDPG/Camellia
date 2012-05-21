@@ -80,6 +80,8 @@ public:
   int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal);
   
   void getCubature(FieldContainer<double> &cubaturePoints, FieldContainer<double> &cubatureWeights, int maxTestDegree);
+  
+  void printInfo();
 };
 
 #endif

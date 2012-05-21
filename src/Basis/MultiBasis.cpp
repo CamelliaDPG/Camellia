@@ -420,7 +420,7 @@ BasisPtr MultiBasis::getLeafBasis(int leafOrdinal) {
     if (leafOrdinal < leafOrdinalOffset + numLeaves) {
       // reachable by (or identical to) this subBasis
       if (BasisFactory::isMultiBasis(subBasis)) {
-        int relativeLeafOrdinal = leafOrdinalOffset + numLeaves - leafOrdinal - 1; // -1 for 0-based index
+        int relativeLeafOrdinal = leafOrdinal - leafOrdinalOffset;
         return ((MultiBasis*) subBasis.get())->getLeafBasis(relativeLeafOrdinal);
       } else {
         return subBasis;
@@ -486,4 +486,22 @@ int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdina
     previousMaxReachable = maxReachableLeaf;
   }
   TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
+}
+
+void MultiBasis::printInfo() {
+  cout << "MultiBasis with " << _numLeaves << " leaves:\n";
+  for (int leafOrdinal=0; leafOrdinal<_numLeaves; leafOrdinal++) {
+    BasisPtr leafBasis = getLeafBasis(leafOrdinal);
+    cout << "Leaf " << leafOrdinal << ": cardinality " << leafBasis->getCardinality() << endl;
+  }
+  int numBases = _bases.size();
+  for (int basisIndex=0; basisIndex<numBases; basisIndex++) {
+    BasisPtr basis = _bases[basisIndex];
+    cout << "*** sub-basis " << basisIndex << " ***\n";
+    if ( BasisFactory::isMultiBasis(basis) ) {
+      ((MultiBasis*)basis.get())->printInfo();
+    } else {
+      cout << "Leaf basis: cardinality " << basis->getCardinality() << endl;
+    }
+  }
 }

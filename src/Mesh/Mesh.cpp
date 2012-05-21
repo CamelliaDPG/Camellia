@@ -1777,7 +1777,13 @@ void Mesh::maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem
   }
 }
 
-map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex) {
+map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex, int bigNeighborPolyOrder) {
+  if (bigNeighborPolyOrder==-1) {
+    // assumption is that we're at the top level: so parent's neighbor on sideIndex exists/is a peer
+    int bigNeighborCellID = parent->getNeighborCellID(sideIndex);
+    ElementPtr bigNeighbor = getElement(bigNeighborCellID);
+    bigNeighborPolyOrder = _dofOrderingFactory.polyOrder( bigNeighbor->elementType()->trialOrderPtr );
+  }
   vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(sideIndex);
   map< int, BasisPtr > varIDsToUpgrade;
   vector< map< int, BasisPtr > > childVarIDsToUpgrade;
@@ -1786,11 +1792,23 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     int childCellIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
     ElementPtr childCell = parent->getChild(childCellIndex);
-    DofOrderingPtr childTrialOrder = childCell->elementType()->trialOrderPtr;
     
     if ( childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() > 1)) {
-      childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex) );
+      childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex,bigNeighborPolyOrder) );
     } else {
+      DofOrderingPtr childTrialOrder = childCell->elementType()->trialOrderPtr;
+      
+      int childPolyOrder = _dofOrderingFactory.polyOrder( childTrialOrder );
+      
+      if (bigNeighborPolyOrder > childPolyOrder) {
+        // upgrade child p along side
+        childTrialOrder = _dofOrderingFactory.setSidePolyOrder(childTrialOrder, childSideIndex, bigNeighborPolyOrder, false);
+        ElementTypePtr newChildType = _elementTypeFactory.getElementType(childTrialOrder, 
+                                                                         childCell->elementType()->testOrderPtr, 
+                                                                         childCell->elementType()->cellTopoPtr );
+        setElementType(childCell->cellID(), newChildType, true); // true: only a side upgrade
+      }
+      
       pair< DofOrderingPtr,int > entry = make_pair(childTrialOrder,childSideIndex);
       vector< pair< DofOrderingPtr,int > > childTrialOrdersForSide;
       childTrialOrdersForSide.push_back(entry);
@@ -1811,6 +1829,8 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
       bases.push_back(childVarIDsToUpgrade[permutedChildIndex][varID]);
     }
     BasisPtr multiBasis = BasisFactory::getMultiBasis(bases);
+    // debugging:
+//    ((MultiBasis*)multiBasis.get())->printInfo();
     varIDsToUpgrade[varID] = multiBasis;
   }
   return varIDsToUpgrade;
