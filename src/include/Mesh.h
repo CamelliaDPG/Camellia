@@ -211,7 +211,7 @@ public:
   
   void maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem, int sideIndex);
   
-  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex);
+  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex, int bigNeighborPolyOrder = -1);
   
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   static int neighborDofPermutation(int dofIndex, int numDofsForSide);

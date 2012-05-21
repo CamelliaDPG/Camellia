@@ -858,11 +858,6 @@ int main(int argc, char *argv[]) {
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
     
-    writeStreamlines(0, 1, 0, 1, solution, u1, u2, "u_streamlines.m");
-    // corner detail
-    writeStreamlines(0, .1, 0, .1, solution, u1, u2, "u_detail_streamlines.m");
-    writeStreamlines(0, .01, 0, .01, solution, u1, u2, "u_minute_detail_streamlines.m");
-    writeStreamlines(0, .001, 0, .001, solution, u1, u2, "u_minute_minute_detail_streamlines.m");
     writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
     writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
     writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");

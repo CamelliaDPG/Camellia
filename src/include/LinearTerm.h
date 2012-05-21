@@ -98,6 +98,8 @@ LinearTermPtr operator+(VarPtr v1, VarPtr v2);
 
 LinearTermPtr operator/(VarPtr v, double weight);
 
+LinearTermPtr operator/(VarPtr v, FunctionPtr f);
+
 LinearTermPtr operator-(VarPtr v1, VarPtr v2);
 
 LinearTermPtr operator-(VarPtr v);

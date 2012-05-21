@@ -70,14 +70,18 @@ public:
                  const EOperator        operatorType) const;
   
   BasisPtr getSubBasis(int basisIndex);
+  BasisPtr getLeafBasis(int leafOrdinal);
   
   vector< pair<int,int> > adjacentVertexOrdinals(); // NOTE: prototype, untested code!
   
   int numLeafNodes();
+  int numSubBases();
   
   int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal);
   
   void getCubature(FieldContainer<double> &cubaturePoints, FieldContainer<double> &cubatureWeights, int maxTestDegree);
+  
+  void printInfo();
 };
 
 #endif

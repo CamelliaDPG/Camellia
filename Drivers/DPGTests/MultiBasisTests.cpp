@@ -34,12 +34,12 @@ void MultiBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   try {
-    setup();
-    if (testSolveUniformMesh()) {
-      numTestsPassed++;
-    }
-    numTestsRun++;
-    teardown();
+//    setup();
+//    if (testSolveUniformMesh()) {
+//      numTestsPassed++;
+//    }
+//    numTestsRun++;
+//    teardown();
     
     setup();
     if (testSimpleRefinement()) {
@@ -88,14 +88,12 @@ void MultiBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
 }
 
-bool MultiBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {
-  bool success = true;
-  
+bool MultiBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {  
   // for every side (MultiBasis or no), compute values for that side, and values for its neighbor along
   // the same physical points.  (Imitate the comparison between parent and child, only remember that
   // the neighbor involves a flip: (-1,1) --> (1,-1).)
  
-  return MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D);
+  return MeshTestSuite::neighborBasesAgreeOnSides(mesh, _testPoints1D, true);
 }
 
 bool MultiBasisTests::doPRefinementAndTestIt(ElementPtr elem, const string &testName) {
@@ -247,7 +245,7 @@ void MultiBasisTests::makeMultiLevelRefinement() {
 bool MultiBasisTests::meshLooksGood() {
   bool looksGood = true;
   if ( !multiBasisCorrectlyAppliedInMesh(_mesh,_fluxIDs,_fieldIDs) ) {
-    cout << "patchBasisCorrectlyAppliedInMesh returned false.\n";
+    cout << "multiBasisCorrectlyAppliedInMesh returned false.\n";
     looksGood = false;
   }
 //  if ( !patchBasesAgreeWithParentInMesh() ) {
@@ -260,6 +258,7 @@ bool MultiBasisTests::meshLooksGood() {
   }
   if ( !basisValuesAgreeWithPermutedNeighbor(_mesh) ) {
     cout << "basisValuesAgreeWithPermutedNeighbor returned false.\n";
+    looksGood = false;
   }
   return looksGood;
 }
@@ -641,9 +640,7 @@ bool MultiBasisTests::testMultiLevelRefinement() {
 bool MultiBasisTests::testChildPRefinementSimple() {
   // in same mesh as the simple h-refinement test, p-refine the child.  Check that its parent also gets p-refined...
   makeSimpleRefinement();
-  
-  bool success = true;
-  
+    
   // the child we'd like to p-refine is the upper-right quadrant of the lower-left cell of the original mesh.
   // since we're on a unit square, that element contains the point (0.375, 0.375)
   FieldContainer<double> cellPoint(1,2);
@@ -655,7 +652,6 @@ bool MultiBasisTests::testChildPRefinementSimple() {
 
 bool MultiBasisTests::testChildPRefinementMultiLevel() { 
   // in same mesh as the multi-level h-refinement test, p-refine the child.  Check that its parent and grandparent also get p-refined...
-  bool success = true;
   makeMultiLevelRefinement();
   
   // the child we'd like to p-refine is NE quad. of the SE quad. of the SW element of the original mesh.

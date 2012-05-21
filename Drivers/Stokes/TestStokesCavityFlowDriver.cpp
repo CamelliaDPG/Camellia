@@ -26,50 +26,20 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 using namespace std;
 
-//// just testing the mass flux integration
-//// this one should mean that a 1x1 mesh has mass flux of 2.0
-//class U1_0 : public SimpleFunction {
-//  double _eps;
-//public:
-//  U1_0(double eps) {
-//    _eps = eps;
-//  }
-//  double value(double x, double y) {
-//    double tol = 1e-14;
-//    if (abs(x-1.0) < tol) { // right boundary
-//      return 1.0; // flow out
-//    } else if (abs(x) < tol) { // left boundary
-//      return -1.0; // flow out
-//    } else {
-//      return 0;
-//    }
-//  }
-//};
 
-// trying a smoother version
-//class U1_0 : public SimpleFunction {
-//  double _eps;
-//public:
-//  U1_0(double eps) {
-//    _eps = eps;
-//  }
-//  double value(double x, double y) {
-//    double tol = 1e-14;
-//    if (abs(y-1.0) < tol) { // top boundary
-//      if ( (abs(x) < _eps) ) { // top left
-//        double x_s = x / _eps; // x_s: scaled x
-//        return 3 * x_s * x_s - 2 * x_s * x_s * x_s;
-//      } else if ( abs(1.0-x) < _eps) { // top right
-//        double x_s = (1 - x) / _eps;
-//        return 3 * x_s * x_s - 2 * x_s * x_s * x_s;
-//      } else { // top middle
-//        return 1;
-//      }
-//    } else { // not top boundary: 0.0
-//      return 0.0;
-//    }
-//  }
-//};
+void printBoundaryCells(Teuchos::RCP<Mesh> mesh) {
+  int numCells = mesh->numElements();
+  cout << "Boundary cells:\n";
+  for (int cellID=0; cellID<numCells; cellID++) {
+    // quads only, for now:
+    int numSides = 4;
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      if (mesh->boundary().boundaryElement(cellID, sideIndex) ) {
+        cout << "cellID: " << cellID << ", side " << sideIndex << endl;
+      }
+    }
+  }
+}
 
 class U1_0 : public SimpleFunction {
   double _eps;
@@ -263,7 +233,7 @@ int main(int argc, char *argv[]) {
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
-  bool enforceLocalConservation = true;
+  bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = false;
@@ -473,6 +443,12 @@ int main(int argc, char *argv[]) {
   vector<int> quadCellsToRefine;
   quadCellsToRefine.push_back(0);
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+  if (! MeshTestUtility::checkMeshConsistency(mesh)) {
+    if (rank==0) cout << "checkMeshConsistency returned false before refinement.\n";
+  }
+  
+  printBoundaryCells(mesh);
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -813,11 +789,10 @@ int main(int argc, char *argv[]) {
     cout << "smallest h: " << sqrt(minCellMeasure) << endl;
     cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
   }
+  
+  printBoundaryCells(mesh);
+  
   if (rank == 0) {
-    cout << "phi ID: " << phi->ID() << endl;
-    cout << "psi1 ID: " << psi_1->ID() << endl;
-    cout << "psi2 ID: " << psi_2->ID() << endl;
-    
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
@@ -861,16 +836,6 @@ int main(int argc, char *argv[]) {
       cout << "wrote files: u1.dat, u2.dat, p.dat\n";
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
-    
-    writeStreamlines(0, 1, 0, 1, solution, u1, u2, "u_streamlines.m");
-    // corner detail
-    writeStreamlines(0, .1, 0, .1, solution, u1, u2, "u_detail_streamlines.m");
-    writeStreamlines(0, .01, 0, .01, solution, u1, u2, "u_minute_detail_streamlines.m");
-    writeStreamlines(0, .001, 0, .001, solution, u1, u2, "u_minute_minute_detail_streamlines.m");
-    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
-    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
-    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
 }
   
   if (compareWithOverkillMesh) {

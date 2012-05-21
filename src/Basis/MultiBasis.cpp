@@ -162,12 +162,12 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
                            const EOperator operatorType) const {
   // compute cellJacobian, etc. for inputPoints:
   // inputPoints dimensions (P, D)
-  // outputPoints dimensions (F,P), (F,P,D), or (F,P,D,D)
+  // outputValues dimensions (F,P), (F,P,D), or (F,P,D,D)
   // each basis is nonzero for just some of the points 
   // -- the ones inside the (convex hull of the) appropriate entry in subRefNodes
   int numPoints = inputPoints.dimension(0);
   int numSubRefCells = _subRefNodes.dimension(0);
-  int numNodesPerCell = _subRefNodes.dimension(1);
+//  int numNodesPerCell = _subRefNodes.dimension(1);
   int spaceDim = inputPoints.dimension(1);
   if (spaceDim != _cellTopo.getDimension() ) {
     TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo.getDimension()");
@@ -190,7 +190,8 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
       if ( (x >= xMin) && (x <= xMax) ) {
         //subRefCellForPoint[pointIndex] = cellIndex;
         pointsForSubRefCell[cellIndex].push_back(pointIndex);
-        break; // we've found our match, so break out of cellIndex for loop
+        // break; // we've found our match, so break out of cellIndex for loop
+        // (commented out the above, because vertex points may lie on *two* sub-elements)
       }
     }
   }
@@ -215,6 +216,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
     // collect input points and map them to the ref cell for basis
     int numPointsForSubRefCell = pointsForSubRefCell[refCellIndex].size();
     if (numPointsForSubRefCell == 0) {
+      outputValueLocation[0] += basis->getCardinality();
       continue; // next basisIndex
     }
     FieldContainer<double> inputPointsQuasiPhysical(numPointsForSubRefCell,spaceDim);
@@ -244,7 +246,7 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
                                                                     inputPointsRefCell,
                                                                     cellJacobian, cellJacobInv, cellJacobDet);
       
-//    cout << "transformedValues:\n" << *transformedValues;
+//    cout << "transformedValues for basis " << basisIndex << ":\n" << *transformedValues;
     Teuchos::Array<int> basisValueLocation = outputValueLocation;
     basisValueLocation.insert(basisValueLocation.begin(),0); // cell dimension
     // copy the values to the right spot in outputValues
@@ -399,8 +401,34 @@ int MultiBasis::numLeafNodes() {
   return _numLeaves;
 }
 
+int MultiBasis::numSubBases() {
+  return _bases.size();
+}
+
 BasisPtr MultiBasis::getSubBasis(int basisIndex) {
   return _bases[basisIndex];
+}
+
+BasisPtr MultiBasis::getLeafBasis(int leafOrdinal) {
+  int leafOrdinalOffset = 0;
+  for (int subBasisIndex=0; subBasisIndex < _bases.size(); subBasisIndex++) {
+    BasisPtr subBasis = _bases[subBasisIndex];
+    int numLeaves = 1; // 1 if not MultiBasis
+    if (BasisFactory::isMultiBasis(subBasis)) {
+      numLeaves = ((MultiBasis*) subBasis.get())->numLeafNodes();
+    }
+    if (leafOrdinal < leafOrdinalOffset + numLeaves) {
+      // reachable by (or identical to) this subBasis
+      if (BasisFactory::isMultiBasis(subBasis)) {
+        int relativeLeafOrdinal = leafOrdinal - leafOrdinalOffset;
+        return ((MultiBasis*) subBasis.get())->getLeafBasis(relativeLeafOrdinal);
+      } else {
+        return subBasis;
+      }
+    }
+    leafOrdinalOffset += numLeaves;
+  }
+  TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
 }
 
 vector< pair<int,int> > MultiBasis::adjacentVertexOrdinals() { // NOTE: prototype, untested code!
@@ -458,4 +486,22 @@ int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdina
     previousMaxReachable = maxReachableLeaf;
   }
   TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
+}
+
+void MultiBasis::printInfo() {
+  cout << "MultiBasis with " << _numLeaves << " leaves:\n";
+  for (int leafOrdinal=0; leafOrdinal<_numLeaves; leafOrdinal++) {
+    BasisPtr leafBasis = getLeafBasis(leafOrdinal);
+    cout << "Leaf " << leafOrdinal << ": cardinality " << leafBasis->getCardinality() << endl;
+  }
+  int numBases = _bases.size();
+  for (int basisIndex=0; basisIndex<numBases; basisIndex++) {
+    BasisPtr basis = _bases[basisIndex];
+    cout << "*** sub-basis " << basisIndex << " ***\n";
+    if ( BasisFactory::isMultiBasis(basis) ) {
+      ((MultiBasis*)basis.get())->printInfo();
+    } else {
+      cout << "Leaf basis: cardinality " << basis->getCardinality() << endl;
+    }
+  }
 }

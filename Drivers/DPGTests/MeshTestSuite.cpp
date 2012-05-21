@@ -148,7 +148,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   
   bool success = true;
   
-  double tol = 1e-15; // small tolerance
+  double tol = 2e-15; // small tolerance
   double maxDiff = 0.0;
     
   int numPoints = testPointsRefCoords.dimension(0);
@@ -178,8 +178,8 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       int subSideIndexInNeighbor = -1;
       // because of the above, we can assume, below, that elem is the small guy if the two aren't peers.
       ancestorTestPointsRefCoords = testPointsRefCoords;
-      int ancestorSideIndex = sideIndex;
-      if ( ancestorCellID != cellID ) {
+      int ancestorSideIndex = sideIndex; // if necessary, we'll walk up the family tree to the real ancestor, getting the right sideIndices along the way...
+      if ( ancestorCellID != cellID ) { // i.e. the two are *not* peers: elem small, neighbor big 
         // then we need to map the coords into ancestor's ref space
         // simplest (though not most efficient!) to do this by iteratively mapping into parent's space
         Teuchos::RCP<Element> currentElement = mesh->getElement(cellID);
@@ -191,9 +191,9 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
           currentElement = mesh->getElement(currentElement->getParent()->cellID());
         }
         vector< pair<int,int> > descendantsForSide = mesh->getElement(ancestorCellID)->getDescendantsForSide(ancestorSideIndex);
-        int subSideIndexInAncestor = -1;
-        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end(); descIt++) {
-          subSideIndexInAncestor++;
+        int subSideIndexInAncestor = 0;
+        for (vector< pair<int,int> >::iterator descIt = descendantsForSide.begin(); descIt != descendantsForSide.end(); 
+             descIt++, subSideIndexInAncestor++) {
           if (descIt->first == cellID) {
             subSideIndexInNeighbor = mesh->neighborChildPermutation(subSideIndexInAncestor, descendantsForSide.size());
           }
@@ -222,6 +222,11 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
             if (diff > tol) {
               success = false;
               failedHere = true;
+              if (reportErrors) {
+                cout << "values for point " << pointIndex << " and my dofOrdinal " << dofOrdinal;
+                cout << " differ from those for neighbor dofOrdinal " << neighborDofOrdinal;
+                cout << ": " << values(dofOrdinal,pointIndex) << " != " << neighborValues(neighborDofOrdinal,pointIndex) << endl;
+              }
             }
             maxDiff = max(diff,maxDiff);
           }
