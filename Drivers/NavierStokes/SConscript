@@ -2,7 +2,5 @@ Import('*')
 
 #src_obj = env.Object([''])
 
-env.Program('exec/NavierStokes',['NavierStokesDriver.cpp'])
-
 env.Program('exec/NS',['NSDriver.cpp'])
 

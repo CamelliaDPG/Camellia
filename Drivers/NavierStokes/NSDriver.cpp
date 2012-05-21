@@ -3,6 +3,8 @@
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
+#include "LagrangeConstraints.h"
+
 #include "RefinementStrategy.h"
 #include "NonlinearStepSize.h"
 #include "NonlinearSolveStrategy.h"
@@ -27,16 +29,62 @@
 #include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
 
+#include "ElementType.h"
+#include "Element.h"
+
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 typedef map< int, sparseFxnMatrix > sparseFxnTensor; // dim = {spatial dim, testID, trialID}
 
+typedef Teuchos::RCP< ElementType > ElementTypePtr;
+typedef Teuchos::RCP< Element > ElementPtr;
+typedef Teuchos::RCP< Mesh > MeshPtr;
+
 static const double GAMMA = 1.4;
 static const double PRANDTL = 0.72;
-static const double YTOP = 2.0;
+static const double YTOP = 1.0;
 
 using namespace std;
+
+class ScalarParamFunction : public Function {
+  double _a;
+public:
+  ScalarParamFunction(double a) : Function(0){
+    _a = a;
+  }
+  void set_param(double a){
+    _a = a;
+  }
+  double get_param(){
+    return _a;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    values.initialize(_a);
+  }
+};
+
+class SqrtFunction : public Function {
+  FunctionPtr _f;
+public:
+  SqrtFunction(FunctionPtr f) : Function(0) {
+    _f = f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    _f->values(values,basisCache);
+    
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double value = values(cellIndex,ptIndex);
+        values(cellIndex,ptIndex) = sqrt(value);
+      }
+    }
+  }
+};
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -53,11 +101,39 @@ public:
   }
 };
 
+class OutflowBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = ((abs(x-2.0)<tol) && (y > 0) && (y < YTOP)) ;
+    return yMatch;
+  }
+};
+
 class InflowBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool yMatch = (abs(x) < tol);
+    bool yMatch = ((abs(x) < tol) && (y > 0) && (y < YTOP));
+    return yMatch;
+  }
+};
+
+class FreeStreamBoundaryTop : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = (abs(y-YTOP) < tol && (x < 2.0) && (x > 0.0));
+    //    bool yMatch = (abs(y-YTOP) < tol); 
+    return yMatch;
+  }
+};
+
+class FreeStreamBoundaryBottom : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = ((abs(y) < tol) && (x < 1.0) && (x > 0.0));
     return yMatch;
   }
 };
@@ -69,47 +145,62 @@ public:
     bool yMatch = ((abs(y) < tol) && (x > 1.0) && (x < 2.0));
     return yMatch;
   }  
-  /*
-  bool matchesPoints(FieldContainer<bool> pointsMatch, BasisCachePtr basisCache){
-    double tol = 1e-14;
-    FieldContainer<double> pts = basisCache->getPhysicalCubaturePoints();    
-  }
-  */
-};
-
-class FreeStreamBoundaryBottom : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool yMatch = ((abs(y) < tol) && (x <= 1.0) && (x > 0.0));
-    return yMatch;
-  }
-};
-
-class FreeStreamBoundaryTop : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool yMatch = (abs(y-YTOP) < tol && (x < 2.0) && (x > 0.0));
-    return yMatch;
-  }
 };
 
 /*
-class SubsonicOutflowBoundary : public SpatialFilter {
-private: 
-  FunctionPtr un, c;
-public:
-  SubsonicOutflowBoundary(UN,C){
-    un = UN;
-    c = C;
-  }  
-  bool matchesPoints(FieldContainer<bool> pointsMatch, BasisCachePtr basisCache){
-    double tol = 1e-14;
-    FieldContainer<double> pts = basisCache->getPhysicalCubaturePoints();
-    numPts = pts.dimension(0);
+  class LineSearch {
+  private:
+  FunctionPtr rho_prev, rho_update;
+  MeshPtr meshPtr;
+  public:
+  LineSearch(FunctionPtr Rho_p, FunctionPtr Rho_up, MeshPtr Mesh){
+  rho_prev = Rho_p;
+  rho_update = Rho_up;
+  meshPtr = Mesh;
   }
-};
+
+  double getWeight(){
+  double weight = 1.0;
+  vector< ElementTypePtr > elemTypes = meshPtr->elementTypes(); // returns *all* elementTypes
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt!=elemTypes.end(); elemTypeIt++){
+  ElementTypePtr elemTypePtr = (*elemTypeIt);
+  vector< ElementPtr > elems = meshPtr->elementsOfTypeGlobal(elemTypePtr);          
+  vector<int> cellIDs;
+  for (int i = 0;i<elems.size();i++){
+  cellIDs.push_back(elems[i]->cellID());
+  }
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, meshPtr));
+  // set cellIDs, physCellNodes
+  basisCache->setPhysicalCellNodes(meshPtr->physicalCellNodes(elemTypePtr), cellIDs, false); // false = don't create side cache
+  double elemTypeWeight = getWeightForElemType(basisCache);
+  weight = min(weight,elemTypeWeight);
+  }
+  return weight;
+  }
+
+  double getWeightForElemType(BasisCachePtr basisCache){
+
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  FieldContainer<double> rho(numCells,numPoints);
+  FieldContainer<double> drho(numCells,numPoints);
+  rho_prev->values(rho,basisCache);
+  rho_update->values(drho,basisCache);
+  double weight = 1.0;
+  double min_rho = 1e-2;
+  for (int i = 0;i<numCells;i++){
+  for (int j = 0;j<numPoints;j++){	
+  double w = ( min_rho - rho(i,j) ) / drho(i,j);
+  if (w>0){
+  // if it's positive, we need weight<1. take smallest weight over all points
+  weight = min(w,weight); 
+  }
+  }
+  }
+  return weight;
+  }
+  };
 */
 
 int main(int argc, char *argv[]) {
@@ -146,7 +237,20 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = YTOP;  
   
   int H1Order = polyOrder + 1;
-  int nCells = 1;
+  int nCells = 2;
+  if ( argc > 1) {
+    nCells = atoi(argv[1]);
+    if (rank==0){
+      cout << "nCells = " << nCells << endl;
+    }
+  }
+  int numRefs = 0;
+  if ( argc > 2) {
+    numRefs = atoi(argv[2]);
+    if (rank==0){
+      cout << "numRefs = " << numRefs << endl;
+    }
+  }
   int horizontalCells = (2.0/YTOP)*nCells, verticalCells = nCells;
   
   double energyThreshold = 0.25; // for mesh refinements
@@ -158,16 +262,19 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // new-style bilinear form definition
+  // traces
   VarFactory varFactory;
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr That = varFactory.traceVar("\\widehat{T}");
   
+  // fluxes
   VarPtr F1nhat = varFactory.fluxVar("\\widehat{F}_1n");
   VarPtr F2nhat = varFactory.fluxVar("\\widehat{F}_2n");
   VarPtr F3nhat = varFactory.fluxVar("\\widehat{F}_3n");
   VarPtr F4nhat = varFactory.fluxVar("\\widehat{F}_4n");
   
+  // fields
   VarPtr u1 = varFactory.fieldVar("u_1");
   VarPtr u2 = varFactory.fieldVar("u_2");
   VarPtr rho = varFactory.fieldVar("\\rho");
@@ -179,6 +286,7 @@ int main(int argc, char *argv[]) {
   VarPtr q2 = varFactory.fieldVar("q_2");
   VarPtr omega = varFactory.fieldVar("\\omega");
   
+  // test fxns
   VarPtr tau1 = varFactory.testVar("\\tau_1",HDIV);
   VarPtr tau2 = varFactory.testVar("\\tau_2",HDIV);
   VarPtr tau3 = varFactory.testVar("\\tau_3",HDIV);
@@ -202,13 +310,12 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
+
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
-                                                         nullRHS, nullIP) );  
-  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
-						       nullRHS, nullIP) );  
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
 
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
@@ -231,30 +338,32 @@ int main(int argc, char *argv[]) {
   FunctionPtr rho_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, rho) );
   FunctionPtr T_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, T) );
 
+  // for subsonic outflow 
+  FunctionPtr u2hat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u2hat) );
+  FunctionPtr F2nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F2nhat) );
+  FunctionPtr F3nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F3nhat) );
+  FunctionPtr F4nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F4nhat) );
+
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
 
   // ==================== SET INITIAL GUESS ==========================
 
-  mesh->registerSolution(backgroundFlow); // u_t(i)
-  mesh->registerSolution(prevTimeFlow); // u_t(i-1)
-
   double rho_free = 1.0;
   double u1_free = 1.0;
   double u2_free = 0.0;
-  double T_free = (1/((GAMMA-1.0)*Ma*Ma)) * ( 1 + .5 * (GAMMA-1.0) * Ma*Ma);
+  //  double T_free = (1/((GAMMA-1.0)*Ma*Ma)) * ( 1 + .5 * (GAMMA-1.0) * Ma*Ma); // TODO - check this value
+  double T_free = 1/(GAMMA*(GAMMA-1.0)*Ma*Ma); // TODO - check this value - from Capon paper
 
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(rho_free) );
   functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(u1_free) );
   functionMap[u2->ID()] = Teuchos::rcp( new ConstantScalarFunction(u2_free) );
   functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T_free) );
-  //  functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  functionMap[sigma11->ID()] = zero;
-  functionMap[sigma12->ID()] = zero;
-  functionMap[sigma22->ID()] = zero;
+
   // everything else = 0; previous stresses sigma_ij = 0 as well
   backgroundFlow->projectOntoMesh(functionMap);
   prevTimeFlow->projectOntoMesh(functionMap);
+
   if (rank==0){
     cout << "Initial guess set" << endl;
   }
@@ -266,19 +375,20 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   double gam1 = (GAMMA-1.0);
-  FunctionPtr p = (gam1 * cv) * rho_prev * T_prev;
   FunctionPtr u1sq = u1_prev*u1_prev;
   FunctionPtr u2sq = u2_prev*u2_prev;
-  FunctionPtr iota = cv*T_prev; // internal energy
   FunctionPtr unorm = (u1sq + u2sq);
-  FunctionPtr e = .5*unorm + iota; // kinetic + internal energy
+
+  FunctionPtr iota = cv*T_prev; // internal energy per unit mass
+  FunctionPtr p = (gam1 * cv) * rho_prev * T_prev;
+  FunctionPtr e = .5*unorm + iota; // kinetic + internal energy (per unit mass)
   
   // derivatives of p and e
-  FunctionPtr dpdrho = cv*T_prev*gam1;
-  FunctionPtr dpdT = cv*rho_prev*gam1;
+  FunctionPtr dpdrho = (gam1*cv)*T_prev;
+  FunctionPtr dpdT = (gam1*cv)*rho_prev;
   FunctionPtr dedu1 = u1_prev;
   FunctionPtr dedu2 = u2_prev;
-  double dedT = cv * GAMMA;
+  double dedT = cv; 
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
@@ -362,7 +472,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr T_wy = u2_prev * (dpdT + rho_prev * dedT);
 
   A_euler[x_comp][v4->ID()][rho->ID()] = rho_wx;
-  A_euler[x_comp][v4->ID()][u1->ID()] = u1_wx-sigma11_prev;
+  A_euler[x_comp][v4->ID()][u1->ID()] = u1_wx-sigma11_prev; 
   A_euler[x_comp][v4->ID()][u2->ID()] = u2_wx-sigma12_prev;;
   A_euler[x_comp][v4->ID()][T->ID()]  = T_wx;
 
@@ -371,6 +481,7 @@ int main(int argc, char *argv[]) {
   A_euler[y_comp][v4->ID()][u2->ID()] = u2_wy-sigma22_prev;;
   A_euler[y_comp][v4->ID()][T->ID()]  = T_wy;
 
+  // stress portions
   A_visc[x_comp][v4->ID()][sigma11->ID()]  = -u1_prev;
   A_visc[x_comp][v4->ID()][sigma12->ID()]  = -u2_prev;
   A_visc[x_comp][v4->ID()][q1->ID()]  = Teuchos::rcp( new ConstantScalarFunction(-1.0));
@@ -423,6 +534,10 @@ int main(int argc, char *argv[]) {
   
   // ========================================= STRESS LAWS  =========================================
 
+  bf->addTerm(u1hat, -tau1->dot_normal() );    
+  bf->addTerm(u2hat, -tau2->dot_normal() );
+  bf->addTerm(That, -tau3->dot_normal() );
+
   double lambda_factor = lambda / (4.0 * mu * (mu + lambda) );
 
   FunctionPtr lambda_factor_fxn = Teuchos::rcp(new ConstantScalarFunction(lambda_factor));
@@ -432,6 +547,7 @@ int main(int argc, char *argv[]) {
   // 1st stress eqn
   eps_visc[x_comp][tau1->ID()][sigma11->ID()] = one/two_mu - lambda_factor_fxn;
   eps_visc[x_comp][tau1->ID()][sigma22->ID()] = -lambda_factor_fxn;
+
   eps_visc[y_comp][tau1->ID()][sigma12->ID()] = one/two_mu;
   eps_visc[y_comp][tau1->ID()][omega->ID()] = -one;
   
@@ -440,6 +556,7 @@ int main(int argc, char *argv[]) {
   // 2nd stress eqn
   eps_visc[x_comp][tau2->ID()][sigma12->ID()] = one/two_mu;
   eps_visc[x_comp][tau2->ID()][omega->ID()] = one;
+
   eps_visc[y_comp][tau2->ID()][sigma11->ID()] = -lambda_factor_fxn;
   eps_visc[y_comp][tau2->ID()][sigma22->ID()] = one/two_mu - lambda_factor_fxn;
 
@@ -471,7 +588,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Eulerian component of stress (Hdiv) equations 
+  // Eulerian component of stress (Hdiv) equations (positive b/c of IBP)
   sparseFxnMatrix::iterator testIt;
   for (testIt = eps_euler.begin();testIt!=eps_euler.end();testIt++){
     int testID = testIt->first;
@@ -483,11 +600,7 @@ int main(int argc, char *argv[]) {
       bf->addTerm(trialWeight*U[trialID],TAU[testID]->div());
     }
   } 
-
-  bf->addTerm(u1hat, -tau1->dot_normal() );    
-  bf->addTerm(u2hat, -tau2->dot_normal() );
-  bf->addTerm(That, -tau3->dot_normal() );
-  
+ 
   ////////////////////////////////////////////////////////////////////
   // DEFINE INNER PRODUCT
   ////////////////////////////////////////////////////////////////////
@@ -500,9 +613,8 @@ int main(int argc, char *argv[]) {
   visc[x_comp][tau1->ID()][sigma11->ID()] = eps_visc[x_comp][tau1->ID()][sigma11->ID()]*ReScaling;
   visc[x_comp][tau1->ID()][sigma22->ID()] = eps_visc[x_comp][tau1->ID()][sigma22->ID()]*ReScaling;
   visc[y_comp][tau1->ID()][sigma12->ID()] = eps_visc[y_comp][tau1->ID()][sigma12->ID()]*ReScaling;
-
   
-   // 2nd stress eqn
+  // 2nd stress eqn
   visc[x_comp][tau2->ID()][sigma12->ID()] = eps_visc[x_comp][tau2->ID()][sigma12->ID()]*ReScaling;
   visc[y_comp][tau2->ID()][sigma11->ID()] = eps_visc[y_comp][tau2->ID()][sigma11->ID()]*ReScaling;
   visc[y_comp][tau2->ID()][sigma22->ID()] = eps_visc[y_comp][tau2->ID()][sigma22->ID()]*ReScaling;
@@ -512,7 +624,7 @@ int main(int argc, char *argv[]) {
   visc[y_comp][tau3->ID()][q2->ID()] = eps_visc[y_comp][tau3->ID()][q2->ID()]*ReScaling; // O(Re)
 
   IPPtr ip = Teuchos::rcp( new IP );
-
+  
   // Rescaled L2 portion of TAU
   for (xyIt = visc.begin();xyIt!=visc.end();xyIt++){
     int component = xyIt->first;
@@ -569,38 +681,42 @@ int main(int argc, char *argv[]) {
 	FunctionPtr trialWeight = trialIt->second;
 	if (component==x_comp){
 	  ip->addTerm(trialWeight*V[testID]->dx());
-	}  else if (component==y_comp){
+	} else if (component==y_comp){
 	  ip->addTerm(trialWeight*V[testID]->dy());
 	}
       }
     }
   }
 
+  ip->addTerm( ReScaling*v1 );
+  ip->addTerm( ReScaling*v2 );
+  ip->addTerm( ReScaling*v3 );
+  ip->addTerm( ReScaling*v4 );  
+ 
   // div remains the same (identity operator in classical variables)
   ip->addTerm(tau1->div());
   ip->addTerm(tau2->div());
   ip->addTerm(tau3->div());
 
-  ip->addTerm( ReScaling*v1 );
-  ip->addTerm( ReScaling*v2 );
-  ip->addTerm( ReScaling*v3 );
-  ip->addTerm( ReScaling*v4 );  
-
-
-//  ////////////////////////////////////////////////////////////////////
-//  // DEFINE RHS
-//  ////////////////////////////////////////////////////////////////////
+  //  ////////////////////////////////////////////////////////////////////
+  //  // DEFINE RHS
+  //  ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
   // mass contributions
   FunctionPtr mass_1 = rho_prev*u1_prev;
   FunctionPtr mass_2 = rho_prev*u2_prev;
 
+  rhs->addTerm( (e1 * mass_1 + e2 *mass_2) * v1->grad());
+
   // inviscid momentum contributions
   FunctionPtr momentum_x_1 = rho_prev * u1sq + p ;
   FunctionPtr momentum_x_2 = rho_prev * u1_prev * u2_prev ;
   FunctionPtr momentum_y_1 = rho_prev * u1_prev * u2_prev ;
   FunctionPtr momentum_y_2 = rho_prev * u2sq + p ;
+
+  rhs->addTerm( (e1 * momentum_x_1 + e2 *momentum_x_2 - e1 * sigma11_prev - e2 * sigma12_prev) * v2->grad());
+  rhs->addTerm( (e1 * momentum_y_1 + e2 *momentum_y_2 - e1 * sigma12_prev - e2 * sigma22_prev) * v3->grad());
 
   // inviscid energy contributions
   FunctionPtr rho_e_p = rho_prev * e + p;
@@ -611,18 +727,15 @@ int main(int argc, char *argv[]) {
   FunctionPtr viscousEnergy1 = sigma11_prev * u1_prev + sigma12_prev * u2_prev;
   FunctionPtr viscousEnergy2 = sigma12_prev * u1_prev + sigma22_prev * u2_prev;
     
-  FunctionPtr sigmaTrace = sigma11_prev + sigma22_prev;
-  FunctionPtr sig11lambda = - lambda_factor * sigma11_prev;
-  FunctionPtr sig22lambda = - lambda_factor * sigma22_prev;
+  rhs->addTerm( (e1 * energy_1 + e2 *energy_2 - e1 * viscousEnergy1 - e2 * viscousEnergy2) * v4->grad());
+
+  // stress rhs - no heat flux or omega (asym tensor) accumulated, eqns are linear in those
+  FunctionPtr sigmaTrace = -lambda_factor*(sigma11_prev + sigma22_prev);
   FunctionPtr viscous1 = e1 * sigma11_prev/(2*mu) + e2 * sigma12_prev/(2*mu) + e1 * sigmaTrace;
   FunctionPtr viscous2 = e1 * sigma12_prev/(2*mu) + e2 * sigma22_prev/(2*mu) + e2 * sigmaTrace;
 
-  rhs->addTerm( (e1 * mass_1 + e2 *mass_2) * v1->grad());
-  rhs->addTerm( (e1 * momentum_x_1 + e2 *momentum_x_2 + e1 * sigma11_prev + e2 * sigma12_prev) * v2->grad());
-  rhs->addTerm( (e1 * momentum_y_1 + e2 *momentum_y_2 + e1 * sigma12_prev + e2 * sigma22_prev) * v3->grad());
-  rhs->addTerm( (e1 * energy_1 + e2 *energy_2 + e1 * viscousEnergy1 + e2 * viscousEnergy2) * v4->grad());
-  rhs->addTerm(u1_prev * -tau1->div() + viscous1 * tau1);
-  rhs->addTerm(u2_prev * -tau2->div() + viscous2 * tau2);
+  rhs->addTerm(u1_prev * -tau1->div() - viscous1 * tau1);
+  rhs->addTerm(u2_prev * -tau2->div() - viscous2 * tau2);
   rhs->addTerm(T_prev * -tau3->div());
 
   ////////////////////////////////////////////////////////////////////
@@ -657,59 +770,72 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(F3nhat, inflowBoundary, ( e1 * mom_y1_free + e2 * mom_y2_free) * n );
   bc->addDirichlet(F4nhat, inflowBoundary, ( e1 * energy_1_free + e2 * energy_2_free) * n ); 
 
-  /* // other inflow bcs
-  bc->addDirichlet(F1nhat,inflowBoundary,(e1*mass_1 + e2 *mass_2)*n);
-  bc->addDirichlet(F2nhat,inflowBoundary,(e1*momentum_x_1 + e2*momentum_x_2 + e1*sigma11_prev + e2*sigma12_prev)*n);
-  bc->addDirichlet(F3nhat,inflowBoundary,(e1*momentum_y_1 + e2*momentum_y_2 + e1*sigma12_prev + e2*sigma22_prev)*n);
-  bc->addDirichlet(F4nhat,inflowBoundary,(e1*energy_1 + e2*energy_2 + e1 * viscousEnergy1 + e2 * viscousEnergy2)*n);
-  */
-
   // =============================================================================================
   
   // wall BCs
-  bc->addDirichlet(u1hat, wallBoundary, zero);
   bc->addDirichlet(u2hat, wallBoundary, zero);
-  bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*2.8))); // inferred from LD paper
+  bc->addDirichlet(u1hat, wallBoundary, zero);
+  double Tscale = 1.0 + gam1*Ma*Ma/2.0; // from pj capon paper "adaptive finite element method compressible...".  Is equal to 2.8 for Mach 3 and Gamma = 1.4;
+  //  bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
+  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets heat flux = 0
 
   // =============================================================================================
 
-  FunctionPtr F2n_for_sigma12 = ( e1 * momentum_x_1 + e2 * momentum_x_2) * n; // makes sigma_12 implicitly 0
-  FunctionPtr F4n_for_qn = (e1 * energy_1 + e2 *energy_2 + e1 * viscousEnergy1 + e2 * viscousEnergy2)*n; // makes q_n implicitly 0  
-
   // symmetry BCs
   SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  bc->addDirichlet(u2hat, freeTop, Teuchos::rcp( new ConstantScalarFunction(u2_free))); // top sym bc
-  //  bc->addDirichlet(F2nhat, freeTop, F2n_for_sigma12);
-  //  bc->addDirichlet(F4nhat, freeTop, F4n_for_qn); // sets zero y-stress in free stream top boundary 
+  bc->addDirichlet(u2hat, freeTop, Teuchos::rcp( new ConstantScalarFunction(0.0))); // top sym bc
   bc->addDirichlet(F2nhat, freeTop, zero);
   bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
 
   // =============================================================================================
 
   SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
-  bc->addDirichlet(u2hat, freeBottom, Teuchos::rcp( new ConstantScalarFunction(u2_free))); // symmetry bc
-  //  bc->addDirichlet(u2hat, freeBottom, u2_prev); 
-  //  bc->addDirichlet(F2nhat, freeBottom, F2n_for_sigma12);
-  bc->addDirichlet(F2nhat, freeBottom, zero);
-  //  bc->addDirichlet(F4nhat, freeBottom, F4n_for_qn); // sets zero y-stress in free stream bottom boundary
-  bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
-  //  bc->addDirichlet(F4nhat, wallBoundary, F4n_for_qn); // sets zero heat flux at wall
- 
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE PENALTY BC
-  ////////////////////////////////////////////////////////////////////
+  bc->addDirichlet(u2hat, freeBottom, Teuchos::rcp( new ConstantScalarFunction(0.0))); // sym bcs
+  bc->addDirichlet(F2nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
+  bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero heat-flux in free stream bottom boundary
 
-  //  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  //    LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
-  //    pc->addConstraint(sigma_hat==zero,outflowBoundary);
-  //    pc->addConstraint(q_n == 0, wallBoundary);
+  // =============================================================================================
+
+  /*
+    SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowBoundary );
+    FunctionPtr F2n_for_sigma = ( e1 * momentum_x_1 + e2 * momentum_x_2) * n; 
+    FunctionPtr F3n_for_sigma = ( e1 * momentum_y_1 + e2 * momentum_y_2) * n; 
+    FunctionPtr F4n_for_qn = (e1 * energy_1 + e2 *energy_2 + e1 * viscousEnergy1 + e2 * viscousEnergy2)*n; // makes q_n implicitly 0 b/c u2 = 0, sigma12 = 0, and n = (1,0)
+
+    bc->addDirichlet(F2nhat, outflowBoundary, F2n_for_sigma);
+    bc->addDirichlet(F3nhat, outflowBoundary, F3n_for_sigma);
+    bc->addDirichlet(F4nhat, outflowBoundary, F4n_for_qn);
+  */
   
-  
+  //  bc->addDirichlet(F2nhat, outflowBoundary, Teuchos::rcp(new ConstantScalarFunction(1.0)));
+
+  // =============================================================================================
+
   ////////////////////////////////////////////////////////////////////
   // CREATE SOLUTION OBJECT
   ////////////////////////////////////////////////////////////////////
+
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
+
+  // for use in line search enforcing rho > 0
+  /*
+    FunctionPtr rho_update = Teuchos::rcp( new PreviousSolutionFunction(solution, rho ));
+    Teuchos::RCP<LineSearch> lineSearch;
+    lineSearch = Teuchos::rcp(new LineSearch(rho_prev, rho_update, mesh));
+  */
+
+  // enforce local conservation of fluxes  
+  bool enforceLocalConservation = false;
+  if (enforceLocalConservation){
+    solution->lagrangeConstraints()->addConstraint(F1nhat == zero);  
+    solution->lagrangeConstraints()->addConstraint(F2nhat == zero);
+    solution->lagrangeConstraints()->addConstraint(F3nhat == zero);
+    solution->lagrangeConstraints()->addConstraint(F4nhat == zero);
+  }
+
   mesh->registerSolution(solution);
+  mesh->registerSolution(backgroundFlow); // u_t(i)
+  mesh->registerSolution(prevTimeFlow); // u_t(i-1)
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
@@ -717,7 +843,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numTimeSteps = 0;
+  int numTimeSteps = 150; // max time steps
   int numNRSteps = 1;
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -727,10 +853,10 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
   ////////////////////////////////////////////////////////////////////
-
+  double dt = 2.5e-1;
+  //  FunctionPtr Dt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (numTimeSteps>0){
-    double dt = 1e-2;
-    FunctionPtr dt_fxn;
     cout << "Timestep dt = " << dt << endl;
 
     // needs prev time residual (u_t(i-1) - u_t(i))/dt
@@ -741,38 +867,39 @@ int main(int argc, char *argv[]) {
     FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
 
     // mass 
-    bf->addTerm(rho,v1/dt);    
+    bf->addTerm(rho,invDt*v1);    
     FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
-    rhs->addTerm( time_res_1 * (v1/dt));
-
+    rhs->addTerm( (time_res_1 * invDt) * v1);
+    
     // x momentum
-    bf->addTerm(u1_prev * rho + rho_prev * u1, v2/dt);
+    bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
     FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
-    rhs->addTerm(time_res_2 * (v2/dt));
+    rhs->addTerm((time_res_2*invDt) * v2);
 
     // y momentum
-    bf->addTerm(u2_prev * rho + rho_prev * u2, v3/dt);
+    bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
     FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
-    rhs->addTerm(time_res_3 * (v3/dt));
+    rhs->addTerm((time_res_3 *  invDt ) *v3);
 
     // energy  
-    bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, v4/dt);
+    bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
     FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
-    rhs->addTerm(time_res_4 * (v4/dt));
+    rhs->addTerm((time_res_4 * invDt) * v4);    
   }
+
   // time step 1
-
-  cout << "getting to the solve..." << endl;
-
   // prerefine the mesh
-  int numRefs = 0;
-  for (int refIndex=0;refIndex<numRefs;refIndex++){    
+  /*
+    for (int refIndex=0;refIndex<numRefs;refIndex++){    
     solution->solve(); // false: don't use MUMPS
     refinementStrategy->refine(rank==0); // print to console on rank 0	
-  }
-  solution->solve(); // false: don't use MUMPS
-  cout << "solved." << endl;
+    }
+    solution->solve(); // false: don't use MUMPS
+  */
+
   if (rank==0){
+
+    // UN_minus_C->writeValuesToMATLABFile(solution->mesh(), "un_c.m");
     solution->writeFluxesToFile(u1hat->ID(), "u1hat.dat");
     solution->writeFluxesToFile(u2hat->ID(), "u2hat.dat");
     solution->writeFluxesToFile(That->ID(), "That.dat");
@@ -797,19 +924,57 @@ int main(int argc, char *argv[]) {
   //  energy_2->writeValuesToMATLABFile(mesh, "energy_2.m");
 
   if (rank==0){
-    cout << "doing 2-n timesteps" << endl;
+    cout << "doing timesteps" << endl;
   }
   // time steps
-  for (int i = 0;i<numTimeSteps;i++){
-    for (int j = 0;j<numNRSteps;j++){
-      solution->solve(); 
-      backgroundFlow->addSolution(solution,1.0);
+  double time_tol = 1e-4;
+  for (int k = 0;k<numRefs;k++){
+    double L2_time_residual = 1e7;
+    int i = 0;
+    while(L2_time_residual > time_tol && (i<numTimeSteps)){
+      //  for (int i = 0;i<numTimeSteps;i++){
+      for (int j = 0;j<numNRSteps;j++){
+	solution->solve(false); 
+	backgroundFlow->addSolution(solution,1.0);
+      }         
+
+      prevTimeFlow->addSolution(backgroundFlow,-1.0); 
+    
+      double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
+      double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
+      double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
+      double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
+      double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
+      L2_time_residual= sqrt(L2_time_residual_sq);    
+   
+      if (rank==0){
+	cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;
+      }
+
+      prevTimeFlow->setSolution(backgroundFlow); 
+      i++;
     }
-    prevTimeFlow->setSolution(backgroundFlow);  
-    cout << "timestep i = " << i << endl;
+    refinementStrategy->refine(rank==0); // print to console on rank 0	
   }
 
-  if (rank==0){
+
+  if (numTimeSteps==0){
+    for (int j = 0;j<numNRSteps;j++){
+      solution->solve(false); 
+      if (j<5){
+	backgroundFlow->addSolution(solution,.2);
+      }else{
+	backgroundFlow->addSolution(solution,.5);
+      }
+      
+      cout << "nr iter " << j << endl;
+    }
+  }
+  cout << "finishing it off with final solve" << endl;
+  solution->solve(); 
+  backgroundFlow->addSolution(solution,1.0);
+
+  if (rank==0){    
     solution->writeFluxesToFile(u1hat->ID(), "u1hat2.dat");
     solution->writeFluxesToFile(u2hat->ID(), "u2hat2.dat");
     solution->writeFluxesToFile(That->ID(), "That2.dat");
@@ -818,6 +983,7 @@ int main(int argc, char *argv[]) {
     solution->writeFluxesToFile(F3nhat->ID(), "F3nhat2.dat");
     solution->writeFluxesToFile(F4nhat->ID(), "F4nhat2.dat");
 
+    solution->writeFieldsToFile(rho->ID(),"drho2.m");
     backgroundFlow->writeFieldsToFile(u1->ID(), "u12.m");
     backgroundFlow->writeFieldsToFile(u2->ID(), "u22.m");
     backgroundFlow->writeFieldsToFile(rho->ID(), "rho2.m");
@@ -830,121 +996,6 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(q2->ID(), "q22.m");
     solution->writeFieldsToFile(omega->ID(), "w2.m");    
   } 
-  /*
-    for (int i = 0;i<numTimeSteps;i++){
-    // single NR solve
-    solution->solve(); // false: don't use MUMPS
-    backgroundFlow->addSolution(solution,1.0);
 
-    // next timestep
-    prevTimeFlow->setSolution(backgroundFlow);
-
-    std::string s = "hat.dat"; 
-    std::string m = ".m"; 
-    std::stringstream rho_out; std::stringstream u1_out;
-    std::stringstream u2_out; std::stringstream T_out;
-    rho_out << "rho" << i ;
-    u1_out << "u1"<< i;
-    u2_out << "u2" << i ;
-    T_out << "T" << i ;
-    
-    if (rank==0){
-      backgroundFlow->writeFieldsToFile(u1->ID(), (u1_out.str()+m).c_str());
-      backgroundFlow->writeFieldsToFile(u2->ID(), (u2_out.str()+m).c_str());
-      backgroundFlow->writeFieldsToFile(rho->ID(), (rho_out.str()+m).c_str());
-      backgroundFlow->writeFieldsToFile(T->ID(), (T_out.str()+m).c_str());
-      
-      solution->writeFieldsToFile(u1->ID(), "du1.m");
-      solution->writeFieldsToFile(u2->ID(), "du2.m");
-      solution->writeFieldsToFile(rho->ID(), "drho.m");
-      solution->writeFieldsToFile(T->ID(), "dT.m");
-
-      solution->writeFluxesToFile(u1hat->ID(), (u1_out.str()+s).c_str());
-      solution->writeFluxesToFile(u2hat->ID(),(u2_out.str()+s).c_str());
-      solution->writeFluxesToFile(That->ID(), (T_out.str()+s).c_str());
-      solution->writeFluxesToFile(F1nhat->ID(), "F1nhat.dat");
-      solution->writeFluxesToFile(F2nhat->ID(), "F2nhat.dat");
-      solution->writeFluxesToFile(F3nhat->ID(), "F3nhat.dat");
-      solution->writeFluxesToFile(F4nhat->ID(), "F4nhat.dat");
-      cout << "done with timestep " << i << endl;
-    }
-  }
-  
-  for (int i = 0;i<numTimeSteps;i++){
-    if (rank==0){
-      backgroundFlow->writeFieldsToFile(u1->ID(), "u1_prev.m");
-      backgroundFlow->writeFieldsToFile(u2->ID(), "u2_prev.m");
-      backgroundFlow->writeFieldsToFile(rho->ID(), "rho_prev.m");
-      backgroundFlow->writeFieldsToFile(T->ID(), "T_prev.m");
-    }
-    for (int j = 0;j<numNRSteps;j++){
-      solution->solve(); // false: don't use MUMPS
-      backgroundFlow->addSolution(solution,1.0);
-    }
-    prevTimeFlow->setSolution(backgroundFlow);
-    if (rank==0){
-      cout << "on timestep " << i << endl;
-    }
-
-    std::string s; std::stringstream rho_out; std::stringstream u1_out;
-    std::stringstream u2_out; std::stringstream T_out;
-    rho_out << "rho" << i << ".m";
-    u1_out << "u1"<< i << ".m";
-    u2_out << "u2" << i << ".m";
-    T_out << "T" << i << ".m";
-    if (rank==0){
-      backgroundFlow->writeFieldsToFile(u1->ID(), u1_out.str().c_str());
-      backgroundFlow->writeFieldsToFile(u2->ID(), u2_out.str().c_str());
-      backgroundFlow->writeFieldsToFile(rho->ID(), rho_out.str().c_str());
-      backgroundFlow->writeFieldsToFile(T->ID(), T_out.str().c_str());
-
-      solution->writeFieldsToFile(u1->ID(), "du1.m");
-      solution->writeFieldsToFile(u2->ID(), "du2.m");
-      solution->writeFieldsToFile(rho->ID(), "drho.m");
-      solution->writeFieldsToFile(T->ID(), "dT.m");
-
-      solution->writeFluxesToFile(u1hat->ID(), "u1hat.dat");
-      solution->writeFluxesToFile(u2hat->ID(), "u2hat.dat");
-      solution->writeFluxesToFile(That->ID(), "That.dat");
-    }
-  }
-  //  backgroundFlow->addSolution(solution,1.0);
-  */
-  /*
-  if (numRefs==0){ //just do one solve
-    solution->solve(false); // false: don't use MUMPS
-  }else{
-    for (int refIndex=0;refIndex<numRefs;refIndex++){    
-      solution->solve(false); // false: don't use MUMPS
-      //    solveStrategy->solve(rank==0);       // print to console on rank 0
-      refinementStrategy->refine(rank==0); // print to console on rank 0	
-    }
-    solution->solve(false); // false: don't use MUMPS
-  }
-
-  int numPreRefs = 0;
-  for (int refIndex=0;refIndex<numPreRefs;refIndex++){    
-    solution->solve(false); // false: don't use MUMPS
-    //solveStrategy->solve(rank==0);       // print to console on rank 0
-    refinementStrategy->refine(rank==0); // print to console on rank 0	
-  }
-
-  solution->solve(false); // false: don't use MUMPS 
-  
-  // one more nonlinear solve on refined mesh
-  double factor = 1/Re;
-  factor = .5;
-  for (int i=0;i<numNRSteps;i++){
-    solution->solve(); // false: don't use MUMPS
-    backgroundFlow->addSolution(solution,factor);
-    factor *= 1.5;
-    factor = min(factor,.5);
-    double err = solution->energyErrorTotal();
-    if (rank==0){
-      cout << "NR step " << i << " with energy error " << err << " and factor = " << factor << endl;
-    }
-  }
-  */
-   
   return 0;
 }

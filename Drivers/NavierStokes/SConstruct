@@ -2,7 +2,7 @@
 includeDir = ['.','../DPGTests']
 
 import os
-env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O3','-w'],CPPPATH=includeDir)
+env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-w'],CPPPATH=includeDir)
 #env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-w'],CPPPATH=includeDir)
 #env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-g'],CPPPATH=includeDir)
 
