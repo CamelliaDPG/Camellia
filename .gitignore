@@ -17,6 +17,7 @@ build/Camellia-debug.build/*
 ############## ignore these files
 *.o
 *.dat
+*~
 
 ############## ignore all compressed files
 *.gz
