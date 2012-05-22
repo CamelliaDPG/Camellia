@@ -104,7 +104,7 @@ private:
   double _maxTimeLocalStiffness, _maxTimeGlobalAssembly, _maxTimeBCImposition, _maxTimeSolve, _maxTimeDistributeSolution;
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
-  bool _reportConditionNumber;
+  bool _reportConditionNumber, _reportTimingResults;
   
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
@@ -173,6 +173,7 @@ public:
   void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
   void setReportConditionNumber(bool value);
+  void setReportTimingResults(bool value);
   
   void computeResiduals();
   void computeErrorRepresentation();

@@ -105,6 +105,8 @@ Solution::Solution(const Solution &soln) {
   _solutionForCellIDGlobal = soln.solutionForCellIDGlobal();
   _filter = soln.filter();
   _lagrangeConstraints = soln.lagrangeConstraints();
+  _reportConditionNumber = false;
+  _reportTimingResults = false;
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
@@ -123,6 +125,7 @@ void Solution::initialize() {
   _residualsComputed = false;
   _energyErrorComputed = false;
   _reportConditionNumber = false;
+  _reportTimingResults = false;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -220,7 +223,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
-  if (zeroMeanConstraints.size() > 0) {
+/*  if (zeroMeanConstraints.size() > 0) {
       vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
     int numEntries = 1; // 1 for the diagonal (stab. parameter)
     int trialID = zeroMeanConstraints[0];
@@ -233,7 +236,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
     }
     maxRowSize = max(numEntries,maxRowSize);
-  }
+  }*/
 
   //cout << "max row size for mesh: " << maxRowSize << endl;
   //cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
@@ -660,8 +663,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   err = timeSolveVector.MaxValue( &_maxTimeSolve );
   err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
   
-  bool printTimingReport = false;
-  if ((rank == 0) && printTimingReport) {
+  if ((rank == 0) && _reportTimingResults) {
     cout << "****** SUM OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _totalTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _totalTimeGlobalAssembly << " sec." << endl;
@@ -2331,6 +2333,10 @@ void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrang
 
 void Solution::setReportConditionNumber(bool value) {
   _reportConditionNumber = value;
+}
+
+void Solution::setReportTimingResults(bool value) {
+  _reportTimingResults = value;
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
