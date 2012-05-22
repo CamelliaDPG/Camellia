@@ -186,7 +186,7 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
 
 void Solution::solve(Teuchos::RCP<Solver> solver) {
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
-  initialize();
+  //initialize();
   
   int numProcs=1;
   int rank=0;
