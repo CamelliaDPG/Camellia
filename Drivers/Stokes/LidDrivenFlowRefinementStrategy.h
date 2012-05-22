@@ -14,9 +14,11 @@
 
 class LidDrivenFlowRefinementStrategy : public RefinementStrategy {
   double _hmin;
+  int _maxPolyOrder;
+  bool _printToConsole;
 public:
-  LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin) 
-  : RefinementStrategy(solution,  relativeEnergyThreshold) { _hmin = hmin; }
+  LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin, int maxPolyOrder, bool printToConsole=false) 
+  : RefinementStrategy(solution,  relativeEnergyThreshold) { _hmin = hmin; _maxPolyOrder = maxPolyOrder; _printToConsole = printToConsole;}
   virtual void refineCells(vector<int> &cellsToRefine);
 };
 
