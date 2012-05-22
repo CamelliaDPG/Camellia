@@ -591,7 +591,7 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 )); // no h-refinements allowed
+    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0, overkillPolyOrder )); // no h-refinements allowed
   else
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   

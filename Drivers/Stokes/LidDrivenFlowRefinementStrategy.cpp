@@ -16,7 +16,6 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
   vector<int> quadCellsToRefine;
   vector<int> pCellsToRefine;
   
-  int maxPolyOrder = 6; // corresponds to L^2 (field) order of 5
   int spaceDim = 2;
   FieldContainer<double> triangleVertices(3,spaceDim);
   FieldContainer<double> quadVertices(4,spaceDim);
@@ -56,11 +55,13 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
     }
     
     int polyOrder = mesh->cellPolyOrder(cellID);
-    if ((!cornerCell || (h <= _hmin)) && (polyOrder < maxPolyOrder) ) {
+    if ((!cornerCell || (h - tol <= _hmin)) && (polyOrder < _maxPolyOrder) ) {
       pCellsToRefine.push_back(cellID);
-//      cout << "p-refining " << cellID << endl;
+      if (_printToConsole)
+        cout << "p-refining " << cellID << " (polyOrder prior to refinement: " << polyOrder << ")" << endl;
     } else if (h - tol > _hmin) {
-      //cout << "h-refining " << cellID << " (h: " << h << ")" << endl;
+      if (_printToConsole)
+        cout << "h-refining " << cellID << " (h: " << h << ")" << endl;
       //cout << "cornerCell: " << cornerCell << endl;
       //cout << "polyOrder: " << polyOrder << endl;
       if (mesh->getElement(cellID)->numSides()==3) {
@@ -69,7 +70,8 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
         quadCellsToRefine.push_back(cellID);
       }
     } else {
-      cout << "Skipping refinement of cellID " << cellID << " because min h and max p have been attained.\n";
+      if (_printToConsole)
+        cout << "Skipping refinement of cellID " << cellID << " because min h " << h << " and max p " << polyOrder << " have been attained.\n";
     }
   }
   

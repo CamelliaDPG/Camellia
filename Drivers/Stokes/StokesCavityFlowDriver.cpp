@@ -258,20 +258,20 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   int pToAddForStreamFunction = 3;
-  double eps = 1.0/8.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
-  bool enforceLocalConservation = true;
+  bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = false;
   bool compareWithOverkillMesh = true;
   bool weightTestNormDerivativesByH = false;
   bool useAdHocHPRefinements = true;
-  int overkillMeshSize = 8;
-  int overkillPolyOrder = 6; // H1 order
+  int overkillMeshSize = 64;
+  int overkillPolyOrder = 7; // H1 order
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
   
   // define meshes:
   int H1Order = polyOrder + 1;
-  int horizontalCells = 8, verticalCells = 8;
+  int horizontalCells = 2, verticalCells = 2;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles | singularityAvoidingInitialMesh;
   Teuchos::RCP<Mesh> mesh, streamMesh, overkillMesh;
@@ -571,9 +571,12 @@ int main(int argc, char *argv[]) {
       cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
     }
     overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-    overkillSolution->solve(useMumps);
+    overkillSolution->solve();
     if (rank == 0)
       cout << "...solved.\n";
+    double overkillEnergyError = overkillSolution->energyErrorTotal();
+    if (rank == 0)
+      cout << "overkill energy error: " << overkillEnergyError << endl;
   }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
@@ -610,8 +613,8 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize ));
+//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
+    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
   else
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   
@@ -849,6 +852,8 @@ int main(int argc, char *argv[]) {
       streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
       vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
       
+      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
+      ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
       cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
     } else {
       solution->writeToFile(u1->ID(), "u1.dat");
