@@ -1,0 +1,321 @@
+\documentclass{article}
+
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{color}
+\usepackage{undertilde}
+\usepackage[colorlinks = true, filecolor = red, urlcolor = blue, linkcolor = black]{hyperref}
+\usepackage{pdflscape}
+\usepackage{pifont}
+%\usepackage{fullpage}
+\setlength\textwidth{6in}
+\setlength\textheight{8in}
+\setlength\oddsidemargin{0.25in} % LaTeX adds a default 1in to this!
+\setlength\evensidemargin{0.25in}
+\setlength\topmargin{-0.0in} % LaTeX adds a default 1in to this!
+\setlength\headsep{0in}
+\setlength\headheight{0in}
+\setlength\footskip{1in}
+
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\triangle}
+\newcommand{\grad}{\nabla}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+\date{}
+\author{Jesse Chan}
+\title{NS notes}
+
+\begin{document}
+
+\section{Intro}
+
+Following Demkowicz and Oden, we seek to solve 
+\[
+\sum^2_{i=1} G_i\left( U\right)_{,i}=\sum^2_{i=1} V_i\left( U\right)_{,i}
+\]
+where
+\[
+V_i = \vectfour{0}{\sigma_{i1}}{\sigma_{i2}}{\sum_{j=1}^2\sigma_{ij}u_j + q_i}
+\]
+are the viscous fluxes, and 
+\[
+ G_1 = \vectfour{\rho u_1}{\rho u_1^2+p}{\rho u_1 u_2}{((\rho e)+p)u_1}, \qquad G_2 = \vectfour{\rho u_2}{\rho u_1 u_2}{\rho u_2^2+p}{((\rho e)+p)u_2}
+\]
+are the Eulerian fluxes. 
+
+We also have the constitutive relations 
+\begin{align*}
+\sigma_{ij} &= \mu(u_{i,j}+u_{j,i}) + \lambda u_{k,k}\delta_{ij}\\
+q_i &= \kappa T_{,i}\\
+p &= (\gamma-1)\rho\iota\\
+\iota &= e-\frac{1}{2}(u_1^2+u_2^2)\\
+\iota &= c_vT
+\end{align*}
+where $e$ and $\iota$ are energy and internal energy per unit mass, respectively.  
+
+\section{Symbolic form}
+In symbolic form, we can write the Navier Stokes equations as a system of seven first order equations. Let $[u_1,u_2] = [u,v]$. 
+
+\subsection{Mass equation}
+\[
+\div \vecttwo{\rho u }{\rho v} = 0
+\]
+\subsection{Momentum equations}
+\begin{align*}
+\div \vecttwo{\rho u^2+p }{\rho u v} &= \div\left(\vec{\sigma_{i1}}\right)\\
+\div \vecttwo{\rho u v}{\rho v^2+p } &= \div\left(\vec{\sigma_{i2}}\right)
+\end{align*}
+\subsection{Energy equation}
+Let $\boldsymbol \sigma$ be a tensor whose $ij$th term is $\sigma_{ij}$.  
+\[
+\div\vecttwo{((\rho e)+p)u}{((\rho e)+p)v} = \div\left[\boldsymbol\sigma U + \vec{q}\right]
+\]
+\subsection{Newtonian fluid laws}
+We represent $\boldsymbol\sigma$ using the Newtonian fluid law
+\[
+\sigma_{ij} = \mu(u_{i,j} + u_{j,i}) + \lambda u_{k,k} \delta_{ij}
+\]
+where $\mu$ is viscosity and $\lambda$ is bulk viscosity. 
+%Following elasticity, a general formula for the stress tensor is 
+%\[
+%\sigma_{ij} = 2\mu \epsilon_{ij} + \lambda \epsilon_{kk} \delta_{ij}
+%\]
+We can invert the stress tensor under isotropic and plane strain assumptions to get
+%\[
+%\epsilon_{ij} = \frac{1}{2\mu} \sigma_{ij} - \frac{\lambda}{4\mu (\mu + \lambda)} \sigma_{kk}\delta_{ij}
+%\] 
+%which translates to
+\[
+\frac{1}{2}\left(\grad  U + \grad ^T  U\right) = \frac{1}{2\mu} \sigma_{ij} - \frac{\lambda}{4\mu (\mu + \lambda)} \sigma_{kk}\delta_{ij}
+\]
+We also have
+\[
+\frac{1}{2}\left(\grad  U + \grad ^T  U\right) = \grad  U - \boldsymbol \omega
+\]
+where $\boldsymbol \omega$ is the antisymmetric part of the infinitesimal strain tensor:
+\[
+\boldsymbol \omega = \frac{1}{2}\left(\grad  U - \grad ^T  U\right).
+\]
+Thus our final form is
+\begin{align*}
+\grad  U - \boldsymbol \omega = \frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I.
+\end{align*}
+Notice that $\boldsymbol \omega$ is implicitly defined to be the symmetric part of $\grad u$ by taking the symmetric part of the above equation.
+
+In general, $\mu$ and $\lambda$ are functions of temperature.
+
+\subsection{Fourier's heat conduction law}
+\begin{align*}
+\vec{q} &= \kappa \grad T
+\end{align*}
+$\kappa$ is generally a function of temperature, and is often assumed to be proportional to $\mu$. 
+
+We introduce here the Prandtl number here as well
+\[
+{\rm Pr} = \frac{\gamma c_v \mu}{\kappa}
+\]
+In this case, we assume a constant Prandlt number, implying that viscosity is proportional to conductivity.
+
+\subsection{Classical and momentum variables}
+
+In classical variables, our system of equations is now
+\begin{align*}
+\div \vecttwo{\rho u }{\rho v} &= 0\\
+\div \left(\vecttwo{\rho u^2+p }{\rho u v} - \boldsymbol \sigma_{1}\right) &=0\\
+\div \left(\vecttwo{\rho u v}{\rho v^2+p } - \boldsymbol \sigma_{2}\right) &=0\\
+\div \left(\vecttwo{((\rho e)+p)u}{((\rho e)+p)v} - \boldsymbol\sigma \mathbf{u} + \vec{q}\right) &=0\\
+\frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I &= \grad \mathbf{u} - \boldsymbol \omega\\
+\frac{1}{\kappa}\vec{q} &= \grad T
+\end{align*}
+
+We strongly enforce symmetry of $\boldsymbol \sigma$ by setting $\sigma_{21} = \sigma_{12}$.  
+
+\section{Nondimensionalization}
+To nondimensionalize our equations, we introduce nondimensional quantities for length, density, velocity, temperature, and viscosity. 
+\[
+\boldsymbol x^* = \frac{\boldsymbol x}{L}, \qquad \rho^* = \frac{\rho}{\rho_{\infty}}, \qquad \boldsymbol u^* = \frac{\boldsymbol u}{V_\infty}, \qquad T^* = \frac{T}{T_\infty}, \qquad \mu^* = \frac{\mu}{\mu_\infty}
+\]
+Momentum, pressure, internal energy, and bulk viscosity are then nondimensionalized with respect to the above variables
+\[
+\boldsymbol m^* = \frac{\boldsymbol m}{\rho_\infty V_\infty}, \qquad p^* = \frac{p}{\rho_\infty V_\infty^2}, \qquad \iota^* = \frac{\iota}{V_\infty^2}, \qquad \lambda^* = \frac{\lambda}{\mu_\infty}
+\]
+We introduce, for convenience, the Reynolds number
+\[
+{\rm Re} = \frac{\rho_\infty V_\infty L}{\mu_\infty} 
+\]
+and the reference (free stream) Mach number
+\[
+M_\infty = \frac{V_\infty}{\sqrt{\gamma(\gamma-1)c_vT_\infty}}
+\]
+Note that 
+\[
+a = \sqrt{\frac{\gamma p_\infty}{\rho_\infty}} = \sqrt{{\gamma p_\infty}} = \sqrt{\gamma(\gamma-1)c_vT_\infty}
+\]
+The equations take the same form as before after nondimensionalization, so long as we define new material constants
+\[
+\tilde{\mu} = \frac{\mu^*}{\rm Re}, \qquad \tilde{\lambda} = \frac{\lambda^*}{\rm Re}, \qquad \tilde{c}_v = \frac{1}{\gamma(\gamma-1)M_\infty^2}, \qquad \tilde{\kappa} = \frac{\gamma\tilde{c}_v\tilde{\mu}}{\rm Pr}
+\]
+From here on, we drop the $^*$ superscript and adopt the nondimensionalized equations.
+
+\subsection{Linearization}
+
+\subsubsection{Conservation laws}
+
+\begin{align*}
+\div \vecttwo{\rho u }{\rho v} &= 0\\
+\div \left(\vecttwo{\rho u^2+p }{\rho u v} - \boldsymbol \sigma_{1}\right) &=0\\
+\div \left(\vecttwo{\rho u v}{\rho v^2+p } - \boldsymbol \sigma_{2}\right) &=0\\
+\div \left(\vecttwo{((\rho e)+p)u}{((\rho e)+p)v} - \boldsymbol \sigma_1 \cdot \boldsymbol u- \boldsymbol \sigma_2 \cdot \boldsymbol u + \vec{q}\right) &=0\\
+\end{align*}
+or generally, 
+\[
+\div (F_i(\boldsymbol U)-G_i(\boldsymbol U,\boldsymbol \sigma) = 0, \qquad i = 1,\ldots, 4
+\]
+The variational form restricted to a single element gives
+\[
+\langle \widehat{F}_i\cdot n, v\rangle - \int_K  (F(\boldsymbol U)-G_i(\boldsymbol U,\boldsymbol \sigma)) \cdot \grad v_i = 0 , \qquad i = 1,\ldots, 4
+\]
+and the variational form over the entire domain is given by summing up the element-wise contributions. 
+
+The presence of terms such as $\boldsymbol \sigma_i \cdot \boldsymbol u$ means that we will need to linearize in the stress variables $\sigma_ij$ in addition to our Eulerian quantities. Since fluxes and traces are linear, we do not need to linearize them. Instead, fluxes $\widehat{F}_{i,n}$ and traces $\widehat{u},\widehat{v},\widehat{T}$ will represent normal traces and traces of the accumulated nonlinear solution. 
+\begin{align*}
+\langle \widehat{F}_i\cdot n, v\rangle &- \int_K  \left(F_{i,\boldsymbol U}(\boldsymbol U)\cdot \Delta \boldsymbol U -G_{i,\boldsymbol U}(\boldsymbol U, \boldsymbol \sigma)\cdot \Delta \boldsymbol U - G_{i,\boldsymbol \sigma}(\boldsymbol U, \boldsymbol \sigma)\cdot \Delta \boldsymbol \sigma \right)\cdot \grad v_i \\
+&= \int_K  \left(F_i(\boldsymbol U)-G_i(\boldsymbol U)\right) \cdot \grad v_i \\
+\qquad i &= 1,\ldots, 4
+\end{align*}
+where
+\begin{align*}
+F^1_{1,\boldsymbol U} &= \{u,\rho ,0,0\} \\
+F^2_{1,\boldsymbol U} &= \{v,0,\rho ,0\} \\
+F^1_{2,\boldsymbol U} &=\left\{c_v T (\gamma -1)+u^2,2 u \rho ,0,c_v (\gamma -1) \rho \right\}\\
+F^2_{2,\boldsymbol U} &=\{u v,v \rho ,u \rho ,0\}\\
+F^1_{3,\boldsymbol U} &=\{u v,v \rho ,u \rho ,0\}\\
+F^2_{3,\boldsymbol U} &=\left\{c_v T (\gamma -1)+v^2,0,2 v \rho ,c_v (\gamma -1) \rho \right\}\\
+F^1_{4,\boldsymbol U} &=\left\{\frac{1}{2} u \left(2 c_v T (2 \gamma -1)+u^2+v^2\right),\frac{1}{2} \rho  \left(2 c_v T (2 \gamma -1)+3 u^2+v^2\right),u v \rho ,c_v u (2 \gamma -1) \rho \right\}\\
+F^2_{4,\boldsymbol U} &=\left\{\frac{1}{2} v \left(2 c_v T (2 \gamma -1)+u^2+v^2\right),u v \rho ,\frac{1}{2} \rho  \left(2c_v T (2 \gamma -1)+u^2+3 v^2\right),c_v v (2 \gamma -1) \rho \right\}
+\end{align*}
+The viscous Jacobians become (when linearized with respect to $\{\sigma_{11},\sigma_{12}, \sigma_{22}\}$)
+\begin{align*}
+G^1_{2,\boldsymbol \sigma} &= \{1,0,0\}\\
+G^2_{2,\boldsymbol \sigma} &= \{0,1,0\}\\
+G^1_{3,\boldsymbol \sigma} &= \{0,1,0\}\\
+G^2_{3,\boldsymbol \sigma} &= \{0,0,1\}\\
+G^1_{4,\boldsymbol \sigma} &= \{u_1,u_2,0\}\\
+G^2_{4,\boldsymbol \sigma} &= \{0,u_1,u_2\}
+\end{align*}
+and (when linearized with respect to the Eulerian variables)
+\begin{align*}
+G^1_{4,\boldsymbol U} &= \{0,\sigma_{11},\sigma_{12},0\}\\
+G^2_{4,\boldsymbol U} &= \{0,\sigma_{12},\sigma_{22},0\}
+\end{align*}
+
+\subsubsection{Viscous equations}
+We have two equations left to linearize - the constitutive laws defining our viscous stresses and heat flux terms. 
+\begin{align*}
+\frac{1}{2\mu}{\boldsymbol \sigma}- \frac{\lambda}{4\mu(\mu+\lambda)}{\rm tr}({\boldsymbol \sigma}){\boldsymbol I} + {\boldsymbol \omega} &= 
+\grad
+\left[\begin{array}{c}
+u_1\\
+u_2
+\end{array}
+\right]\\
+\frac{1}{\kappa}
+\left[\begin{array}{c}
+q_1\\
+q_2
+\end{array}\right] &=
+\grad T
+\end{align*}
+
+We treat the first tensor equation as two vector equations by considering each column:
+\begin{align*}
+\frac{1}{2\mu} \vecttwo{\sigma_{11}}{\sigma_{12}} - \frac{\lambda}{4\mu(\mu+\lambda)}\vecttwo{\sigma_{11}+\sigma_{22}}{0} + \vecttwo{0}{-\omega} - \grad u_1&= 0 \\
+\frac{1}{2\mu} \vecttwo{\sigma_{12}}{\sigma_{22}} - \frac{\lambda}{4\mu(\mu+\lambda)}\vecttwo{0}{\sigma_{11}+\sigma_{22}} + \vecttwo{\omega}{0} - \grad u_2 &= 0
+\end{align*}
+These equations are linear in $\sigma_{ij}$, so the linearization is simple. 
+Since all equations are linear in variables $q_1, q_2, w$ for all combinations of variables, we do not need to linearize any equations in $q_1, q_2, w$. 
+
+\subsubsection{Initial guess}
+
+For our initial guesses, we set
+\[
+\rho = 1,\qquad m_1= 1,\qquad m_2 = 0, \qquad T = 1
+\]
+which is consistent with what was done in Demkowicz and Oden (find citation). 
+
+\section{	Boundary conditions}
+
+\subsection{Carter flat plate}
+
+Our first problem of interest is the Carter flat plate problem. An infinitesmally thin flat plate disrupts a free stream flow and causes a shock to form at the tip of the plate. 
+
+\begin{figure}[!h]
+\centering
+\includegraphics[scale=.5]{flat_plate_BCs.pdf}
+\caption{Carter flat plate problem.}
+\end{figure}
+
+\begin{itemize}
+\item \textbf{Inflow boundary conditions:} free stream conditions are applied here to all four fluxes $\widehat{f}_{i,n}$.
+\item \textbf{Symmetry boundary conditions:} $u_n = q_n = \pd{u_s}{n} = 0$. Here, this implies $u_2 = q_2 = \sigma_{12} = 0$. We impose the stress condition by noting that, for the flat plate geometry, if $u_2 = 0$, then at the top and bottom, with $n = (0,1)$, $\widehat{f}_{2,n} = \sigma_{12}$, and $\widehat{f}_{4,n} = q_2$ if $\sigma_{12}$ and $u_2 = 0$. 
+\item \textbf{Flat plate boundary conditions:} $u_1 = u_2 = 0$, and $T = T_w = \left[1+(\gamma-1)M_\infty^2/2\right] T_\infty = 2.8T_\infty$ (for Mach 3 flow). We impose these strongly on the trace variables $\widehat{u}_1, \widehat{u}_2, \widehat{T}$. 
+\item \textbf{Outflow boundary conditions:} the exact boundary conditions to enforce here are questionable\footnote{Demkowicz et al enforce this boundary condition only in regions where the flow is subsonic.}. Capon et al enforce $\pd{u_1}{n}=\pd{u_2}{n}=0$ and $\pd{T}{n} = 0$. Since $u_1$ and $u_2$ are not expected to be zero at these points, we will set $\widehat{f}_{2,n}$ and $\widehat{f}_{4,n}$ to their represented quantities using either the field variables from the background flow, or (in the case of pseudo-time stepping) the previous timestep's flux and field quantities. 
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+\end{document}

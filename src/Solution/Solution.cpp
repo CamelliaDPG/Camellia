@@ -856,6 +856,80 @@ double Solution::meshMeasure() {
   return value;
 }
 
+double Solution::InfNormOfSolutionGlobal(int trialID){
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  int indexBase = 0;
+  Epetra_Map procMap(numProcs,indexBase,Comm);
+  double localInfNorm = InfNormOfSolution(trialID);
+  Epetra_Vector infNormVector(procMap);
+  infNormVector[0] = localInfNorm;
+  double globalInfNorm;
+  int errCode = infNormVector.NormInf( &globalInfNorm );
+  if (errCode!=0){
+    cout << "Error in infNormOfSolutionGlobal, errCode = " << errCode << endl;
+  }
+  return globalInfNorm;  
+}
+
+double Solution::InfNormOfSolution(int trialID){
+
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  double value = 0.0;
+  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
+  vector<ElementTypePtr>::iterator elemTypeIt;
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
+    int numCells = cells.size();
+    // note: basisCache below will use a greater cubature degree than strictly necessary
+    //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh)); 
+    
+    // get cellIDs for basisCache
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = cells[cellIndex]->cellID();
+      cellIDs.push_back(cellID);
+    }
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
+    bool createSideCacheToo = false;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    FieldContainer<double> values(numCells,numPoints);
+    bool weightForCubature = false;
+    solutionValues(values, trialID, basisCache, weightForCubature);
+ 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        value = max(abs(values(cellIndex,ptIndex)),value);
+      }
+    }
+  }  
+  return value;
+}
+
 double Solution::L2NormOfSolutionGlobal(int trialID){
   int numProcs=1;
   int rank=0;
