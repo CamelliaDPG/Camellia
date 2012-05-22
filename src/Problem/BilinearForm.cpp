@@ -180,7 +180,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
   //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
   
-  if (_useSPDSolveForOptimalTestFunctions) {
+  if (! _useSPDSolveForOptimalTestFunctions) {
     Epetra_SerialDenseSolver solver;
     
     int solvedAll = 0;
