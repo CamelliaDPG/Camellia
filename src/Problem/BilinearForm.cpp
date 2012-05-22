@@ -35,6 +35,10 @@
 
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
+
+#include "Epetra_SerialSymDenseMatrix.h"
+#include "Epetra_SerialSpdDenseSolver.h"
+
 #include "Epetra_DataAccess.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -72,6 +76,10 @@ static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately..
 static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
 
 set<int> BilinearForm::_normalOperators;
+
+BilinearForm::BilinearForm() {
+  _useSPDSolveForOptimalTestFunctions = false;
+}
 
 const vector< int > & BilinearForm::trialIDs() {
   return _trialIDs;
@@ -114,6 +122,27 @@ void BilinearForm::multiplyFCByWeight(FieldContainer<double> & fc, double weight
   }
 }
 
+bool checkSymmetry(FieldContainer<double> &innerProductMatrix) {
+  double tol = 1e-10;
+  int numCells = innerProductMatrix.dimension(0);
+  int numRows = innerProductMatrix.dimension(1);
+  if (numRows != innerProductMatrix.dimension(2)) {
+    // non-square: obviously not symmetric!
+    return false;
+  }
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int i=0; i<numRows; i++) {
+      for (int j=0; j<i; j++) {
+        double diff = abs( innerProductMatrix(cellIndex,i,j) - innerProductMatrix(cellIndex,j,i) );
+        if (diff > tol) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
                                      FieldContainer<double> &innerProductMatrix,
                                      ElementTypePtr elemType,
@@ -151,67 +180,125 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
   //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
   
-  Epetra_SerialDenseSolver solver;
-  
-  int solvedAll = 0;
-  
-  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-    // changed to Copy from View for debugging...
-    Epetra_SerialDenseMatrix ipMatrixT(Copy,
-                                       &innerProductMatrix(cellIndex,0,0),
-                                       innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
-                                       innerProductMatrix.dimension(2),innerProductMatrix.dimension(1));
+  if (_useSPDSolveForOptimalTestFunctions) {
+    Epetra_SerialDenseSolver solver;
     
-    Epetra_SerialDenseMatrix stiffness(Copy,
-                                       &stiffnessMatrixT(cellIndex,0,0),
-                                       stiffnessMatrixT.dimension(2), // stride
-                                       stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
+    int solvedAll = 0;
     
-    Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
-    
-    
-    solver.SetMatrix(ipMatrixT);
-    //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
-    int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
-    
-    if (successLocal != 0) {
-      cout << "computeOptimalTest: failed to SetVectors with error " << successLocal << endl;
-    }
-    
-    bool equilibrated = false;
-    if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-    
-    successLocal = solver.Solve();
-    
-    if (successLocal != 0) {
-      cout << "computeOptimalTest: Solve FAILED with error: " << successLocal << endl;
-      solvedAll = successLocal;
-    }
-    
-    if (equilibrated) {
-      successLocal = solver.UnequilibrateLHS();
+    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+      // changed to Copy from View for debugging...
+      Epetra_SerialDenseMatrix ipMatrixT(Copy,
+                                         &innerProductMatrix(cellIndex,0,0),
+                                         innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
+                                         innerProductMatrix.dimension(2),innerProductMatrix.dimension(1));
+      
+      Epetra_SerialDenseMatrix stiffness(Copy,
+                                         &stiffnessMatrixT(cellIndex,0,0),
+                                         stiffnessMatrixT.dimension(2), // stride
+                                         stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
+      
+      Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
+      
+      
+      solver.SetMatrix(ipMatrixT);
+      //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
+      int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
+      
       if (successLocal != 0) {
-        cout << "computeOptimalTest: unequilibration FAILED with error: " << successLocal << endl;
+        cout << "computeOptimalTest: failed to SetVectors with error " << successLocal << endl;
+      }
+      
+      bool equilibrated = false;
+      if ( solver.ShouldEquilibrate() ) {
+        solver.EquilibrateMatrix();
+        solver.EquilibrateRHS();
+        equilibrated = true;
+      }
+      
+      successLocal = solver.Solve();
+      
+      if (successLocal != 0) {
+        cout << "computeOptimalTest: Solve FAILED with error: " << successLocal << endl;
         solvedAll = successLocal;
       }
-    }
-    
-    for (int i=0; i<optimalTestWeights.dimension(1); i++) {
-      for (int j=0; j<optimalTestWeights.dimension(2); j++) {
-        optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
+      
+      if (equilibrated) {
+        successLocal = solver.UnequilibrateLHS();
+        if (successLocal != 0) {
+          cout << "computeOptimalTest: unequilibration FAILED with error: " << successLocal << endl;
+          solvedAll = successLocal;
+        }
       }
+      
+      for (int i=0; i<optimalTestWeights.dimension(1); i++) {
+        for (int j=0; j<optimalTestWeights.dimension(2); j++) {
+          optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
+        }
+      }
+      
+      // double oneNorm = ipMatrixT.OneNorm();
+      
+      //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
+      
     }
+    return solvedAll;
+  } else {
+    Epetra_SerialSpdDenseSolver solver;
     
-    // double oneNorm = ipMatrixT.OneNorm();
+    int solvedAll = 0;
     
-    //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
-    
+    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+      // changed to Copy from View for debugging...
+      Epetra_SerialSymDenseMatrix ipMatrixT(Copy,
+                                            &innerProductMatrix(cellIndex,0,0),
+                                            innerProductMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
+                                            innerProductMatrix.dimension(2));
+      
+      Epetra_SerialDenseMatrix stiffness(Copy,
+                                         &stiffnessMatrixT(cellIndex,0,0),
+                                         stiffnessMatrixT.dimension(2), // stride
+                                         stiffnessMatrixT.dimension(2),stiffnessMatrixT.dimension(1));
+      
+      Epetra_SerialDenseMatrix optimalWeightsT(numTestDofs, numTrialDofs);
+      
+      
+      solver.SetMatrix(ipMatrixT);
+      //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
+      int successLocal = solver.SetVectors(optimalWeightsT, stiffness);
+      
+      if (successLocal != 0) {
+        cout << "BilinearForm::optimalTestWeights: failed to SetVectors with error " << successLocal << endl;
+      }
+      
+      if ( solver.ShouldEquilibrate() ) {
+        solver.FactorWithEquilibration(true);
+        solver.SolveToRefinedSolution(false);
+      }
+      int result = solver.Factor();
+      if (result != 0) {
+        cout << "BilinearForm::optimalTestWeights: Factor failed with code " << result << endl;
+      }
+      
+      successLocal = solver.Solve();
+      
+      if (successLocal != 0) {
+        cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << successLocal << endl;
+        solvedAll = successLocal;
+      }
+      
+      for (int i=0; i<optimalTestWeights.dimension(1); i++) {
+        for (int j=0; j<optimalTestWeights.dimension(2); j++) {
+          optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
+        }
+      }
+      
+      // double oneNorm = ipMatrixT.OneNorm();
+      
+      //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
+      
+    }
+    return solvedAll;
   }
-  return solvedAll;
   
 }
 
@@ -749,4 +836,8 @@ const set<int> & BilinearForm::normalOperators() {
     _normalOperators.insert(OP_TIMES_NORMAL_Z);
   }
   return _normalOperators;
+}
+
+void BilinearForm::setUseSPDSolveForOptimalTestFunctions(bool value) {
+  _useSPDSolveForOptimalTestFunctions = value;
 }

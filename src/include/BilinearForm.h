@@ -89,6 +89,7 @@ using namespace IntrepidExtendedTypes;
 class BilinearForm {
   typedef Teuchos::RCP<ElementType> ElementTypePtr;
 public:
+  BilinearForm();
   virtual bool trialTestOperator(int trialID, int testID, 
                                  IntrepidExtendedTypes::EOperatorExtended &trialOperator,
                                  IntrepidExtendedTypes::EOperatorExtended &testOperator) { 
@@ -148,9 +149,12 @@ public:
   virtual void printTrialTestInteractions();
   
   static const set<int> & normalOperators(); // the set of all operators that use the normal
+  
+  void setUseSPDSolveForOptimalTestFunctions(bool value);
 protected:
  
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
+  bool _useSPDSolveForOptimalTestFunctions;
 };
 #endif
