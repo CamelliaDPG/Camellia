@@ -393,25 +393,36 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {        
         int globalRowIndex = partMap.GID(localRowIndex);
         int nnz = 0;
+        double valueSum = 0.0;
         for (int i=0; i<numTrialDofs; i++) {
           if (lhs(cellIndex,i) != 0.0) {
 	          globalDofIndices(nnz) = _mesh->globalDofIndex(cellIDs[cellIndex],i);
             nonzeroValues(nnz) = lhs(cellIndex,i);
+            valueSum += abs(nonzeroValues(nnz));
             nnz++;
           }
         }
         // rhs:
         globalDofIndices(nnz) = globalRowIndex;
-        if (nnz!=0)
-          nonzeroValues(nnz) = -rhs(cellIndex); // minus because moving from rhs to lhs
-        else // no nonzero weights
+        if (nnz!=0) {
+          if (rhs(cellIndex) == 0) {
+            // then we can stabilize (right?) -- certainly this is what we've done with the zmc's...
+            nonzeroValues(nnz) = valueSum; // a simple choice that ensures diagonal dominance (in this row)
+          } else {
+            // not sure if we're still allowed to stabilize in that case...
+            nonzeroValues(nnz) = 0.0;
+          }
+        } else { // no nonzero weights
           nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
+        }
         // insert row:
         globalStiffMatrix.InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
                                              &nonzeroValues(0));
         // insert column:
         globalStiffMatrix.InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
                                              &nonzeroValues(0));
+        rhsVector.ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
+        
         localRowIndex++;
       }
     }
