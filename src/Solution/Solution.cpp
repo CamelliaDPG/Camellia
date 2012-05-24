@@ -87,9 +87,11 @@
 #include "LagrangeConstraints.h"
 
 #include "Solver.h"
+#include "CondensationSolver.h"
 
 #include "Solution.h"
 #include "Projector.h"
+
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
