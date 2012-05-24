@@ -91,9 +91,7 @@ private:
   bool _residualsComputed;
   bool _energyErrorComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
-  
-  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
-  
+   
   void initialize();
   void integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID);
   void integrateBasisFunctions(FieldContainer<double> &values, ElementTypePtr elemTypePtr, int trialID);
@@ -113,6 +111,8 @@ public:
   Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
   Solution(const Solution &soln);
 //  bool equals(Solution& otherSolution, double tol=0.0);
+
+  Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
