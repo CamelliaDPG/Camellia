@@ -1,11 +1,9 @@
 Import('env')
 
-src_obj = env.Object(Glob('*/*.cpp')) #option to build everything
+src_obj = env.Object(Glob('*/*.cpp'))
 
-#TODO - build serial debug/release libraries?
-lib_name = '../build/lib/Camellia.a' 
+lib_name = 'lib/Camellia'
 
-src_lib = env.Library(lib_name,src_obj)
-print "src_lib: ", src_lib
+src_lib = env.Library(lib_name, src_obj)
 
-Return('src_lib')
+# Return('src_lib')
