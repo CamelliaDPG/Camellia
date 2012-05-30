@@ -1,6 +1,0 @@
-Import('*')
-
-#src_obj = env.Object([''])
-
-env.Program('exec/NS',['NSDriver.cpp'])
-
