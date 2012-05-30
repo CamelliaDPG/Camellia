@@ -1,11 +1,13 @@
 # include everything in this directory - all header files 
+camellia_dir = '../../build/mpi-debug'
 includeDir = [Dir('.')]
 env = Environment(CXX='c++',CC='gcc',CXXFLAGS = '-O3',CPPPATH=includeDir)
 env.Append(CPPPATH=[Dir('../MultiOrderStudy')])
 print map(str,env['CPPPATH'])
 
 # run the Camellia library builder if it's not built already
-SConscript('../../build/SConscript',exports = 'env')
+Export('env', 'camellia_dir')
+SConscript('../../SConscript')
 
 # run current SCons script to build driver program
-SConscript('SConscript', exports=['env'])
+SConscript('SConscript')

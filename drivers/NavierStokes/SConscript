@@ -1,4 +1,4 @@
 Import('*')
 
-env.Program('#exec/NS',['NSDriver.cpp'])
+env.Program('exec/NS',['NSDriver.cpp'])
 

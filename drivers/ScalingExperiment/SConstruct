@@ -1,4 +1,5 @@
 # include everything in this directory. 
+camellia_dir = '../../build/mpi-debug'
 #env = Environment(CXX='c++',CC='gcc',CXXFLAGS = ['-O3','-g','-rdynamic'])
 
 import os
@@ -6,10 +7,11 @@ env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-g']
 #env = Environment(ENV=os.environ,CXX='/opt/apps/intel11_1/openmpi/1.4.3/bin/mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-g'])
 
 # run the Camellia library builder if it's not built already
-SConscript('../../build/SConscript',exports = 'env')
+Export('env', 'camellia_dir')
+SConscript('../../SConscript')
 
 env.Append(CPPPATH=[Dir('.')])
 
 # run current SCons script to build driver program
-SConscript('SConscript', exports=['env'])
+SConscript('SConscript')
 
