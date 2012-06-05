@@ -1,5 +1,5 @@
 Import('*')
 
-env.Program('exec/Confusion',['ConfusionDriver.cpp'])
+driver = env.Program('exec/Confusion', ['ConfusionDriver.cpp'])
 
-
+Default(driver)

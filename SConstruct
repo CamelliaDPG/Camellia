@@ -42,7 +42,7 @@ else:
     build_message += 'optimized version'
 print build_message
 
-Export('env', 'debug', 'parallel', 'camellia_dir')
+Export('env')
 
 SConscript('SConscript')
 

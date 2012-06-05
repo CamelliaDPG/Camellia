@@ -14,10 +14,19 @@ build/mpi-release-trimmed/*
 
 build/Camellia-debug.build/*
 
+build/lib
+
+drivers/*/exec
+
 ############## ignore these files
 *.o
 *.dat
 *~
+*.swp
+*/.sconsign.bdlite
+drivers/*/.sconsign.dblite
+build/.sconsign.dblite
+.sconsign.dblite
 
 ############## ignore all compressed files
 *.gz
