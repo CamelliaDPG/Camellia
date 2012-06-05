@@ -29,5 +29,5 @@ env.Append(LIBS = MumpsLibs)
 
 # Build Camellia Library
 src_obj = env.Object(Glob('src/*/*.cpp'))
-lib = env.Library('build/lib/Camellia', src_obj)
-Default(lib)
+camellia = env.Library('build/lib/Camellia', src_obj)
+# Default(camellia)

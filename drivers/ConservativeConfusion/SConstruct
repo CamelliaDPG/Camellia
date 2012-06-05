@@ -6,6 +6,12 @@ Help("""
        """)
 
 import os
+import multiprocessing
+
+# Build with max cores
+job_count = multiprocessing.cpu_count()/2
+SetOption('num_jobs', job_count)
+print 'Building with ' + str(job_count) + ' jobs'
 
 env = Environment(ENV=os.environ)
 
@@ -42,3 +48,4 @@ SConscript('../../SConscript')
 
 # Build Driver
 SConscript('SConscript')
+

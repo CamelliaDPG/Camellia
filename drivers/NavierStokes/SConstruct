@@ -1,13 +1,51 @@
-# include everything in this directory. 
-camellia_dir = '../../build/mpi-debug'
-includeDir = ['.','../DPGTests']
+Help("""
+       Type: 'scons' to build the production library,
+             'scons -c' to clean the build,
+             'scons debug=1' to build the debug version,
+             'scons parallel=1' to build the parallel version (default).
+       """)
 
 import os
-env = Environment(ENV=os.environ,CXX='mpicxx',CC='mpicc',CXXFLAGS = ['-O0','-w'],CPPPATH=includeDir)
+import multiprocessing
 
-# run the Camellia library builder if it's not built already
-Export('env', 'camellia_dir')
+# Build with max cores
+job_count = multiprocessing.cpu_count()/2
+SetOption('num_jobs', job_count)
+print 'Building with ' + str(job_count) + ' jobs'
+
+env = Environment(ENV=os.environ)
+
+# Compiler Settings
+CC_OPTS     = '-O3'
+DEBUG_OPTS  = '-g -Wall'
+CPP_COMP    = 'mpicxx'
+C_COMP      = 'mpicc'
+
+env['CXX'] = CPP_COMP
+env['CC'] = C_COMP
+
+build_message = 'Building '
+# Serial version
+parallel = int(ARGUMENTS.get('parallel', 1))
+if parallel:
+    build_message += 'parallel '
+else:
+    env.Replace(CXX = 'cpp')
+    build_message += 'serial '
+
+# Debug options
+debug = int(ARGUMENTS.get('debug', 1))
+if debug:
+    env.Append(CCFLAGS = DEBUG_OPTS)
+    build_message += 'debug version'
+else:
+    env.Append(CCFLAGS = CC_OPTS)
+    build_message += 'optimized version'
+
+# Build Camellia Library
+Export('env')
 SConscript('../../SConscript')
 
-# run current SCons script to build driver program
+# Build Driver
 SConscript('SConscript')
+
