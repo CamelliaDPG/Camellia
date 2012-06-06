@@ -119,11 +119,21 @@ int CondensationSolver::solve(){
   getDofIndices(); // get dof inds
 
   //  Teuchos::RCP<Epetra_RowMatrix> A = problem().GetMatrix();
-  Epetra_RowMatrix* K = problem().GetMatrix();
-  Epetra_MultiVector* f = problem().GetRHS();
+  Epetra_RowMatrix* stiffMat = problem().GetMatrix();
+  Epetra_MultiVector* rhs = problem().GetRHS();
 
-  // modify load vector
-  Epetra_SerialDenseSolver solver;
+  // create reduced matrix 
+  int numGlobalDofs = _allFluxInds.size();
+  set<int> globalIndsForPartition = _mesh->globalDofIndicesForPartition(rank);
+  Epetra_Map partMap = _solution->getPartitionMap(rank, globalIndsForPartition, numGlobalDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
+  Epetra_FECrsMatrix Aflux(Copy, partMap, numGlobalDofs); // reduced matrix - soon to be schur complement
+  Epetra_FEVector bflux(partMap);
+
+
+  // get dense solver for distributed portion
+  Epetra_SerialDenseSolver denseSolver;
+
+  // modify stiffness/load vector
   vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
   vector< ElementPtr >::iterator elemIt;
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
@@ -133,32 +143,70 @@ int CondensationSolver::solve(){
 
     // [D   B][fieldDofs] = [f]
     // [B^T A][flux Dofs] = [g]
+    Epetra_SerialDenseMatrix D = getSubMatrix(stiffMat,fieldInds,fieldInds); // block field submatrix
+    Epetra_SerialDenseMatrix B = getSubMatrix(stiffMat,fieldInds,fluxInds);  // field/flux submat
+    Epetra_SerialDenseMatrix A = getSubMatrix(stiffMat,fluxInds,fluxInds);  // field/flux submat
+    Epetra_SerialDenseMatrix f = getSubVector(rhs,fieldInds);           // field RHS
+    Epetra_SerialDenseMatrix g = getSubVector(rhs,fluxInds);           // flux RHS -> will be reduced
+    Epetra_SerialDenseMatrix Dinv_f;     // scratch storage
+    Epetra_SerialDenseMatrix Dinv_B;     // scratch storage
 
-    Epetra_SerialDenseMatrix D = getSubMatrix(K,fieldInds,fieldInds); // block field dof submatrix
-    Epetra_SerialDenseMatrix B = getSubMatrix(K,fieldInds,fluxInds);  // coupling bw field/flux submat
-    Epetra_SerialDenseMatrix b = getSubVector(f,fieldInds);           // field RHS
-    Epetra_SerialDenseMatrix rhsMod;    
-
-    solver.SetMatrix(D);
-    solver.SetVectors(rhsMod,B);
+    // modify load vector
+    denseSolver.SetMatrix(D);
+    denseSolver.SetVectors(Dinv_f,f); // solves Dx = b
     bool equilibrated = false;
-    if ( solver.ShouldEquilibrate() ) {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
+    if ( denseSolver.ShouldEquilibrate() ) {
+      denseSolver.EquilibrateMatrix();
+      denseSolver.EquilibrateRHS();
       equilibrated = true;
     }    
-    solver.Solve();    
+    denseSolver.Solve();    
     if (equilibrated) {
-      solver.UnequilibrateLHS();
+      denseSolver.UnequilibrateLHS();
     }
+    g.Multiply('T','N',-1.0,B,Dinv_f,1.0); // g := g - 1.0 * B^T*x , and x = inv(D) * f
     
-    // create reduced matrix 
-    int numGlobalDofs = _allFluxInds.size();
-    set<int> globalIndsForPartition = _mesh->globalDofIndicesForPartition(rank);
-    Epetra_Map partMap = _solution->getPartitionMap(rank, globalIndsForPartition,numGlobalDofs,0,&Comm); // 0 = assumes no zero mean or Lagrange constraints imposed 
-    Epetra_FECrsMatrix Aflux(Copy, partMap, numGlobalDofs); // reduced matrix - soon to be schur complement
-    Epetra_FEVector bflux(partMap);        
+    // modify stiffness matrix
+    denseSolver.SetVectors(Dinv_B,B);
+    denseSolver.Solve();    
+    A.Multiply('T','N',1.0,B,Dinv_B,1.0);
     
+    int numDofs = fluxInds.size();
+    //    globalStiffMatrix.SumIntoGlobalValues(numDofs,&globalDofIndices(0),numDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+    // TODO - figure out how to reference the array values like a FC
+    //    rhsVector.SumIntoGlobalValues(numDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
+
+    //    Aflux.SumIntoGlobalValues()
+    //    bflux.SumIntoGlobalValues()
+    
+  }
+
+  Aflux.GlobalAssemble();
+  bflux.GlobalAssemble();
+  Epetra_FEVector lhsVector(partMap, true);
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&Aflux, &lhsVector, &bflux)); 
+
+  _solver->setProblem(problem);
+  int solveSuccess = _solver->solve(); // solve for the flux dofs (may need to modify this to make parallel)
+
+   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*(elemIt))->cellID();
+    vector<int> fluxInds = _GlobalFluxInds[cellID];
+    vector<int> fieldInds = _GlobalFieldInds[cellID];
+
+    // [D   B][fieldDofs] = [f]
+    // [B^T A][flux Dofs] = [g]
+    Epetra_SerialDenseMatrix D = getSubMatrix(stiffMat,fieldInds,fieldInds); // block field submatrix
+    Epetra_SerialDenseMatrix B = getSubMatrix(stiffMat,fieldInds,fluxInds);  // field/flux submat
+    Epetra_SerialDenseMatrix f_mod = getSubVector(rhs,fieldInds);           // field RHS
+    Epetra_SerialDenseMatrix Dinv_rhs;     // scratch storage
+    Epetra_SerialDenseMatrix y; // = getSubVector of flux solution y
+
+    f_mod.Multiply('N','N',-1.0,B,y,1.0);
+    denseSolver.SetMatrix(D);
+    denseSolver.SetVectors(Dinv_rhs,f_mod);
+    
+    // TODO - set field degrees of freedom
   }
   
   return 0;
