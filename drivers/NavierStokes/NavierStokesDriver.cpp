@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
   double mu = 1.0 / Re;
-  double lambda = -.66 / Re;
+  double lambda = - .66 / Re;
   double kappa =  - GAMMA * cv * mu / PRANDTL; // double check sign - may be positive
   
   bool useTriangles = false;
@@ -424,7 +424,7 @@ int main(int argc, char *argv[]) {
 
   int numRefs = 3;
   int numNRSteps = 1;
-  int numTimeSteps = 10;
+  int numTimeSteps = 0;
   double dt = .01;
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -521,6 +521,8 @@ int main(int argc, char *argv[]) {
   */
 
   if (rank==0){
+    backgroundFlow->writeFieldsToFile(u1hat->ID(), "u1hat_prev.m");
+    backgroundFlow->writeFieldsToFile(u2hat->ID(), "u2hat_prev.m");
     backgroundFlow->writeFieldsToFile(u1->ID(), "u1_prev.m");
     backgroundFlow->writeFieldsToFile(u2->ID(), "u2_prev.m");
     backgroundFlow->writeFieldsToFile(rho->ID(), "rho_prev.m");

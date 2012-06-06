@@ -32,6 +32,8 @@
 #include "ElementType.h"
 #include "Element.h"
 
+#include "MeshPolyOrderFunction.h"
+
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
@@ -65,26 +67,53 @@ public:
   }
 };
 
-class SqrtFunction : public Function {
+class PowerFunction : public Function {
   FunctionPtr _f;
+  double _power;
+  double _minVal;
 public:
-  SqrtFunction(FunctionPtr f) : Function(0) {
+  PowerFunction(FunctionPtr f,double power) : Function(0) {
     _f = f;
+    _power = power;
+    _minVal = 1e-7;
+  }
+  PowerFunction(FunctionPtr f,double power,double minVal) : Function(0) {
+    _f = f;
+    _power = power;
+    _minVal = minVal;
   }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     CHECK_VALUES_RANK(values);
-    _f->values(values,basisCache);
-    
+    _f->values(values,basisCache);    
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
         double value = values(cellIndex,ptIndex);
-        values(cellIndex,ptIndex) = sqrt(value);
+        values(cellIndex,ptIndex) = pow(max(value,_minVal),_power); // WARNING: MAX OPERATOR HACK FOR NEG TEMP
       }
     }
   }
 };
+
+class PartitionFunction : public Function {
+  Teuchos::RCP<Mesh> _mesh;
+public:
+  PartitionFunction(  Teuchos::RCP<Mesh> mesh) : Function(0) {
+    _mesh = mesh;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    for (int i = 0;i<cellIDs.size();i++){
+      int partitionNumber = _mesh->partitionForCellID(cellIDs[i]);
+      for (int j = 0;j<numPoints;j++){
+	values(i,j) = partitionNumber;
+      }
+    }
+  }
+};
+
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -146,6 +175,7 @@ public:
     return yMatch;
   }  
 };
+
 
 /*
   class LineSearch {
@@ -216,25 +246,22 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e2;
+  double Re = 1e3;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
-  double mu = 1.0 / Re;
-  double lambda = -.66 / Re;
-  double kappa =  GAMMA * cv * mu / PRANDTL; // double check sign
   
   bool useTriangles = false;
   
-  FieldContainer<double> quadPoints(4,2);
+  FieldContainer<double> domainPoints(4,2);
   
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 2.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 2.0;
-  quadPoints(2,1) = YTOP;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = YTOP;  
+  domainPoints(0,0) = 0.0; // x1
+  domainPoints(0,1) = 0.0; // y1
+  domainPoints(1,0) = 2.0;
+  domainPoints(1,1) = 0.0;
+  domainPoints(2,0) = 2.0;
+  domainPoints(2,1) = YTOP;
+  domainPoints(3,0) = 0.0;
+  domainPoints(3,1) = YTOP;  
   
   int H1Order = polyOrder + 1;
   int nCells = 2;
@@ -253,7 +280,7 @@ int main(int argc, char *argv[]) {
   }
   int horizontalCells = (2.0/YTOP)*nCells, verticalCells = nCells;
   
-  double energyThreshold = 0.25; // for mesh refinements
+  double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
   double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   
@@ -302,10 +329,14 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, 
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(domainPoints, horizontalCells, 
                                                 verticalCells, bf, H1Order, 
                                                 H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
+  // to analyze polynomial order
+  FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
+  FunctionPtr partitions = Teuchos::rcp( new PartitionFunction(mesh) );
   
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -373,7 +404,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // DEFINE PHYSICAL QUANTITIES
   ////////////////////////////////////////////////////////////////////
-  
+
   double gam1 = (GAMMA-1.0);
   FunctionPtr u1sq = u1_prev*u1_prev;
   FunctionPtr u2sq = u2_prev*u2_prev;
@@ -389,6 +420,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr dedu1 = u1_prev;
   FunctionPtr dedu2 = u2_prev;
   double dedT = cv; 
+
+  double beta = 2.0/3.0;
+  FunctionPtr T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1.0/Re) );  // set 1/Re = min viscosity
+  FunctionPtr mu = T_visc / Re;
+  FunctionPtr lambda = -.66 * T_visc / Re;
+  FunctionPtr kappa =  GAMMA * cv * mu / PRANDTL; // double check sign
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
@@ -538,10 +575,10 @@ int main(int argc, char *argv[]) {
   bf->addTerm(u2hat, -tau2->dot_normal() );
   bf->addTerm(That, -tau3->dot_normal() );
 
-  double lambda_factor = lambda / (4.0 * mu * (mu + lambda) );
-
-  FunctionPtr lambda_factor_fxn = Teuchos::rcp(new ConstantScalarFunction(lambda_factor));
-  FunctionPtr two_mu = Teuchos::rcp(new ConstantScalarFunction(2*mu));
+  FunctionPtr lambda_factor_fxn = lambda / (4.0 * mu * (mu + lambda) );
+  FunctionPtr two_mu = 2*mu; 
+  //  FunctionPtr lambda_factor_fxn = Teuchos::rcp(new ConstantScalarFunction(lambda_factor));
+  //  FunctionPtr two_mu = Teuchos::rcp(new ConstantScalarFunction(2*mu));
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   // 1st stress eqn
@@ -563,8 +600,8 @@ int main(int argc, char *argv[]) {
   eps_euler[tau2->ID()][u2->ID()] = one;
 
   // Heat stress equation
-  eps_visc[x_comp][tau3->ID()][q1->ID()] = Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
-  eps_visc[y_comp][tau3->ID()][q2->ID()] = Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
+  eps_visc[x_comp][tau3->ID()][q1->ID()] = one/kappa; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
+  eps_visc[y_comp][tau3->ID()][q2->ID()] = one/kappa; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
   eps_euler[tau3->ID()][T->ID()] = one;
   
   // Stress (Hdiv) equations 
@@ -624,8 +661,8 @@ int main(int argc, char *argv[]) {
   visc[y_comp][tau3->ID()][q2->ID()] = eps_visc[y_comp][tau3->ID()][q2->ID()]*ReScaling; // O(Re)
 
   IPPtr ip = Teuchos::rcp( new IP );
-  
-  // Rescaled L2 portion of TAU
+    
+  // Rescaled L2 portion of TAU - has Re built into it
   for (xyIt = visc.begin();xyIt!=visc.end();xyIt++){
     int component = xyIt->first;
     sparseFxnMatrix A = xyIt->second;
@@ -691,12 +728,27 @@ int main(int argc, char *argv[]) {
   ip->addTerm( ReScaling*v1 );
   ip->addTerm( ReScaling*v2 );
   ip->addTerm( ReScaling*v3 );
-  ip->addTerm( ReScaling*v4 );  
+  ip->addTerm( ReScaling*v4 );    
  
   // div remains the same (identity operator in classical variables)
   ip->addTerm(tau1->div());
   ip->addTerm(tau2->div());
   ip->addTerm(tau3->div());
+
+  /*
+  ip->addTerm(tau1);
+  ip->addTerm(tau2);
+  ip->addTerm(tau3);
+
+  ip->addTerm(v1);
+  ip->addTerm(v2);
+  ip->addTerm(v3);
+  ip->addTerm(v4);
+  ip->addTerm(v1->grad());
+  ip->addTerm(v2->grad());
+  ip->addTerm(v3->grad());
+  ip->addTerm(v4->grad());
+  */
 
   //  ////////////////////////////////////////////////////////////////////
   //  // DEFINE RHS
@@ -730,7 +782,7 @@ int main(int argc, char *argv[]) {
   rhs->addTerm( (e1 * energy_1 + e2 *energy_2 - e1 * viscousEnergy1 - e2 * viscousEnergy2) * v4->grad());
 
   // stress rhs - no heat flux or omega (asym tensor) accumulated, eqns are linear in those
-  FunctionPtr sigmaTrace = -lambda_factor*(sigma11_prev + sigma22_prev);
+  FunctionPtr sigmaTrace = -lambda_factor_fxn*(sigma11_prev + sigma22_prev);
   FunctionPtr viscous1 = e1 * sigma11_prev/(2*mu) + e2 * sigma12_prev/(2*mu) + e1 * sigmaTrace;
   FunctionPtr viscous2 = e1 * sigma12_prev/(2*mu) + e2 * sigma22_prev/(2*mu) + e2 * sigmaTrace;
 
@@ -816,9 +868,10 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
+  //  solution->setReportTimingResults(true); // print out timing 
 
-  // for use in line search enforcing rho > 0
   /*
+    // for use in line search enforcing rho > 0
     FunctionPtr rho_update = Teuchos::rcp( new PreviousSolutionFunction(solution, rho ));
     Teuchos::RCP<LineSearch> lineSearch;
     lineSearch = Teuchos::rcp(new LineSearch(rho_prev, rho_update, mesh));
@@ -853,11 +906,14 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
   ////////////////////////////////////////////////////////////////////
-  double dt = 2.5e-1;
-  //  FunctionPtr Dt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+  bool useAdaptiveTimesteps = false;
+  double dt = .1;
+  //  FunctionPtr Dt = Teuchos::rcp(new ScalarParamFunction(dt));    
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (numTimeSteps>0){
-    cout << "Timestep dt = " << dt << endl;
+    if (rank==0){
+      cout << "Timestep dt = " << dt << endl;
+    }
 
     // needs prev time residual (u_t(i-1) - u_t(i))/dt
     FunctionPtr u1sq_pt = u1_prev_time*u1_prev_time;
@@ -890,11 +946,11 @@ int main(int argc, char *argv[]) {
   // time step 1
   // prerefine the mesh
   /*
-    for (int refIndex=0;refIndex<numRefs;refIndex++){    
+  for (int refIndex=0;refIndex<1;refIndex++){    
     solution->solve(); // false: don't use MUMPS
     refinementStrategy->refine(rank==0); // print to console on rank 0	
-    }
-    solution->solve(); // false: don't use MUMPS
+  }
+  solution->solve(); // false: don't use MUMPS
   */
 
   if (rank==0){
@@ -921,13 +977,12 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(q2->ID(), "q2.m");
     solution->writeFieldsToFile(omega->ID(), "w.m");    
   } 
-  //  energy_2->writeValuesToMATLABFile(mesh, "energy_2.m");
 
   if (rank==0){
     cout << "doing timesteps" << endl;
   }
   // time steps
-  double time_tol = 1e-4;
+  double time_tol = 5e-7;
   for (int k = 0;k<numRefs;k++){
     double L2_time_residual = 1e7;
     int i = 0;
@@ -939,24 +994,46 @@ int main(int argc, char *argv[]) {
       }         
 
       prevTimeFlow->addSolution(backgroundFlow,-1.0); 
-    
+
+      if (useAdaptiveTimesteps){
+	double inf_rho = prevTimeFlow->InfNormOfSolutionGlobal(rho->ID());
+	double inf_u1 = prevTimeFlow->InfNormOfSolutionGlobal(u1->ID());
+	double inf_u2 = prevTimeFlow->InfNormOfSolutionGlobal(u2->ID());
+	double inf_T = prevTimeFlow->InfNormOfSolutionGlobal(T->ID());
+	double inf_time_residual = max(max(inf_rho,inf_u1),max(inf_u2,inf_T));
+	double first_step_residual, residual_ratio;
+	int init_ts = 10; // give a few timesteps to stabilize
+	if (i>=init_ts){
+	  if (i==init_ts){
+	    first_step_residual = inf_time_residual;
+	  }else{
+	    double maxDt = 2.5;
+	    double minDt = 1e-2;
+	    residual_ratio = inf_time_residual/first_step_residual;
+	    // cout << "residual ratio = " << residual_ratio << endl;
+	    dt /= residual_ratio;
+	    dt = min(dt,maxDt);
+	    dt = max(dt,minDt);
+	  }     
+	}
+	((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);     
+      }
+
       double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
       double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
       double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
       double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
       double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
-      L2_time_residual= sqrt(L2_time_residual_sq);    
+      L2_time_residual= sqrt(L2_time_residual_sq);
    
       if (rank==0){
 	cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;
       }
-
       prevTimeFlow->setSolution(backgroundFlow); 
       i++;
     }
-    refinementStrategy->refine(rank==0); // print to console on rank 0	
+    refinementStrategy->refine(rank==0);
   }
-
 
   if (numTimeSteps==0){
     for (int j = 0;j<numNRSteps;j++){
@@ -970,11 +1047,17 @@ int main(int argc, char *argv[]) {
       cout << "nr iter " << j << endl;
     }
   }
-  cout << "finishing it off with final solve" << endl;
-  solution->solve(); 
+  if (rank==0){
+    cout << "finishing it off with final solve" << endl;
+  }
+  solution->solve(false); 
   backgroundFlow->addSolution(solution,1.0);
-
+  if (rank==0){
+    cout << "writing solutions to file" << endl;
+  }
   if (rank==0){    
+    unorm->writeValuesToMATLABFile(solution->mesh(),"unorm.m");
+    T_visc->writeValuesToMATLABFile(solution->mesh(),"T_visc.m");
     solution->writeFluxesToFile(u1hat->ID(), "u1hat2.dat");
     solution->writeFluxesToFile(u2hat->ID(), "u2hat2.dat");
     solution->writeFluxesToFile(That->ID(), "That2.dat");
@@ -995,6 +1078,9 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(q1->ID(), "q12.m");
     solution->writeFieldsToFile(q2->ID(), "q22.m");
     solution->writeFieldsToFile(omega->ID(), "w2.m");    
+
+    //    polyOrderFunction->writeValuesToMATLABFile(mesh, "polyOrders.m");
+    //    partitions->writeValuesToMATLABFile(mesh,"partitions.m");
   } 
 
   return 0;
