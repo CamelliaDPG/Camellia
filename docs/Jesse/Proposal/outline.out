@@ -1,0 +1,11 @@
+\BOOKMARK [1][-]{section.1}{Introduction}{}
+\BOOKMARK [2][-]{subsection.1.1}{Motivation and goal}{section.1}
+\BOOKMARK [2][-]{subsection.1.2}{Literature review}{section.1}
+\BOOKMARK [1][-]{section.2}{Range of CFD problems}{}
+\BOOKMARK [1][-]{section.3}{DPG: a minimum residual method for linear problems}{}
+\BOOKMARK [1][-]{section.4}{Robustness for convection-dominated diffusion}{}
+\BOOKMARK [1][-]{section.5}{DPG for nonlinear problems}{}
+\BOOKMARK [1][-]{section.6}{Proposed work}{}
+\BOOKMARK [2][-]{subsection.6.1}{Area A}{section.6}
+\BOOKMARK [2][-]{subsection.6.2}{Area B}{section.6}
+\BOOKMARK [2][-]{subsection.6.3}{Area C}{section.6}
