@@ -1,0 +1,7 @@
+Import('*')
+
+driver1 = env.Program('exec/Step', ['Confusion_step.cpp'])
+driver2 = env.Program('exec/Hughes', ['Confusion_Hughes.cpp'])
+
+Default(driver1)
+Default(driver2)
