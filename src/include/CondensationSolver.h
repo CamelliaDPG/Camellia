@@ -6,6 +6,8 @@
 #include "ElementType.h"
 #include "Solution.h"
 
+#include <Epetra_Map.h>
+
 using namespace std;
 
 class CondensationSolver : public Solver{
@@ -29,7 +31,7 @@ class CondensationSolver : public Solver{
   CondensationSolver(Teuchos::RCP<Mesh> mesh,Teuchos::RCP<Solution> solution){
     _mesh = mesh;
     _solution = solution;
-    _solver = Teuchos::rcp(new KluSolver()); // default to KLU for the reduced system
+    _solver = Teuchos::rcp(new KluSolver()); // default to KLU for the reduced system for now
   }
   CondensationSolver(Teuchos::RCP<Mesh> mesh,Teuchos::RCP<Solution> solution, Teuchos::RCP<Solver> solver){
     _mesh = mesh;
@@ -38,6 +40,7 @@ class CondensationSolver : public Solver{
   }
 
   int solve();
+  //  Epetra_Map getFluxPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, Epetra_Comm* Comm);
 
 };
 
