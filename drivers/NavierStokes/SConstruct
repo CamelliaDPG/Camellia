@@ -16,7 +16,7 @@ print 'Building with ' + str(job_count) + ' jobs'
 env = Environment(ENV=os.environ)
 
 # Compiler Settings
-CC_OPTS     = '-O3'
+CC_OPTS     = '-O0'
 DEBUG_OPTS  = '-g -Wall'
 CPP_COMP    = 'mpicxx'
 C_COMP      = 'mpicc'
