@@ -87,7 +87,7 @@
 #include "LagrangeConstraints.h"
 
 #include "Solver.h"
-#include "CondensationSolver.h"
+//#include "CondensationSolver.h"
 
 #include "Solution.h"
 #include "Projector.h"
