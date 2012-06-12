@@ -1,0 +1,218 @@
+#!/bin/sh
+#
+# Makediss
+#
+# A Bourne shell script file to compile the dissertation template.
+# The test of exit code after the first latex command causes
+# execution of the shell script to stop if there were unresolved
+# errors (so one will not have to repeat the same steps four more
+# times before the shell script ends).
+#
+#	22 Jul 2001		Craig McCluskey
+# 
+#	23 Sep 2001		Craig McCluskey
+#		- added checking for existing gv process.
+#
+#	04 Oct 2001		Craig McCluskey
+#		- added removing of extra files from previous run.
+#
+#	09 Oct 2001		Craig McCluskey
+#		- added comments.
+#	29 Nov 2001		Craig McCluskey
+#		- added code to compare existing utdiss2.sty to
+#		  the latest style file ($STY) in case someone
+#		  has gotten a new style file and not removed the
+#		  copy of the old one.
+#	07 Dec 2001		Craig McCluskey
+#		- made viewing the PostScript the default after
+#		  generating it.
+#	16 Dec 2001		Craig McCluskey
+#		- added echo commands of each run of a command.
+#	23 Dec 2001		Craig McCluskey
+#		- added gv options media and noresize.
+#	16 Jan 2002		Craig McCluskey
+#		- added -t option to dvips to force using
+#		  of letter-sized paper.
+#	13 Mar 2002		Craig McCluskey
+#		- changed compare of utdiss2.sty to ask use if
+#		  he wants to update.
+#		- changed rm -f $DISS.aux to rm -f *.aux to remove
+#		  auxillary files for chapters, too.
+#		- added clear.
+#		- removed echo "utdiss2 already exists."
+#		- added test for existence of $STY.
+#		- made exit values increase for each subsequent exit.
+#	25 Aug 2002		Craig McCluskey
+#		- changed STY to utdiss2-05.sty.
+#
+
+DISS="./disstemplate"	# Change this to the name of your
+			# dissertation file.
+
+STY="utdiss2-05.sty"
+
+# Remove working files from last run.
+#
+rm -f $DISS.log \
+	*.aux \
+	$DISS.bbl \
+	$DISS.blg \
+	$DISS.dvi \
+	$DISS.idx \
+	$DISS.ilg \
+	$DISS.ind \
+	$DISS.lof \
+	$DISS.log \
+	$DISS.lot \
+	$DISS.ps \
+	$DISS.toc	2>/dev/null
+
+# Clear the screen.
+#
+clear
+
+# Make sure the latest version of the style file exists.
+#
+if test ! -e $STY
+  then
+    echo ""
+    echo "	$STY does not exist!"
+    echo ""
+    exit 1
+fi
+
+# Copy the latest version of the utdiss2 style file to utdiss2.sty.
+#
+if test -e utdiss2.sty
+  then
+    cmp utdiss2.sty $STY > /dev/null 2>&1
+    retval="$?"
+    if test $retval -ne 0
+      then
+	echo ""
+	echo ""
+	echo "	$STY and utdiss2.sty are different."
+	echo ""
+	echo -n "Over-write utdiss2.sty with $STY ? (y/<return>)"
+	read reply
+	if test "$reply" = "y"
+	  then
+	    cp -fa $STY utdiss2.sty
+	    echo ""
+	    echo "	utdiss2.sty over-written."
+	    echo ""
+	  else
+	    echo ""
+	    echo "	utdiss2.sty NOT over-written."
+	    echo ""
+	fi
+	echo ""
+	sleep 1
+    fi
+  else
+    cp -a $STY utdiss2.sty
+fi
+
+
+# Run latex, bibtex, and makeindex to create the output file ($DISS.dvi)
+#
+echo ""
+echo "	First run of LaTeX ..."
+echo ""
+latex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 2
+	fi
+echo ""
+echo "	Run of BibTeX ..."
+echo ""
+bibtex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 3
+	fi
+echo ""
+echo "	Second run of LaTeX ..."
+echo ""
+latex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 4
+	fi
+echo ""
+echo "	Third run of LaTeX ..."
+echo ""
+latex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 5
+	fi
+echo ""
+echo "	Run of makeindex ..."
+echo ""
+makeindex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 6
+	fi
+echo ""
+echo "	Fourth run of LaTeX ..."
+echo ""
+latex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 7
+	fi
+echo ""
+echo "	Fifth and last run of LaTeX ..."
+echo ""
+latex $DISS
+exitcode="$?"
+	if test $exitcode -ne 0
+	  then
+	    exit 8
+	fi
+
+# Make the postscript file from the .dvi file. The t option forces
+# dvips to make the postscript file for letter (8.5 x 11) size paper.
+#
+dvips -t letter $DISS -o
+
+
+# If the user is not looking at the postscript file already, ask him
+# if he wants to. If so, start GhostView.
+#
+echo ""
+echo ""
+echo ""
+echo ""
+echo ""
+echo ""
+echo 
+
+# ps -ef 2>/dev/null | grep -v grep | grep "gv" \
+# 			| grep "$DISS.ps" > /dev/null 2>&1
+
+ps -eo cmd 2>/dev/null | grep -v grep | grep "gv" \
+			| grep "$DISS.ps" > /dev/null 2>&1
+retval="$?"
+if test $retval -ne 0
+  then
+    echo 
+    echo "	View Postscript? <return/n> "
+    read reply
+    if test "$reply" != "n"
+      then
+        gv $DISS.ps &
+        # gv -media letter -noresize $DISS.ps &
+    fi
+  else
+    echo 
+fi

@@ -1,0 +1,4 @@
+pdflatex outline
+bibtex outline
+pdflatex outline
+pdflatex outline
