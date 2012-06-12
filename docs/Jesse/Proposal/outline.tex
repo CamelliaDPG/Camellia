@@ -153,16 +153,22 @@ Address the fact that CFD problems have issues of robustness; introduce reasonin
 
 Historically, the Galerkin method has been very successfully applied to a broad range of problems in solid mechanics, for which the variational problems resulting from the PDE are symmetric and coercive (positive-definite). It is well known that the finite element method produces optimal or near-optimal results for such problems, with the finite element solution matching or coming close to the best approximation of the solution in the finite element space. However, standard Bubnov-Galerkin methods tend to perform poorly for the class of PDEs known as singular perturbation problems. These problems are often characterized by a parameter that may be either very small or very large in the context of physical problems.  An additional complication of singular perturbation problems is that very often, in the limiting case of the parameter blowing up or decreasing to zero, the PDE itself will change types (e.g.\ from elliptic to hyperbolic).
 
-A canonical example of a singularly perturbed problem is the convection-diffusion equation. In 1D, the convection-diffusion equation is
+A canonical example of a singularly perturbed problem is the convection-diffusion equation on domain $\Omega \in \mathbb{R}^3$,
+\[
+\div \left(\beta u\right) - \epsilon \Delta u = f.
+\]
+The equation represents the change in the scalar quantity $u$, representing the concentration of a quantity in a given medium, taking into account both convective and diffusive effects. $\beta \in \mathbb{R}^3$ specifies the direction and magnitude of convection, while the singular perturbation parameter $\epsilon$ represents the diffusivity of the medium. In the limit of an inviscid medium as $\epsilon\rightarrow 0$, the equation changes types, from elliptic to hyperbolic, and from second order to first order.
+
+We will illustrate the issues associated with numerical methods for this equation using one dimensional examples.  In 1D, the convection-diffusion equation is
 \begin{align*}
 \beta u'-\epsilon u'' &= f.
 \end{align*}
-The equation represents the change in the concentration $u$ of a quantity in a given medium, taking into account both convective and diffusive effects. $\beta$ represents the speed of convection, while the singular perturbation parameter $\epsilon$ represents the diffusivity of the medium. In the limit of an inviscid medium as $\epsilon\rightarrow 0$, the equation changes types, from elliptic to hyperbolic, and from second order to first order. For Dirichlet boundary conditions $u(0)=u_0$ and $u(1)= u_1$, the solution can develop sharp boundary layers of width $\epsilon$ near the outflow. 
+For Dirichlet boundary conditions $u(0)=u_0$ and $u(1)= u_1$, the solution can develop sharp boundary layers of width $\epsilon$ near the outflow boundary $x=1$. 
 
 \begin{figure}[!h]
 \centering
-\includegraphics[scale=.5]{figs/GalerkinOscTight.png}
-\caption{Oscillations in the finite element solution of the convection-diffusion equation for small diffusion.}
+\includegraphics[scale=.4]{figs/GalerkinOscTight.png}
+\caption{Oscillations in the 1D finite element solution of the convection-diffusion equation for small diffusion.}
 \label{fig:GalerkinOsc}
 \end{figure}
 
@@ -189,9 +195,9 @@ For the past half-century, problems in computational fluid dynamics (CFD) have b
 
 For linear problems, finite difference (FD) methods approximate derivatives based on interpolation of pointwise values of a function.  FD methods were popularized first by Lax, who introduced the concepts of the monotone scheme and numerical flux. For the conservation laws governing compressible aerodynamics, FD methods approximated the conservation law, using some numerical flux to reconstruct approximations to the derivative at a point. Finite volume (FV) methods are similar to finite difference methods, but approximate the integral version of a conservation law as opposed to the differential form. FD and FV have roughly the same computational cost/complexity; however, the advantage of FV methods over FD is that FV methods can be used on a much larger class of discretizations than FD methods, which require uniform or smooth meshes. 
 
-For nonlinear shock problems, the solution often exhibits sharp gradients or discontinuities, around which the solution would develop spurious Gibbs-type oscillations. Several ideas were introduced to deal with oscillations in the solution near a sharp gradient or shock: artificial viscosity parameters, total variation diminishing (TVD) schemes, and slope limiters. However, each method had its drawback, either in terms of loss of accuracy, dimensional limitations, or problem-specific parameters to be tuned \cite{Shu:Lectures}. Harten, Enquist, Osher and Chakravarthy introduced the essentially non-oscillatory (ENO) scheme in 1987 \cite{ENO}, which was improved upon with the weighted essentially non-oscillatory (WENO) scheme in \cite{WENO}. WENO remains a popular choice today for both finite volume and finite difference schemes. 
+For nonlinear shock problems, the solution often exhibits sharp gradients or discontinuities, around which the solution would develop spurious Gibbs-type oscillations. Several ideas were introduced to deal with oscillations in the solution near a sharp gradient or shock: artificial diffusion, total variation diminishing (TVD) schemes, and slope limiters. However, each method had its drawback, either in terms of loss of accuracy, dimensional limitations, or problem-specific parameters to be tuned \cite{Shu:Lectures}. Harten, Enquist, Osher and Chakravarthy introduced the essentially non-oscillatory (ENO) scheme in 1987 \cite{ENO}, which was improved upon with the weighted essentially non-oscillatory (WENO) scheme in \cite{WENO}. WENO remains a popular choice today for both finite volume and finite difference schemes. Most of these methods can be interpreted as adding some specific artificial diffusion to the given numerical scheme.  We refer to such schemes as \emph{modified equation} methods, as the exact solution no longer satisfies the discrete system due to the presence of additional artificial diffusion.  
 
-Historically, finite volumes and finite difference methods have been the numerical discretizations of choice for CFD applications; the simplicity of implementation of the finite difference method allows for quick turnaround time, and the finite volume method is appealing due to its locally conservative nature and flexibility. More recently, the finite element (FE) method has gained popularity as a discretization method for CFD applications for its stability properties and rigorous mathematical foundations. Early pioneers of the finite element method for CFD included Zienkiewicz, Oden, Karniadakis, and Hughes \cite{ChungCFDBook}.
+Historically, finite volumes and finite difference methods have been the numerical discretizations of choice for CFD applications; the simplicity of implementation of the finite difference method allows for quick turnaround time, and the finite volume method is appealing due to its locally conservative nature and flexibility. More recently, the finite element (FE) method has gained popularity as a discretization method for CFD applications for its stability properties and rigorous mathematical foundations. Early pioneers of the finite element method for CFD included Zienkiewicz, Oden, Karniadakis, and Hughes \cite{ChungCFDBook}.  
 
 \subsection{Stabilized finite element methods}
 
@@ -199,25 +205,57 @@ The finite element/Galerkin method has been widely utilized in engineering to so
 
 Traditionally, instability/loss of robustness in finite element methods has been dealt with using residual-based stabilization techniques.  Given some variational form, the problem is modified by adding to the bilinear form the strong form of the residual, weighted by a test function and scaled by a stabilization constant $\tau$.  The most well-known example of this technique is the streamline-upwind Petrov-Galerkin (SUPG) method, which is a stabilized FE method for solving the convection-diffusion equation using piecewise linear continuous finite elements \cite{SUPG}.  SUPG stabilization not only removes the spurious oscillations from the finite element solution of the convection-diffusion equation, but delivers the best finite element approximation in the $H^1$ norm.  
 
-An important difference between residual-based stabilization techniques and other stabilization methods is the idea of \textit{consistency} --- by adding stabilization terms based on the residual, the exact solution still satisfies the same variational problem (i.e.\ Galerkin orthogonality still holds). Contrast this to the artificial viscosity methods in finite difference and finite volume methods, where a specific amount of additional viscosity is added based on the magnitude of the convection and diffusion parameters: unlike residual-based stabilization schemes, the exact solution to the original equation no longer satisfies the new stabilized formulation. 
-
-The addition of residual-based stabilization terms can also be interpreted as a modification of the test functions --- in other words, stabilization can be achieved by changing the test space for a given problem.  We approach the idea of stabilization through the construction of \textit{optimal test functions} to achieve optimal approximation properties. 
-
 \subsubsection{SUPG}
 
-\todo{FINISH - add SUPG detailed description and Hughes book diagrams for test functions.}
+The Streamline Upwind Petrov Galerkin (SUPG) method is a stabilization method for $H^1$-conforming finite elements, the idea of which was originally motivated by artificial diffusion techniques in finite differences.  In particular, for the homogeneous 1D convection-diffusion equation, it is possible to recover, under a finite difference method, the exact solution at nodal points by adding an ``exact" artificial diffusion based on the mesh size $h$ and the magnitudes of the convection $\beta$ and the viscosity $\epsilon$.  
+
+The idea of ``exact" artificial viscosity was adapted to finite elements not through the direct modification of the equations, but through the test functions and weighting of the residual.  In particular, finite element and Galerkin methods are often referred to as ``weighted residual" methods, since the starting point of both is to multiply the residual by a particular test, or weighting, function.  Standard Galerkin methods, known as Bubnov-Galerkin methods, simply choose these weighting functions to be the same as the the basis functions used to approximate the solution.  A Petrov-Galerkin method refers to any Galerkin method other than a classical Bubnov-Galerkin method.  
+
+We will introduce the SUPG method at an abstract level for illustrative purposes only.  Further details and perspectives on the SUPG method can be found in \cite{SUPG}, as well as in an upcoming book by Hughes.  The convection-diffusion equation can be written as follows:
+\[
+Lu = \left(L_{\rm adv} + L_{\rm diff} \right) u = f,
+\]
+where $L_{\rm adv} = \div \left(\beta u\right)$ is the first order advective operator, and $L_{\rm diff} = \epsilon \Delta u$ is the second-order diffusive operator.  Let us assume $u$ to be a linear combination of piecewise-linear basis functions $\phi_i, i = 0,\ldots,N$.  The SUPG method is then to solve
+\[
+\int_\Omega L u v + \int_\Omega \tau \left(L_{\rm adv}v\right)\left( L u - f\right) = \int_\Omega f v 
+\]
+for where $\tau$ is the SUPG parameter.  For uniform meshes in 1D, $\tau$ is chosen such that, for $f=0$, the matrix system resulting from SUPG is exactly equal to the finite difference system under ``exact" artificial diffusion.  However, unlike the artificial diffusion method, for $f\neq 0$, the SUPG method still delivers optimal stabilization.  In fact, the SUPG finite element solution in 1D is nothing less than the nodal interpolant and the best $H^1$ approximation of the exact solution, as seen in Figure~\ref{fig:SUPG}.
+
+\begin{figure}[!h]
+\centering
+\subfigure[SUPG and standard FEM solutions]{\includegraphics[scale=.43]{figs/SUPG.png}}
+\subfigure[SUPG test function]{\includegraphics[scale=.22]{figs/SUPGtest.png}}
+\caption{SUPG and standard Bubnov-Galerkin solutions to the 1D convection-dominated diffusion equation, and a modified SUPG test function (in black) corresponding to a linear basis ``hat" function (in red).  The upwind portion of the element is emphasized, while the downwind portion is decreased.  The magnitude of the discontinuity between the upwind and downwind portion is controlled by the intrinsic timescale parameter $\tau$. }
+\label{fig:SUPG}
+\end{figure}
+
+The idea of emphasizing the upwind portion of a test function is an old idea, introduced in 1977 by Zienkiewicz et al.\ in \cite{zienkUpwind}.  However, the precise amount of upwinding,\footnote{Insufficient upwinding results in a method which still exhibits oscillations and instabilities, while excessive upwinding leads to an overly diffusive method.} as well as the connection to residual-based stabilization methods, were novel to SUPG.  To date, the SUPG is still the most popular stabilization method of choice for convection-diffusion type problems, in both academic and industry applications.  
+
+An important feature of SUPG and other residual-based stabilization techniques that separates it from modified equation methods is the idea of \textit{consistency} --- by adding stabilization terms based on the residual, the exact solution still satisfies the same variational problem (i.e.\ Galerkin orthogonality still holds). Contrast this to the artificial diffusion methods in finite difference and finite volume methods, where a specific amount of additional viscosity is added based on the magnitude of the convection and diffusion parameters: unlike residual-based stabilization schemes, the exact solution to the original equation no longer satisfies the new stabilized formulation.  
+
+This addition of residual-based stabilization terms can be interpreted as a modification of the test functions as well.  For SUPG, the formulation can equivalently be written as
+\[
+\int_\Omega\left( Lu-f\right) v_i = \int_\Omega f v_i, \quad i = 0,\ldots,N
+\]
+where $v_i$ is defined as
+\[
+v_i = \phi_i(x) + \tau L_{\rm adv} \phi_i.  
+\]
+In other words, the test function $v_i$ is a perturbation of the basis function $\phi_i$ by a scaled advective operator applied to $\phi_i$.  For a linear $C^0$ basis function (the ``hat" function), this naturally leads to a bias in the upwind or streamline direction of the flow $\beta$, as seen in Figure~\ref{fig:SUPG}.  
+
+An important connection can now be made --- stabilization can be achieved by changing the test space for a given problem.  We will discuss in Section~\secref{optimalTest} approaching the idea of stabilization through the construction of \textit{optimal test functions} to achieve optimal approximation properties. 
 
 \subsubsection{DG methods}
 
 Discontinuous Galerkin (DG) methods form a subclass of FEM; first introduced by Reed and Hill in \cite{Reed:73}, these methods were later analyzed by Cockburn and Shu \cite{CockburnShu:DG} and have rapidly gained popularity for CFD problems. Rather than having a continuous basis where the basis function support spans several element cells, DG opts instead for a discontinuous, piecewise polynomial basis, where, like FV schemes, a numerical flux facilitates communication between discontinuities (unlike FV methods, however, there is no need for a reconstruction step). Advantages of DG methods include easily modified local orders of approximation, easy adaptivity in both $h$ and $p$, and efficient parallelizability. 
 
-An additional reason for the popularity of DG methods is that they can be interpreted as stabilized FE methods through appropriate choices of the numerical flux. For example, for the pure convection problem, the solution has only regularity in the streamline direction, but is only $L^2$ in the crosswind direction. As a consequence, the boundary trace of the solution is defined only in the direction of convection. The upwind DG method addresses the above issue by choosing the numerical flux to be the upwind flux; in 1D, this means the numerical flux between two elements is taken to be the left
+An additional reason for the popularity of DG methods is that they can be interpreted as stabilized FE methods through appropriate choices of the numerical flux. For example, for the pure convection problem, the solution has only regularity in the streamline direction, but is only $L^2$ in the crosswind direction. As a consequence, the boundary trace of the solution is defined only in the direction of convection. The upwind DG method addresses the above issue by choosing the numerical flux to be the upwind flux; we will illustrate this with a 1D example.  
 
 \todo{Add 1D description and diagrams (Hughes book) of DG formulation for convection with upwind flux.}
 
 In this case, the DG numerical flux can be viewed as imparting additional regularity than is present in the solution \cite{DPG1,DPG3}. 
 
-A more recent development in DG methods is the idea of \emph{hybridized} DG (HDG), introduced by Gopalakrishnan and Lazarov \cite{hybridDG}. The hybridized DG framework addresses several criticisms of common DG methods (globally coupled degrees of freedom, complicated/inefficient implementation procedures, suboptimal convergence of approximate fluxes) by identifying degrees of freedom with support only on element edges. Neighboring elements are coupled together only through these degrees of freedom, which can be interpreted as Lagrange multipliers enforcing weak continuity of the trial space. Additionally, HDG methods 
+A more recent development in DG methods is the idea of \emph{hybridized} DG (HDG), introduced by Gopalakrishnan and Lazarov \cite{hybridDG}. The hybridized DG framework addresses several criticisms of common DG methods (globally coupled degrees of freedom, complicated/inefficient implementation procedures, suboptimal convergence of approximate fluxes) by identifying degrees of freedom with support only on element edges. Neighboring elements are coupled together only through these degrees of freedom, which can be interpreted as Lagrange multipliers enforcing weak continuity of the trial space. Additionally, HDG methods \todo{add bit about numerical fluxes still used, stabilization param}
 
 \subsubsection{Optimization/NL solvers}
 
