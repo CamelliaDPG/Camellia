@@ -253,6 +253,8 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     solution->writeFieldsToFile(u->ID(), "u.m");
     solution->writeFluxesToFile(uhat->ID(), "u_hat.dat");
+
+    solution->writeToVTK("confusion.vtu", 3);
     
     cout << "wrote files: u.m, u_hat.dat\n";
   }

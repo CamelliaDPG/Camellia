@@ -201,6 +201,9 @@ public:
   // Jesse's additions:
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
+
+  void writeToVTK(const string& filePath, unsigned int refinementLevel=1);
+  void writeToVTU(const string& filePath);
   
   // statistics accessors:
   double totalTimeLocalStiffness();
