@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
+include(ConfigureOptions.cmake)
 
 project(Camellia)
 
-include(ConfigureOptions.cmake)
 
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
@@ -97,8 +97,4 @@ link_libraries(
 )
 
 # Build Drivers
-# Conservative Confusion
-set(CONSERVATIVE_CONFUSION_SOURCES
-  ${DRIVER_DIR}/ConservativeConfusion/ConfusionDriver.cpp
-)
-add_executable(ConservativeConfusion ${CONSERVATIVE_CONFUSION_SOURCES})
+add_subdirectory(drivers)
