@@ -251,13 +251,30 @@ An important connection can now be made --- stabilization can be achieved by cha
 
 Discontinuous Galerkin (DG) methods form a subclass of FEM; first introduced by Reed and Hill in \cite{Reed:73}, these methods were later analyzed by Cockburn and Shu \cite{CockburnShu:DG} and have rapidly gained popularity for CFD problems. Rather than having a continuous basis where the basis function support spans several element cells, DG opts instead for a discontinuous, piecewise polynomial basis, where, like FV schemes, a numerical flux facilitates communication between neighboring elements (unlike FV methods, however, there is no need for a reconstruction step). Advantages of DG methods include the local conservation property, easily modified local orders of approximation, easy adaptivity in both $h$ and $p$, and efficient parallelizability. 
 
-An additional reason for the popularity of DG methods is that they can be interpreted as stabilized FE methods through appropriate choices of the numerical flux \todo{add Brezzi citation}. We will illustrate this with the pure convection equation in 1D.  
-
-Local conservation: in 1D, numerical solution at outflow is exact.
+An additional reason for the popularity of DG methods is that they can be interpreted as stabilized FE methods through appropriate choices of the numerical flux \cite{Brezzi20063293}. We will illustrate this with the pure convection equation in 1D ---
+\begin{align*}
+\pd{\left(\beta u\right)}{x} &= f\\
+u(0) &= u_0.
+\end{align*}
+The DG formulation is derived by multiplying by a test function $v$ with support only on a single element $K = [x_K,x_{K+1}]$ and integrating by parts. The boundary term is left alone, such that the local formulation is 
+\[
+\left.\beta u v\right|_{x_K}^{x_{K+1}} + \int_K -\beta u \pd{v}{x} = \int_K f v,
+\]
+and the global formulation is recovered by summing up all element-wise local formulations. However, the boundary term in the local formulation is presently ill-defined, as both $u$ and $v$ are dual-valued over element boundaries. Consequently, we make the choice to define the values of $u$ on the boundary (the \emph{traces} of $u$) as
+\begin{align*}
+u(x_K) \coloneqq u(x_K^-), \quad u(x_{K+1}) \coloneqq u(x_{K+1}^-),
+\end{align*}
+where $u(x_K^-)$ is the value of $u$ at $x_K$ as seen from the left, and $u(x_K^+)$ the value as seen from the right. Similarly, the traces of $v$ are defined to be
+\begin{align*}
+v(x_K) \coloneqq v(x_K^+), \quad v(x_{K+1}) \coloneqq v(x_{K+1}^-),
+\end{align*}
+Notice the specific choice of $v(x_K)$ --- we have chosen the value of $v(x_K)$ to be the value in the upwind direction. 
 
 \todo{Add 1D description and diagrams (Hughes book) of DG formulation for convection with upwind flux.}
 
-For example, for the pure convection problem, the solution has only regularity in the streamline direction, but is only $L^2$ in the crosswind direction. As a consequence, the boundary trace of the solution is defined only in the direction of convection. The upwind DG method addresses the above issue by choosing the numerical flux to be the upwind flux; in this case, the DG numerical flux can be viewed as imparting additional regularity than is present in the solution \cite{DPG1,DPG3}. 
+For example, for the pure convection problem, the solution has a distributional derivative in the streamline direction, but is only $L^2$ in the crosswind direction. As a consequence of the regularity of the solution, the boundary trace of the solution is defined only in the direction of convection. The upwind DG method addresses the above issue by choosing the numerical flux to be the upwind flux; in this case, the DG numerical flux can be viewed as imparting additional regularity than is present in the solution \cite{DPG1,DPG3}. 
+
+
 
 A more recent development in DG methods is the idea of \emph{hybridized} DG (HDG), introduced by Gopalakrishnan and Lazarov \cite{hybridDG}. The hybridized DG framework addresses several criticisms of common DG methods (globally coupled degrees of freedom, complicated/inefficient implementation procedures, suboptimal convergence of approximate fluxes) by identifying degrees of freedom with support only on element edges. Neighboring elements are coupled together only through these degrees of freedom, which can be interpreted as Lagrange multipliers enforcing weak continuity of the trial space. Additionally, HDG methods \todo{add bit about numerical fluxes still used, stabilization param}
 
@@ -683,6 +700,6 @@ Using a variant of the quasi-optimal test norm, numerical results show that the 
 \end{itemize}
 
 \bibliographystyle{plain}
-\bibliography{CFD_intro,DPG_old,paper,NS}
+\bibliography{CFD_intro,DPG_old,paper,LitRev}
 
 \end{document}
