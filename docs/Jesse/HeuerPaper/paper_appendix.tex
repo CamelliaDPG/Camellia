@@ -1,0 +1,331 @@
+\appendix
+
+\section{Proof of lemmas/stability of the adjoint problem}
+
+We present now the proofs of the three lemmas used in this paper to show the equivalence of the DPG energy norm to norms on $U$. We reduce the adjoint problem to the scalar second order equation
+\begin{align}
+- \epsilon \Delta v - \beta \cdot \grad v &= g - \epsilon \div f \eqnlab{adjoint}
+\end{align}
+with boundary conditions
+\begin{align}
+%\tau \cdot n = 
+- \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{reducedbc_1}\\ 
+v &= 0, \quad x\in \Gamma_+ \label{reducedbc_2}
+\end{align}
+and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions are the reduced form of boundary conditions \eqref{bc_1} and \eqref{bc_2} corresponding to $\left.\tau\cdot n\right|_{\Gamma_-}=0$ and $\left.v\right|_{\Gamma_+}=0$. Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. 
+
+The normal trace of $f\cdot n$ is treated using a density argument --- for $f\in C^\infty(\Omega)$, we derive inequalities that are independent of $f\cdot n$ and $\div f$. We extend these inequalities to $f\in L^2(\Omega)$ by taking $f$ to be the limit of smooth functions. 
+%The appearance of the normal trace $f\cdot n$ necessitates the use of a smooth dense subset of $L^2$.  Formally speaking, we define the adjoint equation \eqnref{adjoint} for $f\in C^\infty(\Omega)$.  In doing so, we are allowed to speak of the normal trace $f\cdot n$ on the boundary.  We derive inequalities that are independent of $f\cdot n$ and $\div f$ (quantities that are ill-defined for $L^2(\Omega)$ functions), and note that, since smooth functions are dense in $L^2(\Omega)$, we can take any $L^2$ function to be the limit of $C^\infty(\Omega)$ functions.  Since each inequality will hold for all smooth functions and is well-defined for $L^2(\Omega)$ functions, the same inequality will hold for $L^2(\Omega)$ functions in the limit as well.
+
+\begin{lemma} 
+\label{lemma_stream}
+Assume $v$ satisfies \eqnref{adjoint}, with boundary conditions \eqref{bc_1} and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, then
+\[
+\|\beta \cdot \grad v \| \lesssim \| g\|.
+\]
+\end{lemma}
+
+\begin{proof}
+Define $v_\beta = \beta\cdot \grad v$.  Multiplying the adjoint equation \eqnref{adjoint} by $v_\beta$ and integrating over $\Omega$ gives
+\[
+\|v_\beta\|^2 = -\int_\Omega g v_\beta - \epsilon \int_\Omega \Delta v v_\beta.
+\]
+Note that 
+\[
+-\int_{\Omega} \beta\cdot \grad v \del v = -\int_{\Omega} \beta\cdot \grad v \div \grad v.
+\]
+Integrating this by parts, we get
+\[
+-\int_{\Omega} \beta\cdot \grad v \div \grad v = \int_{\Omega}\grad (\beta\cdot \grad v) \cdot \grad v  - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v.
+\]
+Since $\grad (\beta \cdot \grad v) = \grad \beta \cdot \grad v + \beta \cdot \grad \grad v$, where $\grad \beta$ and $\grad \grad v$ are understood to be tensors, 
+\[
+\int_{\Omega}\grad (\beta\cdot \grad v) \cdot \grad v = \int_{\Omega}(\grad \beta\cdot \grad v) \cdot \grad v + \int_{\Omega}\beta\cdot \grad\grad v \cdot \grad v 
+\]
+If we integrate by parts again and use that $\grad v \cdot \grad \grad v = \grad\frac{1}{2}\left(\grad v\cdot \grad v\right)$, we get
+%\[
+%\int_{\Omega}\beta\cdot \grad\grad v \cdot \grad v = \frac{1}{2}\int_{\Omega}\beta\cdot \grad(\grad v \cdot \grad v ) = \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) - \frac{1}{2}\int_{\Omega}\div \beta (\grad v \cdot \grad v )
+%\]
+%Then, we can combine these terms to get
+\begin{align*}
+-\int_{\Omega}  \del vv_\beta &= - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v + \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) - \frac{1}{2}\int_{\Omega}\div \beta (\grad v \cdot \grad v ) + \int_{\Omega}(\grad \beta\cdot \grad v) \cdot \grad v\\
+&= - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v + \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) + \int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v
+\end{align*}
+Finally, substituting this into our adjoint equation multiplied by $v_\beta$, we get
+\[
+\| v_\beta\|^2 = -\int_{\Omega}g\beta\cdot \grad v +  \epsilon\int_{\Gamma}  \left( -n\cdot \grad v \beta + \frac{1}{2}\beta_n \grad v \right) \cdot \grad v + \epsilon\int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v
+\]
+%The first term on the RHS can be controlled using Young's inequality. 
+The last term can be bounded by our assumption on $\|\grad \beta - \frac{1}{2}\div \beta I\|^2 \leq C$:
+\[
+\epsilon \int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v \leq C\frac{\epsilon}{2} \|\grad v\|^2.
+\]
+For the boundary terms, on $\Gamma_-$, $\grad v\cdot n = 0$, reducing the integrand over the boundary to $\beta_n|\grad v|^2 \leq 0$.  On $\Gamma_+$, $v=0$ implies $\grad v \cdot \tau = 0$, where $\tau$ is any tangential direction.  An orthogonal decomposition in the normal and tangential directions yields $\grad v = (\grad v \cdot n) n$, reducing the above to 
+\[
+ \epsilon\int_{\Gamma}  -\frac{1}{2}|\beta_n| (\grad v \cdot n)^2 \leq 0.
+\]
+Applying these inequalities to our expression for $\|v_\beta\|^2$ leaves us with the estimate
+\[
+\|v_\beta\|^2 \leq  -\int_{\Omega}g\beta\cdot \grad v + C\frac{\epsilon}{2} \|\grad v\|^2.
+\]
+Since $C=O(1)$, an application of Young's inequality and Lemma \ref{lemma_grad} complete the estimate.
+\end{proof}
+
+\begin{lemma} 
+\label{lemma_grad}
+Assume $\beta$ satisfies \eqref{a_req}.  Then, for $v$ satisfying equation \eqnref{adjoint} with boundary conditions \eqref{bc_1} and \eqref{bc_2} and sufficiently small $\epsilon$, 
+\[
+\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\|^2 + \epsilon \| f\|^2
+\]
+\end{lemma}
+
+\begin{proof}
+Since $\curl \beta=0$, and $\Omega$ is simply connected, there exists a scalar potential $\psi$, $\grad \psi = \beta$ by properties of the exact sequence. The potential is non-unique up to a constant, and we choose the constant such that $e^\psi = O(1)$.  Take the transformed function $w = e^\psi v$; following (2.26) in \cite{DPGrobustness}, we substitute $w$ into the the left hand side of equation \eqnref{adjoint}, arriving at the relation  
+\[
+-\epsilon \Delta w - (1-2\epsilon) \beta \cdot \grad w + \left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w = e^\psi (g-\epsilon \div f)
+\]
+Multiplying by $w$ and integrating over $\Omega$ gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w + \int_\Omega\left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w^2 = \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+Integrating by parts gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w = \epsilon \left( \int_\Omega |\grad w|^2- \int_{\Gamma} w \grad w \cdot n  \right) + \frac{(1-2\epsilon) }{2} \left(\int_\Omega \div \beta w^2 - \int_\Gamma\beta_n w^2 \right)
+\]
+Note that $w=0$ on $\Gamma_+$ reduces the boundary integrals over $\Gamma$ to just the inflow $\Gamma_-$.  Furthermore, we have $\grad w = e^\psi(\grad v + \beta v)$.  Applying the above and boundary conditions on $\Gamma_-$, the first boundary integral becomes
+\[
+\int_{\Gamma_-} w \grad w \cdot n = \int_{\Gamma_-} we^\psi(\grad v + \beta v)\cdot n =  \int_{\Gamma_-} we^\psi(f\cdot n + \beta_n v)
+\]
+Noting $\int_{\Gamma_-}\beta_n w^2 \leq 0$ through $\beta_n<0$ on the inflow gives
+\[
+\epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n \leq \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ imply $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi = O(1)$. We can then bound from below:
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n  \lesssim \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n 
+\]
+Interpreting $\div f$ as a functional, the right hand gives
+\begin{align*}
+\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w
+\end{align*}
+The boundary integral on $\Gamma$ reduces to $\Gamma_-$, which is then nullified by the same term on the left hand side, leaving us with 
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 \lesssim \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) = \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot (\beta w + \grad w)
+\]
+From here, the proof is identical to the final lines of the proof of Lemma 1 in \cite{DPGrobustness}; an application of Young's inequality (with $\delta$) to the right hand side and bounds on $\|v\|, \|\grad v\|$ by $\|w\|,\|\grad w\|$ complete the estimate.  
+%ISSUE: REMOVE BOUNDARY TERM
+\end{proof}
+
+\begin{lemma}
+\label{lemma_boundary}
+%\todo{Rewrite in two steps - get variational soln to div free portion, then infer existence of curl z, then put together the decomp}
+Let $\beta$ satisfy conditions \eqref{a_req} and \eqref{c_req}, and let $v \in H^1(\Oh)$ , $\tau \in H({\rm div},\Oh)$ satisfy equations \eqref{adjoint1} and \eqref{adjoint2} with $f=g=0$%in a distributional sense, with arbitrary boundary conditions
+. Then
+\[
+\|\grad v\| = \frac{1}{\epsilon}\|\tau\| \lesssim \frac{1}{\epsilon} \| \jump{\tau\cdot n}\|_{\Gh \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| \jump{v}\|_{\Gh^0 \cup \Gamma_+}
+\]
+\end{lemma}
+\begin{proof}
+
+We begin by choosing $\psi$ as the unique solution to the following problem
+\begin{align*}
+-\epsilon \Delta \psi + \div \left(\beta \psi\right) &= -\div \tau \\
+\epsilon \grad \psi \cdot n - \beta_n\psi - \tau\cdot n &= 0, \quad x\in \Gamma_-\\
+\psi &= 0, \quad x\in \Gamma_+.
+\end{align*}
+Since $\div \beta = 0$, we can conclude that the bilinear form is coercive and the problem is well posed \cite{DPGrobustness}. The well-posedness of the above problem directly implies that $\div \left(\tau-(\epsilon\grad \psi - \beta \psi)\right) = 0$ in a distributional sense, and thus there exists a $z\in H({\rm curl},\Omega)$ such that
+\[
+\tau = \left(\epsilon \grad \psi - \beta \psi\right) + \curl z
+\]
+Since $\div \beta = 0$, we satisfy condition~\eqref{a_req}. Noting that the sign on $\beta$ is opposite now of the sign on $\epsilon \Delta \psi$, the problem for $\psi$ matches the adjoint problem \label{adjoint} for $f = \frac{1}{\epsilon}\tau$. Given the boundary conditions on $\psi$, we can use a trivial modification of the proof of Lemma \ref{lemma_grad} to bound
+\[
+\epsilon \|\grad \psi\|_{L^2}^2 + \|\psi \|_{L^2}^2 \lesssim \frac{1}{\epsilon}\|\tau\|_{L^2}^2.
+\]
+By the above bound and the triangle inequality, 
+\[
+\|\curl z \|_{L^2} \leq \epsilon \|\grad \psi\|_{L^2} + \|\beta \psi\|_{L^2} + \|\tau\|_{L^2} \lesssim \frac{1}{\sqrt{\epsilon}}\|\tau\|_{L^2}.
+\]
+On the other hand, using the decomposition and boundary conditions directly, we can integrate by parts over $\Oh$ to arrive at
+\begin{align*}
+\|\tau\|_{L^2}^2 &= (\tau, \epsilon \grad \psi - \beta \psi + \curl z)_{\Oh} = (\tau, \epsilon \grad \psi) - (\tau,\beta \psi) + (\tau,\curl z)  \\
+&=(\tau, \epsilon \grad \psi) + \epsilon(\grad v,\beta \psi) - \epsilon(\grad v,\curl z)  \\
+&=\epsilon \langle [\tau \cdot n],\psi \rangle - \epsilon  \langle n\cdot \curl z, \jump{v}\rangle-\epsilon(\div \tau, \psi) + \epsilon(\div \left(\beta v\right), \psi).
+\end{align*}
+Note that $\div(\beta v) - \div \tau = 0$ removes the contribution of the pairings on the domain and leaves us with only boundary pairings. By definition of the boundary norms on $\jump{\tau\cdot n}$ and $\jump{v}$ and the fact that $\curl z$ is trivially in $H({\rm div}, \Omega)$,
+\begin{align*}
+\|\tau\|_{L^2}^2 &=\epsilon \langle [\tau \cdot n],\psi \rangle -
+\epsilon \langle n\cdot \curl z, \jump{v}\rangle = \epsilon \langle [\tau
+  \cdot n],\psi \rangle_{\Gh \setminus \Gamma_+} - \epsilon
+\langle n\cdot \curl z,\jump{v}\rangle_{\Gh \setminus
+  \left(\Gamma_-\cup \Gamma_0\right)}\\ &\lesssim \epsilon \|[\tau
+  \cdot n]\| \|\psi\|_{H^1(\Omega)} + \epsilon \| \jump{v}\|\| \curl z
+\|_{L^2}.
+\end{align*}
+Applying the bounds $\|\psi\|_{H^1(\Omega)}  \leq \frac{1}{\epsilon}\|\tau\|_{L^2}$ and 
+$\|\curl z\|_{L^2} \lesssim \frac{1}{\sqrt{\epsilon}}\|\tau\|_{L^2}$, and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
+\end{proof}
+%
+%\section{Alternative test norms}
+%
+%We can derive relations between the constants $C_u^i,\ldots,C_{\widehat{f}_n}^i$ that define the trial norms $\nor{\cdot}_{U,1}$ and $\nor{\cdot}_{U,2}$ and the constants $C_{\beta\cdot \grad v},\ldots,C_{\div \tau}$ that define the test norm. We will refer to $C_u^i,C_\sigma^i,C_{\widehat{u}}^i,C_{\widehat{f}_n}^i$ as trial constants, and $C_{\beta\cdot \grad v},C_{\grad v},C_{v},C_{\tau},C_{\div \tau}$ as test constants. 
+%
+%We first consider the bound $\nor{\cdot}_{U,1} \lesssim \nor{\cdot}_E$. Recall that showing this bound is equivalent to showing $\nor{\left(v,\tau\right)}_{V,U,1} \gtrsim \nor{\left(v,\tau\right)}_V$. $\nor{\left(v,\tau\right)}_V$ is given in terms of the quantities $\nor{\beta\cdot v}$, $\nor{\grad v}$, $\nor{v}$, $\nor{\tau}$, and $\nor{\div \tau}$. These must be bounded by quantities $\nor{g}$, $\nor{f}$, $\nor{\jump{\tau\cdot n}}$, and $\nor{\jump{v}}$, where $f$ and $g$ are defined by equations \ref{adjoint1} and \ref{adjoint2}. The relationships between these two sets of quantities is given by Lemma~\ref{lemma_stream}, Lemma~\ref{lemma_grad}, and Lemma~\ref{lemma_boundary}. 
+%
+%Under the decomposition described in Section~\ref{sec:strategy2}, we split $(v,\tau)\in V$ into $(v_i,\tau_i)$ for $i = 0,1,2$, where $(v_1,\tau_1),(v_2,\tau_2) \in H^1(\Omega)\times H({\rm div},\Omega)$, and $(v_0,\tau_0)\in  H^1(\Omega_h)\times H({\rm div},\Omega_h)$. Additionally, $(v_1,\tau_1)$ satisfies the adjoint equations \ref{adjoint1} and \ref{adjoint2} with $f=0$, $(v_2,\tau_2)$ satisfies \ref{adjoint1} and \ref{adjoint2} with $g=0$, and $(v_0,\tau_0)$ satisfies \ref{adjoint1} and \ref{adjoint2} with $f=g=0$. To show the bound $\nor{\left(v,\tau\right)}_{V,U,1} \gtrsim \nor{\left(v,\tau\right)}_V$ for general $(v,\tau)\in V$, it suffices to show the same bound holds for each component of the decomposition $(v_0,\tau_0)$, $(v_1,\tau_1)$, and $(v_2,\tau_2)$. For each $(v_i,\tau_i)$, we will need to bound every term that makes up the test norm $\nor{\left(v,\tau\right)}_V$ by a corresponding term in $\nor{(v,\tau)}_{V,U,1}$, the test norm induced by $\nor{\cdot}_{U,1}$. These bounds will provide a relationship between the trial constants $C_u^i,\ldots,C_{\widehat{f}_n}^i$ and test constants $C_{\beta\cdot \grad v},\ldots,C_{\div \tau}$. 
+%
+%\begin{itemize}
+%\item{\textbf{Discontinous test functions $\bm{(v_0,\tau_0)}$ with $\bm{f=g=0}$}}: Using Lemma~\ref{lemma_boundary}, we have the bounds 
+%\begin{align*}
+%\|\grad v_0\| &\lesssim \frac{1}{\epsilon}\nor{\jump{\tau\cdot n}} + \frac{1}{\sqrt{\epsilon}}\nor{\jump{\tau\cdot n}}\\
+%\|\tau_0\| &\lesssim \nor{\jump{\tau\cdot n}} + {\sqrt{\epsilon}}\nor{\jump{\tau\cdot n}}
+%\end{align*}
+%Furthermore, Lemma 4.2 of \cite{analysisDPG} gives us the Poinc\'are inequality for discontinuous functions
+%\[
+%\|v_0\| \lesssim \|\grad v_0\| + \|\jump{v_0}\|
+%\]
+%\begin{itemize}
+%\item{$\bm{C_{\grad v}\nor{\grad v_0}}$ and $\bm{C_{\beta\cdot\grad v}\nor{\beta\cdot \grad v_0}}$:} Since $\nor{\grad v} = \frac{1}{\epsilon}\nor{\tau}$, by Lemma~\ref{lemma_boundary}, we have
+%\[
+%C_{\grad v}\nor{\grad v_0} \lesssim \frac{C_{\grad v}}{\epsilon}\nor{\jump{\tau\cdot n}} + \frac{C_{\grad v}}{\sqrt{\epsilon}}\nor{\jump{v}}
+%\]
+%Since $C_{\beta\cdot \grad v_0}\nor{\beta\cdot \grad v_0} \lesssim \nor{\grad v_0}$, we have the analagous bound for $\beta\cdot \grad v$ as well.
+%\item{$\bm{C_{v}\nor{v_0}}$:} By the Poinc\'are inequality for discontinuous functions, 
+%\[
+%C_{v}\nor{v_0} \leq C_{v}\nor{\grad v_0} + C_v \nor{\jump{v}} \lesssim \frac{C_{v}}{\epsilon}\nor{\jump{\tau\cdot n}} + \frac{C_v}{\sqrt{\epsilon}} \nor{\jump{v}}
+%\]
+%\item{$\bm{C_{\tau_0}\nor{\tau_0}}$:} By Lemma~\ref{lemma_boundary}, we have
+%\[
+%C_\tau \nor{\tau} \lesssim C_\tau \nor{\jump{\tau}} + C_\tau \sqrt{\epsilon} \nor{\jump{v}}
+%\]
+%\item{$\bm{C_{\div\tau_0}\nor{\div\tau_0}}$:} By noting that $\beta\cdot \grad v_0 = \div \tau_0$, we have a bound on $C_{\div\tau_0}\nor{\div\tau_0}$ analagous to the bound on $C_{\beta\cdot \grad v_0}\nor{\beta\cdot \grad v_0}$
+%\end{itemize}
+%Since the test norm is equivalent to 
+%\[
+%\left\|\left(v,\tau\right)\right\|_V \simeq C_v\|v\|_{L^2} + C_{\grad v}\|\grad v\|_{L^2} + C_{\beta\cdot\grad v}\|\beta \cdot \grad v\|_{L^2}  + C_\tau\|\tau\|_{L^2} + C_{\div \tau}\|\div \tau\|_{L^2},
+%\]
+%if we wish to show the bound $\nor{(v,\tau)}_V \lesssim \nor{(v,\tau)}_{V,U,1}$, then by comparing like terms, the above bounds imply the following relationships between trial constants $C_{\widehat{u}}^1$ and $C_{\widehat{f}_n}^1$ and test constants $C_{\beta\cdot \grad v},\ldots,C_{\div \tau}$:
+%\begin{align*}
+%\frac{1}{C_{\widehat{u}}^1} &\geq \max\left(\frac{C_{\beta\cdot \grad v}}{\epsilon},\frac{C_{\grad v}}{\epsilon},\frac{C_{v}}{\epsilon},C_\tau, \frac{C_{\div \tau}}{\epsilon}\right)\\
+%\frac{1}{C_{\widehat{f}_n}^1} &\geq \max\left(\frac{C_{\beta\cdot \grad v}}{\sqrt{\epsilon}},\frac{C_{\grad v}}{\sqrt{\epsilon}},\frac{C_{v}}{\sqrt{\epsilon}},C_\tau \sqrt{\epsilon}, \frac{C_{\div \tau}}{\sqrt{\epsilon}}\right)
+%\end{align*}
+%\item{\textbf{Conforming test functions $\bm{(v_1,\tau_1)}$ with $\bm{f=0}$}.} Using Lemma~\ref{lemma_stream} and Lemma~\ref{lemma_grad}, we have the relations
+%\begin{align*}
+%\nor{\beta\cdot\grad v_1} &\lesssim \nor{g} \\
+%\nor{\grad v_1} &\lesssim \frac{1}{\sqrt{\epsilon}}\nor{g} \\
+%\nor{v_1} &\lesssim \nor{g}
+%\end{align*}
+%\begin{itemize}
+%\item{$\bm{C_{\grad v}\nor{\grad v_1}}$, $\bm{C_{\beta \cdot \grad v}\nor{\beta \cdot \grad v_1}}$, and $\bm{C_{v}\nor{v_1}}$:} The above relations give trivially
+%\begin{align*}
+%C_{\grad v}\nor{\grad v_1} &\lesssim \frac{C_{\grad v}}{\sqrt{\epsilon}}\nor{g}\\
+%C_{\beta \cdot \grad v}\nor{\beta \cdot \grad v_1} &\lesssim C_{\beta \cdot \grad v}\nor{g}\\
+%C_{ v}\nor{v_1} &\lesssim C_{ v}\nor{g}
+%\end{align*}
+%\item{$\bm{C_{\tau}\nor{\tau_1}}$:} Since $f=0$, $\tau = \epsilon \grad v$. Using Lemma~\ref{lemma_grad}, we have
+%\[
+%C_{ \tau}\nor{\tau_1} \lesssim C_{ \tau}\epsilon \nor{\grad v_1} \lesssim C_{\tau} \sqrt{\epsilon}\nor{g}
+%\]
+%\item{$\bm{C_{\div \tau}\nor{\div \tau_1}}$:} Since $\div \tau_1 = g + \beta\cdot \grad v_1$, 
+%\[
+%C_{ \div \tau} \nor{\div \tau_1} \leq C_{ \div \tau} \left(\nor{g} + \nor{\beta\cdot\grad v_1}\right) \lesssim C_{\div \tau} \nor{g}
+%\]
+%\end{itemize}
+%From the above relationships, it is clear that 
+%\begin{align*}
+%\frac{1}{C_u^1} &\geq \max\left(C_{\beta\cdot \grad v},\frac{C_{\grad v}}{\sqrt{\epsilon}},C_{v}, C_\tau \sqrt{\epsilon}, C_{\div \tau}\right)
+%\end{align*}
+%\item{\textbf{Conforming test functions $\bm{(v_2,\tau_2)}$ with $\bm{g=0}$}.} For this case, we only have Lemma~\ref{Lemma_grad}, which gives us
+%\begin{align*}
+%\nor{\grad v_2} &\lesssim \nor{f}\\
+%\nor{v_2} &\lesssim {\sqrt{\epsilon}}\nor{f}
+%\end{align*}
+%\begin{itemize}
+%\item{$\bm{C_{\grad v}\nor{\grad v_2}}$, $\bm{C_{\beta \cdot \grad v}\nor{\beta \cdot \grad v_2}}$, and $\bm{C_{v}\nor{ v_2}}$}: By noting that $\nor{\beta \cdot \grad v}\lesssim \nor{\grad v}$, the above relations directly give 
+%\begin{align*}
+%C_{\grad v}\nor{\grad v_2} &\lesssim C_{\grad v}\nor{f}\\
+%C_{\beta \cdot \grad v}\nor{\beta \cdot \grad v_2} &\lesssim C_{\beta \cdot \grad v}\nor{f}\\
+%C_{ v}\nor{v_2} &\lesssim C_{ v}\sqrt{\epsilon}\nor{f}
+%\end{align*}
+%\item{$\bm{C_{\tau}\nor{\tau_2}}$}: Noting that $\tau_2 = f - \grad v$, 
+%\[
+%C_\tau \nor{\tau_2} \leq C_\tau \epsilon \left(\nor{f} + \nor{\grad v_2}\right) \lesssim C_\tau \epsilon \nor{f}
+%\]
+%\item{$\bm{C_{\div \tau}\nor{\div \tau_2}}$}: Since $g=0$, $\div \tau = \beta\cdot \grad v$. Then, 
+%\[
+%C_{\div \tau}\nor{\div \tau_2} = C_{\div \tau}\nor{\beta \cdot \grad v_2} \lesssim C_{\div \tau}\nor{\grad v_2} \lesssim C_{\div \tau} \nor{f}
+%\]
+%\end{itemize}
+%From the above relationships, it is clear that 
+%\begin{align*}
+%\frac{1}{C_\sigma^1} &\geq \max\left(C_{\beta\cdot \grad v},C_{\grad v},C_{v}\sqrt{\epsilon}, C_\tau {\epsilon}, C_{\div \tau}\right)
+%\end{align*}
+%\end{itemize}
+%
+%We now consider the bound $\nor{\cdot}_{E} \lesssim \nor{\cdot}_{U,2}$. As before, showing this bound is equivalent to showing $\nor{\left(v,\tau\right)}_{V} \gtrsim \nor{\left(v,\tau\right)}_{V,U,1}$. However, this second bound is less complicated, as we will estimate this bound from above using much more elementary means. Whereas previously we began with the test norm $\nor{(v,\tau)}_V$, we begin now with the induced norm $\nor{\cdot}_{U,2}$, which we will bound by $\nor{(v,\tau)}_V$. By the definitions of $f$ and $g$ and the triangle inequality,
+%\begin{align*}
+%\frac{1}{C_u^2} \nor{g} &\leq \frac{1}{C_u^2} \left(\nor{\beta\cdot\grad v} + \nor{\div \tau}\right)\\
+%\frac{1}{C_\sigma^2} \nor{f} &\leq \frac{1}{\epsilon C_\sigma^2}\nor{\tau} + \frac{1}{C_\sigma^2}\nor{\grad v}. 
+%\end{align*}
+%What remains is to estimate the jump norms in $\left(\tau,v\right)$. We do so by following \cite{DPGrobustness}; we begin by choosing $\eta \in H({\rm div}; \Omega)$, $w\in H^1(\Omega)$, such that $\left.\left(\eta-\beta w \right)\cdot n\right |_{\Gamma_+} = 0$ and $\left.w\right |_{\Gamma_-\cup\Gamma_0} = 0$, and integrating the boundary pairing by parts to get
+%\begin{align*}
+%\langle \jump{\tau\cdot n},w\rangle + \langle \jump{v},\left(\eta - \beta w\right)\cdot n\rangle &= (\tau,\grad w) + (\div \tau, w) + \left(\eta - \beta w, \grad v\right) +  \left(\div \left(\eta - \beta w\right), v\right)\\
+%&\lesssim \sqrt{C_\tau^2\|\tau\|^2 \frac{1}{C_\tau^2} \|\grad w\|^2} + \sqrt{C_{\div \tau}^2\|\div \tau\|^2 \frac{1}{C_{\div \tau}^2}\|w\|^2} \\
+%& \left.\hspace{.3cm}\right. + \sqrt{C_{\grad v}^2\| \grad v\|^2\frac{1}{C_{\grad v}^2}\|\eta\|^2} + \sqrt{ C_{\beta\cdot \grad v}^2 \|\beta \cdot \grad v\|^2 \frac{1}{C_{\beta\cdot \grad v}^2} \| w\|^2}\\
+%&\left.\hspace{.3cm}\right. + \sqrt{C_v^2\|v\|^2\frac{1}{C_v^2}\|\div \eta\|^2} + \sqrt{C_v^2\| v\|^2\frac{1}{C_v^2}\| w\|^2} \\
+%&\left.\hspace{.3cm}\right. + \sqrt{C_v^2\| v\|^2\frac{1}{C_v^2}\| \grad w\|^2}
+%\end{align*}
+%where we have used that $\div \beta = O(1)$ and that $\|\beta\cdot \grad w\|\lesssim \|\grad w\|$.  
+%
+%Since $\|\eta\| = \|\eta - \beta w + \beta w\| \leq \|\eta - \beta w\| + \|\beta w\| \lesssim \|\eta-\beta w\| + \|w\|$, an application of discrete Cauchy-Schwarz gives us
+%\begin{align*}
+%\langle \jump{\tau\cdot n},w\rangle + \langle \jump{v},\left(\eta - \beta w\right)\cdot n\rangle &\lesssim \alpha\|\left(\tau,v\right)\|_V  \left(\|\eta\| + \|w\|\right)\\
+%%\langle \jump{\tau\cdot n},w\rangle + \langle \jump{v},\left(\eta - \beta w\right)\cdot n\rangle 
+%&\lesssim \alpha \|\left(\tau,v\right)\|_V\left(\|\eta-\beta w\| + \|w\|\right).
+%\end{align*}
+%where 
+%\[
+%\alpha = \max\left(\frac{1}{C_{\grad v}}, \frac{1}{C_{\beta\cdot \grad v}}, \frac{1}{C_{v}},\frac{1}{C_\tau},\frac{1}{C_{\div \tau}}\right).
+%\] 
+%Dividing through and taking the supremum gives
+%\[
+%\sup_{w,\eta \neq 0} \frac{\langle\jump{\tau\cdot n},w\rangle + \langle \jump{v},\left(\eta - \beta w\right)\cdot n\rangle}{\left(\|\eta-\beta w\| + \|w\|\right)} \lesssim \|\left(\tau,v\right)\|_V\alpha
+%\]
+%To relate the above statement back to the terms $\nor{\jump{\tau\cdot n}}$ and $\nor{\jump{v}}$, we define $\rho \in H^{1/2}(\Gh)$ and $\phi \in H^{-1/2}(\Gh)$ such that $\rho = \left.w\right|_{\Gh}$ and $\phi = \left.(\eta-\beta w)\cdot n\right|_{\Gh}$, and note that, from \cite{analysisDPG}, by the definition of the trace norms on $\jump{\tau\cdot n}$ and $\jump{v}$ 
+%\begin{align*}
+%\sup_{\rho,\phi \neq 0} \frac{\langle \jump{\tau\cdot n},\rho\rangle + \langle \jump{v},\phi \rangle}{\|\rho\|_{H^{1/2}(\Gh)}+\|\phi\|_{H^{-1/2}(\Gh)}} &= \sup_{w,\eta \neq 0} \frac{\langle \jump{\tau\cdot n},w\rangle + \langle \jump{v},\left(\eta - \beta w\right)\cdot n\rangle}{ \|w\|_{H^1(\Omega)}+\|\eta-\beta w\|_{H({\rm div},\Omega)}}.
+%\end{align*}
+%In order for $\nor{\left(v,\tau\right)}_{V} \gtrsim \nor{\left(v,\tau\right)}_{V,U,1}$, we will need trial constants $C_u^2,\ldots,C_{\widehat{f}_n}^2$ and test constants $C_{\beta\cdot\grad v}^2,\ldots,C_{\div \tau}^2$ to satisfy
+%\begin{align*}
+%\frac{1}{C_u^2} &\leq \min \left(C_{\beta \cdot \grad v}, C_{\div \tau} \right)\\
+%\frac{1}{C_\sigma^2} &\leq \min \left({C_{\tau}}{\epsilon}, C_{\grad v} \right)\\
+%\frac{1}{C_{\widehat{u}}^2}, \frac{1}{C_{\widehat{f}_n}^2} &\leq \max\left(\frac{1}{C_{\grad v}}, \frac{1}{C_{\beta\cdot \grad v}}, \frac{1}{C_{v}},\frac{1}{C_\tau},\frac{1}{C_{\div \tau}}\right)
+%\end{align*}
+%
+%To summarize, our analysis of the bound of $\nor{\cdot}_{U,1} \lesssim \nor{\cdot}_{E}$ yielded the following relationships between trial norm constants $C_u^1,\ldots,C_{\widehat{f}_n}^1$ and the test norm constants $C_{\grad v},\ldots,C_{\div \tau}$. 
+%\begin{align}
+%\frac{1}{C_u^1} &\geq \max\left(C_{\beta\cdot \grad v},\frac{C_{\grad v}}{\sqrt{\epsilon}},C_{v}, C_\tau \sqrt{\epsilon}, C_{\div \tau}\right) \label{u1rel}\\
+%\frac{1}{C_\sigma^1} &\geq \max\left(C_{\beta\cdot \grad v},C_{\grad v},C_{v}\sqrt{\epsilon}, C_\tau {\epsilon}, C_{\div \tau}\right)\label{sigma1rel}\\
+%\frac{1}{C_{\widehat{u}}^1} &\geq \max\left(\frac{C_{\beta\cdot \grad v}}{\epsilon},\frac{C_{\grad v}}{\epsilon},\frac{C_{v}}{\epsilon},C_\tau, \frac{C_{\div \tau}}{\epsilon}\right)\label{uhat1rel}\\
+%\frac{1}{C_{\widehat{f}_n}^1} &\geq \max\left(\frac{C_{\beta\cdot \grad v}}{\sqrt{\epsilon}},\frac{C_{\grad v}}{\sqrt{\epsilon}},\frac{C_{v}}{\sqrt{\epsilon}},C_\tau \sqrt{\epsilon}, \frac{C_{\div \tau}}{\sqrt{\epsilon}}\right)\label{fnhat1rel}
+%\end{align}
+%
+%Similarly, the bound from above of $\nor{\cdot}_E \lesssim \nor{\cdot}_{U,2}$ yielded the following relationships between trial norm constants $C_u^2,\ldots,C_{\widehat{f}_n}^2$ and the test norm constants. 
+%\begin{align}
+%\frac{1}{C_u^2} &\leq \min \left(C_{\beta \cdot \grad v}, C_{\div \tau} \right)\label{u2rel}\\
+%\frac{1}{C_\sigma^2} &\leq \min \left({C_{\tau}}{\epsilon}, C_{\grad v} \right)\label{sigma2rel}\\
+%\frac{1}{C_{\widehat{u}}^2}, \frac{1}{C_{\widehat{f}_n}^2} &\leq \max\left(\frac{1}{C_{\grad v}}, \frac{1}{C_{\beta\cdot \grad v}}, \frac{1}{C_{v}},\frac{1}{C_\tau},\frac{1}{C_{\div \tau}}\right)\label{tr2rel}
+%\end{align}
+%
+%The connection between the scaling constants on the test norm $\nor{(v,\tau)}_V$ and the constants present in the norms $\nor{\cdot}_{U,1}$ and $\nor{\cdot}_{U,2}$ are captured in these relationships. We can now make concrete our choice of test norm by choosing specific trial constants, and choosing test constants such that they satisfy the above relations. 
+%
+%It still remains to specify what trial constants we should choose. Ideally, we would want $O(1)$ trial constants independent of $\epsilon$, but from the above bounds relating the trial and test constants, we can see that it is impossible to request such values for every trial constant. Additionally, we do not expect DPG to perform better than the quasi-optimal test norm for \textit{any} choice of test constants, as the performance DPG under the quasi-optimal norm is, in many senses, the best we can expect under any a localizable test norm. In \cite{DPGrobustness}, it is shown that, under the quasi-optimal test norm, the trial constants $C^1_u=C^1_\sigma=1$, but $C^1_{\widehat{u}}= \epsilon$, and $C^1_{\widehat{f}_n}=\sqrt{\epsilon}$.\footnote{The proof in \cite{DPGrobustness} is given for Dirichlet boundary conditions, but is easily generalized to the boundary conditions specified here.} 
+%
+%We thus take this as our starting point --- we request the same trial constants $C^1_u,\ldots,C^1_{\widehat{f}_n}$ induced by the quasi-optimal test norm. 
+%\begin{itemize}
+%\item{$C_u^1=1$}: Since $\epsilon \ll 1$, by \eqnref{u1rel}, $C_{\grad v} = \sqrt{\epsilon}$. Similarly,  we can assume without loss of generality that $C_{\beta\cdot \grad v} = C_v = C_{\div \tau} = 1$. 
+%\item{$C_\sigma^1=1$, $C_{\widehat{u}}^1=\epsilon$, $C_{\widehat{f}_n}^1=\sqrt{\epsilon}$}: The only remaining constant whose value has yet to be set is $C_\tau$. \eqnref{sigma1rel}, \eqnref{uhat1rel}, and \eqnref{fnhat1rel} all simply that $C_\tau \leq \frac{1}{\epsilon}$, so we set $C_\tau = \frac{1}{\epsilon}$. Likewise, the values of the test constants $C_{\beta\cdot \grad v}$, $C_v$, and $C_{\div \tau}$ that we have previously set are all consistent with relations \eqnref{u1rel}, \eqnref{sigma1rel}, \eqnref{uhat1rel}, \eqnref{fnhat1rel}, and our desired values of the trial constants. 
+%\end{itemize}
+%With this, we have fully specified the test norm on $V$:
+%\[
+%\nor{(v,\tau)}_V^2 \coloneqq \nor{\beta\cdot \grad v}_{L^2}^2 + \epsilon\nor{\grad v}_{L^2}^2 + \nor{v}_{L^2}^2 + \frac{1}{\epsilon}\nor{\tau}_{L^2}^2 + \nor{\div \tau}_{L^2}^2
+%\]

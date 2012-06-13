@@ -1,0 +1,18 @@
+
+
+
+
+Specify special considerations that should be given to the paper (if any).
+
+A brief background regarding the research involved or how the data was collected.
+
+The Author to whom we should address our correspondence (in the event of multiple Authors, a single Corresponding Author must be named).
+
+A contact address, telephone/fax numbers and e-mail address (Elsevier has introduced a
+service for Authors to receive PDF proofs by e-mail).
+
+Details of any previous or concurrent submissions (Please see our Authors' Rights section for more copyright information).
+
+It is also useful to provide the Editor-in-Chief with any information that will support your submission (e.g. original or confirmatory data, relevance, topicality).
+
+The inclusion (or exclusion) of certain Reviewers. When providing the names of potential Reviewers, please supply their full contact details including an e-mail address.
