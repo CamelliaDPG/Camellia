@@ -1,7 +1,7 @@
-set(DRIVER_NAME ConservativeConfusion)
+set(DRIVER_NAME NavierStokes)
 project(${DRIVER_NAME})
 
 set(SRC
-  ConfusionDriver.cpp
+  NSDriver.cpp
 )
 add_executable(${DRIVER_NAME} ${SRC})
