@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 2.8)
 
 project(Camellia)
+set(CMAKE_BUILD_TYPE Debug)
 
 # Set Trilinos Directory
 set(TRILINOS_PATH /workspace/jchan/trilinos_builds/mpi_release/)
 set(MUMPS_PATH /workspace/jchan/MUMPS_4.9.2/)
+set(SCALAPACK_PATH /workspace/jchan/lib/scalapack)
 # Set Camellia Source Directory
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
@@ -49,6 +51,7 @@ IF(NOT CMAKE_CXX_COMPILER)
   MESSAGE("Setting CXX compiler.")
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
 ENDIF()
+SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
 
 # If you haven't already set the C compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
@@ -56,6 +59,7 @@ IF(NOT CMAKE_C_COMPILER)
   MESSAGE("Setting C compiler.")
   SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
 ENDIF()
+SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
 
 # If you haven't already set the Fortran compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
@@ -63,6 +67,7 @@ IF(NOT CMAKE_Fortran_COMPILER)
   MESSAGE("Setting Fortran compiler.")
   SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
 ENDIF()
+SET(CMAKE_Fortran_COMPILER ${Trilinos_Fortran_COMPILER})
 
 MESSAGE("CAMELLIA_SOURCE_DIR = ${CAMELLIA_SOURCE_DIR} ")
 # Find all library source files
@@ -80,9 +85,11 @@ include_directories(
 )
 
 link_directories(
+  ${SCALAPACK_PATH}
   ${Trilinos_TPL_LIBRARY}
   ${Trilinos_DIR}
   ${MUMPS_PATH}/lib
+  ${MUMPS_PATH}/PORD/lib
   ${MUMPS_PATH}/PORD/lib
 )
 
