@@ -176,7 +176,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
           total_cells++;
           offsetCount += 4;
           offsets << offsetCount << " ";
-          types << 5 << " ";
+          types << 9 << " ";
         }
         subcellStartIndex++;
       }
