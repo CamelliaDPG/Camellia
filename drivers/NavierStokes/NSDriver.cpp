@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 3;
+  int polyOrder = 1;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
