@@ -295,32 +295,31 @@ For our initial guesses, we set
 \]
 which is consistent with what was done in Demkowicz and Oden in \cite{Demkowicz:1990:NFE:112271.112276}. Stresses are set uniformly to zero.
 
-We take the computational domain to be $\Omega = [0,2]\times[0,1]$. For $\Reyn = 500$, we begin with an initial mesh of 8 by 16 elements. 
-\begin{figure}[!h]
-\centering
-\subfigure{\includegraphics[scale=.5]{figs/rhoRe500.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/u1Re500.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/u2Re500.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/TRe500.pdf}}
-\caption{Solutions after four refinements for $\rho$, $u_1$, $u_2$, and $T$ and $\Reyn = 500$.}
-\label{fig:Re500}
-\end{figure}
+We take the computational domain to be $\Omega = [0,2]\times[0,1]$. For $\Reyn = 1000$, we experimented with initial meshes from size 4 by 8 to 8 by 16 elements. We note that, on a very coarse initial mesh (4 by 8 elements), the convergence of the pseudo-timestep stagnates at around a transient residual of $1e-6$; however, if we lower the tolerance only for the first step and continued with the adaptive algorithm, the solution converges below $\epsilon_t$ for all refined meshes. 
 
-For $\Reyn = 1000$, we experimented with both an initial mesh of 4 by 8 and 8 by 16 elements. We note that, on a very coarse initial mesh (4 by 8 elements), the convergence of the pseudo-timestep stagnates at around a transient residual of $1e-6$; however, if we lower the tolerance only for the first step and continued with the adaptive algorithm, the solution converges below $\epsilon_t$ for all refined meshes. 
 \begin{figure}[!h]
 \centering
-\subfigure{\includegraphics[scale=.5]{figs/rhoRe1000.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/u1Re1000.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/u2Re1000.pdf}}
-\subfigure{\includegraphics[scale=.5]{figs/TRe1000.pdf}}
-\caption{Solutions after four refinements for $\rho$, $u_1$, $u_2$, and $T$ and $\Reyn = 1000$.}
+\subfigure[$\rho$]{\includegraphics[scale=.42]{figs/rho.pdf}}
+\subfigure[$u_1$]{\includegraphics[scale=.42]{figs/u1.pdf}}
+\subfigure[$u_2$]{\includegraphics[scale=.42]{figs/u2.pdf}}
+\subfigure[$T$]{\includegraphics[scale=.42]{figs/T.pdf}}
+\caption{Solutions after six refinements for $\Reyn = 1000$.}
 \label{fig:Re500}
 \end{figure}
 
 \begin{figure}[!h]
 \centering
-\subfigure[$\Reyn = 500$]{\includegraphics[scale=.5]{figs/MeshRe500.pdf}}
-\subfigure[$\Reyn = 1000$]{\includegraphics[scale=.5]{figs/MeshRe1000.pdf}}
-\caption{Adaptive mesh after four refinement iterations for $\Reyn = 500$ and $\Reyn = 1000$.}
+\subfigure[$\rho$]{\includegraphics[scale=.4]{figs/rhozoom.pdf}}
+\subfigure[$u_1$]{\includegraphics[scale=.4]{figs/u1zoom.pdf}}
+\subfigure[$u_2$]{\includegraphics[scale=.4]{figs/u2zoom.pdf}}
+\subfigure[$T$]{\includegraphics[scale=.4]{figs/Tzoom.pdf}}
+\caption{Zoom of solutions at the beginning of the plate for $\Reyn = 1000$.}
+\label{fig:Re500}
+\end{figure}
+
+\begin{figure}[!h]
+\centering
+\includegraphics[scale=.75]{figs/mesh.pdf}
+\caption{Adaptive mesh after six refinements for $\Reyn = 1000$.}
 \label{fig:MeshRe500}
 \end{figure}

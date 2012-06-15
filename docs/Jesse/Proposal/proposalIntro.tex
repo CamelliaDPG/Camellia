@@ -137,17 +137,23 @@ Another perspective on the use of the numerical flux in DG methods is that the s
 
 \subsubsection{HDG}
 
-A more recent development in DG methods is the idea of \emph{hybridized} DG (HDG), introduced by Gopalakrishnan and Lazarov \cite{hybridDG}. The hybridized DG framework addresses several criticisms of common DG methods (globally coupled degrees of freedom, complicated/inefficient implementation procedures, suboptimal convergence of approximate fluxes) by identifying degrees of freedom with support only on element edges. Neighboring elements are coupled together only through these degrees of freedom, which can be interpreted as Lagrange multipliers enforcing weak continuity of the trial space. Additionally, HDG methods \todo{add bit about numerical fluxes still used, stabilization params}
+A more recent development in DG methods is the idea of \emph{hybridized} DG (HDG), introduced by Gopalakrishnan and Lazarov \cite{hybridDG}. The hybridized DG framework addresses several criticisms of common DG methods (globally coupled degrees of freedom, complicated/inefficient implementation procedures, suboptimal convergence of approximate fluxes) by identifying degrees of freedom with support only on element edges, which can be interpreted as Lagrange multipliers enforcing weak continuity of the trial space. 
+
+HDG methods treat numerical \emph{traces} and numerical \emph{fluxes} differently depending on the form of the boundary term resulting from integration by parts. The numerical trace (the result of integrating by parts the gradient) in HDG methods is chosen to be an unknown, while the numerical flux (the result of integrating by parts the divergence) is chosen to be an appropriate function of both function values on neighboring elements and the numerical trace. Note that HDG methods still fall under the category of stabilized methods --- stabilization techniques are employed through the choice of the HDG numerical flux, which involves some stabilization parameter $\tau$. 
+
+By a careful choice of the numerical flux, the global HDG formulation can be reduced to a single equation involving only the numerical trace degrees of freedom, referred to as the \emph{global} problem. Once the global problem is solved, interior degrees of freedom can be recovered in parallel through so-called \emph{local} problems \cite{HDGprojection}. 
 
 \section{Scope}
 
-This proposal will
+This PhD thesis proposal will proceed in four main parts:
 \begin{enumerate}
-\item Introduce DPG
-\item Cover the problem of robustness for model problems
-\item Extend results/formulations to nonlinear problems
-\item Discuss proposed work
+\item Introduce the abstract DPG method as a minimum residual method for linear problems.
+\item Formulate a DPG method addressing the issue of robustness for the model problem of convection-dominated diffusion.
+\item Apply the DPG method to singularly perturbed nonlinear problems in CFD, discussing preliminary results for the Burgers and compressible Navier-Stokes equations. 
+\item Introduce completed and proposed work in concentration areas A, B, and C. 
 \end{enumerate}
+
+
 
 \section{Range of CFD problems}
 

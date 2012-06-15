@@ -226,47 +226,17 @@ This document and its source file show to write a Doctoral Dissertation using
 
 \chapter{Proposed work}
 
-\begin{itemize}
-\item Introduce nonlinear residual to measure convergence, DPG formulation for nonlinear problems. Briefly discuss solution strategies (pseudo-timestep/damped Newton). 
-\item Formulate DPG for Burgers' equation as an example, show results
-\item Show DPG applied to Navier-Stokes at a broad level, with results
-\end{itemize}
-
 \include{NonlinDPG}
 \include{BurgersNotes}
 \include{NSNotes}
-
-\section{Area requirements}
-
-\subsection{Area A}
-
-\begin{itemize}
-\item{\textbf{Completed: }} Prove robustness of DPG method for the scalar convection-diffusion problem
-\item Attempt analysis of the linearized Navier-Stokes system
-\end{itemize}
-
-\subsection{Area B}
-
-\begin{itemize}
-\item{\textbf{Completed: }} Collaborative work with Nathan Roberts on the higher order parallel adaptive DPG code Camellia.
-\item Nonlinear DPG - Hessian adjoint trick
-\item Adaptivity: anisotropic refinements and $hp$-schemes.
-\item Distributed static condensation
-\end{itemize}
-
-\subsection{Area C}
-
-\begin{itemize}
-\item{\textbf{Completed: }} Convection-dominated diffusion, Burgers, and Navier-Stokes. 
-\item Higher Reynolds number, ramp problem, Gaussian bump, airfoil.
-\item Euler with NS regularization?
-\end{itemize}
+\include{areaReq}
 
 \bibliographystyle{plain}
 \bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes}
 
 %\chapter{Appendix}
-\appendix
+\appendices
 \input{paper_appendix.tex}
+\input{hyperbolicDPG.tex}
 
 \end{document}
