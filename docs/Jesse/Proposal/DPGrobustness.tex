@@ -1,12 +1,11 @@
+\section{DPG formulation for convection-diffusion}
 
-
-\section{Model problem and robustness}
 \seclab{sec:modelSec}
-The remainder of the paper focuses on a convection-diffusion model problem using the abstract theory that we
-have discussed so far. In particular, we shall use the DPG method based on the ultra-weak formulation with optimal test functions to solve the model problem and analyze its behavior with respect to $\epsilon$. 
+The remainder of this chapter focuses on the convection-diffusion problem using the abstract theory that we
+have discussed so far. In particular, we shall use the DPG method based on the ultra-weak formulation with optimal test functions to solve this model problem and analyze its behavior with respect to $\epsilon$. 
 Our goal is to show the robustness of the method with respect to $\epsilon$, and demonstrate its usefulness as  a numerical approach to solving singular-perturbed problems. 
 
-We consider the following model convection-diffusion problem on a domain
+The convection-diffusion problem is given on a domain
 $\Omega \subset \mathbb{R}^d$ with boundary $\pO \equiv \Gamma$
 \begin{equation}
 \div (\beta u) - \epsilon\Delta u = f  \in \L \label{primal},
@@ -66,7 +65,7 @@ where $\beta_n \coloneqq \beta \cdot n$.
 Previous work in \cite{DPGrobustness} adopted Dirichlet boundary
 conditions everywhere on $\Gamma$.  
 %and we could obtain the robustness only with special weighted norms in which the weight varied spatially. 
-In this paper, we employ the inflow
+We employ instead the inflow
 condition of Hesthaven \etal \cite{Hesthaven96astable}, where we set
 \[
 \beta_n u - \sigma_n  = u_0, \quad \text{on } \Gm,
@@ -78,7 +77,7 @@ On the outflow boundary, we apply standard homogeneous Dirichlet boundary condit
 \[
 u = 0, \quad \text{on } \Gp.
 \]
-This paper is intended to act as an extension of work presented by Heuer and Demkowicz in \cite{DPGrobustness}. The primary focus of the paper is to analyze the DPG method and extend previous results under this new choice of inflow boundary conditions. The difference in the performance of DPG under both new and old boundary conditions is connected to the difference in the adjoint problems induced under each boundary condition. The secondary contribution of this paper will be to analyze the performance of DPG under a new mesh-dependent test norm. 
+This work is intended to act as an extension of work presented by Heuer and Demkowicz in \cite{DPGrobustness}. The primary focus of this chapter is to analyze the DPG method and extend previous results under this new choice of inflow boundary conditions. The difference in the performance of DPG under both new and old boundary conditions is connected to the difference in the adjoint problems induced under each boundary condition. The secondary contribution of this work will be to analyze the performance of DPG under a new mesh-dependent test norm. 
 
 \subsection{Norms on $U$}
 
@@ -175,7 +174,7 @@ The difficulty in using the quasi-optimal test norm for convection-diffusion is 
 Resolving such boundary layers present in test functions under the quasi-optimal test norm has been investigated numerically using specially designed (Shishkin) subgrid meshes by Niemi, Collier, and Calo in
 \cite{DBLP:journals/procedia/NiemiCC11}.  However, even with Shishkin meshes, the approximation of optimal test functions under the quasi-optimal norm is far more expensive and complex to implement than approximation of test functions using a simple $p$-enriched space for $V$. We therefore aim instead to design a test norm that does not induce boundary layers, but still delivers good approximation results over a range of $\epsilon$.  
 
-\section{Analysis of a DPG test norm}
+\subsection{Analysis of a DPG test norm}
 \seclab{sec:testNormSec}
 We are interested in computing DPG optimal test functions for the convection-diffusion equation with very small values of $\epsilon$; due to the difficulty of approximating optimal test functions, we conclude that the use of the quasi-optimal test norm is infeasible towards this goal. 
 
@@ -254,7 +253,7 @@ Since the techniques used to show such bounds are more involved, we break the pr
 \item{}Derive adjoint estimates (Section~\ref{sec:strategy3}).
 \end{enumerate}
 
-\subsection{Decomposition into analyzable components}
+\subsubsection{Decomposition into analyzable components}
 \label{sec:strategy2}
 
 Having reduced the problem of comparing norms on $U$ to the comparison of norms on $V$, we break the analysis of $\left(v,\tau\right) \in V$ into the analysis of three subproblems.  Define the decomposition
@@ -336,7 +335,7 @@ for arbitrary data $f, g\in L^2({\Omega})$ and boundary conditions $\jump{\tau\c
 %\]
 %By choosing $g = u$, 
 
-\subsection{Adjoint estimates}
+\subsubsection{Adjoint estimates}
 \label{sec:strategy3}
 
 The final step to estimating the induced norm on $U$ by a selected localizable test norm on $V$ is to derive adjoint stability estimates on $\tau$ and $v$ in terms of localizable normed quantities.  We will construct complete test norms on $V$ through combinations of these normed quantities.%, where each normed quantity on $\tau$ or $v$ will correspond roughly to $\|u\|_{L^2}$, $\|\sigma\|_{L^2}$, $\|\widehat{u}\|$, or $\|\widehat{f}_n\|$.  
@@ -382,7 +381,7 @@ We are interested in showing the equivalence of the DPG energy norm with norms $
 %  $(v, \tau)$ for all three problems is not a good idea. Why don't we
 %  use $(v_i,\tau_i)$ introduced above? Things are much clearer this
 %  way?}
-\subsection{A mesh-dependent test norm}
+\subsubsection{A mesh-dependent test norm}
 \seclab{sec:meshDep}
 Ideally, we would be interested in the use of the test norm 
 \[
@@ -406,12 +405,12 @@ L_{\rm \beta^\perp} \coloneqq v - \epsilon \Delta v,
 and can develop boundary layers in those directions. The presence of boundary layers has been verified through numerical computation as well; using an $H^1$-conforming finite element code with $hp$-adaptivity \cite{demkowicz2006computing}, the solution to the variational problem defining the optimal test function under the above test norm was computed. Figure~\ref{fig:boundaryTest} shows the result of such a computation for the $v$ component of an optimal test function under the above test norm. 
 \begin{figure}[!h]
 \centering
-\subfigure{\includegraphics[scale=.22]{figs/mesh1.png}}
-\subfigure{\includegraphics[scale=.22]{figs/sol1.png}}
+\subfigure{\includegraphics[scale=.2]{figs/mesh1.png}}
+\subfigure{\includegraphics[scale=.2]{figs/sol1.png}}
 \caption{The $v$ component of the optimal test function corresponding to flux $\widehat{u} = x(1-x)$ on the bottom side of a unit element for $\epsilon = 0.01$. The corresponding $hp$-mesh used to compute the solution is displayed to the left.}
 \label{fig:boundaryTest}
 \end{figure}
-To avoid boundary layers in the optimal test functions, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ by $C_v(K)$, such that, when transformed to the reference element, both $C_v(K)\|v\|^2$ and $\epsilon\|\grad v\|^2$ are of the same magnitude. Similarly, we scale the $L^2$ contributions of $\tau$ by $C_\tau(K)$ such that $\frac{C_\tau(K)}{\epsilon} \|\tau\|^2$ and $\|\div \tau\|^2$ are of the same magnitude as well. For this paper, we consider only isotropic refinements on quadrilateral elements in 2D.
+To avoid boundary layers in the optimal test functions, we follow \cite{DPGrobustness} in scaling the $L^2$ contributions of $v$ by $C_v(K)$, such that, when transformed to the reference element, both $C_v(K)\|v\|^2$ and $\epsilon\|\grad v\|^2$ are of the same magnitude. Similarly, we scale the $L^2$ contributions of $\tau$ by $C_\tau(K)$ such that $\frac{C_\tau(K)}{\epsilon} \|\tau\|^2$ and $\|\div \tau\|^2$ are of the same magnitude as well. For this work, we consider only isotropic refinements on quadrilateral elements in 2D.
 
 Our test norm, as defined over a single element $K$, is now
 \[
@@ -419,11 +418,11 @@ Our test norm, as defined over a single element $K$, is now
 \]
 This modified test norm avoids boundary layers in the locally computed optimal test functions, but for adaptive meshes, provides additional stability in areas of heavy refinement, where the best approximation error tends to be large and stronger robustness is most necessary.  This leads to a test norm which produces easily approximable optimal test functions, but still provides \textit{asymptotically} the strongest test norm and tightest robustness results in the areas of highest error. 
 
-\subsection{Equivalence of energy norm with $\nor{\cdot}_U$}
+\subsubsection{Equivalence of energy norm with $\nor{\cdot}_U$}
 %\subsection{Relations between trial and test constants}
 \label{sec:main_bounds}
 
-The main theoretical result of this paper can now be given:
+The main theoretical result of this work can now be given:
 \begin{lemma}
 Under the mesh-dependent test norm
 \[
@@ -574,7 +573,7 @@ To finish the proof, define $\rho \in H^{1/2}(\Gamma_h)$ and $\phi \in H^{-1/2}(
 Together, the bounds on the jump terms and the bounds on $\|g\|$ and $\|f\|$ imply $\left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{E} \lesssim \left\|\left(u,\sigma,\widehat{u},\widehat{f}_n\right)\right\|_{U,2}$.
 \end{proof}
 
-\subsection{Comparison of boundary conditions}
+\subsubsection{Comparison of boundary conditions}
 
 It is worth addressing the effect of boundary conditions on stability.  Specifically, a test norm that provides stability for one set of boundary conditions may perform poorly for another set.  Take, for example, the test norm defined in Section~\ref{sec:main_bounds} and the convection-diffusion problem with Dirichlet boundary conditions. 
 
@@ -674,7 +673,7 @@ Let us restrict ourselves to the cases where $v_1$ is sufficiently smooth for $v
 \caption{$v_1(x) = \frac{e^{-\frac{x}{\epsilon}}}{e^{\frac{1}{\epsilon}}-1}\left(e^{\frac{1}{\epsilon}}\left(e^{\frac{x}{\epsilon}}-1\right) + \left(e^{\frac{1}{\epsilon}}-1\right)e^{\frac{x}{\epsilon}}x\right)$, the solution to the adjoint equation for $f=0$ and constant $\beta$ and load $g$ for $\epsilon = .01$.}
 \label{fig:testBoundary1D}
 \end{figure}
-The solution $v_1$ is plotted in Figure~\ref{fig:testBoundary1D}, where we can see that $v_1(x)$ develops strong boundary layers of width $\epsilon$ near the inflow boundary $x=0$. Consequently, $\frac{\epsilon}{2} v_1'(0)^2 \approx \epsilon^{-1}$. Thus, we cannot conclude $\|\beta v'\| \lesssim \|g\|$ when $g$ is a constant,\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f}_n = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.} and as a consequence cannot conclude that the robust error bound $\|u-u_h\|_{L^2} \lesssim \|(u,\sigma,\widehat{u},\widehat{f}_n)-(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h})\|_E$ holds for the solution $u_h$.  More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and indicate the same lack of robustness under the test norm derived in this paper.\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
+The solution $v_1$ is plotted in Figure~\ref{fig:testBoundary1D}, where we can see that $v_1(x)$ develops strong boundary layers of width $\epsilon$ near the inflow boundary $x=0$. Consequently, $\frac{\epsilon}{2} v_1'(0)^2 \approx \epsilon^{-1}$. Thus, we cannot conclude $\|\beta v'\| \lesssim \|g\|$ when $g$ is a constant,\footnote{Unlike the case of Dirichlet boundary conditions, the inflow condition on $ \widehat{f}_n = u(0)-\epsilon u'(0)$ induces an adjoint boundary condition $\tau(0)=0$, or equivalently $v'(0) = 0$, removing the non-robust term from the estimate.} and as a consequence cannot conclude that the robust error bound $\|u-u_h\|_{L^2} \lesssim \|(u,\sigma,\widehat{u},\widehat{f}_n)-(u_h,\sigma_h,\widehat{u}_h,\widehat{f}_{n,h})\|_E$ holds for the solution $u_h$.  More detailed 1D error bounds for Dirichlet boundary conditions are provided in \cite{DPG3}, and indicate the same lack of robustness under the test norm used thus far.\footnote{Demkowicz and Heuer proved in \cite{DPGrobustness} that for Dirichlet boundary conditions, robustness as $\epsilon \rightarrow 0$ is achieved by the test norm
 \[
 \|\left(\tau, v\right)\|_{V,w}^2 = \|v\| + \epsilon \|\grad v\| + \|\beta \cdot \grad v\|_{w+\epsilon} + \| \div \tau\|_{w+\epsilon} + \frac{1}{\epsilon}\|\tau\|_{w+\epsilon}
 \]
@@ -781,10 +780,10 @@ We examined how small $\epsilon$ needed to be in order to encounter roundoff eff
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/roundoff_rates.png}
+\includegraphics[scale=.36]{figs/roundoff_rates.png}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/roundoff_ratio.png}
+\includegraphics[scale=.36]{figs/roundoff_ratio.png}
 }
 \caption{Energy error and $L^2$/energy error ratio for $\epsilon=1e-5$, $\epsilon=1e-6$, $\epsilon=1e-7$. Non-monotonic behavior of the energy error indicates conditioning issues and roundoff effects.}
 \label{roundoff_figures}
@@ -838,10 +837,10 @@ Figure~\ref{disc_sol} shows the solution $u$ and overlaid trace variable $\wideh
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/rates_disc.png}
+\includegraphics[scale=.36]{figs/rates_disc.png}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/ratio_disc.png}
+\includegraphics[scale=.36]{figs/ratio_disc.png}
 }
 \caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$, with discontinuous $u_0$ approximated by a Fourier expansion. }
 \label{disc_sol_fourier}

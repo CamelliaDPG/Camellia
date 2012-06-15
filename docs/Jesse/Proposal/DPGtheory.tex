@@ -11,7 +11,7 @@ This DPG method with optimal test functions is better understood in \cite{DPG3,D
 
 Optimal order comparison to DG in \cite{DPG1}. Comparisons to other DG methods in \cite{Bui-ThanhDemkowiczGhattas11a,DGDPG}.
 
-\section{Optimal Petrov-Galerkin methods}
+\subsection{Optimal Petrov-Galerkin methods}
 
 \seclab{optimalTest} Petrov-Galerkin methods, in which the test space differs from the trial space, have been explored for over 30 years, beginning with the approximate symmetrization method of Barrett and
 Morton~\cite{BARRETT01101981}. The idea was continued with the SUPG method of Hughes, and the characteristic Petrov-Galerkin approach of Demkowicz and Oden~\cite{Demkowicz1986188}, which introduced the
@@ -153,7 +153,7 @@ This is simply a consequence of the least-squares nature of DPG; the energy erro
 
 Practically speaking, this implies that the DPG method is discretely stable on any mesh. In particular, DPG is unconditionally stable for higher order adaptive meshes, where discrete stability is often an issue. 
 
-\section{Ultra-weak variational formulation}
+\subsection{Ultra-weak variational formulation}
 \seclab{abstractUweak}
 
 The naming of the discontinuous Petrov-Galerkin method refers to the fact that the method is a Petrov-Galerkin method, and that the test functions are specified to be discontinuous across element boundaries. There is no specification of the regularity of the trial space, and we stress that the idea of DPG is not inherently tied to a single variational formulation \cite{Bui-ThanhDemkowiczGhattas11a}. 
@@ -215,7 +215,7 @@ where $D(A_h^*)$ denotes the broken graph space corresponding to $A_h^*$,
 and $\gamma(D(A))$ the trace space (assumed to exist) of the graph space of
 operator $A$. The first discussion of the well-posedness of DPG with the ultra-weak formulation can be found in \cite{analysisDPG}, where the proof is presented for the Poisson and convection-diffusion equations. A more comprehensive discussion of the abstract setting for DPG with the ultra-weak formulation using the graph space, as well as a more general proof of well-posedness, can be consulted in \cite{Bui-ThanhDemkowiczGhattas11b}. 
 
-\section{Choices of test and trial norms}
+\subsection{Choices of test and trial norms}
 \seclab{energyPair}
 
 A clear property of the energy norm defined by \eqnref{energyNorm} is that the trial norm $\nor{\cdot}_{U,E}$ is induced by a given test norm. However, the reverse relationship holds as well; for any trial norm, the test norm that induces such a norm is recoverable through duality. We have a result, proved in \cite{Bui-ThanhDemkowiczGhattas11a}: assuming, for simplicity, that the bilinear form $b(u,v)$ is definite, given any norm $\nor{\cdot}_{U}$ on the trial space $U$, for $\varphi \in U$, we can represent $\nor{\varphi}_{U}$ via
