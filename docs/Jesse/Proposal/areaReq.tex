@@ -1,25 +1,56 @@
 \section{Area requirements}
+\seclab{sec:proposedWork}
 
 \subsection{Area A}
 
 \begin{itemize}
-\item{\textbf{Completed: }} Prove robustness of DPG method for the scalar convection-diffusion problem
-\item Attempt analysis of the linearized Navier-Stokes system
+\item{\textbf{Completed: Prove robustness of DPG method for the scalar convection-diffusion problem.}}
+
+Analysis has been done in \cite{DPGrobustness2}, extending the results of \cite{DPGrobustness}. In particular, we have introduced a test norm under which the DPG method robustly bounds the $L^2$ error in the field variables $u$ and the scaled stress $\sigma$. Numerical results confirm the theoretical bounds given. 
+
+\item{\textbf{Proposed: Attempt analysis of the linearized Navier-Stokes system.}}
+
+We hope to analyze the linearized Navier-Stokes equations to determine an optimal extrapolation of the test norm for the scalar convection-diffusion problem to systems. 
+
 \end{itemize}
 
 \subsection{Area B}
 
 \begin{itemize}
-\item{\textbf{Completed: }} Collaborative work with Nathan Roberts on the higher order parallel adaptive DPG code Camellia.
-\item Nonlinear DPG - Hessian adjoint trick
-\item Adaptivity: anisotropic refinements and $hp$-schemes.
-\item Distributed static condensation
+\item{\textbf{Completed: Collaborative work with Nathan Roberts on the higher order parallel adaptive DPG code Camellia.}}
+
+Most numerical experiments have been done using the higher-order adaptive codebase Camellia, built upon the Trilinos library and designed by Nathan Roberts. The library allows for rapid implementation of problems through a symbolic syntax similar to the Fenics project. Work has been done to support arbitrary-irregularity refinements in both $h$ and $p$, and the framework for anisotropic refinements is in place as well. Similarly, the code is partially parallelized - the determination of the stiffness matrix is perfectly scalable, and we are currently exploring options for more scalable solvers. 
+
+\item{\textbf{Proposed: Distributed iterative static condensation.}}
+
+A clear choice for a parallelized solver under the ultra-weak variational formulation is static condensation/the Schur-complement method. Given a block matrix structure of a stiffness matrix $K$, we can view the DPG system as
+\[
+Ku = \arr{A}{B}{B^T}{D}\vecttwo{u_{\rm flux}}{u_{\rm field}} = \vecttwo{f}{g} = l
+\]
+where $D$ has a block-diagonal structure, and $A$ and $D$ are both square matrices with $\dim{A} < \dim{D}$. The system can be reduced to yield the condensed system
+\[
+\left(A-B D^{-1} B^T\right)u_{\rm flux} = f - B D^{-1} g
+\]
+where $D^{-1}$ can be inverted block-wise. Once the globally coupled flux degrees of freedom are solved for, the field degrees of freedom can be reconstructed locally. 
+
+Additionally, though the Schur complement $A-B D^{-1} B^T$ is generally a dense matrix, it does not have to be explicitly formed, and we can use a matrix-free method to solve the above condensed system. The question remains on whether or not the condensed DPG stiffness matrix is well-conditioned. It has been shown that, unlike standard least-squares methods, DPG generates for the Poisson matrix a stiffness matrix with condition number $O(h^{-2})$ \cite{practicalDPG}. It is well known that, under standard finite element methods, if the condition number of the global stiffness matrix $K$ is $O(h^{-2})$, the condition number of the Schur complement is $O(h^{-1})$. Additionally, through either diagonal preconditioning or matrix equilibration, the condition number of the Schur complement can often be made significantly smaller than $O(h^{-1})$. 
+
+We hope to implement such a distributed solver and determine the scalability of this solver under DPG.
+  
+\item{\textbf{Proposed: a Nonlinear Hessian-based DPG method.}}
+
+We hope to implement the Hessian-based nonlinear DPG approach to the viscous Burgers and compressible Navier-Stokes problems and compare convergence and error rates for each problem after applying this nonlinear strategy. 
+
+\item{\textbf{Proposed: Anisotropic refinements and $hp$-schemes.}}
+
+The effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. As the error representation function has been shown to yield an effective and natural vector-valued residual with which to drive refinement, we hope to generalize the use of the error representation function to yield anisotropic adaptive schemes. Additionally, we hope to explore the possibility of inferring an optimal choice between $h$ and $p$ refinement using the error representation function. %\cite{BoeingHigherOrder}. 
+
 \end{itemize}
 
 \subsection{Area C}
 
 \begin{itemize}
-\item{\textbf{Completed: }} Convection-dominated diffusion, Burgers, and Navier-Stokes. 
-\item Higher Reynolds number, ramp problem, Gaussian bump, airfoil.
-\item Euler with NS regularization?
+\item{\textbf{Completed: convection-dominated diffusion, Burgers, and a model problem for Navier-Stokes.}} 
+\item{\textbf{Proposed: Higher Reynolds number, ramp problem, Gaussian bump, airfoil.}}
+\item{\textbf{Proposed: regularized Euler.}}
 \end{itemize}

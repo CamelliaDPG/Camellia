@@ -1,9 +1,8 @@
+The majority of this chapter will focus on the convection-diffusion problem using the abstract theory that we have discussed in the previous chapter. In particular, we shall use the DPG method based on the ultra-weak formulation with optimal test functions to solve this model problem and analyze its behavior as $\epsilon\rightarrow 0$. Our goal is to show the robustness of the method with respect to $\epsilon$, and demonstrate its usefulness as a numerical method for solving singular-perturbed problems. 
+
 \section{DPG formulation for convection-diffusion}
 
 \seclab{sec:modelSec}
-The remainder of this chapter focuses on the convection-diffusion problem using the abstract theory that we
-have discussed so far. In particular, we shall use the DPG method based on the ultra-weak formulation with optimal test functions to solve this model problem and analyze its behavior with respect to $\epsilon$. 
-Our goal is to show the robustness of the method with respect to $\epsilon$, and demonstrate its usefulness as  a numerical approach to solving singular-perturbed problems. 
 
 The convection-diffusion problem is given on a domain
 $\Omega \subset \mathbb{R}^d$ with boundary $\pO \equiv \Gamma$
@@ -701,14 +700,12 @@ Recall our strategy for analysis was to decompose of $(v,\tau)$ into continuous 
 %\caption{Comparison of primal and adjoint problems for convection-diffusion under the standard Dirichlet outflow boundary condition and the new inflow boundary condition. Notice the replacement of a wall-stop boundary condition with a Neumann stress boundary condition at the outflow boundary of the adjoint problem. }
 %\end{figure}
 
-\section{Numerical experiments}
+\section{Numerical experiments: Eriksson-Johnson problem}
 \label{sec:num_exp}
 
 In each numerical experiment, we vary $\epsilon = .01, .001, .0001$ in order to demonstrate robustness over a range of $\epsilon$.  This is intended to mirror the experience with roundoff effects in numerical experiments \cite{DPGrobustness}; for ``worst-case" linear solvers, such as LU decomposition without pivoting, the effect of roundoff error becomes evident in the solving of optimal test functions for $\epsilon \leq O(1e-5)$.  The roundoff itself comes from the conditioning of the Gram matrix under certain test norms; for example, if the weighted $H({\rm div};\Omega)\times H^1(\Omega)$ norm is used for the test norm $\|\left(\tau,v\right)\|_V$ (as was done in \cite{DPG2}), for an element of size $h$, $\|v\|_{L^2}^2 = O(h)$, while $\|\grad v\|_{L^2}^2 = O(h^{-1})$. As $h\rightarrow 0$, the seminorm portion of the test norm dominates the Gram matrix, leading to a near-singular and ill-conditioned system. 
 
 The effect of roundoff error is often characterized by an increase in the energy error, which (assuming negligible error in the approximation of test functions) is proven to decrease for any series of refined meshes. These roundoff effects are dependent primarily on the mesh, appearing when trying to fully resolve very thin boundary layers by introducing elements of size $\epsilon$ through adaptivity. The effects of roundoff error were successfully treated in \cite{DPG3} by dynamically rescaling the test norms based on element size, a practical remedy not covered yet by the present analysis. 
-
-\subsection{Eriksson-Johnson model problem}
 
 To confirm our theoretical results, we adopt a modification of a problem first proposed by Eriksson and Johnson in \cite{Eriksson1993}. For the choice of $\Omega = (0,1)^2$, $f=0$, and $\beta = (1,0)^T$, the convection diffusion equation reduces to
 \[
@@ -736,7 +733,7 @@ C_n = \int_0^1 u_0(y) \cos(n\pi y).
 
 All computations have been done using the adaptive DPG code Camellia, built on the Sandia toolbox Trilinos \cite{Camellia}.
 
-\subsubsection{Solution with $C_1 = 1, C_{n\neq 1} = 0$}
+\subsection{Solution with $C_1 = 1, C_{n\neq 1} = 0$}
 
 We begin with the solution taken to be the first non-constant term of the above series.  We set the inflow boundary condition to be exactly the value of $u-\sigma_x$ corresponding to the exact solution.  
 
@@ -794,7 +791,7 @@ For $\epsilon=1e-6$, the ratio simply remains constant, but for $\epsilon=1e-7$,
 
 It is worth noting that for $\epsilon \leq 1e-5$, we do not perform enough refinements to completely resolve the boundary layer, so $|K| \geq \epsilon$ for all $K\in \Oh$. Thus, any roundoff effects observed are not due to the conditioning issues associated with the differing scales of the $\nor{v}_{L^2(K)}$ and $\nor{\grad v}_{L^2(K)}$ terms discussed previously. 
 
-\subsubsection{Neglecting $\sigma_n$}
+\subsection{Neglecting $\sigma_n$}
 
 In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and will have to set $\beta_n u - \sigma_n = u_0$, ignoring the viscous contribution to the boundary condition.  The hope is that for small $\epsilon$, this omission will be negligible. Figure~\ref{ratios_noSigma} indicates that, between $\epsilon = .005$ and $\epsilon = .001$, the omission of $\sigma_n$ in the boundary condition becomes negligible, and both our error rates and ratios of $L^2$ to energy error become identical to the case where $\sigma_n$ is explicitly accounted for in the inflow condition. For large $\epsilon = .01$, the $L^2$ error stagnates around $1e-3$, or about $7\%$ relative error. 
 
@@ -810,7 +807,7 @@ In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and w
 \label{ratios_noSigma}
 \end{figure}
 
-\subsubsection{Discontinuous inflow data}
+\subsection{Discontinuous inflow data}
 
 We note also that an additional advantage of selecting this new boundary condition is a relaxation of regularity requirements: as $\widehat{f}_n \in H^{-1/2}(\Gh)$, strictly discontinuous inflow boundary conditions are no longer ``variational crimes".  We consider the discontinuous inflow condition
 \[

@@ -24,11 +24,50 @@ The solution of a nonlinear problem is most commonly found using an iterative me
 The solution at the next timestep is then set $u(t_{i+1}) \coloneqq u(t_i) + \Delta u(t_i)$.  This procedure is then repeated for the next timestep $t_{i+1}$ until the transient residual decreases such that $\nor{u(t_i) - u(t_{i-1})}_{L^2(\Omega)} = \nor{\Delta u(t_i)}_{L^2(\Omega)} \leq tol$.\footnote{Strictly speaking, seeking the solution at each timestep involves the solution of a nonlinear problem, requiring a Newton-type iteration to solve for $u(t_i)$.  However, for most applications, it is sufficient to approximate the nonlinear solution using a single Newton solve at each time step.} 
 \end{itemize}
 
-In practice, most compressible flow solvers opt for the pseudo-time step method over the direct Newton iteration due to the difficulty of convergence and sensitivity of the Newton iteration to initial guess\cite{libMeshPaper}.  Though the convergence of the pseudo-time step is slower, the addition of the zero-order transient terms ``regularizes" the problem, making it easier to solve.\footnote{The addition of a zero-order term ``regularizes" an equation by adding to it a positive-definite $L^2$ projection operator.  In the limit as $\Delta t\rightarrow 0$, the solution at $t_i$ will simply return the $L^2$ projection of the solution at the previous timestep.}
+In practice, most compressible flow solvers opt for the pseudo-time step method over the direct Newton iteration due to the difficulty of convergence and sensitivity of the Newton iteration to initial guess\cite{libMeshPaper}.  Though the convergence of the pseudo-time step is slower, the addition of the zero-order transient terms ``regularizes" the problem and makes it less difficult to solve.\footnote{The addition of a zero-order term ``regularizes" an equation by adding to it a positive-definite $L^2$ projection operator.  In the limit as $\Delta t\rightarrow 0$, the solution at $t_i$ will simply return the $L^2$ projection of the solution at the previous timestep.}
 
 A second class of nonlinear solvers are optimization methods.  Since DPG allows for the formulation of a discrete nonlinear residual, it is possible to formulate the nonlinear DPG problem as a minimization problem and use an optimization method to solve the discrete nonlinear problem.  This approach has been successfully implemented by Peraire et al\. in solving compressible gas dynamics problems on uniform grids using a modified version of the ultra-weak variational formulation \cite{MITDPG}.  An additional advantage of such an approach would be the more direct enforcement of physical constraints, which are treated in an ad-hoc manner in most compressible Navier-Stokes solvers.  
 
 \subsection{DPG as a nonlinear minimum residual method}
 
-\todo{Add adjoint trick stuff}
+A recent theoretical development is the formulation of a DPG method that aims to minimize a nonlinear residual. Given two Hilbert spaces --- a trial space $U$ and test space $V$ --- our nonlinear variational formulation can be written as $b(u,v) = l(v)$, with the corresponding operator form of the formulation in $V'$
+\[
+B(u) = l.
+\]
+We can apply the steps used to derive the DPG method for linear problems to the nonlinear setting as well. Given a finite dimensional subspace $U_h \subset U$, we consider the discrete nonlinear residual
+\[
+J(u_h) \coloneqq \frac{1}{2}\nor{R_V^{-1}\left(B(u_h)-l\right)}_V^2.
+\]
+Our goal is to solve
+\[
+u_h = \arg \min_{w_h\in U_h}J(w_h).
+\]
+Similarly to the linear case, we can take the Gate\'aux derivative to arrive at a necessary condition for $u_h$ to minimize $J(u_h)$ 
+\begin{align*}
+\LRa{J'(u_h), \delta u_h} &= \LRp{R_V^{-1}\left(B(u_h)-l\right),R_V^{-1}B'(u_h;\delta u_h)}_V, \quad \delta u_h \in U_h. 
+\end{align*}
+As the above is a nonlinear equation, we seek its solution through linearization. Differentiating a second time in $u$, we arrive at
+\begin{align*}
+\LRa{J''(u_h), \Delta u_h} =& \LRa{B'(u_h;\Delta u_h), B'(u_h;\delta u_h)}_V \\
+& + \LRa{\left(B(u_h)-l\right),B''(u_h;\delta u_h,\Delta u_h)}_V \\
+=& \LRp{R_V^{-1}B'(u_h;\Delta u_h), R_V^{-1}B'(u_h;\delta u_h)}_V \\
+& + \LRp{R_V^{-1}\left(B(u_h)-l\right),R_V^{-1}B''(u_h;\delta u_h,\Delta u_h)}_V 
+\end{align*}
+where $B''(u_h;\delta u_h,\Delta u_h)$ denotes the Hessian of $B(u_h)$, evaluated using both $\delta u_h$ and $\Delta u_h$. 
+
+Examining the above formulation, we note that DPG as applied to the linearized problem produces the term $ \LRp{R_V^{-1}B'(u_h;\Delta u_h), R_V^{-1}B'(u_h;\delta u_h)}_V$. However, in approaching the nonlinear problem through the minimization of the discrete residual, we gain a second-order term involving the Hessian
+\[
+\LRp{R_V^{-1}\left(B(u_h)-l\right),R_V^{-1}B''(u_h;\delta u_h,\Delta u_h)}_V.
+\] 
+The evaluation of this term can be done in a computationally efficient manner --- if we define the image of the nonlinear residual under the Riesz inverse
+\[
+v_{R(u)} = R_V^{-1}\left(B(u_h)-l\right),
+\]
+then we can compute this additional term through
+\begin{align*}
+\LRp{v_{R(u)},R_V^{-1}B''(u_h;\delta u_h,\Delta u_h)}_V &= \LRa{v_{R(u)},B''(u_h;\delta u_h,\Delta u_h)}_V
+\end{align*}
+which can be computed in the same fashion as a Bubnov-Galerkin stiffness matrix. This addition, though not positive definite, is symmetric due to the nature of second order Ga\^teux derivatives. 
+
+We note that we have not implemented this Hessian-based nonlinear solver in the numerical experiments to follow, and instead plan to do so in the proposed work outlined in Section~\secref{sec:proposedWork}.
 

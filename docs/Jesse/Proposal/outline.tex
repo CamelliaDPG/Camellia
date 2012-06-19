@@ -154,9 +154,9 @@
 
 \committeemembers
 	[Thomas J. R. Hughes]
-	[Somebody]
-	[Somebody]
-	{Eh}
+	[Committee member 2]
+	[Committee member 3]
+	{Committee member 4}
 
 \previousdegrees{B.A.}
 
@@ -207,36 +207,34 @@ This document and its source file show to write a Doctoral Dissertation using
 
 \chapter{Introduction}
 
-\include{proposalIntro}
+\input{proposalIntro}
+
+\chapter{Range of problems}
+
+\input{problemRange}
 
 \chapter{Discontinuous Petrov-Galerkin: a minimum residual method for linear problems}
 
-\include{DPGtheory}
+\input{DPGtheory}
 
 
 \chapter{A robust DPG method for convection-diffusion}
 
-\begin{itemize}
-\item Describe mathematically the issue with standard Galerkin.
-\item Give proofs of robustness and numerical results (from paper)\cite{ChanHeuerBui-ThanhDemkowicz12}
-\end{itemize}
-\todo{Transition between paper and this bit}
-
-\include{DPGrobustness}
+\input{DPGrobustness}
 
 \chapter{Proposed work}
 
-\include{NonlinDPG}
-\include{BurgersNotes}
-\include{NSNotes}
-\include{areaReq}
+\input{NonlinDPG}
+\input{BurgersNotes}
+\input{NSNotes}
+\input{areaReq}
 
 \bibliographystyle{plain}
 \bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes}
 
 %\chapter{Appendix}
-\appendices
+\appendix
 \input{paper_appendix.tex}
-\input{hyperbolicDPG.tex}
+%\input{hyperbolicDPG.tex}
 
 \end{document}

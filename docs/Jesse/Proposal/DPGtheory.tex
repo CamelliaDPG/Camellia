@@ -1,15 +1,10 @@
-The Discontinuous Petrov-Galerkin (DPG) method of Demkowicz and Gopalakrishnan was first formulated in \cite{DPG1} for the pure convection problem. 
+The Discontinuous Petrov-Galerkin (DPG) method of Demkowicz and Gopalakrishnan was first formulated in \cite{DPG1} as a scheme for the pure convection problem. The method demonstrated promise --- in particular, the method was able to achieve optimal convergence rates for the Peterson problem where standard DG methods were suboptimal. A breakthrough came in \cite{DPG2}, where the concept of locally-computable optimal test functions led to the development of the DPG method in its current form. Soon after, the DPG method was successfully applied to solve the convection-diffusion problem in the small-diffusion limit with $\epsilon = 1e-7$ \cite{DPG2,DPG3}. 
 
-Historically, the name DPG was given by Bottasso, Micheletti, Sacco and Causin to their method for elliptic problems in \cite{BottassoMichelettiSacco02}. The method was then extended to other problems, including convection-diffusion, in \cite{BottassoMichelettiSacco05,CausinSacco05,CausinSaccoBottasso05}. 
+Historically, the name DPG was given by Bottasso, Micheletti, Sacco and Causin to their method for elliptic problems in \cite{BottassoMichelettiSacco02}. The method was then extended to other problems, including convection-diffusion, in \cite{BottassoMichelettiSacco05,CausinSacco05,CausinSaccoBottasso05}. The key point in the method of Bottasso et al.\ was their method of hybridization of fluxes. Whereas HDG methods identify an additional flux unknown on the boundary, the numerical flux coupling neighboring elements together is still typically computed in part by using contributions from interior degrees of freedom on neighboring elements. In the DPG formulation, all numerical fluxes are declared to be independent unknowns, leaving the interior field degrees of freedom completely uncoupled from element to element. This formulation is often referred to as the \emph{ultra-weak} variational formulation. 
 
-The key point in the method of Bottasso et al.\ was their method of hybridization of fluxes. Whereas HDG methods will identify an additional flux unknown on the boundary, the numerical flux coupling neighboring elements together is still typically computed in part using contributions from the field variables. In the DPG formulation, all numerical fluxes are declared to be independent unknowns, leaving the interior field degrees of freedom completely uncoupled from element to element. \todo{Finish, check if this is true.}
+Since its inception, the DPG method has been applied to a wide range of problems with great success, including elasticity \cite{DPGElasLocking}, thin body shell problems \cite{DPGElas}, the cloacking problem in electromagnetics \cite{DPGcloak}, both Helmholtz and elastic wave propagation problems \cite{DPG4}, and recently, the linear Stokes equation \cite{stokesDPG}. DPG has also been shown to be a generalization of several successful finite element methods --- comparisons between DPG and standard DG methods can be found in \cite{DPG1}, and more recently, several existing DG methods have been shown to be derivable using the DPG framework \cite{Bui-ThanhDemkowiczGhattas11a,DGDPG}. 
 
-The breakthrough came in \cite{DPG2}, where the concept of locally-computable optimal test functions led to the development of the DPG method in its current form.
-
-\todo{Clean up}
-This DPG method with optimal test functions is better understood in \cite{DPG3,DPG4}, extended to problems in \cite{DPGElas,stokesDPG}, well-posedness theory developed for Poisson and convection-diffusion in \cite{analysisDPG}, extended to large class of Friedrichs systems in \cite{Bui-ThanhDemkowiczGhattas11b}. \cite{practicalDPG}. 
-
-Optimal order comparison to DG in \cite{DPG1}. Comparisons to other DG methods in \cite{Bui-ThanhDemkowiczGhattas11a,DGDPG}.
+Detailed analysis of the energy setting and well-posedness of DPG has been done for the Poisson and convection-diffusion equations in \cite{analysisDPG}. The well-posedness of DPG has also recently been extended to the large class of Friedrichs systems in \cite{Bui-ThanhDemkowiczGhattas11b}. Significant efforts have also been made in demonstrating the robustness of the DPG method for singular perturbation problems, both in wave propagation \cite{DPG4,DPGwave} and convection-diffusion problems \cite{DPGrobustness, DPGrobustness2}. 
 
 \subsection{Optimal Petrov-Galerkin methods}
 
@@ -338,7 +333,7 @@ optimal test norm) is used to compute  optimal test functions in
 \eqnref{optvVar}, the finite element error in the canonical norm is the
 best in the sense of \eqnref{optimalError}. 
 
-Unfortunately, the optimal test norm is non-localizable due to the presence of the jump term $\jump{v}$.\footnote{A localizable norm $\nor{v}_{V(\Oh)}$ can be written in the form $\nor{v}_{V(\Oh)} = \sum_{K\in\Oh} \nor{v}_{V(K)},$ where $\nor{v}_{V(K)}$ is a norm over the element $K$.} Since the jump terms couple elements together, the evaluation of the jump terms requires contributions from all the elements in the mesh. Consequently, solving for an optimal test function
+Unfortunately, the optimal test norm is non-localizable due to the presence of the jump term $\jump{v}$.\footnote{A localizable norm can be written as $\nor{v}_{V(\Oh)} = \sum_{K\in\Oh} \nor{v}_{V(K)},$ where $\nor{v}_{V(K)}$ is a norm over $K$.} Since the jump terms couple elements together, the evaluation of the jump terms requires contributions from all the elements in the mesh. Consequently, solving for an optimal test function
 amounts to inverting the Riesz map %, defined on the left sideof \eqnref{optvVar}, 
 over the entire mesh $\Oh$, making the optimal test norm impractical.
 
