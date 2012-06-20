@@ -73,26 +73,29 @@ public:
   }
 };
 
-// class MassFluxParity : public Function 
-// {
-//   private:
-//     FunctionPtr _massFlux;
-//     Teuchos::RCP<Mesh> _mesh;
-//   public:
-//     MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
-//     _massFlux(massFlux), _mesh(mesh) {}
-//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-//       int numCells = values.dimension(0);
-//       int numPoints = values.dimension(1);
-// 
-//       vector<int> cellIDs = basisCache->cellIDs();
-//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-//         FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
-//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-//         }
-//       }
-//     }
-// };
+class MassFluxParity : public Function 
+{
+  private:
+    FunctionPtr _massFlux;
+    Teuchos::RCP<Mesh> _mesh;
+  public:
+    MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
+    _massFlux(massFlux), _mesh(mesh) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      vector<int> cellIDs = basisCache->cellIDs();
+      int sideIndex = basisCache->getSideIndex();
+      _massFlux->values(values, basisCache);
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) *= parities(sideIndex);
+        }
+      }
+    }
+};
 
 // boundary value for u
 class U0 : public Function {
@@ -206,13 +209,13 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  robIP->addTerm( ip_scaling * v );
+  // robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
   if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( v );
+    robIP->addZeroMeanTerm( 1e6 * v );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -265,7 +268,7 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  int numRefs = 1;
+  int numRefs = 6;
     
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
@@ -279,7 +282,8 @@ int main(int argc, char *argv[]) {
   // Create a fake bilinear form for the testing
   BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
   // Define our mass flux
-  FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+  FunctionPtr massFluxVal = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+  FunctionPtr massFlux = Teuchos::rcp( new MassFluxParity(massFluxVal, mesh) );
   LinearTermPtr massFluxTerm = massFlux * testOne;
 
   Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
