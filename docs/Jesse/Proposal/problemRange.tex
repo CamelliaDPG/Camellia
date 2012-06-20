@@ -63,7 +63,7 @@ where $e$ and $\iota$ are energy and internal energy per unit mass, respectively
 
 \subsection{The linearized Navier-Stokes equations}
 
-The linearized Navier-Stokes equations are the result of small perturbation assumptions applied to the full Navier-Stokes equations. Under such assumptions, the flow is largely uniform, with slight variations that are small compared to the uniform stream velocity. We are interested in the linearized Navier-Stokes equations mainly for mathematical purposes; 
+The linearized Navier-Stokes equations are the result of small perturbation assumptions applied to the full Navier-Stokes equations. Under such assumptions, the flow is largely uniform, with slight variations that are small compared to the uniform stream velocity. We are interested in the linearized Navier-Stokes equations mainly for mathematical purposes - as the solution to the full Navier-Stokes equations involves a series of solutions for linearized Navier-Stokes, we wish to investigate the behavior of our numerical method with respect to this system.  
 
 \section{The scalar convection-diffusion equation}
 
@@ -73,14 +73,19 @@ The scalar convection-diffusion problem is the prototypical model problem for so
 
 \subsection{Burgers' equation}
 
-The Burgers' equation is physically derived from the incompressible Navier-Stokes equations under the assumption that $\grad p \approx 0$, or that the pressure field is near constant. A feature of the Burgers' equation not present in convection-diffusion is that, due to the presence of the nonlinear term, it can develop shock discontinuities in its solutions in finite time. 
-
-The Burgers' equation has also been used to study the phenomenon of turbulence; however, the Burgers equation does not exhibit the chaotic nature and sensitivity to initial conditions that characterizes turbulence as observed in the full and incompressible Navier-Stokes equations. In the scope of this dissertation, Burgers shall be used as to test the extension of our numerical method to nonlinear problems. 
+The Burgers' equation is physically derived from the incompressible Navier-Stokes equations under the assumption that $\grad p \approx 0$, or that the pressure field is near constant. A feature of the Burgers' equation not present in convection-diffusion is that, due to the presence of the nonlinear term, it can develop shock discontinuities in its solutions in finite time.  The Burgers' equation has also been used to study the phenomenon of turbulence; however, the Burgers equation does not exhibit the chaotic nature and sensitivity to initial conditions that characterizes turbulence as observed in the full and incompressible Navier-Stokes equations. In the scope of this dissertation proposal, Burgers shall be used as to test the extension of our numerical method to nonlinear problems. 
 
 \section{The inviscid case}
 
-The Euler equations are a result of neglecting the viscous terms in the Navier-Stokes equations. Physically speaking, these assumptions correspond to the inviscid limit, as well as a particular class of boundary conditions (for example, the wall boundary condition $\boldsymbol u = 0$ does not hold in the inviscid limit). 
+The pure convection equation is a result of neglecting the viscous term in the convection-diffusion equation. Physically speaking, these assumptions correspond to the inviscid limit, as well as a particular class of boundary conditions (for example, the wall boundary condition $u = 0$ and prescribed inflow condition may be incompatible in the inviscid limit).  The Euler equations are likewise a result of neglecting the viscous terms in the Navier-Stokes equations.  However, these problems can be ill-posed in the continuous setting.  Take, for example, the vortex problem in Figure~\ref{fig:convCirc}.  A feature of the convection equation is that there is no crosswind diffusion - thus, materials do not mix across streamlines.  However, for the vortex problem, this also implies that the solution on any closed streamline can take any arbitrary value, and is thus undefined.  
 
-\todo{express coupling - Drela's IBL work} \cite{BoeingDrela}
-\todo{Express that mathematically, the Euler equations are difficult}
+\begin{figure}[!h]
+\centering
+\includegraphics[scale = .22]{figs/convCirc.png}
+\caption{Setup for the vortex problem.}
+\label{fig:convCirc}
+\end{figure}
+Formally speaking, the solution to the vortex problem is taken to be the solution to the convection-diffusion equation (with appropriate outflow boundary conditions) as the viscosity tends towards zero, in which case, the solution in the interior would be uniformly zero.  This motivates the need for \emph{artificial viscosity} methods with which to regularize inviscid solutions.  The topic is expansive, and we direct the reader towards \cite{Barter} for a more detailed discussion of past and present artificial viscosity methods.
+
+There is still much interest in solving the inviscid Euler equations in industry --- the full Navier-Stokes models often prove difficult to solve due to the mathematical nature of the equations, and the coupling of the Euler equations with boundary layer models has been successful in simulating many phenomena in compressible flow \cite{BoeingDrela}.  
 
