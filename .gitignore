@@ -33,3 +33,13 @@ build/.sconsign.dblite
 *.tar
 *.rar
 
+############## ignore LaTeX build files
+
+*.aux
+*.log
+*.bbl
+*.blg
+*.toc
+*.idx
+*.lof
+*.lot
