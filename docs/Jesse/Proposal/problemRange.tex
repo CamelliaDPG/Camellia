@@ -58,8 +58,9 @@ where $e$ and $\iota$ are energy and internal energy per unit mass, respectively
 
 \subsection{Incompressibility}
 
-\todo{reference Stokes, cite Nate}
-\cite{stokesDPG}
+Under appropriate assumptions on the behavior of density and temperature, the behavior of the compressible Navier-Stokes equations can be sufficiently represented by the incompressible Navier-Stokes equations for low speed laminar fluid flows. 
+
+For viscous ``creeping'' flows, the incompressible Navier-Stokes equations reduce down to the Stokes equations. \cite{stokesDPG}
 
 \subsection{The linearized Navier-Stokes equations}
 
@@ -69,11 +70,15 @@ The linearized Navier-Stokes equations are the result of small perturbation assu
 
 The scalar convection-diffusion problem is the prototypical model problem for solving the full Navier-Stokes equations; most stabilized methods consider first the scalar convection-diffusion equation as a test case before attempting a solution of the full Navier-Stokes equations. As discussed previously, an important feature of the convection-diffusion equation is that solutions can develop  boundary layers, a physical feature found in most applications of interest for compressible flow. 
 
+The scalar convection-diffusion equation is also mathematically important
+
 \todo{add perspective on convection-diffusion}
 
 \subsection{Burgers' equation}
 
-The Burgers' equation is physically derived from the incompressible Navier-Stokes equations under the assumption that $\grad p \approx 0$, or that the pressure field is near constant. A feature of the Burgers' equation not present in convection-diffusion is that, due to the presence of the nonlinear term, it can develop shock discontinuities in its solutions in finite time.  The Burgers' equation has also been used to study the phenomenon of turbulence; however, the Burgers equation does not exhibit the chaotic nature and sensitivity to initial conditions that characterizes turbulence as observed in the full and incompressible Navier-Stokes equations. In the scope of this dissertation proposal, Burgers shall be used as to test the extension of our numerical method to nonlinear problems. 
+The Burgers' equation is physically derived from the incompressible Navier-Stokes equations under the assumption that $\grad p \approx 0$, or that the pressure field is near constant. A feature of the Burgers' equation not present in convection-diffusion is that, due to the presence of the nonlinear term, it can develop shock discontinuities in its solutions in finite time.  The Burgers' equation has also been used to study the phenomenon of turbulence; however, the Burgers equation does not exhibit the chaotic nature and sensitivity to initial conditions that characterizes turbulence as observed in the full and incompressible Navier-Stokes equations. 
+
+The Burgers' equation is also the simplest nonlinear extension of the linear convection-diffusion equation, and exact solutions can sometimes be found using the method of characteristics. In the scope of this dissertation proposal, Burgers shall be used as to test the extension of our numerical method to nonlinear problems. 
 
 \section{The inviscid case}
 
