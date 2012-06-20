@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 2;
+  int polyOrder = 1;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
@@ -586,13 +586,13 @@ int main(int argc, char *argv[]) {
   eps_visc[x_comp][tau1->ID()][sigma22->ID()] = -lambda_factor_fxn;
 
   eps_visc[y_comp][tau1->ID()][sigma12->ID()] = one/two_mu;
-  eps_visc[y_comp][tau1->ID()][omega->ID()] = -one;
+  eps_visc[y_comp][tau1->ID()][omega->ID()] = -one*Re;
   
   eps_euler[tau1->ID()][u1->ID()] = one;
   
   // 2nd stress eqn
   eps_visc[x_comp][tau2->ID()][sigma12->ID()] = one/two_mu;
-  eps_visc[x_comp][tau2->ID()][omega->ID()] = one;
+  eps_visc[x_comp][tau2->ID()][omega->ID()] = one*Re;
 
   eps_visc[y_comp][tau2->ID()][sigma11->ID()] = -lambda_factor_fxn;
   eps_visc[y_comp][tau2->ID()][sigma22->ID()] = one/two_mu - lambda_factor_fxn;
@@ -896,7 +896,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numTimeSteps = 150; // max time steps
+  int numTimeSteps = 100; // max time steps
   int numNRSteps = 1;
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -943,44 +943,10 @@ int main(int argc, char *argv[]) {
     rhs->addTerm((time_res_4 * invDt) * v4);    
   }
 
-  // time step 1
-  // prerefine the mesh
-  /*
-  for (int refIndex=0;refIndex<1;refIndex++){    
-    solution->solve(); // false: don't use MUMPS
-    refinementStrategy->refine(rank==0); // print to console on rank 0	
-  }
-  solution->solve(); // false: don't use MUMPS
-  */
-
-  if (rank==0){
-
-    // UN_minus_C->writeValuesToMATLABFile(solution->mesh(), "un_c.m");
-    solution->writeFluxesToFile(u1hat->ID(), "u1hat.dat");
-    solution->writeFluxesToFile(u2hat->ID(), "u2hat.dat");
-    solution->writeFluxesToFile(That->ID(), "That.dat");
-
-    solution->writeFluxesToFile(F1nhat->ID(), "F1nhat.dat");
-    solution->writeFluxesToFile(F2nhat->ID(), "F2nhat.dat");
-    solution->writeFluxesToFile(F3nhat->ID(), "F3nhat.dat");
-    solution->writeFluxesToFile(F4nhat->ID(), "F4nhat.dat");
-
-    solution->writeFieldsToFile(u1->ID(), "u1.m");
-    solution->writeFieldsToFile(u2->ID(), "u2.m");
-    solution->writeFieldsToFile(rho->ID(), "rho.m");
-    solution->writeFieldsToFile(T->ID(), "T.m");
-
-    solution->writeFieldsToFile(sigma11->ID(), "sigma11.m");
-    solution->writeFieldsToFile(sigma12->ID(), "sigma12.m");
-    solution->writeFieldsToFile(sigma22->ID(), "sigma22.m");
-    solution->writeFieldsToFile(q1->ID(), "q1.m");
-    solution->writeFieldsToFile(q2->ID(), "q2.m");
-    solution->writeFieldsToFile(omega->ID(), "w.m");    
-  } 
-
   if (rank==0){
     cout << "doing timesteps" << endl;
   }
+
   // time steps
   double time_tol = 5e-7;
   for (int k = 0;k<numRefs;k++){
@@ -1050,8 +1016,31 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     cout << "finishing it off with final solve" << endl;
   }
-  solution->solve(false); 
-  backgroundFlow->addSolution(solution,1.0);
+
+  double L2_time_residual = 1e7;
+  int i = 0;
+  while(L2_time_residual > time_tol && (i<numTimeSteps)){
+    //  for (int i = 0;i<numTimeSteps;i++){
+    for (int j = 0;j<numNRSteps;j++){
+      solution->solve(false); 
+      backgroundFlow->addSolution(solution,1.0);
+    }         
+    prevTimeFlow->addSolution(backgroundFlow,-1.0); 
+
+    double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
+    double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
+    double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
+    double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
+    double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
+    L2_time_residual= sqrt(L2_time_residual_sq);
+   
+    if (rank==0){
+      cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;
+    }
+    prevTimeFlow->setSolution(backgroundFlow); 
+    i++;
+  }
+
   if (rank==0){
     cout << "writing solutions to file" << endl;
   }
