@@ -16,12 +16,15 @@
 class IP : public DPGInnerProduct {
   vector< LinearTermPtr > _linearTerms;
   vector< LinearTermPtr > _boundaryTerms;
+  vector< LinearTermPtr > _zeroMeanTerms;
 public:
   IP();
   
   // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
   void addTerm( LinearTermPtr a);
   void addTerm( VarPtr v );
+  void addZeroMeanTerm( LinearTermPtr a);
+  void addZeroMeanTerm( VarPtr v);
   
   void addBoundaryTerm( LinearTermPtr a );
   void addBoundaryTerm( VarPtr v );

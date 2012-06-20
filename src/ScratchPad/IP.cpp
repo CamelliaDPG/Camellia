@@ -20,6 +20,14 @@ void IP::addTerm( VarPtr v ) {
   _linearTerms.push_back( Teuchos::rcp( new LinearTerm(v) ) );
 }
 
+void IP::addZeroMeanTerm( LinearTermPtr a) {
+  _zeroMeanTerms.push_back(a);
+}
+
+void IP::addZeroMeanTerm( VarPtr v ) {
+  _zeroMeanTerms.push_back( Teuchos::rcp( new LinearTerm(v) ) );
+}
+
 void IP::addBoundaryTerm( LinearTermPtr a ) {
   _boundaryTerms.push_back(a);
 }
@@ -37,6 +45,7 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   unsigned numCells = physicalCubaturePoints.dimension(0);
   unsigned numPoints = physicalCubaturePoints.dimension(1);
   unsigned spaceDim = physicalCubaturePoints.dimension(2);
+  unsigned numDofs = dofOrdering->totalDofs();
   
   shards::CellTopology cellTopo = basisCache->cellTopology();
   
@@ -60,6 +69,27 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
     LinearTermPtr bt = *btIt;
     bool forceBoundary = true; // force interpretation of this as a term on the element boundary
     bt->integrate(innerProduct,dofOrdering,bt,dofOrdering,basisCache,forceBoundary);
+  }
+  
+  // zero mean terms:
+  for ( vector< LinearTermPtr >:: iterator ztIt = _zeroMeanTerms.begin();
+       ztIt != _zeroMeanTerms.end(); ztIt++) {
+    LinearTermPtr zt = *ztIt;
+    FieldContainer<double> avgVector(numCells, numDofs);
+    // Integrate against 1
+    zt->integrate(avgVector, dofOrdering, basisCache);
+
+    // cout << numDofs << avgVector << endl;
+
+    // Sum into innerProduct
+    for (unsigned int c=0; c < numCells; c++)
+      for (unsigned int i=0; i < numDofs; i++)
+        for (unsigned int j=0; j < numDofs; j++)
+        {
+          double valAdd = 1e12 * avgVector[c, i] * avgVector[c, j];
+          // cout << "(" << innerProduct[c, i, j] << ", " << valAdd << ") ";
+          innerProduct[c, i, j] += valAdd;
+        }
   }
 }
 

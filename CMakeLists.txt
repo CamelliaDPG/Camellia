@@ -3,10 +3,17 @@ include(ConfigureOptions.cmake)
 
 project(Camellia)
 
-
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
+
+#find_package(VTK REQUIRED)
+#include(${VTK_USE_FILE})
+#if(VTK_LIBRARIES)
+#  link_libraries(${VTK_LIBRARIES})
+#else()
+#  link_libraries(vtkHybrid)
+#endif()
 
 # Find Trilinos
 find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
@@ -77,15 +84,20 @@ include_directories(
 )
 
 link_directories(
-  ${Trilinos_DIR}
+  ${TRILINOS_PATH}/lib
   ${Trilinos_TPL_LIBRARY}
   ${MUMPS_PATH}/lib
+  ${SCALAPACK_PATH}
 )
 
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
 link_libraries(
   Camellia
+  #${VTK_LIBRARIES}
+)
+
+link_libraries(
   ${Trilinos_LIBRARIES} 
   dmumps
   mumps_common

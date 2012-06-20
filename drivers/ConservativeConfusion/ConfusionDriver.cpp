@@ -9,6 +9,7 @@
 #include "Constraint.h"
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
+#include "PreviousSolutionFunction.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -71,6 +72,27 @@ public:
     return xMatch || yMatch;
   }
 };
+
+// class MassFluxParity : public Function 
+// {
+//   private:
+//     FunctionPtr _massFlux;
+//     Teuchos::RCP<Mesh> _mesh;
+//   public:
+//     MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
+//     _massFlux(massFlux), _mesh(mesh) {}
+//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//       int numCells = values.dimension(0);
+//       int numPoints = values.dimension(1);
+// 
+//       vector<int> cellIDs = basisCache->cellIDs();
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//         }
+//       }
+//     }
+// };
 
 // boundary value for u
 class U0 : public Function {
@@ -189,6 +211,8 @@ int main(int argc, char *argv[]) {
   robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+  if (enforceLocalConservation)
+    robIP->addZeroMeanTerm( v );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -241,18 +265,71 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  int numRefs = 6;
+  int numRefs = 1;
     
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
-    solution->solve();
+    solution->solve(false);
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
-  solution->solve();
+  solution->solve(false);
+
+  // Check conservation by testing against one
+  VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+  // Create a fake bilinear form for the testing
+  BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+  // Define our mass flux
+  FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+  LinearTermPtr massFluxTerm = massFlux * testOne;
+
+  Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  DofOrderingFactory dofOrderingFactory(fakeBF);
+  int fakeTestOrder = H1Order;
+  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
   
+  int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+  vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+  map<int, double> massFluxIntegral; // cellID -> integral
+  double maxMassFluxIntegral = 0.0;
+  double totalMassFlux = 0.0;
+  double totalAbsMassFlux = 0.0;
+  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    ElementTypePtr elemType = *elemTypeIt;
+    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+    vector<int> cellIDs;
+    for (int i=0; i<elems.size(); i++) {
+      cellIDs.push_back(elems[i]->cellID());
+    }
+    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+    FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+    massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+    for (int i=0; i<elems.size(); i++) {
+      int cellID = cellIDs[i];
+      // pick out the ones for testOne:
+      massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+    }
+    // find the largest:
+    for (int i=0; i<elems.size(); i++) {
+      int cellID = cellIDs[i];
+      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+    }
+    for (int i=0; i<elems.size(); i++) {
+      int cellID = cellIDs[i];
+      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+      totalMassFlux += massFluxIntegral[cellID];
+      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+    }
+  }
+  
+  
+  // Print results from processor with rank 0
   if (rank==0){
-    solution->writeFieldsToFile(u->ID(), "u.m");
-    solution->writeFluxesToFile(uhat->ID(), "u_hat.dat");
+    cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+    cout << "total mass flux: " << totalMassFlux << endl;
+    cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     solution->writeToVTK("confusion.vtu", 3);
     

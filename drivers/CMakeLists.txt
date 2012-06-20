@@ -1,3 +1,5 @@
+project(DPGDrivers)
+
 # Include headers from DPGTests for some drivers
 include_directories(DPGTests)
 

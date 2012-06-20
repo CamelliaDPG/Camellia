@@ -1,10 +1,11 @@
 #include "Solution.h"
 
+// #define USE_VTK
 #ifdef USE_VTK
-#include <vtkVersion.h>
+#include "vtkFloatArray.h"
 
 // Write solution to unstructured VTK format
-void Solution::writeToVTK(const string& filePath)
+void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 {
   int spaceDim = 2; // TODO: generalize to 3D...
   int num1DPts = 2;
