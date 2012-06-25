@@ -147,7 +147,7 @@
 
 %%%%%%%%%%%%%%% End def of new commands %%%%%%%%%%%%%%%%%%%
 
-\author{Jesse Chan\\Committee: \vspace{-0.3cm}\\Dr. Leszek Demkowicz (co-supervisor), Dr. Robert Moser (co-supervisor),\vspace{-0.3cm}\\ Dr. Tom Hughes, Committee Member 2, Committee Member 3}
+\author{Jesse Chan\\Committee: \vspace{-0.3cm}\\Dr. Leszek Demkowicz (co-supervisor), Dr. Robert Moser (co-supervisor),\vspace{-0.3cm}\\ Dr. Todd Arbogast, Dr. Omar Ghattas, Dr. Venkat Raman}
 
 \title{A DPG method for compressible flow problems}
 
@@ -162,7 +162,7 @@ Many of the above issues are tied to the notion of \emph{robustness}, which we d
 
 The issue of robustness for finite element methods was addressed early on by Brooks and Hughes in the SUPG method \cite{SUPG}, which introduced the idea of residual-based stabilization to combat such oscillations. Such methods have been widely used in industry; however, these methods are limited to low-order approximations. Additionally, such methods are typically formulated for model problems and then applied to the Navier-Stokes equations, where the extrapolation can be inexact and ad-hoc.  
 
-Residual-based stabilizations can alternatively be viewed as modifying the standard finite element test space, and consequently the norm in which the finite element method converges. Demkowicz and Gopalakrishnan generalized this idea in 2009 by introducing the discontinous Petrov-Galerkin (DPG) method with optimal test functions, where test functions are determined such that they minimize the discrete linear residual in a dual space.  Under the ultra-weak variational formulation, these test functions can be computed locally to yield a symmetric, positive-definite system.  The DPG method was quickly used to solve the convection and convection-diffusion problems \cite{DPG1,DPG2,DPG3}, and has recently been shown to yield a robust higher order adaptive method for the convection-diffusion model problem in arbitrary dimensions \cite{DPGrobustness,DPGrobustness2}.  
+Residual-based stabilizations can alternatively be viewed as modifying the standard finite element test space, and consequently the norm in which the finite element method converges. Demkowicz and Gopalakrishnan generalized this idea in 2009 by introducing the Discontinous Petrov-Galerkin (DPG) method with optimal test functions, where test functions are determined such that they minimize the discrete linear residual in a dual space.  Under the ultra-weak variational formulation, these test functions can be computed locally to yield a symmetric, positive-definite system.  The DPG method was quickly used to solve the convection and convection-diffusion problems \cite{DPG1,DPG2,DPG3}, and has recently been shown to yield a robust higher order adaptive method for the convection-diffusion model problem in arbitrary dimensions \cite{DPGrobustness,DPGrobustness2}.  
 
 \paragraph{Goal:} Our goal is to develop a DPG method and higher order adaptive scheme for the steady state compressible laminar Navier-Stokes equations in transonic/supersonic regimes that is robust over a range of Mach and Reynolds numbers. In particular, we hope to present a method for which automatic $hp$-adaptivity can be applied to problems in compressible flow.  
 
@@ -172,7 +172,7 @@ The main theoretical thrust of this research is to develop a DPG method that is 
 
 \subsection*{Area B: Numerical Analysis and Scientific Computation}
 
-A large thrust of the numerical work here has focused on the development of a 2D compressible flow code under the parallel DPG Camellia codebase, developed by Nathan Roberts at ICES \cite{Camellia}.  In particular, we have developed a framework allowing for rapid implementation of problems and the easy application of higher order and $hp$-adaptive schemes based on a natural error representation function that stems from the DPG residual \cite{DPG2, DPG3}. Additionally, the effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. The DPG error representation function has been shown to yield an effective and natural vector-valued residual with which to drive refinement, which we hope to generalize to anisotropic adaptive schemes. 
+A large thrust of the numerical work here has focused on the development of a 2D compressible flow code under the parallel DPG Camellia codebase, developed by Nathan Roberts at ICES \cite{Camellia}.  In particular, we have developed a framework allowing for rapid implementation of problems and the easy application of higher order and $hp$-adaptive schemes based on a natural error representation function that stems from the DPG residual \cite{DPG2, DPG3}. Additionally, the effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. The DPG error representation function has been shown to yield an effective and natural residual with which to drive refinement, which we hope to generalize to anisotropic adaptive schemes. 
 
 A recent theoretical development has been a Hessian-based DPG method that aims to minimize the \emph{nonlinear} residual in the dual space.  This method will augment the positive definite DPG stiffness matrix with a symmetric update determined by the form of the Hessian and the nonlinear residual.  I will implement such a nonlinear approach and study its effect on the convergence of the nonlinear steady-state problem and the feasibility of different solvers for the new discrete system.  
 
@@ -180,9 +180,9 @@ Finally, the DPG method under the ultra-weak formulation yields itself very natu
 
 \subsection*{Area C: Mathematical Modeling and Applications}
 
-I will apply the DPG method to a several convection diffusion problems which mimic difficult problems in compressible flow simulations, including boundary layer and closed streamline problems.  I will also solve a viscous Burgers' equation as an extension of DPG to nonlinear problems.  Finally, the effectiveness of DPG as a numerical method for compressible flow will be assessed with the application of DPG to common transonic and superonic benchmark problems.  In particular, I will use DPG to solve the flat plate problem, the ramp problem, flow over a Gaussian bump, and flow over an airfoil over a range of Mach numbers and laminar Reynolds numbers.  
+I will apply the DPG method to a several convection diffusion problems which mimic difficult problems in compressible flow simulations, including boundary layer and closed streamline problems.  I will also solve a viscous Burgers' equation as an extension of DPG to nonlinear problems.  Finally, the effectiveness of DPG as a numerical method for compressible flow will be assessed with the application of DPG to common transonic and superonic benchmark problems.  In particular, I will use DPG to solve the flat plate problem, the ramp problem, and flow over a Gaussian bump over a range of Mach numbers and laminar Reynolds numbers. 
 
-Time permitting, I will also explore the regularization of the inviscid convection and Euler equations using the full convection-diffusion and Navier-Stokes equations in the small-viscosity limit.  
+Time permitting, I will also attempt to simulate flow over an airfoil, and to explore the regularization of the inviscid convection and Euler equations using the full convection-diffusion and Navier-Stokes equations in the small-viscosity limit.  
 
 %Additionally, we will seek to pursue the application of DPG to the inviscid Euler equations 
 

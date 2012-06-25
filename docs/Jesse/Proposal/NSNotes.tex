@@ -250,11 +250,11 @@ An alternative boundary condition would be as follows: since $u_1$ and $u_2$ are
 
 \end{itemize}
 
-For our initial guesses, we set
+We initialize our solution to
 \[
 \rho = 1,\qquad u_1= 1,\qquad u_2 = 0, \qquad T = 1
 \]
-which is consistent with what was done in Demkowicz and Oden in \cite{Demkowicz:1990:NFE:112271.112276}. Stresses are set uniformly to zero.
+which is consistent with what was done in Demkowicz and Oden in \cite{Demkowicz:1990:NFE:112271.112276}. Stresses are set uniformly to zero. 
 
 We take the computational domain to be $\Omega = [0,2]\times[0,1]$. For $\Reyn = 1000$, we experimented with initial meshes from size 4 by 8 to 8 by 16 elements. We note that, on a very coarse initial mesh (4 by 8 elements), the convergence of the pseudo-timestep stagnates at around a transient residual of $1e-6$; however, if we lower the tolerance only for the first step and continued with the adaptive algorithm, the solution converges below $\epsilon_t$ for all refined meshes. 
 
@@ -278,14 +278,15 @@ We take the computational domain to be $\Omega = [0,2]\times[0,1]$. For $\Reyn =
 \label{fig:Re500}
 \end{figure}
 
-For $p=2$, after six refinements, the mesh contained 1134 elements and 150489 global dofs, with a total DPG energy error of $.000753$. 
+%For $p=2$, after six refinements, the energy error is 0.000410347. After refinement, mesh has 1083 elements and 143910 global dofs. 
 
 \begin{figure}[!h]
 \centering
-\subfigure[$p=2$]{\includegraphics[scale=.5]{figs/Re1000p2/mesh.pdf}}
+%\subfigure[$p=2$]{\includegraphics[scale=.5]{figs/Re1000p2/mesh.pdf}}
 %\subfigure[$p=3$]{\includegraphics[scale=.5]{figs/Re1000p3/mesh.pdf}}
+\includegraphics[scale=.55]{figs/Re1000p2/mesh.pdf}
 \caption{Adaptive mesh after six refinements for $p=2$
 % and five refinements for $p=3$ 
 with $\Reyn = 1000$.}
-\label{fig:MeshRe500}
+\label{fig:MeshRe1000}
 \end{figure}

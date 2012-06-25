@@ -53,14 +53,15 @@ p &= (\gamma-1)\rho\iota\\
 \end{align*}
 where $e$ and $\iota$ are energy and internal energy per unit mass, respectively. 
 
-\todo{write blurb on how comp NS is used - small Re limit}
-\todo{write blurb on turbulence}
+As mentioned before, the compressible Navier-Stokes equations are especially of interest in the simulation of high-speed air flows. In other contexts, however, the compressible Navier-Stokes equations may be simplified based on physical assumptions about the problem at hand. We briefly cover several simplifying assumptions common in CFD applications. 
 
 \subsection{Incompressibility}
 
-Under appropriate assumptions on the behavior of density and temperature, the behavior of the compressible Navier-Stokes equations can be sufficiently represented by the incompressible Navier-Stokes equations for low speed laminar fluid flows. 
+Under appropriate assumptions on the behavior of density and temperature, the behavior of the compressible Navier-Stokes equations can be sufficiently represented by the incompressible Navier-Stokes equations for low speed laminar fluid flows. The study of the incompressible Navier-Stokes equations is an open area in mathematics, and is one of the most famous Millenium Problems posed by the Clay Mathematics Institute. The equations of incompressible flow pose a difficult problem computationally as well, in part due to the problem of the simulation of turbulent phenomena. 
 
-For viscous ``creeping'' flows, the incompressible Navier-Stokes equations reduce down to the Stokes equations. \cite{stokesDPG}
+For highly viscous ``creeping'' flows, the incompressible Navier-Stokes equations reduce down to the Stokes equations. We remark that determining good finite element spaces for the Stokes problem is still an active area of research. \cite{stokesFEM} lists several choices of finite element discretizations suitable for the Stokes equation. 
+
+The scope of this dissertation will not deal with these two equations --- the Stokes equations are treated in \cite{stokesDPG}, and the incompressible Navier-Stokes are covered in an upcoming dissertation. 
 
 \subsection{The linearized Navier-Stokes equations}
 
@@ -68,11 +69,13 @@ The linearized Navier-Stokes equations are the result of small perturbation assu
 
 \section{The scalar convection-diffusion equation}
 
-The scalar convection-diffusion problem is the prototypical model problem for solving the full Navier-Stokes equations; most stabilized methods consider first the scalar convection-diffusion equation as a test case before attempting a solution of the full Navier-Stokes equations. As discussed previously, an important feature of the convection-diffusion equation is that solutions can develop  boundary layers, a physical feature found in most applications of interest for compressible flow. 
+The scalar convection-diffusion equation models mathematically the distribution of the concentration $u$ of a substance in a medium due to both convective and diffusive effects. The general form of the equation in $\mathbb{R}^n$ is 
+\[
+\beta\cdot \grad u - \epsilon \Delta u = f,
+\]
+where $\beta \in \mathbb{R}^n$ is a vector specifying the direction of convection.
 
-The scalar convection-diffusion equation is also mathematically important
-
-\todo{add perspective on convection-diffusion}
+Scalar convection-diffusion has significant historical importance, as it is the prototypical model problem for solving the full Navier-Stokes equations --- most stabilized methods consider first the scalar convection-diffusion equation as a test case before attempting a solution of the full Navier-Stokes equations. As discussed previously, an important feature of the convection-diffusion equation is that solutions can develop boundary layers whose thickness depends on the viscosity, a physical feature found in most applications of interest for compressible flow. 
 
 \subsection{Burgers' equation}
 
@@ -82,7 +85,7 @@ The Burgers' equation is also the simplest nonlinear extension of the linear con
 
 \section{The inviscid case}
 
-The pure convection equation is a result of neglecting the viscous term in the convection-diffusion equation. Physically speaking, these assumptions correspond to the inviscid limit, as well as a particular class of boundary conditions (for example, the wall boundary condition $u = 0$ and prescribed inflow condition may be incompatible in the inviscid limit).  The Euler equations are likewise a result of neglecting the viscous terms in the Navier-Stokes equations.  However, these problems can be ill-posed in the continuous setting.  Take, for example, the vortex problem in Figure~\ref{fig:convCirc}.  A feature of the convection equation is that there is no crosswind diffusion - thus, materials do not mix across streamlines.  However, for the vortex problem, this also implies that the solution on any closed streamline can take any arbitrary value, and is thus undefined.  
+The pure convection equation is a result of neglecting the viscous term in the convection-diffusion equation. Physically speaking, these assumptions correspond to the inviscid limit, as well as a particular class of boundary conditions (for example, the wall boundary condition $u = 0$ and prescribed inflow condition may be incompatible in the inviscid limit).  The Euler equations are likewise a result of neglecting the viscous terms in the Navier-Stokes equations.  However, these problems can be ill-posed in the continuous setting.  Take, for example, the vortex problem in Figure~\ref{fig:convCirc}.  A feature of the convection equation is that there is no crosswind diffusion - thus, materials do not mix across streamlines.  However, for the vortex problem, this also implies that the solution on any closed streamline can take any arbitrary value, and is thus undefined. 
 
 \begin{figure}[!h]
 \centering
@@ -90,7 +93,7 @@ The pure convection equation is a result of neglecting the viscous term in the c
 \caption{Setup for the vortex problem.}
 \label{fig:convCirc}
 \end{figure}
-Formally speaking, the solution to the vortex problem is taken to be the solution to the convection-diffusion equation (with appropriate outflow boundary conditions) as the viscosity tends towards zero, in which case, the solution in the interior would be uniformly zero.  This motivates the need for \emph{artificial viscosity} methods with which to regularize inviscid solutions.  The topic is expansive, and we direct the reader towards \cite{Barter} for a more detailed discussion of past and present artificial viscosity methods.
+Formally speaking, the solution to the vortex problem is taken to be the solution to the convection-diffusion equation (with appropriate outflow boundary conditions) as the viscosity tends towards zero, in which case, the solution in the interior would be uniformly zero.  This motivates the need for \emph{artificial viscosity} methods with which to regularize inviscid solutions.  The topic is expansive, and we direct the reader towards \cite{Barter} for a more detailed discussion of past and present artificial viscosity methods. 
 
 There is still much interest in solving the inviscid Euler equations in industry --- the full Navier-Stokes models often prove difficult to solve due to the mathematical nature of the equations, and the coupling of the Euler equations with boundary layer models has been successful in simulating many phenomena in compressible flow \cite{BoeingDrela}.  
 
