@@ -14,22 +14,23 @@ idea of tailoring the test space to change the norm in which a finite element me
 
 The idea of optimal test functions was introduced by Demkowicz and Gopalakrishnan in \cite{DPG2}.  Conceptually, these optimal test functions are the natural result of the minimization of a residual corresponding to the operator form of a variational equation. The connection between stabilization and least squares/minimum residual methods has been observed previously \cite{GLS}. However, the method in \cite{DPG2} distinguishes itself by measuring the residual of the natural \textit{operator form of the equation}, which is posed in the dual space, and measured with the dual norm, as we now discuss. 	
 
-Throughout the paper, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U'$ and $V'$ as the respective topological dual spaces. Let $U_h \subset U$ and $V_h\subset V$ be finite dimensional subsets. We are interested in the following problem  
-\begin{equation}
-\eqnlab{variationEq}
-\left\{
-  \begin{array}{l}
-    \text{Given } l \in V', \text{ find } u_h \in U_h  \text{ such that} \\ 
-    b(u_h,v_h) = l(v_h), \quad \forall v_h\in V_h,
-  \end{array}
-  \right.
-\end{equation}
+Throughout this work, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U'$ and $V'$ as the respective topological dual spaces. Let $U_h \subset U$ and $V_h\subset V$ be finite dimensional subsets. We are interested in the following problem: given $l \in V'$, find $u_h \in U_h$  such that 
+%\begin{equation}
+%\eqnlab{variationEq}
+%\left\{
+%  \begin{array}{l}
+%    \text{Given } l \in V', \text{ find } u_h \in U_h  \text{ such that} \\ 
+%    b(u_h,v_h) = l(v_h), \quad \forall v_h\in V_h,
+%  \end{array}
+%  \right.
+%\end{equation}
+\begin{align}
+b(u_h,v_h) &= l(v_h), \quad \forall v_h\in V_h, \eqnlab{variationEq}
+\end{align}
 where $b\LRp{\cdot,\cdot}: U \times V \to \mbb{R}$ is a continuous
-bilinear form.  $U$ is chosen to be some trial space of approximating functions, but $V_h$ is as of yet unspecified. 
+bilinear form.  $U$ is chosen to be some trial space of approximating functions, but $V_h$ is as of yet unspecified. Throughout this work, we suppose the variational problem \eqnref{variationEq} to be well-posed. 
 
-Throughout the paper, we suppose the variational
-problem \eqnref{variationEq} to be well-posed. In that case, we can
-identify a unique operator $B:U\rightarrow V'$ such that
+We can identify a unique operator $B:U\rightarrow V'$ such that
 \[
 \langle Bu,v\rangle_V \coloneqq b(u,v), \quad u\in U, v\in V
 \]
@@ -48,7 +49,7 @@ where $J(w)$ is defined for $w\in U$ as
 \[
 J(w) = \frac{1}{2}\|Bw-l\|_{V'}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus\{0\}} \frac{| b(w,v)-l(v)|^2}{\nor{v}_V^2}.
 \]
-For convenience in writing, we will abuse the notation $\sup_{v \in V}$ to denote $\sup_{v\in V\setminus\{0\}}$ for the remainder of the paper.
+For convenience in writing, we will abuse the notation $\sup_{v \in V}$ to denote $\sup_{v\in V\setminus\{0\}}$ for the remainder of this work.
 
 Let us define $R_V: V \to V'$ as the Riesz map, which identifies
 elements of $V$ with elements of $V'$ by 
@@ -65,8 +66,7 @@ have
 \min_{u_h\in U_h} J(u_h) = \frac{1}{2}\left\|Bu_h-l\right\|_{V'}^2 =  \frac{1}{2}\left\|R_V^{-1}(Bu_h-l)\right\|_V^2.
 \end{equation}
 The first order optimality condition for \eqnref{minimization} requires
-the G\^ateaux derivative to be zero in all directions $\delta u \in
-U_h$, i\.e\.,
+the G\^ateaux derivative to be zero in all directions $\delta u \in U_h$, i.e.,
 \begin{align*}
 \left(R_V^{-1}(Bu_h-l),R_V^{-1}B\delta u\right)_V = 0, \quad \forall \delta u \in U. 
 \end{align*}
@@ -116,7 +116,7 @@ infeasible since it amounts to inverting the Riesz map $R_V$ exactly.
 Instead, optimal test functions are approximated using the standard
 Bubnov-Galerkin method on an ``enriched" subspace $\tilde{V} \subset
 V$ such that $\dim(\tilde{V}) > \dim(U_h)$ elementwise \cite{DPG1, DPG2}. In this
-paper, we assume the error in approximating the optimal test functions
+document, we assume the error in approximating the optimal test functions
 is negligible, and refer to the work in \cite{practicalDPG} for
 estimating the effects of approximation error on the performance of DPG.
 
@@ -144,9 +144,9 @@ identity
 \left(v_{u-u_h},\delta v\right)_V = b(u-u_h,\delta v) = l\LRp{\delta
 v} - b(u_h,\delta v).
 \]
-This is simply a consequence of the least-squares nature of DPG; the energy error is simply the norm of the  residual in $V'$. 
+This is simply a consequence of the minimum-residual nature of DPG; the energy error is simply the norm of the  residual in $V'$. 
 
-Practically speaking, this implies that the DPG method is discretely stable on any mesh. In particular, DPG is unconditionally stable for higher order adaptive meshes, where discrete stability is often an issue. 
+Practically speaking, this implies that the DPG method is not only discretely stable, but delivers the \emph{best approximation in the energy norm} on any mesh. In particular, the stability and optimality of DPG apply naturally to higher order adaptive meshes, where discrete stability is often an issue. 
 
 \subsection{Ultra-weak variational formulation}
 \seclab{abstractUweak}
@@ -176,7 +176,6 @@ For $e$ belonging to the domain boundary $\partial \Omega$, we define
 \jump{\tau \cdot n} = {n}_e\cdot \tau.
 \]
 Note that we allow arbitrariness in assigning ``-'' and ``+'' quantities to the adjacent elements $K_i$ and $K_j$.
-%For the rest of the paper, we will use the same notation for both a function and its trace (if it is well-defined) when there is no ambiguity.
 
 The ultra-weak formulation for $Au = f$ on $\Oh$, ignoring boundary
 conditions for now, reads
@@ -256,7 +255,7 @@ $\nor{\cdot}_{U,2}$ in $U$, one simply needs to show the reverse inequality on t
 corresponding norms in $V$, that is, $\nor{\cdot}_{V,U,1}$ is stronger
 than $\nor{\cdot}_{V,U,2}$.
 
-From now on, unless otherwise stated, we will refer to $\nor{\cdot}_{V,U}$ as the test norm that induces a given norm $\nor{\cdot}_U$. Likewise, we will refer $\nor{\cdot}_{U,V}$ as the trial norm induced by a given test norm $\nor{\cdot}_V$. In this paper, for simplicity of exposition, we shall call a pair of norms in $U$ and $V$ that induce each other as an {\em energy norm pairing}.
+From now on, unless otherwise stated, we will refer to $\nor{\cdot}_{V,U}$ as the test norm that induces a given norm $\nor{\cdot}_U$. Likewise, we will refer $\nor{\cdot}_{U,V}$ as the trial norm induced by a given test norm $\nor{\cdot}_V$. In this work, for simplicity of exposition, we shall call a pair of norms in $U$ and $V$ that induce each other as an {\em energy norm pairing}.
 
 From the discussion above of energy norm and test norm pairings, we know that specifying either a test norm or trial norm is sufficient to define an energy pairing. We now derive and discuss two important energy norm pairings, the first of which begins by specifying the canonical norm in $U$ and inducing a test norm on $V$. The second pairing begins instead by specifying the canonical norm on $V$ under the ultra-weak formulation \eqnref{uweak} and inducing an energy norm on the trial space $U$.
 

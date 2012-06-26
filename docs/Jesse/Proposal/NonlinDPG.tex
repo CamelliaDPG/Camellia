@@ -26,7 +26,7 @@ The solution at the next timestep is then set $u(t_{i+1}) \coloneqq u(t_i) + \De
 
 In practice, most compressible flow solvers opt for the pseudo-time step method over the direct Newton iteration due to the difficulty of convergence and sensitivity of the Newton iteration to initial guess\cite{libMeshPaper}.  Though the convergence of the pseudo-time step is slower, the addition of the zero-order transient terms ``regularizes" the problem and makes it less difficult to solve.\footnote{The addition of a zero-order term ``regularizes" an equation by adding to it a positive-definite $L^2$ projection operator.  In the limit as $\Delta t\rightarrow 0$, the solution at $t_i$ will simply return the $L^2$ projection of the solution at the previous timestep.}
 
-A second class of nonlinear solvers are optimization methods.  Since DPG allows for the formulation of a discrete nonlinear residual, it is possible to formulate the nonlinear DPG problem as a minimization problem and use an optimization method to solve the discrete nonlinear problem.  This approach has been successfully implemented by Peraire et al\. in solving compressible gas dynamics problems on uniform grids using a modified version of the ultra-weak variational formulation \cite{MITDPG}.  An additional advantage of such an approach would be the more direct enforcement of physical constraints, which are treated in an ad-hoc manner in most compressible Navier-Stokes solvers.  
+A second class of nonlinear solvers are optimization methods.  Since DPG allows for the formulation of a discrete nonlinear residual, it is possible to formulate the nonlinear DPG problem as a minimization problem and use an optimization method to solve the discrete nonlinear problem.  This approach has been successfully implemented by Peraire et al.\ in solving compressible gas dynamics problems on uniform grids using a modified version of the ultra-weak variational formulation \cite{MITDPG}.  An additional advantage of such an approach would be the more direct enforcement of physical constraints, which are treated in an ad-hoc manner in most compressible Navier-Stokes solvers.  
 
 \subsection{DPG as a nonlinear minimum residual method}
 
@@ -67,7 +67,7 @@ then we can compute this additional term through
 \begin{align*}
 \LRp{v_{R(u)},R_V^{-1}B''(u_h;\delta u_h,\Delta u_h)}_V &= \LRa{v_{R(u)},B''(u_h;\delta u_h,\Delta u_h)}_V
 \end{align*}
-which can be computed in the same fashion as a Bubnov-Galerkin stiffness matrix. This addition, though not positive definite, is symmetric due to the nature of second order Ga\^teux derivatives. 
+which can be computed in the same fashion as a Bubnov-Galerkin stiffness matrix. This addition, though not positive definite, is symmetric due to the nature of second order derivatives. 
 
 We note that we have not implemented this Hessian-based nonlinear solver in the numerical experiments to follow, and instead plan to do so in the proposed work outlined in Section~\secref{sec:proposedWork}.
 

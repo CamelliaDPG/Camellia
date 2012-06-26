@@ -6,11 +6,11 @@ We will illustrate the application of DPG to nonlinear problems using a viscous 
 \]
 If we remove the viscous term, the above problem reduces to the form of the 1D transient Burgers equation, whose solution we can determine via the method of characteristics.  For boundary conditions 
 \[
-u(x.y) = 1-2x, \quad x = 0, y = 0,
+u(x,y) = 1-2x, \quad x = 0, y = 0,
 \]
 the solution forms a shock discontinuity starting at $(x,y) = (.5,.5)$, which then propagates upward in the $y$-direction.  The addition of the viscous term smears this discontinuity, leading to a solution with a smooth shock of width $\epsilon$.  
 
-We begin by writing the equation in a first order system.  Defining $\beta(u) = \LRp{u/2,1}$, the above Burgers equation can be written as
+We begin by writing the equation as a first order system.  Defining $\beta(u) = \LRp{u/2,1}$, the above Burgers equation can be written as 
 \begin{align*}
 \div\left(\beta(u)u-\sigma\right) &=f \\
 \frac{1}{\epsilon}\sigma - \grad u &=0.

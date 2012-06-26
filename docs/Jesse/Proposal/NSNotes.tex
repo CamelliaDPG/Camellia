@@ -213,7 +213,7 @@ Identifying vector-valued terms in the Navier-Stokes formulation with equivalent
 \|\left(V,W\right)\|_{V,K}^2 =& \min\left\{\frac{\Reyn}{|K|},1\right\}\|v\|^2 + \frac{1}{\Reyn} \|A_{\rm visc}^T\grad v\|^2 + \|A_{\rm Euler}^T \grad v\|^2 \\
 & + \| \div W\|^2 + \min\left\{\Reyn,\frac{1}{|K|}\right\}\|E_{\rm visc}^T\tau\|^2.
 \end{align*}
-An advantage of this extrapolation approach is that the incompletely parabolic nature of the Navier-Stokes equation is taken into account; there is no diffusive term present in the mass conservation equation, and the test norm reflects that by requesting only limited regularity of $v_1$.\footnote{The situation is analagous to using the full $H^1(\Oh)$ norm for the pure convection equation --- the optimal test norm $\nor{v}_V = \nor{\beta\cdot \grad v} + \nor{v}$ implies only streamline regularity, whereas taking $\nor{v}_V = \nor{\grad v} + \nor{v}$ implies stronger regularity on the test space $V$ than the graph norm. Consequently, convergence is suboptimal for DPG applied to the convection problem under the $H^1(\Oh)$ test norm.}
+An advantage of this extrapolation approach is that the incompletely parabolic nature of the Navier-Stokes equation is taken into account; there is no diffusive term present in the mass conservation equation, and the test norm reflects that by requesting only limited regularity of $v_1$.\footnote{The situation is analogous to using the full $H^1(\Oh)$ norm for the pure convection equation --- the optimal test norm $\nor{v}_V = \nor{\beta\cdot \grad v} + \nor{v}$ implies only streamline regularity, whereas taking $\nor{v}_V = \nor{\grad v} + \nor{v}$ implies stronger regularity on the test space $V$ than the graph norm. Consequently, convergence is suboptimal for DPG applied to the convection problem under the $H^1(\Oh)$ test norm.}
 
 \subsection{Boundary conditions}
 
@@ -227,7 +227,7 @@ For our solver, we use a standard pseudo-time solver and greedy refinement schem
 
 The numerical parameters used are as follows:
 \begin{itemize}
-\item{DPG parameters:} $p = 2$ or $p=3$, and $\Delta p = 2$ uniformly across the mesh. 
+\item{DPG parameters:} $p = 2$ and $\Delta p = 2$ uniformly across the mesh. 
 \item{Adaptivity parameters:} Energy threshold for refinements is $\alpha = .2$ or $\alpha = .15$. 
 \item{Time-stepping parameters:} $\Delta t = .1$, and tolerance for transient residual $\epsilon_t = 5e-7$.
 \end{itemize}
@@ -244,9 +244,9 @@ Our problem of interest is the Carter flat plate problem. An infinitesmally thin
 \item \textbf{Inflow boundary conditions:} free stream conditions are applied here to all four fluxes $\widehat{f}_{i,n}$.
 \item \textbf{Symmetry boundary conditions:} $u_n = q_n = \pd{u_s}{n} = 0$. Here, this implies $u_2 = q_2 = \sigma_{12} = 0$. We impose the stress condition by noting that, for the flat plate geometry, if $u_2 = 0$, then at the top and bottom, with $n = (0,1)$, $\widehat{f}_{2,n} = \sigma_{12}$, and $\widehat{f}_{4,n} = q_2$ if $\sigma_{12}$ and $u_2 = 0$. 
 \item \textbf{Flat plate boundary conditions:} $u_1 = u_2 = 0$, and $T = T_w = \left[1+(\gamma-1)M_\infty^2/2\right] T_\infty = 2.8T_\infty$ (for Mach 3 flow). We impose these strongly on the trace variables $\widehat{u}_1, \widehat{u}_2, \widehat{T}$. 
-\item \textbf{Outflow boundary conditions:} the exact boundary conditions to enforce here are not universally agreed on\footnote{Demkowicz et al enforce an outflow boundary condition only in regions where the flow is subsonic.\cite{Demkowicz:1990:NFE:112271.112276}}. Many enforce $\pd{u_1}{n}=\pd{u_2}{n}=0$ and $\pd{T}{n} = 0$. We adopt a ``no boundary condition'' outflow condition, first introduced in \cite{FLD:FLD1650140506}. A mathematical analysis and explanation of this boundary condition for standard $H^1$ elements is given in \cite{FLD:FLD505}. 
+\item \textbf{Outflow boundary conditions:} the exact boundary conditions to enforce here are not universally agreed on.  Many enforce $\pd{u_1}{n}=\pd{u_2}{n}=0$ and $\pd{T}{n} = 0$, while others enforce an outflow boundary condition only in regions where the flow is subsonic.\cite{Demkowicz:1990:NFE:112271.112276}.  We adopt a ``no boundary condition'' outflow condition, first introduced in \cite{FLD:FLD1650140506}. A mathematical analysis and explanation of this boundary condition for standard $H^1$ elements is given in \cite{FLD:FLD505}. 
 
-An alternative boundary condition would be as follows: since $u_1$ and $u_2$ are not expected to be zero at these points, we can set $\widehat{f}_{2,n}$ and $\widehat{f}_{4,n}$ to their represented quantities using either the field variables from the background flow, or (in the case of pseudo-time stepping) the previous timestep's flux and field quantities. 
+%An alternative boundary condition would be as follows: since $u_1$ and $u_2$ are not expected to be zero at these points, we can set $\widehat{f}_{2,n}$ and $\widehat{f}_{4,n}$ to their represented quantities using either the field variables from the background flow, or (in the case of pseudo-time stepping) the previous timestep's flux and field quantities. 
 
 \end{itemize}
 
