@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
   robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
   if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( 1e6 * v );
+    robIP->addZeroMeanTerm( v );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
