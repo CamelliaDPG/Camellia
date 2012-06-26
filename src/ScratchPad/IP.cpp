@@ -79,6 +79,7 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
     // Integrate against 1
     zt->integrate(avgVector, dofOrdering, basisCache);
 
+
     // cout << numDofs << avgVector << endl;
 
     // Sum into innerProduct
@@ -86,9 +87,9 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
       for (unsigned int i=0; i < numDofs; i++)
         for (unsigned int j=0; j < numDofs; j++)
         {
-          double valAdd = 1e12 * avgVector[c, i] * avgVector[c, j];
-          // cout << "(" << innerProduct[c, i, j] << ", " << valAdd << ") ";
-          innerProduct[c, i, j] += valAdd;
+          double valAdd = avgVector(c, i) * avgVector(c, j);
+          // cout << "(" << innerProduct(c, i, j) << ", " << valAdd << ") ";
+          innerProduct(c, i, j) += valAdd;
         }
   }
 }
