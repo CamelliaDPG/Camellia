@@ -242,8 +242,9 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 1;
+  int polyOrder = 2;
   int pToAdd = 2; // for tests
+  cout << "Running with polynomial order " << polyOrder << ", delta p = " << pToAdd << endl;
   
   // define our manufactured solution or problem bilinear form:
   double Re = 1e3;
@@ -650,11 +651,13 @@ int main(int argc, char *argv[]) {
   visc[x_comp][tau1->ID()][sigma11->ID()] = eps_visc[x_comp][tau1->ID()][sigma11->ID()]*ReScaling;
   visc[x_comp][tau1->ID()][sigma22->ID()] = eps_visc[x_comp][tau1->ID()][sigma22->ID()]*ReScaling;
   visc[y_comp][tau1->ID()][sigma12->ID()] = eps_visc[y_comp][tau1->ID()][sigma12->ID()]*ReScaling;
+  visc[y_comp][tau1->ID()][omega->ID()]   = eps_visc[y_comp][tau1->ID()][omega->ID()]*ReScaling;
   
   // 2nd stress eqn
   visc[x_comp][tau2->ID()][sigma12->ID()] = eps_visc[x_comp][tau2->ID()][sigma12->ID()]*ReScaling;
   visc[y_comp][tau2->ID()][sigma11->ID()] = eps_visc[y_comp][tau2->ID()][sigma11->ID()]*ReScaling;
   visc[y_comp][tau2->ID()][sigma22->ID()] = eps_visc[y_comp][tau2->ID()][sigma22->ID()]*ReScaling;
+  visc[x_comp][tau2->ID()][omega->ID()]   = eps_visc[x_comp][tau2->ID()][omega->ID()]*ReScaling;
 
   // Heat stress equation
   visc[x_comp][tau3->ID()][q1->ID()] = eps_visc[x_comp][tau3->ID()][q1->ID()]*ReScaling; // O(Re)
@@ -896,7 +899,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numTimeSteps = 100; // max time steps
+  int numTimeSteps = 125; // max time steps
   int numNRSteps = 1;
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -961,36 +964,12 @@ int main(int argc, char *argv[]) {
 
       prevTimeFlow->addSolution(backgroundFlow,-1.0); 
 
-      if (useAdaptiveTimesteps){
-	double inf_rho = prevTimeFlow->InfNormOfSolutionGlobal(rho->ID());
-	double inf_u1 = prevTimeFlow->InfNormOfSolutionGlobal(u1->ID());
-	double inf_u2 = prevTimeFlow->InfNormOfSolutionGlobal(u2->ID());
-	double inf_T = prevTimeFlow->InfNormOfSolutionGlobal(T->ID());
-	double inf_time_residual = max(max(inf_rho,inf_u1),max(inf_u2,inf_T));
-	double first_step_residual, residual_ratio;
-	int init_ts = 10; // give a few timesteps to stabilize
-	if (i>=init_ts){
-	  if (i==init_ts){
-	    first_step_residual = inf_time_residual;
-	  }else{
-	    double maxDt = 2.5;
-	    double minDt = 1e-2;
-	    residual_ratio = inf_time_residual/first_step_residual;
-	    // cout << "residual ratio = " << residual_ratio << endl;
-	    dt /= residual_ratio;
-	    dt = min(dt,maxDt);
-	    dt = max(dt,minDt);
-	  }     
-	}
-	((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);     
-      }
-
       double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
       double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
       double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
       double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
       double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
-      L2_time_residual= sqrt(L2_time_residual_sq);
+      L2_time_residual= sqrt(L2_time_residual_sq)/dt;
    
       if (rank==0){
 	cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;
@@ -1032,7 +1011,7 @@ int main(int argc, char *argv[]) {
     double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
     double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
     double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
-    L2_time_residual= sqrt(L2_time_residual_sq);
+    L2_time_residual= sqrt(L2_time_residual_sq)/dt;
    
     if (rank==0){
       cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;
@@ -1068,8 +1047,8 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(q2->ID(), "q22.m");
     solution->writeFieldsToFile(omega->ID(), "w2.m");    
 
-    //    polyOrderFunction->writeValuesToMATLABFile(mesh, "polyOrders.m");
-    //    partitions->writeValuesToMATLABFile(mesh,"partitions.m");
+    solution->writeToVTU("dU_NS.vtu",4);    
+    backgroundFlow->writeToVTU("U_NS.vtu",4);
   } 
 
   return 0;

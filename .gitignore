@@ -43,3 +43,8 @@ build/.sconsign.dblite
 *.idx
 *.lof
 *.lot
+
+############## ignore vtu and matlab files in drivers
+
+drivers/*/*.m
+drivers/*/*.dat

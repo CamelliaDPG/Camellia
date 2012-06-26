@@ -1,7 +1,7 @@
 \section{Area requirements}
 \seclab{sec:proposedWork}
 
-\subsection{Area A}
+\subsection{Area A: Applicable mathematics}
 
 \begin{itemize}
 \item{\textbf{Completed: Prove robustness of DPG method for the scalar convection-diffusion problem.}}
@@ -14,7 +14,7 @@ We hope to analyze the linearized Navier-Stokes equations to determine an optima
 
 \end{itemize}
 
-\subsection{Area B}
+\subsection{Area B: Numerical analysis and scientific computation}
 
 \begin{itemize}
 \item{\textbf{Completed: Collaborative work with Nathan Roberts on the higher order parallel adaptive DPG code Camellia.}}
@@ -33,9 +33,7 @@ where $D$ has a block-diagonal structure, and $A$ and $D$ are both square matric
 \]
 where $D^{-1}$ can be inverted block-wise. Once the globally coupled flux degrees of freedom are solved for, the field degrees of freedom can be reconstructed locally. 
 
-Additionally, though the Schur complement $A-B D^{-1} B^T$ is generally a dense matrix, it does not have to be explicitly formed, and we can use a matrix-free method to solve the above condensed system. The question remains on whether or not the condensed DPG stiffness matrix is well-conditioned. It has been shown that, unlike standard least-squares methods, DPG generates for the Poisson matrix a stiffness matrix with condition number $O(h^{-2})$ \cite{practicalDPG}. It is well known that, under standard finite element methods, if the condition number of the global stiffness matrix $K$ is $O(h^{-2})$, the condition number of the Schur complement is $O(h^{-1})$. Additionally, through either diagonal preconditioning or matrix equilibration, the condition number of the Schur complement can often be made significantly smaller than $O(h^{-1})$, and the positive-definiteness of the resulting system allows the use of fast iterative solvers in solving the condensed system. 
-
-We hope to implement such a distributed solver and determine the scalability of this solver under DPG.
+Additionally, though the Schur complement $A-B D^{-1} B^T$ is generally a dense matrix, it does not have to be explicitly formed, and we can use a matrix-free method to solve the above condensed system. The question remains on whether or not the condensed DPG stiffness matrix is well-conditioned. It has been shown that, unlike standard least-squares methods, DPG generates for the Poisson matrix a stiffness matrix with condition number $O(h^{-2})$ \cite{practicalDPG}. It is well known that, under standard finite element methods, if the condition number of the global stiffness matrix $K$ is $O(h^{-2})$, the condition number of the Schur complement is $O(h^{-1})$. Additionally, through either diagonal preconditioning or matrix equilibration, the condition number of the Schur complement can often be made significantly smaller than $O(h^{-1})$, and the positive-definiteness of the resulting system allows the use of fast iterative solvers in solving the condensed system. We hope to implement such a distributed solver and determine the scalability of this solver under DPG.
   
 \item{\textbf{Proposed: a Nonlinear Hessian-based DPG method.}}
 
@@ -43,14 +41,23 @@ We hope to implement the Hessian-based nonlinear DPG approach to the viscous Bur
 
 \item{\textbf{Proposed: Anisotropic refinements and $hp$-schemes.}}
 
-The effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. As the error representation function has been shown to yield an effective and natural vector-valued residual with which to drive refinement, we hope to generalize the use of the error representation function to yield anisotropic adaptive schemes. Additionally, we hope to explore the possibility of inferring an optimal choice between $h$ and $p$ refinement using the error representation function. %\cite{BoeingHigherOrder}. 
+The effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. As the error representation function has been shown to yield an effective and natural residual with which to drive refinement, we hope to generalize the use of the error representation function to yield anisotropic adaptive schemes. Additionally, we hope to explore the possibility of inferring an optimal choice between $h$ and $p$ refinement using the error representation function. %\cite{BoeingHigherOrder}. 
 
 \end{itemize}
 
-\subsection{Area C}
+\subsection{Area C: Mathematical modeling and applications}
 
 \begin{itemize}
 \item{\textbf{Completed: convection-dominated diffusion, Burgers, and a model problem for Navier-Stokes.}} 
+
+I have applied the DPG method to a several convection diffusion problems which mimic difficult problems in compressible flow simulations, including boundary layer and closed streamline problems.  I have also solved the viscous Burgers' equation as an extension of DPG to nonlinear problems. I have also explored the regularization of the pure convection equation using the full convection-diffusion equation in the small-viscosity limit. A quadratic-order adaptive DPG method has also been applied to the Navier-Stokes equations to achieve a solution to the flat plate problem for $\Reyn = 1000$.
+
 \item{\textbf{Proposed: Higher Reynolds number, ramp problem, Gaussian bump, airfoil.}}
+
+The effectiveness of DPG as a numerical method for compressible flow will be assessed with the application of DPG to common transonic and superonic benchmark problems.  In particular, I will use DPG to solve the flat plate problem, the ramp problem, flow over a Gaussian bump, over a range of Mach numbers and laminar Reynolds numbers. Time permitting, I will attempt to also present solutions to flow over an airfoil. 
+
 \item{\textbf{Proposed: regularized Euler.}}
+
+Time permitting, I will also explore the regularization of the Euler equations using the full Navier-Stokes equations in the inviscid limit.
+
 \end{itemize}

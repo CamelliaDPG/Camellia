@@ -42,8 +42,8 @@ void RefinementStrategy::refine(bool printToConsole) {
     maxError = max(cellEnergyError,maxError);
     totalEnergyError += cellEnergyError * cellEnergyError; 
   }
+  totalEnergyError = sqrt(totalEnergyError);
   if ( printToConsole && _reportPerCellErrors ) {
-    totalEnergyError = sqrt(totalEnergyError);
     cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
     for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
          activeElemIt != activeElements.end(); activeElemIt++) {
