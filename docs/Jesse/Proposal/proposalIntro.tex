@@ -47,7 +47,6 @@ where $C(\epsilon)$ grows as $\epsilon\rightarrow 0$. The dependence of the cons
 From the perspective of the full Navier-Stokes equations, this loss of robustness is doubly problematic.  Not only will any nonlinear solution suffer from similar non-physical oscillations, but nonlinear solvers themselves may fail to yield a solution due to such instabilities.  A nonlinear solution is almost always computed by solving a series of linear problems whose solutions will converge to the nonlinear solution under appropriate assumptions, and the presence of such oscillations in each linear problem can cause the solution convergence to slow significantly or even diverge.  
 
 Our aim is to develop a \emph{stable, higher order adaptive scheme} for the steady compressible laminar Navier-Stokes equations in transonic/supersonic regimes that is \emph{robust for very small viscosity}.  In particular, we hope to present a method for which $hp$-adaptivity can be applied to problems in compressible flow.  The goal of this dissertation will be to develop a mathematical theory demonstrating the robustness in $\epsilon$ of our method for singularly perturbed convection-diffusion problems, and to demonstrate its feasibility as a CFD solver by applying it to several benchmark problems.  
-\todo{Check with LD if it's what he's looking for}
 
 \section{Literature review}
 
@@ -73,15 +72,16 @@ Traditionally, instability/loss of robustness in finite element methods has been
 
 All Galerkin methods involve both trial (approximating) and test (weighting) functions.   Standard Galerkin methods, where these trial and test functions are taken from the same space, are referred to as Bubnov-Galerkin methods.  Petrov-Galerkin methods refer most often to methods where test and trial functions \emph{differ}, leading to differing test and trial spaces.\footnote{Hughes takes the more general definition of a Petrov-Galerkin method to be any Galerkin method other than a classical Bubnov-Galerkin method.}  The Streamline Upwind Petrov Galerkin (SUPG) method is a stabilization method for $H^1$-conforming finite elements, the idea of which was originally motivated by artificial diffusion techniques in finite differences.  In particular, for the homogeneous 1D convection-diffusion equation, it is possible to recover, under a finite difference method, the exact solution at nodal points by adding an ``exact" artificial diffusion based on the mesh size $h$ and the magnitudes of the convection $\beta$ and the viscosity $\epsilon$.  The idea of ``exact" artificial viscosity was adapted to finite elements not through the direct modification of the equations, but through the \emph{test} functions and weighting of the residual. \footnote{Finite element and Galerkin methods are often referred to as ``weighted residual" methods, since the starting point of both is to multiply the residual by a particular test, or weighting, function.  Standard Bubnov-Galerkin methods simply choose these weighting functions to be the same as the the basis functions used to approximate the solution.  }
 
-We will introduce the SUPG method at an abstract level for illustrative purposes only.  Further details and perspectives on the SUPG method can be found in \cite{SUPG}, as well as in an upcoming book by Hughes.  The convection-diffusion equation can be written as follows:
+We will introduce the SUPG method at the abstract level for illustrative purposes only.  Further details and perspectives on the SUPG method can be found in \cite{SUPG}, as well as in an upcoming book by Hughes.  The convection-diffusion equation can be written as follows:
 \[
 Lu = \left(L_{\rm adv} + L_{\rm diff} \right) u = f,
 \]
-where $L_{\rm adv}u \coloneqq \div \left(\beta u\right)$ is the first order advective operator, and $L_{\rm diff}u \coloneqq \epsilon \Delta u$ is the second-order diffusive operator.  Let us assume $u$ to be a linear combination of piecewise-linear basis functions $\phi_i, i = 0,\ldots,N$ (then, within each element, $L_{\rm diff} u = 0$).  The SUPG method is then to solve
-\[
-\int_\Omega L u v + \int_\Omega \tau \left(L_{\rm adv}v\right)\left( L u - f\right) = \int_\Omega f v 
-\]
-for where $\tau$ is the SUPG parameter.  For uniform meshes in 1D, $\tau$ is chosen such that, for $f=0$, the matrix system resulting from SUPG is exactly equal to the finite difference system under ``exact" artificial diffusion.  However, unlike exact artificial diffusion, for $f\neq 0$, the SUPG method still delivers optimal stabilization.  In fact, the SUPG finite element solution in 1D is nothing less than the nodal interpolant and the best $H^1_0$ approximation of the exact solution, as seen in Figure~\ref{fig:SUPG}.
+where $L_{\rm adv}u \coloneqq \div \left(\beta u\right)$ is the first order advective operator, and $L_{\rm diff}u \coloneqq \epsilon \Delta u$ is the second-order diffusive operator.  Let us assume $u$ to be a linear combination of piecewise-linear basis functions $\phi_i, i = 0,\ldots,N$ (then, within each element, $L_{\rm diff} u = 0$).  If $b(u,v)$ and $l(v)$ are the bilinear form and load for the standard Galerkin method (resulting from multiplying by a test function $v$ and integrating both convective and diffusion terms by parts), the SUPG method is then to solve $b_{\rm SUPG}(u,v) = l_{\rm SUPG}(v)$, where $b_{\rm SUPG}(u,v)$ and $l_{\rm SUPG}(v)$ are defined as
+\begin{align*}
+b_{\rm SUPG}(u,v) &= b(u,v)+ \sum_{K} \int_{K} \tau \LRp{L_{\rm adv} v} \LRp{L u - f} \\
+l_{\rm SUPG}(v) &= l(v) + \sum_{K} \int_{K} \tau \LRp{L_{\rm adv}v} f
+\end{align*}
+for where $\tau$ is the SUPG parameter. For uniform meshes in 1D, $\tau$ is chosen such that, for $f=0$, the matrix system resulting from SUPG is exactly equal to the finite difference system under ``exact" artificial diffusion.  However, unlike exact artificial diffusion, for $f\neq 0$, the SUPG method still delivers optimal stabilization.  In fact, the SUPG finite element solution in 1D is nothing less than the nodal interpolant and the best $H^1_0$ approximation of the exact solution, as seen in Figure~\ref{fig:SUPG}.
 
 \begin{figure}[!h]
 \centering
@@ -93,20 +93,19 @@ for where $\tau$ is the SUPG parameter.  For uniform meshes in 1D, $\tau$ is cho
 
 The idea of emphasizing the upwind portion of a test function is an old idea, introduced in 1977 by Zienkiewicz et al.\ in \cite{zienkUpwind}.  However, the precise amount of upwinding,\footnote{Insufficient upwinding results in a method which still exhibits oscillations and instabilities, while excessive upwinding leads to an overly diffusive method.} as well as the connection to residual-based stabilization methods, were novel to SUPG.  
 
-The method can be made to ``work" for $p>1$, but the results are not as strong as for linear elements, and there is no clear generalization of SUPG to higher order elements.  Additionally, the stabilization properties of SUPG are weaker in higher dimensions, and the SUPG solution is no longer the $H^1$ best approximation for 2D and 3D problems \todo{find citation}.  Despite these caveats, SUPG is still the most popular stabilization method of choice for convection-diffusion type problems, in both academic and industry applications.  
+For appropriately chosen $\tau$, the method can be generalized for higher order elements as well.  In higher dimensions, and the SUPG solution is very close to, but no longer the $H^1_0$ best approximation for 2D and 3D problems \cite{HughesSangalliSUPG}.  Since its inception, SUPG is and has been the most popular stabilization method of choice for convection-diffusion type problems, in both academic and industry applications. 
 
 An important feature of SUPG and other residual-based stabilization techniques that separates it from modified equation methods is the idea of \textit{consistency} --- by adding stabilization terms based on the residual, the exact solution still satisfies the same variational problem (i.e.\ Galerkin orthogonality still holds). Contrast this to the artificial diffusion methods in finite difference and finite volume methods, where a specific amount of additional viscosity is added based on the magnitude of the convection and diffusion parameters: unlike residual-based stabilization schemes, the exact solution to the original equation no longer satisfies the new stabilized formulation.  
 
 This addition of residual-based stabilization terms can be interpreted as a modification of the test functions as well.  For SUPG, the formulation can equivalently be written as
 \[
-\int_\Omega\left( Lu-f\right) v_i = \int_\Omega f v_i, \quad i = 0,\ldots,N
+b\LRp{u,\tilde{v}_{i}} = l\LRp{\tilde{v}_{i}}, \quad \forall i = 1,\ldots,N-1
 \]
-\todo{check to make sure this is correct}
-where $v_i$ is defined as
+where the SUPG test function $\tilde{v}_{i}$ is defined elementwise as
 \[
-v_i = \phi_i(x) + \tau L_{\rm adv} \phi_i.  
+\tilde{v}_{i} = \phi_i(x) + \tau L_{\rm adv} \phi_i.  
 \]
-In other words, the test function $v_i$ is a perturbation of the basis function $\phi_i$ by a scaled advective operator applied to $\phi_i$.  For a linear $C^0$ basis function (the ``hat" function), this naturally leads to a bias in the upwind or streamline direction of the flow $\beta$, as seen in Figure~\ref{fig:SUPG}.  
+In other words, the test functions $\tilde{v}_{i}$ is a perturbation of the basis function $\phi_i$ by a scaled advective operator applied to $\phi_i$.  For a linear $C^0$ basis function (the ``hat" function), this naturally leads to a bias in the upwind or streamline direction of the flow $\beta$, as seen in Figure~\ref{fig:SUPG}.  
 
 An important connection can now be made --- stabilization can be achieved by changing the test space for a given problem.  We will discuss in Section~\secref{optimalTest} approaching the idea of stabilization through the construction of \textit{optimal test functions} to achieve optimal approximation properties. 
 
