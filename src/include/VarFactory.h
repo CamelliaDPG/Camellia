@@ -10,6 +10,7 @@
 #define Camellia_VarFactory_h
 
 #include "Var.h"
+#include "BilinearForm.h"
 
 class VarFactory {
   map< string, VarPtr > _testVars;
@@ -36,10 +37,32 @@ class VarFactory {
     }
     return IDarg;
   }
+protected:
+  VarFactory(const map< string, VarPtr > &trialVars, const map< string, VarPtr > &testVars,
+             const map< int, VarPtr > &trialVarsByID, const map< int, VarPtr > &testVarsByID,
+             int nextTrialID, int nextTestID) {
+    _trialVars = trialVars;
+    _testVars = testVars;
+    _trialVarsByID = trialVarsByID;
+    _testVarsByID = testVarsByID;
+    _nextTrialID = nextTrialID;
+    _nextTestID = nextTestID;
+  }
 public:
+  enum BubnovChoice { BUBNOV_TRIAL, BUBNOV_TEST };
+  
   VarFactory() {
     _nextTestID = 0;
     _nextTrialID = 0;
+  }
+  VarFactory getBubnovFactory(BubnovChoice choice) {
+    VarFactory factory;
+    if (choice == BUBNOV_TRIAL) {
+      factory = VarFactory(_trialVars, _trialVars, _trialVarsByID, _trialVarsByID, _nextTrialID, _nextTrialID);
+    } else {
+      factory = VarFactory(_testVars, _testVars, _testVarsByID, _testVarsByID, _nextTestID, _nextTestID);
+    }
+    return factory;
   }
   // accessors:
   VarPtr test(int testID) {
@@ -71,6 +94,10 @@ public:
   // the variables.  The basic function of the factory is to assign unique test/trial IDs.
   
   VarPtr testVar(string name, Space fs, int ID = -1) {
+    if ( _testVars.find(name) != _testVars.end() ) {
+      return _testVars[name];
+    }
+    
     ID = getTestID(ID);
     int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
     
@@ -80,6 +107,9 @@ public:
     return _testVarsByID[ID];
   }
   VarPtr fieldVar(string name, Space fs = L2, int ID = -1) {
+    if (_trialVars.find(name) != _trialVars.end()) {
+      return _trialVars[name];
+    }
     ID = getTrialID(ID);
     int rank = ((fs == HGRAD) || (fs == L2)) ? 0 : 1;
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
@@ -88,6 +118,9 @@ public:
     return _trialVarsByID[ID];
   }
   VarPtr fluxVar(string name, Space fs = L2, int ID = -1) { // trace of HDIV  (implemented as L2 on boundary)
+    if (_trialVars.find(name) != _trialVars.end()) {
+      return _trialVars[name];
+    }
     int rank = 0;
     ID = getTrialID(ID);
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
@@ -96,6 +129,9 @@ public:
     return _trialVarsByID[ID];
   }
   VarPtr traceVar(string name, Space fs = HGRAD, int ID = -1) { // trace of HGRAD (implemented as HGRAD on boundary)
+    if (_trialVars.find(name) != _trialVars.end() ) {
+      return _trialVars[name];
+    }
     int rank = 0;
     ID = getTrialID(ID);
     _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 

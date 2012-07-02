@@ -18,8 +18,9 @@ class BF : public BilinearForm {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
   vector< BilinearTerm > _terms;
   VarFactory _varFactory;
-public:
+public:  
   BF( VarFactory varFactory ); // copies (note that external changes in VarFactory won't be registered by BF)
+  BF( VarFactory varFactory, VarFactory::BubnovChoice choice);
 
   void addTerm( LinearTermPtr trialTerm, LinearTermPtr testTerm );
   void addTerm( VarPtr trialVar, LinearTermPtr testTerm );

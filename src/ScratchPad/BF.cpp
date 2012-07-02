@@ -17,6 +17,12 @@ BF::BF( VarFactory varFactory ) { // copies (note that external changes in VarFa
   _testIDs = _varFactory.testIDs();
 }
 
+BF::BF( VarFactory varFactory, VarFactory::BubnovChoice choice ) {
+  _varFactory = varFactory.getBubnovFactory(choice);
+  _trialIDs = _varFactory.trialIDs();
+  _testIDs = _varFactory.testIDs();
+}
+
 void BF::addTerm( LinearTermPtr trialTerm, LinearTermPtr testTerm ) {
   _terms.push_back( make_pair( trialTerm, testTerm ) );
 }
