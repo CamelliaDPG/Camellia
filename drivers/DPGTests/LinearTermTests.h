@@ -17,6 +17,8 @@
 #include "LinearTerm.h"
 #include "VarFactory.h"
 
+#include "BasisCache.h"
+
 typedef Basis<double, FieldContainer<double> > DoubleBasis;
 typedef Teuchos::RCP< DoubleBasis > BasisPtr;
 
@@ -30,6 +32,10 @@ class LinearTermTests : public TestSuite {
   VarPtr u3_hat_n; // flux variable
   
   FunctionPtr sine_x;
+  
+  DofOrderingPtr trialOrder, testOrder;
+  
+  BasisCachePtr basisCache;
   
   void setup();
   void teardown();

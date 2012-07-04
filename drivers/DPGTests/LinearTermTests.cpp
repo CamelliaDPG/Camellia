@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "LinearTermTests.h"
+#include "BF.h"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
@@ -57,6 +58,39 @@ void LinearTermTests::setup() {
   u2_hat = varFactory.traceVar("\\widehat{u}_2");
   
   u3_hat_n = varFactory.fluxVar("\\widehat{u}_3n");
+  
+  BFPtr bf = Teuchos::rcp(new BF(varFactory)); // we don't actually *use* the bf -- just for the DofOrderingFactory
+  
+  DofOrderingFactory discreteSpaceFactory(bf);
+  
+  int polyOrder = 3, testToAdd = 2;
+  Teuchos::RCP<shards::CellTopology> quadTopoPtr;
+  quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  
+  trialOrder = discreteSpaceFactory.trialOrdering(polyOrder, *(quadTopoPtr.get()));
+  testOrder = discreteSpaceFactory.testOrdering(polyOrder + testToAdd, *(quadTopoPtr.get()));
+  
+  ElementTypePtr elemType = Teuchos::rcp( new ElementType( trialOrder, testOrder, quadTopoPtr ) );
+  
+  basisCache = Teuchos::rcp(new BasisCache(elemType));
+  
+  // define nodes for "mesh"
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
+  quadPoints.resize(1,4,2); // 1 is the num cells...
+  
+  vector<int> cellIDs; cellIDs.push_back(0);
+  bool createSideCacheToo = true;
+  
+  basisCache->setPhysicalCellNodes(quadPoints, cellIDs, createSideCacheToo);
 }
 
 void LinearTermTests::teardown() {
@@ -140,9 +174,70 @@ bool LinearTermTests::testSums() {
   return success;
 }
 
+bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofOrdering, BasisCachePtr basisCache) {
+  double tol = 1e-14;
+  
+  int numCells = basisCache->cellIDs().size();
+  int numDofs = dofOrdering->totalDofs();
+  bool forceBoundaryTerm = false;
+  FieldContainer<double> aValues(numCells,numDofs), bValues(numCells,numDofs), sumValues(numCells,numDofs);
+  a->integrate(aValues,dofOrdering,basisCache,forceBoundaryTerm);
+  b->integrate(bValues,dofOrdering,basisCache,forceBoundaryTerm);
+  (a+b)->integrate(sumValues, dofOrdering, basisCache, forceBoundaryTerm);
+  
+  int size = aValues.size();
+  
+  for (int i=0; i<size; i++) {
+    double expectedValue = aValues[i] + bValues[i];
+    double diff = abs( expectedValue - sumValues[i] );
+    if (diff > tol) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool LinearTermTests::testIntegration() {
   cout << "LinearTermTests::testIntegration() not yet implemented.\n";
-  return false;
+  
+  // for now, we just check the consistency: for LinearTerm a = b + c, does a->integrate
+  // give the same values as b->integrate + c->integrate ?
+  bool success = true;
+  
+  //  VarPtr v1, v2, v3; // HGRAD members (test variables)
+  //  VarPtr q1, q2, q3; // HDIV members (test variables)
+  //  VarPtr u1, u2, u3; // L2 members (trial variables)
+  //  VarPtr u1_hat, u2_hat; // trace variables
+  //  VarPtr u3_hat_n; // flux variable
+  //  
+  //  FunctionPtr sine_x;
+  
+  if ( ! checkLTSumConsistency(1 * v1, 1 * v2, testOrder, basisCache) ) {
+    cout << "(v1 + v2)->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(sine_x * v1, 1 * v2, testOrder, basisCache) ) {
+    cout << "(sine_x * v1 + v2)->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(1 * q1->div(), 1 * q2->x(), testOrder, basisCache) ) {
+    cout << "(q1->div() + q2->x())->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(1 * u1, 1 * u2, trialOrder, basisCache) ) {
+    cout << "(u1 + u2)->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(1 * u1, sine_x * u2, trialOrder, basisCache) ) {
+    cout << "(u1 + sine_x * u2)->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  return success;
 }
   
 std::string LinearTermTests::testSuiteName() {
