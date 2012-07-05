@@ -10,6 +10,7 @@
 
 #include "LinearTermTests.h"
 #include "BF.h"
+#include "IP.h"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
@@ -85,8 +86,17 @@ void LinearTermTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
-  quadPoints.resize(1,4,2); // 1 is the num cells...
   
+  // create a pointer to a new mesh:  
+  int horizontalCells = 2;
+  int verticalCells = 2;
+
+  mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, 
+			     verticalCells, bf, polyOrder, 
+			     polyOrder+testToAdd, false);
+  
+  quadPoints.resize(1,4,2); // 1 is the num cells...
+
   vector<int> cellIDs; cellIDs.push_back(0);
   bool createSideCacheToo = true;
   
@@ -107,6 +117,13 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testIntegration()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  setup();
+  if (testEnergyNorm()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -239,7 +256,26 @@ bool LinearTermTests::testIntegration() {
   
   return success;
 }
+
+bool LinearTermTests::testEnergyNorm() {
+  bool success = true;
   
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(v1); // L^2 on an HGrad var
+  ip->addTerm(q1); // L^2 on Hdiv var
+
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  LinearTermPtr identity = one*v1; 
+
+  double norm = identity->energyNormTotal(mesh,ip); // should be equal to the sqrt of the measure of the domain [-1,1]^2
+
+  double tol = 1e-15;
+  if (abs(norm-2.0)>tol){
+    success = false;
+  }
+  return success;
+}
+
 std::string LinearTermTests::testSuiteName() {
   return "LinearTermTests";
 }

@@ -35,6 +35,6 @@ for i in range(len(Confusion_files)):
 
 print Confusion_files    
 
-src_obj = env.Object(['PatchBasisTests.cpp','VectorizedBasisTestSuite.cpp','MeshTestSuite.cpp','SolutionTests.cpp','RHSTests.cpp','MultiBasisTests.cpp','ElementTests.cpp','MeshRefinementTests.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp'),'../Stokes/StokesBilinearForm.cpp'])
+src_obj = env.Object(['FunctionTests.cpp','ScratchPadTests.cpp','LinearTermTests.cpp','TestBilinearFormDx.cpp','TestBilinearFormFlux.cpp','PatchBasisTests.cpp','VectorizedBasisTestSuite.cpp','MeshTestSuite.cpp','SolutionTests.cpp','RHSTests.cpp','MultiBasisTests.cpp','ElementTests.cpp','MeshRefinementTests.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp'),'../Stokes/StokesBilinearForm.cpp'])
 
 env.Program('exec/DPGTests',['DPGTests.cpp',src_obj])
