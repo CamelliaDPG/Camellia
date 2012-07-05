@@ -53,9 +53,9 @@ public:
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                 FunctionPtr scalarWeight, BasisCachePtr basisCache,
-                 bool forceBoundaryTerm = false);
+//  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+//                 FunctionPtr scalarWeight, BasisCachePtr basisCache,
+//                 bool forceBoundaryTerm = false);  //deprecated
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);

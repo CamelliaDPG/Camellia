@@ -96,7 +96,8 @@ VarType LinearTerm::termType() const {
   return _termType; 
 }
 
-void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
+// this version of integrate is deprecated (do ( scalarWeight * ltPtr )->integrate() instead)
+/*void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                            FunctionPtr scalarWeight, BasisCachePtr basisCache,
                            bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
@@ -175,8 +176,17 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       }
     }
   }
-}
+}*/
 
+// some notes on the design of integrate:
+// each linear summand can be either an element-boundary-only term, or one that's defined on the
+// whole element.  For boundary-only terms, we integrate along each side.  The summands that are
+// defined on the whole element are integrated over the element interior, unless forceBoundaryTerm
+// is set to true, in which case these too will be integrated over the boundary.  One place where 
+// this is appropriate is when a test function LinearTerm is being integrated against a trace or
+// flux in a bilinear form: the test function is defined on the whole element, but the traces and
+// fluxes are only defined on the element boundary.
+// TODO: make the code below match the description above.
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
