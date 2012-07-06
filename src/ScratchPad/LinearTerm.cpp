@@ -279,7 +279,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       if (! boundaryTerm) {
         otherTerm->values(otherValues,otherID,otherBasis,basisCache,applyCubatureWeights);
       } else {
-        otherTerm->values(otherValues,otherID,otherBasis,basisCache,applyCubatureWeights,sideIndex);
+        otherTerm->values(otherValues,otherID,otherBasis,basisCache->getSideBasisCache(sideIndex),applyCubatureWeights);
       }
       
       for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
@@ -295,9 +295,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
         
         if (! boundaryTerm ) {
 #warning Need to add integration of boundary-only terms to the putative volume integral (for function weights defined only on element boundaries)....
-          this->values(thisValues,thisID,thisBasis,basisCache);
+          this->values(thisValues,thisID,thisBasis,basisCache,false);
         } else {
-          this->values(thisValues,thisID,thisBasis,basisCache,false,sideIndex); // false: don't apply cubature weights
+          this->values(thisValues,thisID,thisBasis,basisCache->getSideBasisCache(sideIndex),false); // false: don't apply cubature weights
           if ( this->termType() == FLUX ) {
             // we need to multiply thisValues' entries by the parity of the normal, since
             // the trial implicitly contains an outward normal, and we need to adjust for the fact
