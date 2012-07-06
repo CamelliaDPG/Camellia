@@ -83,13 +83,31 @@ void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
 }
 
 void LinearTerm::addVar(double weight, VarPtr var) {
-  FunctionPtr weightFn = Teuchos::rcp( new ConstantScalarFunction(weight) );
+  FunctionPtr weightFn = (weight != 1.0) ? Teuchos::rcp( new ConstantScalarFunction(weight) ) 
+                                         : Teuchos::rcp( new ConstantScalarFunction(weight, "") );
+  // (suppress display of 1.0 weights)
   addVar( weightFn, var );
 }
 
 void LinearTerm::addVar(vector<double> vector_weight, VarPtr var) { // dots weight vector with vector var, makes a vector out of a scalar var
   FunctionPtr weightFn = Teuchos::rcp( new ConstantVectorFunction(vector_weight) );
   addVar( weightFn, var );
+}
+
+string LinearTerm::displayString() {
+  ostringstream dsStream;
+  bool first = true;
+  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    if ( ! first ) {
+      dsStream << " + ";
+    }
+    LinearSummand ls = *lsIt;
+    FunctionPtr f = ls.first;
+    VarPtr var = ls.second;
+    dsStream << f->displayString() << " " << var->displayString();
+    first = false;
+  }
+  return dsStream.str();
 }
 
 const set<int> & LinearTerm::varIDs() const {
@@ -976,7 +994,8 @@ LinearTermPtr operator/(VarPtr v, FunctionPtr scalarFunction) {
 }
 
 LinearTermPtr operator+(VarPtr v1, VarPtr v2) {
-  return 1.0 * v1 + 1.0 * v2;
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0, "") );
+  return one * v1 + one * v2;
 }
 
 LinearTermPtr operator/(VarPtr v, double weight) {
@@ -984,19 +1003,22 @@ LinearTermPtr operator/(VarPtr v, double weight) {
 }
 
 LinearTermPtr operator-(VarPtr v1, VarPtr v2) {
-  return v1 + (-1.0) * v2;
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  return v1 + minus_one * v2;
 }
 
 LinearTermPtr operator-(VarPtr v) {
-  return (-1.0) * v;
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  return minus_one * v;
 }
 
 LinearTermPtr operator-(LinearTermPtr a) {
-  return Teuchos::rcp( new ConstantScalarFunction(-1.0) ) * a;
+  return Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") ) * a;
 }
 
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
-  return a + (-1.0) * v;
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  return a + minus_one * v;
 }
 
 LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2) {

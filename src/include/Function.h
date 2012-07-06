@@ -53,6 +53,8 @@ public:
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache);
   
+  virtual string displayString() { return "f"; }
+  
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
@@ -67,8 +69,11 @@ private:
 
 class ConstantScalarFunction : public Function {
   double _value;
+  string _stringDisplay;
 public:
   ConstantScalarFunction(double value);
+  ConstantScalarFunction(double value, string stringDisplay);
+  string displayString();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);

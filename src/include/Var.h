@@ -37,6 +37,7 @@ public:
   
   int ID();
   const string & name();
+  string displayString();
   IntrepidExtendedTypes::EOperatorExtended op();
   int rank();  // 0 for scalar, 1 for vector, etc.
   Space space();

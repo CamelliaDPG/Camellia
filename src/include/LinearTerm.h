@@ -82,6 +82,8 @@ public:
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
 
+  string displayString(); // TeX by convention
+  
   // -------------- added by Jesse --------------------
 
   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);

@@ -368,7 +368,19 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
 
 
 ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) { 
+  _value = value;
+  ostringstream valueStream;
+  valueStream << value;
+  _stringDisplay = valueStream.str();
+}
+
+ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) : Function(0) { 
   _value = value; 
+  _stringDisplay = stringDisplay;
+}
+
+string ConstantScalarFunction::displayString() {
+  return _stringDisplay;
 }
 
 void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {\

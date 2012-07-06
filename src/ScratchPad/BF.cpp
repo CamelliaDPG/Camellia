@@ -63,7 +63,21 @@ bool BF::isFluxOrTrace(int trialID) {
 }
 
 void BF::printTrialTestInteractions() {
-  cout << "BF::printTrialTestInteractions() not yet implemented.\n";
+  ostringstream bfStream;
+  bool first = true;
+  for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+       btIt != _terms.end(); btIt++) {
+    if (! first ) {
+      bfStream << " + ";
+    }
+    BilinearTerm bt = *btIt;
+    LinearTermPtr trialTerm = btIt->first;
+    LinearTermPtr testTerm = btIt->second;
+    bfStream << "( " << trialTerm->displayString() << ", " << testTerm->displayString() << ")";
+    first = false;
+  }
+  string bfString = bfStream.str();
+  cout << bfString << endl;
 }
 
 void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
