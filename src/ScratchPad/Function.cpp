@@ -453,6 +453,11 @@ ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( pro
     _f2 = f1;
   }
 }
+
+bool ProductFunction::boundaryValueOnly() {
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
 void ProductFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   if (( _f2->rank() > 0) && (this->rank() == 0)) { // tensor product resulting in scalar value
@@ -470,6 +475,11 @@ QuotientFunction::QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor) : F
   _f = f;
   _scalarDivisor = scalarDivisor;
 }
+
+bool QuotientFunction::boundaryValueOnly() {
+  return _f->boundaryValueOnly() || _scalarDivisor->boundaryValueOnly();
+}
+
 void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   _f->values(values,basisCache);
@@ -522,6 +532,10 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
   }
 }
 
+bool ScalarFunctionOfNormal::boundaryValueOnly() {
+  return true;
+}
+
 void ScalarFunctionOfNormal::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   const FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
@@ -539,7 +553,39 @@ void ScalarFunctionOfNormal::values(FieldContainer<double> &values, BasisCachePt
   }
 }
 
+bool SideParityFunction::boundaryValueOnly() {
+  return true;
+}
+
+void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr sideBasisCache) {
+  CHECK_VALUES_RANK(values);
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  int sideIndex = sideBasisCache->getSideIndex();
+  if (sideIndex == -1) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
+  }
+  vector<int> cellIDs = sideBasisCache->cellIDs();
+  if (cellIDs.size() != numCells) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
+  }
+  Teuchos::RCP<Mesh> mesh = sideBasisCache->mesh();
+  if (! mesh.get()) {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "mesh unset in BasisCache.");
+  }
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    int parity = mesh->cellSideParitiesForCell(cellIDs[cellIndex])(0,sideIndex);
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      values(cellIndex,ptIndex) = parity;
+    }
+  }
+}
+
 UnitNormalFunction::UnitNormalFunction() : Function(1) {}
+
+bool UnitNormalFunction::boundaryValueOnly() {
+  return true;
+}
 
 void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);

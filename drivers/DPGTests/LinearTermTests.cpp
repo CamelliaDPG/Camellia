@@ -11,6 +11,12 @@
 #include "LinearTermTests.h"
 #include "BF.h"
 
+#include "IP.h"
+#include "BCEasy.h"
+#include "RHSEasy.h"
+
+#include "PreviousSolutionFunction.h"
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 class Sine_x : public Function {
@@ -30,6 +36,24 @@ public:
   }
 };
 
+
+class Cosine_y : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex) = cos(y);
+      }
+    }
+  }
+};
+
 void LinearTermTests::setup() {
   
 //  VarPtr v1, v2, v3; // HGRAD members (test variables)
@@ -41,6 +65,7 @@ void LinearTermTests::setup() {
 //  FunctionPtr sine_x;
 
   sine_x = Teuchos::rcp( new Sine_x );
+  cos_y = Teuchos::rcp( new Cosine_y );
   
   q1 = varFactory.testVar("q_1", HDIV);
   q2 = varFactory.testVar("q_2", HDIV);
@@ -59,22 +84,22 @@ void LinearTermTests::setup() {
   
   u3_hat_n = varFactory.fluxVar("\\widehat{u}_3n");
   
-  BFPtr bf = Teuchos::rcp(new BF(varFactory)); // we don't actually *use* the bf -- just for the DofOrderingFactory
+  bf = Teuchos::rcp(new BF(varFactory)); // made-up bf for Mesh + previous solution tests
   
-  DofOrderingFactory discreteSpaceFactory(bf);
+  bf->addTerm(u1_hat, q1->dot_normal());
+  bf->addTerm(u1, q1->x());
+  bf->addTerm(u2, q1->y());
+  
+  bf->addTerm(u3_hat_n, v1);
+  bf->addTerm(u3, v1);
+  
+//  DofOrderingFactory discreteSpaceFactory(bf);
   
   int polyOrder = 3, testToAdd = 2;
   Teuchos::RCP<shards::CellTopology> quadTopoPtr;
-  quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+//  quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
   
-  trialOrder = discreteSpaceFactory.trialOrdering(polyOrder, *(quadTopoPtr.get()));
-  testOrder = discreteSpaceFactory.testOrdering(polyOrder + testToAdd, *(quadTopoPtr.get()));
-  
-  ElementTypePtr elemType = Teuchos::rcp( new ElementType( trialOrder, testOrder, quadTopoPtr ) );
-  
-  basisCache = Teuchos::rcp(new BasisCache(elemType));
-  
-  // define nodes for "mesh"
+  // define nodes for mesh
   FieldContainer<double> quadPoints(4,2);
   
   quadPoints(0,0) = -1.0; // x1
@@ -85,12 +110,24 @@ void LinearTermTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
-  quadPoints.resize(1,4,2); // 1 is the num cells...
+  
+  int horizontalElements = 1, verticalElements = 1;
+  
+  mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
+  
+//  trialOrder = discreteSpaceFactory.trialOrdering(polyOrder, *(quadTopoPtr.get()));
+//  testOrder = discreteSpaceFactory.testOrdering(polyOrder + testToAdd, *(quadTopoPtr.get()));
+  
+  ElementTypePtr elemType = mesh->getElement(0)->elementType();
+  trialOrder = elemType->trialOrderPtr;
+  testOrder = elemType->testOrderPtr;
+  
+  basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
   
   vector<int> cellIDs; cellIDs.push_back(0);
   bool createSideCacheToo = true;
   
-  basisCache->setPhysicalCellNodes(quadPoints, cellIDs, createSideCacheToo);
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
 }
 
 void LinearTermTests::teardown() {
@@ -197,9 +234,7 @@ bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofO
   return true;
 }
 
-bool LinearTermTests::testIntegration() {
-  cout << "LinearTermTests::testIntegration() not yet implemented.\n";
-  
+bool LinearTermTests::testIntegration() {  
   // for now, we just check the consistency: for LinearTerm a = b + c, does a->integrate
   // give the same values as b->integrate + c->integrate ?
   bool success = true;
@@ -237,6 +272,62 @@ bool LinearTermTests::testIntegration() {
     success = false;
   }
   
+  // now, same thing, but with boundary-value-only functions in the mix:
+  // this next is a fairly complex test; may want to add a more granular one above...
+  IPPtr ip = Teuchos::rcp(new IP);
+  Teuchos::RCP<RHS> rhs = Teuchos::rcp(new RHSEasy);
+  Teuchos::RCP<BC> bc = Teuchos::rcp(new BCEasy);
+  SolutionPtr solution = Teuchos::rcp( new Solution(mesh,bc,rhs,ip) );
+  // project some functions onto solution, so that something interesting is there:
+  FunctionPtr u1_proj = sine_x;
+  FunctionPtr u2_proj = cos_y;
+  FunctionPtr u3_proj = u1_proj * u2_proj;
+  map<int, FunctionPtr> solnToProject;
+  solnToProject[u1->ID()] = u1_proj;
+  solnToProject[u2->ID()] = u2_proj;
+  solnToProject[u3->ID()] = u3_proj;
+  solnToProject[u1_hat->ID()] = u1_proj;
+  solnToProject[u2_hat->ID()] = u2_proj;
+  // u3_hat_n isn't too much like a 'real' bilinear form, in that u3 itself is a scalar
+  // this is just a test, so I'm not worried about it...
+  solnToProject[u3_hat_n->ID()] = u3_proj;
+  
+  solution->projectOntoMesh(solnToProject);
+  
+  LinearTermPtr bfTestFunctional = bf->testFunctional(solution);
+  
+  // bf->addTerm(u1, q1->x());
+  // bf->addTerm(u2, q1->y());
+  // bf->addTerm(u3, v1);
+  
+//  bf->addTerm(u1_hat, q1->dot_normal());
+//  bf->addTerm(u3_hat_n, v1);
+  
+  LinearTermPtr testFunctionalNoBoundaryValues = u1_proj * q1->x() + u2_proj * q1->y() + u3_proj * v1;
+  
+  FunctionPtr u1_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1_hat) );
+  FunctionPtr u2_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2_hat) );
+  FunctionPtr u3_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u3_hat_n) );
+  LinearTermPtr testFunctionalBoundaryValues = u1_hat_prev * q1->dot_normal() + u3_hat_prev * v1;
+  
+  if ( ! checkLTSumConsistency(testFunctionalNoBoundaryValues, testFunctionalBoundaryValues, 
+                               testOrder, basisCache) ) {
+    cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(testFunctionalBoundaryValues, bfTestFunctional - testFunctionalBoundaryValues, 
+                               testOrder, basisCache) ) {
+    cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+  
+  if ( ! checkLTSumConsistency(testFunctionalNoBoundaryValues, bfTestFunctional - testFunctionalNoBoundaryValues, 
+                               testOrder, basisCache) ) {
+    cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
+    success = false;
+  }
+
   return success;
 }
   
