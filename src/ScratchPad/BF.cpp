@@ -9,6 +9,8 @@
 #include "BF.h"
 #include "VarFactory.h"
 #include "BilinearFormUtility.h"
+#include "Function.h"
+#include "PreviousSolutionFunction.h"
 
 BF::BF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by BF)
   _varFactory = varFactory;
@@ -79,4 +81,17 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
                          testTerm,  elemType->testOrderPtr, basisCache);
   }
   BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness);
+}
+
+LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {
+  LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
+  for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+       btIt != _terms.end(); btIt++) {
+    BilinearTerm bt = *btIt;
+    LinearTermPtr trialTerm = btIt->first;
+    LinearTermPtr testTerm = btIt->second;
+    FunctionPtr trialValue = Teuchos::rcp( new PreviousSolutionFunction(trialSolution, trialTerm) );
+    functional = functional + trialValue * testTerm;
+  }
+  return functional;
 }
