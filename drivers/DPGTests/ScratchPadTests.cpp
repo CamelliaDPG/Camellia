@@ -8,6 +8,7 @@
 
 #include "ScratchPadTests.h"
 #include "PenaltyConstraints.h"
+#include "IP.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -275,6 +276,7 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
   }
   return success;
 }
+
 
 std::string ScratchPadTests::testSuiteName() {
   return "ScratchPadTests";

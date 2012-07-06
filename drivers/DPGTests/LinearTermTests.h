@@ -34,16 +34,14 @@ class LinearTermTests : public TestSuite {
   VarPtr u1, u2, u3; // L2 members (trial variables)
   VarPtr u1_hat, u2_hat; // trace variables
   VarPtr u3_hat_n; // flux variable
-  
   FunctionPtr sine_x, cos_y;
+  Teuchos::RCP<Mesh> mesh;
   
   DofOrderingPtr trialOrder, testOrder;
   
   BasisCachePtr basisCache;
   
   BFPtr bf;
-  
-  Teuchos::RCP<Mesh> mesh;
   
   void setup();
   void teardown();
@@ -52,7 +50,9 @@ public:
   
   bool testSums();
   bool testIntegration();
-  
+
+  bool testEnergyNorm();
+
   std::string testSuiteName();
 };
 
