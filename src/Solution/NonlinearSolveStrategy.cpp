@@ -40,7 +40,11 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
     }
     double relErrorDiff = abs(totalError-prevError)/max(totalError,prevError);
     if (printToConsole){
-      cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff << endl;
+      cout << "on iter = " << i  << ", relative change in energy error is " << relErrorDiff;
+      if (abs(relErrorDiff - 1.0) < 0.1) { // for large rel. error, print more detail...
+        cout << "\t(totalError: " << totalError << "; prevError: " << prevError << ")";
+      }
+      cout << endl;
     }
     
     if (relErrorDiff < _relativeEnergyTolerance) {

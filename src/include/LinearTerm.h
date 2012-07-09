@@ -71,9 +71,6 @@ public:
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                 FunctionPtr scalarWeight, BasisCachePtr basisCache,
-                 bool forceBoundaryTerm = false);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
@@ -81,10 +78,12 @@ public:
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
   void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
-              bool applyCubatureWeights = false, int sideIndex = -1);
+              bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
 
+  string displayString(); // TeX by convention
+  
   // -------------- added by Jesse --------------------
 
   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);

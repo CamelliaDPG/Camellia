@@ -60,6 +60,7 @@ OBJ_NAMES = DofOrdering \
        MultiBasis \
        PatchBasis \
        Solution \
+       WriteSolution \
        DPGInnerProduct \
        ExactSolution \
        MultiOrderStudy \

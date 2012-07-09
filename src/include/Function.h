@@ -26,6 +26,8 @@ public:
   Function();
   Function(int rank);
   
+  virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
+  
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
   int rank();
   
@@ -51,6 +53,8 @@ public:
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache);
   
+  virtual string displayString() { return "f"; }
+  
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
@@ -65,8 +69,11 @@ private:
 
 class ConstantScalarFunction : public Function {
   double _value;
+  string _stringDisplay;
 public:
   ConstantScalarFunction(double value);
+  ConstantScalarFunction(double value, string stringDisplay);
+  string displayString();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
@@ -98,6 +105,7 @@ private:
 public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual bool boundaryValueOnly();
 };
 
 class QuotientFunction : public Function {
@@ -105,6 +113,7 @@ class QuotientFunction : public Function {
 public:
   QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual bool boundaryValueOnly();
 };
 
 class SumFunction : public Function {
@@ -130,12 +139,20 @@ typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 class UnitNormalFunction : public Function {
 public:
   UnitNormalFunction();
+  bool boundaryValueOnly();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
 class ScalarFunctionOfNormal : public Function { // 2D for now
 public:
+  bool boundaryValueOnly();
   virtual double value(double x, double y, double n1, double n2) = 0;
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class SideParityFunction : public Function {
+public:
+  bool boundaryValueOnly();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
