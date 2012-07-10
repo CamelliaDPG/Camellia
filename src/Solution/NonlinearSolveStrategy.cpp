@@ -13,6 +13,11 @@ NonlinearSolveStrategy::NonlinearSolveStrategy(Teuchos::RCP<Solution> background
   _solution = solution;
   _stepSize = stepSize;
   _relativeEnergyTolerance = relativeEnergyTolerance;
+  _usePicardIteration = false; // Newton-Raphson by default
+}
+
+void NonlinearSolveStrategy::setUsePicardIteration(bool value) {
+  _usePicardIteration = value;
 }
 
 void NonlinearSolveStrategy::solve(bool printToConsole) {
@@ -53,8 +58,12 @@ void NonlinearSolveStrategy::solve(bool printToConsole) {
       prevError = totalError; // reset previous error and continue
     } 
     
-    double stepLength = _stepSize->stepSize(_solution,_backgroundFlow);
-    _backgroundFlow->addSolution(_solution,stepLength);
+    if ( ! _usePicardIteration ) {
+      double stepLength = _stepSize->stepSize(_solution,_backgroundFlow);
+      _backgroundFlow->addSolution(_solution,stepLength);
+    } else {
+      _backgroundFlow->setSolution(_solution);
+    }
     
     i++;            
   }
