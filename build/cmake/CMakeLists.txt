@@ -128,6 +128,10 @@ set( STOKES_BACKWARD_FACING_STEP_DRIVER
   "${STOKES_DIR}/StokesBackwardFacingStepDriver.cpp"
   )
   
+set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
+  "${STOKES_DIR}/NavierStokesCavityFlowDriver.cpp"
+  )
+  
 set( STOKES_CAVITY_FLOW_DRIVER
   "${STOKES_DIR}/StokesCavityFlowDriver.cpp"
   )
@@ -207,6 +211,7 @@ add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
+add_executable(NavierStokesCavityFlowDriver ${STOKES_SOURCES} ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NavierStokesDriver ${NAVIER_STOKES_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
@@ -236,6 +241,11 @@ target_link_libraries(NewConfusionDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(DPGTests
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesCavityFlowDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

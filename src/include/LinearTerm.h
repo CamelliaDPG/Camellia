@@ -9,6 +9,19 @@
 #ifndef Camellia_LinearTerm_h
 #define Camellia_LinearTerm_h
 
+#include "Mesh.h"
+#include "DPGInnerProduct.h"
+
+#include <Epetra_Map.h>
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
+#include "Epetra_SerialDenseMatrix.h"
+#include "Epetra_SerialDenseSolver.h"
+
 #include "Intrepid_Utils.hpp"
 #include "Intrepid_Basis.hpp"
 #include "Function.h"
@@ -28,6 +41,11 @@ class LinearTerm {
   vector< LinearSummand > _summands;
   set<int> _varIDs;
   VarType _termType; // shouldn't mix
+
+  // for the Riesz inversion evaluation
+  map< ElementType*, FieldContainer<double> > _rieszRepresentationForElementType;
+  map< ElementType*, FieldContainer<double> > _rieszRHSForElementType;
+  map< int, double > _energyNormForCellIDGlobal;
 public: // was protected; changed for debugging (no big deal either way, I think)
   const vector< LinearSummand > & summands() const;
 public:
@@ -53,9 +71,6 @@ public:
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
-  void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                 FunctionPtr scalarWeight, BasisCachePtr basisCache,
-                 bool forceBoundaryTerm = false);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
@@ -63,9 +78,22 @@ public:
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
   void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
-              bool applyCubatureWeights = false, int sideIndex = -1);
+              bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
+
+  string displayString(); // TeX by convention
+  
+  // -------------- added by Jesse --------------------
+
+  void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
+  void computeRieszRHS(Teuchos::RCP<Mesh> mesh);
+  LinearTermPtr rieszRep(VarPtr v);
+  double functionalNorm();
+  const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
+  double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
+
+  // -------------- end of added by Jesse --------------------
   
   // operator overloading niceties:
   

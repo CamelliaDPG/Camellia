@@ -39,7 +39,7 @@ public:
       FunctionPtr f = constIt->f();
       
       lt->integrate(constraintMatrix,elemType->trialOrderPtr,lt,elemType->trialOrderPtr,basisCache);
-      lt->integrate(constraintLoad,elemType->trialOrderPtr,f,basisCache);
+      (f * lt)->integrate(constraintLoad,elemType->trialOrderPtr,basisCache);
     }
 //    cout << "constraintMatrix:\n" << constraintMatrix;
 //    cout << "constraintLoad:\n" << constraintLoad;

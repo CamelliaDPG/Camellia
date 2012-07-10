@@ -21,15 +21,26 @@ class PreviousSolutionFunction : public Function {
   LinearTermPtr _solnExpression;
   bool _overrideMeshCheck;
 public:
-  PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression) : Function(solnExpression->rank()) { 
+  PreviousSolutionFunction(SolutionPtr soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true) : Function(solnExpression->rank()) { 
     _soln = soln;
     _solnExpression = solnExpression;
     _overrideMeshCheck = false;
+    if ((solnExpression->termType() == FLUX) && multiplyFluxesByCellParity) {
+      FunctionPtr parity = Teuchos::rcp( new SideParityFunction );
+      _solnExpression = parity * solnExpression;
+    }
   }
-  PreviousSolutionFunction(SolutionPtr soln, VarPtr var) : Function(var->rank()) { 
+  PreviousSolutionFunction(SolutionPtr soln, VarPtr var, bool multiplyFluxesByCellParity = true) : Function(var->rank()) { 
     _soln = soln;
     _solnExpression = 1.0 * var;
     _overrideMeshCheck = false;
+    if ((var->varType() == FLUX) && multiplyFluxesByCellParity) {
+      FunctionPtr parity = Teuchos::rcp( new SideParityFunction );
+      _solnExpression = parity * var;
+    }
+  }
+  bool boundaryValueOnly() { // fluxes and traces are only defined on element boundaries
+    return (_solnExpression->termType() == FLUX) || (_solnExpression->termType() == TRACE);
   }
   void setOverrideMeshCheck(bool value) {
     _overrideMeshCheck = value;

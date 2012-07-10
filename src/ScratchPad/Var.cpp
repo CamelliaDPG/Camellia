@@ -8,6 +8,35 @@
 
 #include "Var.h"
 
+static const string & S_OP_VALUE = "";
+static const string & S_OP_GRAD = "\\nabla ";
+static const string & S_OP_CURL = "\\nabla \\times ";
+static const string & S_OP_DIV = "\\nabla \\cdot ";
+static const string & S_OP_D1 = "D1 ";
+static const string & S_OP_D2 = "D2 ";
+static const string & S_OP_D3 = "D3 ";
+static const string & S_OP_D4 = "D4 ";
+static const string & S_OP_D5 = "D5 ";
+static const string & S_OP_D6 = "D6 ";
+static const string & S_OP_D7 = "D7 ";
+static const string & S_OP_D8 = "D8 ";
+static const string & S_OP_D9 = "D9 ";
+static const string & S_OP_D10 = "D10 ";
+static const string & S_OP_X = "{1 \\choose 0} \\cdot ";
+static const string & S_OP_Y = "{0 \\choose 1} \\cdot ";
+static const string & S_OP_Z = "\\bf{k} \\cdot ";
+static const string & S_OP_DX = "\\frac{\\partial}{\\partial x} ";
+static const string & S_OP_DY = "\\frac{\\partial}{\\partial y} ";
+static const string & S_OP_DZ = "\\frac{\\partial}{\\partial z} ";
+static const string & S_OP_CROSS_NORMAL = "\\times \\widehat{n} ";
+static const string & S_OP_DOT_NORMAL = "\\cdot \\widehat{n} ";
+static const string & S_OP_TIMES_NORMAL = " \\widehat{n} \\cdot ";
+static const string & S_OP_TIMES_NORMAL_X = " \\widehat{n}_x ";
+static const string & S_OP_TIMES_NORMAL_Y = " \\widehat{n}_y ";
+static const string & S_OP_TIMES_NORMAL_Z = " \\widehat{n}_z ";
+static const string & S_OP_VECTORIZE_VALUE = ""; // handle this one separately...
+static const string & S_OP_UNKNOWN = "[UNKNOWN OPERATOR] ";
+
 IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Space space) {
   if (space == HGRAD)
     return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
@@ -37,6 +66,116 @@ int Var::ID() {
 
 const string & Var::name() { 
   return _name; 
+}
+
+const string & operatorName(IntrepidExtendedTypes::EOperatorExtended op) {
+  switch (op) {
+    case  IntrepidExtendedTypes::OP_VALUE:
+      return S_OP_VALUE; 
+      break;
+    case IntrepidExtendedTypes::OP_GRAD:
+      return S_OP_GRAD; 
+      break;
+    case IntrepidExtendedTypes::OP_CURL:
+      return S_OP_CURL; 
+      break;
+    case IntrepidExtendedTypes::OP_DIV:
+      return S_OP_DIV; 
+      break;
+    case IntrepidExtendedTypes::OP_D1:
+      return S_OP_D1; 
+      break;
+    case IntrepidExtendedTypes::OP_D2:
+      return S_OP_D2; 
+      break;
+    case IntrepidExtendedTypes::OP_D3:
+      return S_OP_D3; 
+      break;
+    case IntrepidExtendedTypes::OP_D4:
+      return S_OP_D4; 
+      break;
+    case IntrepidExtendedTypes::OP_D5:
+      return S_OP_D5; 
+      break;
+    case IntrepidExtendedTypes::OP_D6:
+      return S_OP_D6; 
+      break;
+    case IntrepidExtendedTypes::OP_D7:
+      return S_OP_D7; 
+      break;
+    case IntrepidExtendedTypes::OP_D8:
+      return S_OP_D8; 
+      break;
+    case IntrepidExtendedTypes::OP_D9:
+      return S_OP_D9; 
+      break;
+    case IntrepidExtendedTypes::OP_D10:
+      return S_OP_D10; 
+      break;
+    case IntrepidExtendedTypes::OP_X:
+      return S_OP_X; 
+      break;
+    case IntrepidExtendedTypes::OP_Y:
+      return S_OP_Y; 
+      break;
+    case IntrepidExtendedTypes::OP_Z:
+      return S_OP_Z; 
+      break;
+    case IntrepidExtendedTypes::OP_DX:
+      return S_OP_DX; 
+      break;
+    case IntrepidExtendedTypes::OP_DY:
+      return S_OP_DY; 
+      break;
+    case IntrepidExtendedTypes::OP_DZ:
+      return S_OP_DZ; 
+      break;
+    case IntrepidExtendedTypes::OP_CROSS_NORMAL:
+      return S_OP_CROSS_NORMAL; 
+      break;
+    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+      return S_OP_DOT_NORMAL; 
+      break;
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL:
+      return S_OP_TIMES_NORMAL; 
+      break;
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_X:
+      return S_OP_TIMES_NORMAL_X; 
+      break;
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Y:
+      return S_OP_TIMES_NORMAL_Y; 
+      break;
+    case IntrepidExtendedTypes::OP_TIMES_NORMAL_Z:
+      return S_OP_TIMES_NORMAL_Z; 
+      break;
+    case IntrepidExtendedTypes::OP_VECTORIZE_VALUE:
+      return S_OP_VECTORIZE_VALUE; 
+      break;
+    default:
+      return S_OP_UNKNOWN;
+      break;
+  }
+}
+
+bool isRightOperator(IntrepidExtendedTypes::EOperatorExtended op) { // as opposed to left
+  set<int> _normalOperators;
+  _normalOperators.insert(OP_CROSS_NORMAL);
+  _normalOperators.insert(OP_DOT_NORMAL);
+  _normalOperators.insert(OP_TIMES_NORMAL);
+  _normalOperators.insert(OP_TIMES_NORMAL_X);
+  _normalOperators.insert(OP_TIMES_NORMAL_Y);
+  _normalOperators.insert(OP_TIMES_NORMAL_Z);
+  return _normalOperators.find(op) != _normalOperators.end();
+}
+
+string Var::displayString() {
+  ostringstream varStream;
+  if ( isRightOperator(_op) ) {
+    varStream << _name << operatorName(_op);
+  } else {
+    varStream << operatorName(_op) << _name;
+  }
+  return varStream.str();
 }
 
 EOperatorExtended Var::op() { 

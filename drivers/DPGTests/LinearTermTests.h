@@ -17,6 +17,12 @@
 #include "LinearTerm.h"
 #include "VarFactory.h"
 
+#include "Mesh.h"
+
+#include "BasisCache.h"
+
+#include "BF.h"
+
 typedef Basis<double, FieldContainer<double> > DoubleBasis;
 typedef Teuchos::RCP< DoubleBasis > BasisPtr;
 
@@ -28,8 +34,14 @@ class LinearTermTests : public TestSuite {
   VarPtr u1, u2, u3; // L2 members (trial variables)
   VarPtr u1_hat, u2_hat; // trace variables
   VarPtr u3_hat_n; // flux variable
+  FunctionPtr sine_x, cos_y;
+  Teuchos::RCP<Mesh> mesh;
   
-  FunctionPtr sine_x;
+  DofOrderingPtr trialOrder, testOrder;
+  
+  BasisCachePtr basisCache;
+  
+  BFPtr bf;
   
   void setup();
   void teardown();
@@ -38,7 +50,9 @@ public:
   
   bool testSums();
   bool testIntegration();
-  
+
+  bool testEnergyNorm();
+
   std::string testSuiteName();
 };
 
