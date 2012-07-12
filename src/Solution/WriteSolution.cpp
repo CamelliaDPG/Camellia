@@ -1,5 +1,6 @@
 #include "Solution.h"
 
+#include "vtkVersion.h"
 // #define USE_VTK
 #ifdef USE_VTK
 #include "vtkFloatArray.h"
@@ -65,6 +66,8 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 // Prefer the VTK version, it is cleaner and probably more efficient
 void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 {
+  vtkVersion* version = vtkVersion::New();
+  cout << "VTK Version: " << version->GetVTKVersion() << endl;
   // Get trialIDs
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   vector<int> fieldTrialIDs;

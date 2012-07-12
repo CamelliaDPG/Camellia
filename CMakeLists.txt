@@ -7,13 +7,13 @@ project(Camellia)
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)
 
-#find_package(VTK REQUIRED)
-#include(${VTK_USE_FILE})
-#if(VTK_LIBRARIES)
-#  link_libraries(${VTK_LIBRARIES})
-#else()
-#  link_libraries(vtkHybrid)
-#endif()
+find_package(VTK REQUIRED)
+include(${VTK_USE_FILE})
+if(VTK_LIBRARIES)
+  link_libraries(${VTK_LIBRARIES})
+else()
+  link_libraries(vtkHybrid)
+endif()
 
 # Find Trilinos
 find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
@@ -83,29 +83,33 @@ include_directories(
   ${CAMELLIA_SOURCE_DIR}/include
 )
 
+#link_directories(
+#  ${TRILINOS_PATH}/lib
+#  ${Trilinos_TPL_LIBRARY}
+#  ${MUMPS_PATH}/lib
+#  ${SCALAPACK_PATH}
+#)
 link_directories(
-  ${TRILINOS_PATH}/lib
-  ${Trilinos_TPL_LIBRARY}
-  ${MUMPS_PATH}/lib
-  ${SCALAPACK_PATH}
+  ${Trilinos_LIBRARY_DIRS}
+  ${Trilinos_TPL_LIBRARY_DIRS}
 )
 
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
+#link_libraries(
+#  Camellia
+#  ${Trilinos_LIBRARIES} 
+#  dmumps
+#  mumps_common
+#  pord
+#  lapack
+#  blas
+#  pthread
+#)
 link_libraries(
   Camellia
-  #${VTK_LIBRARIES}
-)
-
-link_libraries(
-  ${Trilinos_LIBRARIES} 
-  dmumps
-  mumps_common
-  pord
-  lapack
-  blas
-  pthread
-  scalapack
+  ${Trilinos_LIBRARIES}
+  ${Trilinos_TPL_LIBRARIES}
 )
 
 # Build Drivers
