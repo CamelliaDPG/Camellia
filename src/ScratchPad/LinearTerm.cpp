@@ -140,7 +140,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   // boundaryTerm ==> even volume summands should be restricted to boundary
   // (if thisFluxOrTrace, there won't be any volume summands, so the above will hold trivially)
-  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
+  int numSides = basisCache->cellTopology().getSideCount();
   
   Teuchos::Array<int> ltValueDim;
   ltValueDim.push_back(numCells);
@@ -177,17 +177,19 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       // now, compute boundary integrals
       for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
         BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-        numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
-        ltValueDim[2] = numPoints;
-        ltValues.resize(ltValueDim);
-        bool naturalBoundaryValuesOnly = true; // don't restrict volume summands to boundary
-        this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
-        // compute integrals:
-        for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
-          for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
-            int varDofIndex = varDofIndices[basisOrdinal];
-            for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-              values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex);
+        if ( sideBasisCache.get() != NULL ) {
+          numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+          ltValueDim[2] = numPoints;
+          ltValues.resize(ltValueDim);
+          bool naturalBoundaryValuesOnly = true; // don't restrict volume summands to boundary
+          this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
+          // compute integrals:
+          for (int cellIndex = 0; cellIndex<numCells; cellIndex++) {
+            for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+              int varDofIndex = varDofIndices[basisOrdinal];
+              for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+                values(cellIndex,varDofIndex) += ltValues(cellIndex,basisOrdinal,ptIndex);
+              }
             }
           }
         }
