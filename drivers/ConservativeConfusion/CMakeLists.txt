@@ -9,3 +9,8 @@ add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)
 target_link_libraries(DoubleGlazingDriver 
   Camellia
 )
+
+add_executable(EricksonDriver EricksonDriver.cpp)
+target_link_libraries(EricksonDriver 
+  Camellia
+)
