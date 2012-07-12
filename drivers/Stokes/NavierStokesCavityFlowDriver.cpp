@@ -15,6 +15,7 @@
 #include "MeshPolyOrderFunction.h"
 #include "MeshTestUtility.h"
 #include "NonlinearSolveStrategy.h"
+#include "PenaltyConstraints.h"
 
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -26,7 +27,7 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 using namespace std;
 
-const static double REYN = 1;
+const static double REYN = 1000;
 //const static double REYN = 400; // matches John Evans's dissertation, p. 183
 
 const static string S_TAU1 = "\\tau_1";
@@ -207,6 +208,7 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
 void initStokesBilinearForm(BFPtr emptyBF, FunctionPtr mu) {  
   // the velocity-gradient-pressure (VGP) stokes form
   BFPtr stokesBFMath = emptyBF;
+  // the tau equations define sigma = grad u
   // tau1 terms:
   stokesBFMath->addTerm(u1,tau1->div());
   stokesBFMath->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
@@ -219,6 +221,7 @@ void initStokesBilinearForm(BFPtr emptyBF, FunctionPtr mu) {
   stokesBFMath->addTerm(sigma22,tau2->y());
   stokesBFMath->addTerm(-u2hat, tau2->dot_normal());
   
+  // the v equations are the momentum equations
   // v1:
   stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
   stokesBFMath->addTerm(mu * sigma12,v1->dy());
@@ -231,6 +234,7 @@ void initStokesBilinearForm(BFPtr emptyBF, FunctionPtr mu) {
   stokesBFMath->addTerm( -p, v2->dy());
   stokesBFMath->addTerm( t2n, v2);
   
+  // the q equation is the conservation of mass
   // q:
   stokesBFMath->addTerm(-u1,q->dx()); // (-u, grad q)
   stokesBFMath->addTerm(-u2,q->dy());
@@ -355,7 +359,7 @@ int main(int argc, char *argv[]) {
   double dt = 0.01;
   double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
 //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
-  double eps = 1.0/4.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool enforceLocalConservation = false;
@@ -364,6 +368,7 @@ int main(int argc, char *argv[]) {
   bool useMumps = false;
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
+  bool usePicardIteration = true; // instead of newton-raphson
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order
   
@@ -424,13 +429,17 @@ int main(int argc, char *argv[]) {
   BFPtr stokesBFMath = Teuchos::rcp(new BF(varFactory));
   initStokesBilinearForm( stokesBFMath, mu );
 
-  initRHSNavierStokes( rhs, stokesBFMath, mu, solution );
+  if ( ! usePicardIteration ) { // Picard solves not for increments, but successive full solutions
+    initRHSNavierStokes( rhs, stokesBFMath, mu, solution );
+  }
   
-  // add time marching terms for momentum equations (v1 and v2):
-  FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
-  // LHS gets u_inc / dt:
-  navierStokesBF->addTerm(-dt_inv * u1, v1);
-  navierStokesBF->addTerm(-dt_inv * u2, v2);
+  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
+    // add time marching terms for momentum equations (v1 and v2):
+    FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
+    // LHS gets u_inc / dt:
+    navierStokesBF->addTerm(-dt_inv * u1, v1);
+    navierStokesBF->addTerm(-dt_inv * u2, v2);
+  }
   
   if (rank==0) {
     cout << "********** STOKES BF **********\n";
@@ -531,8 +540,24 @@ int main(int argc, char *argv[]) {
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1) );
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2) );
   
-  bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1_prev);
-  bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2_prev);
+  FunctionPtr u1hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat) );
+  FunctionPtr u2hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2hat) );
+    
+  if ( ! usePicardIteration ) {
+//    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
+//    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
+  // as long as we don't subtract from the RHS, I think the following is actually right:
+    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+  } else {
+//    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+//    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+    // experiment:
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(u1hat==u1_0,entireBoundary);
+    pc->addConstraint(u2hat==u2_0,entireBoundary);
+    solnIncrement->setFilter(pc);
+  }
   bc->addZeroMeanConstraint(p);
   
   /////////////////// SOLVE OVERKILL //////////////////////
@@ -598,6 +623,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
                                                                                                stepSize, nonlinearRelativeEnergyTolerance));
+  
+  solveStrategy->setUsePicardIteration(usePicardIteration);
   
   // run some refinements on the initial linear problem
 //  int numInitialRefs = 5;
@@ -692,9 +719,11 @@ int main(int argc, char *argv[]) {
 //  }
   
   double energyErrorTotal = solution->energyErrorTotal();
+  double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
+    cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
   
   FunctionPtr u1_sq = u1_prev * u1_prev;

@@ -358,7 +358,10 @@ const FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int 
 }
 
 BasisCachePtr BasisCache::getSideBasisCache(int sideOrdinal) {
-  return _basisCacheSides[sideOrdinal];
+  if (sideOrdinal < _basisCacheSides.size() )
+    return _basisCacheSides[sideOrdinal];
+  else
+    return Teuchos::rcp((BasisCache *) NULL);
 }
 
 BasisCachePtr BasisCache::getVolumeBasisCache() {

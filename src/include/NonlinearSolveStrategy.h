@@ -15,8 +15,10 @@ class NonlinearSolveStrategy {
   Teuchos::RCP<NonlinearStepSize> _stepSize;
   Teuchos::RCP<Solution> _backgroundFlow, _solution;
   double _relativeEnergyTolerance;
+  bool _usePicardIteration; // instead of Newton-Raphson (will just do background = new at each step)
 public:
   NonlinearSolveStrategy(Teuchos::RCP<Solution> backgroundFlow, Teuchos::RCP<Solution> solution, Teuchos::RCP<NonlinearStepSize> stepSize, double relativeEnergyTolerance);
+  void setUsePicardIteration(bool value);
   void solve(bool printToConsole=false);
 };
 
