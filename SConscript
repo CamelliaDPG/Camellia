@@ -22,7 +22,7 @@ env.Append(LIBPATH = [Trilinos_Dir+'lib'])
 env.Append(LIBS = TrilinosLibs)
 
 # Mumps
-MumpsLibs = ['dmumps', 'mumps_common', 'pord', 'scalapack']
+MumpsLibs = ['dmumps', 'mumps_common', 'pord', 'scalapack-openmpi']
 env.Append(CPPPATH = [Mumps_Dir+'include', Mumps_Dir+'PORD/include'])
 env.Append(LIBPATH = [Mumps_Dir+'lib', Mumps_Dir+'PORD/lib', Scalapack_lib])
 env.Append(LIBS = MumpsLibs)
