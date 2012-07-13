@@ -69,11 +69,13 @@ void CondensationSolver::getDofIndices(){
     for (trialIt = trialIDs.begin();trialIt!=trialIDs.end();trialIt++){
       int trialID = *(trialIt);
       if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)){ 
-	elemFieldInds = elemTypePtr->trialOrderPtr->getDofIndices(trialID, 0); // 0 = side index
+	vector<int> fieldDofInds = elemTypePtr->trialOrderPtr->getDofIndices(trialID, 0); // 0 = side index
+	elemFieldInds.insert(elemFieldInds.end(), fieldDofInds.begin(), fieldDofInds.end()); 
       } else {
 	int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(trialID);
 	for (int sideIndex = 0;sideIndex<numSides;sideIndex++){
-	  elemFluxInds = elemTypePtr->trialOrderPtr->getDofIndices(trialID, sideIndex); 
+	  vector<int> fluxDofInds = elemTypePtr->trialOrderPtr->getDofIndices(trialID, sideIndex);
+	  elemFluxInds.insert(elemFluxInds.end(), fluxDofInds.begin(), fluxDofInds.end()); 
 	}
       }
     } 
@@ -121,24 +123,38 @@ int CondensationSolver::solve(){
   //  Teuchos::RCP<Epetra_RowMatrix> A = problem().GetMatrix();
   Epetra_RowMatrix* stiffMat = problem().GetMatrix();
   Epetra_MultiVector* rhs = problem().GetRHS();
+  Epetra_MultiVector* lhs = problem().GetLHS();
 
   // create reduced matrix 
   int numGlobalFluxDofs = _allFluxInds.size();
   set<int> globalIndsForPartition = _mesh->globalDofIndicesForPartition(rank); 
   // TODO: REMOVE field inds from above set
+  set<int> globalFluxIndsForPartition;
+  vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
+  vector< ElementPtr >::iterator elemIt;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*(elemIt))->cellID();
+    vector<int> fluxInds = _GlobalFluxInds[cellID];
+    vector<int>::iterator indIt;
+    for (indIt = fluxInds.begin(); indIt != fluxInds.end(); indIt++){
+      int ind = (*indIt);
+      const bool isInPartition = globalIndsForPartition.find(ind) != globalIndsForPartition.end();
+      if (isInPartition){
+	globalFluxIndsForPartition.insert(ind);
+      }
+    }
+  }
+ 
 
-  Epetra_Map partMap = _solution->getPartitionMap(rank, globalIndsForPartition, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
+  Epetra_Map partMap = _solution->getPartitionMap(rank, globalFluxIndsForPartition, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
   Epetra_FECrsMatrix Aflux(Copy, partMap, numGlobalFluxDofs); // reduced matrix - soon to be schur complement
   Epetra_FEVector bflux(partMap);
-
 
   // get dense solver for distributed portion
   Epetra_SerialDenseSolver denseSolver;
 
   // modify stiffness/load vector
-  vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
-  vector< ElementPtr >::iterator elemIt;
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+  for (elemIt=elems.begin(); elemIt!=elems.end(); elemIt++){
     int cellID = (*(elemIt))->cellID();
     vector<int> fluxInds = _GlobalFluxInds[cellID];
     vector<int> fieldInds = _GlobalFieldInds[cellID];
@@ -180,12 +196,13 @@ int CondensationSolver::solve(){
     }
 
     // NOTE: THIS IS NOT THE DISTRIBUTED VERSION
-    //    Aflux.SumIntoGlobalValues(numFluxDofs,&fluxIndsFC(0),numDofs,&fluxIndsFC(0), A);
-    //    bflux.SumIntoGlobalValues(numFluxDofs,&fluxIndsFC(0), g);
+    Aflux.SumIntoGlobalValues(numFluxDofs,&fluxIndsFC(0),numFluxDofs,&fluxIndsFC(0), &A(0,0));
+    bflux.SumIntoGlobalValues(numFluxDofs,&fluxIndsFC(0), &g(0,0));
   }
 
   Aflux.GlobalAssemble();
   bflux.GlobalAssemble();
+
   Epetra_FEVector lhsVector(partMap, true);
   Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&Aflux, &lhsVector, &bflux)); 
 
@@ -205,25 +222,31 @@ int CondensationSolver::solve(){
     Epetra_SerialDenseMatrix B = getSubMatrix(stiffMat,fieldInds,fluxInds);  // field/flux submat
     Epetra_SerialDenseMatrix f_mod = getSubVector(rhs,fieldInds);           // field RHS
     Epetra_SerialDenseMatrix Dinv_rhs(numFieldDofs,1);     // scratch storage for field solutions
-    Epetra_SerialDenseMatrix y(numFluxDofs,1); // = getSubVector of flux solution y
+    Epetra_SerialDenseMatrix y = getSubVector(&lhsVector,fluxInds); // sub vector of flux solution y in lhsVector
 
     f_mod.Multiply('N','N',-1.0,B,y,1.0); // x := inv(D)*(f - B*y)
     denseSolver.SetMatrix(D);
     denseSolver.SetVectors(Dinv_rhs,f_mod); 
-    
+    bool equilibrated = false;
+    if ( denseSolver.ShouldEquilibrate() ) {
+      denseSolver.EquilibrateMatrix();
+      denseSolver.EquilibrateRHS();
+      equilibrated = true;
+    }    
+    denseSolver.Solve();    
+    if (equilibrated) {
+      denseSolver.UnequilibrateLHS();
+    }
+
     FieldContainer<double> fieldDofs(numFieldDofs);
     for (unsigned int i=0;i<numFieldDofs;++i){
       fieldDofs(i) = Dinv_rhs(i,1); 
-    }
+    }        
     
-    vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
-    FieldContainer<double> solnCoeffsToSet;
-    for (int trialID = 0;trialID<trialIDs.size();++trialID){
-      // TODO - set field degrees of freedom in lhsVector
-      _solution->setSolnCoeffsForCellID(solnCoeffsToSet, cellID, trialID, 0);
-    }
   }
-  
+
+  // do I need to global assemble here?
+
   return 0;
 }
 
