@@ -852,15 +852,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
   //  solution->setReportTimingResults(true); // print out timing 
 
-  // enforce local conservation of fluxes  
-  bool enforceLocalConservation = false;
-  if (enforceLocalConservation){ 
-    solution->lagrangeConstraints()->addConstraint(F1nhat == zero);  
-    solution->lagrangeConstraints()->addConstraint(F2nhat == zero);
-    solution->lagrangeConstraints()->addConstraint(F3nhat == zero);
-    solution->lagrangeConstraints()->addConstraint(F4nhat == zero);
-  }
-
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
   mesh->registerSolution(prevTimeFlow); // u_t(i-1)
@@ -875,10 +866,6 @@ int main(int argc, char *argv[]) {
 
   int numTimeSteps = 150; // max time steps
   int numNRSteps = 1;
-  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
-  solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
-                                                           nonlinearRelativeEnergyTolerance));
   
   ////////////////////////////////////////////////////////////////////
   // SOLVE 
@@ -886,39 +873,49 @@ int main(int argc, char *argv[]) {
   double dt = .1;
   //  FunctionPtr Dt = Teuchos::rcp(new ScalarParamFunction(dt));    
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
-  if (numTimeSteps>0){
-    if (rank==0){
-      cout << "Timestep dt = " << dt << endl;
-    }
-
-    // needs prev time residual (u_t(i-1) - u_t(i))/dt
-    FunctionPtr u1sq_pt = u1_prev_time*u1_prev_time;
-    FunctionPtr u2sq_pt = u2_prev_time*u2_prev_time;
-    FunctionPtr iota_pt = cv*T_prev_time; // internal energy
-    FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
-    FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
-
-    // mass 
-    bf->addTerm(rho,invDt*v1);    
-    FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
-    rhs->addTerm( (time_res_1 * invDt) * v1);
-    
-    // x momentum
-    bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
-    FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
-    rhs->addTerm((time_res_2*invDt) * v2);
-
-    // y momentum
-    bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
-    FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
-    rhs->addTerm((time_res_3 *  invDt ) *v3);
-
-    // energy  
-    bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
-    FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
-    rhs->addTerm((time_res_4 * invDt) * v4);    
+  if (rank==0){
+    cout << "Timestep dt = " << dt << endl;
   }
 
+  // needs prev time residual (u_t(i-1) - u_t(i))/dt
+  FunctionPtr u1sq_pt = u1_prev_time*u1_prev_time;
+  FunctionPtr u2sq_pt = u2_prev_time*u2_prev_time;
+  FunctionPtr iota_pt = cv*T_prev_time; // internal energy
+  FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
+  FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
+
+  // mass 
+  bf->addTerm(rho,invDt*v1);    
+  FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
+  rhs->addTerm( (time_res_1 * invDt) * v1);
+    
+  // x momentum
+  bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
+  FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
+  rhs->addTerm((time_res_2*invDt) * v2);
+
+  // y momentum
+  bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
+  FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
+  rhs->addTerm((time_res_3 *  invDt ) *v3);
+
+  // energy  
+  bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
+  FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
+  rhs->addTerm((time_res_4 * invDt) * v4);    
+
+  // enforce local conservation of fluxes  
+  bool enforceLocalConservation = true;
+  if (enforceLocalConservation){ 
+    if (rank==0){
+      cout << "Enforcing local conservation" << endl;
+    }
+    solution->lagrangeConstraints()->addConstraint(F1nhat == (time_res_1 * invDt));  
+    solution->lagrangeConstraints()->addConstraint(F2nhat == (time_res_2 * invDt));
+    solution->lagrangeConstraints()->addConstraint(F3nhat == (time_res_3 * invDt));
+    solution->lagrangeConstraints()->addConstraint(F4nhat == (time_res_4 * invDt));
+  }
+ 
   if (rank==0){
     cout << "doing timesteps" << endl;
   }
