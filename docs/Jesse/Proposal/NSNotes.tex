@@ -223,7 +223,7 @@ Additionally, inflow boundary conditions are applied not directly to the trace v
 
 \subsection{Numerical experiments: Carter flat plate}
 
-For our solver, we use a standard pseudo-time solver and greedy refinement scheme. Though we have not yet implemented adaptive timestepping, we are able to take large enough uniform timesteps over a coarse mesh such that convergence is order-of-magnitude comparable to the convergence of a damped Newton method. 
+For our solver, we use a standard pseudo-time solver and greedy refinement scheme. Though we have not yet implemented adaptive timestepping, we are able to take large enough uniform timesteps over a coarse mesh such that convergence occurs sufficiently quickly.
 
 The numerical parameters used are as follows:
 \begin{itemize}
@@ -256,37 +256,37 @@ We initialize our solution to
 \]
 which is consistent with what was done in Demkowicz and Oden in \cite{Demkowicz:1990:NFE:112271.112276}. Stresses are set uniformly to zero. 
 
-We take the computational domain to be $\Omega = [0,2]\times[0,1]$. For $\Reyn = 1000$, we experimented with initial meshes from size 4 by 8 to 8 by 16 elements. We note that, on a very coarse initial mesh (4 by 8 elements), the convergence of the pseudo-timestep stagnates at around a transient residual of $1e-6$; however, if we lower the tolerance only for the first step and continued with the adaptive algorithm, the solution converges below $\epsilon_t$ for all refined meshes. 
+We take the computational domain to be $\Omega = [0,2]\times[0,1]$. We begin with a mesh of 8 by 16 elements. Under Dirichlet wall boundary conditions for all 3 traces $u_1$, $u_2$, and $T$, the solution develops a singularity in the density $\rho$ at the plate beginning, and both $T$ and $u_1$ form a boundary layer along the leading edge of the plate. Due to the presence of the singularity, the solution for $\rho$ is scaled such that the features of the solution away from the singularity are visible in Figure~\ref{fig:rhoScaled}.
 
 \begin{figure}[!h]
 \centering
-\subfigure[$\rho$]{\includegraphics[scale=.42]{figs/Re1000p2/rho.pdf}}
-\subfigure[$u_1$]{\includegraphics[scale=.42]{figs/Re1000p2/u1.pdf}}
-\subfigure[$u_2$]{\includegraphics[scale=.42]{figs/Re1000p2/u2.pdf}}
-\subfigure[$T$]{\includegraphics[scale=.42]{figs/Re1000p2/T.pdf}}
-\caption{Solutions after six refinements for $p=2$ and $\Reyn = 1000$.}
+\subfigure[$\rho$]{\includegraphics[scale=.21]{figs/Re1000p2/rhoUnscaled.png}}
+\subfigure[$u_1$]{\includegraphics[scale=.21]{figs/Re1000p2/u1.png}}
+\subfigure[$u_2$]{\includegraphics[scale=.21]{figs/Re1000p2/u2.png}}
+\subfigure[$T$]{\includegraphics[scale=.21]{figs/Re1000p2/T.png}}
+\caption{Solutions after seven refinements for $p=2$ and $\Reyn = 1000$.}
 \label{fig:Re500}
 \end{figure}
 
 \begin{figure}[!h]
 \centering
-\subfigure[$\rho$]{\includegraphics[scale=.4]{figs/Re1000p2/rhozoom.pdf}}
-\subfigure[$u_1$]{\includegraphics[scale=.4]{figs/Re1000p2/u1zoom.pdf}}
-\subfigure[$u_2$]{\includegraphics[scale=.4]{figs/Re1000p2/u2zoom.pdf}}
-\subfigure[$T$]{\includegraphics[scale=.4]{figs/Re1000p2/Tzoom.pdf}}
+\subfigure[$\rho$]{\includegraphics[scale=.25]{figs/Re1000p2/rhoScaled.png}}
+\subfigure[Mesh]{\includegraphics[scale=.57]{figs/Re1000p2/mesh6.png}}
+\caption{Rescaled solution for $\rho$ in the range $[0,3]$ and adaptive mesh after seven refinements.}
+\label{fig:rhoScaled}
+\end{figure}
+
+\begin{figure}[!h]
+\centering
+\subfigure[$\rho$]{\includegraphics[scale=.23]{figs/Re1000p2/rhoUnscaledzoom.png}}
+\subfigure[$u_1$]{\includegraphics[scale=.23]{figs/Re1000p2/u1zoom.png}}
+\subfigure[$u_2$]{\includegraphics[scale=.23]{figs/Re1000p2/u2zoom.png}}
+\subfigure[$T$]{\includegraphics[scale=.23]{figs/Re1000p2/Tzoom.png}}
 \caption{Zoom of solutions at the beginning of the plate for $p=2$ and $\Reyn = 1000$.}
-\label{fig:Re500}
 \end{figure}
-
-%For $p=2$, after six refinements, the energy error is 0.000410347. After refinement, mesh has 1083 elements and 143910 global dofs. 
 
 \begin{figure}[!h]
 \centering
-%\subfigure[$p=2$]{\includegraphics[scale=.5]{figs/Re1000p2/mesh.pdf}}
-%\subfigure[$p=3$]{\includegraphics[scale=.5]{figs/Re1000p3/mesh.pdf}}
-\includegraphics[scale=.55]{figs/Re1000p2/mesh.pdf}
-\caption{Adaptive mesh after six refinements for $p=2$
-% and five refinements for $p=3$ 
-with $\Reyn = 1000$.}
-\label{fig:MeshRe1000}
+\includegraphics[scale=.45]{figs/Re1000p2/heatflux.png}
+\caption{Heat flux at the bottom boundary.}
 \end{figure}
