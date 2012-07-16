@@ -7,8 +7,8 @@ b_u(\Delta u,v) = l(v) - b(u,v),
 \]
 where $b_u(\Delta u,v)$ is the linearization of $b(u,v)$ with respect to $u$.  Let $B(u)$ and $B_u\Delta u$ be the variational operators associated with $b(u,v)$ and $b_u(\Delta u,v)$, respectively.  We define two additional measures: 
 \begin{align*}
-\|\Delta u\|_E \coloneqq &= \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V = \sup_{v\in V} \frac{b_u(\Delta u,v)}{\nor{v}_V}\\
-\nor{R(u)}_E \coloneqq &= \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V = \sup_{v\in V} \frac{b(u,v)-l(v)}{\nor{v}_V}
+\|\Delta u\|_E \coloneqq & \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V = \sup_{v\in V} \frac{b_u(\Delta u,v)}{\nor{v}_V}\\
+\nor{R(u)}_E \coloneqq & \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V = \sup_{v\in V} \frac{b(u,v)-l(v)}{\nor{v}_V}
 \end{align*}
 These two quantities are measures of the linearized update $\Delta u$ and the nonlinear residual in the appropriate norm in the dual space $V'$.  The first will be used to measure convergence of a nonlinear solution scheme to a stable discrete solution, while the second will be used to assess the convergence of the discrete solution to the continuous solution.  
 
