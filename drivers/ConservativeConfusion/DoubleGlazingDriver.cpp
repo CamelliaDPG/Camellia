@@ -19,7 +19,8 @@
 bool enforceLocalConservation = true;
 double epsilon = 1e-2;
 int numRefs = 12;
-double ramp = epsilon;
+double ramp = sqrt(epsilon);
+// double ramp = 1./64.;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -33,7 +34,7 @@ public:
   double value(double x, double y, double h) {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/h, 1.0);
+    double scaling = min(_epsilon/h*h, 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
@@ -93,7 +94,7 @@ class MassFluxParity : public Function
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) *= parities(sideIndex);
+          // values(cellIndex, ptIndex) *= parities(sideIndex);
         }
       }
     }
@@ -356,9 +357,9 @@ int main(int argc, char *argv[]) {
     cout << "total mass flux: " << totalMassFlux << endl;
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
-    solution->writeToVTK("confusion.vtu", 3);
-    
-    cout << "wrote files: u.m, u_hat.dat\n";
+    stringstream outfile;
+    outfile << "confusion_" << epsilon << ".vtu";
+    solution->writeToVTK(outfile.str(), 3);
   }
   
   return 0;
