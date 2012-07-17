@@ -33,7 +33,7 @@ public:
   double value(double x, double y, double h) {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/h, 1.0);
+    double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
@@ -100,16 +100,16 @@ class MassFluxParity : public Function
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) *= parities(sideIndex);
+          // values(cellIndex, ptIndex) *= parities(sideIndex);
         }
       }
     }
 };
 
 // boundary value for u
-class U_ltb : public Function {
+class U_exact : public Function {
   public:
-    U_ltb() : Function(0) {}
+    U_exact() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -234,9 +234,9 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
   SpatialFilterPtr tbBoundary = Teuchos::rcp( new TopBottomBoundary );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  FunctionPtr u_ltb = Teuchos::rcp( new U_ltb );
+  FunctionPtr u_ltb = Teuchos::rcp( new U_exact );
   FunctionPtr u_r = Teuchos::rcp( new U_r );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u_ltb);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, beta*n*u_ltb);
   bc->addDirichlet(beta_n_u_minus_sigma_n, tbBoundary, beta*n*u_ltb);
   bc->addDirichlet(uhat, rBoundary, u_r);
   
@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;
   
   int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
+  int horizontalCells = 2, verticalCells = 2;
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
@@ -273,12 +273,27 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.3; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
+  ofstream convOut;
+  stringstream convOutFile;
+  convOutFile << "erickson_conv_" << epsilon <<".txt";
+  convOut.open(convOutFile.str().c_str());
+  u_ltb->writeValuesToMATLABFile(mesh, "u_exact.m");
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
+    FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+    FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
+    FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
+    FunctionPtr u_diff = (u_soln - u_ltb)*(u_soln - u_ltb);
+    double L2_error = sqrt(u_diff->integrate(mesh));
+    double energy_error = solution->energyErrorTotal();
+    convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
+
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
   solution->solve(false);
+
+  convOut.close();
 
   // Check conservation by testing against one
   VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
@@ -338,9 +353,9 @@ int main(int argc, char *argv[]) {
     cout << "total mass flux: " << totalMassFlux << endl;
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
-    solution->writeToVTK("confusion.vtu", 3);
-    
-    cout << "wrote files: u.m, u_hat.dat\n";
+    stringstream outfile;
+    outfile << "erickson_" << epsilon << ".vtu";
+    solution->writeToVTK(outfile.str(), 3);
   }
   
   return 0;
