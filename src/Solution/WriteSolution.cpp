@@ -1,20 +1,71 @@
 #include "Solution.h"
 
-#include "vtkVersion.h"
-// #define USE_VTK
+#define USE_VTK
 #ifdef USE_VTK
+#include "vtkPointData.h"
 #include "vtkFloatArray.h"
+#include "vtkUnstructuredGrid.h"
+#include "vtkXMLUnstructuredGridWriter.h"
+#include "vtkCellType.h"
 
 // Write solution to unstructured VTK format
 void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 {
+  vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
+  // vtkUnstructuredGrid* trace_ug = vtkUnstructuredGrid::New();
+  vector<vtkFloatArray*> fieldData;
+  // vector<vtkFloatArray*> traceData;
+  vtkPoints* points = vtkPoints::New();
+  // vtkPoints* trace_points = vtkPoints::New();
+
+  // Get trialIDs
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector<int> fieldTrialIDs;
+  // vector<int> traceTrialIDs;
+
   int spaceDim = 2; // TODO: generalize to 3D...
-  int num1DPts = 2;
+  int totalCells = _mesh->activeElements().size();
+  int totalSubCells = refinementLevel  * refinementLevel * totalCells;
+  ug->Allocate(totalSubCells, totalSubCells);
+  // trace_ug->Allocate(totalCells, totalCells);
+  int numFieldVars = 0;
+  int numTraceVars = 0;
+  for (unsigned int i=0; i < trialIDs.size(); i++)
+  {
+    if (!(_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i])))
+    {
+      numFieldVars++;
+      fieldTrialIDs.push_back(trialIDs[i]);
+      fieldData.push_back(vtkFloatArray::New());
+    }
+    else
+    {
+      // numTraceVars++;
+      // traceTrialIDs.push_back(trialIDs[i]);
+      // traceData.push_back(vtkFloatArray::New());
+    }
+  }
+
+  for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
+  {
+    fieldData[varIdx]->SetNumberOfComponents(1);
+    fieldData[varIdx]->SetName(_mesh->bilinearForm()->trialName(fieldTrialIDs[varIdx]).c_str());
+  }
+  // for (int varIdx = 0; varIdx < numTraceVars; varIdx++)
+  // {
+  //   traceData[varIdx]->SetNumberOfComponents(1);
+  //   traceData[varIdx]->SetName(_mesh->bilinearForm()->trialName(traceTrialIDs[varIdx]).c_str());
+  // }
+
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
-  // Loop through quads, triangles, etc
+
+  unsigned int total_vertices = 0;
+  // unsigned int total_trace_vertices = 0;
+
+  // Loop through Quads, Triangles, etc
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
-  { 
+  {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -34,30 +85,201 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
       cellIDs.push_back(cellID);
     }
 
+    int num1DPts = refinementLevel+1;
     int numPoints = num1DPts * num1DPts;
+    int numTracePoints = 4;
     FieldContainer<double> refPoints(numPoints,spaceDim);
-    for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++)
-    {
-      for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++)
-      {
-        int pointIndex = yPointIndex*num1DPts + 2*xPointIndex;
+    for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+        int pointIndex = xPointIndex*num1DPts + yPointIndex;
         double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
         double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
         refPoints(pointIndex,0) = x;
         refPoints(pointIndex,1) = y;
       }
     }
+    // int numPoints = 9;
+    // FieldContainer<double> refPoints(numPoints,spaceDim);
+    // refPoints(0, 0) = -1.0; refPoints(0, 1) = -1.0;
+    // refPoints(1, 0) =  1.0; refPoints(1, 1) = -1.0;
+    // refPoints(2, 0) =  1.0; refPoints(2, 1) =  1.0;
+    // refPoints(3, 0) = -1.0; refPoints(3, 1) =  1.0;
+    // refPoints(4, 0) =  0.0; refPoints(4, 1) = -1.0;
+    // refPoints(5, 0) =  1.0; refPoints(5, 1) =  0.0;
+    // refPoints(6, 0) =  0.0; refPoints(6, 1) =  1.0;
+    // refPoints(7, 0) = -1.0; refPoints(7, 1) =  0.0;
+    // refPoints(8, 0) =  0.0; refPoints(8, 1) =  0.0;
+
+    FieldContainer<double> refTracePoints(numTracePoints,spaceDim);
+    refTracePoints(0, 0) = -1.0; refTracePoints(0, 1) = -1.0;
+    refTracePoints(1, 0) =  1.0; refTracePoints(1, 1) = -1.0;
+    refTracePoints(2, 0) =  1.0; refTracePoints(2, 1) =  1.0;
+    refTracePoints(3, 0) = -1.0; refTracePoints(3, 1) =  1.0;
     
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
-    FieldContainer<double> computedValues(numCells,numPoints);
+    const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+    // basisCache->setRefCellPoints(refTracePoints);
+    // const FieldContainer<double> *tracePoints = &basisCache->getPhysicalCubaturePoints();
 
-    // for (int cellIndex=0; cellIndex<numCells; cellIndex++ ) {
-    //   for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
-    
-    // this->solutionValues(computedValues, trialID, basisCache);
-    // const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+    vector< FieldContainer<double> > computedValues;
+    vector< FieldContainer<double> > computedTraceValues;
+    computedValues.resize(numFieldVars);
+    computedTraceValues.resize(numTraceVars);
+    for (int i=0; i < numFieldVars; i++)
+    {
+      computedValues[i].resize(numCells, numPoints);
+      solutionValues(computedValues[i], fieldTrialIDs[i], basisCache);
+    }
+    // for (int i=0; i < numTraceVars; i++)
+    // {
+    //   computedTraceValues[i].resize(numCells, numTracePoints);
+    //   solutionValues(computedTraceValues[i], traceTrialIDs[i], basisCache);
+    // }
+
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
+    {
+      // vtkIdType cell[4] = {
+      //   total_trace_vertices,
+      //   total_trace_vertices+1,
+      //   total_trace_vertices+2,
+      //   total_trace_vertices+3
+      // };
+      // trace_ug->InsertNextCell((int)VTK_QUAD, 4, cell);
+
+      int subcellStartIndex = total_vertices;
+      for (int I=0; I < num1DPts-1; I++)
+      {
+        for (int J=0; J < num1DPts-1; J++)
+        {
+          int ind1 = subcellStartIndex;
+          int ind2 = ind1 + num1DPts;
+          int ind3 = ind2 + 1;
+          int ind4 = ind1 + 1;
+          vtkIdType subCell[4] = {
+            ind1, ind2, ind3, ind4};
+          ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
+
+          subcellStartIndex++;
+        }
+        subcellStartIndex++;
+      }
+      // int subcellStartIndex = total_vertices;
+      // vtkIdType base = total_vertices;
+      // vtkIdType quadCell1[4] = {
+      //   base,
+      //   base+4,
+      //   base+8,
+      //   base+7
+      // };
+      // vtkIdType quadCell2[4] = {
+      //   base+4,
+      //   base+1,
+      //   base+5,
+      //   base+8
+      // };
+      // vtkIdType quadCell3[4] = {
+      //   base+7,
+      //   base+8,
+      //   base+6,
+      //   base+3
+      // };
+      // vtkIdType quadCell4[4] = {
+      //   base+8,
+      //   base+5,
+      //   base+2,
+      //   base+6
+      // };
+      // vtkIdType quadCell[8] = {
+      //   base,
+      //   base+1,
+      //   base+2,
+      //   base+3,
+      //   base+4,
+      //   base+5,
+      //   base+6,
+      //   base+7
+      // };
+      // vtkIdType triCell1[6] = {
+      //   base,
+      //   base+1,
+      //   base+2,
+      //   base+4,
+      //   base+5,
+      //   base+8
+      // };
+      // vtkIdType triCell2[6] = {
+      //   base,
+      //   base+2,
+      //   base+3,
+      //   base+8,
+      //   base+6,
+      //   base+7
+      // };
+      // ug->InsertNextCell((int)VTK_QUADRATIC_TRIANGLE, 6, triCell1);
+      // ug->InsertNextCell((int)VTK_QUADRATIC_TRIANGLE, 6, triCell2);
+      // ug->InsertNextCell((int)VTK_QUADRATIC_QUAD, 8, quadCell);
+      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell1);
+      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell2);
+      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell3);
+      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell4);
+
+      for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      {
+        points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
+                                (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
+        for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+        {
+          fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+        }
+        total_vertices++;
+      }
+      // for (int pointIndex=0; pointIndex < numTracePoints; pointIndex++)
+      // {
+      //   trace_points->InsertNextPoint((*tracePoints)(cellIndex, pointIndex, 0),
+      //                                 (*tracePoints)(cellIndex, pointIndex, 1), 0.0);
+      //   for (int varIdx=0; varIdx < numTraceVars; varIdx++)
+      //   {
+      //     traceData[varIdx]->InsertNextValue(computedTraceValues[varIdx](cellIndex, pointIndex));
+      //   }
+      //   total_trace_vertices++;
+      // }
+    }
   }
+  ug->SetPoints(points);
+  // trace_ug->SetPoints(trace_points);
+  points->Delete();
+  // trace_points->Delete();
+
+  for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+  {
+    ug->GetPointData()->AddArray(fieldData[varIdx]);
+    fieldData[varIdx]->Delete();
+  }
+  // for (int varIdx=0; varIdx < numTraceVars; varIdx++)
+  // {
+  //   trace_ug->GetPointData()->AddArray(traceData[varIdx]);
+  //   traceData[varIdx]->Delete();
+  // }
+
+  vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+  // vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
+  wr->SetInput(ug);
+  // trace_wr->SetInput(trace_ug);
+  ug->Delete();
+  // trace_ug->Delete();
+  wr->SetFileName((filePath+".vtu").c_str());
+  // trace_wr->SetFileName((filePath+"_trace.vtu").c_str());
+  // wr->SetDataModeToAscii();
+  wr->SetDataModeToBinary();
+  // trace_wr->SetDataModeToBinary();
+  // trace_wr->SetDataModeToAscii();
+  wr->Update();
+  // trace_wr->Update();
+  wr->Write();
+  // trace_wr->Write();
+  wr->Delete();
+  // trace_wr->Delete();
 }
 #else
 
@@ -66,8 +288,6 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 // Prefer the VTK version, it is cleaner and probably more efficient
 void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
 {
-  vtkVersion* version = vtkVersion::New();
-  cout << "VTK Version: " << version->GetVTKVersion() << endl;
   // Get trialIDs
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   vector<int> fieldTrialIDs;
@@ -236,116 +456,5 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
   fout << "</VTKFile>" << endl;
   fout.close();
 }
-
-#if 0
-// Write solution to new VTK format
-void Solution::writeToVTK(const string& filePath){
-
-  // Get number total number of vertices
-  vector< ElementPtr > elems = _mesh->activeElements();
-  vector< ElementPtr >::iterator elem_it;
-  unsigned int total_vertices = 0;
-  for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it){
-    total_vertices += _mesh->vertexIndicesForCell((*elem_it)->cellID()).size();
-  }
-  // Get number of cells
-  unsigned int total_cells = _mesh->activeElements().size();
-
-  ofstream fout(filePath.c_str());
-  fout << setprecision(15);
-  fout << "<VTKFile type=\"UnstructuredGrid\" version=\"0.1\" byte_order=\"BigEndian\">" << endl;
-  fout << "  <UnstructuredGrid>" << endl;
-  fout << "    <Piece NumberOfPoints=\"" << total_vertices << "\" "
-    << "NumberOfCells=\"" << total_cells << "\">" << endl;
-  fout << "      <Points>" << endl;
-  fout << "        <DataArray type=\"Float32\" NumberOfComponents=\"3\" "
-    << "Format=\"ascii\">" << endl;
-  // Loop over cells and print vertices
-  for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it)
-  {
-    FieldContainer< double > vertices;
-    _mesh->verticesForCell(vertices, (*elem_it)->cellID());
-    for (unsigned int v = 0; v < vertices.dimension(0); ++v)
-    {
-      fout << "          ";
-      for (unsigned int d = 0; d < vertices.dimension(1); ++d)
-        fout << vertices(v, d) << " ";
-      fout << "0" << endl;
-    }
-  }
-  fout << "        </DataArray>" << endl;
-  fout << "      </Points>" << endl;
-  fout << "      <Cells>" << endl;
-  fout << "        <DataArray type=\"Int32\" Name=\"connectivity\" Format=\"ascii\">" << endl;
-  unsigned int connectivity_count = 0;
-  for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it)
-  {
-    FieldContainer< double > vertices;
-    _mesh->verticesForCell(vertices, (*elem_it)->cellID());
-    fout << "          ";
-    for (unsigned int v = 0; v < vertices.dimension(0); ++v)
-    {
-      fout << connectivity_count++ << " ";
-    }
-    fout << endl;
-  }
-  fout << "        </DataArray>" << endl;
-  fout << "        <DataArray type=\"Int32\" Name=\"offsets\" Format=\"ascii\">" << endl;
-  fout << "          ";
-  unsigned int offset_count = 0;
-  for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it){
-    offset_count += _mesh->vertexIndicesForCell((*elem_it)->cellID()).size();
-    fout << offset_count << " ";
-  }
-  fout << endl;
-  fout << "        </DataArray>" << endl;
-  fout << "        <DataArray type=\"Int32\" Name=\"types\" Format=\"ascii\">" << endl;
-  fout << "          ";
-  for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it){
-    unsigned int num_verts = _mesh->vertexIndicesForCell((*elem_it)->cellID()).size();
-    unsigned int type = 0;
-    if (num_verts == 4)
-      type = 9;
-    else if (num_verts == 3)
-      type = 5;
-    fout << type << " ";
-  }
-  fout << endl;
-  fout << "        </DataArray>" << endl;
-  fout << "      </Cells>" << endl;
-  fout << "      <PointData Scalars=\"scalars\">" << endl;
-  vector<int> tIDs = _mesh->bilinearForm()->trialIDs();
-  for (int i=0; i != tIDs.size(); i++)
-  {
-    if (!(_mesh->bilinearForm()->isFluxOrTrace(tIDs[i])))
-    {
-      fout << "        <DataArray type=\"Float32\" Name=\""
-        << _mesh->bilinearForm()->trialName(tIDs[i]) << "\" " 
-        << "NumberOfComponents=\"1\" Format=\"ascii\">" << endl;
-      // Loop over cells and print values
-      for (elem_it = elems.begin(); elem_it != elems.end(); ++elem_it)
-      {
-        // FieldContainer< double > vertices;
-        // _mesh->verticesForCell(vertices, (*elem_it)->cellID());
-        // FieldContainer< double > values;
-        // solutionValues(values, tIDs[i], vertices);
-        // for (unsigned int v = 0; v < values; ++v)
-        // {
-        //   fout << "          ";
-        //   for (unsigned int d = 0; d < vertices.dimension(1); ++d)
-        //     fout << vertices(v, d) << " ";
-        //   fout << "0" << endl;
-        // }
-      }
-      fout << "        </DataArray>" << endl;
-    }
-  }
-  fout << "      </PointData>" << endl;
-  fout << "    </Piece>" << endl;
-  fout << "  </UnstructuredGrid>" << endl;
-  fout << "</VTKFile>" << endl;
-  fout.close();
-}
-#endif
 
 #endif
