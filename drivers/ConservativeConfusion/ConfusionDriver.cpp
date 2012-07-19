@@ -16,6 +16,9 @@
 #else
 #endif
 
+double epsilon = 1e-2;
+double numRefs = 6;
+
 bool enforceLocalConservation = true;
 
 typedef Teuchos::RCP<IP> IPPtr;
@@ -30,7 +33,7 @@ public:
   double value(double x, double y, double h) {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/h, 1.0);
+    double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
@@ -91,7 +94,7 @@ class MassFluxParity : public Function
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) *= parities(sideIndex);
+          // values(cellIndex, ptIndex) *= parities(sideIndex);
         }
       }
     }
@@ -174,13 +177,11 @@ int main(int argc, char *argv[]) {
   beta_const.push_back(2.0);
   beta_const.push_back(1.0);
   
-  double eps = 1e-2;
-  
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / eps, tau->x());
-  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(sigma1 / epsilon, tau->x());
+  confusionBF->addTerm(sigma2 / epsilon, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(-uhat, tau->dot_normal());
   
@@ -202,17 +203,20 @@ int main(int argc, char *argv[]) {
   // quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP);
   qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / eps + v->grad() );
+  qoptIP->addTerm( tau / epsilon+ v->grad() );
   qoptIP->addTerm( beta_const * v->grad() - tau->div() );
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon
+) ); 
   // robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(eps) * v->grad() );
+  robIP->addTerm( sqrt(epsilon
+) * v->grad() );
   robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+  robIP->addTerm( ip_scaling/sqrt(epsilon
+) * tau );
   if (enforceLocalConservation)
     robIP->addZeroMeanTerm( v );
   
@@ -267,8 +271,6 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  int numRefs = 6;
-    
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
     refinementStrategy.refine(rank==0); // print to console on rank 0
@@ -334,9 +336,9 @@ int main(int argc, char *argv[]) {
     cout << "total mass flux: " << totalMassFlux << endl;
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
-    solution->writeToVTK("confusion.vtu", 3);
-    
-    cout << "wrote files: u.m, u_hat.dat\n";
+    stringstream outfile;
+    outfile << "confusion" << epsilon;
+    solution->writeToVTK(outfile.str(), 3);
   }
   
   return 0;
