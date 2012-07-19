@@ -49,6 +49,8 @@ static const double YTOP = 1.0;
 
 using namespace std;
 
+// ===================== Mesh functions ====================
+
 class MeshInfo {
   MeshPtr _mesh;
 public:
@@ -88,6 +90,8 @@ public:
     return minMeasure;
   }
 };
+
+// ===================== Helper functions ====================
 
 class ScalarParamFunction : public Function {
   double _a;
@@ -154,7 +158,6 @@ public:
   }
 };
 
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:
@@ -168,6 +171,8 @@ public:
     return sqrt(scaling);
   }
 };
+
+// ===================== Spatial filter boundary functions ====================
 
 class OutflowBoundary : public SpatialFilter {
 public:
@@ -215,25 +220,25 @@ public:
   }  
 };
 
-class MassFluxParity : public Function 
+class FluxParity : public Function 
 {
 private:
-  FunctionPtr _massFlux;
+  FunctionPtr _flux;
   Teuchos::RCP<Mesh> _mesh;
 public:
-  MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
-								   _massFlux(massFlux), _mesh(mesh) {}
+  FluxParity(FunctionPtr Flux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
+							   _flux(Flux), _mesh(mesh) {}
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     vector<int> cellIDs = basisCache->cellIDs();
     int sideIndex = basisCache->getSideIndex();
-    _massFlux->values(values, basisCache);
+    _flux->values(values, basisCache);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	values(cellIndex, ptIndex) *= parities(sideIndex);
+	//	values(cellIndex, ptIndex) *= parities(sideIndex);
       }
     }
   }
@@ -249,7 +254,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 3; // for tests
+  int pToAdd = 5; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double Re = 1e3;
@@ -650,14 +655,42 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // DEFINE INNER PRODUCT
   ////////////////////////////////////////////////////////////////////
-  // function to scale the squared guy by epsilon/h
-  //  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  
+  // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
 
-   IPPtr ip = Teuchos::rcp( new IP );
-    
+  IPPtr ip = Teuchos::rcp( new IP );
+
+  ////////////////////////////////////////////////////////////////////
   // Rescaled L2 portion of TAU - has Re built into it
+  ////////////////////////////////////////////////////////////////////
+
+  sparseFxnMatrix sumTau; // maps from trialID and testID to a VECTOR valued bit
+  sparseFxnMatrix::iterator sumTauIt;
+  map<int, LinearTermPtr > sumTauTest; // maps from trialID to dual test portion 
+  map<int, LinearTermPtr >::iterator sumTauTestIt;
+  
+  // initialize sum - a sum of test fxns corresp to components and each trial ID
+  for (xyIt = eps_visc.begin();xyIt!=eps_visc.end();xyIt++){
+    int component = xyIt->first;
+    sparseFxnMatrix A = xyIt->second;
+    sparseFxnMatrix::iterator testIt;
+    for (testIt = A.begin();testIt!=A.end();testIt++){
+      int testID = testIt->first;      
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;   
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;	
+	if (component==x_comp){
+	  sumTau[trialID][testID] = e1*zero + e2*zero;
+	}else if (component==y_comp){
+	  sumTau[trialID][testID] = e1*zero + e2*zero;
+	}
+	sumTauTest[trialID] = Teuchos::rcp(new LinearTerm);
+      }
+    }
+  }
+
+  // essentially builds adjoint matrix bit
   for (xyIt = eps_visc.begin();xyIt!=eps_visc.end();xyIt++){
     int component = xyIt->first;
     sparseFxnMatrix A = xyIt->second;
@@ -665,20 +698,108 @@ int main(int argc, char *argv[]) {
     for (testIt = A.begin();testIt!=A.end();testIt++){
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;
+      sparseFxnVector::iterator trialIt;   
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;
+	int trialID = trialIt->first;      
 	FunctionPtr trialWeight = trialIt->second;
 	if (component==x_comp){
-	  ip->addTerm(ReScaling*trialWeight*TAU[testID]->x());
-	} else if (component==y_comp){
-	  ip->addTerm(ReScaling*trialWeight*TAU[testID]->y());
+	  sumTau[trialID][testID] = sumTau[trialID][testID] + trialWeight*e1;
+	} else if (component == y_comp){
+	  sumTau[trialID][testID] = sumTau[trialID][testID] + trialWeight*e2;
 	}
+      }
+    }
+  }  
+
+  // builds LinearTerm sum - the dual test portion 
+  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
+  for (sumTauIt = sumTau.begin();sumTauIt!=sumTau.end();sumTauIt++){
+    int trialID = sumTauIt->first;
+    map<int, FunctionPtr> column = sumTauIt->second;
+    map<int, FunctionPtr>::iterator colIt;    
+    for (colIt = column.begin(); colIt != column.end(); colIt++){
+      int testID = colIt->first;
+      FunctionPtr testVector = colIt->second;
+      sumTauTest[trialID] = sumTauTest[trialID] + testVector * TAU[testID];
+    }
+  }
+
+  // adds dual test portion to IP
+  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
+    LinearTermPtr ipSum = sumTauTestIt->second;
+    ip->addTerm(ReScaling*ipSum);
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  // epsilon portion of grad V
+  ////////////////////////////////////////////////////////////////////
+
+  sparseFxnMatrix sumEpsV; // maps from trialID and testID to a VECTOR valued bit
+  sparseFxnMatrix::iterator sumEpsVIt;
+  map<int, LinearTermPtr > sumEpsVTest; // maps from trialID to dual test portion 
+  map<int, LinearTermPtr >::iterator sumEpsVTestIt;  
+  // initialize sum - a sum of test fxns corresp to components and each trial ID
+  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
+    int component = xyIt->first;
+    sparseFxnMatrix A = xyIt->second;
+    sparseFxnMatrix::iterator testIt;
+    for (testIt = A.begin();testIt!=A.end();testIt++){
+      int testID = testIt->first;      
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;   
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;	
+	if (component==x_comp){
+	  sumEpsV[trialID][testID] = e1*zero + e2*zero;
+	}else if (component==y_comp){
+	  sumEpsV[trialID][testID] = e1*zero + e2*zero;
+	}
+	sumEpsVTest[trialID] = Teuchos::rcp(new LinearTerm);
       }
     }
   }
 
-  // epsilon portion of grad V
+  // essentially builds adjoint matrix bit
+  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
+    int component = xyIt->first;
+    sparseFxnMatrix A = xyIt->second;
+    sparseFxnMatrix::iterator testIt;
+    for (testIt = A.begin();testIt!=A.end();testIt++){
+      int testID = testIt->first;
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;   
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;      
+	FunctionPtr trialWeight = trialIt->second;
+	if (component==x_comp){
+	  sumEpsV[trialID][testID] = sumEpsV[trialID][testID] + trialWeight*e1;
+	} else if (component == y_comp){
+	  sumEpsV[trialID][testID] = sumEpsV[trialID][testID] + trialWeight*e2;
+	}
+      }
+    }
+  }  
+
+  // builds LinearTerm sum - the dual test portion 
+  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
+  for (sumEpsVIt = sumEpsV.begin();sumEpsVIt!=sumEpsV.end();sumEpsVIt++){
+    int trialID = sumEpsVIt->first;
+    map<int, FunctionPtr> column = sumEpsVIt->second;
+    map<int, FunctionPtr>::iterator colIt;    
+    for (colIt = column.begin(); colIt != column.end(); colIt++){
+      int testID = colIt->first;
+      FunctionPtr testVector = colIt->second;
+      sumEpsVTest[trialID] = sumEpsVTest[trialID] + testVector/sqrt(Re) * V[testID]->grad();
+    }
+  }
+
+  // adds dual test portion to IP
+  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
+    LinearTermPtr ipSum = sumTauTestIt->second;
+    ip->addTerm(ipSum);
+  }
+
+  /*
   for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
     int component = xyIt->first;
     sparseFxnMatrix A = xyIt->second;
@@ -687,19 +808,90 @@ int main(int argc, char *argv[]) {
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
       sparseFxnVector::iterator trialIt;
+      FunctionPtr sum = zero;
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
 	int trialID = trialIt->first;
 	FunctionPtr trialWeight = trialIt->second;
+	sum = sum + trialWeight;
+      }
+      if (component==x_comp){
+	ip->addTerm(sum/sqrt(Re)*V[testID]->dx());
+      } else if (component==y_comp){
+	ip->addTerm(sum/sqrt(Re)*V[testID]->dy());
+      }
+    }
+  }
+  */
+  
+
+  ////////////////////////////////////////////////////////////////////
+  // "streamline" portion of grad V
+  ////////////////////////////////////////////////////////////////////
+   
+  sparseFxnMatrix sumStreamV; // maps from trialID and testID to a VECTOR valued bit
+  sparseFxnMatrix::iterator sumStreamVIt;
+  map<int, LinearTermPtr > sumStreamVTest; // maps from trialID to dual test portion 
+  map<int, LinearTermPtr >::iterator sumStreamVTestIt;  
+  // initialize sum - a sum of test fxns corresp to components and each trial ID
+  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
+    int component = xyIt->first;
+    sparseFxnMatrix A = xyIt->second;
+    sparseFxnMatrix::iterator testIt;
+    for (testIt = A.begin();testIt!=A.end();testIt++){
+      int testID = testIt->first;      
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;   
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;	
 	if (component==x_comp){
-	  ip->addTerm(trialWeight/sqrt(Re)*V[testID]->dx());
-	} else if (component==y_comp){
-	  ip->addTerm(trialWeight/sqrt(Re)*V[testID]->dy());
+	  sumStreamV[trialID][testID] = e1*zero + e2*zero;
+	}else if (component==y_comp){
+	  sumStreamV[trialID][testID] = e1*zero + e2*zero;
 	}
+	sumStreamVTest[trialID] = Teuchos::rcp(new LinearTerm);
       }
     }
   }
 
-  // "streamline" portion of grad V
+  // essentially builds adjoint matrix bit
+  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
+    int component = xyIt->first;
+    sparseFxnMatrix A = xyIt->second;
+    sparseFxnMatrix::iterator testIt;
+    for (testIt = A.begin();testIt!=A.end();testIt++){
+      int testID = testIt->first;
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;   
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;      
+	FunctionPtr trialWeight = trialIt->second;
+	if (component==x_comp){
+	  sumStreamV[trialID][testID] = sumStreamV[trialID][testID] + trialWeight*e1;
+	} else if (component == y_comp){
+	  sumStreamV[trialID][testID] = sumStreamV[trialID][testID] + trialWeight*e2;
+	}
+      }
+    }
+  }  
+
+  // builds LinearTerm sum - the dual test portion 
+  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
+  for (sumStreamVIt = sumStreamV.begin();sumStreamVIt!=sumStreamV.end();sumStreamVIt++){
+    int trialID = sumStreamVIt->first;
+    map<int, FunctionPtr> column = sumStreamVIt->second;
+    map<int, FunctionPtr>::iterator colIt;    
+    for (colIt = column.begin(); colIt != column.end(); colIt++){
+      int testID = colIt->first;
+      FunctionPtr testVector = colIt->second;
+      sumStreamVTest[trialID] = sumStreamVTest[trialID] + testVector * V[testID]->grad();
+    }
+  }
+  // adds dual test portion to IP
+  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
+    LinearTermPtr ipSum = sumTauTestIt->second;
+    ip->addTerm(ipSum);
+  }
+  /*
   for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
     int component = xyIt->first;
     sparseFxnMatrix A = xyIt->second;
@@ -708,17 +900,20 @@ int main(int argc, char *argv[]) {
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
       sparseFxnVector::iterator trialIt;
+      FunctionPtr sum = zero;
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
 	int trialID = trialIt->first;
 	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  ip->addTerm(trialWeight*V[testID]->dx());
-	} else if (component==y_comp){
-	  ip->addTerm(trialWeight*V[testID]->dy());
-	}
+	sum = sum + trialWeight;	
+      }
+      if (component==x_comp){
+	ip->addTerm(sum*V[testID]->dx());
+      } else if (component==y_comp){
+	ip->addTerm(sum*V[testID]->dy());
       }
     }
   }
+  */
 
   ip->addTerm( ReScaling*v1 );
   ip->addTerm( ReScaling*v2 );
@@ -731,18 +926,18 @@ int main(int argc, char *argv[]) {
   ip->addTerm(tau3->div());
 
   /*
-  ip->addTerm(tau1);
-  ip->addTerm(tau2);
-  ip->addTerm(tau3);
+    ip->addTerm(tau1);
+    ip->addTerm(tau2);
+    ip->addTerm(tau3);
 
-  ip->addTerm(v1);
-  ip->addTerm(v2);
-  ip->addTerm(v3);
-  ip->addTerm(v4);
-  ip->addTerm(v1->grad());
-  ip->addTerm(v2->grad());
-  ip->addTerm(v3->grad());
-  ip->addTerm(v4->grad());
+    ip->addTerm(v1);
+    ip->addTerm(v2);
+    ip->addTerm(v3);
+    ip->addTerm(v4);
+    ip->addTerm(v1->grad());
+    ip->addTerm(v2->grad());
+    ip->addTerm(v3->grad());
+    ip->addTerm(v4->grad());
   */
 
   //  ////////////////////////////////////////////////////////////////////
@@ -858,9 +1053,6 @@ int main(int argc, char *argv[]) {
   
   MeshInfo meshInfo(mesh); // gets info like cell measure, etc
 
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE REFINEMENT STRATEGY
-  ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
@@ -868,10 +1060,10 @@ int main(int argc, char *argv[]) {
   int numNRSteps = 1;
   
   ////////////////////////////////////////////////////////////////////
-  // SOLVE 
+  // TIMESTEPPING TERMS
   ////////////////////////////////////////////////////////////////////
+
   double dt = .1;
-  //  FunctionPtr Dt = Teuchos::rcp(new ScalarParamFunction(dt));    
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -904,18 +1096,45 @@ int main(int argc, char *argv[]) {
   FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
   rhs->addTerm((time_res_4 * invDt) * v4);    
 
-  // enforce local conservation of fluxes  
-  bool enforceLocalConservation = true;
-  if (enforceLocalConservation){ 
-    if (rank==0){
-      cout << "Enforcing local conservation" << endl;
+  ////////////////////////////////////////////////////////////////////
+  // PREREFINE THE MESH
+  ////////////////////////////////////////////////////////////////////
+
+  int numPreRefs = 0;
+  cout << "doing " << numPreRefs << " pre refinements" << endl;
+  for (int i =0;i<=numPreRefs;i++){   
+    vector<ElementPtr> elems = mesh->activeElements();
+    vector<ElementPtr>::iterator elemIt;
+    vector<int> wallCells;    
+    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
+      int cellID = (*elemIt)->cellID();
+      int numSides = mesh->getElement(cellID)->numSides();
+      FieldContainer<double> vertices(numSides,2); //for quads
+
+      mesh->verticesForCell(vertices, cellID);
+      bool cellIDset = false;	
+      for (int j = 0;j<numSides;j++){ 
+	if (vertices(j,0)>=1.0 && vertices(j,1)==0 && !cellIDset){
+	  wallCells.push_back(cellID);
+	  cellIDset = true;
+	}
+      }
     }
-    solution->lagrangeConstraints()->addConstraint(F1nhat == (time_res_1 * invDt));  
-    solution->lagrangeConstraints()->addConstraint(F2nhat == (time_res_2 * invDt));
-    solution->lagrangeConstraints()->addConstraint(F3nhat == (time_res_3 * invDt));
-    solution->lagrangeConstraints()->addConstraint(F4nhat == (time_res_4 * invDt));
+    if (i<numPreRefs){
+      refinementStrategy->refineCells(wallCells);
+    }else{
+      //      mesh->pRefine(wallCells);
+    }
   }
- 
+  if (rank==0){
+    polyOrderFunction->writeValuesToMATLABFile(mesh,"polyOrder.m");
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  // PSEUDO-TIME SOLVE STRATEGY 
+  ////////////////////////////////////////////////////////////////////
+
+
   if (rank==0){
     cout << "doing timesteps" << endl;
   }
@@ -924,7 +1143,11 @@ int main(int argc, char *argv[]) {
 
   // time steps
   double time_tol = 1e-8;
-  for (int k = 0;k<numRefs;k++){    
+  for (int k = 0;k<=numRefs;k++){    
+
+    if (rank==0 && k==numRefs){
+      cout << "Finishing it off with the final solve" << endl;
+    }
 
     if (useCFL){
       double CFL = 20.0; // ARBITRARY
@@ -953,9 +1176,9 @@ int main(int argc, char *argv[]) {
 	solution->solve(false); 
 	backgroundFlow->addSolution(solution,1.0);
       }         
-
-      prevTimeFlow->addSolution(backgroundFlow,-1.0); 
-      
+     
+      // subtract solutions to get residual
+      prevTimeFlow->addSolution(backgroundFlow,-1.0);       
       double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
       double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
       double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
@@ -972,126 +1195,88 @@ int main(int argc, char *argv[]) {
 	dat<<".dat";
 	std::ostringstream vtu;
 	vtu<<".vtu";
-	string Ustr("tU_NS");
+	string Ustr("U_NS");
       
-	solution->writeFluxesToFile(u1hat->ID(),"tu1hat" +oss.str()+dat.str());
-	solution->writeFluxesToFile(u2hat->ID(),"tu2hat" +oss.str()+dat.str());
-	solution->writeFluxesToFile(That->ID(), "tThat" +oss.str()+dat.str());
-	solution->writeFluxesToFile(F1nhat->ID(),"tF1nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F2nhat->ID(),"tF2nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F3nhat->ID(),"tF3nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F4nhat->ID(),"tF4nhat"+oss.str()+dat.str() );
+	solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
+	solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
+	solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
+	solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
+	solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
+	solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
+	solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
 
 	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),4);
-
-      }
-      prevTimeFlow->setSolution(backgroundFlow); 
+      }     
+      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
       i++;
     }
-    if (rank==0){
-      cout << "at refinement " << k << endl;
-      std::ostringstream oss;
-      oss << k;
-      std::ostringstream dat;
-      dat<<".dat";
-      std::ostringstream vtu;
-      vtu<<".vtu";
-      string Ustr("U_NS");
-      
-      solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
-      solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
+    // Check conservation by testing against one
+    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+    // Create a fake bilinear form for the testing
+    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+    // Define our mass flux
+    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, F1nhat) );
+    //      FunctionPtr massFlux = Teuchos::rcp( new FluxParity(massFluxVal, mesh) );
+    LinearTermPtr massFluxTerm = massFlux * testOne;
 
-      backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),4);
+    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    DofOrderingFactory dofOrderingFactory(fakeBF);
+    int fakeTestOrder = H1Order;
+    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+  
+    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+    map<int, double> massFluxIntegral; // cellID -> integral
+    double maxMassFluxIntegral = 0.0;
+    double totalMassFlux = 0.0;
+    double totalAbsMassFlux = 0.0;
+    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+      ElementTypePtr elemType = *elemTypeIt;
+      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+      vector<int> cellIDs;
+      for (int i=0; i<elems.size(); i++) {
+	cellIDs.push_back(elems[i]->cellID());
+      }
+      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	// pick out the ones for testOne:
+	massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+      }
+      // find the largest:
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+      }
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+	totalMassFlux += massFluxIntegral[cellID];
+	totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+      }
     }
-
-    refinementStrategy->refine(rank==0);
-  }
-
-  if (rank==0){
-    cout << "finishing it off with final solve" << endl;
-  }
-
-  int i = 0;
-  double L2_time_residual = 1e7;
-  while(L2_time_residual > time_tol && (i<numTimeSteps)){
-    for (int j = 0;j<numNRSteps;j++){
-      solution->solve(false); 
-      backgroundFlow->addSolution(solution,1.0);
-    }         
-    prevTimeFlow->addSolution(backgroundFlow,-1.0); 
-
-    double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
-    double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
-    double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
-    double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
-    double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
-    L2_time_residual= sqrt(L2_time_residual_sq)/dt;
-
-    if (rank==0){
-      cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;    	
-
-      std::ostringstream oss;
-      oss << "_fin_" << i ;
-      std::ostringstream dat;
-      dat<<".dat";
-      std::ostringstream vtu;
-      vtu<<".vtu";
-      string Ustr("U_NS");
-      
-      solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
-      solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
-      solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
-
-      backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),4);
-
-    }
-
-   
-    prevTimeFlow->setSolution(backgroundFlow); 
-    i++;
-  }
-
-  if (rank==0){
-    cout << "writing solutions to file" << endl;
-  }
-  if (rank==0){    
-    solution->writeFluxesToFile(u1hat->ID(), "u1hat_final.dat");
-    solution->writeFluxesToFile(u2hat->ID(), "u2hat_final.dat");
-    solution->writeFluxesToFile(That->ID(), "That_final.dat");
-    solution->writeFluxesToFile(F1nhat->ID(), "F1nhat_final.dat");
-    solution->writeFluxesToFile(F2nhat->ID(), "F2nhat_final.dat");
-    solution->writeFluxesToFile(F3nhat->ID(), "F3nhat_final.dat");
-    solution->writeFluxesToFile(F4nhat->ID(), "F4nhat_final.dat");
-    backgroundFlow->writeToVTK("U_NS_final.vtu",4);
-
-    std::ostringstream oss;
-    oss << numRefs;
-    std::ostringstream dat;
-    dat<<".dat";
-    std::ostringstream vtu;
-    vtu<<".vtu";
-    string Ustr("U_NS");
-
-    solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-    solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-    solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
-    solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
-    solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
-    solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
-    solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
     
-    //      solution->writeToVTK("dU_NS.vtu",4);    
-    backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),4);
-  } 
+    // Print results from processor with rank 0
+    if (rank==0){
+      cout << endl;
+      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+      cout << "total mass flux: " << totalMassFlux << endl;
+      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+      cout << endl;
+    }
+
+    if (k<numRefs){
+      if (rank==0){
+	cout << "Performing refinement number " << k << endl;
+      }     
+      refinementStrategy->refine(rank==0);    
+    }
+  }
 
   return 0;
 }
