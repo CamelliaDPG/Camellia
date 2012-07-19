@@ -210,7 +210,7 @@ with variational formulation
 \end{align*}
 Identifying vector-valued terms in the Navier-Stokes formulation with equivalent scalar terms in the convection-diffusion equation allows us to extrapolate our test norm to systems of equations
 \begin{align*}
-\|\left(V,W\right)\|_{V,K}^2 =& \min\left\{\frac{\Reyn}{|K|},1\right\}\|v\|^2 + \frac{1}{\Reyn} \|A_{\rm visc}^T\grad v\|^2 + \|A_{\rm Euler}^T \grad v\|^2 \\
+\|\left(V,W\right)\|_{V,K}^2 =& \min\left\{\frac{1}{\Reyn|K|},1\right\}\|v\|^2 + \frac{1}{\Reyn} \|A_{\rm visc}^T\grad v\|^2 + \|A_{\rm Euler}^T \grad v\|^2 \\
 & + \| \div W\|^2 + \min\left\{\Reyn,\frac{1}{|K|}\right\}\|E_{\rm visc}^T\tau\|^2.
 \end{align*}
 An advantage of this extrapolation approach is that the incompletely parabolic nature of the Navier-Stokes equation is taken into account; there is no diffusive term present in the mass conservation equation, and the test norm reflects that by requesting only limited regularity of $v_1$.\footnote{The situation is analogous to using the full $H^1(\Oh)$ norm for the pure convection equation --- the optimal test norm $\nor{v}_V = \nor{\beta\cdot \grad v} + \nor{v}$ implies only streamline regularity, whereas taking $\nor{v}_V = \nor{\grad v} + \nor{v}$ implies stronger regularity on the test space $V$ than the graph norm. Consequently, convergence is suboptimal for DPG applied to the convection problem under the $H^1(\Oh)$ test norm.}
