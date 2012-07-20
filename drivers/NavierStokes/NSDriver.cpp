@@ -220,29 +220,26 @@ public:
   }  
 };
 
-class FluxParity : public Function 
-{
-private:
-  FunctionPtr _flux;
-  Teuchos::RCP<Mesh> _mesh;
-public:
-  FluxParity(FunctionPtr Flux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
-							   _flux(Flux), _mesh(mesh) {}
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
+// ===================== IP helper functions ====================
 
-    vector<int> cellIDs = basisCache->cellIDs();
-    int sideIndex = basisCache->getSideIndex();
-    _flux->values(values, basisCache);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	//	values(cellIndex, ptIndex) *= parities(sideIndex);
-      }
+void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
+
+  FunctionPtr zero = Teuchos::rcp(new ConstantScalarFunction(0.0));
+  
+  sparseFxnMatrix::iterator testIt;
+  for (testIt = A.begin();testIt!=A.end();testIt++){
+    int testID = testIt->first;      
+    sparseFxnVector a = testIt->second;
+    sparseFxnVector::iterator trialIt;   
+    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+      int trialID = trialIt->first;	
+      Mvec[trialID] = Teuchos::rcp(new LinearTerm);
     }
   }
-};
+}
+
+
+// ===================== main file ====================
 
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
@@ -254,10 +251,10 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 5; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e3;
+  double Re = 1e4;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
 
@@ -396,7 +393,6 @@ int main(int argc, char *argv[]) {
   double rho_free = 1.0;
   double u1_free = 1.0;
   double u2_free = 0.0;
-  //  double T_free = (1/((GAMMA-1.0)*Ma*Ma)) * ( 1 + .5 * (GAMMA-1.0) * Ma*Ma); // TODO - check this value
   double T_free = 1/(GAMMA*(GAMMA-1.0)*Ma*Ma); // TODO - check this value - from Capon paper
 
   map<int, Teuchos::RCP<Function> > functionMap;
@@ -439,7 +435,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1.0/Re) );  // set 1/Re = min viscosity
   FunctionPtr mu = T_visc / Re;
   FunctionPtr lambda = -.66 * T_visc / Re;
-  FunctionPtr kappa =  GAMMA * cv * mu / PRANDTL; // double check sign
+  FunctionPtr kappa = GAMMA * cv * mu / PRANDTL; // double check sign
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
@@ -476,40 +472,39 @@ int main(int argc, char *argv[]) {
   TAU[tau3->ID()] = tau3;
 
   // sparse Jacobians and viscous matrices
-  sparseFxnTensor A_euler; // 
-  sparseFxnTensor A_visc; // 
-  sparseFxnTensor eps_visc; // multiplies viscous terms (like 1/epsilon * sigma)
+  sparseFxnMatrix A_euler; // 
+  sparseFxnMatrix A_visc; // 
+  //  sparseFxnTensor eps_visc; // multiplies viscous terms (like 1/epsilon * sigma)
+  sparseFxnMatrix eps_visc; // multiplies viscous terms (like 1/epsilon * sigma)
   sparseFxnMatrix eps_euler; // multiplies eulerian terms (like grad(u)) 
 
   // ========================================= CONSERVATION LAWS ====================================
 
   // mass conservation
-  A_euler[x_comp][v1->ID()][rho->ID()] = u1_prev;
-  A_euler[x_comp][v1->ID()][u1->ID()]  = rho_prev;
-  A_euler[y_comp][v1->ID()][rho->ID()] = u2_prev;
-  A_euler[y_comp][v1->ID()][u2->ID()]  = rho_prev;
+  A_euler[v1->ID()][rho->ID()] = u1_prev*e1 + u2_prev*e2;
+  A_euler[v1->ID()][u1->ID()] = rho_prev*e1;
+  A_euler[v1->ID()][u2->ID()] = rho_prev*e2;
 
   // x-momentum conservation
-  A_euler[x_comp][v2->ID()][rho->ID()] = (u1sq + dpdrho);
-  A_euler[x_comp][v2->ID()][u1->ID()] = (2*u1_prev*rho_prev);
-  A_euler[x_comp][v2->ID()][T->ID()] = dpdT;
-  A_euler[y_comp][v2->ID()][rho->ID()] =  (u1_prev * u2_prev);
-  A_euler[y_comp][v2->ID()][u1->ID()] = (u2_prev * rho_prev);
-  A_euler[y_comp][v2->ID()][u2->ID()] =(u1_prev * rho_prev);  
+  A_euler[v2->ID()][rho->ID()] = (u1sq + dpdrho)*e1 + (u1_prev * u2_prev)*e2;
+  A_euler[v2->ID()][u1->ID()] = (2*u1_prev*rho_prev)*e1 + (u2_prev * rho_prev)*e2;
+  A_euler[v2->ID()][u2->ID()] = (u1_prev * rho_prev)*e2;
+  A_euler[v2->ID()][T->ID()] = dpdT*e1;
+
   // x-momentum viscous terms
-  A_visc[x_comp][v2->ID()][sigma11->ID()] = Teuchos::rcp( new ConstantScalarFunction(-1.0));
-  A_visc[y_comp][v2->ID()][sigma12->ID()] = Teuchos::rcp( new ConstantScalarFunction(-1.0));
+  FunctionPtr negOne =  Teuchos::rcp( new ConstantScalarFunction(-1.0));
+  A_visc[v2->ID()][sigma11->ID()] = negOne*e1;
+  A_visc[v2->ID()][sigma12->ID()] = negOne*e2;
 
   // y-momentum conservation
-  A_euler[x_comp][v3->ID()][rho->ID()] = (u1_prev * u2_prev);
-  A_euler[x_comp][v3->ID()][u1->ID()] = (u2_prev * rho_prev);
-  A_euler[x_comp][v3->ID()][u2->ID()] = (u1_prev * rho_prev);
-  A_euler[y_comp][v3->ID()][rho->ID()] = (u2sq + dpdrho);
-  A_euler[y_comp][v3->ID()][u1->ID()] = (2 * u2_prev * rho_prev);
-  A_euler[y_comp][v3->ID()][T->ID()] = dpdT;
+  A_euler[v3->ID()][rho->ID()] = (u1_prev * u2_prev)*e1 + (u2sq + dpdrho)*e2;
+  A_euler[v3->ID()][u1->ID()] = (u2_prev * rho_prev)*e1 + (2 * u2_prev * rho_prev)*e2;
+  A_euler[v3->ID()][u2->ID()] = (u1_prev * rho_prev)*e1;
+  A_euler[v3->ID()][T->ID()] = dpdT*e2;
+
   // y-momentum viscous terms
-  A_visc[x_comp][v3->ID()][sigma12->ID()] = Teuchos::rcp( new ConstantScalarFunction(-1.0));
-  A_visc[y_comp][v3->ID()][sigma22->ID()] = Teuchos::rcp( new ConstantScalarFunction(-1.0));
+  A_visc[v3->ID()][sigma12->ID()] = negOne*e1;
+  A_visc[v3->ID()][sigma22->ID()] = negOne*e2;
 
   // energy conservation
   FunctionPtr rho_wx = u1_prev * (e + dpdrho);
@@ -522,67 +517,43 @@ int main(int argc, char *argv[]) {
   FunctionPtr u2_wy = rho_prev * e + p + u2_prev * rho_prev * dedu2;
   FunctionPtr T_wy = u2_prev * (dpdT + rho_prev * dedT);
 
-  A_euler[x_comp][v4->ID()][rho->ID()] = rho_wx;
-  A_euler[x_comp][v4->ID()][u1->ID()] = u1_wx-sigma11_prev; 
-  A_euler[x_comp][v4->ID()][u2->ID()] = u2_wx-sigma12_prev;;
-  A_euler[x_comp][v4->ID()][T->ID()]  = T_wx;
-
-  A_euler[y_comp][v4->ID()][rho->ID()] = rho_wy;
-  A_euler[y_comp][v4->ID()][u1->ID()] = u1_wy-sigma12_prev;
-  A_euler[y_comp][v4->ID()][u2->ID()] = u2_wy-sigma22_prev;;
-  A_euler[y_comp][v4->ID()][T->ID()]  = T_wy;
+  A_euler[v4->ID()][rho->ID()] = rho_wx*e1 + rho_wy*e2;
+  A_euler[v4->ID()][u1->ID()]  = (u1_wx-sigma11_prev)*e1 + (u1_wy-sigma12_prev)*e2;
+  A_euler[v4->ID()][u2->ID()]  = (u2_wx-sigma12_prev)*e1 + (u2_wy-sigma22_prev)*e2;
+  A_euler[v4->ID()][T->ID()]   = (T_wx)*e1 + (T_wy)*e2;
 
   // stress portions
-  A_visc[x_comp][v4->ID()][sigma11->ID()]  = -u1_prev;
-  A_visc[x_comp][v4->ID()][sigma12->ID()]  = -u2_prev;
-  A_visc[x_comp][v4->ID()][q1->ID()]  = Teuchos::rcp( new ConstantScalarFunction(-1.0));
-
-  A_visc[y_comp][v4->ID()][sigma12->ID()]  = -u1_prev;
-  A_visc[y_comp][v4->ID()][sigma22->ID()]  = -u2_prev;
-  A_visc[y_comp][v4->ID()][q2->ID()]  = Teuchos::rcp( new ConstantScalarFunction(-1.0));
+  A_visc[v4->ID()][sigma11->ID()]  = -u1_prev*e1;;
+  A_visc[v4->ID()][sigma12->ID()]  = -u2_prev*e1 -u1_prev*e2;
+  A_visc[v4->ID()][sigma22->ID()]  = -u2_prev*e2;
+  A_visc[v4->ID()][q1->ID()]  = negOne*e1;
+  A_visc[v4->ID()][q2->ID()]  = negOne*e2;
 
   // conservation (Hgrad) equations
+  sparseFxnMatrix::iterator testIt;
+  for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
+    int testID = testIt->first;
+    sparseFxnVector a = testIt->second;
+    sparseFxnVector::iterator trialIt;
+    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+      int trialID = trialIt->first;
+      FunctionPtr trialWeight = trialIt->second;
+      bf->addTerm(-trialWeight*U[trialID],V[testID]->grad());
+    }
+  }
+
   sparseFxnTensor::iterator xyIt;
-  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;
-	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  bf->addTerm(trialWeight*U[trialID],-V[testID]->dx());
-	}else if (component==y_comp){
-	  bf->addTerm(trialWeight*U[trialID],-V[testID]->dy());
-	}
-      }
+  for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
+    int testID = testIt->first;
+    sparseFxnVector a = testIt->second;
+    sparseFxnVector::iterator trialIt;
+    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+      int trialID = trialIt->first;
+      FunctionPtr trialWeight = trialIt->second;
+      bf->addTerm(-trialWeight*U[trialID],V[testID]->grad());
     }
   }
-  // conservation (Hgrad) equations - viscous terms
-  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;
-	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  bf->addTerm(trialWeight*U[trialID],-V[testID]->dx());
-	}else if (component==y_comp){
-	  bf->addTerm(trialWeight*U[trialID],-V[testID]->dy());
-	}
-      }
-    }
-  }
-  
+
   // ========================================= STRESS LAWS  =========================================
 
   bf->addTerm(u1hat, -tau1->dot_normal() );    
@@ -591,56 +562,43 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr lambda_factor_fxn = lambda / (4.0 * mu * (mu + lambda) );
   FunctionPtr two_mu = 2*mu; 
-  //  FunctionPtr lambda_factor_fxn = Teuchos::rcp(new ConstantScalarFunction(lambda_factor));
-  //  FunctionPtr two_mu = Teuchos::rcp(new ConstantScalarFunction(2*mu));
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   // 1st stress eqn
-  eps_visc[x_comp][tau1->ID()][sigma11->ID()] = one/two_mu - lambda_factor_fxn;
-  eps_visc[x_comp][tau1->ID()][sigma22->ID()] = -lambda_factor_fxn;
-
-  eps_visc[y_comp][tau1->ID()][sigma12->ID()] = one/two_mu;
-  eps_visc[y_comp][tau1->ID()][omega->ID()] = -one*Re;
+  eps_visc[tau1->ID()][sigma11->ID()] = (one/two_mu - lambda_factor_fxn)*e1;
+  eps_visc[tau1->ID()][sigma12->ID()] = one/two_mu*e2;
+  eps_visc[tau1->ID()][sigma22->ID()] = -lambda_factor_fxn*e1;
+  eps_visc[tau1->ID()][omega->ID()] = -one*Re*e2;
   
   eps_euler[tau1->ID()][u1->ID()] = one;
   
   // 2nd stress eqn
-  eps_visc[x_comp][tau2->ID()][sigma12->ID()] = one/two_mu;
-  eps_visc[x_comp][tau2->ID()][omega->ID()] = one*Re;
-
-  eps_visc[y_comp][tau2->ID()][sigma11->ID()] = -lambda_factor_fxn;
-  eps_visc[y_comp][tau2->ID()][sigma22->ID()] = one/two_mu - lambda_factor_fxn;
+  eps_visc[tau2->ID()][sigma11->ID()] = -lambda_factor_fxn*e2;
+  eps_visc[tau2->ID()][sigma12->ID()] = one/two_mu*e1;
+  eps_visc[tau2->ID()][sigma22->ID()] = (one/two_mu - lambda_factor_fxn)*e2;
+  eps_visc[tau2->ID()][omega->ID()] = one*Re*e1;
 
   eps_euler[tau2->ID()][u2->ID()] = one;
 
   // Heat stress equation
-  eps_visc[x_comp][tau3->ID()][q1->ID()] = one/kappa; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
-  eps_visc[y_comp][tau3->ID()][q2->ID()] = one/kappa; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
+  eps_visc[tau3->ID()][q1->ID()] = one/kappa*e1; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
+  eps_visc[tau3->ID()][q2->ID()] = one/kappa*e2; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
   eps_euler[tau3->ID()][T->ID()] = one;
   
   // Stress (Hdiv) equations 
-  for (xyIt = eps_visc.begin();xyIt!=eps_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;
-	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  bf->addTerm(trialWeight*U[trialID],TAU[testID]->x());
-	} else if (component==y_comp){
-	  bf->addTerm(trialWeight*U[trialID],TAU[testID]->y());
-	}
-      }
+  for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
+    int testID = testIt->first;
+    sparseFxnVector a = testIt->second;
+    sparseFxnVector::iterator trialIt;
+    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+      int trialID = trialIt->first;
+      FunctionPtr trialWeight = trialIt->second;
+      bf->addTerm(trialWeight*U[trialID],TAU[testID]);
     }
   }
-
+ 
   // Eulerian component of stress (Hdiv) equations (positive b/c of IBP)
-  sparseFxnMatrix::iterator testIt;
+  //  sparseFxnMatrix::iterator testIt;
   for (testIt = eps_euler.begin();testIt!=eps_euler.end();testIt++){
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
@@ -653,6 +611,45 @@ int main(int argc, char *argv[]) {
   } 
  
   ////////////////////////////////////////////////////////////////////
+  // TIMESTEPPING TERMS
+  ////////////////////////////////////////////////////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+
+  double dt = .1;
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+  if (rank==0){
+    cout << "Timestep dt = " << dt << endl;
+  }
+
+  // needs prev time residual (u_t(i-1) - u_t(i))/dt
+  FunctionPtr u1sq_pt = u1_prev_time*u1_prev_time;
+  FunctionPtr u2sq_pt = u2_prev_time*u2_prev_time;
+  FunctionPtr iota_pt = cv*T_prev_time; // internal energy
+  FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
+  FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
+
+  // mass 
+  bf->addTerm(rho,invDt*v1);    
+  FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
+  rhs->addTerm( (time_res_1 * invDt) * v1);
+    
+  // x momentum
+  bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
+  FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
+  rhs->addTerm((time_res_2*invDt) * v2);
+
+  // y momentum
+  bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
+  FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
+  rhs->addTerm((time_res_3 *  invDt ) *v3);
+
+  // energy  
+  bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
+  FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
+  rhs->addTerm((time_res_4 * invDt) * v4);    
+
+  ////////////////////////////////////////////////////////////////////
   // DEFINE INNER PRODUCT
   ////////////////////////////////////////////////////////////////////
   // function to scale the squared guy by epsilon/|K| 
@@ -661,289 +658,147 @@ int main(int argc, char *argv[]) {
   IPPtr ip = Teuchos::rcp( new IP );
 
   ////////////////////////////////////////////////////////////////////
+  // Timestep L2 portion of V
+  ////////////////////////////////////////////////////////////////////
+
+  // rho dt term
+  ip->addTerm(invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
+  // u1 dt term
+  ip->addTerm(invDt*(rho_prev*v2 + (dedu1*rho_prev)*v4));
+  // u2 dt term
+  ip->addTerm(invDt*(rho_prev*v3 + (dedu2*rho_prev)*v4));
+  // T dt term
+  ip->addTerm(invDt*(dedT*rho_prev*v4) );
+
+  bool coupleTauTestTerms = true;
+  bool coupleEpsVTestTerms = true;
+  bool coupleStreamTestTerms = true;
+  
+  ////////////////////////////////////////////////////////////////////
   // Rescaled L2 portion of TAU - has Re built into it
   ////////////////////////////////////////////////////////////////////
 
-  sparseFxnMatrix sumTau; // maps from trialID and testID to a VECTOR valued bit
-  sparseFxnMatrix::iterator sumTauIt;
-  map<int, LinearTermPtr > sumTauTest; // maps from trialID to dual test portion 
-  map<int, LinearTermPtr >::iterator sumTauTestIt;
-  
-  // initialize sum - a sum of test fxns corresp to components and each trial ID
-  for (xyIt = eps_visc.begin();xyIt!=eps_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;      
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;	
-	if (component==x_comp){
-	  sumTau[trialID][testID] = e1*zero + e2*zero;
-	}else if (component==y_comp){
-	  sumTau[trialID][testID] = e1*zero + e2*zero;
-	}
-	sumTauTest[trialID] = Teuchos::rcp(new LinearTerm);
-      }
-    }
-  }
+  if (coupleTauTestTerms){
+    map<int, LinearTermPtr> tauVec;
+    initLinearTermVector(eps_visc,tauVec); // initialize to LinearTermPtrs of dimensions of eps_visc
 
-  // essentially builds adjoint matrix bit
-  for (xyIt = eps_visc.begin();xyIt!=eps_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
+    for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
+      sparseFxnVector::iterator trialIt;
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;      
+	int trialID = trialIt->first;
 	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  sumTau[trialID][testID] = sumTau[trialID][testID] + trialWeight*e1;
-	} else if (component == y_comp){
-	  sumTau[trialID][testID] = sumTau[trialID][testID] + trialWeight*e2;
-	}
+	tauVec[trialID] = tauVec[trialID] + trialWeight*TAU[testID];
       }
+    } 
+    // adds dual test portion to IP
+    map<int, LinearTermPtr>::iterator tauIt;
+    for (tauIt = tauVec.begin();tauIt != tauVec.end();tauIt++){
+      LinearTermPtr ipSum = tauIt->second;
+      ip->addTerm(ReScaling*ipSum);
     }
-  }  
-
-  // builds LinearTerm sum - the dual test portion 
-  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
-  for (sumTauIt = sumTau.begin();sumTauIt!=sumTau.end();sumTauIt++){
-    int trialID = sumTauIt->first;
-    map<int, FunctionPtr> column = sumTauIt->second;
-    map<int, FunctionPtr>::iterator colIt;    
-    for (colIt = column.begin(); colIt != column.end(); colIt++){
-      int testID = colIt->first;
-      FunctionPtr testVector = colIt->second;
-      sumTauTest[trialID] = sumTauTest[trialID] + testVector * TAU[testID];
-    }
+  }else{
+    for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
+      int testID = testIt->first;
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;
+	FunctionPtr trialWeight = trialIt->second;
+	ip->addTerm(ReScaling*trialWeight*TAU[testID]);
+      }
+    } 
   }
-
-  // adds dual test portion to IP
-  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
-    LinearTermPtr ipSum = sumTauTestIt->second;
-    ip->addTerm(ReScaling*ipSum);
-  }
-
   ////////////////////////////////////////////////////////////////////
   // epsilon portion of grad V
   ////////////////////////////////////////////////////////////////////
+  FunctionPtr SqrtReInv = Teuchos::rcp(new ConstantScalarFunction(1.0/sqrt(Re)));
 
-  sparseFxnMatrix sumEpsV; // maps from trialID and testID to a VECTOR valued bit
-  sparseFxnMatrix::iterator sumEpsVIt;
-  map<int, LinearTermPtr > sumEpsVTest; // maps from trialID to dual test portion 
-  map<int, LinearTermPtr >::iterator sumEpsVTestIt;  
-  // initialize sum - a sum of test fxns corresp to components and each trial ID
-  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;      
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;	
-	if (component==x_comp){
-	  sumEpsV[trialID][testID] = e1*zero + e2*zero;
-	}else if (component==y_comp){
-	  sumEpsV[trialID][testID] = e1*zero + e2*zero;
-	}
-	sumEpsVTest[trialID] = Teuchos::rcp(new LinearTerm);
-      }
-    }
-  }
+  if (coupleEpsVTestTerms){
+    map<int, LinearTermPtr> vEpsVec;
+    initLinearTermVector(A_visc,vEpsVec); // initialize to LinearTermPtrs of dimensions of A_visc
 
-  // essentially builds adjoint matrix bit
-  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;      
-	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  sumEpsV[trialID][testID] = sumEpsV[trialID][testID] + trialWeight*e1;
-	} else if (component == y_comp){
-	  sumEpsV[trialID][testID] = sumEpsV[trialID][testID] + trialWeight*e2;
-	}
-      }
-    }
-  }  
-
-  // builds LinearTerm sum - the dual test portion 
-  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
-  for (sumEpsVIt = sumEpsV.begin();sumEpsVIt!=sumEpsV.end();sumEpsVIt++){
-    int trialID = sumEpsVIt->first;
-    map<int, FunctionPtr> column = sumEpsVIt->second;
-    map<int, FunctionPtr>::iterator colIt;    
-    for (colIt = column.begin(); colIt != column.end(); colIt++){
-      int testID = colIt->first;
-      FunctionPtr testVector = colIt->second;
-      sumEpsVTest[trialID] = sumEpsVTest[trialID] + testVector/sqrt(Re) * V[testID]->grad();
-    }
-  }
-
-  // adds dual test portion to IP
-  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
-    LinearTermPtr ipSum = sumTauTestIt->second;
-    ip->addTerm(ipSum);
-  }
-
-  /*
-  for (xyIt = A_visc.begin();xyIt!=A_visc.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
+    for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
       sparseFxnVector::iterator trialIt;
-      FunctionPtr sum = zero;
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
 	int trialID = trialIt->first;
 	FunctionPtr trialWeight = trialIt->second;
-	sum = sum + trialWeight;
+	vEpsVec[trialID] = vEpsVec[trialID] + trialWeight*V[testID]->grad();
       }
-      if (component==x_comp){
-	ip->addTerm(sum/sqrt(Re)*V[testID]->dx());
-      } else if (component==y_comp){
-	ip->addTerm(sum/sqrt(Re)*V[testID]->dy());
-      }
+    } 
+    // adds dual test portion to IP
+    map<int, LinearTermPtr>::iterator vEpsIt;
+    for (vEpsIt = vEpsVec.begin();vEpsIt != vEpsVec.end();vEpsIt++){
+      LinearTermPtr ipSum = vEpsIt->second;
+      ip->addTerm(SqrtReInv*ipSum);
     }
+  } else {
+    for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
+      int testID = testIt->first;
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;
+	FunctionPtr trialWeight = trialIt->second;
+	ip->addTerm(SqrtReInv*trialWeight*V[testID]->grad());
+      }
+    } 
   }
-  */
-  
-
   ////////////////////////////////////////////////////////////////////
   // "streamline" portion of grad V
   ////////////////////////////////////////////////////////////////////
-   
-  sparseFxnMatrix sumStreamV; // maps from trialID and testID to a VECTOR valued bit
-  sparseFxnMatrix::iterator sumStreamVIt;
-  map<int, LinearTermPtr > sumStreamVTest; // maps from trialID to dual test portion 
-  map<int, LinearTermPtr >::iterator sumStreamVTestIt;  
-  // initialize sum - a sum of test fxns corresp to components and each trial ID
-  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;      
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;	
-	if (component==x_comp){
-	  sumStreamV[trialID][testID] = e1*zero + e2*zero;
-	}else if (component==y_comp){
-	  sumStreamV[trialID][testID] = e1*zero + e2*zero;
-	}
-	sumStreamVTest[trialID] = Teuchos::rcp(new LinearTerm);
-      }
-    }
-  }
-
-  // essentially builds adjoint matrix bit
-  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
-      int testID = testIt->first;
-      sparseFxnVector a = testIt->second;
-      sparseFxnVector::iterator trialIt;   
-      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-	int trialID = trialIt->first;      
-	FunctionPtr trialWeight = trialIt->second;
-	if (component==x_comp){
-	  sumStreamV[trialID][testID] = sumStreamV[trialID][testID] + trialWeight*e1;
-	} else if (component == y_comp){
-	  sumStreamV[trialID][testID] = sumStreamV[trialID][testID] + trialWeight*e2;
-	}
-      }
-    }
-  }  
-
-  // builds LinearTerm sum - the dual test portion 
-  //  (i.e. (u1, beta_1^T*v1 + beta_2^T*v2 + ...)_{L^2}
-  for (sumStreamVIt = sumStreamV.begin();sumStreamVIt!=sumStreamV.end();sumStreamVIt++){
-    int trialID = sumStreamVIt->first;
-    map<int, FunctionPtr> column = sumStreamVIt->second;
-    map<int, FunctionPtr>::iterator colIt;    
-    for (colIt = column.begin(); colIt != column.end(); colIt++){
-      int testID = colIt->first;
-      FunctionPtr testVector = colIt->second;
-      sumStreamVTest[trialID] = sumStreamVTest[trialID] + testVector * V[testID]->grad();
-    }
-  }
-  // adds dual test portion to IP
-  for (sumTauTestIt = sumTauTest.begin();sumTauTestIt != sumTauTest.end();sumTauTestIt++){
-    LinearTermPtr ipSum = sumTauTestIt->second;
-    ip->addTerm(ipSum);
-  }
-  /*
-  for (xyIt = A_euler.begin();xyIt!=A_euler.end();xyIt++){
-    int component = xyIt->first;
-    sparseFxnMatrix A = xyIt->second;
-    sparseFxnMatrix::iterator testIt;
-    for (testIt = A.begin();testIt!=A.end();testIt++){
+  if (coupleStreamTestTerms){
+    map<int, LinearTermPtr> vStreamVec;
+    initLinearTermVector(A_euler,vStreamVec); // initialize to LinearTermPtrs of dimensions of A_euler
+    for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
       int testID = testIt->first;
       sparseFxnVector a = testIt->second;
       sparseFxnVector::iterator trialIt;
-      FunctionPtr sum = zero;
       for (trialIt = a.begin();trialIt!=a.end();trialIt++){
 	int trialID = trialIt->first;
 	FunctionPtr trialWeight = trialIt->second;
-	sum = sum + trialWeight;	
+	vStreamVec[trialID] = vStreamVec[trialID] + trialWeight*V[testID]->grad();
       }
-      if (component==x_comp){
-	ip->addTerm(sum*V[testID]->dx());
-      } else if (component==y_comp){
-	ip->addTerm(sum*V[testID]->dy());
-      }
+    } 
+    // adds dual test portion to IP
+    map<int, LinearTermPtr>::iterator vStreamIt;
+    for (vStreamIt = vStreamVec.begin();vStreamIt != vStreamVec.end();vStreamIt++){
+      LinearTermPtr ipSum = vStreamIt->second;
+      ip->addTerm(ipSum);
     }
+  } else {
+    for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
+      int testID = testIt->first;
+      sparseFxnVector a = testIt->second;
+      sparseFxnVector::iterator trialIt;
+      for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+	int trialID = trialIt->first;
+	FunctionPtr trialWeight = trialIt->second;
+	ip->addTerm(trialWeight*V[testID]->grad());
+      }
+    } 
   }
-  */
+
+  ////////////////////////////////////////////////////////////////////
+  // rest of the test terms (easier)
+  ////////////////////////////////////////////////////////////////////
 
   ip->addTerm( ReScaling*v1 );
   ip->addTerm( ReScaling*v2 );
   ip->addTerm( ReScaling*v3 );
   ip->addTerm( ReScaling*v4 );    
- 
+
   // div remains the same (identity operator in classical variables)
   ip->addTerm(tau1->div());
   ip->addTerm(tau2->div());
   ip->addTerm(tau3->div());
-
-  /*
-    ip->addTerm(tau1);
-    ip->addTerm(tau2);
-    ip->addTerm(tau3);
-
-    ip->addTerm(v1);
-    ip->addTerm(v2);
-    ip->addTerm(v3);
-    ip->addTerm(v4);
-    ip->addTerm(v1->grad());
-    ip->addTerm(v2->grad());
-    ip->addTerm(v3->grad());
-    ip->addTerm(v4->grad());
-  */
-
+  
   //  ////////////////////////////////////////////////////////////////////
   //  // DEFINE RHS
   //  ////////////////////////////////////////////////////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
   // mass contributions
   FunctionPtr mass_1 = rho_prev*u1_prev;
@@ -1060,48 +915,13 @@ int main(int argc, char *argv[]) {
   int numNRSteps = 1;
   
   ////////////////////////////////////////////////////////////////////
-  // TIMESTEPPING TERMS
-  ////////////////////////////////////////////////////////////////////
-
-  double dt = .1;
-  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
-  if (rank==0){
-    cout << "Timestep dt = " << dt << endl;
-  }
-
-  // needs prev time residual (u_t(i-1) - u_t(i))/dt
-  FunctionPtr u1sq_pt = u1_prev_time*u1_prev_time;
-  FunctionPtr u2sq_pt = u2_prev_time*u2_prev_time;
-  FunctionPtr iota_pt = cv*T_prev_time; // internal energy
-  FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
-  FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
-
-  // mass 
-  bf->addTerm(rho,invDt*v1);    
-  FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
-  rhs->addTerm( (time_res_1 * invDt) * v1);
-    
-  // x momentum
-  bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
-  FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
-  rhs->addTerm((time_res_2*invDt) * v2);
-
-  // y momentum
-  bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
-  FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
-  rhs->addTerm((time_res_3 *  invDt ) *v3);
-
-  // energy  
-  bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
-  FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
-  rhs->addTerm((time_res_4 * invDt) * v4);    
-
-  ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
   ////////////////////////////////////////////////////////////////////
 
   int numPreRefs = 0;
-  cout << "doing " << numPreRefs << " pre refinements" << endl;
+  if (rank==0){
+    cout << "doing " << numPreRefs << " pre refinements" << endl;
+  }
   for (int i =0;i<=numPreRefs;i++){   
     vector<ElementPtr> elems = mesh->activeElements();
     vector<ElementPtr>::iterator elemIt;
@@ -1210,13 +1030,13 @@ int main(int argc, char *argv[]) {
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
       i++;
     }
+
     // Check conservation by testing against one
     VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
     // Create a fake bilinear form for the testing
     BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
     // Define our mass flux
     FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, F1nhat) );
-    //      FunctionPtr massFlux = Teuchos::rcp( new FluxParity(massFluxVal, mesh) );
     LinearTermPtr massFluxTerm = massFlux * testOne;
 
     Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
