@@ -7,6 +7,132 @@
 #include "vtkUnstructuredGrid.h"
 #include "vtkXMLUnstructuredGridWriter.h"
 #include "vtkCellType.h"
+#include "vtkIdList.h"
+
+void Solution::writeTracesToVTK(const string& filePath)
+{
+  vtkUnstructuredGrid* trace_ug = vtkUnstructuredGrid::New();
+  vector<vtkFloatArray*> traceData;
+  vtkPoints* trace_points = vtkPoints::New();
+
+  // Get trialIDs
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector<int> traceTrialIDs;
+
+  // Allocate memory for VTK unstructured grid
+  int totalCells = _mesh->activeElements().size();
+  trace_ug->Allocate(4*totalCells, 4*totalCells);
+
+  // Count trace variables
+  int numTraceVars = 0;
+  for (unsigned int i=0; i < trialIDs.size(); i++)
+  {
+    if (_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i]))
+    {
+      numTraceVars++;
+      traceTrialIDs.push_back(trialIDs[i]);
+      traceData.push_back(vtkFloatArray::New());
+    }
+  }
+  for (int varIdx = 0; varIdx < numTraceVars; varIdx++)
+  {
+    traceData[varIdx]->SetNumberOfComponents(1);
+    traceData[varIdx]->SetName(_mesh->bilinearForm()->trialName(traceTrialIDs[varIdx]).c_str());
+  }
+  unsigned int trace_vertex_count = 0;
+
+  BasisCachePtr basisCache;
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo, 1) );
+    if (basisCache.get() == NULL)
+      cout << "NULL Basis" << endl;
+    int numSides = cellTopo.getSideCount();
+
+    int numCells = physicalCellNodes.dimension(0);
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      cellIDs.push_back(cellID);
+    }
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
+
+    // int numPoints = 2;
+    // FieldContainer<double> refTracePoints(numPoints);
+    // refTracePoints(0) = -1.0;
+    // refTracePoints(1) =  1.0;
+    // refTracePoints(2) =  0.0;
+    FieldContainer<double> refTracePoints(2, 1);
+    refTracePoints(0, 0) =  0.0;
+    refTracePoints(1, 0) =  1.0;
+    // refTracePoints(2, 0) =  0.0;
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++)
+    {
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+      //TODO: Set correct reference cell points.
+      // The line below causes the code to crash
+      // sideBasisCache->setRefCellPoints(refTracePoints);
+      int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+      cout << "numPoints = " << numPoints << endl;
+      if (sideBasisCache.get() == NULL)
+        cout << "NULL Side Basis" << endl;
+
+      vector< FieldContainer<double> > computedValues;
+      computedValues.resize(numTraceVars);
+      for (int i=0; i < numTraceVars; i++)
+      {
+        computedValues[i].resize(numCells, numPoints);
+        solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
+      }
+      FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+
+      for (int cellIndex=0;cellIndex < numCells;cellIndex++)
+      {
+        vtkIdList* edge = vtkIdList::New();
+        edge->Initialize();
+        for (int i=0; i < numPoints; i++)
+        {
+          edge->InsertNextId(trace_vertex_count+i);
+        }
+        trace_ug->InsertNextCell((int)VTK_POLY_LINE, edge);
+        edge->Delete();
+
+        for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+        {
+          trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
+              physCubPoints(cellIndex, pointIndex, 1), 0.0);
+          for (int varIdx=0; varIdx < numTraceVars; varIdx++)
+          {
+            traceData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          }
+          trace_vertex_count++;
+        }
+      }
+    }
+  }
+  trace_ug->SetPoints(trace_points);
+  trace_points->Delete();
+  for (int varIdx=0; varIdx < numTraceVars; varIdx++)
+  {
+    trace_ug->GetPointData()->AddArray(traceData[varIdx]);
+    traceData[varIdx]->Delete();
+  }
+  vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
+  trace_wr->SetInput(trace_ug);
+  trace_ug->Delete();
+  trace_wr->SetFileName((filePath+"_trace.vtu").c_str());
+  trace_wr->SetDataModeToAscii();
+  trace_wr->Update();
+  trace_wr->Write();
+  trace_wr->Delete();
+}
 
 // Write solution to unstructured VTK format
 void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
@@ -29,7 +155,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
   ug->Allocate(totalSubCells, totalSubCells);
   // trace_ug->Allocate(totalCells, totalCells);
   int numFieldVars = 0;
-  int numTraceVars = 0;
+  // int numTraceVars = 0;
   for (unsigned int i=0; i < trialIDs.size(); i++)
   {
     if (!(_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i])))
@@ -38,12 +164,12 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
       fieldTrialIDs.push_back(trialIDs[i]);
       fieldData.push_back(vtkFloatArray::New());
     }
-    else
-    {
-      // numTraceVars++;
-      // traceTrialIDs.push_back(trialIDs[i]);
-      // traceData.push_back(vtkFloatArray::New());
-    }
+    // else
+    // {
+    //   numTraceVars++;
+    //   traceTrialIDs.push_back(trialIDs[i]);
+    //   traceData.push_back(vtkFloatArray::New());
+    // }
   }
 
   for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
@@ -70,7 +196,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
     
-    FieldContainer<double> vertexPoints, physPoints;    
+    FieldContainer<double> vertexPoints;    
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     
@@ -85,9 +211,8 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
       cellIDs.push_back(cellID);
     }
 
-    int num1DPts = refinementLevel+1;
+    int num1DPts = 3; //refinementLevel+1;
     int numPoints = num1DPts * num1DPts;
-    int numTracePoints = 4;
     FieldContainer<double> refPoints(numPoints,spaceDim);
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
@@ -110,32 +235,59 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
     // refPoints(7, 0) = -1.0; refPoints(7, 1) =  0.0;
     // refPoints(8, 0) =  0.0; refPoints(8, 1) =  0.0;
 
-    FieldContainer<double> refTracePoints(numTracePoints,spaceDim);
-    refTracePoints(0, 0) = -1.0; refTracePoints(0, 1) = -1.0;
-    refTracePoints(1, 0) =  1.0; refTracePoints(1, 1) = -1.0;
-    refTracePoints(2, 0) =  1.0; refTracePoints(2, 1) =  1.0;
-    refTracePoints(3, 0) = -1.0; refTracePoints(3, 1) =  1.0;
+    int numTracePoints = 3;
+    // Assumes num1DPts = 3
+    FieldContainer<double> refTracePoints(numTracePoints);
+    refTracePoints(0) = -1.0;
+    refTracePoints(1) =  0.0;
+    refTracePoints(2) =  1.0;
     
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
     // basisCache->setRefCellPoints(refTracePoints);
-    // const FieldContainer<double> *tracePoints = &basisCache->getPhysicalCubaturePoints();
+    // // Assumes quad
+    // for (int s=0; s < 4; s++)
+    // {
+    //   const FieldContainer<double> *tracePoints = &basisCache->getPhysicalCubaturePointsForSide(s);
+    //   vector< FieldContainer<double> > computedTraceValues;
+    //   computedTraceValues.resize(numTraceVars);
+    //   for (int i=0; i < numTraceVars; i++)
+    //   {
+    //     computedTraceValues[i].resize(numCells, numTracePoints);
+    //     //TODO: Loop through sides, pass in 1-D set of points and vertexPoints
+    //     solutionValues(computedTraceValues[i], elemTypePtr, 
+    //         traceTrialIDs[i], *physicalPoints, refPoints, s);
+    //   }
+    //   for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
+    //   {
+    //     vtkIdType side[3] = {
+    //       total_trace_vertices,
+    //       total_trace_vertices+2,
+    //       total_trace_vertices+1
+    //     };
+    //     trace_ug->InsertNextCell((int)VTK_QUADRATIC_EDGE, 3, side);
+
+    //     for (int pointIndex=0; pointIndex < numTracePoints; pointIndex++)
+    //     {
+    //       trace_points->InsertNextPoint((*tracePoints)(cellIndex, pointIndex, 0),
+    //           (*tracePoints)(cellIndex, pointIndex, 1), 0.0);
+    //       for (int varIdx=0; varIdx < numTraceVars; varIdx++)
+    //       {
+    //         traceData[varIdx]->InsertNextValue(computedTraceValues[varIdx](cellIndex, pointIndex));
+    //       }
+    //       total_trace_vertices++;
+    //     }
+    //   }
+    // }
 
     vector< FieldContainer<double> > computedValues;
-    vector< FieldContainer<double> > computedTraceValues;
     computedValues.resize(numFieldVars);
-    computedTraceValues.resize(numTraceVars);
     for (int i=0; i < numFieldVars; i++)
     {
       computedValues[i].resize(numCells, numPoints);
       solutionValues(computedValues[i], fieldTrialIDs[i], basisCache);
     }
-    // for (int i=0; i < numTraceVars; i++)
-    // {
-    //   computedTraceValues[i].resize(numCells, numTracePoints);
-    //   solutionValues(computedTraceValues[i], traceTrialIDs[i], basisCache);
-    // }
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
     {
@@ -236,8 +388,8 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
       }
       // for (int pointIndex=0; pointIndex < numTracePoints; pointIndex++)
       // {
-      //   trace_points->InsertNextPoint((*tracePoints)(cellIndex, pointIndex, 0),
-      //                                 (*tracePoints)(cellIndex, pointIndex, 1), 0.0);
+      //   trace_points->InsertNextPoint(vertexPoints(cellIndex, pointIndex, 0),
+      //                                 vertexPoints(cellIndex, pointIndex, 1), 0.0);
       //   for (int varIdx=0; varIdx < numTraceVars; varIdx++)
       //   {
       //     traceData[varIdx]->InsertNextValue(computedTraceValues[varIdx](cellIndex, pointIndex));
@@ -280,6 +432,7 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
   // trace_wr->Write();
   wr->Delete();
   // trace_wr->Delete();
+  writeTracesToVTK(filePath);
 }
 #else
 
@@ -344,12 +497,12 @@ void Solution::writeToVTK(const string& filePath, unsigned int refinementLevel)
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
     
-    FieldContainer<double> vertexPoints, physPoints;    
+    FieldContainer<double> vertexPoints;    
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     
     int numCells = physicalCellNodes.dimension(0);
-    bool createSideCacheToo = false;
+    bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
     
     vector<int> cellIDs;
