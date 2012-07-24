@@ -216,6 +216,15 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
       }
       
       successLocal = solver.Solve();
+
+      /*
+      bool reportConditionNumber = true;
+      if (reportConditionNumber) {
+	double rcond;
+	solver.ReciprocalConditionEstimate(rcond);
+	cout << "1-norm condition number estimate = " << 1.0/rcond << endl;
+      }
+      */
       
       if (successLocal != 0) {
         cout << "computeOptimalTest: Solve FAILED with error: " << successLocal << endl;

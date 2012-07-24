@@ -125,7 +125,7 @@ int CondensationSolver::solve(){
   Epetra_MultiVector* rhs = problem().GetRHS();
   Epetra_MultiVector* lhs = problem().GetLHS();
 
-  // create reduced matrix 
+  // create reduced matrix inds
   int numGlobalFluxDofs = _allFluxInds.size();
   set<int> globalIndsForPartition = _mesh->globalDofIndicesForPartition(rank); 
   // TODO: REMOVE field inds from above set
@@ -143,8 +143,7 @@ int CondensationSolver::solve(){
 	globalFluxIndsForPartition.insert(ind);
       }
     }
-  }
- 
+  } 
 
   Epetra_Map partMap = _solution->getPartitionMap(rank, globalFluxIndsForPartition, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
   Epetra_FECrsMatrix Aflux(Copy, partMap, numGlobalFluxDofs); // reduced matrix - soon to be schur complement

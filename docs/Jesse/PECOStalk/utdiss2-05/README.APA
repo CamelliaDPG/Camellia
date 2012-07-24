@@ -1,0 +1,135 @@
+		README.APA for utdiss2-02, 29 November 2001
+
+
+The first comments below are from Lynn Renegar, the OGS doctoral evaluator,
+edited to remove comments not applicable to APA style referencing.
+
+The second comments below are from a friend of mine who tried out APA style
+referencing with utdiss2.
+
+					Craig McCluskey
+					29 November 2001
+
+--------------------------------------------------------------------
+
+It is OK to use APA style. The only comment I made about it is that we do
+require there to be a page number on the first page of text (arabic 1) and
+students have told me that APA doesn't place a number on that page (although
+it is counted). If that is true, then it just means you have to put a number
+on that page. Otherwise, APA guidelines (so far as I know) don't conflict
+with ours.
+
+All I do when a dissertation is turned in to me is require that it be correct.
+How you get it that way is up to you. It must be submitted as one file in PDF.
+It must conform to the guidelines in our formatting booklet. Those guidelines
+have not changed (except for the Committee Certification of Approved Version
+page replacing the former signature page).
+
+As I said, the problem people seemed to be having was with conversion to PDF
+-- specifically making the document into one file. I don't know what the
+problem is, I'm only reporting what I was told.
+
+Thanks, Lynn Renegar (doctoral evaluator)
+
+--------------------------------------------------------------------
+
+Please do take off the scary warning about APA not meeting Lynn Renegar's
+guidelines; she verified that APA style is fine in general.
+
+In any case, the APA-specific files on the Comprehensive TeX Archive Network
+(CTAN) are all pretty old, and in my opinion not worth messing with. Instead
+I would just recommend that people use the natbib and merlin.mbs packages,
+which can handle any citation style and make it easy to set up one that looks
+like APA. I did try natbib with the utdiss2 template, and it worked just fine.
+
+Merlin is available on CTAN (where it is called custom-bib) at:
+
+  http://www.ctan.org/tex-archive/biblio/bibtex/contrib/custom-bib/
+
+And natbib is at:
+
+  http://www.ctan.org/tex-archive/macros/latex/contrib/supported/natbib/
+
+Merlin.mbs (custom-bib) and natbib are both by the same author and complement
+each other.  Basically, natbib is a general .sty file that can handle any
+citation style, but to do that it relies on a .bst file to actually format
+the bibliography.  Custom-bib can create the .bst file to work with natbib
+or with other packages.
+
+The most important feature of natbib is that it allows author and date
+information to be inserted into the text easily, as is common in the natural
+sciences (hence the name natbib).  Here's the abstract from the natbib docs:
+
+
+      Journals in the natural sciences tend to use the
+      author-year style of literature citations, in contrast
+      to the numerical style supported by LaTeX and BibTeX. 
+      A number of contributed packages exist to accommodate
+      this citation mode, but each one is tailored to a limited
+      number of BibTeX style (.bst) files.  The reason is that
+      each one reads in the author-year information in different
+      formats for the "bibitem commands.  In contrast, the
+      natbib packs author-year bibliography styles, but also
+      those for standard numerical citations.  In fact, it can
+      also produce numerical citations even with an author-year
+      bibliographic style, something that permits easy switching
+      between the two citation modes.  To this end, replacements
+      for the standard LaTeX .bst files are also provided.
+  
+      It is possible to define the citation style (type of
+      brackets and punctuation between citations) and even to
+      associate it with the name of the bibliographic style so
+      that it is automatically activated. Citation styles can be
+      defined for local .bst files by means of a configuration
+      file natbib.cfg.
+  
+      It is compatible with the packages: index, showkeys,
+      chapterbib, hyperref, koma and with the classes amsbook
+      and amsart.  It can also emulate the sorting and
+      compressing functions of the cite package (with which it
+      is otherwise incompatible).
+  
+      The natbib package therefore acts as a single, flexible
+      interface for most of the available bibliographic styles.
+
+
+On the other hand, the custom-bib package lets a user generate particular
+bibliography style files (.bst files) for a particular journal or set of
+conventions.  Natbib can then use this .bst file to handle that formatting.
+From the custom-bib documentation:
+
+
+      A problem facing users of BibTeX is that there is no
+      standard for formatting lists of references.  Publishers
+      and journals insist on completely arbitrary placement of
+      commas, colons, and ordering of entries.  Furthermore,
+      author-year styles of citations are supported by certain
+      special LaTeX packages, but each for only a very limited
+      number of bibliographic styles.  Finally, most such style
+      files are for English only, and any adaptations to other
+      languages must duplicate the entire spectrum of such files.
+    
+      All of these obstacles are in principle easily overcome by
+      simply reprogramming BibTeX by means of an appropriate
+      bibliographic style file (extension .bst).  BibTeX is in
+      fact extremely flexible; unfortunately its programming
+      language is very low-level, permitting only the most basic
+      of hacks for the normal user.
+    
+      The solution to this is a generic or master bibliographic
+      style file (extension .mbs) containing docstrip options
+      for alternative coding.  By selecting the desired options,
+      one can customize a .bst file to one's needs.
+    
+      This file, merlin.mbs, is my latest version of a
+      general-purpose .mbs file to meet as many bibliographic
+      needs as possible.  
+
+
+So people can use either or both natbib and custom-bib.  Natbib affects
+what the LaTeX author can do in the text (e.g. ask for author info to be
+inserted into the text right here), and custom-bib affects how the
+bibliography itself will be formatted.  Both seem to work fine with your
+template; I was able to use both the commands defined by natbib.sty and
+the .bst files generated from custom-bib without any problem.  Just see
+(or recommend that users see) the natbib docs for instructions. 
