@@ -78,7 +78,7 @@ void Solution::writeTracesToVTK(const string& filePath)
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
       //TODO: Set correct reference cell points.
       // The line below causes the code to crash
-      // sideBasisCache->setRefCellPoints(refTracePoints);
+      sideBasisCache->setRefCellPoints(refTracePoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
       cout << "numPoints = " << numPoints << endl;
       if (sideBasisCache.get() == NULL)
