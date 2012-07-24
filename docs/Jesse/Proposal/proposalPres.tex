@@ -23,6 +23,9 @@
 
 \usepackage{graphicx}
 \usepackage{subfigure}
+%\usepackage{caption}
+%\usepackage{subcaption}
+
 \usepackage{color}
 \usepackage{undertilde}
 \usepackage{pdflscape}
@@ -626,24 +629,37 @@ For $\beta = (-y,x)^T$ on $\Omega = [-1,1]^2$, and zero normal stress outflow co
 \section{Proposed Work}
 \frame{
 \frametitle{DPG for nonlinear problems}
-\textcolor{red}{REWORK. HOW TO DO THIS SECTION?}
-Begin with the nonlinear variational formulation
-$b(u,v) = l(v)$, linear in $v$, but not in $u$.  An appropriate linearization gives
+
+Given some linearization technique, we can measure 
+\begin{itemize}
+\item the nonlinear residual 
 \[
-b_u(\Delta u,v) = l(v) - b(u,v),
+\nor{R(u)}_E \coloneqq \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V 
 \]
-Let $B(u)$ and $B_u\Delta u$ be the variational operators associated with $b(u,v)$ and $b_u(\Delta u,v)$. 
-\begin{align*}
-\|\Delta u\|_E &\coloneqq \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V \\
-\nor{R(u)}_E &\coloneqq \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V 
-\end{align*}
+\item size of the linearized update $\Delta u$
+\[
+\|\Delta u\|_E \coloneqq \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V 
+\]
+\end{itemize}
+
+%\textcolor{red}{REWORK. HOW TO DO THIS SECTION?}
+%Begin with the nonlinear variational formulation
+%$b(u,v) = l(v)$, linear in $v$, but not in $u$.  An appropriate linearization gives
+%\[
+%b_u(\Delta u,v) = l(v) - b(u,v),
+%\]
+%Let $B(u)$ and $B_u\Delta u$ be the variational operators associated with $b(u,v)$ and $b_u(\Delta u,v)$. 
+%\begin{align*}
+%\|\Delta u\|_E &\coloneqq \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V \\
+%\nor{R(u)}_E &\coloneqq \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V 
+%\end{align*}
 }
 %\frame{
 %\frametitle{Burgers' equation as an example}
 %
 %}
 \frame{
-\frametitle{Burgers equation}
+\frametitle{Test case: Burgers equation}
 \begin{columns}
 \begin{column}{.48\textwidth}
 \vspace{-.5cm}
@@ -753,6 +769,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh0.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 1}
 \begin{figure}
@@ -761,6 +779,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh1.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 2}
 \begin{figure}
@@ -769,6 +789,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh2.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 3}
 \begin{figure}
@@ -777,6 +799,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh3.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 4}
 \begin{figure}
@@ -785,6 +809,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh4.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 5}
 \begin{figure}
@@ -793,6 +819,8 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh5.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
+
 \frame{
 \frametitle{Refinement level 6}
 \begin{figure}
@@ -801,8 +829,21 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh6.png}}
 \end{figure}
 }
+\setcounter{subfigure}{0}
 
-\section{Area A}
+\frame{
+\frametitle{Zoomed solutions at the plate edge}
+\begin{figure}
+\subfigure[$\rho$]{\includegraphics[scale = .12]{figs/Re1000p2/rhoUnscaledzoom.png}}
+\subfigure[$u_1$]{\includegraphics[scale = .12]{figs/Re1000p2/u1zoom.png}}
+\subfigure[$u_2$]{\includegraphics[scale = .12]{figs/Re1000p2/u2zoom.png}}
+\subfigure[$T$]{\includegraphics[scale = .12]{figs/Re1000p2/Tzoom.png}}
+\subfigure[$q_n$]{\includegraphics[scale = .23]{figs/Re1000p2/heatflux.png}}
+\end{figure}
+}
+
+\section{Proposed work}
+\subsection{Area A}
 \frame{
 \frametitle{Proposed work: Area A}
 \begin{itemize}
@@ -851,21 +892,21 @@ Given a nonlinear variational problem $b(u,v) = l(v)$, linear in $v$ but not in 
 \[
 J(u_h) = \frac{1}{2}\|B(u_h)-l\|_{V'}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus\{0\}} \frac{| b(u_h,v)-l(v)|^2}{\nor{v}_V^2}.
 \]
-produces a Hessian-based DPG method 
+produces a Hessian-based DPG method, which solves
 \[
-b_u(\Delta u,v) + b''(\Delta u, \delta u, v_{R(u)}) = r(u,v) = l(v) - b(u,v),
+b_u(\Delta u,v) + b''(\Delta u, \delta u, v_{R(u)}) = l(v) - b(u,v) = r(u,v),
 \]
-which aims to minimize the nonlinear dual residual instead of the linearized problem residual. 
+and aims to minimize the nonlinear dual residual instead of the linearized problem residual. 
 }
 
 \section{Area C}
 \frame{
-\frametitle{Proposed work: Area C}\
-textcolor{red}{GET GRAPHICS FOR EACH}
+\frametitle{Proposed work: Area C}
 \begin{itemize}
 \item{\textbf{Completed: convection-dominated diffusion, Burgers, and a model problem for Navier-Stokes.}} 
 \item{\textbf{Proposed: Range of Reynolds/Mach numbers, ramp problem, Gaussian bump.}}
 \item{\textbf{Proposed: regularized Euler.}}
+\textcolor{red}{Graphics?}
 \end{itemize}
 }
 \end{document}
