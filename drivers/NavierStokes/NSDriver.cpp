@@ -431,8 +431,13 @@ int main(int argc, char *argv[]) {
   FunctionPtr dedu2 = u2_prev;
   double dedT = cv; 
 
-  double beta = 2.0/3.0;
-  FunctionPtr T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1.0/Re) );  // set 1/Re = min viscosity
+  double beta = 0.0;//2.0/3.0;
+  FunctionPtr T_visc;
+  if (abs(beta)<1e-14){
+    T_visc = Teuchos::rcp( new ConstantScalarFunction(1.0) );  
+  }else{
+    T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1.0/1000.0) );  // set 1/Re = min viscosity
+  }
   FunctionPtr mu = T_visc / Re;
   FunctionPtr lambda = -.66 * T_visc / Re;
   FunctionPtr kappa = GAMMA * cv * mu / PRANDTL; // double check sign
@@ -616,7 +621,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .1;
+  double dt = .05;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -911,16 +916,18 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numTimeSteps = 150; // max time steps
+  int numTimeSteps = 200; // max time steps
   int numNRSteps = 1;
   
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
   ////////////////////////////////////////////////////////////////////
 
-  int numPreRefs = 0;
+  double ReferenceRe = 100; // galerkin can represent Re = 10 easily on a standard 8x8 mesh, so no prerefs there
+  int numPreRefs = round(max(ceil(log10(Re/ReferenceRe)),0.0));
+  //  int numPreRefs = 0;
   if (rank==0){
-    cout << "doing " << numPreRefs << " pre refinements" << endl;
+    cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
   for (int i =0;i<=numPreRefs;i++){   
     vector<ElementPtr> elems = mesh->activeElements();
@@ -956,39 +963,35 @@ int main(int argc, char *argv[]) {
 
 
   if (rank==0){
-    cout << "doing timesteps" << endl;
+    cout << "doing timesteps";
+    if (rank==0){
+      cout << " using adaptive timestepping";
+    }
+    cout << endl;  
   }
 
-  bool useCFL = false;
-
+  bool useAdaptTS = false;
   // time steps
   double time_tol = 1e-8;
   for (int k = 0;k<=numRefs;k++){    
 
-    if (rank==0 && k==numRefs){
-      cout << "Finishing it off with the final solve" << endl;
-    }
-
-    if (useCFL){
-      double CFL = 20.0; // ARBITRARY
-      double minCellMeasure = meshInfo.getMinCellMeasure();
-      double min_h = sqrt(minCellMeasure);
-      if (rank==0){
-	cout << "MIN h = " << min_h << endl;      
+    ofstream residualFile;      
+    ofstream dtFile;      
+    if (rank==0){
+      std::ostringstream refNum;
+      refNum << k;
+      string filename1 = "time_res" + refNum.str()+ ".txt";
+      residualFile.open(filename1.c_str());
+      string filename2 = "dt" + refNum.str()+ ".txt";
+      dtFile.open(filename2.c_str());
+      
+      if (rank==0 && k==numRefs){
+	cout << "Finishing it off with the final solve" << endl;
       }
-      if (dt > (CFL*min_h/polyOrder)){
-	if (rank==0){
-	  cout << "dt = " << dt << ", while cfl and min h = " << CFL << ", " << min_h << endl;
-	}
-	double minDt = .05;
-	dt = CFL*min_h/polyOrder; // assumes uniform in p mesh
-	dt = max(minDt,dt);
-	((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);      
-      }    
     }
-
     double L2_time_residual = 1e7;
     int i = 0;
+    int thresh = 2; // timestep threshhold to turn on adaptive timestepping
     while(L2_time_residual > time_tol && (i<numTimeSteps)){
 
       //  for (int i = 0;i<numTimeSteps;i++){
@@ -1005,8 +1008,40 @@ int main(int argc, char *argv[]) {
       double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
       double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
       L2_time_residual= sqrt(L2_time_residual_sq)/dt;
+          
+      double prev_time_residual, prev_prev_time_residual;
+      if (useAdaptTS){
+	if (i>=0){
+	  prev_time_residual = L2_time_residual;
+	} else if (i>0){
+	  prev_prev_time_residual = prev_time_residual;
+	} 
+	if (i>thresh){
+	  double e0 = prev_prev_time_residual;
+	  double e1 = prev_time_residual;
+	  double e2 = L2_time_residual;
+	  double maxDt = .25;
+	  double minDt = .025;
+	  
+	  // adaptive timestep controls
 
+	  double k1 = .5;
+	  double k2 = .01; 
+	  double k3 = .05;
+
+	  double factor = pow(e1/e2,k1) * pow(time_tol/e2,k2) * pow(e1/(e2*e0),k3);	
+	  //      double factor = pow(e2-time_tol,.025);
+	  dt *= factor;
+	  dt = min(maxDt,dt);
+	  dt = max(minDt,dt);
+	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);      	
+	}
+      }
+      
       if (rank==0){
+       residualFile << L2_time_residual << endl;
+       dtFile << dt << endl;
+
 	cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;    	
 
 	std::ostringstream oss;
@@ -1025,13 +1060,16 @@ int main(int argc, char *argv[]) {
 	solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
 	solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
 
-	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),4);
+	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
       i++;
     }
-
+    
+    //////////////////////////////////////////////////////////////////////////
     // Check conservation by testing against one
+    //////////////////////////////////////////////////////////////////////////
+
     VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
     // Create a fake bilinear form for the testing
     BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
@@ -1088,6 +1126,8 @@ int main(int argc, char *argv[]) {
       cout << "total mass flux: " << totalMassFlux << endl;
       cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       cout << endl;
+      residualFile.close();
+      dtFile.close();
     }
 
     if (k<numRefs){
@@ -1095,6 +1135,9 @@ int main(int argc, char *argv[]) {
 	cout << "Performing refinement number " << k << endl;
       }     
       refinementStrategy->refine(rank==0);    
+      // RESET solution every refinement - make sure discretization error doesn't creep in
+      backgroundFlow->projectOntoMesh(functionMap);
+      prevTimeFlow->projectOntoMesh(functionMap);
     }
   }
 
