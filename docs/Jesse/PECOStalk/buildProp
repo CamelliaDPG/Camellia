@@ -1,0 +1,5 @@
+pdflatex outline
+bibtex outline
+pdflatex outline
+pdflatex outline
+#pdfnup --nup 2x1 outline.pdf 

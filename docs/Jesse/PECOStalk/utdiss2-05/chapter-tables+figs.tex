@@ -1,0 +1,214 @@
+\chapter{Making Tables and Including Figures}
+\index{Making Tables and Including Figures@\emph{Making Tables
+	and Including Figures}}%
+
+The \emph{tabular} 
+\index{commands!environments!tabular}%
+environment allows us to create complex 
+tables and figures, and draw boundaries around and within it.
+The following example illustrates this:
+
+\begin{table}[h]
+\begin{center}
+\caption{An example of a table.}
+\vskip 10pt
+\begin{tabular}{|ll|l|ll|l|lll|}
+\cline{1-2} \cline{4-5} \cline{7-9}
+\multicolumn{2}{|c|} {\textsl{Gegenwart}} & &
+\multicolumn{2}{|c|} {\textsl{Imperfekt}} & &
+\multicolumn{3}{|c|} {\textsl{Perfekt}} \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+ich & bin  & & ich & war   & & ich & bin  & gewesen \\
+du  & bist & & du  & warst & & du  & bist & gewesen \\
+er  &      & & er  &       & & er  &      &         \\
+sie & ist  & & sie & wart  & & sie & ist  & gewesen \\
+es  &      & & es  &       & & es  &      &         \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+wir & sind & & wir & waren & & wir & sind & gewesen \\
+ihr & seid & & ihr & wart  & & ihr & seid & gewesen \\
+sie & sind & & sie & waren & & sie & sind & gewesen \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+Sie & sind & & Sie & waren & & Sie & sind & gewesen \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+\end{tabular} \\[10pt]
+Note: The assistance of Herr Professor Lothar Frommhold \\
+in generating this table of German declensions \\
+is gratefully acknowledged.
+\vskip -20pt
+\end{center}
+\end{table}
+\index{commands!environments!table}%
+
+This table was created with the following sequence 
+of commands:
+\begin{verbatim}
+\begin{table}[h]
+\begin{center}
+\caption{An example of a table.}
+\vskip 10pt
+\begin{tabular}{|ll|l|ll|l|lll|}
+\cline{1-2} \cline{4-5} \cline{7-9}
+\multicolumn{2}{|c|} {\textsl{Gegenwart}} & &
+\multicolumn{2}{|c|} {\textsl{Imperfekt}} & &
+\multicolumn{3}{|c|} {\textsl{Perfekt}} \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+ich & bin  & & ich & war   & & ich & bin  & gewesen \\
+du  & bist & & du  & warst & & du  & bist & gewesen \\
+er  &      & & er  &       & & er  &      &         \\
+sie & ist  & & sie & wart  & & sie & ist  & gewesen \\
+es  &      & & es  &       & & es  &      &         \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+wir & sind & & wir & waren & & wir & sind & gewesen \\
+ihr & seid & & ihr & wart  & & ihr & seid & gewesen \\
+sie & sind & & sie & waren & & sie & sind & gewesen \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+Sie & sind & & Sie & waren & & Sie & sind & gewesen \\
+\cline{1-2} \cline{4-5} \cline{7-9}
+\end{tabular} \\[10pt]
+Note: The assistance of Herr Professor Lothar Frommhold \\
+in generating this table of German declensions \\
+is gratefully acknowledged.
+\vskip -20pt
+\end{center}
+\end{table}
+\index{commands!environments!table}%
+\end{verbatim}
+
+The argument \texttt{h} indicates the position for the 
+table, in this case ``here if possible''. Other values
+of this argument are:
+\texttt{t} (top of the page),
+\texttt{b} (bottom of the page),
+\texttt{p} (on the page of floats) and 
+\texttt{H} (HERE! - requires using the package float.sty.
+Note: When this option is used, LaTeX ignores all of its formatting
+rules and does what you say, putting the entire float exactly where
+it is defined. Check your output to make sure it is what you want!
+If you are having trouble with LaTeX wanting to put a figure that's
+larger than roughly half-a-page, as well as all of the figures
+following it, at the end of a chapter, try using the command
+\cn{clearpage} immediately following the large figure --- and maybe
+a \cn{newpage} later.)
+It is possible to combine several arguments, such as
+\texttt{ht} (``here if possible, otherwise on top of
+the page''). The default is \texttt{tbp}.
+
+Figure \ref{f:ex} is a typical example of inclusion of a 
+figure contained in an encapsulated PostScript file. 
+\index{PostScript}%
+\index{encapsulated PostScript}%
+In order to use it, it is necessary to include the 
+command \cn{usepackage\{psfig\}} 
+\index{psfig}%
+at the beginning of the document.
+
+\begin{figure}[htb] % Imported eps example.
+\begin{center}
+\ \psfig{file=pup-on-rug.eps,height=1.5in,width=2.0in}
+\caption{An example of an imported eps file.}
+\label{f:ex}
+\end{center}
+\end{figure}
+\index{commands!environments!figure}%
+You can see the commands that generated this
+figure in the source file. Look for the line
+\cn{begin\{figure\}[htb] \% Imported eps example. }
+
+The command that imports the file is \cn{psfig}, and it also 
+controls its size (\texttt{height} and \texttt{width}), and 
+can rotate the figure (\texttt{angle}).
+
+Figures can also be drawn by using \LaTeX{} commands. 
+Figure \ref{f:circuit} is an example 
+(taken from \cite{gms:tlc}).
+
+\begin{figure}[htb] % Picture example.
+\begin{center}
+   \setlength{\unitlength}{4mm}
+   \begin{picture}(12,10)(-2,0)
+      \linethickness{0.4pt}
+      \qbezier(2.00,6.00)(7.00,6.00)(9.00,3.00)
+      \qbezier(2.00,0.00)(7.00,0.00)(9.00,3.00)
+      \qbezier(2.00,6.00)(4.00,3.00)(2.00,0.00)
+      \qbezier(1.00,6.00)(3.00,3.00)(1.00,0.00)
+      \put(9.75,3.00){\circle{1.50}}
+      \put(10.50,3.00){\line(1,0){1.50}}
+      \put(0.00,5.00){\line(1,0){1.50}}
+      \put(0.00,1.00){\line(1,0){1.50}}
+   \end{picture}
+\caption{An example of a picture}
+\label{f:circuit}
+\end{center}
+\end{figure}
+\index{picture}%
+
+The commands that generated this
+picture are in the source file following the line
+\cn{begin\{figure\}[htb] \% Picture example.  }
+
+The commands used have rather obvious meanings. In particular, 
+the command \cn{qbezier} 
+\index{commands!qbezier@\cn{qbezier}}%
+draws a quadratic Bezier curve, 
+defined by its two ending points, and a third point (whose 
+coordinates are in the middle) that is used as control point. 
+Figure \ref{f:qb} illustrates the effect of the control point:
+
+%\begin{figure}[htb] % Bezier curves example.
+\begin{figure}[h] % Bezier curves example.
+\begin{center}
+   \setlength{\unitlength}{.8mm}
+   \begin{picture}(55,55)(-15,0)
+      \linethickness{1pt}
+      \qbezier(0,0)(-10,30)(50,30)
+      \qbezier(0,0)(20,50)(50,30)
+      \thinlines
+      \put(0,0){\line(-1,3){10}}
+      \put(50,30){\line(-1,0){60}}
+      \put(0,0){\line(2,5){20}}
+      \put(50,30){\line(-3,2){30}}
+      \put(0,0){\circle*{1}}
+      \put(0,-1){\makebox(0,0)[t]{$A_{0,0}$}}
+      \put(-10,30){\circle*{1}}
+      \put(-10,31){\makebox(0,0)[b]{$B_{10,30}$}}
+      \put(50,30){\circle*{1}}
+      \put(58,29){\makebox(0,0)[b]{$C_{50,30}$}}
+      \put(20,50){\circle*{1}}
+      \put(20,51){\makebox(0,0)[b]{$D_{20,50}$}}
+   \end{picture}
+\caption{Bezier curves}
+\label{f:qb}
+\end{center}
+\end{figure}
+\index{Bezier curves}%
+
+
+This figure has been generated with the following commands:
+\begin{verbatim}
+\begin{figure}[htb] % Bezier curves example.
+\begin{center}
+   \setlength{\unitlength}{.8mm}
+   \begin{picture}(55,55)(-15,0)
+      \linethickness{1pt}
+      \qbezier(0,0)(-10,30)(50,30)
+      \qbezier(0,0)(20,50)(50,30)
+      \thinlines
+      \put(0,0){\line(-1,3){10}}
+      \put(50,30){\line(-1,0){60}}
+      \put(0,0){\line(2,5){20}}
+      \put(50,30){\line(-3,2){30}}
+      \put(0,0){\circle*{1}}
+      \put(0,-1){\makebox(0,0)[t]{$A_{0,0}$}}
+      \put(-10,30){\circle*{1}}
+      \put(-10,31){\makebox(0,0)[b]{$B_{10,30}$}}
+      \put(50,30){\circle*{1}}
+      \put(58,29){\makebox(0,0)[b]{$C_{50,30}$}}
+      \put(20,50){\circle*{1}}
+      \put(20,51){\makebox(0,0)[b]{$D_{20,50}$}}
+   \end{picture}
+\caption{Bezier curves}
+\label{f:qb}
+\end{center}
+\end{figure}
+\end{verbatim}
+
