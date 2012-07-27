@@ -17,7 +17,7 @@
 #endif
 
 double epsilon = 1e-2;
-double numRefs = 6;
+double numRefs = 0;
 
 bool enforceLocalConservation = true;
 
