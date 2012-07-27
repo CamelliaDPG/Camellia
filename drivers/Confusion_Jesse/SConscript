@@ -2,6 +2,9 @@ Import('*')
 
 driver1 = env.Program('exec/Step', ['Confusion_step.cpp'])
 driver2 = env.Program('exec/Hughes', ['Confusion_Hughes.cpp'])
+driver3 = env.Program('exec/Vortex', ['Vortex.cpp'])
+driver3 = env.Program('exec/Rates', ['Rates.cpp'])
 
 Default(driver1)
 Default(driver2)
+Default(driver3)
