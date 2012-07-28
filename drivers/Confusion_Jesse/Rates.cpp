@@ -259,6 +259,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr sig1_exact = Teuchos::rcp( new Uex(eps,1) );
   FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+
   bc->addDirichlet(uhat, outflowBoundary, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
@@ -305,7 +306,6 @@ int main(int argc, char *argv[]) {
   convOut.open(convOutFile.str().c_str());
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
-    refinementStrategy.refine(rank==0); // print to console on rank 0
 
     FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
     FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
@@ -317,11 +317,16 @@ int main(int argc, char *argv[]) {
     double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
     double L2_error = sqrt(u_L2_error + sigma_L2_error);
     double energy_error = solution->energyErrorTotal();
+    u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
+    u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
+    u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
 
     convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
     if (rank==0){
       cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio = " << L2_error/energy_error << endl;
     }
+
+    refinementStrategy.refine(); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
   solution->solve(false);

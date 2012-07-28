@@ -7,9 +7,10 @@
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
-#endif
+#endif  
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
+
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -205,9 +206,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr betaNorm = Teuchos::rcp( new l2NormOfVector(beta));
   FunctionPtr three = Teuchos::rcp( new ConstantScalarFunction(3.0));
 
-  //  robIP->addTerm( ip_scaling * v);
-  robIP->addTerm( eps*invH*v );
-
+  if (enforceLocalConservation){
+    robIP->addZeroMeanTerm( v );
+  }else{
+    robIP->addTerm( ip_scaling * v);
+    //  robIP->addTerm( eps*invH*v );
+  }
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
@@ -222,13 +226,13 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
 
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  //  bc->addDirichlet(uhat, outflowBoundary, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u0);  
-  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  // pc->addConstraint(uhat==u0,inflowBoundary);
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  //  pc->addConstraint(beta_n_u_minus_sigma_n - beta*n*uhat==zero,outflowBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
@@ -255,7 +259,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
-  // solution->setFilter(pc);
+  solution->setFilter(pc);
 
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
