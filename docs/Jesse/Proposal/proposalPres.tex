@@ -133,8 +133,8 @@
 \newcommand{\Gin} {\Gamma_{in}}
 \newcommand{\Gout} {\Gamma_{out}}
 
-\title{A DPG method for compressible flow problems}
-\author{Jesse Chan}
+\title{A Discontinuous Petrov-Galerkin method for compressible flow problems}
+\author{Jesse Chan \\ Supervisors: Leszek Demkowicz, Robert Moser}
 
 \begin{document}
 \begin{frame}
@@ -150,7 +150,7 @@
 \subfigure[Boundary layer]{\includegraphics[scale=.16]{figs/compFlowPics/boundary_layer.png}}
 %\subfigure{\includegraphics[scale=.15]{figs/compFlowPics/capsule.png}}
 \end{figure}
-Compressible flow plays an important role in the aerospace and energy industries - supersonic aircraft, combustion engines, etc. 
+Compressible flow plays an important role in the aerospace and energy industries - transonic and supersonic aircraft, combustion engines, etc. 
 
 }
 \frame{
@@ -159,7 +159,7 @@ Compressible flow plays an important role in the aerospace and energy industries
 \begin{column}{.475\textwidth}
 Numerical difficulties:
 \begin{itemize}
-\item{} Resolving solutions (sharp, localized $O(\Reyn^{-1})$ phenomena)
+\item{} Resolving solution features (sharp, localized $O(\Reyn^{-1})$ phenomena)
 \begin{itemize}
 \item{} Shocks, boundary layers
 \item{} Turbulent phenomena
@@ -169,6 +169,7 @@ Numerical difficulties:
 \item{} Coarse/adaptive grids
 \item{} Higher order
 \end{itemize}
+\item{} Nonlinear convergence and uniqueness of solutions
 \end{itemize}
 \end{column}
 \begin{column}{.475\textwidth}
@@ -184,7 +185,7 @@ Idea: begin first with the model problem of convection-diffusion.
 \end{center}
 }
 \frame{
-\frametitle{Convection-diffusion as a model problem}
+\frametitle{Robustness: convection-diffusion as a model problem}
 \vspace{-.5cm}
 \[
 \div \left(\beta u\right) - \epsilon \Delta u = f, \quad \text{on }\Omega \in \mathbb{R}^3
@@ -205,29 +206,28 @@ l(v) &= \int_\Omega f v
 \begin{column}{.49\textwidth}
 \begin{figure}
 \centering
-\includegraphics[scale=.3]{figs/GalerkinOscTight.png}
-\caption{Oscillations in the standard Galerkin method for underresolved meshes and small $\epsilon$.}
+\includegraphics[scale=.35]{figs/GalerkinOscTight.png}
+\caption{Oscillations in the standard Galerkin for underresolved meshes and small $\epsilon$.}
 \end{figure}
 \end{column}
 \end{columns}
 }
-\frame{
-\frametitle{Stabilization}
-Historical stabilization methods: 
-\begin{itemize}
-\item Artificial diffusion - solve
-\[
-\beta u' - \tilde{\epsilon} u'' = f
-\]
-where $\tilde{\epsilon}$ is set depending on $\beta$, $\epsilon$, and the mesh. 
-\item Upwind stencils - for positive $\beta$, and uniform grid points $x_A$,
-\[
-u'(x_A) \approx \frac{u_h(x_A)-u_h(x_{A-1})}{h}
-\]
-\end{itemize}
-
-Both of these methods introduce additional numerical diffusion, and their effectiveness depends on the forcing $f$ and parameters $h$, $|\beta|$, and $\epsilon$.
-}
+%\frame{
+%\frametitle{Stabilization}
+%Historical stabilization methods: 
+%\begin{itemize}
+%\item Artificial diffusion - solve
+%\[
+%\beta u' - \tilde{\epsilon} u'' = f
+%\]
+%where $\tilde{\epsilon}$ is set depending on $\beta$, $\epsilon$, and the mesh. Can be made ``exact'' for $f=0$. 
+%\item Upwind finite differences - for $\beta > 0$, and uniform grid points $x_A$,
+%\[
+%u'(x_A) \approx \frac{u_h(x_A)-u_h(x_{A-1})}{h}
+%\]
+%\end{itemize}
+%Both of these methods introduce additional numerical diffusion, and their effectiveness depends on the forcing $f$ and parameters $h$, $|\beta|$, and $\epsilon$.
+%}
 \frame{
 \frametitle{Streamline-upwind Petrov-Galerkin (SUPG)}
 SUPG solves $b_{\rm SUPG}(u,v) = l_{\rm SUPG}(v)$, where
@@ -240,8 +240,8 @@ l_{\rm SUPG}(v) &= l(v) + \sum_{K} \int_{K} \tau \LRp{L_{\rm adv}v} f.
 \begin{column}{.47\textwidth}
 \vspace{-.5cm}
 \begin{itemize}
-\item{} $L_{\rm adv}u = \div \left(\beta u\right)$, and $\tau$ is a parameter. 
-\item{} Recovers ``exact'' artificial diffusion for $f=0$.
+\item{} $Lu = \div\left(\beta u\right) - \epsilon \triangle u$, $L_{\rm adv}u = \div \left(\beta u\right)$, and $\tau$ is a parameter. 
+%\item{} Recovers ``exact'' artificial diffusion for $f=0$.
 \item{} Effective for $f\neq 0$, unlike ``exact'' artificial diffusion.
 \item{} \emph{Residual-based} stabilization. 
 \end{itemize}
@@ -249,8 +249,8 @@ l_{\rm SUPG}(v) &= l(v) + \sum_{K} \int_{K} \tau \LRp{L_{\rm adv}v} f.
 \begin{column}{.52\textwidth}
 \begin{figure}
 \centering
-\includegraphics[scale=.3]{figs/SUPG.png}
-\caption{Exact, FEM, and SUPG solutions.}
+\includegraphics[scale=.35]{figs/SUPG.png}
+%\caption{Exact, Bubnov-Galerkin, and SUPG solutions.}
 \end{figure}
 \end{column}
 \end{columns}
@@ -274,8 +274,12 @@ where the SUPG test function $\tilde{v}_{i}$ is defined elementwise as
 
 \section{The DPG Method}
 \frame{
-\frametitle{Minimum residual methods and optimal testing}
-Identify $B:U\rightarrow V'$ such that
+\frametitle{DPG: a minimum residual method via optimal testing}
+Given
+\[
+b(u,v) = l(v), \quad u\in U, \quad v\in V
+\]
+identify $B:U\rightarrow V'$ such that 
 \[
 \langle Bu,v\rangle_V \coloneqq b(u,v), \quad u\in U, v\in V.
 \]
@@ -290,7 +294,7 @@ J(u_h) = \frac{1}{2}\|Bu_h-l\|_{V'}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus
 }
 
 \begin{frame}
-Let $R_V: V \to V'$ be the isometric the Riesz map st.\
+Let $R_V: V \to V'$ be the isometric Riesz map st.\
 \[
 \langle R_V v,\delta v\rangle_V \coloneqq(v, \delta v)_V, \quad \forall \delta v \in V.
 \]
@@ -307,42 +311,55 @@ First order optimality: G\^ateaux derivative is zero in all directions $\delta u
 \end{frame}
 
 \frame{
-For $\delta u \in U$, we define the {\em optimal test function} $v_{\delta u}$
+\frametitle{Minimum residual methods and optimal testing}
+For $\delta u \in U$, define the \textcolor{red}{optimal test function} $v_{\delta u}$. 
 \begin{equation*}
-v_{\delta u} \coloneqq R_V^{-1}B\delta u 
+v_{\delta u} \coloneqq R_V^{-1}B\delta u.
 \end{equation*} 
-such that $J(u_h)$ is minimized by the solution of
+Then, the least-squares residual $J(u_h) = \frac{1}{2}\left\|Bu_h-l\right\|_{V'}^2$ is minimized by the solution of
 \[
 b\LRp{u_h,v_{\delta u}} = l\LRp{v_{\delta u}}, \quad \forall \delta u \in U
 \]
 }
-\frame{
-\frametitle{Details and properties of DPG}
-\begin{itemize}
-\item By choosing $V$ as a \emph{broken} test space, test functions can be determined locally.
-\item In practice, $V \coloneqq V_h$, where $\dim(V_h) > \dim(U_h)$ elementwise, and test functions are approximated via solving
-\[
-\LRp{v_{\delta u},\delta v}_V = b(\delta u,\delta v).
-\]
-\item Symmetric positive-definite stiffness matrix: for $B_{ji} = b(u_j,v_i)$, $l_i = l(v_i)$ for $v_i$ spanning $V_h$, DPG solves
-\[
-u^T B^T R_V^{-1}B = l R_V^{-1}B 
-\]
-\end{itemize}
 
+\frame{
+\frametitle{Practical details of DPG}
+\begin{itemize}
+\item By choosing a \emph{broken} test space $V$ and \textcolor{red}{localizable} norm $\nor{v}_V = \sum_K \nor{v}_{V(K)}$, test functions can be determined locally.
+\item In practice, we use the \textcolor{red}{enriched space} $V \coloneqq V_h$, where $\dim(V_h) > \dim(U_h)$ elementwise, and \textcolor{red}{optimal test functions} are approximated by solving
+\[
+\LRp{v_{\delta u},\delta v}_V = b(\delta u,\delta v), \quad \delta u\in U, \quad v_{\delta u},\delta v\in V_h
+\]
+Typically, if $U_h = \mathcal{P}^p(\mathbb{R}^n)$, $V_h = \mathcal{P}^{p+\triangle p}(\mathbb{R}^n)$, where $\triangle p \geq n$. 
+\end{itemize}
 }
 
 \frame{
+\frametitle{Properties of DPG}
+DPG provides a symmetric positive-definite stiffness matrix. Let $\{\phi_j\}_{j=1}^m$ be a basis for $U_h$, and $\{v_i\}_{i=1}^n$ a basis for $V_h$, such that $n>m$. Then, for 
+\begin{align*}
+B_{ji} &= b(\phi_j,v_i),\\
+l_i &= l(v_i),
+\end{align*}
+DPG solves the discrete system
+\begin{align*}
+(B^T R_V^{-1}B) u  &= (B^T R_V^{-1}) l,
+\end{align*}
+where, under a localizable norm and discontinuous test functions, $R_V^{-1}$ is block diagonal.
+}
+
+\frame{
+\frametitle{Properties of DPG}
 \begin{itemize}
-\item DPG provides the best approximation in the energy norm 
+\item DPG provides the best approximation in the \textcolor{red}{energy norm}
 \[
-\|u\|_E = \|Bu\|_{V'} = \sup \frac{b(u,v)}{\nor{v}_V}.
+\|u\|_E = \|Bu\|_{V'} = \sup_{\nor{v}_V=1} \left|b(u,v)\right|.
 \]
-\item The actual energy error is computable through the residual
+\item The energy error is computable through the residual
 \[
 \nor{u-u_h}_E = \nor{B(u-u_h)}_{V'} = \nor{R_V^{-1}(l-Bu_h)}_V = \nor{e}_V
 \]
-where $(e,\delta v)_V = l(v)-b(u_h,v)$ for all $v\in V$. 
+where the \textcolor{red}{error representation function} $e$ is defined through $(e,\delta v)_V = l(v)-b(u_h,\delta v)$ for all $\delta v\in V$. 
 \end{itemize}
 }
 
@@ -379,20 +396,19 @@ Given a first order system $Au = f$, we identify the \textbf{\emph{partition}} $
 \vspace{-.5cm}
 The ultra-weak formulation for $Au = f$ on $\Oh$ is
 \[
-b\left(\left(u, \widehat{u}\right),v\right) \coloneqq \langle \widehat{u}, \jump{v}
-\rangle_{\Gh} - (u,A_h^*v)_{\Oh}= \LRp{f,v}_{\Oh}.
+b\left(\left(u, \widehat{u}\right),v\right) \coloneqq \sum_K\langle \widehat{u},v \rangle_{\delta K} + (u,A_h^*v)_{\Oh}= \LRp{f,v}_{\Oh}.
 \]
-where
+Under proper assumptions, $\sum_K\langle \widehat{u},v \rangle_{\delta K} = \langle \widehat{u}, \jump{v} \rangle_{\Gh}$. The energy setting is
 \[
 u\in L^2\LRp{\Oh} \equiv L^2(\Omega), \quad v\in V=D(A^*_h), \quad
 \widehat{u}\in \gamma(D(A)),
 \]
-where $D(A_h^*)$ is the broken graph space of $A_h^*$, and $\gamma(D(A))$ the trace space of the graph space of operator $A$.
+where $D(A_h^*)$ is the broken graph space of the formal adjoint $A_h^*$, and $\gamma(D(A))$ the trace space of the graph space of operator $A$.
 }
 
 \frame{
-\frametitle{Canonical norms for the ultra-weak formulation}
-Under the ultra-weak formulation, we have the following relations:
+\frametitle{Test and trial norms for the ultra-weak formulation}
+Under the ultra-weak formulation, we have the following equivalence relations:
 \begin{figure}[!h]
 \centering
 \begin{tabular}{l c c}
@@ -401,17 +417,30 @@ Trial norm & & Test norm \\
 $\boxed{\|u\|^2_{\L} + \|\widehat{u}\|^2}$ & $\Longrightarrow$  & $\|A_h^*v\|_{\L}^2
 +\left(\sup_{\widehat{u}} \frac{\LRa{ \widehat{u},
   \jump{v} }_{\Gh}}{\|\widehat{u}\|}\right)^2$ \\
-%\hline
-%Quasi-optimal trial norm & & Canonical test norm \\
-%\hline
 $\nor{u}_{\L}^2+\sup_{v } \left(\frac{\LRa{\widehat{u},
   \jump{v}}_{\Gh}}{\|v\|_V}\right)^2$ &  $\Longleftarrow$ & $\boxed{\|A_h^*v\|_{\L}^2 + \nor{v}_{\L}^2}$
 \end{tabular}
-\caption{The optimal \textit{test} norm is naturally derived by beginning with the canonical norm on the trial space, while the quasi-optimal \textit{trial} norm is derived from beginning with the canonical norm on the test space.}
+\caption{The optimal \textit{test} norm is naturally derived by beginning with the canonical norm on the trial space, while the quasi-optimal \textit{trial} norm is derived from beginning with the canonical (\emph{graph}) norm on the test space.}
 \end{figure}
 }
 
-\section{A Robust DPG Method}
+%\frame{
+%\frametitle{The canonical test norm}
+%Under the ultra-weak formulation, we have the natural norm
+%\[
+%\nor{\LRp{u,\widehat{u}}} = \|u\|^2_{\L} + \|\widehat{u}\|^2 
+%\]
+%which generates a test norm \emph{equivalent} to 
+%\[
+%\nor{v}_{V_{\rm opt}} \coloneqq \|A_h^*v\|_{\L}^2 +\left(\sup_{\widehat{u}} \frac{\LRa{ \widehat{u},\jump{v} }_{\Gh}}{\|\widehat{u}\|}\right)^2
+%\]
+%This norm is not localizable, so we instead substitute the jump terms for an $L^2$ term, giving us the \emph{graph norm}
+%\[
+%\nor{v}_V \coloneqq \|A_h^*v\|_{\L}^2 + \nor{v}_{L^2}.
+%\]
+%}
+
+\section{A Robust DPG Method for Convection-Diffusion}
 
 \frame{
 \frametitle{Ultra-weak formulation for convection-diffusion}
@@ -430,20 +459,20 @@ f \\ 0
 The variational formulation is
 \begin{align*}
 b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),
-\left( v, \tau \right)\right) = \left(u,\div \tau - \beta \cdot \grad
-v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad v\right)_{\Oh}&\\
+\left( v, \tau \right)\right) = \left(u,\grad_h\cdot \tau - \beta \cdot \grad_h
+v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad_h v\right)_{\Oh}&\\
  - \LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gh} + \LRa{ \widehat{f}_n,\jump{v} }_{\Gh}&,
 \end{align*}
-where $\widehat{f}_n \coloneqq \beta_n u - \sigma_n$. Note that $\div$ and $\grad$ are taken to act elementwise.
+where $\widehat{f}_n \coloneqq \beta_n u - \sigma_n$, and $\grad_h\cdot$ and $\grad_h$ act elementwise.
 }
 
 \frame{
-\frametitle{Quasi-optimal norm under convection-diffusion}
-For convection-diffusion, the quasi-optimal test norm is 
+\frametitle{Graph norm under convection-diffusion}
+For convection-diffusion, the quasi-optimal (graph) test norm is 
 \[
 \|\left(v,\tau\right)\|_V^2 = \| \div \tau - \beta \cdot \grad v
 \|_{L^2}^2 + \| \epsilon^{-1} \tau + \grad v \|_{L^2}^2 +
-\|v\|_{L^2}^2 + \|\tau\|_{L^2}^2.
+\|v\|_{L^2}^2.
 \]
 Problem with this test norm: approximability of test functions.
 \vspace{-.3cm}
@@ -456,7 +485,7 @@ Problem with this test norm: approximability of test functions.
 }
 
 \frame{
-\frametitle{Bilinear forms and induced adjoints}
+\frametitle{Determining an alternative test norm}
 Recall the convection-diffusion bilinear form
 \begin{align*}
 b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),
@@ -464,89 +493,100 @@ b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),
 v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad v\right)_{\Oh}&\\
  - \LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gh} + \LRa{ \widehat{f}_n,\jump{v} }_{\Gh}&,
 \end{align*}
-We recover $\nor{u}_{L^2(\Omega)}$ by choosing continuous $\LRp{v,\tau}$ s.t.\
+We recover $\nor{u}_{L^2(\Omega)}$ by choosing continuous $\LRp{v,\tau}$ satisfying the \emph{adjoint equations}
 \begin{align*}
 \div\tau - \beta \cdot \grad v   &= u\\
-\frac{1}{\epsilon}\tau - \grad v &= 0
+\frac{1}{\epsilon}\tau + \grad v &= 0
 \end{align*}
 where boundary conditions are s.t.\ $\LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gh}$ and $\LRa{ \widehat{f}_n,\jump{v} }_{\Gh}$ vanish. 
 }
 
 \frame{
-\frametitle{Determining an alternative test norm}
-``Necessary'' conditions for robustness --- let $\boldsymbol U = \LRp{u,\sigma,\widehat{u},\widehat{f}_n}$, then, by choosing specific $\LRp{v,\tau}$, 
+\frametitle{A robust bound}
+``Necessary'' conditions for robustness --- let $\boldsymbol U = \LRp{u,\sigma,\widehat{u},\widehat{f}_n}$, then, by choosing specific $\LRp{v,\tau}$ satisfying the adjoint equations,
 \[
 \nor{u}^2_{L^2(\Omega)} = b\LRp{{\boldsymbol U},\LRp{v,\tau}} = \frac{b\LRp{{\boldsymbol U},\LRp{v,\tau}}}{\nor{\LRp{v,\tau}}_V} \nor{\LRp{v,\tau}}_V \leq \nor{\boldsymbol U}_E \nor{\LRp{v,\tau}}_V
 \]
 If $ \nor{\LRp{v,\tau}}_V \lesssim \|u\|_{L^2(\Omega)}$, then we have the robust bound
 \[
-\nor{u}^2_{L^2(\Omega)} \lesssim \nor{\boldsymbol U}_E
+\nor{u}_{L^2(\Omega)} \lesssim \nor{\boldsymbol U}_E
 \]
+\textbf{Test norm should measure the adjoint solution robustly.}
 }
-
-
-\frame{
-\frametitle{``Building blocks'' norm}
-Test norm quantities are robustly bounded from above by $\nor{u}_{L^2(\Omega)}$.  
-\[
-\|\left(v,\tau\right)\|_{V,K}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2.
-\]
-Problem: boundary layers in optimal test functions:
-\begin{figure}[!h]
-\centering
-\subfigure{\includegraphics[scale=.15]{figs/mesh1.png}}
-\subfigure{\includegraphics[scale=.15]{figs/sol1.png}}
-\caption{The $v$ component of the optimal test function corresponding to flux $\widehat{u} = x(1-x)$ on the bottom side of a unit element for $\epsilon = 0.01$.}
-\label{fig:boundaryTest}
-\end{figure}
-}
-\frame{
-\frametitle{Mesh-scaled test norms}
-%To avoid boundary layers in the optimal test functions, we scale the $L^2$ contributions of $v$ by $C_v(K)$, such that, when transformed to the reference element, both $C_v(K)\|v\|^2$ and $\epsilon\|\grad v\|^2$ are of the same magnitude. Similarly, we scale the $L^2$ contributions of $\tau$ by $C_\tau(K)$ such that $\frac{C_\tau(K)}{\epsilon} \|\tau\|^2$ and $\|\div \tau\|^2$ are of the same magnitude as well.
-
-Our test norm, as defined over a single element $K$, is now
-\begin{align*}
-\|\left(v,\tau\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 +&\\
-\| \div \tau\|^2 + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|^2&.
-\end{align*}
-\begin{itemize}
-\item $v$ and $\tau$ decoupled.
-\item Coefficients are $O(1)$ after transforming to the unit element.
-\end{itemize}
-%This modified test norm avoids boundary layers in the locally computed optimal test functions, but for adaptive meshes, provides additional stability in areas of heavy refinement, where the best approximation error tends to be large and stronger robustness is most necessary.  This leads to a test norm which produces easily approximable optimal test functions, but still provides \textit{asymptotically} the strongest test norm and tightest robustness results in the areas of highest error. 
-}
-
 \frame{
 \frametitle{Dirichlet inflow boundary condition}
-Standard choice of boundary condition: $u = u_0$ on inflow boundary $\Gamma_{\rm in}$. 
+Standard choice of boundary condition: $u = u_0$ on inflow boundary $\Gamma_{\rm in}$, induces boundary layers in adjoint problems. 
 \begin{figure}[h!]
 \centering
-\subfigure[Primal problem]{\includegraphics[scale=.22]{figs/primalDir.png}}
-\subfigure[Adjoint problem]{\includegraphics[scale=.22]{figs/adjointDir.png}}
+\subfigure[Primal problem]{\includegraphics[scale=.23]{figs/primalDir.png}}
+\subfigure[Adjoint problem]{\includegraphics[scale=.23]{figs/adjointDir.png}}
 \caption{For the standard Dirichlet inflow condition, the solution to the adjoint problem can develop strong boundary layers at the outflow of the adjoint problem. }
 \end{figure}
-
 }
 
 \frame{
 \frametitle{New inflow boundary condition on $\widehat{f}_n$}
-Non-standard choice of boundary condition: $\widehat{f}_n = \beta_n u_0$ on $\Gamma_{\rm in}$. 
+Non-standard choice of boundary condition: $\widehat{f}_n = \beta_n u_0$ on $\Gamma_{\rm in}$, induces smoother adjoint problems. 
 \begin{figure}[h!]
 \centering
-\subfigure[Primal problem]{\includegraphics[scale=.22]{figs/primal.png}}
-\subfigure[Adjoint problem]{\includegraphics[scale=.22]{figs/adjoint.png}}
+\subfigure[Primal problem]{\includegraphics[scale=.23]{figs/primal.png}}
+\subfigure[Adjoint problem]{\includegraphics[scale=.23]{figs/adjoint.png}}
 \caption{Under the new inflow condition, the wall-stop boundary condition is relaxed to a zero-stress condition at the outflow boundary of the adjoint problem.}
 \end{figure}
 }
 
 \frame{
 \frametitle{Test norms and adjoint solutions}
-\begin{itemize}
-\item Standard choice of boundary condition: $u = u_0$ on inflow boundary $\Gamma_{\rm in}$: induces boundary layers in adjoint problems.
-\item Non-standard choice of boundary condition: $\widehat{f}_n = \beta_n u_0$ on $\Gamma_{\rm in}$: induces smoother adjoint problems.
-\end{itemize}
 \textbf{Intuition:} the effectiveness of DPG under a test norm is governed by how a \textbf{specific test norm} measures the \textbf{solutions of the adjoint problem}. 
+
+\begin{figure}[!h]
+\subfigure[Dirichlet inflow]{\includegraphics[scale=.35]{figs/dirichletBC.png}}
+\subfigure[``Convection'' inflow]{\includegraphics[scale=.35]{figs/newBC.png}}
+\caption{DPG solutions to convection-diffusion for both inflow conditions using an $H^1$ test norm.}
+\end{figure}
 }
+
+%\frame{
+%\frametitle{``Building blocks'' norm}
+%Test norm quantities are robustly bounded from above by $\nor{u}_{L^2(\Omega)}$.  
+%\[
+%\|\left(v,\tau\right)\|_{V,K}^2 = \|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 + \| \div \tau\|^2 + \frac{1}{\epsilon}\|\tau\|^2.
+%\]
+%Problem: boundary layers in optimal test functions:
+%\begin{figure}[!h]
+%\centering
+%\subfigure{\includegraphics[scale=.15]{figs/mesh1.png}}
+%\subfigure{\includegraphics[scale=.15]{figs/sol1.png}}
+%\caption{The $v$ component of the optimal test function corresponding to flux $\widehat{u} = x(1-x)$ on the bottom side of a unit element for $\epsilon = 0.01$.}
+%\label{fig:boundaryTest}
+%\end{figure}
+%}
+\frame{
+\frametitle{Adjoint estimates, or ``norm building blocks''}
+For solutions $(v,\tau)$ of the adjoint equations, the following quantities are robustly bounded from above by $\nor{u}_{L^2(\Omega)}$.  
+\begin{align*}
+&\|v\|, \sqrt{\epsilon} \|\grad v\|, \|\beta \cdot \grad v\| \\
+&\| \div \tau\|, \frac{1}{\sqrt{\epsilon}}\|\tau\|.
+\end{align*}
+We will construct a test norm through a combination of the above quantities, such that
+\begin{itemize}
+\item $v$ and $\tau$ decoupled (no systems).
+\item Coefficients are of equal order after transforming to the unit element (no boundary layers).
+\end{itemize}
+}
+\frame{
+\frametitle{Mesh-scaled test norms}
+Our test norm, as defined over a single element $K$, is now
+\begin{align*}
+\|\left(v,\tau\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 +&\\
+\| \div \tau\|^2 + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|^2&.
+\end{align*}
+which induces the proven \emph{robust} bound 
+\[
+\nor{u}_{L^2(\Omega)}+ \nor{\sigma}_{L^2(\Omega)} + \epsilon\nor{\widehat{u}} + \sqrt{\epsilon} \nor{\widehat{f}_n} \lesssim \nor{\LRp{u,\sigma,\widehat{u},\widehat{f}_n}}_E.
+\]
+}
+
 
 \frame{
 \frametitle{Erikkson-Johnson model problem}
@@ -582,18 +622,18 @@ Separation of variables gives an analytic solution.
 \begin{figure}
 \centering
 \subfigure{
-\includegraphics[scale=.23]{figs/errorrates_wallBC.png}
+\includegraphics[scale=.24]{figs/errorrates_wallBC.png}
 }
 \subfigure{
-\includegraphics[scale=.23]{figs/L2energyratio_wallBC.png}
+\includegraphics[scale=.24]{figs/L2energyratio_wallBC.png}
 }
 \subfigure{
 \includegraphics[scale=.22]{figs/u_pointdiff_wallBC.png}
 }
 \caption{$L^2$/energy error, their ratio, and pointwise error in $u$ for $\epsilon = .01$.}
 \end{figure}
-
 }
+
 %\frame{
 %\frametitle{Regularization}
 %Discontinuous inflow conditions on $\widehat{f_n}$, out of alignment with mesh. Boundary condition $\epsilon \grad u \cdot n = 0$ at outflow.
@@ -611,36 +651,37 @@ Separation of variables gives an analytic solution.
 
 \frame{
 \frametitle{Regularization}
-For $\beta = (-y,x)^T$ on $\Omega = [-1,1]^2$, and zero normal stress outflow conditions. Ill posed in the convection setting. Similar tests have been done with discontinuous data.
+For $\beta = (.5-y,x-.5)^T$ on $\Omega = [0,1]^2$, and zero normal stress outflow conditions. Ill posed in the convection setting. Similar tests have been done with discontinuous data.
 
 \begin{figure}
 \centering
 \subfigure{
-\includegraphics[scale=.34]{figs/vortex.png}
+\includegraphics[scale=.35]{figs/vortex.png}
 }
 \subfigure{
-\includegraphics[scale=.34]{figs/vortexMesh.png}
+\includegraphics[scale=.35]{figs/vortexMesh.png}
 }
 \caption{Steady-state vortex problem with $\epsilon = 1e-5$.}
 \end{figure}
 \vspace{-.25cm}
 }
 
-\section{Proposed Work}
+\section{DPG for nonlinear problems}
 \frame{
 \frametitle{DPG for nonlinear problems}
 
 Given some linearization technique, we can measure 
 \begin{itemize}
-\item the nonlinear residual 
-\[
-\nor{R(u)}_E \coloneqq \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1} B(u)-l}_V 
-\]
 \item size of the linearized update $\Delta u$
 \[
 \|\Delta u\|_E \coloneqq \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V 
 \]
+\item the nonlinear residual 
+\[
+\nor{R(u)}_E \coloneqq \nor{B(u)-l}_E = \nor{B(u) - l}_{V'}  = \nor{R_V^{-1}\LRp{B(u)-l}}_V 
+\]
 \end{itemize}
+We will work with either full Newton-Raphson or pseudo-timestepping linearization. 
 
 %\textcolor{red}{REWORK. HOW TO DO THIS SECTION?}
 %Begin with the nonlinear variational formulation
@@ -671,7 +712,7 @@ Burgers equation can be written with $\beta(u) = \LRp{u/2,1}$
 \div\left(\beta(u)u-\sigma\right) &=f \\
 \frac{1}{\epsilon}\sigma - \grad u &=0.
 \end{align*}
-i.e.\ nonlinear convection-diffusion.
+i.e.\ nonlinear convection-diffusion. Solution is achieved using Newton-Raphson.
 \end{column}
 \begin{column}{.48\textwidth}
 \begin{figure}[!h]
@@ -684,7 +725,7 @@ i.e.\ nonlinear convection-diffusion.
 }
 
 \frame{
-\frametitle{Compressible Navier-Stokes equations}
+\frametitle{Compressible Navier-Stokes equations (ideal gas)}
 \begin{align*}
 \div \vecttwo{\rho u }{\rho v} &= 0\\
 \div \left(\vecttwo{\rho u^2+p }{\rho u v} - \boldsymbol \sigma_{1}\right) &=0\\
@@ -694,6 +735,7 @@ i.e.\ nonlinear convection-diffusion.
 \frac{1}{\kappa}\vec{q} &= \grad T
 \end{align*}
 }
+
 \frame{
 $\boldsymbol\sigma$ is a Newtonian fluid $\sigma_{ij} = \mu(u_{i,j} + u_{j,i}) + \lambda u_{k,k} \delta_{ij}$.
 %We can invert the stress tensor under isotropic and plane strain assumptions to get
@@ -761,6 +803,7 @@ Navier-Stokes: let $V$ and $W$ be vectors of test functions $v_i$ and $\tau_i$.
 \item{} No outflow condition set.
 \end{itemize}
 }
+
 \frame{
 \frametitle{Refinement level 0}
 \begin{figure}
@@ -861,16 +904,19 @@ We hope to analyze the linearized Navier-Stokes equations to determine an optima
 \subsection{Area B}
 
 \frame{
-\frametitle{Proposed work: Area B}
+\frametitle{Future work: Area B}
 \begin{itemize}
 \item{\textbf{Completed: Collaborative work with Nathan Roberts on the higher order parallel adaptive DPG code Camellia.}}
 
-Numerical experiments have been done using the higher-order adaptive codebase Camellia, built upon the Trilinos library and designed by Nathan Roberts. %The framework for arbitrary-irregularity anisotropic refinements in both $h$ and $p$ is in place, and the code is partially parallelized.
+Numerical experiments use the higher-order adaptive codebase Camellia, built upon the Trilinos library by Nathan Roberts. %The framework for arbitrary-irregularity anisotropic refinements in both $h$ and $p$ is in place, and the code is partially parallelized.
 
 \item{\textbf{Proposed: Anisotropic refinements and $hp$-schemes.}}
 
-The error representation function has been shown to yield an effective and natural residual with which to drive refinement, which we hope to generalize to yield anisotropic adaptive schemes. 
-\textcolor{red}{GET GRAPHICS FOR ANISOTROPY}
+The error representation function drives refinement effectively, and we hope to generalize its use to anisotropic adaptive schemes. 
+\begin{figure}
+\subfigure{\includegraphics[scale = .18]{figs/anisotropy/b5.png}}
+\subfigure{\includegraphics[scale = .186]{figs/anisotropy/v6.png}}
+\end{figure}
 \end{itemize}
 }
 
@@ -899,14 +945,14 @@ b_u(\Delta u,v) + b''(\Delta u, \delta u, v_{R(u)}) = l(v) - b(u,v) = r(u,v),
 and aims to minimize the nonlinear dual residual instead of the linearized problem residual. 
 }
 
-\section{Area C}
+\subsection{Area C}
 \frame{
 \frametitle{Proposed work: Area C}
 \begin{itemize}
 \item{\textbf{Completed: convection-dominated diffusion, Burgers, and a model problem for Navier-Stokes.}} 
 \item{\textbf{Proposed: Range of Reynolds/Mach numbers, ramp problem, Gaussian bump.}}
 \item{\textbf{Proposed: regularized Euler.}}
-\textcolor{red}{Graphics?}
+%\textcolor{red}{Graphics?}
 \end{itemize}
 }
 \end{document}

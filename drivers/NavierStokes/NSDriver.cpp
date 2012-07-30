@@ -452,7 +452,6 @@ int main(int argc, char *argv[]) {
   bf->addTerm(F3nhat, v3);
   bf->addTerm(F4nhat, v4);
 
-  int x_comp = 0; int y_comp = 1;
   map<int, VarPtr> U;
   U[u1->ID()] = u1;
   U[u2->ID()] = u2;
@@ -659,6 +658,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
+  FunctionPtr ReDtScaling = Teuchos::rcp( new EpsilonScaling(dt/Re) ); 
 
   IPPtr ip = Teuchos::rcp( new IP );
 
@@ -667,13 +667,13 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   // rho dt term
-  ip->addTerm(invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
+  ip->addTerm(ReDtScaling*invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
   // u1 dt term
-  ip->addTerm(invDt*(rho_prev*v2 + (dedu1*rho_prev)*v4));
+  ip->addTerm(ReDtScaling*invDt*(rho_prev*v2 + (dedu1*rho_prev)*v4));
   // u2 dt term
-  ip->addTerm(invDt*(rho_prev*v3 + (dedu2*rho_prev)*v4));
+  ip->addTerm(ReDtScaling*invDt*(rho_prev*v3 + (dedu2*rho_prev)*v4));
   // T dt term
-  ip->addTerm(invDt*(dedT*rho_prev*v4) );
+  ip->addTerm(ReDtScaling*invDt*(dedT*rho_prev*v4) );
 
   bool coupleTauTestTerms = true;
   bool coupleEpsVTestTerms = true;
