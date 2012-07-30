@@ -124,6 +124,109 @@ vector< Teuchos::RCP< Element > > & Mesh::activeElements() {
   return _activeElements;
 }
 
+Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+{
+  ifstream mshFile;
+  mshFile.open(filePath.c_str());
+  TEST_FOR_EXCEPTION(mshFile == NULL, std::invalid_argument, "Could not open msh file");
+  string line;
+  getline(mshFile, line);
+  while (line != "$Nodes")
+  {
+    getline(mshFile, line);
+  }
+  int numNodes;
+  mshFile >> numNodes;
+  cout << numNodes << endl;
+  vector<FieldContainer<double> > vertices;
+  int dummy;
+  for (int i=0; i < numNodes; i++)
+  {
+    FieldContainer<double> vertex(2);
+    mshFile >> dummy;
+    mshFile >> vertex(0) >> vertex(1) >> dummy;
+    cout << vertex(0) << " " << vertex(1) << endl;
+    vertices.push_back(vertex);
+  }
+  while (line != "$Elements")
+  {
+    getline(mshFile, line);
+  }
+  int numElems;
+  mshFile >> numElems;
+  cout << "NumElems: " << numElems << endl;
+  int elemType;
+  int numTags;
+  vector< vector<int> > elementIndices;
+  for (int i=0; i < numElems; i++)
+  {
+    mshFile >> dummy >> elemType >> numTags;
+    for (int j=0; j < numTags; j++)
+      mshFile >> dummy;
+    if (elemType == 2)
+    {
+      vector<int> elemIndices(3);
+      mshFile >> elemIndices[0] >> elemIndices[1] >> elemIndices[2];
+      elemIndices[0]--;
+      elemIndices[1]--;
+      elemIndices[2]--;
+      elementIndices.push_back(elemIndices);
+      cout << elemIndices[0] <<" "<< elemIndices[1] <<" "<< elemIndices[2] << endl;
+    }
+    if (elemType == 4)
+    {
+      vector<int> elemIndices(3);
+      mshFile >> elemIndices[0] >> elemIndices[1] >> elemIndices[2];
+      elemIndices[0]--;
+      elemIndices[1]--;
+      elemIndices[2]--;
+      elementIndices.push_back(elemIndices);
+      cout << elemIndices[0] <<" "<< elemIndices[1] <<" "<< elemIndices[2] << endl;
+    }
+    else
+    {
+      getline(mshFile, line);
+    }
+  }
+  mshFile.close();
+
+  Teuchos::RCP<Mesh> mesh;
+  // // L-shaped domain for double ramp problem
+  // FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+  // A(0) = 0.0; A(1) = 0.5;
+  // B(0) = 0.0; B(1) = 1.0;
+  // C(0) = 0.5; C(1) = 1.0;
+  // D(0) = 1.0; D(1) = 1.0;
+  // E(0) = 1.0; E(1) = 0.5;
+  // F(0) = 1.0; F(1) = 0.0;
+  // G(0) = 0.5; G(1) = 0.0;
+  // H(0) = 0.5; H(1) = 0.5;
+  // vector<FieldContainer<double> > fake_vertices;
+  // fake_vertices.push_back(A); int A_index = 0;
+  // fake_vertices.push_back(B); int B_index = 1;
+  // fake_vertices.push_back(C); int C_index = 2;
+  // fake_vertices.push_back(D); int D_index = 3;
+  // fake_vertices.push_back(E); int E_index = 4;
+  // fake_vertices.push_back(F); int F_index = 5;
+  // fake_vertices.push_back(G); int G_index = 6;
+  // fake_vertices.push_back(H); int H_index = 7;
+  // vector< vector<int> > elementVertices;
+  // vector<int> el1, el2, el3, el4, el5;
+  // // left patch:
+  // el1.push_back(A_index); el1.push_back(H_index); el1.push_back(C_index); el1.push_back(B_index);
+  // // top right:
+  // el2.push_back(H_index); el2.push_back(E_index); el2.push_back(D_index); el2.push_back(C_index);
+  // // bottom right:
+  // el3.push_back(G_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(H_index);
+
+  // elementVertices.push_back(el1);
+  // elementVertices.push_back(el2);
+  // elementVertices.push_back(el3);
+  
+  mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );  
+  return mesh;
+}
+
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 

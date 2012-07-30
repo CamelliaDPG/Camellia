@@ -17,7 +17,7 @@
 #endif
 
 double epsilon = 1e-2;
-double numRefs = 0;
+double numRefs = 6;
 
 bool enforceLocalConservation = true;
 
@@ -239,24 +239,25 @@ int main(int argc, char *argv[]) {
   // pc->addConstraint(uhat==u0,inflowBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
-  // define nodes for mesh
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
-  
   int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", confusionBF, H1Order, pToAdd);
+  // define nodes for mesh
+  // FieldContainer<double> meshBoundary(4,2);
+  // 
+  // meshBoundary(0,0) = 0.0; // x1
+  // meshBoundary(0,1) = 0.0; // y1
+  // meshBoundary(1,0) = 1.0;
+  // meshBoundary(1,1) = 0.0;
+  // meshBoundary(2,0) = 1.0;
+  // meshBoundary(2,1) = 1.0;
+  // meshBoundary(3,0) = 0.0;
+  // meshBoundary(3,1) = 1.0;
+  // 
+  // int horizontalCells = 1, verticalCells = 1;
+  // 
+  // // create a pointer to a new mesh:
+  // Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  //                                               confusionBF, H1Order, H1Order+pToAdd, true);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
@@ -270,6 +271,7 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  refinementStrategy.setEnforceOneIrregurity(false);
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
@@ -338,7 +340,7 @@ int main(int argc, char *argv[]) {
 
     stringstream outfile;
     outfile << "confusion" << epsilon;
-    solution->writeToVTK(outfile.str(), 3);
+    solution->writeFieldsToVTK(outfile.str(), 3);
   }
   
   return 0;

@@ -138,7 +138,6 @@ class U_r : public Function {
       int numPoints = values.dimension(1);
 
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           values(cellIndex, ptIndex) = 0.0;
@@ -242,22 +241,22 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  FieldContainer<double> quadPoints(4,2);
+  FieldContainer<double> meshBoundary(4,2);
   
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
+  meshBoundary(0,0) = 0.0; // x1
+  meshBoundary(0,1) = 0.0; // y1
+  meshBoundary(1,0) = 1.0;
+  meshBoundary(1,1) = 0.0;
+  meshBoundary(2,0) = 1.0;
+  meshBoundary(2,1) = 1.0;
+  meshBoundary(3,0) = 0.0;
+  meshBoundary(3,1) = 1.0;
   
   int H1Order = 3, pToAdd = 2;
   int horizontalCells = 2, verticalCells = 2;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////

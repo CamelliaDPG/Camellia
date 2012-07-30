@@ -1,4 +1,4 @@
-//  ConfusionDriver.cpp
+//  BendDriver.cpp
 //  Driver for Conservative Convection-Diffusion
 //  Camellia
 //
@@ -18,9 +18,8 @@
 
 bool enforceLocalConservation = true;
 double epsilon = 1e-2;
-int numRefs = 12;
-double ramp = sqrt(epsilon);
-// double ramp = 1./64.;
+int numRefs = 6;
+double pi = 2.0*acos(0.0);
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -40,108 +39,51 @@ public:
   }
 };
 
-class EntireBoundary : public SpatialFilter {
+class OutsideBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     return true;
   }
 };
 
-class UnitSquareBoundary : public SpatialFilter {
+class CrackBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
-    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
-    return xMatch || yMatch;
+    return (abs(x) < tol);
   }
 };
 
-class RightBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    return (abs(x-1.0) < tol);
-  }
-};
-
-class LeftTopBottomBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool leftMatch = (abs(x) < tol);
-    bool topMatch = (abs(y-1.0) < tol);
-    bool bottomMatch = (abs(y-1.0) < tol);
-    return leftMatch || topMatch || bottomMatch;
-  }
-};
-
-class MassFluxParity : public Function 
-{
-  private:
-    FunctionPtr _massFlux;
-    Teuchos::RCP<Mesh> _mesh;
+class U0 : public Function {
   public:
-    MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
-    _massFlux(massFlux), _mesh(mesh) {}
+    U0() : Function(1.0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
 
-      vector<int> cellIDs = basisCache->cellIDs();
-      int sideIndex = basisCache->getSideIndex();
-      _massFlux->values(values, basisCache);
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          // values(cellIndex, ptIndex) *= parities(sideIndex);
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          values(cellIndex, ptIndex) = 0.0;
         }
       }
     }
 };
 
 // boundary value for u
-class U0 : public Function {
+class UCrack : public Function {
   public:
-    U0() : Function(0) {}
+    UCrack() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
 
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 0;
-        }
-      }
-    }
-};
-
-class U1 : public Function {
-  public:
-    U1() : Function(1.0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          // if (y < 0.01)
-          //   values(cellIndex, ptIndex) = 100*y;
-          // else if (y > 0.99)
-          //   values(cellIndex, ptIndex) = 100*(y-1.0);
-          // else
-          if (y < ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*y;
-          else if (y > 1.0-ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*(1.0-y);
-          else
-            values(cellIndex, ptIndex) = 1.0;
+          values(cellIndex, ptIndex) = 0.5*(cos(4*pi*y+pi)+1);
         }
       }
     }
@@ -161,8 +103,8 @@ public:
         for (int d = 0; d < spaceDim; d++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = 2*(2*y-1)*(1-(2*x-1)*(2*x-1));
-          values(cellIndex,ptIndex,1) = -2*(2*x-1)*(1-(2*y-1)*(2*y-1));
+          values(cellIndex,ptIndex,0) = -y;
+          values(cellIndex,ptIndex,1) = x;
         }
       }
     }
@@ -175,8 +117,6 @@ int main(int argc, char *argv[]) {
     epsilon = atof(argv[1]);
   if (argc > 2)
     numRefs = atof(argv[2]);
-  if (argc > 3)
-    ramp = atof(argv[3]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -198,12 +138,7 @@ int main(int argc, char *argv[]) {
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
   
-  // vector<double> beta_const;
-  // beta_const.push_back(2.0);
-  // beta_const.push_back(1.0);
   FunctionPtr beta = Teuchos::rcp(new Beta());
-  
-  // double eps = 1e-2;
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -252,28 +187,35 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
-  SpatialFilterPtr ltbBoundary = Teuchos::rcp( new LeftTopBottomBoundary );
-  FunctionPtr u0 = Teuchos::rcp( new U0 );
-  bc->addDirichlet(uhat, ltbBoundary, u0);
-  FunctionPtr u1 = Teuchos::rcp( new U1 );
-  bc->addDirichlet(uhat, rBoundary, u1);
+  SpatialFilterPtr inletBoundary = Teuchos::rcp( new InletBoundary );
+  // SpatialFilterPtr outletBoundary = Teuchos::rcp( new OutletBoundary );
+  SpatialFilterPtr tangentialBoundary = Teuchos::rcp( new TangentialBoundary );
+  FunctionPtr u_in = Teuchos::rcp( new UInlet );
+  bc->addDirichlet(uhat, inletBoundary, u_in);
+  FunctionPtr u_tangent = Teuchos::rcp( new UTangent );
+  bc->addDirichlet(uhat, tangentialBoundary, u_tangent);
   
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  FieldContainer<double> meshBoundary(4,2);
+  FieldContainer<double> meshBoundary(7,2);
   
-  meshBoundary(0,0) = 0.0; // x1
-  meshBoundary(0,1) = 0.0; // y1
-  meshBoundary(1,0) = 1.0;
-  meshBoundary(1,1) = 0.0;
-  meshBoundary(2,0) = 1.0;
-  meshBoundary(2,1) = 1.0;
-  meshBoundary(3,0) = 0.0;
-  meshBoundary(3,1) = 1.0;
+  meshBoundary(0,0) = -0.5; // x1
+  meshBoundary(0,1) = -0.5; // y1
+  meshBoundary(1,0) =  0.0;
+  meshBoundary(1,1) = -0.5;
+  meshBoundary(2,0) =  0.0;
+  meshBoundary(2,1) =  0.0;
+  meshBoundary(3,0) =  0.0;
+  meshBoundary(3,1) = -0.5;
+  meshBoundary(4,0) =  0.5;
+  meshBoundary(4,1) = -0.5;
+  meshBoundary(5,0) =  0.5;
+  meshBoundary(5,1) =  0.5;
+  meshBoundary(6,0) = -0.5;
+  meshBoundary(6,1) =  0.5;
   
   int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
+  int horizontalCells = 4, verticalCells = 4;
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
@@ -304,8 +246,7 @@ int main(int argc, char *argv[]) {
   // Create a fake bilinear form for the testing
   BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
   // Define our mass flux
-  FunctionPtr massFluxVal = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-  FunctionPtr massFlux = Teuchos::rcp( new MassFluxParity(massFluxVal, mesh) );
+  FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
   LinearTermPtr massFluxTerm = massFlux * testOne;
 
   Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
@@ -358,7 +299,7 @@ int main(int argc, char *argv[]) {
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     stringstream outfile;
-    outfile << "confusion_" << epsilon << ".vtu";
+    outfile << "bend_" << epsilon;
     solution->writeToVTK(outfile.str(), 3);
   }
   
