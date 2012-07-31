@@ -1100,7 +1100,7 @@ void Mesh::enforceOneIrregularity() {
       
       if (isIrregular){
         if ( 3 == current_element->numSides() ) {
-          irregularQuadCells.push_back(current_element->cellID());
+          irregularTriangleCells.push_back(current_element->cellID());
         }
         else if (4 == current_element->numSides() ) {
           irregularQuadCells.push_back(current_element->cellID());
