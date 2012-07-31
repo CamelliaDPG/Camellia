@@ -121,6 +121,9 @@ public:
   void solve( Teuchos::RCP<Solver> solver );
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
+  
+  void clearSolution(int trialID);
+
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
   
   virtual void solutionValues(FieldContainer<double> &values, 
