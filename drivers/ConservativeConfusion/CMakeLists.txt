@@ -20,7 +20,7 @@ target_link_libraries(BendDriver
   Camellia
 )
 
-add_executable(RotatingFieldDriver RotatingFieldDriver.cpp)
-target_link_libraries(RotatingFieldDriver 
+add_executable(HemkerDriver HemkerDriver.cpp)
+target_link_libraries(HemkerDriver 
   Camellia
 )

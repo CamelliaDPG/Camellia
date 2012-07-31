@@ -137,7 +137,6 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   }
   int numNodes;
   mshFile >> numNodes;
-  cout << numNodes << endl;
   vector<FieldContainer<double> > vertices;
   int dummy;
   for (int i=0; i < numNodes; i++)
@@ -145,7 +144,6 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
     FieldContainer<double> vertex(2);
     mshFile >> dummy;
     mshFile >> vertex(0) >> vertex(1) >> dummy;
-    cout << vertex(0) << " " << vertex(1) << endl;
     vertices.push_back(vertex);
   }
   while (line != "$Elements")
@@ -154,7 +152,6 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   }
   int numElems;
   mshFile >> numElems;
-  cout << "NumElems: " << numElems << endl;
   int elemType;
   int numTags;
   vector< vector<int> > elementIndices;
@@ -171,7 +168,6 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
       elemIndices[1]--;
       elemIndices[2]--;
       elementIndices.push_back(elemIndices);
-      cout << elemIndices[0] <<" "<< elemIndices[1] <<" "<< elemIndices[2] << endl;
     }
     if (elemType == 4)
     {
@@ -181,7 +177,6 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
       elemIndices[1]--;
       elemIndices[2]--;
       elementIndices.push_back(elemIndices);
-      cout << elemIndices[0] <<" "<< elemIndices[1] <<" "<< elemIndices[2] << endl;
     }
     else
     {
