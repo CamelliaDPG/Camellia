@@ -42,7 +42,7 @@ public:
   double value(double x, double y, double h) {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(sqrt(_epsilon)/ h, 1.0);
+    double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-2;
+  double epsilon = 1e-4;
   bool useTriangles = false;
   
   FieldContainer<double> quadPoints(4,2);
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
-  double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
+  double nonlinearRelativeEnergyTolerance = 0.0001; // used to determine convergence of the nonlinear solution
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE VARIABLES 
@@ -179,10 +179,10 @@ int main(int argc, char *argv[]) {
   // function to scale the squared guy by epsilon/h
   FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
   IPPtr ip = Teuchos::rcp( new IP );
-  ip->addTerm(tau);
-  ip->addTerm(tau->div());
+  ip->addTerm( epsilonOverHScaling * (1.0/sqrt(epsilon))* tau);
+  ip->addTerm( tau->div());
   ip->addTerm( epsilonOverHScaling * v );
-  ip->addTerm( sqrt(sqrt(epsilon)) * v->grad() );
+  ip->addTerm( sqrt(epsilon) * v->grad() );
   ip->addTerm( beta * v->grad() );
 
   ////////////////////////////////////////////////////////////////////
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
-  pc->addConstraint(sigma_hat==zero,outflowBoundary);
+  //  pc->addConstraint(sigma_hat==zero,outflowBoundary);
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE DIRICHLET BC
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
   mesh->registerSolution(solution);
-  solution->setFilter(pc);
+  //  solution->setFilter(pc);
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
-  int numRefs = 5;
+  int numRefs = 9;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -239,18 +239,16 @@ int main(int argc, char *argv[]) {
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   
-  // one more nonlinear solve on refined mesh
-  int numNRSteps = 5;
-  for (int i=0;i<numNRSteps;i++){
-    solution->solve(false); // false: don't use MUMPS
-    backgroundFlow->addSolution(solution,1.0);
-  }
-  
+  solveStrategy->solve(rank==0);
+
   if (rank==0){
+    /*
     backgroundFlow->writeToFile(BurgersBilinearForm::U, "u_ref_old_plotSolution.dat"); // useful for triangles...
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::U, "u_ref.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_1, "sigmax.m");
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigmay.m");
+    */
+    backgroundFlow->writeToVTK("Burgers.vtu",min(H1Order+1,4));
     solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
   }
   

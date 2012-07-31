@@ -1432,9 +1432,11 @@ const map<int,double> & Solution::energyError() {
 #endif  
   
   if ( _energyErrorComputed ) {
+    /*
     if (rank==0){
       cout << "reusing energy error\n";
     }
+    */
     return _energyErrorForCellIDGlobal;
   }
   
