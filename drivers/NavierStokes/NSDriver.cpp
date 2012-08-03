@@ -174,11 +174,121 @@ public:
 
 // ===================== Spatial filter boundary functions ====================
 
+/* not really a spatial filter, but used like one in the penalty method */
+class SubsonicIndicator : public Function {
+  FunctionPtr _u1;
+  FunctionPtr _T;
+  double _gamma;
+  double _cv;    
+  double _tol;
+public:
+  SubsonicIndicator(FunctionPtr u1hat, FunctionPtr That, double gamma, double cv) : Function(0) {
+    _u1 = u1hat;
+    _T = That;
+    _gamma = gamma;
+    _cv = cv;  
+    _tol=1e-12;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {  
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
+    int numCells = (*points).dimension(0);
+    int numPoints = (*points).dimension(1);
+
+    FieldContainer<double> Tv(numCells,numPoints);
+    FieldContainer<double> u1v(numCells,numPoints);;
+    _u1->values(u1v,basisCache);
+    _T->values(Tv,basisCache);
+    
+    bool isSubsonic = false;
+    double min_y = YTOP;
+    double max_y = 0.0;
+    values.initialize(0.0);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	double x = (*points)(cellIndex,ptIndex,0);
+	double y = (*points)(cellIndex,ptIndex,1);
+	
+	double T = Tv(cellIndex,ptIndex);
+	double un = u1v(cellIndex,ptIndex); // WARNING: ASSUMES NORMAL AT OUTFLOW = (1,0)
+	double c = sqrt(_gamma * (_gamma-1.0) * _cv * T);
+
+	cout << "un = " << un << ", T = " << T << endl;
+
+	bool outflowMatch = ((abs(x-2.0) < _tol) && (y > 0.0) && (y < YTOP));
+	bool subsonicMatch = (un < c) && (un > 0.0);
+	if (subsonicMatch && outflowMatch){
+	  values(cellIndex,ptIndex) = 1.0;
+	  isSubsonic = true;
+	  min_y = min(y,min_y);
+	  max_y = max(y,max_y);
+	}
+      }
+    }
+    if (isSubsonic){
+      cout << "subsonic in interval y =(" << min_y << "," << max_y << ")" << endl;
+    }
+  }
+};
+
+class SubsonicOutflow : public SpatialFilter { 
+  FunctionPtr _u1;
+  FunctionPtr _T;
+  double _gamma;
+  double _cv;
+public:
+  SubsonicOutflow(FunctionPtr u1hat, FunctionPtr That, double gamma, double cv) {
+    _u1 = u1hat;
+    _T = That;
+    _gamma = gamma;
+    _cv = cv;
+  }
+
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {  
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    int numCells = (*points).dimension(0);
+    int numPoints = (*points).dimension(1);
+
+    FieldContainer<double> T(numCells,numPoints);
+    FieldContainer<double> u1(numCells,numPoints);;
+    _u1->values(u1,basisCache);
+    _T->values(T,basisCache);
+    
+    double tol=1e-14;
+    bool somePointMatches = false;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	double x = (*points)(cellIndex,ptIndex,0);
+	double y = (*points)(cellIndex,ptIndex,1);
+
+	double T_val = T(cellIndex,ptIndex);
+	double c = sqrt(_gamma * (_gamma-1.0) * _cv * T_val);
+	double un = u1(cellIndex,ptIndex); // WARNING: ASSUMES NORMAL AT OUTFLOW = (1,0)
+
+	cout << "un = " << un << ", T = " << T_val << endl;
+
+	double tol = 1e-14;
+	bool outflowMatch = ((abs(x-2.0) < tol) && (y > 0.0) && (y < YTOP));
+	bool subsonicMatch = (un < c) && (un > 0.0);
+
+	pointsMatch(cellIndex,ptIndex) = false;
+	if (outflowMatch && subsonicMatch){	  
+	  pointsMatch(cellIndex,ptIndex) = true;
+	  somePointMatches = true;
+	}
+      }
+    }
+    return somePointMatches;   
+  }
+};
+
+
 class OutflowBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool yMatch = ((abs(x-2.0)<tol) && (y > 0) && (y < YTOP)) ;
+    bool yMatch = ((abs(x-2.0) < tol) && (y > 0.0) && (y < YTOP));
     return yMatch;
   }
 };
@@ -254,7 +364,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e4;
+  double Re = 1e3;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
 
@@ -277,7 +387,7 @@ int main(int argc, char *argv[]) {
   domainPoints(3,1) = YTOP;  
   
   int H1Order = polyOrder + 1;
-  int nCells = 2;
+  int nCells = 1;
   if ( argc > 1) {
     nCells = atoi(argv[1]);
     if (rank==0){
@@ -292,7 +402,7 @@ int main(int argc, char *argv[]) {
     }
   }
   int horizontalCells = (2.0/YTOP)*nCells, verticalCells = nCells;
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   
   ////////////////////////////////////////////////////////////////////
@@ -381,7 +491,14 @@ int main(int argc, char *argv[]) {
   FunctionPtr T_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, T) );
 
   // for subsonic outflow 
-  FunctionPtr u2hat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u2hat) );
+  FunctionPtr u1hat_prev  = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u1hat ) );
+  FunctionPtr That_prev   = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, That  ) );
+  FunctionPtr F2nhat_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, F2nhat) );
+  FunctionPtr F3nhat_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, F3nhat) );
+  FunctionPtr F4nhat_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, F4nhat) );
+
+  FunctionPtr u1hat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u1hat) );
+  FunctionPtr That_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, That) );
   FunctionPtr F2nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F2nhat) );
   FunctionPtr F3nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F3nhat) );
   FunctionPtr F4nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F4nhat) );
@@ -431,7 +548,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr dedu2 = u2_prev;
   double dedT = cv; 
 
-  double beta = 0.0;//2.0/3.0;
+  double beta = 2.0/3.0;
   FunctionPtr T_visc;
   if (abs(beta)<1e-14){
     T_visc = Teuchos::rcp( new ConstantScalarFunction(1.0) );  
@@ -620,7 +737,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .05;
+  double dt = .1;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -658,7 +775,9 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
-  FunctionPtr ReDtScaling = Teuchos::rcp( new EpsilonScaling(dt/Re) ); 
+  //  FunctionPtr ReScaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
+  //  FunctionPtr ReDtScaling = Teuchos::rcp( new EpsilonScaling(dt/Re) ); 
+  FunctionPtr ReDtScaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   IPPtr ip = Teuchos::rcp( new IP );
 
@@ -907,6 +1026,37 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
   //  solution->setReportTimingResults(true); // print out timing 
 
+  bool setOutflowBC = true;
+  if (setOutflowBC){
+    bool usePenalty = false;
+    if (usePenalty){
+      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+      SpatialFilterPtr outflow = Teuchos::rcp( new OutflowBoundary);
+      FunctionPtr subsonicIndicator = Teuchos::rcp( new SubsonicIndicator(u1hat_prev, That_prev, GAMMA, cv) );
+      // conditions on u_n = u_1, sigma_ns = sigma_12, q_1 flux
+      pc->addConstraint(subsonicIndicator*u1hat == subsonicIndicator*u1hat_prev_time,outflow);
+      pc->addConstraint(subsonicIndicator*F3nhat == subsonicIndicator*F3nhat_prev_time,outflow);
+      pc->addConstraint(subsonicIndicator*F4nhat == subsonicIndicator*F4nhat_prev_time,outflow);
+
+      solution->setFilter(pc);
+
+    } else {
+      SpatialFilterPtr subsonicOutflow = Teuchos::rcp( new SubsonicOutflow(u1hat_prev, That_prev, GAMMA, cv));
+      /*
+      bc->addDirichlet(u1hat, subsonicOutflow, u1hat_prev); // u_n
+      bc->addDirichlet(F3nhat, subsonicOutflow, F3nhat_prev); // sigma_12
+      bc->addDirichlet(F4nhat, subsonicOutflow, F4nhat_prev); // q_1
+      */
+      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+      pc->addConstraint(u1hat == u1hat_prev_time,subsonicOutflow);
+      pc->addConstraint(F3nhat == F3nhat_prev_time,subsonicOutflow);
+      pc->addConstraint(F4nhat == F4nhat_prev_time,subsonicOutflow);
+
+      solution->setFilter(pc);
+
+    }
+  }
+
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
   mesh->registerSolution(prevTimeFlow); // u_t(i-1)
@@ -961,16 +1111,15 @@ int main(int argc, char *argv[]) {
   // PSEUDO-TIME SOLVE STRATEGY 
   ////////////////////////////////////////////////////////////////////
 
-
+  bool useAdaptTS = false;
   if (rank==0){
     cout << "doing timesteps";
-    if (rank==0){
+    if ((rank==0) && useAdaptTS){
       cout << " using adaptive timestepping";
     }
     cout << endl;  
   }
 
-  bool useAdaptTS = false;
   // time steps
   double time_tol = 1e-8;
   for (int k = 0;k<=numRefs;k++){    
@@ -1059,10 +1208,29 @@ int main(int argc, char *argv[]) {
 	solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
 	solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
 	solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
+	
+	backgroundFlow->writeFluxesToFile(u1hat->ID(),"u1hat_prev" +oss.str()+dat.str());
+	backgroundFlow->writeFluxesToFile(u2hat->ID(),"u2hat_prev" +oss.str()+dat.str());
+	backgroundFlow->writeFluxesToFile(That->ID(), "That_prev" +oss.str()+dat.str());
+	backgroundFlow->writeFluxesToFile(F1nhat->ID(),"F1nhat_prev"+oss.str()+dat.str() );
+	backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
+	backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
+	backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
 
 	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
+
+      // clear fluxes that we use for subsonic outflow, which accumulate
+      prevTimeFlow->clearSolution(That->ID());
+      prevTimeFlow->clearSolution(u1hat->ID());
+      prevTimeFlow->clearSolution(F3nhat->ID());
+      prevTimeFlow->clearSolution(F4nhat->ID());
+      backgroundFlow->clearSolution(That->ID());
+      backgroundFlow->clearSolution(u1hat->ID());
+      backgroundFlow->clearSolution(F3nhat->ID());
+      backgroundFlow->clearSolution(F4nhat->ID());
+
       i++;
     }
     
@@ -1135,9 +1303,11 @@ int main(int argc, char *argv[]) {
 	cout << "Performing refinement number " << k << endl;
       }     
       refinementStrategy->refine(rank==0);    
+      
       // RESET solution every refinement - make sure discretization error doesn't creep in
       backgroundFlow->projectOntoMesh(functionMap);
       prevTimeFlow->projectOntoMesh(functionMap);
+      
     }
   }
 
