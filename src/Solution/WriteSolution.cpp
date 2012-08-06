@@ -1,6 +1,6 @@
 #include "Solution.h"
 
-//#define USE_VTK
+#define USE_VTK
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -241,7 +241,8 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
   wr->Update();
   wr->Write();
   wr->Delete();
-  // writeTracesToVTK(filePath);
+
+  cout << "Wrote Field Variables to " << filePath << ".vtu" << endl;
 }
 
 void Solution::writeTracesToVTK(const string& filePath)

@@ -24,3 +24,8 @@ add_executable(HemkerDriver HemkerDriver.cpp)
 target_link_libraries(HemkerDriver 
   Camellia
 )
+
+add_executable(HemkerSquare HemkerSquare.cpp)
+target_link_libraries(HemkerSquare 
+  Camellia
+)

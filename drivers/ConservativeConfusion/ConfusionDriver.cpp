@@ -271,7 +271,6 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  refinementStrategy.setEnforceOneIrregurity(false);
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
