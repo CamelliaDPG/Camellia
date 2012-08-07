@@ -137,7 +137,7 @@ public:
              FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
              FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-             const vector<int> &cellIDs, BasisCachePtr volumeCache);
+             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, BasisCachePtr volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> & getWeightedMeasures();
@@ -151,6 +151,7 @@ public:
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
   // side cache accessor: (new, pretty untested!)
+  bool isSideCache();
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
   Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
   
