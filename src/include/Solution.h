@@ -121,6 +121,9 @@ public:
   void solve( Teuchos::RCP<Solver> solver );
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
+  
+  void clearSolution(int trialID);
+
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
   
   virtual void solutionValues(FieldContainer<double> &values, 
@@ -202,7 +205,8 @@ public:
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
 
-  void writeToVTK(const string& filePath, unsigned int refinementLevel=1);
+  void writeToVTK(const string& filePath, unsigned int num1DPts=3);
+  void writeFieldsToVTK(const string& filePath, unsigned int num1DPts=3);
   void writeTracesToVTK(const string& filePath);
   
   // statistics accessors:

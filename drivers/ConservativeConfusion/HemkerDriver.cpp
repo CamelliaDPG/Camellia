@@ -1,4 +1,4 @@
-//  ConfusionDriver.cpp
+//  BendDriver.cpp
 //  Driver for Conservative Convection-Diffusion
 //  Camellia
 //
@@ -18,12 +18,7 @@
 
 bool enforceLocalConservation = true;
 double epsilon = 1e-2;
-int numRefs = 12;
-double ramp = sqrt(epsilon);
-// double ramp = 1./64.;
-
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
+int numRefs = 2;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -40,20 +35,11 @@ public:
   }
 };
 
-class EntireBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    return true;
-  }
-};
-
-class UnitSquareBoundary : public SpatialFilter {
+class LeftBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
-    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
-    return xMatch || yMatch;
+    return (abs(x+3) < tol);
   }
 };
 
@@ -61,66 +47,32 @@ class RightBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    return (abs(x-1.0) < tol);
+    bool rightMatch = (abs(x-9) < tol);
+    return rightMatch;
   }
 };
 
-class LeftTopBottomBoundary : public SpatialFilter {
+class TopBottomBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool leftMatch = (abs(x) < tol);
-    bool topMatch = (abs(y-1.0) < tol);
-    bool bottomMatch = (abs(y-1.0) < tol);
-    return leftMatch || topMatch || bottomMatch;
+    bool topMatch = (abs(y-3) < tol);
+    bool bottomMatch = (abs(y) < tol);
+    return topMatch || bottomMatch;
   }
 };
 
-class MassFluxParity : public Function 
-{
-  private:
-    FunctionPtr _massFlux;
-    Teuchos::RCP<Mesh> _mesh;
-  public:
-    MassFluxParity(FunctionPtr massFlux, Teuchos::RCP<Mesh> mesh ) : Function(0), 
-    _massFlux(massFlux), _mesh(mesh) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      vector<int> cellIDs = basisCache->cellIDs();
-      int sideIndex = basisCache->getSideIndex();
-      _massFlux->values(values, basisCache);
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        FieldContainer<double> parities = _mesh->cellSideParitiesForCell(cellIDs[cellIndex]);
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          // values(cellIndex, ptIndex) *= parities(sideIndex);
-        }
-      }
-    }
+class CircleBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-6;
+    return (abs(x*x+y*y-1) < tol);
+  }
 };
 
-// boundary value for u
-class U0 : public Function {
+class ZeroBC : public Function {
   public:
-    U0() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 0;
-        }
-      }
-    }
-};
-
-class U1 : public Function {
-  public:
-    U1() : Function(1.0) {}
+    ZeroBC() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -131,17 +83,25 @@ class U1 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          // if (y < 0.01)
-          //   values(cellIndex, ptIndex) = 100*y;
-          // else if (y > 0.99)
-          //   values(cellIndex, ptIndex) = 100*(y-1.0);
-          // else
-          if (y < ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*y;
-          else if (y > 1.0-ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*(1.0-y);
-          else
-            values(cellIndex, ptIndex) = 1.0;
+          values(cellIndex, ptIndex) = 0;
+        }
+      }
+    }
+};
+
+// boundary value for sigma_n
+class OneBC : public Function {
+  public:
+    OneBC() : Function(0) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      double tol=1e-14;
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = 1;
         }
       }
     }
@@ -161,8 +121,8 @@ public:
         for (int d = 0; d < spaceDim; d++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = 2*(2*y-1)*(1-(2*x-1)*(2*x-1));
-          values(cellIndex,ptIndex,1) = -2*(2*x-1)*(1-(2*y-1)*(2*y-1));
+          values(cellIndex,ptIndex,0) = 1;
+          values(cellIndex,ptIndex,1) = 0;
         }
       }
     }
@@ -175,8 +135,6 @@ int main(int argc, char *argv[]) {
     epsilon = atof(argv[1]);
   if (argc > 2)
     numRefs = atof(argv[2]);
-  if (argc > 3)
-    ramp = atof(argv[3]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -198,12 +156,7 @@ int main(int argc, char *argv[]) {
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
   
-  // vector<double> beta_const;
-  // beta_const.push_back(2.0);
-  // beta_const.push_back(1.0);
   FunctionPtr beta = Teuchos::rcp(new Beta());
-  
-  // double eps = 1e-2;
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -252,32 +205,23 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
+  SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
+  SpatialFilterPtr tbBoundary = Teuchos::rcp( new TopBottomBoundary );
   SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
-  SpatialFilterPtr ltbBoundary = Teuchos::rcp( new LeftTopBottomBoundary );
-  FunctionPtr u0 = Teuchos::rcp( new U0 );
-  bc->addDirichlet(uhat, ltbBoundary, u0);
-  FunctionPtr u1 = Teuchos::rcp( new U1 );
-  bc->addDirichlet(uhat, rBoundary, u1);
+  SpatialFilterPtr circleBoundary = Teuchos::rcp( new CircleBoundary );
+  FunctionPtr u0 = Teuchos::rcp( new ZeroBC );
+  FunctionPtr u1 = Teuchos::rcp( new OneBC );
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  bc->addDirichlet(uhat, lBoundary, u0);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, tbBoundary, u0);
+  bc->addDirichlet(uhat, circleBoundary, u1);
+  // pc->addConstraint(beta_n_u_minus_sigma_n - uhat == u0, rBoundary);
   
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  FieldContainer<double> meshBoundary(4,2);
-  
-  meshBoundary(0,0) = 0.0; // x1
-  meshBoundary(0,1) = 0.0; // y1
-  meshBoundary(1,0) = 1.0;
-  meshBoundary(1,1) = 0.0;
-  meshBoundary(2,0) = 1.0;
-  meshBoundary(2,1) = 1.0;
-  meshBoundary(3,0) = 0.0;
-  meshBoundary(3,1) = 1.0;
-  
   int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = Mesh::readMsh("Hemker3.msh", confusionBF, H1Order, pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
@@ -289,8 +233,9 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  double energyThreshold = 0.3; // for mesh refinements
+  double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  refinementStrategy.setEnforceOneIrregurity(false);
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
@@ -304,8 +249,7 @@ int main(int argc, char *argv[]) {
   // Create a fake bilinear form for the testing
   BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
   // Define our mass flux
-  FunctionPtr massFluxVal = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-  FunctionPtr massFlux = Teuchos::rcp( new MassFluxParity(massFluxVal, mesh) );
+  FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
   LinearTermPtr massFluxTerm = massFlux * testOne;
 
   Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
@@ -358,8 +302,8 @@ int main(int argc, char *argv[]) {
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     stringstream outfile;
-    outfile << "confusion_" << epsilon << ".vtu";
-    solution->writeToVTK(outfile.str(), 3);
+    outfile << "hemker_" << epsilon;
+    solution->writeFieldsToVTK(outfile.str(), 3);
   }
   
   return 0;
