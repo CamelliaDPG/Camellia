@@ -185,40 +185,52 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   }
   mshFile.close();
 
-  Teuchos::RCP<Mesh> mesh;
-  // // L-shaped domain for double ramp problem
-  // FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-  // A(0) = 0.0; A(1) = 0.5;
-  // B(0) = 0.0; B(1) = 1.0;
-  // C(0) = 0.5; C(1) = 1.0;
-  // D(0) = 1.0; D(1) = 1.0;
-  // E(0) = 1.0; E(1) = 0.5;
-  // F(0) = 1.0; F(1) = 0.0;
-  // G(0) = 0.5; G(1) = 0.0;
-  // H(0) = 0.5; H(1) = 0.5;
-  // vector<FieldContainer<double> > fake_vertices;
-  // fake_vertices.push_back(A); int A_index = 0;
-  // fake_vertices.push_back(B); int B_index = 1;
-  // fake_vertices.push_back(C); int C_index = 2;
-  // fake_vertices.push_back(D); int D_index = 3;
-  // fake_vertices.push_back(E); int E_index = 4;
-  // fake_vertices.push_back(F); int F_index = 5;
-  // fake_vertices.push_back(G); int G_index = 6;
-  // fake_vertices.push_back(H); int H_index = 7;
-  // vector< vector<int> > elementVertices;
-  // vector<int> el1, el2, el3, el4, el5;
-  // // left patch:
-  // el1.push_back(A_index); el1.push_back(H_index); el1.push_back(C_index); el1.push_back(B_index);
-  // // top right:
-  // el2.push_back(H_index); el2.push_back(E_index); el2.push_back(D_index); el2.push_back(C_index);
-  // // bottom right:
-  // el3.push_back(G_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(H_index);
+  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );  
+  return mesh;
+}
 
-  // elementVertices.push_back(el1);
-  // elementVertices.push_back(el2);
-  // elementVertices.push_back(el3);
-  
-  mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );  
+Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd)
+{
+  ifstream nodeFile;
+  ifstream eleFile;
+  string nodeFileName = filePath+".node";
+  string eleFileName = filePath+".ele";
+  nodeFile.open(nodeFileName.c_str());
+  eleFile.open(eleFileName.c_str());
+  TEST_FOR_EXCEPTION(nodeFile == NULL, std::invalid_argument, "Could not open node file: "+nodeFileName);
+  TEST_FOR_EXCEPTION(eleFile == NULL, std::invalid_argument, "Could not open ele file: "+eleFileName);
+  // Read node file
+  string line;
+  int numNodes;
+  nodeFile >> numNodes;
+  getline(nodeFile, line);
+  vector<FieldContainer<double> > vertices;
+  int dummy;
+  FieldContainer<double> pt(2);
+  for (int i=0; i < numNodes; i++)
+  {
+    nodeFile >> dummy >> pt(0) >> pt(1);
+    getline(nodeFile, line);
+    vertices.push_back(pt);
+  }
+  nodeFile.close();
+  // Read ele file
+  int numElems;
+  eleFile >> numElems;
+  getline(eleFile, line);
+  vector< vector<int> > elementIndices;
+  vector<int> el(3);
+  for (int i=0; i < numElems; i++)
+  {
+    eleFile >> dummy >> el[0] >> el[1] >> el[2];
+    el[0]--;
+    el[1]--;
+    el[2]--;
+    elementIndices.push_back(el);
+  }
+  eleFile.close();
+
+  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bilinearForm, H1Order, pToAdd) );  
   return mesh;
 }
 

@@ -240,7 +240,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   int H1Order = 3, pToAdd = 2;
-  Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", confusionBF, H1Order, pToAdd);
+  // Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", confusionBF, H1Order, pToAdd);
+  Teuchos::RCP<Mesh> mesh = Mesh::readTriangle("quad.1", confusionBF, H1Order, pToAdd);
   // define nodes for mesh
   // FieldContainer<double> meshBoundary(4,2);
   // 

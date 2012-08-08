@@ -18,12 +18,12 @@
 
 bool enforceLocalConservation = true;
 double epsilon = 1e-4;
-int numRefs = 3;
+int numRefs = 0;
 int nseg = 2;
-double pi = 2.0*acos(0.0);
-
-bool ReadMesh = false;
+bool ReadMesh = true;
 bool CircleMesh = false;
+
+double pi = 2.0*acos(0.0);
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -63,9 +63,9 @@ public:
     double tol = 1e-14;
     bool topMatch = (abs(y-3) < tol);
     bool bottomMatch;
-    if (ReadMesh)
-      bottomMatch = (abs(y) < tol);
-    else
+    // if (ReadMesh)
+    //   bottomMatch = (abs(y) < tol);
+    // else
       bottomMatch = (abs(y+3) < tol);
     return topMatch || bottomMatch;
   }
@@ -74,7 +74,7 @@ public:
 class CircleBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
+    double tol = 1e-3;
     return (abs(x*x+y*y) < 1+tol);
   }
 };
@@ -199,7 +199,8 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  // robIP->addTerm( ip_scaling * v );
+  if (!enforceLocalConservation)
+    robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(epsilon) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
@@ -232,8 +233,60 @@ int main(int argc, char *argv[]) {
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
   if (ReadMesh)
-     mesh = Mesh::readMsh("Hemker3.msh", confusionBF, H1Order, pToAdd);
+    mesh = Mesh::readTriangle("Hemker.1", confusionBF, H1Order, pToAdd);
   else
+#if 0
+  {
+    vector< FieldContainer<double> > vertices;
+    FieldContainer<double> pt(2);
+    vector< vector<int> > elementIndices;
+    vector<int> el(3);
+
+    pt(0) = -3; pt(1) = -3;
+    vertices.push_back(pt);
+    pt(0) = 9; pt(1) = -3;
+    vertices.push_back(pt);
+    pt(0) = 9; pt(1) = 3;
+    vertices.push_back(pt);
+    pt(0) = -3; pt(1) = 3;
+    vertices.push_back(pt);
+    pt(0) = 1; pt(1) = 0;
+    vertices.push_back(pt);
+    pt(0) = 0; pt(1) = 1;
+    vertices.push_back(pt);
+    pt(0) = -1; pt(1) = 0;
+    vertices.push_back(pt);
+    pt(0) = 0; pt(1) = -1;
+    vertices.push_back(pt);
+    pt(0) = 3; pt(1) = 3;
+    vertices.push_back(pt);
+    pt(0) = 3; pt(1) = -3;
+    vertices.push_back(pt);
+
+    el[0] = 0; el[1] = 7; el[2] = 6;
+    elementIndices.push_back(el);
+    el[0] = 1; el[1] = 8; el[2] = 9;
+    elementIndices.push_back(el);
+    el[0] = 5; el[1] = 3; el[2] = 6;
+    elementIndices.push_back(el);
+    el[0] = 6; el[1] = 3; el[2] = 0;
+    elementIndices.push_back(el);
+    el[0] = 7; el[1] = 0; el[2] = 9;
+    elementIndices.push_back(el);
+    el[0] = 1; el[1] = 2; el[2] = 8;
+    elementIndices.push_back(el);
+    el[0] = 4; el[1] = 7; el[2] = 9;
+    elementIndices.push_back(el);
+    el[0] = 5; el[1] = 8; el[2] = 3;
+    elementIndices.push_back(el);
+    el[0] = 9; el[1] = 8; el[2] = 4;
+    elementIndices.push_back(el);
+    el[0] = 4; el[1] = 8; el[2] = 5;
+    elementIndices.push_back(el);
+
+    mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, confusionBF, H1Order, pToAdd) );  
+  }
+#else
   {
     // Generate Mesh
     vector< FieldContainer<double> > vertices;
@@ -453,6 +506,7 @@ int main(int argc, char *argv[]) {
     // }
     mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, confusionBF, H1Order, pToAdd) );  
   }
+#endif
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, mathIP) );
@@ -469,10 +523,10 @@ int main(int argc, char *argv[]) {
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
-    refinementStrategy.refine(rank==0); // print to console on rank 0
     stringstream outfile;
     outfile << "hemker_" << refIndex;
     solution->writeFieldsToVTK(outfile.str(), 2);
+    refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
   solution->solve(false);

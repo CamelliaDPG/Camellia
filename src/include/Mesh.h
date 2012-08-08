@@ -142,6 +142,8 @@ public:
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
+  static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+  
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm, 
