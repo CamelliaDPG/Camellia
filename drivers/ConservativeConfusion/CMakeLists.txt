@@ -25,7 +25,7 @@ target_link_libraries(HemkerDriver
   Camellia
 )
 
-add_executable(HemkerSquare HemkerSquare.cpp)
-target_link_libraries(HemkerSquare 
+add_executable(AirfoilDriver AirfoilDriver.cpp)
+target_link_libraries(AirfoilDriver 
   Camellia
 )

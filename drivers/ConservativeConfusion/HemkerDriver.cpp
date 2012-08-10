@@ -19,9 +19,10 @@
 bool enforceLocalConservation = true;
 double epsilon = 1e-4;
 int numRefs = 0;
-int nseg = 2;
-bool ReadMesh = true;
+int nseg = 32;
+bool ReadMesh = false;
 bool CircleMesh = false;
+bool TriangulateMesh = false;
 
 double pi = 2.0*acos(0.0);
 
@@ -136,6 +137,34 @@ public:
   }
 };
 
+class IPWeight : public Function {
+  public:
+    IPWeight() : Function(0) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      double a = 2;
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          // if (x > 0 && abs(y) < 1+1e-3 && x < a)
+          //   values(cellIndex, ptIndex) = epsilon + (x-sqrt(1-y*y))/(a-sqrt(1-y*y));
+          if (x > 0 && sqrt(x*x+y*y) < a)
+          {
+            double dr = sqrt(x*x+y*y) - 1;
+            values(cellIndex, ptIndex) = epsilon + dr/(a-1);
+          }
+          else
+            values(cellIndex, ptIndex) = 1;
+        }
+      }
+    }
+};
+
 int main(int argc, char *argv[]) {
   // Process command line arguments
   if (argc > 1)
@@ -202,8 +231,10 @@ int main(int argc, char *argv[]) {
   if (!enforceLocalConservation)
     robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(epsilon) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
+  // Weight these two terms for inflow
+  FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
+  robIP->addTerm( ip_weight * beta * v->grad() );
+  robIP->addTerm( ip_weight * tau->div() );
   robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
   if (enforceLocalConservation)
     robIP->addZeroMeanTerm( v );
@@ -293,6 +324,8 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> pt(2);
     vector< vector<int> > elementIndices;
     vector<int> el(4);
+    vector<int> el1(3);
+    vector<int> el2(3);
     // Inner Square
     double S;
     if (CircleMesh)
@@ -319,7 +352,19 @@ int main(int argc, char *argv[]) {
       el[1] = i + 1;
       el[2] = 4*nseg + i + 1;
       el[3] = 4*nseg + i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     // Right edge
     for (int i=0; i < nseg; i++)
@@ -340,7 +385,19 @@ int main(int argc, char *argv[]) {
       el[1] = nseg + i + 1;
       el[2] = 5*nseg + i + 1;
       el[3] = 5*nseg + i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     // Top edge
     for (int i=0; i < nseg; i++)
@@ -361,7 +418,19 @@ int main(int argc, char *argv[]) {
       el[1] = 2*nseg + i + 1;
       el[2] = 6*nseg + i + 1;
       el[3] = 6*nseg + i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     // Left edge
     for (int i=0; i < nseg; i++)
@@ -382,10 +451,45 @@ int main(int argc, char *argv[]) {
       el[1] = 3*nseg + i + 1;
       el[2] = 7*nseg + i + 1;
       el[3] = 7*nseg + i;
-      elementIndices.push_back(el);
+      if (i == nseg-1)
+      {
+        el[1] = 0;
+        el[2] = 4*nseg;
+      }
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
-    elementIndices[4*nseg-1][1] = 0;
-    elementIndices[4*nseg-1][2] = 4*nseg;
+    // if (TriangulateMesh)
+    // {
+    //   elementIndices[elementIndices.size()-2][1] = 0;
+    //   elementIndices[elementIndices.size()-2][2] = 4*nseg-1;
+    //   cout << "Left Element 1: " 
+    //     << elementIndices[elementIndices.size()-2][0]
+    //     << elementIndices[elementIndices.size()-2][1]
+    //     << elementIndices[elementIndices.size()-2][2] << endl;
+    //   cout << "Left Element 2: " 
+    //     << elementIndices[elementIndices.size()-1][0]
+    //     << elementIndices[elementIndices.size()-1][1]
+    //     << elementIndices[elementIndices.size()-1][2] << endl;
+    // }
+    // else
+    // {
+    //   elementIndices.back()[1] = 0;
+    //   elementIndices.back()[2] = 4*nseg;
+    // }
+    // elementIndices[4*nseg-1][1] = 0;
+    // elementIndices[4*nseg-1][2] = 4*nseg;
     // Circle
     for (int i=0; i < 4*nseg; i++)
     {
@@ -406,7 +510,19 @@ int main(int argc, char *argv[]) {
       el[1] = N + i + 1;
       el[2] = i + 1;
       el[3] = i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     pt(0) = S;
     pt(1) = -3.0;
@@ -421,7 +537,19 @@ int main(int argc, char *argv[]) {
       el[1] = N + nseg+1 + i + 1;
       el[2] = nseg + i + 1;
       el[3] = nseg + i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     pt(0) = 9.0;
     pt(1) = S;
@@ -436,7 +564,19 @@ int main(int argc, char *argv[]) {
       el[1] = N + 2*(nseg+1) + i + 1;
       el[2] = 2*nseg + i + 1;
       el[3] = 2*nseg + i;
-      elementIndices.push_back(el);
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
     pt(0) = -S;
     pt(1) = 3.0;
@@ -451,9 +591,31 @@ int main(int argc, char *argv[]) {
       el[1] = N + 3*(nseg+1) + i + 1;
       el[2] = 3*nseg + i + 1;
       el[3] = 3*nseg + i;
-      elementIndices.push_back(el);
+      if (i == nseg-1)
+      {
+        el[2] = 0;
+      }
+      if (TriangulateMesh)
+      {
+        el1[0] = el[0];
+        el1[1] = el[1];
+        el1[2] = el[2];
+        el2[0] = el[0];
+        el2[1] = el[2];
+        el2[2] = el[3];
+        elementIndices.push_back(el1);
+        elementIndices.push_back(el2);
+      }
+      else
+        elementIndices.push_back(el);
     }
-    elementIndices[elementIndices.size()-1][2] = 0;
+    // if (TriangulateMesh)
+    // {
+    //   elementIndices[elementIndices.size()-2][2] = 0;
+    //   elementIndices[elementIndices.size()-1][1] = 0;
+    // }
+    // else
+    //   elementIndices.back()[2] = 0;
     pt(0) = -3.0;
     pt(1) = -S;
     vertices.push_back(pt);
@@ -465,7 +627,19 @@ int main(int argc, char *argv[]) {
     el[1] = N;
     el[2] = 0;
     el[3] = N + 4*(nseg+1) - 1;
-    elementIndices.push_back(el);
+    if (TriangulateMesh)
+    {
+      el1[0] = el[0];
+      el1[1] = el[1];
+      el1[2] = el[2];
+      el2[0] = el[0];
+      el2[1] = el[2];
+      el2[2] = el[3];
+      elementIndices.push_back(el1);
+      elementIndices.push_back(el2);
+    }
+    else
+      elementIndices.push_back(el);
     // Bottom right corner
     pt(0) = 9.0;
     pt(1) = -3.0;
@@ -474,7 +648,19 @@ int main(int argc, char *argv[]) {
     el[1] = N + 4*(nseg+1) + 1;
     el[2] = N + nseg+1;
     el[3] = nseg;
-    elementIndices.push_back(el);
+    if (TriangulateMesh)
+    {
+      el1[0] = el[0];
+      el1[1] = el[1];
+      el1[2] = el[2];
+      el2[0] = el[0];
+      el2[1] = el[2];
+      el2[2] = el[3];
+      elementIndices.push_back(el1);
+      elementIndices.push_back(el2);
+    }
+    else
+      elementIndices.push_back(el);
     // Top right corner
     pt(0) = 9.0;
     pt(1) = 3.0;
@@ -483,7 +669,19 @@ int main(int argc, char *argv[]) {
     el[1] = N + 2*(nseg+1)-1;
     el[2] = N + 4*(nseg+1) + 2;
     el[3] = N + 2*(nseg+1);
-    elementIndices.push_back(el);
+    if (TriangulateMesh)
+    {
+      el1[0] = el[0];
+      el1[1] = el[1];
+      el1[2] = el[2];
+      el2[0] = el[0];
+      el2[1] = el[2];
+      el2[2] = el[3];
+      elementIndices.push_back(el1);
+      elementIndices.push_back(el2);
+    }
+    else
+      elementIndices.push_back(el);
     // Top Left corner
     pt(0) = -3.0;
     pt(1) = 3.0;
@@ -492,7 +690,19 @@ int main(int argc, char *argv[]) {
     el[1] = 3*nseg;
     el[2] = N + 3*(nseg+1)-1;
     el[3] = N + 4*(nseg+1) + 3;
-    elementIndices.push_back(el);
+    if (TriangulateMesh)
+    {
+      el1[0] = el[0];
+      el1[1] = el[1];
+      el1[2] = el[2];
+      el2[0] = el[0];
+      el2[1] = el[2];
+      el2[2] = el[3];
+      elementIndices.push_back(el1);
+      elementIndices.push_back(el2);
+    }
+    else
+      elementIndices.push_back(el);
 
     // cout << "Vertices:" << endl;
     // for (int i=0; i < vertices.size(); i++)
@@ -502,7 +712,10 @@ int main(int argc, char *argv[]) {
     // cout << "Connectivity:" << endl;
     // for (int i=0; i < elementIndices.size(); i++)
     // {
-    //   cout << elementIndices[i][0]<<" "<< elementIndices[i][1]<<" "<< elementIndices[i][2]<<" "<<elementIndices[i][3] << endl;
+    //   if (TriangulateMesh)
+    //     cout << elementIndices[i][0]<<" "<< elementIndices[i][1]<<" "<< elementIndices[i][2]<< endl;
+    //   else
+    //     cout << elementIndices[i][0]<<" "<< elementIndices[i][1]<<" "<< elementIndices[i][2]<<" "<<elementIndices[i][3] << endl;
     // }
     mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, confusionBF, H1Order, pToAdd) );  
   }
@@ -518,7 +731,7 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  double energyThreshold = 0.3; // for mesh refinements
+  double energyThreshold = 0.25; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
