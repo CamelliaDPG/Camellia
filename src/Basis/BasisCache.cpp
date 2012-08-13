@@ -111,7 +111,7 @@ BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCel
                        FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                        FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
                        FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-                       const vector<int> &cellIDs, BasisCachePtr volumeCache) {
+                       const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, BasisCachePtr volumeCache) {
   _isSideCache = true; // this is the SIDE constructor: we don't have sides here!  (// TODO: think about 3D here)
   _sideIndex = sideIndex;
   _basisCacheVolume = volumeCache;
@@ -123,7 +123,9 @@ BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCel
   _cubPoints = cubPointsSide;
   _cubPointsSideRefCell = cubPointsSideRefCell;
   
-  _physCubPoints = cubPointsSidePhysical; // NOTE the meaning of _physCubPoints in this context: these are in _spaceDim + 1 dimensions...
+  _physicalCellNodes = physicalCellNodes;
+  
+  _physCubPoints = cubPointsSidePhysical; // NOTE the meaning of _physCubPoints in this context: these are in _spaceDim + 1 dimensions...  (I.e. _physCubPoints is mapped from cubPointsSideRefCell via volumeCache->physicalCellNodes)
   _cubWeights = cubWeightsSide;
   _weightedMeasure = sideMeasure;
   
@@ -368,6 +370,10 @@ BasisCachePtr BasisCache::getVolumeBasisCache() {
   return _basisCacheVolume;
 }
 
+bool BasisCache::isSideCache() {
+  return _sideIndex >= 0;
+}
+
 int BasisCache::getSideIndex() {
   return _sideIndex;
 }
@@ -412,8 +418,14 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
 
 void BasisCache::determinePhysicalPoints() {
   int numPoints = _cubPoints.dimension(0);
-  _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
-  CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+  if ( ! isSideCache() ) {
+    _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
+    CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+  } else {
+    // then _physCubPoints lives in the _spaceDim + 1 dimensions...
+    _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim+1);
+    CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);    
+  }
 }
 
 void BasisCache::determineJacobian() {
@@ -547,7 +559,8 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
                                              cubPointsSide, cubPointsSideRefCell, 
                                              cubWeightsSide, weightedMeasureSideRefCell,
                                              sideNormals, jacobianSideRefCell,
-                                             jacobianInvSideRefCell, jacobianDetSideRefCell, cellIDs, thisPtr);
+                                             jacobianInvSideRefCell, jacobianDetSideRefCell, cellIDs, 
+                                             _physicalCellNodes, thisPtr);
       _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
     }
   }
