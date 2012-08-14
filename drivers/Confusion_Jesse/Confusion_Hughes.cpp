@@ -9,7 +9,7 @@
 #else
 #endif
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -36,6 +36,26 @@ public:
     bool xMatch = (abs(x)<tol);
     bool yMatch = (abs(y)<tol);
     return xMatch || yMatch;
+  }
+};
+
+
+class InflowSquareLeft : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x)<tol);
+    return xMatch;
+  }
+};
+
+
+class InflowSquareBot : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = (abs(y)<tol);
+    return yMatch;
   }
 };
 
@@ -73,9 +93,12 @@ public:
   }
 };
 
-class Beta : public Function {
+class SqrtWeight : public Function {
+  double _eps;
 public:
-  Beta() : Function(1) {}
+  SqrtWeight(double eps) : Function(0) {
+    _eps = eps;
+  }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
@@ -83,13 +106,10 @@ public:
     
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        for (int d = 0; d < spaceDim; d++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = y;
-          values(cellIndex,ptIndex,0) = -x;
-        }
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {	
+	double x = (*points)(cellIndex,ptIndex,0);
+	double y = (*points)(cellIndex,ptIndex,1);
+	values(cellIndex,ptIndex) = sqrt(x*y + _eps);
       }
     }
   }
@@ -151,11 +171,25 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  robIP->addTerm( ip_scaling * v );
+  if (enforceLocalConservation){
+    robIP->addZeroMeanTerm( v );
+  }else{
+    robIP->addTerm( ip_scaling * v );
+  }
   robIP->addTerm( sqrt(eps) * v->grad() );
-  robIP->addTerm( beta_const * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+
+  bool useNewBC = false;
+  FunctionPtr weight = Teuchos::rcp( new SqrtWeight(eps) );
+  if (useNewBC){
+    robIP->addTerm( beta_const * v->grad() );
+    robIP->addTerm( tau->div() );
+    robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+  }else{
+    robIP->addTerm( weight * beta_const * v->grad() );
+    robIP->addTerm( weight * tau->div() );
+    robIP->addTerm( weight * ip_scaling/sqrt(eps) * tau );
+  }
+
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -171,7 +205,15 @@ int main(int argc, char *argv[]) {
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   bc->addDirichlet(uhat, outflowBoundary, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta_const*n*u0);
+  if (useNewBC){
+    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta_const*n*u0);
+  }else{
+    SpatialFilterPtr inflowBot = Teuchos::rcp( new InflowSquareBot );
+    SpatialFilterPtr inflowLeft = Teuchos::rcp( new InflowSquareLeft ); 
+
+    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowLeft, beta_const*n*u0);
+    bc->addDirichlet(uhat, inflowBot, u0);
+  }
   
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   // pc->addConstraint(uhat==u0,inflowBoundary);
@@ -211,7 +253,7 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  int numRefs = 7;
+  int numRefs = 9;
     
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
@@ -221,7 +263,7 @@ int main(int argc, char *argv[]) {
   solution->solve(false);
   
   if (rank==0){
-    solution->writeFieldsToFile(u->ID(), "u.m");
+    solution->writeToVTK("Hughes.vtu",min(H1Order+1,4));
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
     
     cout << "wrote files: u.m, uhat.dat\n";
