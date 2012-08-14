@@ -230,22 +230,7 @@ b(u,v) &= \int_\Omega -\beta uv' + \epsilon u'v' \\
 \end{column}
 \end{columns}
 }
-%\frame{
-%\frametitle{Stabilization}
-%Historical stabilization methods: 
-%\begin{itemize}
-%\item Artificial diffusion - solve
-%\[
-%\beta u' - \tilde{\epsilon} u'' = f
-%\]
-%where $\tilde{\epsilon}$ is set depending on $\beta$, $\epsilon$, and the mesh. Can be made ``exact'' for $f=0$. 
-%\item Upwind finite differences - for $\beta > 0$, and uniform grid points $x_A$,
-%\[
-%u'(x_A) \approx \frac{u_h(x_A)-u_h(x_{A-1})}{h}
-%\]
-%\end{itemize}
-%Both of these methods introduce additional numerical diffusion, and their effectiveness depends on the forcing $f$ and parameters $h$, $|\beta|$, and $\epsilon$.
-%}
+
 \frame{
 \frametitle{Streamline-upwind Petrov-Galerkin (SUPG)}
 SUPG solves $b_{\rm SUPG}(u,v) = l_{\rm SUPG}(v)$, where
