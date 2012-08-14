@@ -190,10 +190,10 @@ public:
     _tol=1e-12;
   }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {  
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
-    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
-    int numCells = (*points).dimension(0);
-    int numPoints = (*points).dimension(1);
+    FieldContainer<double> points  = basisCache->getPhysicalCubaturePoints();
+    FieldContainer<double> normals = basisCache->getSideNormals();
+    int numCells = points.dimension(0);
+    int numPoints = points.dimension(1);
 
     FieldContainer<double> Tv(numCells,numPoints);
     FieldContainer<double> u1v(numCells,numPoints);;
@@ -206,14 +206,12 @@ public:
     values.initialize(0.0);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	double x = (*points)(cellIndex,ptIndex,0);
-	double y = (*points)(cellIndex,ptIndex,1);
+	double x = points(cellIndex,ptIndex,0);
+	double y = points(cellIndex,ptIndex,1);
 	
 	double T = Tv(cellIndex,ptIndex);
 	double un = u1v(cellIndex,ptIndex); // WARNING: ASSUMES NORMAL AT OUTFLOW = (1,0)
 	double c = sqrt(_gamma * (_gamma-1.0) * _cv * T);
-
-	cout << "un = " << un << ", T = " << T << endl;
 
 	bool outflowMatch = ((abs(x-2.0) < _tol) && (y > 0.0) && (y < YTOP));
 	bool subsonicMatch = (un < c) && (un > 0.0);
@@ -222,11 +220,12 @@ public:
 	  isSubsonic = true;
 	  min_y = min(y,min_y);
 	  max_y = max(y,max_y);
+	  //	  cout << "y = " << y << endl;
 	}
       }
     }
     if (isSubsonic){
-      cout << "subsonic in interval y =(" << min_y << "," << max_y << ")" << endl;
+      //      cout << "subsonic in interval y =(" << min_y << "," << max_y << ")" << endl;
     }
   }
 };
@@ -361,7 +360,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 2; // for tests
+  int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double Re = 1e3;
@@ -1026,17 +1025,17 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
   //  solution->setReportTimingResults(true); // print out timing 
 
-  bool setOutflowBC = true;
+  bool setOutflowBC = false;
   if (setOutflowBC){
-    bool usePenalty = false;
+    bool usePenalty = true;
     if (usePenalty){
       Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
       SpatialFilterPtr outflow = Teuchos::rcp( new OutflowBoundary);
       FunctionPtr subsonicIndicator = Teuchos::rcp( new SubsonicIndicator(u1hat_prev, That_prev, GAMMA, cv) );
       // conditions on u_n = u_1, sigma_ns = sigma_12, q_1 flux
-      pc->addConstraint(subsonicIndicator*u1hat == subsonicIndicator*u1hat_prev_time,outflow);
-      pc->addConstraint(subsonicIndicator*F3nhat == subsonicIndicator*F3nhat_prev_time,outflow);
-      pc->addConstraint(subsonicIndicator*F4nhat == subsonicIndicator*F4nhat_prev_time,outflow);
+      pc->addConstraint(subsonicIndicator*u1hat == subsonicIndicator*u1hat_prev,outflow);
+      pc->addConstraint(subsonicIndicator*F3nhat == subsonicIndicator*F3nhat_prev,outflow);
+      pc->addConstraint(subsonicIndicator*F4nhat == subsonicIndicator*F4nhat_prev,outflow);
 
       solution->setFilter(pc);
 
@@ -1075,7 +1074,7 @@ int main(int argc, char *argv[]) {
 
   double ReferenceRe = 100; // galerkin can represent Re = 10 easily on a standard 8x8 mesh, so no prerefs there
   int numPreRefs = round(max(ceil(log10(Re/ReferenceRe)),0.0));
-  //  int numPreRefs = 0;
+  numPreRefs = 0;
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
@@ -1146,6 +1145,13 @@ int main(int argc, char *argv[]) {
       //  for (int i = 0;i<numTimeSteps;i++){
       for (int j = 0;j<numNRSteps;j++){
 	solution->solve(false); 
+
+	// clear fluxes that we use for subsonic outflow, which accumulate
+	backgroundFlow->clearSolution(That->ID());
+	backgroundFlow->clearSolution(u1hat->ID());
+	backgroundFlow->clearSolution(F3nhat->ID());
+	backgroundFlow->clearSolution(F4nhat->ID());
+
 	backgroundFlow->addSolution(solution,1.0);
       }         
      
@@ -1220,16 +1226,6 @@ int main(int argc, char *argv[]) {
 	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
-
-      // clear fluxes that we use for subsonic outflow, which accumulate
-      prevTimeFlow->clearSolution(That->ID());
-      prevTimeFlow->clearSolution(u1hat->ID());
-      prevTimeFlow->clearSolution(F3nhat->ID());
-      prevTimeFlow->clearSolution(F4nhat->ID());
-      backgroundFlow->clearSolution(That->ID());
-      backgroundFlow->clearSolution(u1hat->ID());
-      backgroundFlow->clearSolution(F3nhat->ID());
-      backgroundFlow->clearSolution(F4nhat->ID());
 
       i++;
     }
