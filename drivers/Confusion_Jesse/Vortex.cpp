@@ -204,14 +204,15 @@ int main(int argc, char *argv[]) {
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
   FunctionPtr invH = Teuchos::rcp( new invHScaling ); 
   FunctionPtr betaNorm = Teuchos::rcp( new l2NormOfVector(beta));
-  FunctionPtr three = Teuchos::rcp( new ConstantScalarFunction(3.0));
 
   if (enforceLocalConservation){
     robIP->addZeroMeanTerm( v );
   }else{
     robIP->addTerm( ip_scaling * v);
-    //  robIP->addTerm( eps*invH*v );
   }
+  FunctionPtr epsFxn = Teuchos::rcp(new ConstantScalarFunction(eps));
+  FunctionPtr one = Teuchos::rcp(new ConstantScalarFunction(1.0));
+  FunctionPtr scale = one/(betaNorm + epsFxn);
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
@@ -278,7 +279,7 @@ int main(int argc, char *argv[]) {
   
   if (rank==0){
     //    solution->writeFieldsToFile(u->ID(), "u.m");
-    solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
+    solution->writeFluxesToFile(uhat->ID(), "vortex.dat");
     solution->writeToVTK("vortex.vtu",min(H1Order+1,4));
     
     cout << "wrote files: u.m, uhat.dat\n";

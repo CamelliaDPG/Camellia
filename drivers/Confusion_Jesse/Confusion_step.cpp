@@ -9,7 +9,7 @@
 #else
 #endif
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -239,7 +239,12 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  robIP->addTerm( ip_scaling * v );
+  if (enforceLocalConservation){
+    robIP->addZeroMeanTerm( v );
+  }else{
+    robIP->addTerm( ip_scaling * v );
+  }
+
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
@@ -357,7 +362,7 @@ int main(int argc, char *argv[]) {
   solution->solve(false);
   
   if (rank==0){
-    solution->writeFieldsToFile(u->ID(), "u.m");
+    solution->writeToVTK("step.vtu",min(H1Order+1,4));
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
     
     cout << "wrote files: u.m, uhat.dat\n";

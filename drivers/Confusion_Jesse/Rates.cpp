@@ -93,15 +93,15 @@ public:
 	  double r2 = (1.0-d)/(2.0*_eps);
     
 	  double Cn = 0.0;            
-	  if (n==1){
-	    Cn = 1.0; // first term only
-	  }    
-	  /*
+	  //	  if (n==1){
+	  //	    Cn = 1.0; // first term only
+	  //	  }    
+	  
 	  // discontinuous hat 
 	  Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
 	  Cn /= (n*pi);
 	  Cn /= (n*pi);    
-	  */
+	  
 	  // normal stress outflow
 	  double Xbottom;
 	  double Xtop;
@@ -189,7 +189,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -233,11 +232,10 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  FunctionPtr sqrtInvH = Teuchos::rcp( new invSqrtHScaling ); 
-  FunctionPtr three = Teuchos::rcp( new ConstantScalarFunction(3.0));
+  //  FunctionPtr ip_scaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   robIP->addTerm( ip_scaling * v);
-  //  robIP->addTerm( sqrt(eps)*sqrtInvH*v );
+  //  robIP->addTerm( v );
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
@@ -262,12 +260,12 @@ int main(int argc, char *argv[]) {
 
   bc->addDirichlet(uhat, outflowBoundary, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
-  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  // pc->addConstraint(uhat==u0,inflowBoundary);
+  //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact/eps);  
+  //  bc->addDirichlet(uhat, inflowBoundary, u_exact);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3, pToAdd = 4;
+  int H1Order = 3, pToAdd = 2;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -286,11 +284,11 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
-  
-
+    
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
-  // solution->setFilter(pc);
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
 
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -324,6 +322,7 @@ int main(int argc, char *argv[]) {
     convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
     if (rank==0){
       cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio = " << L2_error/energy_error << endl;
+      cout << "u squared L2 error = " << u_L2_error << ", sigma squared l2 error = " << sigma_L2_error << ", num dofs = " << mesh->numGlobalDofs() << endl;
     }
 
     refinementStrategy.refine(); // print to console on rank 0
@@ -335,6 +334,7 @@ int main(int argc, char *argv[]) {
 
   if (rank==0){
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
+    solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhat.dat");
     solution->writeToVTK("rates.vtu",min(H1Order+1,4));
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
