@@ -384,6 +384,13 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
+  if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
+    // TODO: map pointsRefCell (on side) into volume coordinates
+    int numPoints = pointsRefCell.dimension(0);
+    _cubPointsSideRefCell.resize(numPoints, _spaceDim+1);
+    // _cellTopo is the volume cell topology for side basis caches.
+    CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, _spaceDim, _sideIndex, _cellTopo);
+  }
   
   _knownValues.clear();
   _knownValuesTransformed.clear();
@@ -417,12 +424,13 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
 }
 
 void BasisCache::determinePhysicalPoints() {
-  int numPoints = _cubPoints.dimension(0);
   if ( ! isSideCache() ) {
+    int numPoints = _cubPoints.dimension(0);
     _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
   } else {
     // then _physCubPoints lives in the _spaceDim + 1 dimensions...
+    int numPoints = _cubPointsSideRefCell.dimension(0);
     _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim+1);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);    
   }
@@ -432,10 +440,11 @@ void BasisCache::determineJacobian() {
   // Compute cell Jacobians, their inverses and their determinants
   
   int numCubPoints = _cubPoints.dimension(0);
+  int jacSpaceDim = isSideCache() ? _spaceDim + 1 : _spaceDim;
   
   // Containers for Jacobian
-  _cellJacobian.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
-  _cellJacobInv.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobian.resize(_numCells, numCubPoints, jacSpaceDim, jacSpaceDim);
+  _cellJacobInv.resize(_numCells, numCubPoints, jacSpaceDim, jacSpaceDim);
   _cellJacobDet.resize(_numCells, numCubPoints);
   
   typedef CellTools<double>  CellTools;
