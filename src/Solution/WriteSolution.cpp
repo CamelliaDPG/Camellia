@@ -519,7 +519,7 @@ void Solution::writeTracesToVTK(const string& filePath)
 
   // Allocate memory for VTK unstructured grid
   int totalCells = _mesh->activeElements().size();
-  trace_ug->Allocate(4*totalCells, 4*totalCells);
+  // trace_ug->Allocate(4*totalCells, 4*totalCells);
 
   // Count trace variables
   int numTraceVars = 0;
@@ -563,19 +563,17 @@ void Solution::writeTracesToVTK(const string& filePath)
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
     // int numPoints = 2;
-    // FieldContainer<double> refTracePoints(numPoints);
-    // refTracePoints(0) = -1.0;
-    // refTracePoints(1) =  1.0;
+    FieldContainer<double> refTracePoints(2);
+    refTracePoints(0) =  0.0;
+    refTracePoints(1) =  1.0;
     // refTracePoints(2) =  0.0;
-    FieldContainer<double> refTracePoints(2, 1);
-    refTracePoints(0, 0) =  0.0;
-    refTracePoints(1, 0) =  1.0;
+    // FieldContainer<double> refTracePoints(2, 1);
+    // refTracePoints(0, 0) =  0.0;
+    // refTracePoints(1, 0) =  1.0;
     // refTracePoints(2, 0) =  0.0;
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-      //TODO: Set correct reference cell points.
-      // The line below causes the code to crash
       sideBasisCache->setRefCellPoints(refTracePoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
       cout << "numPoints = " << numPoints << endl;
@@ -589,7 +587,9 @@ void Solution::writeTracesToVTK(const string& filePath)
         computedValues[i].resize(numCells, numPoints);
         solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
       }
-      FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
+      // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      // cout << " physPoints dim = " << physicalPoints->dimension(0) << " " << physicalPoints->dimension(1)<< endl;
 
       for (int cellIndex=0;cellIndex < numCells;cellIndex++)
       {
@@ -602,10 +602,14 @@ void Solution::writeTracesToVTK(const string& filePath)
         trace_ug->InsertNextCell((int)VTK_POLY_LINE, edge);
         edge->Delete();
 
+        cout << "Physical Points: " << endl;
         for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
         {
-          trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
-              physCubPoints(cellIndex, pointIndex, 1), 0.0);
+          trace_points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
+              (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
+          cout << (*physicalPoints)(cellIndex, pointIndex, 0)<<" "<<(*physicalPoints)(cellIndex, pointIndex, 1) << endl;
+          // trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
+          //     physCubPoints(cellIndex, pointIndex, 1), 0.0);
           for (int varIdx=0; varIdx < numTraceVars; varIdx++)
           {
             traceData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));

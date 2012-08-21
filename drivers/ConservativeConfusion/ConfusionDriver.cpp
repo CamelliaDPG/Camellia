@@ -17,7 +17,7 @@
 #endif
 
 double epsilon = 1e-2;
-double numRefs = 6;
+double numRefs = 0;
 
 bool enforceLocalConservation = true;
 
@@ -341,6 +341,7 @@ int main(int argc, char *argv[]) {
     stringstream outfile;
     outfile << "confusion" << epsilon;
     solution->writeFieldsToVTK(outfile.str(), 5);
+    solution->writeTracesToVTK(outfile.str());
   }
   
   return 0;

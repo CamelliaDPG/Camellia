@@ -16,8 +16,8 @@
 #else
 #endif
 
-bool enforceLocalConservation = false;
-double epsilon = 1e-2;
+bool enforceLocalConservation = true;
+double epsilon = 1e-3;
 int numRefs = 0;
 int num1DPts = 5;
 
@@ -69,11 +69,76 @@ public:
   }
 };
 
-class AirfoilBoundary : public SpatialFilter {
+class AirfoilInflowBoundary : public SpatialFilter {
+private:
+  FunctionPtr _beta;
 public:
-  bool matchesPoint(double x, double y) {
+  AirfoilInflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
+  {
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
+    int numCells = (*points).dimension(0);
+    int numPoints = (*points).dimension(1);
+
+    FieldContainer<double> beta_pts(numCells,numPoints,2);
+    _beta->values(beta_pts,basisCache);
+
     double tol = 1e-3;
-    return (abs((x-.5)*(x-.5)+y*y) < 1+tol);
+    bool somePointMatches = false;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        double n1 = (*normals)(cellIndex,ptIndex,0);
+        double n2 = (*normals)(cellIndex,ptIndex,1);
+        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
+        pointsMatch(cellIndex,ptIndex) = false;
+        // if (abs((x-.5)*(x-.5)+y*y) < 1+tol && beta_n >= 0)
+        if (abs((x-.5)*(x-.5)+y*y) < 1+tol)
+        {
+          pointsMatch(cellIndex,ptIndex) = true;
+          somePointMatches = true;
+        }
+      }
+    }
+    return somePointMatches;
+  }
+};
+
+class AirfoilOutflowBoundary : public SpatialFilter {
+private:
+  FunctionPtr _beta;
+public:
+  AirfoilOutflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
+  {
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
+    int numCells = (*points).dimension(0);
+    int numPoints = (*points).dimension(1);
+
+    FieldContainer<double> beta_pts(numCells,numPoints,2);
+    _beta->values(beta_pts,basisCache);
+
+    double tol = 1e-3;
+    bool somePointMatches = false;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        double n1 = (*normals)(cellIndex,ptIndex,0);
+        double n2 = (*normals)(cellIndex,ptIndex,1);
+        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
+        pointsMatch(cellIndex,ptIndex) = false;
+        if (abs((x-.5)*(x-.5)+y*y) < 1+tol && beta_n < 0)
+        {
+          pointsMatch(cellIndex,ptIndex) = true;
+          somePointMatches = true;
+        }
+      }
+    }
+    return somePointMatches;
   }
 };
 
@@ -241,27 +306,29 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
   SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
   SpatialFilterPtr tBoundary = Teuchos::rcp( new TopBoundary );
   SpatialFilterPtr bBoundary = Teuchos::rcp( new BottomBoundary );
-  // SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
-  SpatialFilterPtr airfoilBoundary = Teuchos::rcp( new AirfoilBoundary );
+  SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  SpatialFilterPtr airfoilInflowBoundary = Teuchos::rcp( new AirfoilInflowBoundary(beta) );
+  // SpatialFilterPtr airfoilOutflowBoundary = Teuchos::rcp( new AirfoilOutflowBoundary(beta) );
   FunctionPtr u0 = Teuchos::rcp( new ZeroBC );
   FunctionPtr u1 = Teuchos::rcp( new OneBC );
-  // FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u0);
-  // bc->addDirichlet(beta_n_u_minus_sigma_n, tBoundary, u0);
   bc->addDirichlet(beta_n_u_minus_sigma_n, bBoundary, u0);
-  bc->addDirichlet(uhat, airfoilBoundary, u1);
-  // pc->addConstraint(beta_n_u_minus_sigma_n - uhat == u0, rBoundary);
+  bc->addDirichlet(uhat, airfoilInflowBoundary, u1);
+  // bc->addDirichlet(beta_n_u_minus_sigma_n, airfoilOutflowBoundary, beta*n*u1);
+  // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, rBoundary);
+  // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, tBoundary);
   
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3, pToAdd = 2;
+  int H1Order = 2, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
-  // mesh = Mesh::readTriangle("HighLift.1", confusionBF, H1Order, pToAdd);
-  mesh = Mesh::readTriangle("NACA0012.1", confusionBF, H1Order, pToAdd);
+  mesh = Mesh::readTriangle("HighLift.1", confusionBF, H1Order, pToAdd);
+  // mesh = Mesh::readTriangle("NACA0012.1", confusionBF, H1Order, pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, mathIP) );

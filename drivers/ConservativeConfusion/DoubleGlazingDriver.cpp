@@ -17,7 +17,7 @@
 #endif
 
 bool enforceLocalConservation = true;
-double epsilon = 1e-2;
+double epsilon = 5e-3;
 int numRefs = 12;
 double ramp = sqrt(epsilon);
 // double ramp = 1./64.;
@@ -294,6 +294,11 @@ int main(int argc, char *argv[]) {
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
+    stringstream outfile;
+    outfile << "doubleglazing_" << refIndex;
+    solution->writeFieldsToVTK(outfile.str(), 5);
+    solution->writeFieldsToVTK("grid"+outfile.str(), 2);
+
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
@@ -358,8 +363,9 @@ int main(int argc, char *argv[]) {
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     stringstream outfile;
-    outfile << "confusion_" << epsilon << ".vtu";
-    solution->writeToVTK(outfile.str(), 3);
+    outfile << "doubleglazing_" << numRefs;
+    solution->writeFieldsToVTK(outfile.str(), 5);
+    solution->writeFieldsToVTK("grid"+outfile.str(), 2);
   }
   
   return 0;
