@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int pToAdd = 1; // for optimal test function approximation
-  int pToAddForStreamFunction = 3;
+  int pToAddForStreamFunction = pToAdd;
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
@@ -267,9 +267,10 @@ int main(int argc, char *argv[]) {
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = false;
-  bool compareWithOverkillMesh = true;
+  bool compareWithOverkillMesh = false;
   bool weightTestNormDerivativesByH = false;
-  bool useAdHocHPRefinements = true;
+  bool useAdHocHPRefinements = false;
+  bool finalSolveWithoutRamp = true;
   int overkillMeshSize = 64;
   int overkillPolyOrder = 7; // H1 order
   
@@ -294,14 +295,9 @@ int main(int argc, char *argv[]) {
   VarPtr v1 = varFactory.testVar("v_1", HGRAD); // v_1
   VarPtr v2 = varFactory.testVar("v_2", HGRAD); // v_2
   VarPtr q = varFactory.testVar("q", HGRAD); // q
-  //  VarPtr testOne; // used for local conservation, if requested
-  //  if (enforceLocalConservation) {
-  //    testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-  //  }
   
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
-  //  VarPtr uhatn = varFactory.fluxVar("\\widehat{u}_n");
   VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
   VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
   VarPtr u1 = varFactory.fieldVar("u_1");
@@ -371,16 +367,16 @@ int main(int argc, char *argv[]) {
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles | singularityAvoidingInitialMesh;
   Teuchos::RCP<Mesh> mesh, streamMesh, overkillMesh;
-    FieldContainer<double> quadPoints(4,2);
-    
-    quadPoints(0,0) = 0.0; // x1
-    quadPoints(0,1) = 0.0; // y1
-    quadPoints(1,0) = 1.0;
-    quadPoints(1,1) = 0.0;
-    quadPoints(2,0) = 1.0;
-    quadPoints(2,1) = 1.0;
-    quadPoints(3,0) = 0.0;
-    quadPoints(3,1) = 1.0;
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
   
   if ( ! singularityAvoidingInitialMesh ) {
     // create a pointer to a new mesh:
@@ -390,17 +386,16 @@ int main(int argc, char *argv[]) {
                                      streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-    // outer square
-    A(0) = 0.0; A(1) = 0.0;
-    B(0) = 1.0; B(1) = 0.0;
-    C(0) = 1.0; C(1) = 1.0;
-    D(0) = 0.0; D(1) = 1.0;
-    // center point:
-    E(0) = 0.5; E(1) = 0.5;
-    // bisectors of outer square:
-    F(0) = 0.0; F(1) = 0.5;
-    G(0) = 1.0; G(1) = 0.5;
-    H(0) = 0.5; H(1) = 0.0;
+    // top (left to right):
+    A(0) = 0.0;            A(1) = 1.0;
+    B(0) = 1.0 / 64.0;     B(1) = 1.0;
+    C(0) = 1.0 - 1 / 64.0; C(1) = 1.0;
+    D(0) = 1.0;            D(1) = 1.0;
+    // bottom (right to left):
+    E(0) = 1.0;            E(1) = 0.0;
+    F(0) = 1.0 - 1/64.0;   F(1) = 0.0;
+    G(0) = 1.0 / 64.0;     G(1) = 0.0;
+    H(0) = 0;              H(1) = 0.0;
     
     vector<FieldContainer<double> > vertices;
     vertices.push_back(A); int A_index = 0;
@@ -415,16 +410,48 @@ int main(int argc, char *argv[]) {
     vector< vector<int> > elementVertices;
     vector<int> el1, el2, el3, el4, el5;
     // must go counterclockwise:
-    el1.push_back(A_index); el1.push_back(H_index); el1.push_back(E_index); el1.push_back(F_index);
-    el2.push_back(H_index); el2.push_back(B_index); el2.push_back(G_index); el2.push_back(E_index);
-    el3.push_back(F_index); el3.push_back(E_index); el3.push_back(D_index); 
-    el4.push_back(D_index); el4.push_back(E_index); el4.push_back(C_index); 
-    el5.push_back(E_index); el5.push_back(G_index); el5.push_back(C_index);
+    el1.push_back(A_index); el1.push_back(H_index); el1.push_back(G_index); el1.push_back(B_index);
+    el2.push_back(B_index); el2.push_back(G_index); el2.push_back(F_index); el2.push_back(C_index);
+    el3.push_back(C_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(D_index);
     elementVertices.push_back(el1);
     elementVertices.push_back(el2);
     elementVertices.push_back(el3);
-    elementVertices.push_back(el4);
-    elementVertices.push_back(el5);
+//    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+//    // outer square
+//    A(0) = 0.0; A(1) = 0.0;
+//    B(0) = 1.0; B(1) = 0.0;
+//    C(0) = 1.0; C(1) = 1.0;
+//    D(0) = 0.0; D(1) = 1.0;
+//    // center point:
+//    E(0) = 0.5; E(1) = 0.5;
+//    // bisectors of outer square:
+//    F(0) = 0.0; F(1) = 0.5;
+//    G(0) = 1.0; G(1) = 0.5;
+//    H(0) = 0.5; H(1) = 0.0;
+//    
+//    vector<FieldContainer<double> > vertices;
+//    vertices.push_back(A); int A_index = 0;
+//    vertices.push_back(B); int B_index = 1;
+//    vertices.push_back(C); int C_index = 2;
+//    vertices.push_back(D); int D_index = 3;
+//    vertices.push_back(E); int E_index = 4;
+//    vertices.push_back(F); int F_index = 5;
+//    vertices.push_back(G); int G_index = 6;
+//    vertices.push_back(H); int H_index = 7;
+//    
+//    vector< vector<int> > elementVertices;
+//    vector<int> el1, el2, el3, el4, el5;
+//    // must go counterclockwise:
+//    el1.push_back(A_index); el1.push_back(H_index); el1.push_back(E_index); el1.push_back(F_index);
+//    el2.push_back(H_index); el2.push_back(B_index); el2.push_back(G_index); el2.push_back(E_index);
+//    el3.push_back(F_index); el3.push_back(E_index); el3.push_back(D_index); 
+//    el4.push_back(D_index); el4.push_back(E_index); el4.push_back(C_index); 
+//    el5.push_back(E_index); el5.push_back(G_index); el5.push_back(C_index);
+//    elementVertices.push_back(el1);
+//    elementVertices.push_back(el2);
+//    elementVertices.push_back(el3);
+//    elementVertices.push_back(el4);
+//    elementVertices.push_back(el5);
     
     mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
     streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+pToAddForStreamFunction, pToAdd) );
@@ -582,27 +609,6 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
-  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
-  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
-  streamRHS->addTerm(vorticity * q_s);
-  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-  ((PreviousSolutionFunction*) u1.get())->setOverrideMeshCheck(true);
-  ((PreviousSolutionFunction*) u2.get())->setOverrideMeshCheck(true);
-  
-  Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
-//  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
-  streamBC->addDirichlet(phi_hat, entireBoundary, zero);
-//  streamBC->addZeroMeanConstraint(phi);
-  
-  IPPtr streamIP = Teuchos::rcp( new IP );
-  streamIP->addTerm(q_s);
-  streamIP->addTerm(q_s->grad());
-  streamIP->addTerm(v_s);
-  streamIP->addTerm(v_s->div());
-  SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
-  
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
@@ -637,9 +643,13 @@ int main(int argc, char *argv[]) {
   topCornerPoints(2,1) = 1 - 1e-10;
   topCornerPoints(3,0) = 1 - 1e-12;
   topCornerPoints(3,1) = 1 - 1e-10;
+
+  solution->solve(useMumps);
+  polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders_0.m");
+  FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
+  ten->writeBoundaryValuesToMATLABFile(mesh, "skeleton_0.dat");
   
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
-    solution->solve(useMumps);
+  for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (compareWithOverkillMesh) {
       Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
       solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
@@ -701,9 +711,15 @@ int main(int argc, char *argv[]) {
       cornerIDs.push_back(corners[1]->cellID());
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
     }
+    // solve on the refined mesh:
+    solution->solve(useMumps);
+    
+    ostringstream meshOutputFileName, skeletonOutputFileName;
+    meshOutputFileName << "cavityFlowPolyOrders_" << refIndex + 1 << ".m";
+    polyOrderFunction->writeValuesToMATLABFile(mesh, meshOutputFileName.str());
+    skeletonOutputFileName << "skeleton_" << refIndex + 1 << ".dat";
+    ten->writeBoundaryValuesToMATLABFile(mesh, skeletonOutputFileName.str());
   }
-  // one more solve on the final refined mesh:
-  solution->solve(useMumps);
   if (compareWithOverkillMesh) {
     Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
     solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
@@ -732,6 +748,7 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u2) );
+
   FunctionPtr u1_sq = u1_prev * u1_prev;
   FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
   FunctionPtr u_mag = Teuchos::rcp( new SqrtFunction( u_dot_u ) );
@@ -820,6 +837,45 @@ int main(int argc, char *argv[]) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
+  
+  if (finalSolveWithoutRamp) {
+    //////////////////// BCs FOR eps = 0 //////////////////////
+    Teuchos::RCP<BCEasy> bcFinalMesh = Teuchos::rcp( new BCEasy );
+    FunctionPtr u1_0_finalMesh = Teuchos::rcp( new U1_0(0.0) );
+    bcFinalMesh->addDirichlet(u1hat, entireBoundary, u1_0_finalMesh);
+    bcFinalMesh->addDirichlet(u2hat, entireBoundary, u2_0);
+    bcFinalMesh->addZeroMeanConstraint(p);
+    
+    // replace solution object with one that has these BCs, and also recreate the SolutionFunctions that depend on it
+    solution = Teuchos::rcp( new Solution(mesh, bcFinalMesh, rhs, ip) );
+    solution->solve(useMumps);
+
+    u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
+    u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u2) );
+  }
+  
+  ///////// SET UP & SOLVE STREAM SOLUTION /////////
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
+  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+  streamRHS->addTerm(vorticity * q_s);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+  
+  Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
+  //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
+  streamBC->addDirichlet(phi_hat, entireBoundary, zero);
+  //  streamBC->addZeroMeanConstraint(phi);
+  
+  IPPtr streamIP = Teuchos::rcp( new IP );
+  streamIP->addTerm(q_s);
+  streamIP->addTerm(q_s->grad());
+  streamIP->addTerm(v_s);
+  streamIP->addTerm(v_s->div());
+  SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
+  
   //  mesh->unregisterMesh(streamMesh);
   //  streamMesh->registerMesh(mesh);
   //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
@@ -852,7 +908,7 @@ int main(int argc, char *argv[]) {
       streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
       vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
       
-      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
+//      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
       ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
       cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
     } else {

@@ -23,7 +23,6 @@
 #include "Epetra_DataAccess.h"
 
 #include "ml_epetra_utils.h"
-
 #include <stdlib.h>
 
 #include "CondensationSolver.h"
@@ -53,7 +52,7 @@ void CondensationSolver::getDofIndices(){
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
   
-  // determine any zero-mean constraints:
+  // determine trialIDs
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   vector< int >::iterator trialIt;
 
@@ -78,9 +77,9 @@ void CondensationSolver::getDofIndices(){
 	  elemFluxInds.insert(elemFluxInds.end(), fluxDofInds.begin(), fluxDofInds.end()); 
 	}
       }
-    } 
+    }
 
-    // store cellID to 
+    // store to cellID 
     vector< ElementPtr > elemsOfType = _mesh->elementsOfType(rank, elemTypePtr); // all elems of type on this processor
     vector< ElementPtr >::iterator elemIt;       
     vector<int> globalFieldInds;
@@ -101,7 +100,7 @@ void CondensationSolver::getDofIndices(){
       _ElemFieldInds[cellID] = elemFieldInds; 
       _ElemFluxInds[cellID] = elemFluxInds;      
     }
-  }   
+  } 
 }
 
 int CondensationSolver::solve(){

@@ -1,0 +1,4 @@
+pdflatex boeingPres.tex
+bibtex boeingPres
+pdflatex boeingPres
+pdflatex boeingPres
