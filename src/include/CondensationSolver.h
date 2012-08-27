@@ -18,16 +18,16 @@ class CondensationSolver : public Solver{
   Teuchos::RCP<Solver> _solver; // to get the partition map to create a FECrsMatrix
 
   set<int>              _allFluxInds;    // unique set of all flux inds
-  map<int,vector<int> > _GlobalFluxInds; // from cellID to globalDofInd vector
-  map<int,vector<int> > _GlobalFieldInds;
-  map<int,vector<int> > _ElemFluxInds;   // from cellID to localDofInd vector
-  map<int,vector<int> > _ElemFieldInds;  
-  void getDofIndices();
-  Epetra_SerialDenseMatrix getSubMatrix(Epetra_RowMatrix* K, vector<int> rowInds, vector<int> colInds);
+  map<int,vector<int> > _globalFluxInds; // from cellID to globalDofInd vector
+  map<int,vector<int> > _globalFieldInds;
+  map<int,vector<int> > _localFluxInds;   // from cellID to localDofInd vector
+  map<int,vector<int> > _localFieldInds;  
+
+  void getElemSubMatrices(int cellID, Epetra_RowMatrix* K, Epetra_SerialDenseMatrix A,Epetra_SerialDenseMatrix B,Epetra_SerialDenseMatrix D);
   Epetra_SerialDenseMatrix getSubVector(Epetra_MultiVector*  f,vector<int> inds);
 
  public:  
-
+  
   CondensationSolver(Teuchos::RCP<Mesh> mesh,Teuchos::RCP<Solution> solution){
     _mesh = mesh;
     _solution = solution;
@@ -38,9 +38,10 @@ class CondensationSolver : public Solver{
     _solution = solution;
     _solver = solver; // for the reduced system
   }
-
+  
   int solve();
-  //  Epetra_Map getFluxPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, Epetra_Comm* Comm);
+
+  //  Epetra_Map getFluxMap(int rank, Epetra_Comm* Comm);
 
 };
 

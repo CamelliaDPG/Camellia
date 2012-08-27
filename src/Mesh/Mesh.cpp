@@ -1401,6 +1401,65 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
 
+void Mesh::getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds){
+  
+ 
+  // determine trialIDs
+  vector< int > trialIDs = bilinearForm()->trialIDs();
+  vector< int > fieldIDs;
+  vector< int > fluxIDs;
+  vector< int >::iterator idIt;
+
+  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
+    int trialID = *(idIt);
+    if (!bilinearForm()->isFluxOrTrace(trialID)){ // if field
+      fieldIDs.push_back(trialID);
+    } else {
+      fluxIDs.push_back(trialID);
+    }
+  } 
+
+  // get all elems in mesh (more than just local info)
+  vector< ElementPtr > activeElems = activeElements();
+  vector< ElementPtr >::iterator elemIt;
+
+  // gets dof indices
+  for (elemIt=activeElems.begin();elemIt!=activeElems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    int globalCellIndex = (*elemIt)->globalCellIndex();
+    int cellIndex = (*elemIt)->cellIndex();
+    int numSides = (*elemIt)->numSides();
+    ElementTypePtr elemType = (*elemIt)->elementType();
+    
+    // get local indices (for cell)
+    vector<int> inds;
+    for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
+      int trialID = (*idIt);
+      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      localFieldInds[cellID].insert(localFieldInds[cellID].end(), inds.begin(), inds.end()); 
+    }
+    inds.clear();
+    for (idIt = fluxIDs.begin(); idIt != fluxIDs.end(); idIt++){
+      int trialID = (*idIt);
+      for (int sideIndex = 0;sideIndex<numSides;sideIndex++){	
+	inds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
+	localFluxInds[cellID].insert(localFluxInds[cellID].end(), inds.begin(), inds.end()); 
+      }
+    }
+
+    // gets global indices (across all cells/all procs)
+    for (int i = 0;i<localFieldInds[cellID].size();i++){
+      int dofIndex = globalDofIndex(cellID,localFieldInds[cellID][i]);
+      globalFieldInds[cellID].push_back(dofIndex);
+    }
+    for (int i = 0;i<localFluxInds[cellID].size();i++){
+      int dofIndex = globalDofIndex(cellID,localFluxInds[cellID][i]);
+      globalFluxInds[cellID].push_back(dofIndex);
+      allFluxInds.insert(dofIndex); // all flux indices      
+    }    
+  }  
+}
+
 ElementPtr Mesh::getElement(int cellID) {
   return _elements[cellID];
 }

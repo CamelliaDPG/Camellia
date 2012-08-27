@@ -289,6 +289,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  //  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
 
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -340,5 +341,61 @@ int main(int argc, char *argv[]) {
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
   
+  // determine trialIDs
+  vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
+  vector< int > fieldIDs;
+  vector< int > fluxIDs;
+  vector< int >::iterator idIt;
+
+  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
+    int trialID = *(idIt);
+    if (!mesh->bilinearForm()->isFluxOrTrace(trialID)){ // if field
+      fieldIDs.push_back(trialID);
+    } else {
+      fluxIDs.push_back(trialID);
+    }
+  } 
+
+  int numFieldInds = 0;
+  map<int,vector<int> > globalFluxInds;   // from cellID to localDofInd vector
+  map<int,vector<int> > globalFieldInds;   // from cellID to localDofInd vector
+  map<int,vector<int> > localFieldInds;   // from cellID to localDofInd vector
+  map<int,vector<int> > localFluxInds;   // from cellID to localDofInd vector
+  set<int>              allFluxInds;    // unique set of all flux inds
+
+  mesh->getDofIndices(allFluxInds,globalFluxInds,globalFieldInds,localFluxInds,localFieldInds);
+
+  if (rank==0){
+
+    vector< ElementPtr > activeElems = mesh->activeElements();
+    vector< ElementPtr >::iterator elemIt;
+
+    cout << "num flux dofs = " << allFluxInds.size() << endl;
+    cout << "num field dofs = " << mesh->numFieldDofs() << endl;
+    cout << "num flux dofs = " << mesh->numFluxDofs() << endl;
+    elemIt = activeElems.begin();
+    int cellID = (*elemIt)->cellID();
+    cout << "num LOCAL field dofs = " << localFieldInds[cellID].size() << endl;
+  
+    ofstream fieldInds; 
+    fieldInds.open("fieldInds.dat");
+    for (elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
+      int cellID = (*elemIt)->cellID();
+      vector<int> inds = globalFieldInds[cellID];
+      for (int i = 0;i<inds.size();++i){
+	fieldInds << inds[i]+1 << endl;
+      }
+    }
+    fieldInds.close();
+
+    ofstream fluxInds;
+    fluxInds.open("fluxInds.dat");
+    set<int>::iterator fluxIt;
+    for (fluxIt = allFluxInds.begin();fluxIt!=allFluxInds.end();fluxIt++){
+      fluxInds << (*fluxIt)+1 << endl; // offset by 1 for matlab
+    }
+    fluxInds.close();    
+  }
+
   return 0;
 }
