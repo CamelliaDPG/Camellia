@@ -2,15 +2,13 @@
 #include "RefinementStrategy.h"
 #include "Constraint.h"
 #include "PenaltyConstraints.h"
-#include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "CondensationSolver.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
 #endif
-
-bool enforceLocalConservation = false;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -172,22 +170,8 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-
-  int numRefs = 0;
-  if ( argc > 1) {
-    numRefs = atoi(argv[1]);
-    if (rank==0){
-      cout << "numRefs = " << numRefs << endl;
-    }
-  }
-  
-  double eps = 1e-3;
-  if ( argc > 2) {
-    eps = atof(argv[2]);    
-    if (rank==0){
-      cout << "eps = " << eps << endl;
-    }
-  }
+ 
+  double eps = 1.0;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -223,19 +207,12 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-  // quasi-optimal norm
-  IPPtr qoptIP = Teuchos::rcp(new IP);  
-  qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / eps + v->grad() );
-  qoptIP->addTerm( beta * v->grad() - tau->div() );
-
-  // robust test norm
+   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
   //  FunctionPtr ip_scaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   robIP->addTerm( ip_scaling * v);
-  //  robIP->addTerm( v );
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
@@ -260,12 +237,10 @@ int main(int argc, char *argv[]) {
 
   bc->addDirichlet(uhat, outflowBoundary, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
-  //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact/eps);  
-  //  bc->addDirichlet(uhat, inflowBoundary, u_exact);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3, pToAdd = 2;
+  int H1Order = 2, pToAdd = 2;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -279,6 +254,13 @@ int main(int argc, char *argv[]) {
   quadPoints(3,1) = 1.0;
   
   int nCells = 1;
+  if ( argc > 1) {
+    nCells = atoi(argv[1]);
+    if (rank==0){
+      cout << "numCells = " << nCells << endl;
+    }
+  }
+
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
@@ -289,49 +271,10 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
-  //  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
 
-  if (enforceLocalConservation) {
-    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-    solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
-  }
-  
-  double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
-   
-  ofstream convOut;
-  stringstream convOutFile;
-  convOutFile << "erickson_conv_" << eps <<".txt";
-  convOut.open(convOutFile.str().c_str());
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
-    solution->solve(false);
-
-    FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
-    FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
-    FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
-    FunctionPtr u_diff = (u_soln - u_exact)*(u_soln - u_exact);
-    FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
-    FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-    double u_L2_error = u_diff->integrate(mesh);
-    double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
-    double L2_error = sqrt(u_L2_error + sigma_L2_error);
-    double energy_error = solution->energyErrorTotal();
-    u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
-    u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
-    u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
-
-    convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
-    if (rank==0){
-      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio = " << L2_error/energy_error << endl;
-      cout << "u squared L2 error = " << u_L2_error << ", sigma squared l2 error = " << sigma_L2_error << ", num dofs = " << mesh->numGlobalDofs() << endl;
-    }
-
-    refinementStrategy.refine(); // print to console on rank 0
-  }
-  // one more solve on the final refined mesh:
-  solution->solve(false);
-
-  convOut.close();  
+  Teuchos::RCP<Solver> condensedSolver = Teuchos::rcp(new CondensationSolver(mesh,solution));
+  solution->solve(condensedSolver);
+  //  solution->solve(false);
 
   if (rank==0){
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
@@ -341,74 +284,6 @@ int main(int argc, char *argv[]) {
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
 
-  /*
-  // determine trialIDs
-  vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
-  vector< int > fieldIDs;
-  vector< int > fluxIDs;
-  vector< int >::iterator idIt;
 
-  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
-    int trialID = *(idIt);
-    if (!mesh->bilinearForm()->isFluxOrTrace(trialID)){ // if field
-      fieldIDs.push_back(trialID);
-    } else {
-      fluxIDs.push_back(trialID);
-    }
-  } 
-  int numFieldInds = 0;
-  map<int,vector<int> > globalFluxInds;   // from cellID to localDofInd vector
-  map<int,vector<int> > globalFieldInds;   // from cellID to localDofInd vector
-  map<int,vector<int> > localFieldInds;   // from cellID to localDofInd vector
-  map<int,vector<int> > localFluxInds;   // from cellID to localDofInd vector
-  set<int>              allFluxInds;    // unique set of all flux inds
-
-  mesh->getDofIndices(allFluxInds,globalFluxInds,globalFieldInds,localFluxInds,localFieldInds);
-
-  if (rank==0){
-
-    vector< ElementPtr > activeElems = mesh->activeElements();
-    vector< ElementPtr >::iterator elemIt;
-
-    cout << "num flux dofs = " << allFluxInds.size() << endl;
-    cout << "num field dofs = " << mesh->numFieldDofs() << endl;
-    cout << "num flux dofs = " << mesh->numFluxDofs() << endl;
-    elemIt = activeElems.begin();
-    int cellID = (*elemIt)->cellID();
-    cout << "num LOCAL field dofs = " << localFieldInds[cellID].size() << endl;
-  
-    ofstream fieldInds; 
-    fieldInds.open("fieldInds.dat");
-    for (elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
-      int cellID = (*elemIt)->cellID();
-      vector<int> inds = globalFieldInds[cellID];
-      vector<int> locFieldInds = localFieldInds[cellID];
-      cout << "local field inds for cell ID " << cellID << endl;
-      for (int i = 0;i<inds.size();++i){
-	fieldInds << inds[i]+1 << endl;
-	cout << locFieldInds[i] << endl;
-      }
-      vector<int> finds = globalFluxInds[cellID];
-      vector<int> locFluxInds = localFluxInds[cellID];
-      cout << "local flux inds for cell ID " << cellID << endl;
-      for (int i = 0;i<finds.size();++i){
-	cout << locFluxInds[i] << endl;
-      }
-      cout << "global flux inds for cell ID " << cellID << endl;
-      for (int i = 0;i<finds.size();++i){
-	cout << globalFluxInds[cellID][i] << endl;
-      }
-    }
-    fieldInds.close();
-
-    ofstream fluxInds;
-    fluxInds.open("fluxInds.dat");
-    set<int>::iterator fluxIt;
-    for (fluxIt = allFluxInds.begin();fluxIt!=allFluxInds.end();fluxIt++){
-      fluxInds << (*fluxIt)+1 << endl; // offset by 1 for matlab
-    }
-    fluxInds.close();
-  }
-  */
   return 0;
 }
