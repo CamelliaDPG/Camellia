@@ -148,10 +148,6 @@ set( STOKES_SOURCES
   "${STOKES_DIR}/LidDrivenFlowRefinementStrategy.cpp"
 )
 
-set( NAVIER_STOKES_DRIVER
-  "${NAVIER_STOKES_DIR}/NavierStokesDriver.cpp"
-  )
-
 set( POISSON_SOURCES
   "${DRIVERS_DIR}/Poisson/PoissonBilinearForm.cpp"
   "${DRIVERS_DIR}/Poisson/PoissonExactSolution.cpp"
@@ -213,7 +209,6 @@ add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOK
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(NavierStokesCavityFlowDriver ${STOKES_SOURCES} ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
-add_executable(NavierStokesDriver ${NAVIER_STOKES_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${BURGERS_SOURCES} ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
@@ -261,11 +256,6 @@ target_link_libraries(StokesBackwardFacingStepDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(StokesStudy
-  ${Trilinos_LIBRARIES} 
-  ${Trilinos_TPL_LIBRARIES}
-  ${CAMELLIA_LIBRARY_NAME}
-  )
-target_link_libraries(NavierStokesDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
