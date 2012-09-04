@@ -358,7 +358,8 @@ FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const Field
         /*cout << "(n1,n2) = (" << n1 << ", " << n2 << ")" << endl;
         cout << "(x,y) = (" << xValue << ", " << yValue << ")" << endl;
         cout << "(x,y) x n = " << xValue*n2 - yValue*n1 << endl;*/
-        (*result)(cellIndex,basisOrdinal,pointIndex) = xValue*n2 - yValue*n1;
+//        cout << "WARNING: pretty sure that we've reversed the sign of OP_CROSS_NORMAL.\n";
+        (*result)(cellIndex,basisOrdinal,pointIndex) = yValue*n1 - xValue*n2;
       }
     }
   }
