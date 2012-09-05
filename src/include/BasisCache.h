@@ -175,6 +175,8 @@ public:
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
+  const FieldContainer<double> getRefCellPoints(); 
+
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
