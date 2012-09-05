@@ -97,27 +97,52 @@ void BasisCacheTests::runTests(int &numTestsRun, int &numTestsPassed) {
 bool BasisCacheTests::testSetRefCellPoints() {
   setup();
   
+  bool success = true;
+  double tol = 1e-14;
+  
   // for now, we just test setting these on the side cache, since that's broken right now.
   // TODO: test for volume cache as well.
   shards::CellTopology cellTopo = *(_elemType->cellTopoPtr);
   int numSides = cellTopo.getSideCount();
   
-  FieldContainer<double> refTracePoints(3, 1); // (P,D): three points, 1D
-  refTracePoints(0, 0) =  0.0;
-  refTracePoints(1, 0) =  0.5;
-  refTracePoints(2, 0) =  1.0;
+//  FieldContainer<double> refTracePoints(3, 1); // (P,D): three points, 1D
+//  refTracePoints(0, 0) =  0.0;
+//  refTracePoints(1, 0) =  0.5;
+//  refTracePoints(2, 0) =  1.0;
   
   for (int sideIndex=0; sideIndex < numSides; sideIndex++)
   {
     BasisCachePtr sideBasisCache = _basisCache->getSideBasisCache(sideIndex);
-    //TODO: Set correct reference cell points.
-    // The line below causes the code to crash
-    sideBasisCache->setRefCellPoints(refTracePoints);
+    FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPoints();
+    FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePoints();
+//    cout << "side " << sideIndex << " ref cell points:\n" << refCellPoints;
+//    cout << "side " << sideIndex << " physCubature points:\n" << physicalCubaturePointsExpected;
+    sideBasisCache->setRefCellPoints(refCellPoints);
+    FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
+    double maxDiff = 0;
+    if (! fcsAgree(physicalCubaturePointsActual, physicalCubaturePointsExpected, tol, maxDiff) ) {
+      success = false;
+      cout << "After resetting refCellPoints, physical cubature points are different in side basis cache.\n";
+    }
+    
+//    // just some exploratory code here (TODO: delete this.)
+//    refCellPoints.resize(3, 1);
+//    refCellPoints(0, 0) =  -1.0;
+//    refCellPoints(1, 0) =  0.5;
+//    refCellPoints(2, 0) =  1.0;
+//    sideBasisCache->setRefCellPoints(refCellPoints);
+//    physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
+//    cout << "side " << sideIndex << " ref cell points:\n" << refCellPoints;
+//    cout << "side " << sideIndex << " physCubature points:\n" << physicalCubaturePointsActual;
   }
+
+
+
+  
   
   // TODO: test that the results are correct.
   
-  return true;
+  return success;
 }
 
 string BasisCacheTests::testSuiteName() {

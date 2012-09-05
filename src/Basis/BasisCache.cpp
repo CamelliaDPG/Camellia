@@ -382,6 +382,10 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
 
+const FieldContainer<double> BasisCache::getRefCellPoints() {
+  return _cubPoints;
+}
+
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
