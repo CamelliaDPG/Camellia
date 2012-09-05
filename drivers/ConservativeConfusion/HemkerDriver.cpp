@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
   if (ReadMesh)
-    mesh = Mesh::readTriangle("Hemker.1", confusionBF, H1Order, pToAdd);
+    mesh = Mesh::readTriangle(Camellia_MeshDir+"Hemker/Hemker.1", confusionBF, H1Order, pToAdd);
   else
 #if 0
   {

@@ -3,6 +3,12 @@ include(ConfigureOptions.cmake)
 
 project(Camellia)
 
+configure_file(
+  "${PROJECT_SOURCE_DIR}/src/include/CamelliaConfig.h.in"
+  "${PROJECT_BINARY_DIR}/CamelliaConfig.h"
+)
+include_directories(${PROJECT_BINARY_DIR})
+
 # Set Camellia directories
 set(CAMELLIA_SOURCE_DIR src)
 set(DRIVER_DIR drivers)

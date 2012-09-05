@@ -327,8 +327,8 @@ int main(int argc, char *argv[]) {
   // define nodes for mesh
   int H1Order = 2, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
-  mesh = Mesh::readTriangle("HighLift.1", confusionBF, H1Order, pToAdd);
-  // mesh = Mesh::readTriangle("NACA0012.1", confusionBF, H1Order, pToAdd);
+  mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", confusionBF, H1Order, pToAdd);
+  mesh = Mesh::readTriangle(Camellia_MeshDir+"NACA0012/NACA0012.1", confusionBF, H1Order, pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, mathIP) );
