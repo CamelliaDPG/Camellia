@@ -563,10 +563,10 @@ void Solution::writeTracesToVTK(const string& filePath)
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
     // int numPoints = 2;
-    FieldContainer<double> refTracePoints(2);
-    refTracePoints(0) =  0.0;
-    refTracePoints(1) =  1.0;
-    // refTracePoints(2) =  0.0;
+    FieldContainer<double> refTracePoints(3);
+    refTracePoints(0) = -1.0;
+    refTracePoints(1) =  0.0;
+    refTracePoints(2) =  1.0;
     // FieldContainer<double> refTracePoints(2, 1);
     // refTracePoints(0, 0) =  0.0;
     // refTracePoints(1, 0) =  1.0;

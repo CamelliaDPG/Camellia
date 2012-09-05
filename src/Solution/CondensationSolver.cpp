@@ -104,7 +104,7 @@ void CondensationSolver::init(){
   Epetra_SerialComm Comm;
 #endif
 
-  _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
+  // _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
 
   vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
   vector< ElementPtr >::iterator elemIt;
