@@ -1,6 +1,0 @@
-pdflatex SANDreport
-pdflatex SANDreport
-bibtex SANDreport
-bibtex SANDreport
-pdflatex SANDreport
-pdflatex SANDreport
