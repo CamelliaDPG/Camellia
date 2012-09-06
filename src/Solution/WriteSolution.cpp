@@ -547,7 +547,8 @@ void Solution::writeTracesToVTK(const string& filePath)
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-    basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo, 1) );
+    // basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo, 1) );
+    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, _mesh ) );
     if (basisCache.get() == NULL)
       cout << "NULL Basis" << endl;
     int numSides = cellTopo.getSideCount();
@@ -574,7 +575,7 @@ void Solution::writeTracesToVTK(const string& filePath)
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-      sideBasisCache->setRefCellPoints(refTracePoints);
+      // sideBasisCache->setRefCellPoints(refTracePoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
       cout << "numPoints = " << numPoints << endl;
       if (sideBasisCache.get() == NULL)

@@ -29,3 +29,8 @@ add_executable(AirfoilDriver AirfoilDriver.cpp)
 target_link_libraries(AirfoilDriver 
   Camellia
 )
+
+add_executable(TransientHemker TransientHemker.cpp)
+target_link_libraries(TransientHemker 
+  Camellia
+)
