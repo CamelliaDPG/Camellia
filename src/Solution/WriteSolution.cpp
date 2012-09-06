@@ -1,6 +1,6 @@
 #include "Solution.h"
 
-//#define USE_VTK
+#define USE_VTK
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -85,6 +85,27 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     else // Triangle
     {
       numPoints = 3;
+      switch (num1DPts)
+      {
+        case 1:
+          numPoints = 1;
+          break;
+        case 2:
+          numPoints = 3;
+          break;
+        case 3:
+          numPoints = 6;
+          break;
+        case 4:
+          numPoints = 10;
+          break;
+        case 5:
+          numPoints = 15;
+          break;
+        case 6:
+          numPoints = 21;
+          break;
+      }
     }
     FieldContainer<double> refPoints(numPoints,spaceDim);
     if (isQuad)
@@ -101,12 +122,77 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     }
     else
     {
-      refPoints(0,0) = 0.0;
-      refPoints(0,1) = 0.0;
-      refPoints(1,0) = 1.0;
-      refPoints(1,1) = 0.0;
-      refPoints(2,0) = 0.0;
-      refPoints(2,1) = 1.0;
+      switch(num1DPts)
+      {
+        case 1:
+          refPoints(0,0) = 1./3.; refPoints(0,1) = 1./3.;
+          break;
+        case 2:
+          refPoints(0,0) = 0.0; refPoints(0,1) = 0.0;
+          refPoints(1,0) = 1.0; refPoints(1,1) = 0.0;
+          refPoints(2,0) = 0.0; refPoints(2,1) = 1.0;
+          break;
+        case 3:
+          refPoints(0,0) = 0.0; refPoints(0,1) = 0.0;
+          refPoints(1,0) = 0.5; refPoints(1,1) = 0.0;
+          refPoints(2,0) = 1.0; refPoints(2,1) = 0.0;
+          refPoints(3,0) = 0.0; refPoints(3,1) = 0.5;
+          refPoints(4,0) = 0.5; refPoints(4,1) = 0.5;
+          refPoints(5,0) = 0.0; refPoints(5,1) = 1.0;
+          break;
+        case 4:
+          refPoints(0,0) = 0.0;  refPoints(0,1) = 0.0;
+          refPoints(1,0) = 1./3; refPoints(1,1) = 0.0;
+          refPoints(2,0) = 2./3; refPoints(2,1) = 0.0;
+          refPoints(3,0) = 1.0;  refPoints(3,1) = 0.0;
+          refPoints(4,0) = 0.0;  refPoints(4,1) = 1./3;
+          refPoints(5,0) = 1./3; refPoints(5,1) = 1./3;
+          refPoints(6,0) = 2./3; refPoints(6,1) = 1./3;
+          refPoints(7,0) = 0.0;  refPoints(7,1) = 2./3;
+          refPoints(8,0) = 1./3; refPoints(8,1) = 2./3;
+          refPoints(9,0) = 0;    refPoints(9,1) = 1;
+          break;
+        case 5:
+          refPoints(0 ,0) = 0.0;  refPoints(0 ,1) = 0.0;
+          refPoints(1 ,0) = 1./4; refPoints(1 ,1) = 0.0;
+          refPoints(2 ,0) = 2./4; refPoints(2 ,1) = 0.0;
+          refPoints(3 ,0) = 3./4; refPoints(3 ,1) = 0.0;
+          refPoints(4 ,0) = 1.0;  refPoints(4 ,1) = 0.0;
+          refPoints(5 ,0) = 0.0;  refPoints(5 ,1) = 1./4;
+          refPoints(6 ,0) = 1./4; refPoints(6 ,1) = 1./4;
+          refPoints(7 ,0) = 2./4; refPoints(7 ,1) = 1./4;
+          refPoints(8 ,0) = 3./4; refPoints(8 ,1) = 1./4;
+          refPoints(9 ,0) = 0.0;  refPoints(9 ,1) = 2./4;
+          refPoints(10,0) = 1./4; refPoints(10,1) = 2./4;
+          refPoints(11,0) = 2./4; refPoints(11,1) = 2./4;
+          refPoints(12,0) = 0.0;  refPoints(12,1) = 3./4;
+          refPoints(13,0) = 1./4; refPoints(13,1) = 3./4;
+          refPoints(14,0) = 0.0;  refPoints(14,1) = 1.0;
+          break;
+        case 6:
+          refPoints(0 ,0) = 0.0;  refPoints(0 ,1) = 0.0;
+          refPoints(1 ,0) = 1./5; refPoints(1 ,1) = 0.0;
+          refPoints(2 ,0) = 2./5; refPoints(2 ,1) = 0.0;
+          refPoints(3 ,0) = 3./5; refPoints(3 ,1) = 0.0;
+          refPoints(4 ,0) = 4./5; refPoints(4 ,1) = 0.0;
+          refPoints(5 ,0) = 1.0;  refPoints(5 ,1) = 0.0;
+          refPoints(6 ,0) = 0.0;  refPoints(6 ,1) = 1./5;
+          refPoints(7 ,0) = 1./5; refPoints(7 ,1) = 1./5;
+          refPoints(8 ,0) = 2./5; refPoints(8 ,1) = 1./5;
+          refPoints(9 ,0) = 3./5; refPoints(9 ,1) = 1./5;
+          refPoints(10,0) = 4./5; refPoints(10,1) = 1./5;
+          refPoints(11,0) = 0.0;  refPoints(11,1) = 2./5;
+          refPoints(12,0) = 1./5; refPoints(12,1) = 2./5;
+          refPoints(13,0) = 2./5; refPoints(13,1) = 2./5;
+          refPoints(14,0) = 3./5; refPoints(14,1) = 2./5;
+          refPoints(15,0) = 0.0;  refPoints(15,1) = 3./5;
+          refPoints(16,0) = 1./5; refPoints(16,1) = 3./5;
+          refPoints(17,0) = 2./5; refPoints(17,1) = 3./5;
+          refPoints(18,0) = 0.0;  refPoints(18,1) = 4./5;
+          refPoints(19,0) = 1./5; refPoints(19,1) = 4./5;
+          refPoints(20,0) = 0.0;  refPoints(20,1) = 1.0;
+          break;
+      }
     }
     
     basisCache->setRefCellPoints(refPoints);
@@ -145,72 +231,247 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
       }
       else
       {
-        vtkIdType triCell[3] = { 
-          total_vertices,
-          total_vertices+1,
-          total_vertices+2
-        };
-        ug->InsertNextCell((int)VTK_TRIANGLE, 3, triCell);
+        int s = total_vertices;
+        vtkIdList* cell = vtkIdList::New();
+        cell->Initialize();
+        switch (num1DPts)
+        {
+          case 1:
+            cell->InsertNextId(s);
+            ug->InsertNextCell((int)VTK_VERTEX, cell);
+            break;
+          case 2:
+            cell->InsertNextId(s);
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+2);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            break;
+          case 3:
+            cell->InsertNextId(s);
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+3);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+4);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+5);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            break;
+          case 4:
+            cell->InsertNextId(s+0);
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+5);
+            cell->InsertNextId(s+4);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+5);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+5);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+7);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+6);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+5);
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+8);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+9);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            break;
+          case 5:
+            cell->InsertNextId(s+0);
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+5);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+6);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+7);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+5);
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+10);
+            cell->InsertNextId(s+9);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+11);
+            cell->InsertNextId(s+10);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+9);
+            cell->InsertNextId(s+10);
+            cell->InsertNextId(s+13);
+            cell->InsertNextId(s+12);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+8);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+11);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+10);
+            cell->InsertNextId(s+11);
+            cell->InsertNextId(s+13);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+12);
+            cell->InsertNextId(s+13);
+            cell->InsertNextId(s+14);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            break;
+          case 6:
+            cell->InsertNextId(s+0);
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+6);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+1);
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+7);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+2);
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+9);
+            cell->InsertNextId(s+8);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+3);
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+10);
+            cell->InsertNextId(s+9);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+6);
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+12);
+            cell->InsertNextId(s+11);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+7);
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+13);
+            cell->InsertNextId(s+12);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+8);
+            cell->InsertNextId(s+9);
+            cell->InsertNextId(s+14);
+            cell->InsertNextId(s+13);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+11);
+            cell->InsertNextId(s+12);
+            cell->InsertNextId(s+16);
+            cell->InsertNextId(s+15);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+12);
+            cell->InsertNextId(s+13);
+            cell->InsertNextId(s+17);
+            cell->InsertNextId(s+16);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+15);
+            cell->InsertNextId(s+16);
+            cell->InsertNextId(s+19);
+            cell->InsertNextId(s+18);
+            ug->InsertNextCell((int)VTK_QUAD, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+4);
+            cell->InsertNextId(s+5);
+            cell->InsertNextId(s+10);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+9);
+            cell->InsertNextId(s+10);
+            cell->InsertNextId(s+14);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+13);
+            cell->InsertNextId(s+14);
+            cell->InsertNextId(s+17);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+16);
+            cell->InsertNextId(s+17);
+            cell->InsertNextId(s+19);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            cell->Reset();
+
+            cell->InsertNextId(s+18);
+            cell->InsertNextId(s+19);
+            cell->InsertNextId(s+20);
+            ug->InsertNextCell((int)VTK_TRIANGLE, cell);
+            break;
+        }
       }
-      // int subcellStartIndex = total_vertices;
-      // vtkIdType base = total_vertices;
-      // vtkIdType quadCell1[4] = {
-      //   base,
-      //   base+4,
-      //   base+8,
-      //   base+7
-      // };
-      // vtkIdType quadCell2[4] = {
-      //   base+4,
-      //   base+1,
-      //   base+5,
-      //   base+8
-      // };
-      // vtkIdType quadCell3[4] = {
-      //   base+7,
-      //   base+8,
-      //   base+6,
-      //   base+3
-      // };
-      // vtkIdType quadCell4[4] = {
-      //   base+8,
-      //   base+5,
-      //   base+2,
-      //   base+6
-      // };
-      // vtkIdType quadCell[8] = {
-      //   base,
-      //   base+1,
-      //   base+2,
-      //   base+3,
-      //   base+4,
-      //   base+5,
-      //   base+6,
-      //   base+7
-      // };
-      // vtkIdType triCell1[6] = {
-      //   base,
-      //   base+1,
-      //   base+2,
-      //   base+4,
-      //   base+5,
-      //   base+8
-      // };
-      // vtkIdType triCell2[6] = {
-      //   base,
-      //   base+2,
-      //   base+3,
-      //   base+8,
-      //   base+6,
-      //   base+7
-      // };
-      // ug->InsertNextCell((int)VTK_QUADRATIC_TRIANGLE, 6, triCell1);
-      // ug->InsertNextCell((int)VTK_QUADRATIC_TRIANGLE, 6, triCell2);
-      // ug->InsertNextCell((int)VTK_QUADRATIC_QUAD, 8, quadCell);
-      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell1);
-      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell2);
-      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell3);
-      // ug->InsertNextCell((int)VTK_QUAD, 4, quadCell4);
 
       for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
       {
@@ -219,6 +480,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
         for (int varIdx=0; varIdx < numFieldVars; varIdx++)
         {
           fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          // fieldData[varIdx]->InsertNextValue(pointIndex);
         }
         total_vertices++;
       }
@@ -241,7 +503,8 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
   wr->Update();
   wr->Write();
   wr->Delete();
-  // writeTracesToVTK(filePath);
+
+  cout << "Wrote Field Variables to " << filePath << ".vtu" << endl;
 }
 
 void Solution::writeTracesToVTK(const string& filePath)
@@ -256,7 +519,7 @@ void Solution::writeTracesToVTK(const string& filePath)
 
   // Allocate memory for VTK unstructured grid
   int totalCells = _mesh->activeElements().size();
-  trace_ug->Allocate(4*totalCells, 4*totalCells);
+  // trace_ug->Allocate(4*totalCells, 4*totalCells);
 
   // Count trace variables
   int numTraceVars = 0;
@@ -300,19 +563,17 @@ void Solution::writeTracesToVTK(const string& filePath)
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
     // int numPoints = 2;
-    // FieldContainer<double> refTracePoints(numPoints);
-    // refTracePoints(0) = -1.0;
-    // refTracePoints(1) =  1.0;
-    // refTracePoints(2) =  0.0;
-    FieldContainer<double> refTracePoints(2, 1);
-    refTracePoints(0, 0) =  0.0;
-    refTracePoints(1, 0) =  1.0;
+    FieldContainer<double> refTracePoints(3);
+    refTracePoints(0) = -1.0;
+    refTracePoints(1) =  0.0;
+    refTracePoints(2) =  1.0;
+    // FieldContainer<double> refTracePoints(2, 1);
+    // refTracePoints(0, 0) =  0.0;
+    // refTracePoints(1, 0) =  1.0;
     // refTracePoints(2, 0) =  0.0;
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-      //TODO: Set correct reference cell points.
-      // The line below causes the code to crash
       sideBasisCache->setRefCellPoints(refTracePoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
       cout << "numPoints = " << numPoints << endl;
@@ -326,7 +587,9 @@ void Solution::writeTracesToVTK(const string& filePath)
         computedValues[i].resize(numCells, numPoints);
         solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
       }
-      FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
+      // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      // cout << " physPoints dim = " << physicalPoints->dimension(0) << " " << physicalPoints->dimension(1)<< endl;
 
       for (int cellIndex=0;cellIndex < numCells;cellIndex++)
       {
@@ -339,10 +602,14 @@ void Solution::writeTracesToVTK(const string& filePath)
         trace_ug->InsertNextCell((int)VTK_POLY_LINE, edge);
         edge->Delete();
 
+        cout << "Physical Points: " << endl;
         for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
         {
-          trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
-              physCubPoints(cellIndex, pointIndex, 1), 0.0);
+          trace_points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
+              (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
+          cout << (*physicalPoints)(cellIndex, pointIndex, 0)<<" "<<(*physicalPoints)(cellIndex, pointIndex, 1) << endl;
+          // trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
+          //     physCubPoints(cellIndex, pointIndex, 1), 0.0);
           for (int varIdx=0; varIdx < numTraceVars; varIdx++)
           {
             traceData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));

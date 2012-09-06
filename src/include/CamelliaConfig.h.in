@@ -1,0 +1,4 @@
+#include <string>
+using namespace std;
+#define Camellia_ROOT "@CMAKE_SOURCE_DIR@"
+#define Camellia_MeshDir string("@CMAKE_SOURCE_DIR@/meshes/")

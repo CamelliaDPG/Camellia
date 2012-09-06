@@ -206,6 +206,8 @@ void StokesVVPBilinearForm::applyBilinearFormData(int trialID, int testID,
     case Q_1:
       switch (trialID) {
         case OMEGA_HAT:
+          multiplyFCByWeight(testValues,-1.0);
+          break;
         case P_HAT:
           // 1.0 weight -- do nothing
           break;

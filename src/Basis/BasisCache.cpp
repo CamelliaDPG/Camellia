@@ -118,14 +118,14 @@ BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCel
   
   _cellTopo = cellTopo;
   _numCells = numCells;
-  _spaceDim = spaceDim;
+  _spaceDim = spaceDim; // VOLUME spatial dimension
   
   _cubPoints = cubPointsSide;
   _cubPointsSideRefCell = cubPointsSideRefCell;
   
   _physicalCellNodes = physicalCellNodes;
   
-  _physCubPoints = cubPointsSidePhysical; // NOTE the meaning of _physCubPoints in this context: these are in _spaceDim + 1 dimensions...  (I.e. _physCubPoints is mapped from cubPointsSideRefCell via volumeCache->physicalCellNodes)
+  _physCubPoints = cubPointsSidePhysical; // NOTE the meaning of _physCubPoints in this context: these are in volume cache's spatial dimensions...  (I.e. _physCubPoints is mapped from cubPointsSideRefCell via volumeCache->physicalCellNodes)
   _cubWeights = cubWeightsSide;
   _weightedMeasure = sideMeasure;
   
@@ -382,14 +382,20 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
 
+const FieldContainer<double> BasisCache::getRefCellPoints() {
+  return _cubPoints;
+}
+
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
     // TODO: map pointsRefCell (on side) into volume coordinates
     int numPoints = pointsRefCell.dimension(0);
-    _cubPointsSideRefCell.resize(numPoints, _spaceDim+1);
+    // for side cache, _spaceDim is the spatial dimension of the volume cache
+    _cubPointsSideRefCell.resize(numPoints, _spaceDim); 
     // _cellTopo is the volume cell topology for side basis caches.
-    CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, _spaceDim, _sideIndex, _cellTopo);
+    int sideDim = _spaceDim - 1;
+    CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
   
   _knownValues.clear();
@@ -429,9 +435,9 @@ void BasisCache::determinePhysicalPoints() {
     _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
   } else {
-    // then _physCubPoints lives in the _spaceDim + 1 dimensions...
     int numPoints = _cubPointsSideRefCell.dimension(0);
-    _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim+1);
+    // _spaceDim for side cache refers to the volume cache's spatial dimension:
+    _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);    
   }
 }
@@ -440,16 +446,19 @@ void BasisCache::determineJacobian() {
   // Compute cell Jacobians, their inverses and their determinants
   
   int numCubPoints = _cubPoints.dimension(0);
-  int jacSpaceDim = isSideCache() ? _spaceDim + 1 : _spaceDim;
   
   // Containers for Jacobian
-  _cellJacobian.resize(_numCells, numCubPoints, jacSpaceDim, jacSpaceDim);
-  _cellJacobInv.resize(_numCells, numCubPoints, jacSpaceDim, jacSpaceDim);
+  _cellJacobian.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
+  _cellJacobInv.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
   _cellJacobDet.resize(_numCells, numCubPoints);
   
   typedef CellTools<double>  CellTools;
   
-  CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
+  if (!isSideCache())
+    CellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
+  else
+    CellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
+  
   CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
   CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
 }

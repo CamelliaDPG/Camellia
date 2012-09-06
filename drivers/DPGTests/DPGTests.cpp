@@ -62,6 +62,7 @@
 #endif
 
 #include "DPGTests.h"
+#include "BasisCacheTests.h"
 #include "SolutionTests.h"
 #include "MultiBasisTests.h"
 #include "PatchBasisTests.h"
@@ -148,12 +149,13 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
