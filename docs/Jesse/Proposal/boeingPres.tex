@@ -157,18 +157,6 @@
 \maketitle
 \end{frame}
 
-\section{Introduction/Literature review}
-\frame{
-\frametitle{Phenomena in compressible flow}
-\begin{figure}
-\centering
-\subfigure[Shock wave]{\includegraphics[scale=.0704]{figs/compFlowPics/bullet_shock.png}}
-\subfigure[Boundary layer]{\includegraphics[scale=.16]{figs/compFlowPics/boundary_layer.png}}
-%\subfigure{\includegraphics[scale=.15]{figs/compFlowPics/capsule.png}}
-\end{figure}
-Compressible flow plays an important role in the aerospace and energy industries - transonic and supersonic aircraft, combustion engines, etc. 
-
-}
 \frame{
 \frametitle{Compressible Navier-Stokes equations}
 \begin{columns}[c]
@@ -835,7 +823,7 @@ Given density $\rho$, velocities $\mathbf{u} = \LRp{u_1,u_2}$ and temperature $T
 \div \left(\vecttwo{\rho u_1^2+p }{\rho u_1 u_2} - \boldsymbol \sigma_{1}\right) &=0\\
 \div \left(\vecttwo{\rho u_1 u_2}{\rho u_2^2+p } - \boldsymbol \sigma_{2}\right) &=0\\
 \div \left(\vecttwo{((\rho e)+p)u_1}{((\rho e)+p)u_2} - \boldsymbol\sigma \mathbf{u} + \vec{q}\right) &=0\\
-\frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I &= \grad \mathbf{u} - \Reyn \, \boldsymbol \omega \\
+\frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I &= \grad \mathbf{u} - \Reyn \, \boldsymbol w\\
 \frac{1}{\kappa}\vec{q} &= \grad T
 \end{align*}
 }
@@ -849,17 +837,13 @@ $\boldsymbol\sigma$ for a Newtonian fluid: $\sigma_{ij} = \mu(u_{i,j} + u_{j,i})
 \]
 The symmetric part of the gradient is
 \[
-\frac{1}{2}\left(\grad  U + \grad ^T  U\right) = \grad  U - \boldsymbol \omega
+\frac{1}{2}\left(\grad  U + \grad ^T  U\right) = \grad  U - \boldsymbol w
 \]
-%where $\boldsymbol \omega$ is the antisymmetric part of the infinitesimal strain tensor:
-%\[
-%\boldsymbol \omega = \frac{1}{2}\left(\grad  U - \grad ^T  U\right).
-%\]
 Our final form is
 \begin{align*}
-\grad  U - \boldsymbol \omega = \frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I.
+\grad  U - \boldsymbol w= \frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I.
 \end{align*}
-By enforcing strong symmetry of $\boldsymbol \sigma$, taking the antisymmetric part implicitly defines $\boldsymbol \omega$ to be the antisymmetric part of $\grad u$. 
+By enforcing strong symmetry of $\boldsymbol \sigma$, taking the antisymmetric part implicitly defines $\boldsymbol w$ to be the antisymmetric part of $\grad u$. 
 }
 
 \frame{
@@ -871,7 +855,7 @@ Convection-diffusion:
 \div \left(\beta u - \sigma\right) &= f\\
 \frac{1}{\epsilon}\sigma - \grad u &= 0.
 \end{align*}
-Navier-Stokes: defining vector variables $U = \{\rho,u_1,u_2,T\}$ and $\Sigma = \{{\boldsymbol \sigma},\mathbf{q},\omega\}$,
+Navier-Stokes: defining vector variables $U = \{\rho,u_1,u_2,T\}$ and $\Sigma = \{{\boldsymbol \sigma},\mathbf{q},w\}$,
 \begin{align*}
 \div \left(A_{\rm invisc}U - A_{\rm visc}\Sigma\right) &= R_{\rm conserv}(U,\Sigma)\\
 E_{\rm visc} \Sigma - \grad U &= R_{\rm constit}(U,\Sigma)
