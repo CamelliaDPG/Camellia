@@ -198,8 +198,10 @@ public:
   ElementPtr getActiveElement(int index);
   DofOrderingFactory & getDofOrderingFactory();
 
-  // added by Jesse - gets local and global dof indices for fluxes/fields
+  // added by Jesse - REMOVE, cruft code
   void getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
+  // added by Jesse - gets local and global dof indices for fluxes/fields
+  void getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds);
 
   ElementTypeFactory & getElementTypeFactory();
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
