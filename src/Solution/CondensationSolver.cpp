@@ -62,15 +62,19 @@ int CondensationSolver::solve(){
 
   int numGlobalFluxDofs = _allFluxInds.size();
 
-  //  Epetra_Map fluxPartMap = _solution->getPartitionMap(rank, _condensedFluxInds, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
-  Epetra_Map fluxPartMap = _solution->getPartitionMap(rank, _allFluxInds, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
-  cout << fluxPartMap;
-  //  Epetra_Map partMap = _solution->getPartitionMap(rank, globalIndsForPartition, numGlobalDofs, 0, &Comm);
-  //  cout << partMap;
+  Epetra_Map fluxPartMap = _solution->getPartitionMap(rank, _condensedFluxInds, numGlobalFluxDofs, 0, &Comm); // 0 = assumes no zero mean/Lagrange constraints 
 
-  Epetra_FECrsMatrix K_cond(Copy, fluxPartMap, _mesh->rowSizeUpperBound()); // reduced matrix - soon to be schur complement
+  int maxNnz = min(_mesh->rowSizeUpperBound(),numGlobalFluxDofs);
+  Epetra_FECrsMatrix K_cond(Copy, fluxPartMap, maxNnz); // reduced matrix - soon to be schur complement
   Epetra_FEVector bflux(fluxPartMap);
   Epetra_FEVector lhsVector(fluxPartMap, true);
+
+  cout << "max Nnz = " << maxNnz << endl;
+  cout << "numGlobalFlux = " << numGlobalFluxDofs << endl;
+
+  cout << K_cond.RowMatrixRowMap();
+  cout << endl << " ============ COL MAP =================" << endl << endl;;
+  cout << K_cond.RowMatrixColMap();
 
   // get dense solver for distributed portion
   Epetra_SerialDenseSolver denseSolver;
@@ -162,6 +166,14 @@ void CondensationSolver::init(){
     Epetra_SerialDenseMatrix K_elem(numFieldInds,numFieldInds);
     _elemFieldMats[cellID] = K_elem;
   }
+
+  // figure out nRHS for solves (nonzero coupling terms)
+  Epetra_RowMatrix* K = problem().GetMatrix();
+  int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
+  for (int i = 0;i<numMyRows;++i){
+    // TODO: FINISH
+  }
+
 }
 
 void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMatrix &K_cond){
@@ -178,21 +190,18 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
   Epetra_SerialComm Comm;
 #endif
 
-  cout << "K->MaxNumEntries() = " << K->MaxNumEntries() << endl;
-
-
   int * globalColInds = K->RowMatrixColMap().MyGlobalElements();
   int numMyCols = K->RowMatrixColMap().NumMyElements();
   cout << "number of column elements on rank " << rank << " = " << numMyCols << endl;
 
+  int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc 
+  // get inds and values of row
+  int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
+  double * values = new double[numGlobalRowElements];
+  int * indices = new int[numGlobalRowElements]; 
+  
   int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
   for (int i = 0;i<numMyRows;++i){
-    int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc
-
-    // get inds and values of row
-    int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
-    double * values = new double[numGlobalRowElements];
-    int * indices = new int[numGlobalRowElements]; 
     int numEntries; // output from ExtractMyRowCopy
     K->ExtractMyRowCopy(i,numGlobalRowElements,numEntries,values,indices);    
    
@@ -203,8 +212,6 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
       int colInd = globalColInds[indices[j]];
       bool colIsFlux = _allFluxInds.find(colInd)!=_allFluxInds.end();
       double value = values[j];
-
-      //      cout << "K(" << rowInd << "," << colInd << ") = " << value << endl;
 
       // if the row index is a field index
       if (!rowIsFlux){
@@ -235,15 +242,16 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
 
 	int condensedFluxRowInd = _globalToCondensedFluxInds[rowInd];
 	int condensedFluxColInd = _globalToCondensedFluxInds[colInd];
-	//	K_cond.InsertGlobalValues(1,&condensedFluxRowInd,1,&condensedFluxColInd,&value);
-	K_cond.InsertGlobalValues(1,&rowInd,1,&colInd,&value);
+	cout << "inserting on proc " << rank << " at inds " << condensedFluxRowInd << ", " << condensedFluxColInd << endl;
+	K_cond.InsertGlobalValues(1,&condensedFluxRowInd,1,&condensedFluxColInd,&value);
+	//	K_cond.InsertGlobalValues(1,&rowInd,1,&colInd,&value);
 
       }
       
     }
   }
   K_cond.GlobalAssemble();
-  EpetraExt::RowMatrixToMatlabFile("test_mat.dat",*K);
+  //  EpetraExt::RowMatrixToMatlabFile("test_mat.dat",*K);
 }
 
 // helper function - finds cellID for a field index
