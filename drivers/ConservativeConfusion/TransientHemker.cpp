@@ -20,11 +20,12 @@
 #endif
 
 // =================== Local Settings =====================
-int numTimeSteps = 10; // max time steps
-bool enforceLocalConservation = false;
+bool transient = true;
+int numTimeSteps = 1; // max time steps
+bool enforceLocalConservation = true;
 double epsilon = 1e-4;
 int numRefs = 4;
-int nseg = 2;
+int nseg = 6;
 bool ReadMesh = false;
 bool CircleMesh = false;
 bool TriangulateMesh = false;
@@ -289,8 +290,11 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
   }
-  confusionBF->addTerm( u, invDt*v );
-  rhs->addTerm( u_prev_time * invDt * v );
+  if (transient)
+  {
+    confusionBF->addTerm( u, invDt*v );
+    rhs->addTerm( u_prev_time * invDt * v );
+  }
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE INNER PRODUCT
@@ -316,7 +320,8 @@ int main(int argc, char *argv[]) {
   if (!enforceLocalConservation)
   {
     robIP->addTerm( ip_scaling * v );
-    robIP->addTerm( invDt * v );
+    if (transient)
+      robIP->addTerm( invDt * v );
   }
   robIP->addTerm( sqrt(epsilon) * v->grad() );
   // Weight these two terms for inflow
@@ -402,8 +407,6 @@ int main(int argc, char *argv[]) {
       prevTimeFlow->setSolution(solution); // reset previous time solution to current time sol
       i++;
     }
-
-    refinementStrategy->refine(rank==0); // print to console on rank 0
 
     //////////////////////////////////////////////////////////////////////////
     // Check conservation by testing against one
