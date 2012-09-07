@@ -1,0 +1,733 @@
+\documentclass[compress]{beamer}
+\mode<presentation>
+\usetheme{Warsaw}
+\usecolortheme{seagull}
+%\useoutertheme[subsection=false]{smoothbars}
+\useoutertheme{infolines}
+\useinnertheme{rectangles}
+
+\setbeamercovered{dynamic}
+
+\usepackage{array}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage[normalem]{ulem}
+
+\usepackage{graphicx}
+\usepackage{subfigure}
+%\usepackage{caption}
+%\usepackage{subcaption}
+
+\usepackage{color}
+\usepackage{undertilde}
+\usepackage{pdflscape}
+\usepackage{pifont}
+
+\usepackage{bibentry}
+\nobibliography*
+
+%\usepackage[osf]{mathpazo}
+%\usepackage{mathpazo}
+%\renewcommand\rmdefault{ptm}
+
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\triangle}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\newcommand{\Reyn}{\rm Re}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+% removes nav symbols
+\beamertemplatenavigationsymbolsempty
+
+% defines newblock as null, giving compile issues otherwise
+\let\newblock\relax 
+
+\institute[ICES]{Institute for Computational Engineering and Sciences}
+
+\title[A DPG method for Compressible Flow]{Application of a Discontinuous Petrov-Galerkin method to compressible flow problems}
+\date{Sept 12, 2012}
+\author[J. Chan, L. Demkowicz, R. Moser]{Jesse Chan\\ Supervisors: Leszek Demkowicz, Robert Moser}
+
+\begin{document}
+\begin{frame}
+\maketitle
+\end{frame}
+
+\frame{
+\frametitle{Compressible Navier-Stokes equations}
+\begin{columns}[c]
+\begin{column}{.55\textwidth}
+Numerical difficulties:
+\begin{itemize}
+\item{} Resolving solution features (sharp, localized viscous-scale phenomena)
+\begin{itemize}
+\item{} Shocks
+\item{} Boundary layers - resolution needed for drag/load
+\end{itemize}
+\item{} Stability of numerical schemes
+\begin{itemize}
+\item{} Coarse/adaptive grids
+\item{} Higher order
+\end{itemize}
+\item{} Stabilized methods
+\begin{itemize}
+\item{} Stabilization parameters
+\item{} Higher-order
+\end{itemize}
+\end{itemize}
+\end{column}
+\begin{column}{.4\textwidth}
+\begin{figure}
+\centering
+\subfigure{\includegraphics[scale = .6]{figs/compFlowPics/airfoil_mesh.png}}
+\subfigure{\includegraphics[scale=.3]{figs/SUPG.png}}
+\end{figure}
+\end{column}
+\end{columns}
+}
+
+\section{The DPG Method}
+\frame{
+\frametitle{DPG: a minimum residual method via optimal testing}
+Given a trial space $U$ and Hilbert test space $V$,
+\[
+b(u,v) = \ell(v) \Longleftrightarrow Bu = \ell, \quad 
+\left.\begin{array}{cl}
+\langle Bu,v\rangle_V &\coloneqq b(u,v)\\
+\langle \ell,v\rangle_V &\coloneqq \ell(v).
+\end{array}\right\}
+\]
+We seek to minimize the \textcolor{red}{dual residual} over $U_h \subset U$
+\[
+J(u_h) = \frac{1}{2}\|Bu_h-\ell\|_{V'}^2 = \frac{1}{2}\left\|R_V^{-1}(Bu_h-\ell)\right\|_V^2.
+\]
+where $R_V: V \to V'$ is the isometric Riesz map
+\[
+\langle R_V v,\delta v\rangle_V \coloneqq(v, \delta v)_V, \quad \forall \delta v \in V.
+\]
+Conditions for minimization of the convex functional give
+\[
+b(u_h,v_{\delta u}) = \ell(v_{\delta u}), \quad \forall \delta u \in U_h, \quad v_{\delta u} \coloneqq R_V^{-1}B\delta u.
+\]
+}
+
+\frame{
+\frametitle{Practical details of DPG}
+Computation of $v_{\delta u} \coloneqq R_V^{-1}B\delta u$ is \textbf{global} and \textbf{infinite-dimensional}.
+\begin{itemize}
+\item By choosing a \textcolor{red}{broken} test space $V$ and \textcolor{red}{localizable} norm $\nor{v}_V^2 = \sum_K \nor{v}_{V(K)}^2$, test functions can be determined locally.
+\item In practice, we use an \textcolor{red}{enriched space} $V_h \subset V$, where $\dim(V_h) > \dim(U_h)$ elementwise, and \textcolor{red}{optimal test functions} are approximated by computing $v_{\delta u} \coloneqq R_{V_h}^{-1}B\delta u \in V_h$ through\footnote{\bibentry{DPG2}}
+\[
+\LRp{v_{\delta u},\delta v}_V = b(\delta u,\delta v), \quad \delta u\in U_h, \quad \forall \delta v\in V_h
+\]
+Typically, if $U_h = \mathcal{P}^p(\mathbb{R}^n)$, $V_h = \mathcal{P}^{p+\triangle p}(\mathbb{R}^n)$, where $\triangle p \geq n$.\footnote{\bibentry{practicalDPG}} 
+\end{itemize}
+%\footnotetext{\bibentry{DPG2}}
+}
+
+\frame{
+\frametitle{Properties of DPG}
+%Properties of DPG include\footnotemark
+\begin{itemize}
+\item Stiffness matrices are \textcolor{red}{symmetric positive-definite}. For trial/test bases $\{\phi_j\}_{j=1}^m$ and $\{v_i\}_{i=1}^n$, with $B_{ji} = b(\phi_j,v_i)$ and $l_i = \ell(v_i)$. DPG solves 
+\begin{align*}
+\LRp{B^T R_V^{-1}B} u  &= \LRp{B^T R_V^{-1}} l,
+\end{align*}
+For localizable norms and discontinuous testing, $R_V$ is block diagonal.
+\item DPG provides the best approximation in the \textcolor{red}{energy norm}
+\[
+\|u\|_E = \|Bu\|_{V'} = \sup_{\nor{v}_V=1} \left|b(u,v)\right|.
+\]
+\item The energy error is computable through the \textcolor{red}{error representation function} $e$ defined through $(e,\delta v)_V = \ell(v)-b(u_h,\delta v)$ for all $\delta v\in V$. 
+\[
+\nor{u-u_h}_E = \nor{B(u-u_h)}_{V'} = \nor{R_V^{-1}(l-Bu_h)}_V = \nor{e}_V
+\]
+\end{itemize}
+%\footnotetext{\bibentry{DPG3pub}}
+}
+
+\section{A Robust DPG Method for Convection-Diffusion}
+
+\frame{
+\frametitle{Ultra-weak formulation for convection-diffusion}
+\begin{columns}
+\begin{column}{.65\textwidth}
+The first order convection-diffusion system:
+\[
+A \LRp{u,\sigma} \coloneqq 
+\LRs {
+\begin{array}{c}
+\div (\beta u - \sigma) \\ \frac{1}{\epsilon}\sigma - \grad u
+\end{array}} = \LRs{
+\begin{array}{c}
+f \\ 0
+\end{array}
+}.
+\]
+\end{column}
+
+\begin{column}{.35\textwidth}
+\begin{figure}[!h]
+\centering
+\includegraphics[scale = .15]{figs/mesh_skel.pdf}
+\end{figure}
+\end{column}
+
+\end{columns}
+
+The variational formulation is
+\begin{align*}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),
+\left( v, \tau \right)\right) = \left(u,\grad_h\cdot \tau - \beta \cdot \grad_h
+v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad_h v\right)_{\Oh}&\\
+  - \LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gh} + \LRa{\widehat{f}_n,\jump{v} }_{\Gh}&,
+\end{align*}
+where $\widehat{f}_n \coloneqq \beta_n u - \sigma_n$ and $\LRa{\widehat{f}_n,\jump{v} }_{\Gh}$ is defined 
+\[
+\LRa{\widehat{f}_n,\jump{v} }_{\Gh}\coloneqq \sum_K\int_{\partial K}{\rm sgn}(\vec{n}) \, \widehat{f}_n v.
+\]
+}
+
+\frame{
+\frametitle{Graph norm under convection-diffusion}
+The graph norm\footnote{\bibentry{Bui-ThanhDemkowiczGhattas11b}} for convection-diffusion gives exceptional stability.  %, this norm is defined elementwise
+\begin{align*}
+\|\left(v,\tau\right)\|_{V(K)}^2 =& \| \div \tau - \beta \cdot \grad v\|_{L^2(K)}^2 + 
+\| \epsilon^{-1} \tau + \grad v \|_{L^2(K)}^2 +
+\|v\|_{L^2(K)}^2.
+\end{align*}
+Problem with this test norm: approximability of test functions.
+\begin{figure}[!h]
+\centering
+\includegraphics[scale=.16]{figs/opt.png}
+\caption{Components of optimal test functions for flux $\widehat{f}_n$ on the \emph{right-hand} side of a unit element for $\epsilon = 0.01$. }
+\label{fig:optTestBoundary}
+\end{figure}
+}
+
+\frame{
+\frametitle{Determining an alternative test norm}
+%Recall the convection-diffusion bilinear form.  %Let $\boldsymbol U = \LRp{u,\sigma,\widehat{u},\widehat{f}_n}$. 
+\vspace{-.85cm}
+\begin{align*}%b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),\left( v, \tau \right)\right) 
+b(\boldsymbol U,\boldsymbol V) = \left(u,\div \tau - \beta \cdot \grad
+v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad v\right)_{\Oh} + \text{boundary terms}
+% - \LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gh} + \LRa{\widehat{f}_n,\jump{v} }_{\Gh}
+\end{align*}
+Recover $\nor{u}^2_{L^2(\Omega)}$ with conforming $\LRp{v,\tau}$ satisfying the \emph{adjoint equations}
+\begin{align*}
+\left.
+\begin{array}{cl}
+\div\tau - \beta \cdot \grad v   &= u\\
+\frac{1}{\epsilon}\tau + \grad v &= 0
+\end{array}
+\right. ,
+\quad
+\LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gamma}, \LRa{ \widehat{f}_n,\jump{v} }_{\Gamma} = 0
+\end{align*}
+``Necessary'' conditions for robustness --- 
+\[
+\nor{u}^2_{L^2(\Omega)} = b\LRp{{\boldsymbol U},\LRp{v,\tau}} = \frac{b\LRp{{\boldsymbol U},\LRp{v,\tau}}}{\nor{\LRp{v,\tau}}_V} \nor{\LRp{v,\tau}}_V \leq \nor{\boldsymbol U}_E \nor{\LRp{v,\tau}}_V
+\]
+Let $\lesssim$ denote a robust bound - \textcolor{red}{if $ \nor{\LRp{v,\tau}}_V \lesssim \|u\|_{L^2(\Omega)}$}, then we have that
+\[
+\nor{u}_{L^2(\Omega)} \lesssim \nor{\boldsymbol U}_E
+\]
+\textbf{Main idea: the \textcolor{red}{test norm} should measure \textcolor{red}{adjoint solutions} robustly.}
+}
+
+%\frame{
+%\frametitle{Choice of inflow boundary condition}
+%
+%\begin{columns}
+%\begin{column}{.49\textwidth}
+%We impose the standard outflow wall boundary condition on $u$. For inflow boundary condition: 
+%\begin{itemize}
+%\item{} The standard choice of inflow boundary condition: $u = u_0$.
+%\item{} We impose the non-standard inflow condition: $\widehat{f}_n \coloneqq \beta_n u - \sigma_n \approx \beta_n u_0$ on $\Gamma_{\rm in}$.
+%\end{itemize}
+%\end{column}
+%
+%\begin{column}{.49\textwidth}
+%\begin{figure}
+%\includegraphics[scale=.23]{figs/primal.png}
+%\caption{Non-standard inflow.}
+%\end{figure}
+%\end{column}
+%\end{columns}
+%When $\sigma_n \approx 0$ near the inflow, condition on $\widehat{f}_n$ approximates condition on $u$. 
+%}
+
+\frame{
+\frametitle{Dirichlet inflow condition: issues as $\epsilon \rightarrow 0$}
+Standard choice of boundary condition: $u = u_0$ on inflow boundary $\Gamma_{\rm in}$, induces boundary layers in adjoint problems, \textcolor{red}{$\nor{\beta\cdot \grad v}_{L^2} = O(\epsilon^{-1})$}.
+\begin{figure}[h!]
+\centering
+\subfigure[Primal problem]{\includegraphics[scale=.23]{figs/primalDir.png}}
+\subfigure[Adjoint problem]{\includegraphics[scale=.23]{figs/adjointDir.png}}
+\caption{For the standard Dirichlet inflow condition, the solution to the adjoint problem can develop strong boundary layers at the outflow of the adjoint problem. }
+\end{figure}
+}
+
+\frame{
+\frametitle{Solution: New inflow boundary condition on $\widehat{f}_n$}
+Non-standard choice of boundary condition: $\widehat{f}_n = \beta_n u_0$ on $\Gamma_{\rm in}$, induces smoother adjoint problems, \textcolor{red}{$\nor{\beta\cdot \grad v}_{L^2} = O(1)$}.
+\begin{figure}[h!]
+\centering
+\subfigure[Primal problem]{\includegraphics[scale=.23]{figs/primal.png}}
+\subfigure[Adjoint problem]{\includegraphics[scale=.23]{figs/adjoint.png}}
+\caption{Under the new inflow condition, the wall-stop boundary condition is relaxed to a zero-stress condition at the outflow boundary of the adjoint problem.}
+\end{figure}
+}
+
+\frame{
+\frametitle{Test norms and adjoint solutions}
+\textbf{Intuition:} the effectiveness of DPG under a test norm is governed by how a \textbf{specific test norm} measures the \textbf{solutions of the adjoint problem}. 
+
+\begin{figure}[!h]
+\centering
+\subfigure[Dirichlet inflow]{\includegraphics[scale=.35]{figs/dirichletBC.png}}
+\subfigure[``Convection'' inflow]{\includegraphics[scale=.35]{figs/newBC.png}}
+\caption{DPG solutions to convection-diffusion for both inflow conditions using an $H^1$ test norm.}
+\end{figure}
+}
+
+\frame{
+\frametitle{Mesh-scaled test norms}
+For solutions $(v,\tau)$ of the adjoint equations, we derive quantities that are robustly bounded from above by $\nor{u}_{L^2(\Omega)}$.  Our test norm, as defined over a single element $K$, is now
+\begin{align*}
+\|\left(v,\tau\right)\|_{V,K}^2 = \min\left\{\frac{\epsilon}{|K|},1\right\}\|v\|^2 + \epsilon \|\grad v\|^2 + \|\beta \cdot \grad v\|^2 +&\\
+\| \div \tau\|^2 + \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\|\tau\|^2&.
+\end{align*}
+which induces the proven \emph{robust} bound\footnote{\bibentry{DPGrobustness2}}
+\[
+\nor{u}_{L^2(\Omega)}+ \nor{\sigma}_{L^2(\Omega)} + \epsilon\nor{\widehat{u}} + \sqrt{\epsilon} \nor{\widehat{f}_n} \lesssim \nor{\LRp{u,\sigma,\widehat{u},\widehat{f}_n}}_E.
+\]
+}
+
+\frame{
+\frametitle{Numerical verification: Erikkson-Johnson problem}
+
+%On domain $\Omega = [0,1]^2$, with $\beta = (1,0)^T$, $ f = 0$ and boundary conditions
+%\begin{align*}
+%\widehat{\beta_nu - \sigma_n} &= \widehat{f}_n = u_0, \quad \beta_n \leq 0\\
+%\widehat{u} &= 0, \quad \beta_n > 0
+%\end{align*}
+Experiments done using Camellia\footnote{\bibentry{Camellia}} and a boundary layer solution.
+%\begin{figure}
+%\centering
+%\subfigure{
+%\includegraphics[scale=.23]{figs/wallBC_exact_u.png}
+%}
+%\subfigure{
+%\includegraphics[scale=.23]{figs/wallBC_exact_sigx.png}
+%}
+%\subfigure{
+%\includegraphics[scale=.23]{figs/wallBC_exact_sigy.png}
+%}
+%\caption{Exact solution for $u$, $\sigma_x$, and $\sigma_y$ for $\epsilon = .01$, $C_1 = 1$, $C_n=0$, $n\neq 1$}
+%\end{figure}
+\begin{figure}
+\centering
+\subfigure{
+\includegraphics[scale=.33]{figs/errorrates_wallBC.png}
+}
+\subfigure{
+\includegraphics[scale=.33]{figs/L2energyratio_wallBC.png}
+}
+%\subfigure{
+%\includegraphics[scale=.22]{figs/u_pointdiff_wallBC.png}
+%}
+\caption{$L^2$/energy errors and their ratio for $\epsilon = .01, .001, .0001$.}
+\end{figure}
+}
+
+
+%\section{DPG for nonlinear problems}
+%\frame{
+%\frametitle{DPG for nonlinear problems}
+%
+%Given some linearization technique (typically Newton-Raphson and pseudo-timestepping linearization), we measure 
+%\begin{itemize}
+%\item size of the linearized update $\Delta u$
+%\[
+%\|\Delta u\|_E \coloneqq \nor{B_u\Delta u}_{V'} = \nor{R_V^{-1} B_u\Delta u}_V 
+%\]
+%\item the nonlinear residual 
+%\[
+%\nor{R(u)}_E \coloneqq \nor{B(u) - \ell}_{V'}  = \nor{R_V^{-1}\LRp{B(u)-\ell}}_V 
+%\]
+%\end{itemize}
+%Preliminary experiments were done in 1D\footnote{\bibentry{DPGNS_1d}} and space-time.\footnote{\bibentry{DPGspacetime}}
+%}
+
+\frame{
+\frametitle{2D test case: Burgers equation}
+\begin{columns}
+\begin{column}{.48\textwidth}
+\vspace{-.5cm}
+\[
+\pd{\left(u^2/2\right)}{x} + \pd{u}{y} + \epsilon \Delta u = f
+\]
+Burgers equation can be written with $\beta(u) = \LRp{u/2,1}$
+\begin{align*}
+\div\left(\beta(u)u-\sigma\right) &=f \\
+\frac{1}{\epsilon}\sigma - \grad u &=0.
+\end{align*}
+i.e.\ nonlinear convection-diffusion on domain $[0,1]^2$.
+\end{column}
+\begin{column}{.48\textwidth}
+\begin{figure}[!h]
+\centering
+\includegraphics[scale = .22]{figs/burgers.png}
+\caption{Shock solution for Burgers' equation, $\epsilon = 1e-4$, using Newton-Raphson.}
+\end{figure}
+\end{column}
+\end{columns}
+}
+\frame{
+Adaptivity begins with a cubic $4\times 4$ mesh.
+\begin{figure}[!h]
+\centering
+\subfigure{\includegraphics[scale=.2]{figs/burgersMesh.png}}
+\subfigure{\includegraphics[scale=.2]{figs/burgersZoom.png}}
+\caption{Adaptive mesh after 9 refinements, and zoom view at point (.5,.5) with shock formation and $1e-3$ width line for reference.}
+\end{figure}
+}
+
+\frame{
+\frametitle{2D Compressible Navier-Stokes equations (ideal gas)}
+Given density $\rho$, velocities $\mathbf{u} = \LRp{u_1,u_2}$ and temperature $T$,
+\begin{align*}
+\div \vecttwo{\rho u_1 }{\rho u_2} &= 0,\\
+\div \left(\vecttwo{\rho u_1^2+p }{\rho u_1 u_2} - \boldsymbol \sigma_{1}\right) &=0,\\
+\div \left(\vecttwo{\rho u_1 u_2}{\rho u_2^2+p } - \boldsymbol \sigma_{2}\right) &=0,\\
+\div \left(\vecttwo{((\rho e)+p)u_1}{((\rho e)+p)u_2} - \boldsymbol\sigma \mathbf{u} + \vec{q}\right) &=0,\\
+\frac{1}{2\mu} \boldsymbol \sigma - \frac{\lambda}{4\mu (\mu + \lambda)} { \rm tr}(\boldsymbol \sigma) \boldsymbol I &= \grad \mathbf{u} - \Reyn \, \boldsymbol w,\\
+\kappa^{-1}\vec{q} &= \grad T,
+\end{align*}
+where $\boldsymbol w$ represents the antisymmetric part of $\grad u$
+}
+
+\frame{
+\frametitle{Extrapolation of test norms}
+%\begin{columns}
+%\begin{column}{.48\textwidth}
+Convection-diffusion:
+\begin{align*}
+\div \left(\textcolor{red}{\beta u} - \textcolor{blue}{\sigma}\right) &= f\\
+\frac{1}{\epsilon}\sigma - {\grad u} &= 0.
+\end{align*}
+Navier-Stokes: defining vector variables $U = \{\rho,u_1,u_2,T\}$ and $\Sigma = \{{\boldsymbol \sigma},\mathbf{q},w\}$,
+\begin{align*}
+\div \left(\textcolor{red}{A_{\rm invisc}U} - \textcolor{blue}{A_{\rm visc}\Sigma}\right) &= R_{\rm conserv}(U,\Sigma)\\
+E_{\rm visc} \Sigma - \grad U &= R_{\rm constit}(U,\Sigma)
+\end{align*}
+where $R_{\rm conserv}(U,\Sigma)$ and $R_{\rm constit}(U,\Sigma)$ are the conservation/constitutive residuals.
+}
+%\addtocounter{framenumber}{-1}
+\frame{
+\frametitle{Extrapolation of test norms}
+%\begin{columns}
+%\begin{column}{.48\textwidth}
+Convection-diffusion:
+\begin{align*}
+\div \left(\beta u - \sigma\right) &= f\\
+\textcolor{red}{\frac{1}{\epsilon}\sigma} - \textcolor{blue}{\grad u} &= 0.
+\end{align*}
+Navier-Stokes: defining vector variables $U = \{\rho,u_1,u_2,T\}$ and $\Sigma = \{{\boldsymbol \sigma},\mathbf{q},w\}$,
+\begin{align*}
+\div \left({A_{\rm invisc}U} - {A_{\rm visc}\Sigma}\right) &= R_{\rm conserv}(U,\Sigma)\\
+\textcolor{red}{E_{\rm visc} \Sigma} - \textcolor{blue}{\grad U} &= R_{\rm constit}(U,\Sigma)
+\end{align*}
+where $R_{\rm conserv}(U,\Sigma)$ and $R_{\rm constit}(U,\Sigma)$ are the conservation/constitutive residuals.
+}
+
+\frame{
+\frametitle{Carter's flat plate problem}
+\begin{columns}
+\begin{column}{.49\textwidth}
+\begin{figure}[!h]
+\centering
+\includegraphics[scale=.32]{figs/flat_plate_BCs.pdf}
+\caption{Carter flat plate problem on domain $[0,2]\times[0,1]$. Plate begins at $x=1$, ${\rm Re} = 1000$.}
+\end{figure}
+\end{column}
+\begin{column}{.49\textwidth}
+\begin{enumerate}
+\item{} Symmetry boundary conditions.
+\item{} Prescribed temperature and wall stagnation conditions.
+\item{} Symmetry boundary conditions.
+\item{} Inflow: conserved quantities specified using far-field values.
+\item{} No outflow condition set.
+\end{enumerate}
+Stress/heat flux boundary conditions are set in terms of the momentum and energy fluxes. 
+\end{column}
+\end{columns}
+}
+
+\frame{
+\frametitle{Refinement level 0}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u0.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T0.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh0.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+\frame{
+\frametitle{Refinement level 1}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u1.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T1.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh1.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+\frame{
+\frametitle{Refinement level 2}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u2.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T2.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh2.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+\frame{
+\frametitle{Refinement level 3}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u3.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T3.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh3.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+
+\frame{
+\frametitle{Refinement level 4}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u4.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T4.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh4.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+
+\frame{
+\frametitle{Refinement level 5}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u5.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T5.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh5.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 6}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u6.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T6.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh6.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+
+\frame{
+\frametitle{Refinement level 7}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u7.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T7.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh7.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+\frame{
+\frametitle{Refinement level 8}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u8.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T8.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh8.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 9}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u9.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T9.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh9.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+
+\frame{
+\frametitle{Refinement level 10}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/propMovie/u10.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/propMovie/T10.png}}
+\subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh10.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Zoomed solutions at plate/stagnation point}
+\begin{figure}
+\centering
+\subfigure[$\rho$]{\includegraphics[scale = .12]{figs/Re1000p2/rhoUnscaledzoom.png}}
+\subfigure[$u_1$]{\includegraphics[scale = .12]{figs/Re1000p2/u1zoom.png}}
+\subfigure[$u_2$]{\includegraphics[scale = .12]{figs/Re1000p2/u2zoom.png}}
+\subfigure[$T$]{\includegraphics[scale = .12]{figs/Re1000p2/Tzoom.png}}
+\subfigure[$q_n$]{\includegraphics[scale = .23]{figs/Re1000p2/heatflux.png}}
+\end{figure}
+}
+
+\frame{
+\begin{center}
+Thank you!\\
+\vspace{1cm}
+Questions?
+\end{center}
+}
+
+%\input{futureWork}
+%\input{extendedSlides}
+
+\bibliographystyle{plain}
+{\scriptsize
+\bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes}
+}
+
+\end{document}
