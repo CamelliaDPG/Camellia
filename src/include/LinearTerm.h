@@ -93,8 +93,11 @@ public:
   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
 
-  // -------------- end of added by Jesse --------------------
   
+  // -------------- end of added by Jesse --------------------
+
+  void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
+  void addTerm(LinearTermPtr aPtr, bool overrideTypeCheck=false);
   // operator overloading niceties:
   
   LinearTerm& operator=(const LinearTerm &rhs);
