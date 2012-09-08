@@ -246,7 +246,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
                            LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
-  // values has dimensions (numCells, thisFields, otherFields)
+  // values has dimensions (numCells, otherFields, thisFields)
   
   int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -875,7 +875,6 @@ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos:
   return _energyNormForCellIDGlobal;
 }
 
-
 double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip){
   double energyNormSquared = 0.0;
   const map<int,double>* energyNormPerCell = &(energyNorm(mesh, ip));  
@@ -899,23 +898,35 @@ LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
   _summands = rhs.summands();
   _varIDs = rhs.varIDs();
   return *this;
-}    
+}
 
-LinearTerm& LinearTerm::operator+=(const LinearTerm &rhs) {
+void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
   if (_rank == -1) { // we're empty -- adopt rhs's rank
-    _rank = rhs.rank();
+    _rank = a.rank();
   }
-  if (_rank != rhs.rank()) {
+  if (_rank != a.rank()) {
     TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
   }
   if (_termType == UNKNOWN_TYPE) {
-    _termType = rhs.termType();
+    _termType = a.termType();
   }
-  if (_termType != rhs.termType()) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
+  if (_termType != a.termType()) {
+    if (!overrideTypeCheck) {
+      TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
+    } else {
+      _termType = MIXED_TYPE;
+    }
   }
-  _summands.insert(_summands.end(), rhs.summands().begin(), rhs.summands().end());
-  _varIDs.insert( rhs.varIDs().begin(), rhs.varIDs().end() );
+  _summands.insert(_summands.end(), a.summands().begin(), a.summands().end());
+  _varIDs.insert( a.varIDs().begin(), a.varIDs().end() );
+}
+
+void LinearTerm::addTerm(LinearTermPtr aPtr, bool overrideTypeCheck) {
+  this->addTerm(*aPtr, overrideTypeCheck);
+}
+
+LinearTerm& LinearTerm::operator+=(const LinearTerm &rhs) {
+  this->addTerm(rhs);
   return *this;
 }
 
