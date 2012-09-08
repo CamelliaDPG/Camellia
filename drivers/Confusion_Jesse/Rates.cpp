@@ -341,7 +341,7 @@ int main(int argc, char *argv[]) {
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
 
-  /*
+  
   // determine trialIDs
   vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
   vector< int > fieldIDs;
@@ -409,6 +409,6 @@ int main(int argc, char *argv[]) {
     }
     fluxInds.close();
   }
-  */
+  
   return 0;
 }

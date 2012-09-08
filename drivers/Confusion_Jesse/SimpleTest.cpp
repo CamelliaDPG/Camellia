@@ -235,12 +235,13 @@ int main(int argc, char *argv[]) {
   FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
 
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
   bc->addDirichlet(uhat, outflowBoundary, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*one);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 2, pToAdd = 2;
+  int H1Order = 1, pToAdd = 2;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -274,12 +275,14 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solver> condensedSolver = Teuchos::rcp(new CondensationSolver(mesh,solution));
   solution->solve(condensedSolver);
-  //  solution->solve(false);
+
+  return 0;
+  solution->solve(false);
 
   if (rank==0){
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
     solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhat.dat");
-    solution->writeToVTK("rates.vtu",min(H1Order+1,4));
+    solution->writeToVTK("soln.vtu",min(H1Order+1,4));
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
