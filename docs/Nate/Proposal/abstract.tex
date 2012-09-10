@@ -1,0 +1,193 @@
+%\documentstyle[11pt]{article}
+\documentclass[12pt,c]{article}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{mathrsfs}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage[english]{babel}
+\usepackage{a4wide}
+%\usepackage{showlabels}
+\usepackage{amssymb}
+\usepackage{amsbsy}
+\usepackage{pgf}
+\usepackage[textsize=footnotesize,color=yellow]{todonotes}
+\usepackage{subfigure}
+
+% Latin Modern (similar to CM with more characters)
+\usepackage{lmodern} % math, rm, ss, tt
+\usepackage[T1]{fontenc}
+
+\input{my_preamble}
+\input{nate_commands}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\underline{#1}} \textcolor{red}{#2}}
+\newcommand{\note}[1]{\noindent\emph{\textcolor{blue}{#1\,}}}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left< #1 \right>}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% COLORS
+\def\Reddd{\special{color rgb  1.   0.   0.}} 
+\def\Black{\special{color cmyk 0.   0.   0    1.}} 
+\let\B\Black   
+\let\Rd\Reddd 
+
+
+
+
+\catcode`@=12
+
+             \topmargin 0.0in      %(TOP)  1"
+             \oddsidemargin 0.0in  %(LEFT) 1"
+             \textwidth 6.5in      %(RIGHT)1"
+             \textheight 8.5in     %(BOT)  1"
+             \headsep 0.0in
+             \headheight 0.3in
+
+
+
+
+
+\DeclareMathOperator{\curl}{curl}
+
+\newcommand{\PT}{{\partial T}}
+\def\grad{\nabla}
+\def\pa{\partial}
+\let\tilde\widetilde
+
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\prolab}[1]{\label{pro:#1}}
+\newcommand{\proref}[1]{\ref{pro:#1}}
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\jump}[1] {\ensuremath{[\![#1]\!]}}
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\pO}{\partial \Omega}
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\newcommand{\A}{A}
+\newcommand{\As}{A^\ast}
+\newcommand{\HA}{H_\A}
+\newcommand{\HAs}{H_{\As}}
+\newcommand{\T}{T}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\Tt}{T^\ast}
+\renewcommand{\B}{\mc{B}}
+\newcommand{\M}{\mc{M}}
+\newcommand{\Bs}{\mc{B}^\ast}
+\newcommand{\Ms}{\mc{M}^\ast}
+\newcommand{\V}{V}
+\newcommand{\Vs}{\V^\ast}
+
+\begin{document}
+\baselineskip=16pt
+\parskip= 4pt
+%*************************************************page 1
+
+
+%\input{project}
+%\bibliography{./DPG,/home/leszek/ices/book3/references/Demkowicz}
+%\bibliographystyle{plain}
+
+\newpage
+
+%\vspace*{.5cm}
+
+\begin{center}
+
+{\huge
+A Discontinuous Petrov-Galerkin Methodology\\ for Incompressible Flow\\[8pt]
+}
+{\LARGE
+Towards Automatic, Robust Mesh Adaptivity
+}
+\vspace*{1cm}
+
+\vspace*{.5cm}
+{\large 
+
+Nathan V. Roberts \\
+Committee: Leszek Demkowicz (co-advisor), Robert Moser (co-advisor), \\
+Todd Arbogast, George Biros, Thomas Hughes
+}
+\end{center}
+
+
+%\begin{abstract}
+%We discuss well-posedness and convergence theory for 
+%the DPG method applied to a general system of linear Partial Differential
+%Equations (PDEs) and specialize it to the classical Stokes problem.  The Stokes problem is an iconic troublemaker for standard Bubnov Galerkin methods; if discretizations are not carefully designed, they may exhibit non-convergence or locking.  By contrast, DPG does not require us to treat the Stokes problem in any special manner.  We illustrate and confirm our theoretical convergence estimates with numerical experiments.
+%\end{abstract}
+
+
+
+%{\bf Key words:}
+%Discontinuous Petrov Galerkin, Stokes problem
+%
+%{\bf AMS subject classification:} 65N30, 35L15
+
+
+
+
+%\subsection*{Acknowledgment}
+%Roberts was supported by the Department of Energy
+%[National Nuclear Security Adminis- tration] under Award Number
+%[DE-FC52-08NA28615].  We also thank Pavel Bochev and Denis Ridzal for
+%hosting and collaborating with Roberts in the summers of 2010 and
+%2011, when he was supported by internships at Sandia National
+%Laboratories (Albuquerque).
+
+\paragraph{Motivation.} Incompressible flows---flows in which variations in the density of a fluid are not important to the physics---arise in a wide variety of applications, from hydraulics to aerodynamics.  The incompressible Navier-Stokes equations which govern such flows are also of fundamental physical and mathematical interest.  They are believed to hold the key to understanding turbulent phenomena; precise conditions for the existence and uniqueness of solutions remain unknown---and establishing such conditions is the subject of one of the Clay Mathematics Institute's Millennium Prize Problems.
+
+Typical solutions of incompressible flow problems involve both fine- and large-scale phenomena, so that a uniform finite element mesh of sufficient granularity will at best be wasteful of computational resources, and at worst be infeasible because of resource limitations.  Thus adaptive mesh refinements are required.  In industry, the adaptivity schemes used are ad hoc, requiring a domain expert to predict features of the solution.  A badly chosen mesh may cause the code to take considerably longer to converge, or fail to converge altogether.  Typically, the Navier-Stokes solve will be just one component in an optimization loop, which means that any failure requiring human intervention is costly.
+
+\paragraph{Goal.} My aim is to develop a solver for the incompressible Navier-Stokes equations that provides robust adaptivity starting with a coarse mesh.  By robust, I mean both that the solver always converges to a solution in predictable time, and that the adaptive scheme is independent of the problem---no special expertise is required for adaptivity.
+
+The cornerstone of my approach will be the discontinuous Petrov-Galerkin with optimal test functions (DPG) finite element methodology recently developed by Leszek Demkowicz and Jay Gopalakrishnan \cite{DPG1,DPG2}.  Whereas Bubnov-Galerkin methods use the same function space for both test and trial functions, Petrov-Galerkin methods allow the spaces for test and trial functions to differ.  In DPG, the test functions are computed on the fly and are chosen to minimize the residual.  For well-posed problems with sufficiently regular solutions, DPG can be shown to converge at optimal rates---the ``inf sup'' constants governing the convergence are mesh-independent, and of the same order as those governing the continuous problem \cite{DPGStokes}.  DPG also provides an accurate mechanism for \emph{measuring} (not merely estimating) the error, and this can be used to drive adaptive mesh refinements.
+
+Several approximations to Navier-Stokes are of physical interest, and my approach will involve studying each of these in turn, culminating in the study of the 2D incompressible Navier-Stokes equations.  The Stokes equations can be obtained by neglecting the convective term; these are accurate for ``creeping'' viscous flows.  The Oseen equations replace the convective term, which is nonlinear, with a linear approximation.  The steady-state incompressible Navier-Stokes equations are an approximation of the transient equations, obtained by neglecting time variations.
+
+We have studied DPG applied to the Stokes problem in some detail, with theoretical results predicting optimal rates of convergence, and numerical results that appear to show even more: it appears that we asymptotically approach the best approximation error available in the discrete space \cite{DPGStokes}.  Because of this success and the close relationship between the Stokes equations and the incompressible Navier-Stokes equations, I am optimistic that we can achieve good results with the latter as well.
+
+Central to my study of these problems will be the use and further development of \emph{Camellia} \cite{RobertsetAl11}, a toolbox I developed for solving DPG problems which uses Sandia's Trilinos library of packages \cite{Trilinos}.   I began work on Camellia in collaboration with Denis Ridzal and Pavel Bochev during an internship at Sandia.\nocite{RobertsetAl10}  At present, Camellia supports 2D meshes of triangles and quads of variable polynomial order, provides mechanisms for easy specification of DPG variational forms, supports $h$- and $p$- refinements, and supports distributed computation of the stiffness matrix, among other features.  I hope to add support for meshes of arbitrary spatial dimension, support for space-time elements, and support for distributed mesh and solution representation---although it is not yet clear that these will be necessary for the central goal of the dissertation, it is clear that such features will be desirable.
+
+\paragraph{Contributions.} The central contribution of the dissertation will be the design and development of mathematical techniques and software, based on the DPG method, for solving the 2D incompressible Navier-Stokes equations in the laminar regime (Reynolds numbers up to about 1000).  Along the way, I will investigate approximations to these equations---the Stokes equations and the Oseen equations---followed by the steady-state Navier-Stokes equations.  If time allows, I will also solve the transient Navier-Stokes equations.
+
+The study of DPG applied to a system of PDEs has several aspects.  A first-order variational formulation must be derived, including the selection of appropriate test and trial space norms.  The well-posedness of the formulation might be proved.  The formulation can be investigated numerically by means of test problems: convergence can be studied by means of manufactured solutions, and ``real-world'' performance can be studied by means of more physically realistic test problems.  In terms of the CSEM program areas, the derivation of variational formulations and any proofs of their well-posedness belong to Area A, Applicable Mathematics.  The design and development of software for numerical investigations belong to Area B, Numerical Analysis and Scientific Computation.  The study of test problems belongs to Area C, Mathematical Modeling and Applications.  I will briefly describe the specific proposed contributions of this dissertation to each of these in turn.
+
+\paragraph{Area A.}  I will pose several DPG formulations of the Stokes equations---the velocity-gradient-pressure (VGP), velocity-stress-pressure (VSP), and velocity-vorticity-pressure (VVP) formulations.  I will pose DPG formulations of the Oseen equations and the 2D incompressible Navier-Stokes equations.
+
+I will prove the well-posedness of the VGP Stokes formulation for DPG, which has as consequence a guarantee of optimal convergence rates \cite{DPGStokes}; I plan to complete similar proofs for the VSP and VVP formulations.  Time permitting, I would like to prove a similar result for the Oseen equations.  The work on the Oseen equations will include the study of \emph{robustness} for the small-viscosity (high Reynolds number) case, with reference to previous work on convection-dominated diffusion \cite{DPG2,DemkowiczHeuer}.
+
+\paragraph{Area B.} I will design and develop a software toolbox (\emph{Camellia}) for the investigation of DPG problems.  This will support 2D meshes of triangles and quads of variable polynomial order, provide mechanisms for easy specification of DPG variational forms, support $h$- and $p$- refinements, and support distributed computation of the stiffness matrix, among other features.
+
+Time permitting, I hope to add support for meshes of arbitrary spatial dimension, support for space-time elements, and support for distributed mesh and solution representation.
+
+\paragraph{Area C.} I will verify convergence rates for the Stokes, Oseen, and Navier-Stokes equations using manufactured solutions.
+
+I will simulate the classical lid-driven cavity flow and backward-facing step problems using, in turn, the Stokes, Oseen, and Navier-Stokes equations.
+
+I will simulate flow past a cylinder using the steady-state Navier-Stokes equations.  Time permitting, I will do so with the transient equations as well.
+
+\nocite{Chorin68}
+\nocite{Rannacher99}
+
+\bibliography{./DPG}
+\bibliographystyle{plain}
+
+\end{document}

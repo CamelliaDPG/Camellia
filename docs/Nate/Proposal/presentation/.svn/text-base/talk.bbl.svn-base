@@ -1,0 +1,136 @@
+\begin{thebibliography}{10}
+
+\bibitem{dealiiwithp4est}
+Wolfgang Bangerth, Carsten Burstedde, Timo Heister, and Martin Kronbichler.
+\newblock Algorithms and data structures for massively parallel generic
+  adaptive finite element codes.
+\newblock {\em ACM Transactions on Mathematical Software}, 38(2), 2011.
+
+\bibitem{BangerthKanschat99}
+Wolfgang Bangerth and Guido Kanschat.
+\newblock Concepts for object-oriented finite element software -- the deal.{II}
+  library.
+\newblock In {\em Preprint 43, SFB 359}, 1999.
+
+\bibitem{BoffiBrezziFortin}
+D.~Boffi, F.~Brezzi, and M.~Fortin.
+\newblock Finite elements for the {S}tokes problem.
+\newblock In {\em Lecture Notes in Mathematics}, volume 1939, pages 45--100.
+  Springer, 2008.
+
+\bibitem{FOSLS1}
+Z.~Cai, R.~Lazarov, T.~A. Manteuffel, and S.~F. McCormick.
+\newblock First-order system least squares for second-order partial
+  differential equations: part i.
+\newblock {\em SIAM J. Numer. Anal.}, 31(6):1785--1799, December 1994.
+
+\bibitem{FOSLS2}
+Zhiqiang Cai, Thomas~A. Manteuffel, and Stephen~F. McCormick.
+\newblock First-order system least squares for second-order partial
+  differential equations: Part ii.
+\newblock {\em SIAM J. Numer. Anal.}, 34(2):425--454, April 1997.
+
+\bibitem{CockburnKanschatSchotzauSchwab03}
+B.~Cockburn, G.~Kanschat, D.~Schotzau, and Ch. Schwab.
+\newblock Local {D}iscontinuous {G}alerkin methods for the {S}tokes system.
+\newblock {\em SIAM J. on Num. Anal.}, 40:319--343, 2003.
+
+\bibitem{Cockburn2004}
+Bernardo Cockburn, Guido Kanschat, and Dominik Sch\"{o}tzau.
+\newblock A locally conservative {LDG} method for the incompressible
+  {N}avier-{S}tokes equations.
+\newblock {\em Math. Comp}, pages 1067--1095, 2004.
+
+\bibitem{DPG2}
+L.~Demkowicz and J.~Gopalakrishnan.
+\newblock A class of discontinuous {Petrov-Galerkin} methods. {Part II}:
+  {O}ptimal test functions.
+\newblock {\em Numer. Meth. Part. D. E.}, 2010.
+\newblock in print.
+
+\bibitem{TrilinosShortAuthors}
+Michael A.~Heroux et~al.
+\newblock {An overview of the Trilinos project}.
+\newblock {\em ACM Trans. Math. Softw.}, 31(3):397--423, 2005.
+
+\bibitem{EvansThesis}
+J.~Evans.
+\newblock {\em Divergence-free {B}-spline Discretizations for Viscous
+  Incompressible Flows}.
+\newblock PhD thesis, University of Texas at Austin, 2011.
+
+\bibitem{EvansHughesSteadyNavierStokes}
+John Evans and Thomas~J.R. Hughes.
+\newblock Isogeometric divergence-conforming {B}-splines for the steady
+  {N}avier-{S}tokes equations.
+\newblock Technical Report 12-15, ICES, 2012.
+
+\bibitem{EvansHughesUnsteadyNavierStokes}
+John Evans and Thomas~J.R. Hughes.
+\newblock Isogeometric divergence-conforming {B}-splines for the unsteady
+  {N}avier-{S}tokes equations.
+\newblock Technical Report 12-15, ICES, 2012.
+
+\bibitem{Guermond06}
+J.L. Guermond, P.~Minev, and Jie Shen.
+\newblock An overview of projection methods for incompressible flows.
+\newblock {\em Computer Methods in Applied Mechanics and Engineering},
+  195:6011--6045, 2006.
+
+\bibitem{GuermondMinev2011}
+J.L. Guermond and P.D. Minev.
+\newblock A new class of massively parallel direction splitting for the
+  incompressible {N}avier--{S}tokes equations.
+\newblock {\em Computer Methods in Applied Mechanics and Engineering},
+  200(23--24):2083 -- 2093, 2011.
+
+\bibitem{Kirk2006}
+Benjamin~S. Kirk, John~W. Peterson, Roy~H. Stogner, and Graham~F. Carey.
+\newblock lib{M}esh: a {C}++ library for parallel adaptive mesh
+  refinement/coarsening simulations.
+\newblock {\em Eng. with Comput.}, 22(3):237--254, December 2006.
+
+\bibitem{KovasznayCylinder}
+L.S.G. Kovasznay.
+\newblock Hot-wire investigation of the wake behind cylinders at low {R}eynolds
+  numbers.
+\newblock {\em Proceedings of the Royal Society of London. Series A,
+  Mathematical and Physical Sciences}, 198(1053):174--190, 1949.
+
+\bibitem{fenics:book}
+A.~Logg, K.-A. Mardal, and G.~N. Wells, editors.
+\newblock {\em Automated Solution of Differential Equations by the Finite
+  Element Method}, volume~84 of {\em Lecture Notes in Computational Science and
+  Engineering}.
+\newblock Springer, 2012.
+
+\bibitem{Moffat}
+H.K. Moffat.
+\newblock Viscous and resistive eddies near a sharp corner.
+\newblock {\em Journal of Fluid Mechanics}, 18(1):1--18, 1964.
+
+\bibitem{DPGStokes}
+Nathan~V. Roberts, Tan Bui-Thanh, and Leszek~F. Demkowicz.
+\newblock The {DPG} method for the {S}tokes problem.
+\newblock Technical Report 12-22, ICES, 2012.
+
+\bibitem{RobertsetAl11}
+Nathan~V. Roberts, Denis Ridzal, Pavel~B. Bochev, and Leszek~F. Demkowicz.
+\newblock {A Toolbox for a Class of Discontinuous Petrov-Galerkin Methods Using
+  Trilinos}.
+\newblock Technical Report SAND2011-6678, Sandia National Laboratories, 2011.
+
+\bibitem{RobertsetAl10}
+N.V. Roberts, D.~Ridzal, P.N. Bochev, L.~Demkowicz, K.J. Peterson, and C.~M.
+  Siefert.
+\newblock Application of a discontinuous {P}etrov-{G}alerkin method to the
+  {S}tokes equations.
+\newblock In {\em CSRI Summer Proceedings 2010}. Sandia National Laboratories,
+  2010.
+
+\bibitem{Williamson1996}
+C.~H.~K. Williamson.
+\newblock {Vortex dynamics in the cylinder wake}.
+\newblock {\em Annual review of Fluid Mechanics}, 28:477--539, 1996.
+
+\end{thebibliography}

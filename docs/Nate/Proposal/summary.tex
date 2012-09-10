@@ -1,0 +1,788 @@
+%\documentstyle[11pt]{article}
+\documentclass[11pt,c]{article}
+\usepackage[multiple]{footmisc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{mathrsfs}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage[english]{babel}
+\usepackage{times}
+\usepackage{a4wide}
+%\usepackage{showlabels}
+\usepackage{amssymb}
+\usepackage{amsbsy}
+\usepackage{pgf}
+\usepackage[textsize=footnotesize,color=yellow]{todonotes}
+\usepackage{subfigure}
+\usepackage{listings}
+\usepackage{courier}
+\definecolor{lightlightgray}{gray}{0.95}
+\definecolor{lightlightblue}{rgb}{0.4,0.4,0.95}
+\definecolor{lightlightgreen}{rgb}{0.8,1,0.8}
+\lstset{language=C++,
+           frame=single,
+           basicstyle=\ttfamily\footnotesize,
+           keywordstyle=\color{black}\textbf,
+           backgroundcolor=\color{lightlightgray},
+           commentstyle=\color{blue},
+           frame=single
+           }
+\usepackage{hyperref}
+
+\setcounter{tocdepth}{2}
+
+\input{my_preamble}
+\input{nate_commands}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\underline{#1}} \textcolor{red}{#2}}
+\newcommand{\note}[1]{\noindent\emph{\textcolor{blue}{#1\,}}}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left< #1 \right>}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+
+\newcommand{\pd}[2]{\frac{\partial #1}{\partial #2}}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\deal}{\code{deal.II}\,}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% COLORS
+\def\Reddd{\special{color rgb  1.   0.   0.}} 
+\def\Black{\special{color cmyk 0.   0.   0    1.}} 
+\let\B\Black   
+\let\Rd\Reddd 
+
+
+
+
+\catcode`@=12
+
+             \topmargin 0.0in      %(TOP)  1"
+             \oddsidemargin 0.0in  %(LEFT) 1"
+             \textwidth 6.5in      %(RIGHT)1"
+             \textheight 8.5in     %(BOT)  1"
+             \headsep 0.0in
+             \headheight 0.3in
+
+
+
+
+
+\DeclareMathOperator{\curl}{curl}
+
+\newcommand{\PT}{{\partial T}}
+\def\grad{\nabla}
+\def\pa{\partial}
+\let\tilde\widetilde
+
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\prolab}[1]{\label{pro:#1}}
+\newcommand{\proref}[1]{\ref{pro:#1}}
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\jump}[1] {\ensuremath{[\![#1]\!]}}
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\pO}{\partial \Omega}
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\newcommand{\A}{A}
+\newcommand{\As}{A^\ast}
+\newcommand{\HA}{H_\A}
+\newcommand{\HAs}{H_{\As}}
+\newcommand{\T}{T}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\Tt}{T^\ast}
+\renewcommand{\B}{\mc{B}}
+\newcommand{\M}{\mc{M}}
+\newcommand{\Bs}{\mc{B}^\ast}
+\newcommand{\Ms}{\mc{M}^\ast}
+\newcommand{\V}{V}
+\newcommand{\Vs}{\V^\ast}
+
+\begin{document}
+\baselineskip=16pt
+\parskip= 4pt
+%*************************************************page 1
+
+
+%\input{project}
+%\bibliography{./DPG,/home/leszek/ices/book3/references/Demkowicz}
+%\bibliographystyle{plain}
+
+\newpage
+
+%\vspace*{.5cm}
+
+\begin{center}
+
+{\huge {\bf
+The DPG Method\\[8pt] for Incompressible Flow Problems\\[8pt]
+}}
+\vspace*{1cm}
+
+\vspace*{.5cm}
+{\Large 
+
+ Nathan V. Roberts
+
+\vspace*{.5cm}
+Institute for
+Computational Engineering and Sciences\\
+The University of Texas at Austin, Austin, TX 78712, USA\\
+}
+\end{center}
+
+%\begin{abstract}
+%We discuss well-posedness and convergence theory for 
+%the DPG method applied to a general system of linear Partial Differential
+%Equations (PDEs) and specialize it to the classical Stokes problem.  The Stokes problem is an iconic troublemaker for standard Bubnov Galerkin methods; if discretizations are not carefully designed, they may exhibit non-convergence or locking.  By contrast, DPG does not require us to treat the Stokes problem in any special manner.  We illustrate and confirm our theoretical convergence estimates with numerical experiments.
+%\end{abstract}
+
+
+
+%{\bf Key words:}
+%Discontinuous Petrov Galerkin, Stokes problem
+%
+%{\bf AMS subject classification:} 65N30, 35L15
+
+\subsection*{Acknowledgments}
+I have been supported by the Department of Energy [National Nuclear Security Administration] under Award Number
+[DE-FC52-08NA28615].  I would like to thank my advisors, Leszek Demkowicz and Robert Moser, and the rest of my thesis committee---Todd Arbogast, George Biros, Thomas Hughes, and Venkatramanan Raman---for their support and guidance of my work.  I also thank Pavel Bochev and Denis Ridzal for
+hosting and collaborating with me in the summers of 2010 and 2011, when I was supported by internships at Sandia National
+Laboratories (Albuquerque).  I thank Tan Bui-Thanh and Jesse Chan for their continuing collaboration in various aspects of my research.
+
+\subsection*{Provenance}
+Some of the material in this document was originally developed in collaboration with others, some of which has been published in other contexts.  Specifically, the discussion of distributing the stiffness matrix computation in Appendix \ref{sec:CamelliaDetails} was written with Jesse Chan (but not published); portions of Sections \ref{sec:litreviewflow}, \ref{sec:proposedApproachDPG}, and \ref{sec:preliminaryResults} and Appendices \ref{sec:StokesAnalysis} and \ref{sec:StokesNumericalResults} were written with Tan Bui Thanh and Leszek Demkowicz \cite{DPGStokes}; some of the material regarding development and verification of Camellia in Appendix \ref{sec:CamelliaDetails} arose from a collaboration with Denis Ridzal and Pavel Bochev \cite{RobertsetAl11}.
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+\paragraph{Motivation.} Incompressible flows---flows in which variations in the density of a fluid are not important to the physics---arise in a wide variety of applications, from hydraulics to aerodynamics.  The incompressible Navier-Stokes equations which govern such flows are also of fundamental physical and mathematical interest.  They are believed to hold the key to understanding turbulent phenomena; precise conditions for the existence and uniqueness of solutions remain unknown---and establishing such conditions is the subject of one of the Clay Mathematics Institute's Millennium Prize Problems.
+
+Typical solutions of incompressible flow problems involve both fine- and large-scale phenomena, so that a uniform finite element mesh of sufficient granularity will at best be wasteful of computational resources, and at worst be infeasible because of resource limitations.  Thus adaptive mesh refinements are required.  In industry, the adaptivity schemes used are ad hoc, requiring a domain expert to predict features of the solution.  A badly chosen mesh may cause the code to take considerably longer to converge, or fail to converge altogether.  Typically, the Navier-Stokes solve will be just one component in an optimization loop, which means that any failure requiring human intervention is costly.
+
+\paragraph{Goal.} Our aim is to develop a solver for the incompressible Navier-Stokes equations that provides robust adaptivity starting with a coarse mesh.  By robust, we mean both that the solver always converges to a solution in predictable time, and that the adaptive scheme is independent of the problem---no special expertise is required for adaptivity.
+
+The cornerstone of our approach will be the discontinuous Petrov-Galerkin with optimal test functions (DPG) finite element methodology recently developed by Leszek Demkowicz and Jay Gopalakrishnan \cite{DPG1,DPG2}.  Whereas Bubnov-Galerkin methods use the same function space for both test and trial functions, Petrov-Galerkin methods allow the spaces for test and trial functions to differ.  In DPG, the test functions are computed on the fly and are chosen to minimize the residual.  For well-posed problems with sufficiently regular solutions, DPG can be shown to converge at optimal rates---the ``inf sup'' constants governing the convergence are mesh-independent, and of the same order as those governing the continuous problem \cite{DPGStokes}.  DPG also provides an accurate mechanism for \emph{measuring} (not merely estimating) the error, and this can be used to drive adaptive mesh refinements.
+
+Several approximations to Navier-Stokes are of physical interest, and our approach will involve studying each of these in turn, culminating in the study of the 2D incompressible Navier-Stokes equations.  The Stokes equations can be obtained by neglecting the convective term; these are accurate for ``creeping'' viscous flows.  The Oseen equations replace the convective term, which is nonlinear, with a linear approximation.  The steady-state incompressible Navier-Stokes equations can be obtained by setting the time derivatives in the transient equations to zero.
+
+We have studied DPG applied to the Stokes problem in some detail, with theoretical results predicting optimal rates of convergence, and numerical results that appear to show even more: it appears that we asymptotically approach the best approximation error available in the discrete space \cite{DPGStokes}.  Because of this success and the close relationship between the Stokes equations and the incompressible Navier-Stokes equations, we are optimistic that we can achieve good results with the latter as well.
+
+Central to our study of these problems will be the use and further development of \emph{Camellia} \cite{RobertsetAl11}, a toolbox we developed for solving DPG problems which uses Sandia's Trilinos library of packages \cite{Trilinos}.   I began work on Camellia in collaboration with Denis Ridzal and Pavel Bochev during an internship at Sandia.\nocite{RobertsetAl10}  At present, Camellia supports 2D meshes of triangles and quads of variable polynomial order, provides mechanisms for easy specification of DPG variational forms, supports $h$- and $p$- refinements, and supports distributed computation of the stiffness matrix, among other features.  We hope to add support for meshes of arbitrary spatial dimension, support for space-time elements, and support for distributed mesh and solution representation---although it is not yet clear that these will be necessary for the central goal of the dissertation, it is clear that such features will be desirable.
+
+\paragraph{Structure of the Proposal.} The structure of this document is as follows.  In Section \ref{sec:litreviewflow}, we review some relevant approaches in the literature on incompressible flow; in Section \ref{sec:litreviewFEM}, we discuss three popular FEM codes (\deal, libMesh, and FEniCS), for later comparison and contrast with Camellia.  In Section \ref{sec:proposedApproachDPG}, we describe some features of DPG and how we propose to exploit these in the context of incompressible flow problems.  In Section \ref{sec:proposedApproachCamellia}, we describe the proposed approach to designing FEM software that implements the DPG method (Camellia).  In Section \ref{sec:preliminaryResults}, we summarize the results of these approaches in the context of the Stokes problem.  We conclude in Section \ref{sec:conclusion} with an itemized list of contributions proposed for the dissertation.  Finally, appendices provide details of the work thus far accomplished: Appendix \ref{sec:StokesAnalysis} covers mathematical results for a DPG formulation of the Stokes problem; Appendix \ref{sec:CamelliaDetails} discusses the design, implementation, and verification of Camellia; numerical results for the Stokes problem are detailed in Appendix \ref{sec:StokesNumericalResults}.
+
+\section{Literature Review: Incompressible Flow Problems}
+\label{sec:litreviewflow}
+In this section, we review the literature regarding numerical solutions of the Stokes, Oseen, and incompressible Navier-Stokes equations.  Some of the principal challenges of solving incompressible Navier-Stokes---in particular, its saddle-point character---can already be seen in the Stokes problem, and finite element discretizations and analysis for the Stokes problem often apply to Navier-Stokes as well.
+
+First, though, we briefly state the incompressible transient Navier-Stokes equations, and each of the approximations to them that we will investigate.  The Navier-Stokes equations are:
+\begin{align*}
+- \NVRgrad p + \mu \Delta \vect{u} &= \pd{\vect{u}}{t} + \vect{u} \cdot \NVRgrad \vect{u} \\
+\NVRdiv \vect{u} &= 0,
+\end{align*}
+where $p$ is the pressure, $\vect{u}$ is the velocity, and $\mu = \frac{1}{\rm Re}$ is the viscosity, assumed constant.  The first equation corresponds to the conservation of momentum; the second to conservation of mass.  We have neglected gravitational effects, and have taken density $\rho$ to be a constant, non-dimensionalized to equal 1.  These are the transient equations; with the steady-state assumption $\pd{\vect{u}}{t} = 0$ we get the steady equations:
+\begin{align*}
+- \NVRgrad p + \mu \Delta \vect{u} &= \vect{u} \cdot \NVRgrad \vect{u} \\
+\NVRdiv \vect{u} &= 0.
+\end{align*}
+
+These are nonlinear thanks to the convective term $\vect{u} \cdot \NVRgrad \vect{u}$; if we approximate this by a linear term $\vect{U} \cdot \NVRgrad \vect{u}$, where $\vect{U}$ is the free-stream velocity, we have
+\begin{align*}
+- \NVRgrad p + \mu \Delta \vect{u} &= \vect{U} \cdot \NVRgrad \vect{u} \\
+\NVRdiv \vect{u} &= 0,
+\end{align*}
+which are the Oseen equations.  If we neglect the convective term altogether we have
+\begin{align*}
+- \NVRgrad p + \mu \Delta \vect{u} &= \vect{0} \\
+\NVRdiv \vect{u} &= 0,
+\end{align*}
+the Stokes equations with zero forcing function.
+
+\paragraph{Stokes and Oseen.}
+The Stokes equations model incompressible viscous (``creeping'') flow;
+they can be derived by neglecting the convective term in the
+incompressible Navier-Stokes equations.  Naive discretizations for the
+Stokes problem can lead to non-convergence or locking
+\cite{BoffiBrezziFortin}.  Of crucial importance for Bubnov-Galerkin
+formulations of the Stokes equations---and more generally, of saddle
+point problems---is the satisfaction of the two so-called Brezzi
+inf-sup conditions \cite{Brezzi74}.  For the Stokes equations, the
+first of these, the ``inf-sup in the kernel'' condition, is satisfied
+automatically.  If the discrete spaces for velocity $\vect{u}$ and
+pressure $p$ are $\vect{V}_{h} \subset \vect{H}^{1}$ and $Q_{h}
+\subset L^{2}$, respectively, the second Brezzi condition for Stokes
+is then
+\[
+\inf_{q \in Q_{h}} \sup_{v \in V_{h}} \frac{\left(q, \NVRdiv \vect{v} \right)}{\norm{q}_{L^{2}_{0}} \norm{\vect{v}}_{\vect{H}^{1}}} \geq \gamma_{h} \geq \gamma_{0} > 0.
+\]
+In the context of Stokes, this condition is often called the
+Ladyzhenskaya-Babuska-Brezzi (LBB) condition, because Ladyzhenskaya
+first proved the continuous analog of the condition for the Stokes
+equations \cite{Ladyzhenskaya}; much of the challenge in solving
+Stokes lies in the selection of discrete spaces that satisfy this
+condition.
+
+In \cite{BoffiBrezziFortin}, Boffi, Brezzi, and Fortin survey some
+choices for finite element discretizations to satisfy the LBB
+condition for the Stokes problem, among which are the MINI element,
+Crouzeix-Raviart element, and the class of $Q_{k}-P_{k-1}$ elements.
+Generalized Hood-Taylor elements can be shown to satisfy the condition
+under certain regularity constraints on the mesh.  (Each of these
+elements generalizes to three-dimensional spaces as well.)  It is worth
+noting that each of these elements uses a polynomial approximation for
+pressure of one order lower than that used for velocity, so that the
+theoretical optimal convergence rate is lower for the pressure than it
+is for the velocity.
+
+Cockburn et al. have applied the local discontinuous Galerkin (LDG)
+method \cite{Castillo00} to the Stokes problem
+\cite{CockburnKanschatSchotzauSchwab03}; LDG derives its name from the
+local elimination of some variables (in the case of Stokes, the
+stresses)---by comparison with standard DG methods, the global solve
+in LDG involves only about half as many unknowns, a significant
+savings.  By means of carefully chosen numerical fluxes, the LDG
+method can enforce conservation laws weakly element by element, in a
+locally conservative way.  The method also allows one to choose spaces
+for the pressure and velocity independently, so that
+equal-order approximations can be used, but Cockburn et al. show that the convergence rate
+for pressure and stress will be of order one less than that for
+velocity.  They numerically compare the efficiency of using
+lower-order approximations for pressure and stress with that of
+equal-order approximations, and conclude that in most cases the
+equal-order approximations are more efficient:
+although both choices yield the same \emph{rate} of convergence, the
+lower-order approximation requires more degrees of freedom to
+achieve the same accuracy.
+
+Cockburn et al. have also applied LDG to the Oseen equations by combining their LDG discretization of Stokes with a classical DG discretization of the convective term, with similarly good results---optimal-order convergence when the pressure space is discretized with polynomials of degree one less than that of the velocity, and the possibility of using equal-order approximations for all variables with improved efficiency \cite{Cockburn2002,LDGOseen}.  Their numerical experiments demonstrate success with Reynolds numbers from 1 to 1000. %It would be worth reading the Cockburn2002 reference in detail; I discovered it late in the game, and it does go into a lot more detail.  Also would be worth reading some of the things they cite in both articles in their literature review.
+
+Building on work begun in Evans's PhD. thesis \cite{EvansThesis}, Evans and Hughes have applied their divergence-free B-splines to the Stokes equations, with excellent results: using equal-order velocity and pressure spaces, local conservation is automatic by virtue of the divergence-free basis used for the velocity, and in their experiments, pressure and velocity both converge at optimal\footnote{Evans and Hughes prove an optimal convergence rate of $k+1$ for the velocity; for the pressure, they prove a rate of at least $k$.  Their experiments show $k+1$ rates for both variables.} rates \cite{EvansHughesStokes}.
+
+%\paragraph{Oseen.}
+%LDG for Oseen \cite{LDGOseen}.
+%
+%Cockburn et al. have applied the LDG method to the Oseen problem as well.  
+%
+%What else?  (Original paper by Oseen?  I believe this is actually a book, ``Neuere Methoden und Ergebnisse in der Hydrodynamik,'' Leipzig 1927.)
+%  
+%  I'm a bit stuck finding other good sources.  May want to refer to textbooks, e.g. Panton.  Basic message is that the Oseen equations are linearized Navier-Stokes; they can be seen as a single Newton-Raphson step around a previous solution $\vect{u} = \vect{U}$ (I believe that's correct; I need to double-check it).  (So maybe the right thing is to search for linearized Navier-Stokes; not everyone may refer to Oseen.)
+%  
+%A mathematical treatment of the (transient!) linearized Navier-Stokes equations can be found here: http://people.oregonstate.edu/~thomanen/spin.pdf.  There is at least mention of Stokes and Oseen as well.
+
+\paragraph{Navier-Stokes.}
+
+In incompressible flows velocity and pressure are coupled by an incompressibility constraint, which leads to a saddle-point system that can be very sensitive to the discretization.  Guermond et al. review \emph{projection} methods for incompressible flows \cite{Guermond06}, which can also be viewed as fractional step methods, in that each time step is broken into partial steps.  These are attractive because they decouple the velocity and the pressure: at each time step, two elliptic equations need to be solved in sequence.  The methods fall into three broad classes: pressure-correction methods (such as that of Chorin \cite{Chorin68} and Temam \cite{Temam69.I,Temam69.II}), velocity-correction methods (such as that of Orszag et al. \cite{OrszagEtAl} or that of Karniadakis et al. \cite{KarniadakisEtAl}), and consistent splitting methods such as that of Guermond and Shen \cite{GuermondShen}.  The pressure- and velocity-correction methods introduce artificial boundary conditions which can induce numerical boundary layers, preventing the schemes from converging at optimal rates.  Consistent splitting schemes are schemes that split the time step in a way that does not introduce such artificial boundary conditions.  Guermond et al. cite numerical evidence indicating that the velocity- and pressure-correction schemes can have order 3 convergence for velocity and order $\frac{5}{2}$ convergence for pressure (measured in the $L^{2}$ norm), for time steps that are not too small relative to the spatial discretization.
+
+Guermond and Minev have recently introduced a new dimensional splitting approach to solving the Navier-Stokes equations \cite{GuermondMinev2011}.  Noting that the Chorin-Temam method can be understood as solving a singular perturbation of the exact equations where the perturbation takes the form $-\epsilon \Delta p$, where $\epsilon$ is the size of the time step, they show that the Chorin-Temam scheme is one of a broad class of schemes that have similar convergence properties.  Another such scheme is the one they present in the paper, which has the advantage of being extremely cheap to compute: remarkably, it only requires solving a series of one-dimensional boundary-value problems.  The approach also is suitable for parallel implementation; in their experiments, they show that their implementation has a speedup close to the ideal one on up to 1000 processors.  As presented, the scheme only applies to simple domains discretized into axis-aligned parallelepipeds, although the authors do note in the conclusion several ideas for extending the scheme to more complex domains.
+
+%Chorin 1968: In 1968, Chorin presented a numerical solution of the Navier-Stokes equations using a finite difference method, a projection method that the FEniCS book says is often referred to as a ``non-incremental pressure correction scheme.''  But Chorin says it's a finite difference method, whereas the FEniCS book seems to be talking about a finite element method.  The latter also attributes the scheme to Temam 1969, so maybe Temam took Chorin's FD method and made a FE method from it.  The key insight has to do with neglecting the pressure until late in the game, I think---maybe it's effectively about the way the system is linearized, so that it applies in both contexts.\footnote{The Temam reference has the title ``Sur l'approximation de la solution des Žquations de Navier-Stokes par la mŽthode des pas fractionnaires (I).''  I haven't found a translation.}  Rannacher has a 1992 paper on the Chorin projection method, with what may be a nice characterization of it (he says that the point is to deal with the saddle-point character arising from the incompressibility constraint).
+
+%Rannacher's overview of Navier-Stokes and FEM.  \red{This may be a good reference to find out about the relationship between Stokes elements and inc. Navier-Stokes elements.  From what I've seen, it looks like the former are used for the latter.  Is there some simple way of seeing why?  Certainly it's clear that the two problems are closely related.}
+
+%Something by Moser?
+
+%Something by Jimenez?
+
+Cockburn et al. have applied their LDG approach to the Navier-Stokes equations \cite{Cockburn2004, Cockburn2007}.  They note that while for many schemes for solving the Stokes and Oseen equations, weakly enforced incompressibility suffices in the proof of stability, the presence of the nonlinear convective term in the Navier-Stokes equations means that weak enforcement is insufficient.  They further note that the standard solution to this problem (due to Temam), which involves a modification of the nonlinearity of the equations, cannot be used in an LDG method because it cannot be rendered in divergence form and therefore would prevent local conservation.  The remedy they propose involves projecting the previous approximate solution for the velocity $\vect{u}_{h}$ into a divergence-free space; they then use this divergence-free velocity $\vect{w}$ as the convective velocity in the nonlinear term.  They thereby recover the previously studied Oseen problem, so that with the addition of an appropriate stabilization function, the stability of the method is guaranteed.  The result is a method that is locally conservative, stable, and converges at optimal rates for polynomial discretizations of arbitrary order.  They perform numerical experiments using a classical analytical solution due to Kovasznay \cite{Kovasznay}.  They report success in numerical experiments solving for an analytical solution with Reynolds numbers between 1 and 100; for Reynolds numbers of 1000, they report that the nonlinear iteration does not converge, and hypothesize that this is due to instability in the stationary problem for such Reynolds numbers.
+
+Evans and Hughes have likewise applied their divergence-free B-splines to the steady and unsteady Navier-Stokes equations \cite{EvansHughesSteadyNavierStokes,EvansHughesUnsteadyNavierStokes}, again with excellent results.  They have successfully applied steady Navier-Stokes to the driven cavity problem at Reynolds numbers up to 1000; they report success in other steady flow computations with Reynolds numbers upwards of 3200.  They argue that the fact that most numerical methods only satisfy the incompressibility constraint approximately means that these do not obey fundamental laws of physics, including energy conservation, the failure of which can be shown to lead to numerical instability.  By contrast, they demonstrate that their discretizations conserve momentum and satisfy balance laws for energy, vorticity, enstrophy, and helicity.
+
+%red{expanded on in \cite{Cockburn2007})}
+
+%There's a nice review of DNS as a research tool for understanding turbulence (Moin and Mahesh 1998).  This may provide a nice skeleton to hang any other literature review on.  But then again, it may be too much about turbulence.  I'm not sure.  It doesn't treat Chorin, e.g.---and every paper cited (it seems) h as to do with turbulent flows.  There are complexities in turbulent flows that may not affect other flows, and I'm only aiming at the laminar regime.  I don't see any reason why I couldn't handle turbulent phenomena as well---not turbulence modeling, but DNS---except maybe computational cost.  But let's get the laminar stuff working first!
+
+% Doering's review of the state of our knowledge of the mathematical structure of the 3D Navier-Stokes equations \cite{Doering2009}.
+
+\section{Three Popular FEM Codes: deal.II, libMesh, and FEniCS}
+\label{sec:litreviewFEM}
+In this section, we examine three popular object-oriented libraries for doing finite element computations.  We begin with a somewhat extended discussion of \deal \cite{BangerthKanschat99}, because it is similar to our own approach in Camellia (see Section \ref{sec:proposedApproachCamellia}) and because it preceded libMesh and FEniCS.  We then highlight some features of libMesh \cite{Kirk2006} and FEniCS \cite{fenics:book}.
+
+\paragraph{\deal.}
+\deal is designed for flexibility, ease of use, efficiency, and safety.  It is flexible in that it is possible, without too much effort, to vary choices for finite element spaces, spatial dimension, variational formulations, and linear solvers.  The ease of use comes largely by virtue of encapsulation: details of complex data storage structures are hidden from the user.  Safety is provided by means of runtime parameter checking, which allows programming errors to be detected early.  \deal also boasts extensive documentation (5000 pages if printed, they claim), with many implementation examples available on the \deal website.\footnote{http://www.dealii.org}
+
+It is worth noting that \deal is quite \emph{mature}; the initial DEAL code was developed between 1993 and 1997; \deal was conceived as a rewrite, begun in 1997, and it has continued to be used, extended, and maintained since then.  The LDG work cited in Section \ref{sec:litreviewflow} (\cite{CockburnKanschatSchotzauSchwab03,LDGOseen,Cockburn2004,Cockburn2007}), for example, uses \deal for its numerical experiments.  Also, it is possible to implement DPG methods using \deal; in our research group, Jamie Bramwell is using it in her work on linear elasticity.
+
+Several of \deal's classes are templated on the spatial dimension, making it a relatively simple matter to write dimensionally-independent code.  \deal supports \emph{hypercube} topologies in 1, 2, and 3 space dimensions: lines, quads, and hexahedra, with a variety of finite elements supported on these: continuous and discontinuous Lagrange elements, as well as Nedelec and Raviart-Thomas elements.  Arbitrary polynomial orders are supported for each of these element types.
+
+\deal allows $h$-, $p$-, and $hp$-adaptive meshes; both anisotropic and isotropic mesh refinements are supported.  The meshes are hierarchical: refined (child) cells are nested inside (parent) cells belonging to the previous mesh.  Recently, support has been added for distributing \deal meshes using \code{p4est} \cite{dealiiwithp4est}, a library for parallel adaptive mesh refinement on forests of octrees \cite{p4est}, which boasts scalability to hundreds of thousands of processor cores.
+
+A consequence of using adaptively refined hierarchical meshes is that refined meshes will usually contain \emph{hanging nodes}---faces where one neighbor has been refined and another has not; see Figure \ref{fig:hangingNode}.  If elements $K_{1}$, $K_{2}$, and $K_{3}$ are all linear Lagrangian elements, then along the shared edge, $K_{2}$ and $K_{3}$ define a space containing all (continuous) functions that are linear along the smaller edges AB and BC, while $K_{1}$ only contains functions that are linear along the larger edge AC.  \deal addresses this by means of constraints on the spaces for $K_{2}$ and $K_{3}$, which are incorporated into the final linear problem in a way that will preserve the symmetry and positivity of the stiffness matrix, if the unconstrained stiffness matrix has those features.
+
+Finite element spaces are represented by the \code{FE} class within \deal---this provides shape functions and their derivatives on the reference cell, when the spaces are defined on a reference cell; otherwise, the functions are provided on physical cells.  The \code{FE} class is, however, not typically used directly by application developers; noting that most finite element developers will only be interested in the \emph{values} of shape functions and their derivatives at particular points (e.g. quadrature points), \deal provides an interface to such values in the \code{FEValues} class.  This class handles the transformation of values from reference to physical space, such as the Piola transform.\footnote{Camellia provides this functionality, among other things, within its \code{BasisCache} class.  See Section \ref{sec:proposedApproachCamellia}.}
+
+\paragraph{libMesh.}  libMesh \cite{Kirk2006} is another finite element library; it was in fact inspired by \deal; as the name suggests, libMesh pays particular attention to the mesh---the \code{Element} class is designed to be subclassed with new elements, and a wide variety of elements are provided.  In 2D, both triangle and quad elements are provided; in 3D, hexahedra, tetrahedra, prisms, and pyramids are provided, as well as a collection of infinite elements.  $hp$-adaptivity is supported for all element types.  Support for distributed stiffness matrix computation and assembly is provided.  At present, a copy of the data structures defining the mesh must be stored on each node; development of a \code{ParallelMesh} class is underway, which will support distributed mesh storage.\footnote{See \url{http://libmesh.sourceforge.net/doxygen/classlibMesh_1_1ParallelMesh.php}.} %I believe only isotropic refinements are supported.  Not sure if that's worth mentioning.
+
+\paragraph{FEniCS.}  The FEniCS project \cite{fenics:book} aims at highly automated solution of finite element problems; the authors emphasize the simplicity with which finite element solvers can be implemented.  The only topologies currently supported are simplices: intervals in 1D, triangles in 2D, and tetrahedra in 3D.  On these topologies, many standard finite element types are supported---most of these support polynomials of arbitrary order.  The DOLFIN library \cite[Chapter 10]{fenics:book} provides the main user interface to FEniCS; this generates C++ code from variational forms specified by the user in the Unified Form Language (UFL) \cite[Chapter 17]{fenics:book}---the developers aim thereby to achieve simplicity of specification while maintaining performance.  Both C++ and Python interfaces are supported; some features are only available using the Python interface.
+
+\section{Proposed Approach: DPG for Incompressible Flow}
+\label{sec:proposedApproachDPG}
+\paragraph{The Discontinuous Petrov-Galerkin Method with Optimal Test Functions.} We begin with a short historical review of the method.  By a discontinuous Galerkin (DG) method, we mean one that allows test and/or trial functions that are not globally conforming; by a Petrov-Galerkin method, we mean one that allows the test and trial spaces to differ.  In 2002, Bottasso et al. introduced a method \cite{BottassoMichelettiSacco02, BottassoMichelettiSacco05}, also called DPG.  Like our DPG method, theirs used an ``ultra-weak'' variational formulation (moving all derivatives to test functions) and replaced the numerical fluxes used in DG methods to ``glue'' the elements together with new independent unknowns defined on element interfaces.  The idea of optimal testing was introduced by Demkowicz and Gopalakrishnan in 2009 \cite{DPG1}, which is distinguished by an on-the-fly computation of an approximation to a set of test functions that are optimal in the sense that they guarantee minimization of the residual in the dual norm.  In 2009-2010, a flurry of numerical experimentation followed, including applications to convection-dominated diffusion \cite{DPG2}, wave propagation \cite{DPG4}, elasticity \cite{DPG1023}, thin-body (beam and shell) problems \cite{NiemiBramwellDemkowicz10}, and the Stokes problem \cite{RobertsetAl10}.  The wave propagation paper also introduced the concept of an \emph{optimal test norm}, whose selection makes the energy norm identical to the norm of interest on the trial space.  In 2010, Demkowicz and Gopalakrishnan proved the convergence of the method for the Laplace equation \cite{DPG6}, and Demkowicz and Heuer developed a systematic approach to the selection of a test space norm for singularly perturbed problems \cite{DemkowiczHeuer}. In 2011, Bui-Thanh et al. \cite{Bui-ThanhDemkowiczGhattas11b} developed a unified analysis of DPG problems by means of Friedrichs' systems.  Our analysis for the Stokes problem, presented here in Appendix  \ref{sec:StokesAnalysis} builds on the existence of trace spaces and proceeds along a more classical path, connecting to Banach's theory of closed operators.
+ 
+Some work has been done on nonlinear problems as well.  Very early on, Chan, Demkowicz, and Roberts solved the 1D Burgers and compressible Navier-Stokes equations by applying DPG to the linearized problem \cite{DPG5}.  More recently, Moro et al. have applied their related HDPG method to the 2D Burgers equation; a key difference in their work is that they apply DPG to the \emph{nonlinear} problem, using optimization techniques to minimize the DPG residual.
+%---we hope to pursue similar ideas in our own research on nonlinear problems.
+
+Most DPG analysis assumes that the optimal test functions are computed exactly, but in practice we must approximate them.  Gopalakrishnan and Qiu have shown that for the Laplace equation and linear elasticity, for sufficiently high-order approximations\footnote{$k_{\rm test}=k_{\rm trial}+N$, where $N$ is the number of space dimensions, and by $k_{\rm test}$ we mean the polynomial order of the basis functions for the test space, and by $k_{\rm trial}$ we mean the order for the $L^{2}$ bases in the trial space.} of the test space, optimal convergence rates are maintained \cite{GopalakrishnanQiu11}.
+
+We will now briefly derive DPG, motivating it as a minimum residual method.  Suppose that $U$ is the trial space, and $V$ the test space (both Hilbert) for a well-posed variational problem $b(u,v) = l(v)$.  Writing this in the operator form $Bu = l$, where $B : U \rightarrow V'$, we seek to minimize the residual for the discrete space $U_{h} \subset U$:
+\begin{align*}
+u_{h} = \underset{u_{h} \in U_{h}} \argmin \,\, \frac{1}{2} \norm{Bu_{h}-l}_{V'}^{2}.
+\end{align*}
+Now, the dual space $V'$ is not especially easy to work with; we would prefer to work with $V$ itself.  Recalling that the Riesz operator $R_{V} : V \rightarrow V'$ defined by 
+\begin{align*}
+\langle R_{V}v, \delta v\rangle=(v,\delta v)_{V}, \quad \forall \delta v \in V,
+\end{align*}
+where $\langle \cdot, \cdot \rangle$ denotes the duality pairing
+between $V'$ and $V$, is an \emph{isometry}---that is,
+$\norm{R_{V}v}_{V'} = \norm{v}_{V}$---we can rewrite the term we want
+to minimize as a norm in $V$:
+\begin{align} \label{NVR:eqn:resNormSquared}
+\frac{1}{2} \norm{Bu_{h}-l}_{V'}^{2} = \frac{1}{2} \norm{R_{V}^{-1}\left(Bu_{h}-l\right)}_{V}^{2} = \frac{1}{2} \left(R_{V}^{-1}\left(Bu_{h}-l\right), R_{V}^{-1}\left(Bu_{h}-l\right) \right)_{V}.
+\end{align}
+The first-order optimality condition requires that the G\^ateaux derivative of (\ref{NVR:eqn:resNormSquared}) be equal to zero for minimizer $u_{h}$; we have
+\begin{align*}
+\left(R_{V}^{-1}\left(Bu_{h}-l\right), R_{V}^{-1}B \delta u_{h} \right)_{V} = 0, \quad \forall \delta u_{h} \in U_{h}.
+\end{align*}
+By the definition of $R_{V}$, the preceding equation is equivalent to
+\begin{equation}
+\label{eqn:optTest}
+\langle Bu_{h} - l, R_{V}^{-1}B \delta u_{h} \rangle = 0 \quad \forall \delta u_{h} \in U_{h}.
+\end{equation}
+Now, if we identify $v_{\delta u_{h}} = R_{V}^{-1}B \delta u_{h}$ as a test function, we can rewrite \eqref{eqn:optTest} as
+\begin{align*}
+%\langle Bu_{h} - l, v_{\delta u_{h}} \rangle &= 0 \\
+%\langle Bu_{h}, v_{\delta u_{h}} \rangle &= \langle l, v_{\delta u_{h}} \rangle \\
+b(u_{h},v_{\delta u_{h}}) &= l(v_{\delta u_{h}}).
+\end{align*}
+Note that the last equation is exactly the original variational form,
+tested with a special function $v_{\delta u_{h}}$ that corresponds to $\delta u_{h} \in
+U_{h}$; we call $v_{\delta u_{h}}$ an \emph{optimal test function}. The DPG method
+is then to solve the problem $b(u_{h},v_{\delta u_{h}}) = l(v_{\delta
+  u_{h}})$ with optimal test functions $v_{\delta u_{h}} \in V$ that solve the
+problem
+\begin{align}
+\label{NVR:eqn:testFunctionProblem}
+ (v_{\delta u_{h}}, \delta v)_{V} = \langle R_{V}v_{\delta u_{h}}, \delta v \rangle = \langle B \delta u_{h}, \delta v \rangle =  b(\delta u_{h}, \delta v), \quad \forall \delta v \in V.
+\end{align}
+In standard conforming methods, test functions are continuous over the
+entire domain, which would mean that solving
+(\ref{NVR:eqn:testFunctionProblem}) would require computations on the
+global mesh, making the method impractical.  In DPG, we use test
+functions that are discontinuous across elements, so that
+(\ref{NVR:eqn:testFunctionProblem}) becomes a local problem---that is, it can
+be solved element-by-element.  Of course,
+(\ref{NVR:eqn:testFunctionProblem}) still requires inversion of the
+infinite-dimensional Riesz map, and we approximate this by using an
+``enriched'' test space $V_{h}$ of polynomial order higher
+than that of the trial space $U_{h}$.  Note that the test functions
+$v_{\delta u_{h}}$ immediately give rise to a hermitian positive
+definite stiffness matrix; if $\{e_{i}\}$ is a basis for $U_{h}$, we
+have:
+ \begin{align*}
+b(e_{i},v_{e_{j}}) = (v_{e_{i}},v_{e_{j}})_{V} =  \overline{(v_{e_{j}}, v_{e_{i}})}_{V} = \overline{b(e_{j},v_{e_{i}})}.
+\end{align*}
+
+It should be pointed out that we have not made any assumptions about
+the inner product on $V$.  An important point is that by an
+appropriate choice of test space inner product, the induced energy
+norm on the trial space can be made to coincide with the norm of
+interest \cite{DPG4}; DPG then delivers the best approximation error
+in that norm.  In practice this optimal test space inner product is
+approximated by a ``localizable'' inner product, and DPG delivers the
+best approximation error up to a mesh-independent constant.  That is,
+\begin{align*}
+\norm{u-u_{h}}_{U} \leq \frac{M}{\gamma_{DPG}} \inf_{w_{h} \in U_{h}} \norm{u-w_{h}}_{U},
+\end{align*}
+where $M=O(1)$ and $\gamma_{DPG}$ is mesh-independent, and $\gamma_{DPG}$ is of the order of inf-sup constants for the strong operator and its adjoint (see Appendix \ref{sec:StokesAnalysis}).  We therefore say that DPG is \emph{automatically stable}, modulo any error in solving for the test functions $v_{\delta u_{h}}$.
+
+It is a relatively simple matter, when desired, to enforce \emph{local conservation}---that is, an element-wise property that corresponds to a (mass) conservation law---by means of Lagrange multipliers.  This was first noted by Moro et al. \cite{MoroNguyenPeraire11}.  This is often useful in the context of practical fluid problems.  We have not yet, however, explored combining DPG with local conservation in any great detail.  In the numerical examples presented in Section \ref{sec:preliminaryResults}, local conservation was not enforced, but it appears from our limited experimentation to have negligible effect in the context of these examples.
+
+\paragraph{Application to Nonlinear Problems.} Here, we develop an abstract formulation for DPG applied to nonlinear problems.  Note that the discussion above through (\ref{NVR:eqn:resNormSquared}) makes no assumption that operator $B$ is linear; for a nonlinear $B$ the first-order optimality condition gives us
+\begin{align*}
+\left(R_{V}^{-1}\left(Bu_{h}-l\right), R_{V}^{-1}B'(u_{h},\delta u_{h}) \right)_{V} = 0, \quad \forall \delta u_{h} \in U_{h}.
+\end{align*}
+where $B'(u_{h},\delta u_{h})$ is the G\^ateaux derivative of $B$ at $u_{h}$ in direction $\delta u_{h}$.  Continuing in much the same way as above, we have
+\begin{align}
+\label{eqn:nonlinearDuality}
+\langle Bu_{h} - l, R_{V}^{-1}B'(u_{h},\delta u_{h}) \rangle = 0 \quad \forall \delta u_{h} \in U_{h}.
+\end{align}
+Now, we can again identify $v_{\delta u_{h}} = R_{V}^{-1}B'(u_{h},\delta u_{h})$ as a test function and note that
+\begin{align*}
+b(u_{h},v_{\delta u_{h}}) &= l(v_{\delta u_{h}}),
+\end{align*}
+but notice that now $v_{\delta u_{h}}$ also depends on the solution $u_{h}$.  Linearizing about $u_{h} + \Delta u_{h}$, we have
+\begin{align*}
+B(u_{h} + \Delta u_{h}) \approx Bu_{h} + B'(u_{h},\Delta u_{h})
+\end{align*}
+and
+\begin{align*}
+B'(u_{h} + \Delta u_{h},\delta u_{h}) \approx B'(u_{h},\delta u_{h}) + B''(u_{h},\delta u_{h},\Delta u_{h})
+\end{align*}
+so that (\ref{eqn:nonlinearDuality}) becomes
+\begin{align*}
+\langle Bu_{h} + B'(u_{h},\Delta u_{h}) - l, R_{V}^{-1}\left( B'(u_{h},\delta u_{h}) + B''(u_{h},\delta u_{h},\Delta u_{h}) \right)) \rangle = 0 \quad \forall \delta u_{h} \in U_{h}.
+\end{align*}
+Dropping the terms that are second order in $\Delta u_{h}$ and defining $v_{\delta u_{h}} = R_{V}^{-1}B'(u_{h},\delta u_{h})$, we have
+\begin{align*}
+\langle Bu_{h} - l, v_{\delta u_{h}} \rangle + \langle Bu_{h} - l, R_{V}^{-1}B''(u_{h},\delta u_{h},\Delta u_{h}) \rangle + \langle B'(u_{h},\Delta u_{h}),  v_{\delta u_{h}} \rangle = 0.
+\end{align*}
+The term involving $R_{V}^{-1}B''(u_{h},\delta u_{h},\Delta u_{h})$ is awkward, since it involves both the Riesz inversion and the linear unknown $\Delta u_{h}$.  We can rewrite this term, moving the Riesz operator onto the nonlinear residual:
+\begin{align*}
+\langle Bu_{h} - l, R_{V}^{-1}B''(u_{h},\delta u_{h},\Delta u_{h}) \rangle &= \left( R_{V}^{-1} (Bu_{h} - l), R_{V}^{-1}B''(u_{h},\delta u_{h},\Delta u_{h}) \right)_{V} \\
+&= \langle B''(u_{h},\delta u_{h},\Delta u_{h}), R_{V}^{-1} (Bu_{h} - l) \rangle.
+\end{align*}
+Defining $v_{u_{h}} = R_{V}^{-1} (Bu_{h} - l)$, the linearized problem is then
+\begin{align*}
+b'(u_{h},\Delta u_{h}; v_{\delta u_{h}}) + b''(u_{h},\delta u_{h}, \Delta u_{h}; v_{u_{h}}) = - b(u_{h}, v_{\delta u_{h}}) + l(v_{\delta u_{h}}).
+\end{align*}
+It is worth noting that the above is somewhat different from our previous approach to nonlinear problems, in that here we minimize the nonlinear residual instead of the residual of the linearized problem.  The present approach results in the introduction of the hessian term.  Because the nonlinear residual is the one we are actually interested in minimizing, we believe that the new approach will produce better results (faster convergence of the nonlinear iteration) than the old; however, we have not yet used it in any computations.  Also, whereas the previous approach retained a symmetric positive definite stiffness matrix in the linear problem, here the hessian term might make the linear operator non-positive if the nonlinear residual is large (because $v_{u_{h}}$ depends on that); the stability of the linear solve might suffer as a result.
+
+\paragraph{Adaptive Strategy for Linear Problems.}
+While other methods typically employ a posteriori error \emph{estimators}, DPG allows the error to be computed precisely.  This makes for a simpler, more efficient and more robust adaptivity strategy.  When refining a mesh, the key question is where in the mesh the greatest error lies.  DPG provides a precise measurement of the error in the dual norm:
+\begin{align*}
+\norm{Bu_{h}-l}_{V'} = \norm{R_{V}^{-1}(Bu_{h}-l)}_{V}.
+\end{align*}
+If we then define an error representation function $e=R_{V}^{-1}(Bu_{h}-l) \in V$, we can solve
+\begin{align*}
+(e,\delta v)_{V} = b(u_{h},\delta v) - l(\delta v), \quad \forall \delta v \in V,
+\end{align*}
+locally for $e$.  We use $\norm{e_{K}}_{V}=\norm{Bu_{h}-l}_{V'(K)}$ on each element $K$ to drive adaptive mesh refinements.
+
+At present, we use a simple $h$-refinement strategy:
+\begin{enumerate}
+\item Loop through the elements, determining the maximum element error $\norm{e_{K{\rm max}}}_{V}$.
+\item Refine all elements with error at least 20\% of the maximum $\norm{e_{K{\rm max}}}_{V}$.
+\end{enumerate}
+The analysis and our software implementations support $p$- and $hp$-refinements as well.  $p$-adaptivity can employ a strategy similar to the above.  We do not yet have a well-defined strategy for deciding between $h$- and $p$-refinements once we have decided that a given element should be refined, but in Section \ref{sec:preliminaryResults} we include some results for Stokes flow with the $h$-refinement scheme above as well as an ad hoc $hp$-scheme.
+
+\paragraph{Adaptive Strategies for Nonlinear Problems.}  When using an adaptive mesh for a nonlinear problem, we have two loops: the refinement loop and the nonlinear iteration.  This gives us two basic choices.  We can either hold the mesh fixed and iterate through Newton-Raphson steps, or we can first resolve the linearized problem through mesh refinement and only then proceed to the next Newton-Raphson step.  One can also imagine hybrid choices, in which the requirement for resolution of the linear problem is more relaxed for early Newton-Raphson steps, becoming stricter when the nonlinear problem is nearly resolved.
+
+Some early experiments led us to the conclusion that refining outside the nonlinear iteration is computationally cheaper.  We did not have support for mesh coarsening in the code we were using at the time; having such support could change the balance.  We do not currently have mesh coarsening in Camellia, but we do not believe it will be difficult to add, and it may prove quite useful for nonlinear problems---therefore, we expect to add it in the near future.
+
+\paragraph{Strategy for Transient Problems.} We would like ultimately to apply DPG to the transient Navier-Stokes equations.  The usual practice for transient problems is \emph{time-stepping}, in which first a solution is found at an initial time $t=t_{0}$; the solution at $t=t_{0} + \Delta t$ is then found, via either an implicit or an explicit method, in terms of the solution at the previous time step(s).  One of the questions that must be answered in time-stepping methods is how big a time step to take; implicit methods are generally preferred because they allow accurate results with larger time steps.
+
+%Even for steady-state problems, it can be useful to introduce an artificial transient term and march in time until a steady-state is reached---often such an approach will be less sensitive to the initial guess.  
+
+There is no reason that standard time-stepping approaches would not work well with DPG, and these may have practical advantages.  However, for our initial efforts in transient problems, we plan instead to use \emph{space-time} finite elements, in which the time dimension is treated much as the spatial dimensions are---the only difference is that degree of freedom coefficients are only stored for a single ``time slab,'' which keeps the problem size tractable.  The great advantage of this is that the entire DPG apparatus can be brought to bear on the problem as a whole: with a well-chosen test space norm and a well-posed linear problem, we can guarantee optimal convergence rates; for both linear and nonlinear problems, we can measure the error and use this to drive adaptivity in both space and time.  The latter means that the question of time step size will be answered for us automatically, and in a heterogeneous fashion: in areas of small error, the ``time steps'' will remain coarse; in areas with larger error, they will be refined.
+
+%Looking further forward to very large problems, one limitation of time-stepping methods is that they are by their nature \emph{sequential}; the solution at $t=t_{k}$ must be found before it can be found at $t=t_{k+1}$.  Although finding the solution at a given time step may be perfectly scalable, essentially each processor must go through the whole time series, and that cost may become the bottleneck.  By contrast, a space-time approach allows the solution to be computed through the entire time domain at once, so that each processor might be responsible only for a small piece of the time domain.  Thus space-time elements may allow us to take better advantage of growing computational resources.\footnote{Thanks to Jean-Luc Guermond for making this point in a private conversation.}
+
+\section{Proposed Approach: DPG Software Design}
+\label{sec:proposedApproachCamellia}
+
+In this section, we describe \emph{Camellia}, a C++ toolbox for rapid development of DPG solvers, implemented atop Sandia's Trilinos library of packages \cite{Trilinos}.  The essential design goal for Camellia is to make DPG research and experimentation as simple as possible, without sacrificing too much by way of performance.  Our ideal is to write code that expresses the DPG formulation---the variational form and the inner product on the test space---in a way that makes the mathematics transparent, and requires minimal overhead beyond this to specify and solve problems.  We aim at excellent software design, following software engineering principles such as encapsulation and using tests and parameter checking to verify the code on an ongoing basis.
+
+The goal of the present section is to provide a broad overview of Camellia, putting it in context by comparison to \deal.  Further details can be found in Appendix \ref{sec:CamelliaDetails}.  We begin with some general comments, and then focus, by way of example, on three specific design details: the use of the Factory design pattern throughout the code, how basis values are treated in Camellia, and how hanging nodes are handled.
+
+\begin{figure}[h]
+\centering
+\includegraphics[scale=0.75]{./fig/hangingNode.eps}
+\caption{Schematic of a hanging node: the element on the right has been refined, resulting in a ``broken'' edge along the right side of the coarse element $K_{1}$.
+}
+\label{fig:hangingNode}
+\end{figure}
+
+Because we focus on implementing DPG solvers, we can make certain simplifying assumptions.  We can assume a first-order system with all derivatives moved onto test functions.  We can assume that trial space variables defined on element interiors are discontinuous across element boundaries; the inter-element ``connectivity'' is limited to fluxes and traces, which are defined only on the element boundaries.  The latter allows some flexibility in dealing with hanging nodes.
+
+Camellia aims at a higher level of abstraction than does \deal; for instance, Camellia does not require the user to write a loop over the elements in the mesh to compute the stiffness matrix.  In fact, the user need not be directly aware of the stiffness matrix at all.  There is a tradeoff here: while this has obvious advantages in that the code is generally simpler and easier to write, if the user wishes to do something special with the stiffness matrix, she might find that it is not as obvious how to do so in Camellia as it is in \deal.  In Camellia, specification of variational forms and test space inner products hews quite closely to the mathematics; for instance, the code snippet below specifies:
+\begin{itemize}
+\item a field trial variable $u \in L^{2}$,
+\item a trace trial variable $\widehat{u} \in H^{1/2}$,
+\item a test variable $\vect{v} \in \NVRHdiv$,
+\item a bilinear form $b(u,v) = -\int_{\Omega} u \NVRdiv \vect{v} + \int_{\partial \Omega} \widehat{u} \vect{v} \cdot \vect{n} $, and
+\item a test space norm $\norm{\vect{v}}_{V}^{2} = \norm{\vect{v}}_{L^{2}}^{2} + \norm{\NVRdiv \vect{v}}_{L^{2}}^{2}$.
+ \end{itemize}
+
+\begin{lstlisting}
+  VarFactory varFactory; 
+  // define field variable u
+  VarPtr u = varFactory.fieldVar("u");
+  // define flux variable u_hat
+  VarPtr u_hat = varFactory.traceVar("\\widehat{u}");
+  // define test function v
+  VarPtr v = varFactory.testVar("v", HDIV); 
+  // create bilinear form
+  BFPtr bilinearForm = Teuchos::rcp( new BF(varFactory) );
+  // specify field variable term
+  bilinearForm->addTerm(-u, v->div());
+  // specify flux variable term
+  bilinearForm->addTerm(u_hat, v->dot_normal());
+  // create test space inner product
+  IPPtr innerProduct = Teuchos::rcp(new IP);
+  // add L^2 term
+  innerProduct->addTerm(v);
+  // add divergence term
+  innerProduct->addTerm(v->div());
+\end{lstlisting}
+
+Our approach in Camellia can perhaps be seen as falling somewhere between \deal and FEniCS---the specification of variational forms is at least vaguely reminiscent of FEniCS's UFL, but we are not going so far as to provide a domain-specific language and C++ code generation for that language.  We do include some basic operator overloading to allow expressions in variational forms such as \code{sinx * u1 + cosy * u2}, where \code{sinx} and \code{cosy} are user-supplied pointers to a \code{Function} class instance.
+
+At present, Camellia supports only two spatial dimensions, and has no direct support for a time domain.  We do hope to add support for one, two, and three space dimensions, as well as extrusion of any of these in a time dimension to create space-time elements.  In 2D, Camellia supports both quads and triangles; our hope is to support at least hexahedra and tetrahedra (and perhaps pyramids and prisms) in 3D.  This is in contrast to \deal, which for the sake of simplicity of the code supports only hypercube elements, and FEniCS, which supports only simplicial elements.
+
+One of the great advantages of DPG is that we can \emph{measure}, not merely estimate, the error in the dual norm $\norm{\cdot}_{V'}$, which is exactly the natural norm from a mathematical point of view (of course it is up to the analyst to specify $\norm{\cdot}_{V}$ well).  We can use this to drive adaptivity, and because this depends simply on the choice of norm $\norm{\cdot}_{V}$, the user need not implement an error indicator.  At present, we support both $h$- and $p$-adaptivity; $hp$-refinements are also possible, although we do not yet have a general strategy for deciding between $h$ and $p$.  Similarly, the infrastructure for refinements could easily be extended to support anisotropic refinements, but we do not yet have a strategy for deciding the best refinement direction.  Some examples using adaptivity are discussed in Section \ref{sec:preliminaryResults} and Appendix \ref{sec:StokesNumericalResults}.
+
+Camellia supports distributed computation of the stiffness matrix; because the computation of optimal test functions is a local problem, this scales perfectly.  We do not yet support distributed storage of the mesh or solution---a copy of each is stored on each processor---although we do hope to add both.  Currently, we use KLU and MUMPS solvers, which are both direct solvers; MUMPS is a parallel solver.  Camellia implements an abstract \code{Solver} interface, by which users can add linear solvers of their own choosing.  (Determining good preconditioners for DPG stiffness matrices is an area of active research.)  Detailed discussion of the distribution of the stiffness matrix and some measurements of the scalability of various parts of the code can be found in Appendix \ref{sec:CamelliaDetails}.
+
+\paragraph{The Factory Design Pattern.}
+Camellia represents each basis function that corresponds to a trial or test space variable on a given cell using an instance of Intrepid's \code{Basis} class.  If each cell in the mesh were to store a \code{Basis} object for each basis, that would be a waste both of memory and the time required to construct the objects.  For this reason, we make use of the \emph{Factory} design pattern, which encapsulates object construction---in this instance, we want only to create each basis once on each compute node (to be precise, this is the FlyWeightFactory design pattern \cite[p. 199]{GoFBook}).  When the \code{BasisFactory} receives a request for a basis belonging to a given function space (e.g. \NVRHdiv) on a given cell topology (e.g. a triangle) with a given polynomial order (e.g. 5), it looks up this combination of features in a hash map; if such a basis already exists, a pointer to it is returned; if it does not exist, it is created and stored, and a pointer to it is returned.
+
+Discrete spaces in Camellia are represented by the \code{DofOrdering} class,\footnote{We are considering renaming this class \code{DiscreteSpace}.} and the combination of trial space and test space for an element comprise the \code{ElementType}.  Just as with \code{Basis}, the Factory pattern is applied in \code{DofOrderingFactory} and \code{ElementTypeFactory}.
+
+It is worth noting that the Factory classes will not generally be used directly by users.  Creation of \code{DofOrdering}s and \code{ElementType}s is generally handled by the \code{Mesh} class; \code{Basis} instances are usually requested by the \code{DofOrderingFactory} and assigned to the \code{DofOrdering}.
+
+\paragraph{Basis Values: \deal's \code{FEValues} compared with Camellia's \code{BasisCache}.}
+Finite element computations often make use of a \emph{reference} cell; values of shape functions and derivatives are computed on the reference cell and  transformed to appropriate values in physical space.  The values of interest are usually at specific points; most commonly these are quadrature points.  Both \deal and Camellia include classes---\code{FEValues} and \code{BasisCache},\footnote{Because \code{BasisCache} has evolved somewhat to include additional features relating to the computational context---e.g., it can optionally store a list of the cell IDs currently being operated on---we are considering renaming it \code{ContextCache}.} respectively---that take advantage of this fact to reduce development effort and speed execution.
+
+Both classes compute values in reference space and provide transformations into physical space.  Now, not all the basis function values will be of interest for a given computation---derivative values might not be required, for example, and it would be wasteful to compute them in such a case.  \deal allows the user to specify that such values are not required so that they will not be computed.  Camellia's approach is \emph{lazy} computation of all values: the first time, for example, the derivative values for a basis are requested, these will be computed at all the points of interest, and stored.
+
+It is also worth noting that, while \deal's \code{FEValues} class is tied to a particular element type, \code{BasisCache} is a bit more flexible.  \code{BasisCache} will return values for any requested basis; it is possible to do so efficiently because all bases are created using the \code{BasisFactory}, as described above.  \code{BasisCache} uses the memory address of the \code{Basis} object as an index into its lookup tables.  Generally speaking, a \code{BasisCache} instance will be relatively short-lived in Camellia, but many methods do take a \code{BasisCache} pointer as an argument, so that basis values computed in one part of the code might easily be reused in a completely separate part of the code.
+
+\begin{figure}[h!b!p!]
+\centering
+\includegraphics[scale=0.75]{./fig/hangingNode2irreg.eps}
+\caption{Schematic of a 2-irregular mesh.
+}
+\label{fig:hangingNode2irreg}
+\end{figure}
+
+\paragraph{Treatment of Hanging Nodes: \code{MultiBasis}.}
+As mentioned in the discussion of \deal in Section \ref{sec:litreviewFEM}, one of the usual complexities of finite element methods has to do with the treatment of \emph{hanging nodes}, element faces in the mesh where an element has been refined and its neighbor along that face has not, as shown in Figure \ref{fig:hangingNode}.  At issue is the relationship of the shape functions discretizing a variable on the coarse element to those discretizing the same variable on the finer neighboring elements.  (When neighboring elements are of the same coarseness and polynomial order, the relationship between shape functions on the neighbors is a simple identification.)
+
+The usual way that hanging nodes are handled in finite elements is by imposing a constraint on the finer elements, so that their shape functions conform to the function space on the coarse element along the shared face.  Such constraints might become complicated to implement if arbitrary refinement patterns are allowed---for this reason, finite element codes sometimes limit the irregularity of the mesh;\footnote{\deal and libMesh both support meshes of arbitrary irregularity, although this is not the default option, and their mechanisms for implementing this necessarily differ from ours.} e.g., the mesh shown in Figure \ref{fig:hangingNode2irreg} is called \emph{2-irregular}, because the coarse neighbor on the right has been refined twice along the shared edge, while the one on the left has not been refined at all.  The usual practice is to enforce 1-irregularity by introducing additional refinements to coarse neighbors; usually this is implemented by means of constraints imposed on the appropriate degrees of freedom to ensure continuity.
+
+Our approach in Camellia differs.  We observe that in DPG the discretizations on element interiors are entirely independent of each other, so that only the flux and trace variables---the ones that are defined along a shared edge---need to be reconciled.  We therefore allow the coarse element ($K_{1}$ in Figure \ref{fig:hangingNode}) to ``borrow'' the appropriate basis from its finer neighbors.  The result is that the coarse element has a basis that is only piecewise polynomial along the shared edge; in the case of fluxes, the basis even allows discontinuity at the hanging node.
+
+To implement this, we define a general basis class, which we call \code{MultiBasis}, which allows a basis to be formed along a broken edge from two arbitrary sub-bases.  Clearly, to avoid introducing quadrature error, the quadrature points for the \code{MultiBasis} must be the union of those for its sub-bases; therefore, \code{MultiBasis} provides these to the \code{BasisCache} when the latter determines quadrature points for an edge.  Because a sub-basis can itself be a \code{MultiBasis}, we have an elegant recursive mechanism by which we can handle meshes of arbitrary irregularity.\footnote{Thus far in practice, we have usually continued to enforce 1-irregularity, but in the instances where we have not enforced it, we have not found any ill effects.}
+
+Dual to the concept of \code{MultiBasis} is that of a \code{PatchBasis}, in which the finer elements ``borrow'' a patch of the coarse neighbor's basis.  An option for \code{PatchBasis} is under development.  The \code{PatchBasis} approach coincides exactly with the standard approach of imposing constraints on the finer elements.
+
+\section{Summary of Preliminary Results}
+\label{sec:preliminaryResults}
+In this section, we summarize the results we have thus far achieved in the context of the Stokes problem.  The principal theoretical result is the proof of the well-posedness of the velocity-gradient-pressure Stokes formulation (specified below), which implies optimal convergence rates when the \emph{graph norm} is used as the norm on the test space.  Details are provided in Appendix \ref{sec:StokesAnalysis}.
+
+As can be seen by the large body of research discussed in Section \ref{sec:litreviewflow}, finding good discrete spaces for the
+Stokes problem is \emph{difficult}---this has been an area of ongoing
+research for decades.  Through our analysis and numerical results, we demonstrate that DPG allows
+solution of the Stokes problem without any special effort---that is,
+the Stokes problem is approached and analyzed with exactly the same
+DPG-theoretical tools that we use for other linear problems, and we
+can use the same discrete spaces for velocity and pressure. In
+particular, we use equal-order spaces for velocity and pressure, and
+both pressure and velocity converge at the same rate, a contrast with
+LDG \cite{CockburnKanschatSchotzauSchwab03}.  Indeed, one of our
+numerical experiments demonstrates not only that the method delivers
+the optimal convergence rate, but also that the method provides a solution
+close to the $L^{2}$ projection of the exact solution.
+
+Our Stokes work began in collaboration with Pavel Bochev and Denis
+Ridzal in the summer of 2010 \cite{RobertsetAl10}, during an
+internship at Sandia.  Bochev astutely suggested the Stokes problem as
+a good example problem for DPG.  That summer, we were puzzled by the
+poor performance of DPG using what we herein refer to as the
+\emph{naive} test space norm; the present analysis serves (among other
+things) to explain why the naive norm fails to achieve optimal
+convergence rates, in contrast to the choice to which our analysis
+leads us, which we here call the \emph{adjoint graph} norm.
+
+Our numerical results fall into two categories: convergence studies performed on a manufactured solution to verify the theoretically predicted convergence rates, and adaptivity studies in the context of the lid-driven cavity flow problem.  Further details, including an exploration of how the method can go wrong if the test space norm is naively chosen, can be found in Appendix \ref{sec:StokesNumericalResults}.
+
+\subsection{Velocity-Gradient-Pressure Formulation.} The classical strong form of the Stokes problem in $\Omega \subset
+\mathbb{R}^{2}$ is given by
+\begin{subequations}
+\begin{align}
+- \mu \Delta \vect{u} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:StokesFirstIntro} \\
+\NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+\vect{u} &= \vect{u}_D & \text{ on } \partial\Omega,\label{NVR:eq:StokesLastIntro}
+\end{align}
+\end{subequations}
+where $\mu$ is viscosity, $p$ pressure, $\vect{u}$ velocity, and
+$\vect{f}$ a vector forcing function.  The first equation corresponds
+to conservation of momentum, and the second to conservation of mass.
+While the analysis will treat the case where mass can be added or removed
+from the system ($g \neq 0$), in practice generally (and in our
+numerical experiments) $g = 0$.  Since by appropriate
+non-dimensionalization we can eliminate the constant $\mu$, we take
+$\mu=1$ throughout.
+
+In order to apply the DPG method, we need to cast the system
+\eqref{NVR:eq:StokesFirstIntro}--\eqref{NVR:eq:StokesLastIntro} as a
+first-order system.  We introduce $\NVRtensor{\sigma}= \NVRgrad
+\vect{u}$:
+\begin{subequations}
+\begin{align}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \\
+ \NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+ \NVRtensor{\sigma} - \NVRgrad \vect{u} &= 0 & \text{ in } \Omega,\\ 
+\vect{u} &= \vect{u}_D & \text{ on } \partial\Omega.
+\end{align}
+\end{subequations}
+
+Clearly, the first-order formulation is by no means unique; we have chosen this one for convenience of mathematical analysis
+and simplicity of presentation.  Previously, we have experimented with
+other formulations; the velocity-stress-pressure (VSP) and the velocity-vorticity-pressure (VVP) formulations \cite{RobertsetAl10,RobertsetAl11}.\footnote{The VSP and VVP Stokes formulations are also detailed and used in Appendix \ref{sec:CamelliaDetails} as part of the verification of Camellia.}  Note also that $\NVRtensor{\sigma}$ in this formulation is \emph{not} the physical stress (the physical stress does enter the VSP formulation).
+
+\subsection{Manufactured Solution.}
+To test the method, we use a manufactured solution following Cockburn et al. \cite{CockburnKanschatSchotzauSchwab03}
+\begin{align*}
+u_{1} &=  -e^{x} ( y \cos y + \sin y )\\
+u_{2} &=  e^{x}  y \sin y\\
+p &= 2 \mu e^{x} \sin y
+\end{align*}
+on domain $\Omega = (-1,1)^2$, taking $\mu=1$, with uniform quadrilateral meshes of increasing granularity, and examine convergence rates.  The $L^{2}$ norm of the exact solution for $u_{1}$ is 2.53; for $u_{2}$, 1.07; for $p$, 2.81.
+
+Figure \ref{fig:summary_graph_h} shows $h$-convergence results using the graph norm in the test space, for uniform quadrilateral meshes varying from $k=1$ to 4 in polynomial order, and from $1 \times 1$ to $16 \times 16$ elements.  The dashed lines in the plots show the error of an $L^{2}$ projection of the exact solution (the theoretical best we could achieve)---the lines lie nearly on top of each other.  We not only observe optimal convergence rates, but almost exactly achieve the best approximation error!
+
+\begin{figure}[p]
+\centering
+\subfigure[$u_{1}$]{
+\includegraphics[scale=0.42]{./figures/u1_graph_h.pdf}
+\label{fig:u1graph_h}
+}
+\subfigure[$u_{2}$]{
+\includegraphics[scale=0.42]{./figures/u2_graph_h.pdf}
+\label{fig:u2graph_h}
+}
+\subfigure[$p$]{
+\includegraphics[scale=0.42]{./figures/pressure_graph_h.pdf}
+\label{fig:pressuregraph_h}
+}
+\caption{$h$-convergence of $u_{1},u_{2}$ and $p$ when using the graph norm for the test space.  We observe optimal convergence rates, and nearly match the $L^{2}$-projection of the exact solution.
+}
+\label{fig:summary_graph_h}
+\end{figure}
+
+\subsection{Lid-Driven Cavity Flow.}\label{sec:lidDrivenCavityFlow}
+\begin{figure}[h!b!p!]
+\centering
+\includegraphics[scale=0.75]{./figures/cavity_flow_cartoon.pdf}
+\caption{Sketch of lid-driven cavity flow.
+}
+\label{fig:summary_cavity_flow_cartoon}
+\end{figure}
+A classic test case for Stokes flow is the lid-driven cavity flow problem.  Consider a square cavity with an incompressible, viscous fluid, with a lid that moves at a constant rate.  The resulting flow will be vorticular; as sketched in Figure \ref{fig:summary_cavity_flow_cartoon}, there will also be so-called \emph{Moffat eddies} at the corners; in fact, the exact solution  will have an infinite number of such eddies, visible at progressively finer scales \cite{Moffat}.  Note that the problem as described will have a discontinuity in the fluid velocity at the top corners, and hence its solution will not conform to the spaces we used in our analysis; for this reason, in our experiment we approximate the problem by introducing a thin ramp in the boundary conditions---we have chosen a ramp of width $\frac{1}{64}$.  This makes the boundary conditions continuous,\footnote{It is worth noting that these boundary conditions are not exactly representable by many of the coarser meshes used in our experiments.  We interpolate the boundary conditions in the discrete space.} so that the solution conforms to the spaces used in the analysis.
+\paragraph{$h$-adaptivity study.}
+For $h$-refinements, our strategy---previously discussed in Section \ref{sec:proposedApproachDPG}---is very simple:
+\begin{enumerate}
+\item Loop through the elements, determining the maximum element error $\norm{e_{K{\rm max}}}_{V}$.
+\item Refine all elements with error at least 20\% of the maximum $\norm{e_{K{\rm max}}}_{V}$.
+\end{enumerate}
+
+Because the exact solution is unknown, we first solve on an overkill mesh and compare our adaptive solution at each step to the overkill solution.  In this experiment, we used quadratic field variables ($k=2$), a test space enrichment of 1 relative to the $H^{1}$ order (that is, $k_{\rm test} = k + 2 = 4$) for both the adaptive and overkill solutions.  The overkill mesh was $256 \times 256$ elements, with 5,576,706 dofs.
+
+The initial mesh was a $2 \times 2$ square mesh; we ran seven $h$-adaptive refinements.  We stopped after seven steps to ensure that the resulting mesh was nowhere finer than the overkill solution.  At each step, we computed the Euclidean ($\ell_{2}$) norm of the $L^{2}$ norm of each of the seven field variables.  The final adaptive mesh has 124 elements and 11,202 dofs, and combined $L^{2}$ error of $4.4 \times 10^{-4}$ compared with the overkill mesh.  We also ran a few uniform refinements and computed the $L^{2}$ error for these compared with the overkill mesh, to show the comparative efficiency of the adaptive refinements.  The results are plotted in Figure \ref{fig:summary_adaptive_cavity_flow_quadratic_vs_overkill}.
+\begin{figure}[h!b!p!]
+\centering
+\includegraphics[scale=0.60]{./figures/adaptive_cavity_flow_quadratic_vs_overkill.pdf}
+\caption{Euclidean norm of $L^{2}$ error in all field variables in $h$-adaptive mesh relative to an overkill mesh with $256 \times 256$ quadratic elements.  The Euclidean norm of all field variables in the exact solution is 6.73.
+}
+\label{fig:summary_adaptive_cavity_flow_quadratic_vs_overkill}
+\end{figure}
+
+We also post-processed the results to solve for the stream function $\phi$, where $\Delta \phi = \NVRcurl \vect{u}$.  The contours of $\phi$ are the streamlines of the flow.  These are plotted for the quadratic adaptive mesh described above in Figure \ref{fig:summary_streamlines_p2}; the first Moffat eddy can be seen clearly in the zoomed-in plot.  This quadratic mesh does not resolve the second Moffat eddy, but if we run 11 adaptive refinements on a cubic mesh, we can see it.  This is shown in Figure \ref{fig:summary_streamlines_p3_r11}.
+
+\begin{figure}[p]
+\centering
+\subfigure[full cavity]{
+\includegraphics[scale=0.42]{./figures/streamlines_p2_r7.pdf}
+\label{fig:summary_streamlines_p2_r7}
+}
+\subfigure[lower-left corner]{
+\includegraphics[scale=0.42]{./figures/streamlines_detail_p2_r7.pdf}
+\label{fig:summary_streamlines_detail_p2_r7}
+}
+\caption{Streamlines for the full cavity and for the lower-left corner, on a quadratic mesh after 7 adaptive refinements.  The lower-left corner shows the first Moffat eddy.  The final mesh has 124 elements and 11,202 dofs.}
+\label{fig:summary_streamlines_p2}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[scale=0.42]{./figures/streamlines_minute_detail_p3_r11.pdf}
+\caption{Streamlines for the lower-left corner on a cubic mesh after 11 adaptive refinements: the second Moffat eddy.  The final mesh has 298 elements and 44,206 dofs.}
+\label{fig:summary_streamlines_p3_r11}
+\end{figure}
+
+\paragraph{ad hoc $hp$-adaptivity study.}
+\begin{figure}[h!b!p!]
+\centering
+\includegraphics[scale=0.60]{./figures/hp_adaptive_cavity_flow_vs_overkill.pdf}
+\caption{Euclidean norm of $L^{2}$ error in all field variables in (ad hoc) $hp$-adaptive mesh relative to an overkill mesh with $64 \times 64$ quintic elements.  The Euclidean norm of all field variables in the exact solution is 6.73; the final mesh has 46 elements and 5,986 dofs.
+}
+\label{fig:summary_hp_adaptive_cavity_flow_vs_overkill}
+\end{figure}
+For the $hp$ experiment, we adopt a similar strategy; this time, our overkill mesh contains $64 \times 64$ quintic elements, and our initial mesh has $2 \times 2$ linear elements.  We detail our ad hoc choice between $h$- and $p$-refinement in Appendix \ref{sec:StokesNumericalResults}; here, we simply note that our strategy for making this choice does depend on knowledge of the problem---we aim here simply to demonstrate that the method allows arbitrary meshes of arbitrary, variable polynomial order.
+
+We ran 9 refinement steps.  The final mesh has 46 elements and 5,986 dofs, compared with 1,223,682 dofs in the overkill mesh.  The $L^{2}$ error of the adaptive solution compared with the overkill is $8.0 \times 10^{-4}$.  As in the previous experiment, we also tried running a few uniform $h$-refinements on the same initial mesh, as a baseline for comparison.  The results are plotted in Figure \ref{fig:summary_hp_adaptive_cavity_flow_vs_overkill}.
+
+%pagebreaks provide a ``honeypot'' to keep too many figures from spilling into the conclusion
+%\pagebreak
+
+\section{Conclusion and Proposed Contributions}
+\label{sec:conclusion}
+The central contribution of the dissertation will be the design and development of mathematical techniques and software, based on the DPG method, for solving the 2D incompressible Navier-Stokes equations in the laminar regime (Reynolds numbers up to about 1000).  Along the way, we will investigate approximations to these equations---the Stokes equations and the Oseen equations---followed by the steady-state Navier-Stokes equations.  If time allows, we will also solve the transient Navier-Stokes equations.
+
+The study of DPG applied to a system of PDEs has several aspects.  A first-order variational formulation must be derived, including the selection of appropriate test and trial space norms.  The well-posedness of the formulation might be proved.  The formulation can be investigated numerically by means of test problems: convergence can be studied by means of manufactured solutions, and ``real-world'' performance can be studied by means of more physically realistic test problems.  In terms of the CSEM program areas, the derivation of variational formulations and any proofs of their well-posedness belong to Area A, Applicable Mathematics.  The design and development of software for numerical investigations belong to Area B, Numerical Analysis and Scientific Computation.  The study of test problems belongs to Area C, Mathematical Modeling and Applications.  We will briefly describe the specific proposed contributions of this dissertation to each of these in turn.
+
+\paragraph{Area A.}  We will pose several DPG formulations of the Stokes equations---the velocity-gradient-pressure (VGP), velocity-stress-pressure (VSP), and velocity-vorticity-pressure (VVP) formulations.  We will pose DPG formulations of the Oseen equations and the 2D incompressible Navier-Stokes equations.
+
+We will prove the well-posedness of the VGP Stokes formulation for DPG, which has as consequence a guarantee of optimal convergence rates \cite{DPGStokes}; we plan to complete similar proofs for the VSP and VVP formulations.  Time permitting, we would like to prove a similar result for the Oseen equations.  The work on the Oseen equations will include the study of \emph{robustness} for the small-viscosity (high Reynolds number) case, with reference to previous work on convection-dominated diffusion \cite{DPG2,DemkowiczHeuer}.
+
+\paragraph{Area B.} We will design and develop a software toolbox (\emph{Camellia}) for the investigation of DPG problems.  This will support 2D meshes of triangles and quads of variable polynomial order, provide mechanisms for easy specification of DPG variational forms, support $h$- and $p$- refinements, and support distributed computation of the stiffness matrix, among other features.
+
+Time permitting, we hope to add support for meshes of arbitrary spatial dimension, support for space-time elements, and support for distributed mesh and solution representation.
+
+\paragraph{Area C.} We will verify convergence rates for the Stokes, Oseen, and Navier-Stokes equations using manufactured solutions.
+
+We will simulate the classical lid-driven cavity flow and backward-facing step problems using, in turn, the Stokes, Oseen, and Navier-Stokes equations.
+
+We will simulate flow past a cylinder using the steady-state Navier-Stokes equations.  Time permitting, we will do so with the transient equations as well.
+
+\pagebreak
+\appendix
+\input{stokesAnalysis.tex}
+
+\pagebreak
+\input{CamelliaDetails.tex}
+
+\pagebreak
+\input{stokesExperiments.tex}
+
+%\section{Overview of Incompressible Flow}
+%Discussion of the full transient, nonlinear problem, plus simplified versions:
+%\begin{itemize}
+%\item full transient
+%\item steady
+%\item Oseen
+%\item Stokes
+%\end{itemize}
+
+\bibliography{./DPG}
+\bibliographystyle{plain}
+
+%\pagebreak
+%
+%\section*{Appendix}
+%\input{stokes_bounded_below}
+
+%\input{detailedTables}
+
+
+
+
+\end{document}
