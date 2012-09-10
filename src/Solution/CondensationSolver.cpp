@@ -108,7 +108,7 @@ void CondensationSolver::init(){
   Epetra_SerialComm Comm;
 #endif
 
-  // _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
+  _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
 
   vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
   vector< ElementPtr >::iterator elemIt;
@@ -169,6 +169,12 @@ void CondensationSolver::init(){
 
   // figure out nRHS for solves (nonzero coupling terms)
   Epetra_RowMatrix* K = problem().GetMatrix();
+  int numMyCols = K->RowMatrixColMap().NumMyElements();
+  int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc 
+  // get inds and values of row
+  int * globalColInds = K->RowMatrixColMap().MyGlobalElements();
+  int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
+
   int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
   for (int i = 0;i<numMyRows;++i){
     // TODO: FINISH
@@ -197,11 +203,12 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
   int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc 
   // get inds and values of row
   int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
-  double * values = new double[numGlobalRowElements];
-  int * indices = new int[numGlobalRowElements]; 
   
   int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
   for (int i = 0;i<numMyRows;++i){
+
+    double * values = new double[numGlobalRowElements];
+    int * indices = new int[numGlobalRowElements]; 
     int numEntries; // output from ExtractMyRowCopy
     K->ExtractMyRowCopy(i,numGlobalRowElements,numEntries,values,indices);    
    

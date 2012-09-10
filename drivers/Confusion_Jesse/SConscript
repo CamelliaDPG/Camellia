@@ -9,6 +9,6 @@ driver5 = env.Program('exec/SimpleTest', ['SimpleTest.cpp'])
 #Default(driver1)
 #Default(driver2)
 #Default(driver3)
-#Default(driver4)
+Default(driver4)
 Default(driver5)
 
