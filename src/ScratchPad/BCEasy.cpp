@@ -85,7 +85,6 @@ public:
   }
 };
 
-
 void BCEasy::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction ) {
   if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() ) {
     // "or" the existing condition with the new one:

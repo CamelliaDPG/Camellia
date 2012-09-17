@@ -95,7 +95,7 @@ public:
   static void transposeFCMatrices(FieldContainer<double> &fcTranspose,
                                   const FieldContainer<double> &fc);
   
-  static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array);
+  static bool checkForZeroRowsAndColumns(string name, FieldContainer<double> &array, bool checkRows = true, bool checkCols = true);
   
   static void weightCellBasisValues(FieldContainer<double> &basisValues, 
                                     const FieldContainer<double> &weights, int offset); 

@@ -497,7 +497,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 //      }
 //      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
       rho = 1.0;
-      cout << "in zmc, diagonal entry: " << rho << endl;
+//      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
       localRowIndex++;
@@ -623,9 +623,10 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-//  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  //  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -2830,12 +2831,23 @@ void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, Element
 }
 
 void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap){
+  // TODO: finish the commented-out MPI version of this method...
+  
+//#ifdef HAVE_MPI
+//  int rank     = Teuchos::GlobalMPISession::getRank();
+//#else
+//  int rank     = 0;
+//#endif
+
   vector< ElementPtr > activeElems = _mesh->activeElements();
+//  vector< ElementPtr > activeElems = _mesh->elementsInPartition(rank);
   for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
     projectOntoCell(functionMap,cellID);
   }
+  
+  // TODO: gather the projected solutions
 }
 
 void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int cellID){
