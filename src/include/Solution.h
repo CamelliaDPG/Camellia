@@ -60,6 +60,7 @@
 
 class Solver;
 class LagrangeConstraints;
+class Epetra_LinearProblem;
 
 using namespace Intrepid;
 

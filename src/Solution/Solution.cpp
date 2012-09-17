@@ -613,10 +613,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   }
   
   if (_reportConditionNumber) {
-    double oneNorm = globalStiffMatrix.NormOne();
+//    double oneNorm = globalStiffMatrix.NormOne();
+    double condest = conditionNumberEstimate(*problem);
     if (rank == 0) {
       // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
-      cout << "condition # estimate for global stiffness matrix: " << conditionNumberEstimate(*problem) << endl;
+      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
     }
   }
   
