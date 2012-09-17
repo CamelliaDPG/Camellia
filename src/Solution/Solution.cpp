@@ -92,6 +92,14 @@
 #include "Solution.h"
 #include "Projector.h"
 
+double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
+  // TODO: work out how to suppress the console output here
+  double condest = -1;
+  AztecOO solverForConditionEstimate(problem);
+  solverForConditionEstimate.SetAztecOption(AZ_solver, AZ_cg_condnum);
+  solverForConditionEstimate.ConstructPreconditioner(condest);
+  return condest;
+}
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
@@ -607,7 +615,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   if (_reportConditionNumber) {
     double oneNorm = globalStiffMatrix.NormOne();
     if (rank == 0) {
-      cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
+      cout << "condition # estimate for global stiffness matrix: " << conditionNumberEstimate(*problem) << endl;
     }
   }
   
