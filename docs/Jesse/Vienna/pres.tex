@@ -148,9 +148,9 @@
 
 \institute[ICES]{Institute for Computational Engineering and Sciences}
 
-\title[A DPG method for Compressible Flow]{Application of a Discontinuous Petrov-Galerkin method to compressible flow problems}
-\date{Sept 12, 2012}
-\author[J. Chan, L. Demkowicz, R. Moser]{Jesse Chan\\ Supervisors: Leszek Demkowicz, Robert Moser}
+\title[A DPG method for Compressible Flow]{Application of a Discontinuous Petrov-Galerkin method to problems in compressible flow}
+\date{ECCOMAS: Sept 12, 2012}
+\author[J. Chan, N. Roberts, L. Demkowicz, R. Moser]{Jesse Chan, Nathan Roberts\\ Supervisors: Leszek Demkowicz, Robert Moser}
 
 \begin{document}
 \begin{frame}
@@ -168,16 +168,17 @@ Numerical difficulties:
 \item{} Shocks
 \item{} Boundary layers - resolution needed for drag/load
 \end{itemize}
-\item{} Stability of numerical schemes
-\begin{itemize}
-\item{} Coarse/adaptive grids
-\item{} Higher order
-\end{itemize}
-\item{} Stabilized methods
-\begin{itemize}
-\item{} Stabilization parameters
-\item{} Higher-order
-\end{itemize}
+%\item{} Stability of numerical schemes 
+%\begin{itemize}
+%\item{} Coarse grids
+%\item{} Higher order
+%\end{itemize}
+\item{} Problems of \emph{discrete coercivity} and \emph{robustness}: 
+\begin{align*}
+b(v,v) &\geq \epsilon\nor{v}_{H^1_0}^2, \quad (\text{if at all}),\\
+\nor{u-u_h} &\leq C_\epsilon \inf_{w_h} \nor{u-w_h}.
+\end{align*}
+\item{} Current fix: stabilization%SUPG aims to solve both simultaneously.
 \end{itemize}
 \end{column}
 \begin{column}{.4\textwidth}
@@ -199,7 +200,7 @@ b(u,v) = \ell(v) \Longleftrightarrow Bu = \ell, \quad
 \left.\begin{array}{cl}
 \langle Bu,v\rangle_V &\coloneqq b(u,v)\\
 \langle \ell,v\rangle_V &\coloneqq \ell(v).
-\end{array}\right\}
+\end{array}\right.
 \]
 We seek to minimize the \textcolor{red}{dual residual} over $U_h \subset U$
 \[
@@ -250,6 +251,19 @@ For localizable norms and discontinuous testing, $R_V$ is block diagonal.
 %\footnotetext{\bibentry{DPG3pub}}
 }
 
+\setcounter{subfigure}{0}
+\frame{
+\frametitle{The graph test norm - near $L^2$ best approx for Stokes.}
+\vspace{-.3cm}
+\begin{figure}
+\centering
+\subfigure[Manufactured soln:\ $u_1$ error]{\includegraphics[scale=.235]{figs/stokes/u1_err.pdf}}
+\subfigure[Manufactured soln:\ $p$ error]{\includegraphics[scale=.235]{figs/stokes/pressure_err.pdf}}
+\subfigure[Cavity flow streamlines]{\includegraphics[scale=.245]{figs/stokes/streamlines.pdf}}
+\subfigure[Second Moffat eddy]{\includegraphics[scale=.245]{figs/stokes/streamlines_zoom.pdf}}
+\end{figure}
+}
+
 \section{A Robust DPG Method for Convection-Diffusion}
 
 \frame{
@@ -293,7 +307,7 @@ where $\widehat{f}_n \coloneqq \beta_n u - \sigma_n$ and $\LRa{\widehat{f}_n,\ju
 }
 
 \frame{
-\frametitle{Graph norm under convection-diffusion}
+\frametitle{The graph test norm: problems under convection-diffusion}
 The graph norm\footnote{\bibentry{Bui-ThanhDemkowiczGhattas11b}} for convection-diffusion gives exceptional stability.  %, this norm is defined elementwise
 \begin{align*}
 \|\left(v,\tau\right)\|_{V(K)}^2 =& \| \div \tau - \beta \cdot \grad v\|_{L^2(K)}^2 + 
@@ -327,7 +341,7 @@ Recover $\nor{u}^2_{L^2(\Omega)}$ with conforming $\LRp{v,\tau}$ satisfying the 
 \end{array}
 \right. ,
 \quad
-\LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gamma}, \LRa{ \widehat{f}_n,\jump{v} }_{\Gamma} = 0
+\text{boundary terms} = 0%\LRa{\jump{\tau\cdot n}, \widehat{u} }_{\Gamma}, \LRa{ \widehat{f}_n,\jump{v} }_{\Gamma} = 0
 \end{align*}
 ``Necessary'' conditions for robustness --- 
 \[
@@ -384,17 +398,19 @@ Non-standard choice of boundary condition: $\widehat{f}_n = \beta_n u_0$ on $\Ga
 \end{figure}
 }
 
+
 \frame{
 \frametitle{Test norms and adjoint solutions}
 \textbf{Intuition:} the effectiveness of DPG under a test norm is governed by how a \textbf{specific test norm} measures the \textbf{solutions of the adjoint problem}. 
 
 \begin{figure}[!h]
 \centering
-\subfigure[Dirichlet inflow]{\includegraphics[scale=.35]{figs/dirichletBC.png}}
-\subfigure[``Convection'' inflow]{\includegraphics[scale=.35]{figs/newBC.png}}
+\subfigure[Dirichlet inflow $u=u_0$]{\includegraphics[scale=.35]{figs/dirichletBC.png}}
+\subfigure[``Convection'' inflow $u-\epsilon u' \approx u_0$]{\includegraphics[scale=.35]{figs/newBC.png}}
 \caption{DPG solutions to convection-diffusion for both inflow conditions using an $H^1$ test norm.}
 \end{figure}
 }
+
 
 \frame{
 \frametitle{Mesh-scaled test norms}
@@ -417,7 +433,7 @@ which induces the proven \emph{robust} bound\footnote{\bibentry{DPGrobustness2}}
 %\widehat{\beta_nu - \sigma_n} &= \widehat{f}_n = u_0, \quad \beta_n \leq 0\\
 %\widehat{u} &= 0, \quad \beta_n > 0
 %\end{align*}
-Experiments done using Camellia\footnote{\bibentry{Camellia}} and a boundary layer solution.
+Adaptive refinement using Camellia\footnote{\bibentry{Camellia}} for a boundary layer solution.
 %\begin{figure}
 %\centering
 %\subfigure{
@@ -530,6 +546,7 @@ E_{\rm visc} \Sigma - \grad U &= R_{\rm constit}(U,\Sigma)
 where $R_{\rm conserv}(U,\Sigma)$ and $R_{\rm constit}(U,\Sigma)$ are the conservation/constitutive residuals.
 }
 %\addtocounter{framenumber}{-1}
+\addtocounter{framenumber}{-1}
 \frame{
 \frametitle{Extrapolation of test norms}
 %\begin{columns}
@@ -579,6 +596,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh0.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -591,6 +609,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh1.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -603,6 +622,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh2.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -615,6 +635,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh3.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -628,6 +649,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh4.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -641,6 +663,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh5.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 \frame{
@@ -652,6 +675,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh6.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -665,6 +689,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh7.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -677,6 +702,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh8.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 \frame{
@@ -688,6 +714,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh9.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 
@@ -700,6 +727,7 @@ Stress/heat flux boundary conditions are set in terms of the momentum and energy
 \subfigure{\includegraphics[scale = .35]{figs/propMovie/Mesh10.png}}
 \end{figure}
 }
+\addtocounter{framenumber}{-1}
 \setcounter{subfigure}{0}
 
 \frame{
@@ -723,7 +751,7 @@ Questions?
 }
 
 %\input{futureWork}
-%\input{extendedSlides}
+\input{extendedSlides}
 
 \bibliographystyle{plain}
 {\scriptsize

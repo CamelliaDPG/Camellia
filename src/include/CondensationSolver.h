@@ -32,10 +32,11 @@ class CondensationSolver : public Solver{
   map<int,map<int,int> > _condensedToLocalFieldInds; // cellID + fieldIndex -> local field index
 
   // matrices for static condensation: need to get by iterating through rows of global matrix
-  map<int, Epetra_SerialDenseMatrix> _elemFieldMats; // from cellID to dense matrix
+  map<int, Epetra_SerialDenseMatrix> _elemFieldMats; // from cellID to dense matrix  
+  map<int, set<int> > _elemCouplingInds; // map from cellID to set of nonzero flux indices
+  map<int,map<int,int> > _globalToReducedFluxInds; // from cellID/global flux ind to local coupling matrix ind (i.e. index into # of nonzero columns of elem coupling matrix)
+  map<int,map<int,int> > _reducedFluxToGlobalInds; // vice versa of above
   map<int, Epetra_SerialDenseMatrix > _couplingMatrices; // from cellID to dense compacted matrix
-  map<int, vector<int> > _couplingIndices; // relating cellID to column indices for that cell
-
 
   void init();
   int cellIDForGlobalFieldIndex(int globalFieldIndex);

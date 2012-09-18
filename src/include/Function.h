@@ -10,6 +10,8 @@
 #define Camellia_Function_h
 
 #include "BasisCache.h"
+#include "BilinearForm.h"
+
 class Mesh;
 class ExactSolution;
 
@@ -28,7 +30,14 @@ public:
   
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
   
+  virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
+  virtual FunctionPtr dx();
+  virtual FunctionPtr dy();
+  virtual FunctionPtr dz();
+  virtual FunctionPtr div();
+  virtual FunctionPtr grad();
+  
   int rank();
   
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
@@ -153,6 +162,14 @@ public:
 class SideParityFunction : public Function {
 public:
   bool boundaryValueOnly();
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+
+class VectorizedFunction : public Function {
+  vector< FunctionPtr > _fxns;
+public:
+  VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
+  VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 

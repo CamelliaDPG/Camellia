@@ -33,6 +33,11 @@ public:
                                  Teuchos::RCP<DofOrdering> dofOrdering,
                                  Teuchos::RCP<BasisCache> basisCache);
   
+  void computeInnerProductVector(FieldContainer<double> &ipVector, 
+                                 VarPtr var, FunctionPtr fxn,
+                                 Teuchos::RCP<DofOrdering> dofOrdering, 
+                                 Teuchos::RCP<BasisCache> basisCache);
+  
   bool hasBoundaryTerms();
   
   void operators(int testID1, int testID2, 

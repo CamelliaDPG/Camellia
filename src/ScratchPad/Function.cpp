@@ -25,6 +25,72 @@ int Function::rank() {
   return _rank; 
 }
 
+void Function::values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache) {
+  switch (op) {
+    case IntrepidExtendedTypes::OP_VALUE:
+      this->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DX:
+      this->dx()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DY:
+      this->dy()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DZ:
+      this->dz()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_GRAD:
+      this->grad()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DIV:
+      this->div()->values(values, basisCache);
+      break;
+    default:
+      TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
+      break;
+  }
+  if (op==IntrepidExtendedTypes::OP_VALUE) {
+    
+  } else {
+    TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
+  }
+}
+
+FunctionPtr Function::dx() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::dy() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::dz() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::grad() {
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
+  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+    return Teuchos::rcp((Function *)NULL);
+  } else if (dzFxn.get() == NULL) {
+    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+  } else {
+    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+  }
+}
+
+FunctionPtr Function::div() {
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
+  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+    return Teuchos::rcp((Function *)NULL);
+  } else if (dzFxn.get() == NULL) {
+    return dxFxn + dyFxn;
+  } else {
+    return dxFxn + dyFxn + dzFxn;
+  }
+}
+
 void Function::CHECK_VALUES_RANK(FieldContainer<double> &values) { // throws exception on bad values rank
   // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
   TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
@@ -610,6 +676,39 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
       double n2 = (*sideNormals)(cellIndex,ptIndex,1);
       values(cellIndex,ptIndex,0) = n1;
       values(cellIndex,ptIndex,1) = n2;
+    }
+  }
+}
+
+VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank() + 1) {
+  TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  _fxns.push_back(f1);
+  _fxns.push_back(f2);
+}
+VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) : Function(f1->rank() + 1) {
+  TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  _fxns.push_back(f1);
+  _fxns.push_back(f2);
+  _fxns.push_back(f3);
+}
+void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  // this is not going to be particularly efficient, because values from the components need to be interleaved...
+  Teuchos::Array<int> dims;
+  values.dimensions(dims);
+  int numComponents = dims[dims.size()-1];
+  TEUCHOS_TEST_FOR_EXCEPTION( numComponents != _fxns.size(), std::invalid_argument, "number of components incorrect" );
+  dims.pop_back(); // remove the last, dimensions argument
+  FieldContainer<double> compValues(dims);
+  int valuesPerComponent = compValues.size();
+  
+  int numComps = _fxns.size();
+  for (int comp=0; comp < numComps; comp++) {
+    FunctionPtr fxn = _fxns[comp];
+    fxn->values(compValues, basisCache);
+    for (int i=0; i < valuesPerComponent; i++) {
+      values[ valuesPerComponent * i + comp ] = compValues[ i ];
     }
   }
 }

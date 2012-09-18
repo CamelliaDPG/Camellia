@@ -1,0 +1,393 @@
+\documentclass[mathserif]{beamer}
+\usepackage{subfigure}
+\usepackage{listings}
+\usepackage{courier}
+\definecolor{lightlightgray}{gray}{0.95}
+\definecolor{lightlightblue}{rgb}{0.4,0.4,0.95}
+\definecolor{lightlightgreen}{rgb}{0.8,1,0.8}
+\lstset{language=C++,
+           frame=single,
+           basicstyle=\ttfamily\footnotesize,
+           keywordstyle=\color{black}\textbf,
+           backgroundcolor=\color{lightlightgray},
+           commentstyle=\color{blue},
+           frame=single
+           }
+\usetheme[secheader]{pecostalk}
+\usepackage{bibentry}
+\nobibliography*
+\graphicspath{{figs/}}                                                                                                                              
+
+% defines newblock as null, giving compile issues otherwise
+\let\newblock\relax 
+
+\newcommand{\eqdef}{\stackrel{\text{\tiny def}}{=}}
+
+\newcommand{\NVRvect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\NVRtensor}[1]{\NVRvect{#1}}
+%\newcommand{\NVRtensor}[1]{\underline{\NVRvect{#1}}}
+\newcommand{\NVRnorm}[1]{\left|\left|#1\right|\right|}
+\newcommand{\norm}[1]{\left|\left|#1\right|\right|}
+\newcommand{\NVRgrad}{\nabla}
+\newcommand{\NVRdiv}{\NVRgrad \cdot}
+\newcommand{\NVRpd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\NVRpdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+\newcommand{\NVReqdef}{\stackrel{\text{\tiny def}}{=}}
+
+\newcommand{\NVRHgrad}{H(\text{grad})}
+\newcommand{\NVRHdiv}{H(\text{div})}
+\newcommand{\NVRsumm}[2]{\ensuremath\displaystyle\sum\limits_{#1}^{#2}}
+ 
+\newcommand{\NVRcurl}{\nabla \times}
+\newcommand{\NVRHcurl}{\ensuremath H(\text{curl})}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\deal}{\code{deal.II}\,}
+
+\newcommand{\pecosbold}[1]{{\color{pecos2}{#1}}}
+\newcommand{\pecosreallybold}[1]{{\color{pecos6}{#1}}}
+
+\newcommand{\FootSize}{\scriptsize}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\date{September 12, 2012}
+\author[Nate Roberts]{Nate Roberts \\
+Collaborators: Leszek Demkowicz, Jesse Chan, Truman Ellis
+}
+\institute{Institute for Computational and Engineering Sciences\\
+The University of Texas at Austin}
+\title[Camellia: A DPG Toolbox]{Camellia:}
+\subtitle{A Toolbox for a Class of Discontinuous Petrov-Galerkin Methods\\ Using Trilinos}
+
+\begin{document}
+\begin{frame}
+%\begin{center}
+%\includegraphics[width=.8\linewidth]{grand_logo}\\
+%\end{center}
+\titlepage
+%\begin{flushright}
+%\includegraphics[scale=0.1]{asc_logo}\\
+%\end{flushright}
+\end{frame}
+
+%===============================================================================
+% OUTLINE
+%===============================================================================
+
+% UNCOMMENT THIS TO ADD AN OUTLINE AT THE TOP OF EACH SECTION...
+%\AtBeginSection[]
+%{
+%  \begin{frame}<beamer>
+%    \frametitle{Outline}
+%    \tableofcontents[currentsection]
+%  \end{frame}
+%}
+
+\begin{frame}
+\frametitle{Outline}
+\tableofcontents
+\end{frame}
+
+\section{DPG in Brief} % 5-6 slides
+%===============================================================================
+% From Strong-Form PDE to DPG Form
+%===============================================================================
+\begin{frame}                                                                                                                                                                          
+\frametitle{From Strong-Form PDE to DPG Form}
+\begin{center}
+\includegraphics[width=\linewidth]{../figures/DPGFormCartoon}\\
+\end{center}
+\end{frame}              
+%===============================================================================
+% Solving with DPG
+%===============================================================================
+\begin{frame}                                                                                                                                                                          
+\frametitle{Solving with DPG}
+\begin{center} 
+\includegraphics[width=0.9\linewidth]{../figures/DPGSolveCartoonNew}\\
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Graph Test Norm}
+
+For a strong operator $A$ with formal adjoint $A^{*}$, the \pecosbold{adjoint graph space} is
+\[
+H_{A^{*}} = \left\{ v \in L^{2}(\Omega) : A^{*}v \in L^{2}(\Omega) \right\}
+\]
+
+and the \pecosbold{(adjoint) graph norm} on the test space $V$ is given by
+\[
+\NVRnorm{v}_{\rm graph} = \NVRnorm{v}_{H_{A^{*}}} = \left( \NVRnorm{v}^{2} + \NVRnorm{A^{*}v}^{2}\right)^{1/2}.
+\]
+
+\vspace{5mm}
+\begin{center}
+E.g. if $A^{*} = \NVRgrad$, then $H_{A^{*}} = H^{1}$, and $\NVRnorm{v}_{H_{A^{*}}} = \NVRnorm{v}_{H^{1}}$.
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Key Result: Well-posedness $\implies$ Optimal Convergence}
+Under modest technical assumptions (true for Stokes), we have\footnote{\FootSize \bibentry{DPGStokes}}\\
+\[
+\NVRnorm{Au} \geq \gamma \NVRnorm{u} \implies \sup_{v \in H_{A^{*}}} \frac{b((u,\widehat{u}),v)}{\NVRnorm{v}_{H_{A^{*}}}} \geq \gamma_{\rm DPG} \left(\NVRnorm{u}^{2} + \NVRnorm{\widehat{u}}^{2}_{\widehat{H}_{A}(\Gamma_{h})}\right)^{1/2}
+\]
+where $\gamma_{\rm DPG} = O(\gamma)$ is a mesh-independent constant, and $\NVRnorm{\cdot}_{\widehat{H}_{A}(\Gamma_{h})}$ is the minimum energy extension norm.\\
+\pause
+\vspace{5mm}
+By Babu\v{s}ka's Theorem,
+\[
+\implies \left(\NVRnorm{u - u_{h}}^{2} + \NVRnorm{\widehat{u} - \widehat{u}_{h}}^{2}_{\widehat{H}_{A}(\Gamma_{h})}\right)^{1/2} \leq \frac{M}{\gamma_{\rm DPG}} \left( {\rm B.A.E.} \right).
+\]
+\pause
+Suffices to show that $\NVRnorm{Au} \geq \gamma \NVRnorm{u}$ to prove \pecosbold{optimal} convergence rate!
+\end{frame}
+
+\section{Stokes} % 10-12 slides
+% lit. review (including various classical elements, discussion of locking and non-convergence)
+% Stokes analysis, summary results
+% Numerical experiments: manufactured solution, lid-driven cavity flow problem
+% Probably worth mentioning the naive norm results: drives home why the analysis is valuable, and the fact that the optimal test function lives in a very specific space.
+%===============================================================================
+% Stokes: Classical Problem
+%===============================================================================
+\begin{frame}
+\frametitle{Classical Stokes Problem}
+The classical strong form of the Stokes problem in $\Omega \subset
+\mathbb{R}^{2}$ is given by
+\begin{align*}
+- \mu \Delta \vect{u} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\vect{u} &= \vect{u}_D & \text{ on } \partial\Omega,
+\end{align*}
+where $\mu$ is viscosity, $p$ pressure, $\vect{u}$ velocity, and
+$\vect{f}$ a vector forcing function.  Since by appropriate
+non-dimensionalization we can eliminate the constant $\mu$, we take
+$\mu=1$ throughout. 
+\end{frame}
+
+\begin{frame}
+\frametitle{DPG Applied to Stokes}
+
+To apply DPG, we need a first-order system.  We introduce $\NVRtensor{\sigma}= \NVRgrad
+\vect{u}$:
+\begin{align*}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in } \, \Omega, \\
+ \NVRdiv \vect{u} &= 0 & \text{ in } \, \Omega, \\
+ \NVRtensor{\sigma} - \NVRgrad \vect{u} &= 0 & \text{ in } \, \Omega.
+\end{align*}
+Testing with $(\vect{v},q,\vect{\tau})$, and integrating by parts, we have
+\begin{align*}
+\left(\NVRtensor{\sigma} - p \NVRtensor{I}, \NVRgrad \vect{v} \right)_{\Omega_{h}} - \left\langle \widehat{\vect{t}}_{n}, \vect{v} \right\rangle_{\Gamma_{h}} &= (\vect{f}, \vect{v} )_{\Omega_{h}}\\
+\left(\vect{u}, \NVRgrad q \right)_{\Omega_{h}} -  \left\langle \widehat{\vect{u}} \cdot \vect{n}, q  \right\rangle_{\Gamma_{h}} &= 0\\
+\left( \NVRtensor{\sigma}, \NVRtensor{\tau} \right)_{\Omega_{h}} + \left( \vect{u}, \NVRdiv \NVRtensor{\tau} \right)_{\Omega_{h}} - \left\langle \widehat{\vect{u}}, \NVRtensor{\tau} \vect{n}  \right\rangle_{\Gamma_{h}} &= \NVRtensor{0},
+\end{align*}
+where traction $\vect{t}_{n} \eqdef ( \NVRtensor{\sigma} - p \NVRtensor{I} ) \vect{n}$, and the hatted variables $\widehat{\vect{t}}_{n}$ and $\widehat{\vect{u}}$ are new unknowns representing the traces of the corresponding variables at the boundary.
+
+\end{frame}
+
+\begin{frame}
+\frametitle{DPG Applied to Stokes}
+DPG Formulation:
+\begin{align*}
+b(u,v) =& \left(\NVRtensor{\sigma} - p \NVRtensor{I}, \NVRgrad \vect{v} \right)_{\Omega_{h}} - \left\langle \widehat{\vect{t}}_{n}, \vect{v} \right\rangle_{\Gamma_{h}}\\
+&+\left(\vect{u}, \NVRgrad q \right)_{\Omega_{h}} -  \left\langle \widehat{\vect{u}} \cdot \vect{n}, q  \right\rangle_{\Gamma_{h}}\\
+&+ \left( \NVRtensor{\sigma}, \NVRtensor{\tau} \right)_{\Omega_{h}} + \left( \vect{u}, \NVRdiv \NVRtensor{\tau} \right)_{\Omega_{h}} - \left\langle \widehat{\vect{u}}, \NVRtensor{\tau} \vect{n}  \right\rangle_{\Gamma_{h}} = (\vect{f}, \vect{v} )_{\Omega_{h}} = l(v).
+\end{align*}
+The natural spaces for the trial variables are then:
+\begin{itemize}
+\item fields: $p \in L^{2}(\Omega), \vect{u} \in \vect{L}^{2}(\Omega), \NVRtensor{\sigma} \in \vect{L}^{2}(\Omega)$,
+\item fluxes: $\widehat{\vect{t}}_{n} \in \NVRtensor{H}^{-1/2}(\Gamma_{h})$,
+\item traces: $\widehat{\vect{u}} \in \vect{H}^{1/2}(\Gamma_{h})$.
+\end{itemize}
+
+The natural norms for fluxes and traces are \emph{minimum energy extension norms}.
+
+\end{frame}
+
+%\begin{frame}
+%\frametitle{Polynomial Space Choices}
+%How to select polynomial spaces for $u$ and $\widehat{u}$?
+%\begin{itemize}
+%\item Graph norm $\implies$ error bounded by best approximation error.
+%\vspace{3mm} \pause
+%\item Want all variables to have same B.A.E. convergence rates.
+%\vspace{3mm} \pause
+%\item Fix polynomial order $k$ for $H^{1}(\Omega_{h})$ variables.  ($k$ rate.)
+%\vspace{3mm} \pause
+%\item $\implies$ need order $k-1$ for $L^{2}(\Omega)$.
+%\vspace{3mm} \pause
+%\item $\implies$ need order $k$ for $H^{1/2}(\Gamma_{h})$.
+%\vspace{3mm} \pause
+%\item $\implies$ need order $k-1$ for $H^{-1/2}(\Gamma_{h})$.
+%\vspace{3mm} \pause
+%\item In Camellia, specify the $H^{1}$ polynomial order $k$, and the other orders will be chosen automatically.
+%\end{itemize}
+%\end{frame}
+
+\begin{frame}
+\frametitle{Graph Test Norm}
+The adjoint graph norm for our Stokes formulation is:\footnote{\FootSize \bibentry{DPGStokes}}
+\begin{align*}
+\norm{(\NVRtensor{\tau},\vect{v}, q)}_{\rm graph}^{2} =& \norm{\NVRdiv \NVRtensor{\tau} - \NVRgrad q}^{2} + \norm{\NVRdiv \vect{v}}^{2} + \norm{ \NVRtensor{\tau} + \NVRgrad{\vect{v}}}^{2}\\ 
+&+ \norm{\NVRtensor{\tau}}^{2} + \norm{\vect{v}}^{2} + \norm{q}^{2}.
+\end{align*}
+
+\end{frame}
+
+\section{Camellia} % 10-12 slides
+\begin{frame}
+\frametitle{Camellia\footnote{\FootSize \bibentry{RobertsetAl11}}}
+\pecosbold{Design Goal}: make DPG research and experimentation as simple as possible, without sacrificing too much by way of performance.
+\vspace{3mm}
+\begin{center}
+\includegraphics[scale=.65]{../figures/CamelliaVennDiagram.pdf}
+\end{center}
+\addtocounter{footnote}{1}
+\footnotetext{\FootSize \bibentry{TrilinosShortAuthors}}
+\end{frame}
+
+%===============================================================================
+% WHAT INTREPID (TRILINOS) PROVIDES
+%===============================================================================
+\begin{frame}
+\frametitle{Reliance on Trilinos}
+\begin{block}{}
+\begin{center}
+\begin{tabular}{l c}
+\pecosbold{Feature}			&\pecosbold{Trilinos Package} \\
+OO interface to MUMPS 		&Amesos \\
+KLU solver 				&Amesos \\
+conforming basis functions	&Intrepid \\
+pullbacks/Piola transforms 	&Intrepid \\
+smart multidimensional arrays 	&Intrepid \\
+distributed compressed row storage matrices	&Epetra \\
+cell topologies 				&Shards \\
+reference-counted pointers 				&Teuchos \\
+space-filling curves for spatially local mesh partitioning 		&Zoltan \\
+\end{tabular}
+\end{center}
+\end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Camellia: Users}
+\begin{itemize}
+\item Jesse Chan: compressible Navier-Stokes
+\item Truman Ellis: compressible Navier-Stokes with turbulence
+\item Nate Roberts: incompressible Navier-Stokes
+\end{itemize}
+\begin{figure}
+\centering
+\subfigure[Mesh]{\includegraphics[height = 3cm]{../figures/Jesse/Mesh10.png}}
+\subfigure[$u_1$]{\includegraphics[height = 3cm]{../figures/Jesse/u10.png}}
+\caption{Compressible Navier-Stokes for Carter flat plate problem, ${\rm Re}=1000, {\rm Ma}=3.$}
+\end{figure}
+\end{frame}
+
+\section{Solving Stokes with Camellia}
+\begin{frame}
+\frametitle{Implementation with Camellia}
+%PROBABLY BETTER TO MAKE A CARTOON HERE
+\begin{enumerate}
+\item Identify variables involved: fields, traces, fluxes, and test functions.
+\item Define the bilinear form.
+\item Define right-hand side.
+\item Define inner product.
+\item Define boundary conditions.
+\item Create initial mesh.
+\item Create solution object (and solve).
+\item Adaptively refine the mesh.
+\end{enumerate}
+\end{frame}
+
+\subsection{Identify variables}
+\begin{frame}[fragile]
+\frametitle{Identify variables involved.}
+For Stokes, we have trial variables:
+\begin{itemize}
+\item fields: scalar $p \in L^{2}(\Omega),$ vector $\vect{u} \in \vect{L}^{2}(\Omega)$, tensor $\NVRtensor{\sigma} \in \vect{L}^{2}(\Omega)$,
+\item fluxes: vector $\widehat{\vect{t}}_{n} \in \NVRtensor{H}^{-1/2}(\Gamma_{h})$,
+\item traces: vector $\widehat{\vect{u}} \in \vect{H}^{1/2}(\Gamma_{h})$.
+\end{itemize}
+
+\begin{lstlisting}
+VarFactory varFactory;
+VarPtr p = varFactory.fieldVar("p");
+VarPtr u1 = varFactory.fieldVar("u_1");
+VarPtr u2 = varFactory.fieldVar("u_2");
+VarPtr sigma11 = varFactory.fieldVar("\\sigma_11"); 
+VarPtr sigma12 = varFactory.fieldVar("\\sigma_12"); 
+VarPtr sigma21 = varFactory.fieldVar("\\sigma_21"); 
+VarPtr sigma22 = varFactory.fieldVar("\\sigma_22"); 
+VarPtr t1n = varFactory.fluxVar("\\hat{t}_1n"); 
+VarPtr t2n = varFactory.fluxVar("\\hat{t}_2n"); 
+VarPtr u1 = varFactory.traceVar("\\hat{u}_1");
+VarPtr u2 = varFactory.traceVar("\\hat{u}_2");
+\end{lstlisting}
+
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Camellia: Rapid Specification of Inner Products}
+Suppose we have a problem whose graph norm is
+\[
+\NVRnorm{(v,\vect{q})}_{\rm graph}^{2} = \NVRnorm{v}^{2} + \NVRnorm{\vect{q}}^{2} + \NVRnorm{\NVRpd{v}{x} - \NVRpd{v}{y} + \NVRdiv \vect{q}}^{2}.
+\]
+\vspace{2mm}
+To specify this in Camellia, simply do:
+\begin{lstlisting}
+VarFactory varFactory;
+VarPtr v = varFactory.testVar("v", HGRAD);
+VarPtr q = varFactory.testVar("q", HDIV);
+IPPtr ip = Teuchos::rcp( new IP);
+ip->addTerm(v);
+ip->addTerm(q);
+ip->addTerm(v->dx() - v->dy() + q->div());
+\end{lstlisting}
+
+The bilinear form can be specified similarly.
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Camellia: Stiffness Matrix Timing Test}
+\begin{itemize}
+\item local stiffness matrix computation is \pecosbold{embarrassingly parallel}
+\item minimize assembly costs: \pecosbold{spatially local} mesh partitioning
+\item timing tests on Lonestar: solve convection-dominated diffusion
+\end{itemize}
+\vspace{-5mm}
+\begin{center}
+\includegraphics[scale = 0.40]{../figs/scalingFigs/bar_ref3.pdf}\hspace{1cm}
+\end{center}
+\begin{itemize}
+\vspace{-5mm}
+\item collaborators working on parallel solvers: Kyungjoo Kim (shared memory architecture),  Maciej Paszynski (distributed memory)
+\end{itemize}
+
+\end{frame}
+
+%===============================================================================
+% THANK YOU
+%===============================================================================
+\begin{frame}
+\frametitle{}
+\begin{block}{}
+\center{Thank you!} \\
+\center{Questions?}\\
+\end{block}
+\vspace{1cm}
+\center{For more info:\\
+nroberts@ices.utexas.edu}\\
+\end{frame}
+
+\bibliographystyle{plain}
+{\scriptsize
+\bibliography{../DPG}
+}
+ 
+\end{document}

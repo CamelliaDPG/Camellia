@@ -39,6 +39,7 @@
 #include "Mesh.h"
 #include "Function.h"
 #include "Projector.h"
+#include "VarFactory.h"
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
@@ -207,6 +208,15 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
 
 void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &bc, 
                            Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
+  // define a couple of important inner products:
+  IPPtr ipL2 = Teuchos::rcp( new IP );
+  IPPtr ipH1 = Teuchos::rcp( new IP );
+  VarFactory varFactory;
+  VarPtr trace = varFactory.traceVar("trace");
+  VarPtr flux = varFactory.traceVar("flux");
+  ipL2->addTerm(flux);
+  ipH1->addTerm(trace);
+  ipH1->addTerm(trace->grad());
   globalDofIndicesAndValues.clear();
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
@@ -218,6 +228,8 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);
+    bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+    // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
     if ( bc.bcsImposed(trialID) ) {
       // 1. Collect the physicalCellNodes according to sideIndex
       // 2. Determine global dof indices and values, in one pass per side
@@ -279,6 +291,15 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
           Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
+          // TODO: test the below.  (New as of 9/15/12, basically.)
+          // (NOT YET WORKING, HENCE COMMENTED OUT.  NEED TO MAKE LinearTerm honor side BasisCache, basically.)
+//          if (isTrace) {
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipH1, trace);
+//          } else {
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipL2, flux);
+//
+//          }
+          // was:
           Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           
           //cout << "dirichletValues:" << endl << dirichletValues;

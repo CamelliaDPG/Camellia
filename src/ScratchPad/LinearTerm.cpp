@@ -383,6 +383,137 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   }
 }
 
+// integrate this against otherTerm, where otherVar == fxn
+// TODO: see if we can eliminate the redundancy between this method and the matrix integrate
+// (it may also be interesting to allow a map otherVar->fxn, instead of only allowing a single
+//  variable's function value to be set, though for linear terms, it's possible to build up this
+//  functionality in terms of the present integrate() method)
+void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
+                           LinearTermPtr otherTerm, VarPtr otherVar, FunctionPtr fxn, 
+                           BasisCachePtr basisCache, bool forceBoundaryTerm) {
+  // values has dimensions (numCells, thisFields)
+  
+  int numCells = values.dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  
+  set<int> otherIDs = otherTerm->varIDs();
+  
+  int rank = this->rank();
+  TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
+  
+  set<int>::iterator thisIt;
+  set<int>::iterator otherIt;
+  
+  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > thisBasis;
+  
+  bool thisFluxOrTrace  = (     this->termType() == FLUX) || (     this->termType() == TRACE);
+  bool otherFluxOrTrace = (otherTerm->termType() == FLUX) || (otherTerm->termType() == TRACE);
+  
+  bool boundaryTerm = thisFluxOrTrace || otherFluxOrTrace || forceBoundaryTerm;
+  
+  Teuchos::Array<int> ltValueDim;
+  ltValueDim.push_back(numCells);
+  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+  ltValueDim.push_back(numPoints);
+  
+  // num "sides" for volume integral: 1...
+  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
+  for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
+    int numPointsSide;
+    if (boundaryTerm) { 
+      numPointsSide = basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
+    } else {
+      numPointsSide = -1;      
+    }
+    
+    for (otherIt= otherIDs.begin(); otherIt != otherIDs.end(); otherIt++) {
+      int otherID = *otherIt;
+      if (otherID != otherVar->ID() ) continue; // not the variable we're interested in...
+      
+      // set up values container for other
+      Teuchos::Array<int> ltValueDim1 = ltValueDim;
+      ltValueDim1.remove(1); // delete the fields dimension
+      for (int d=0; d<rank; d++) {
+        ltValueDim1.push_back(spaceDim);
+      }
+      ltValueDim1[2] = boundaryTerm ? numPointsSide : numPoints;
+      FieldContainer<double> otherValues(ltValueDim1);
+      if (! boundaryTerm) {
+        otherTerm->values(otherValues,otherID,fxn,basisCache,false);  // false: don't apply cubature weights
+      } else {
+        otherTerm->values(otherValues,otherID,fxn,basisCache->getSideBasisCache(sideIndex),false);  // false: don't apply cubature weights
+      }
+      
+      for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
+        int thisID = *thisIt;
+        thisBasis = thisFluxOrTrace ? thisOrdering->getBasis(thisID,sideIndex) : thisOrdering->getBasis(thisID);
+        int thisBasisCardinality = thisBasis->getCardinality();
+        
+        // set up values container this term:
+        Teuchos::Array<int> ltValueDim2 = ltValueDim1;
+        ltValueDim2[1] = thisBasisCardinality;
+        
+        FieldContainer<double> thisValues(ltValueDim2);
+
+        bool applyCubatureWeights = true;        
+        if (! boundaryTerm ) {
+#warning Need to add integration of boundary-only terms to the putative volume integral (for function weights defined only on element boundaries)....
+          this->values(thisValues,thisID,thisBasis,basisCache,applyCubatureWeights);
+        } else {
+          this->values(thisValues,thisID,thisBasis,basisCache->getSideBasisCache(sideIndex),applyCubatureWeights);
+          if ( this->termType() == FLUX ) {
+            // we need to multiply thisValues' entries by the parity of the normal, since
+            // the trial implicitly contains an outward normal, and we need to adjust for the fact
+            // that the neighboring cells have opposite normal
+            // thisValues should have dimensions (numCells,numFields,numCubPointsSide)
+            int numFields = thisValues.dimension(1);
+            int numPoints = thisValues.dimension(2);
+            for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              if (parity != 1.0) {  // otherwise, we can just leave things be...
+                for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                    thisValues(cellIndex,fieldIndex,ptIndex) *= parity;
+                  }
+                }
+              }
+            }
+          }
+          // same thing, for otherTerm:
+          if ( otherTerm->termType() == FLUX ) {
+            int numPoints = otherValues.dimension(2);
+            for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              if (parity != 1.0) {  // otherwise, we can just leave things be...
+                for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                  otherValues(cellIndex,ptIndex) *= parity;
+                }
+              }
+            }
+          }
+        }
+        
+        FieldContainer<double> miniVector( numCells, thisBasisCardinality );
+        
+        // I'm not sure that integrate supports this combination: (C,P) against (C,F,P) --> (C,F)
+        FunctionSpaceTools::integrate<double>(miniVector,otherValues,thisValues,COMP_CPP);
+        
+        vector<int> thisDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(thisID,sideIndex)
+        : thisOrdering->getDofIndices(thisID);
+        
+        for (int j=0; j < thisBasisCardinality; j++) {
+          int thisDofIndex = thisDofIndices[j];
+          for (unsigned k=0; k < numCells; k++) {
+            double value = miniVector(k,j); // separate line for debugger inspection
+            values(k,thisDofIndex) += value;
+          }
+        }
+      }
+    }
+  }
+}
+
 // compute the value of linearTerm for solution at the BasisCache points
 // values shape: (C,P), (C,P,D), or (C,P,D,D)
 // TODO: isn't this redundant with PreviousSolutionFunction?  It could be that we handle certain values FC shapes
@@ -512,8 +643,8 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   int sideIndex = basisCache->getSideIndex();
   
   int valuesRankExpected = _rank + 3; // 3 for scalar, 4 for vector, etc.
-  TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
-                     "values FC does not have the expected rank" );
+  TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
+                             "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
@@ -646,6 +777,154 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
                 } else {
                   fValue++;
                 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// compute the value of linearTerm for non-zero varID at the cubature points, for var == fxn
+// values shape: (C,P), (C,P,D), or (C,P,D,D)
+// TODO: refactor this and the other values() to reduce code redundancy
+void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache, 
+                        bool applyCubatureWeights, bool naturalBoundaryTermsOnly) {
+  int sideIndex = basisCache->getSideIndex();
+  
+  int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
+  TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
+                             "values FC does not have the expected rank" );
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  
+  values.initialize(0.0);
+  Teuchos::Array<int> scalarFunctionValueDim;
+  scalarFunctionValueDim.append(numCells);
+  scalarFunctionValueDim.append(numPoints);
+  
+  // (could tune things by pre-allocating this storage)
+  FieldContainer<double> fValues;
+  
+  Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
+  vectorFunctionValueDim.append(spaceDim);
+  Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
+  tensorFunctionValueDim.append(spaceDim);
+  
+  int numFields = 1; // when we're pretending to be a basis
+  Teuchos::Array<int> fxnValueDim, fxnValueAsBasisDim; // adds numFields = 1 to imitate what happens as basis
+  if (fxn->rank() == 0) {
+    fxnValueDim = scalarFunctionValueDim;
+  } else if (fxn->rank() == 1) {
+    fxnValueDim = vectorFunctionValueDim;
+  } else if (fxn->rank() == 2) {
+    fxnValueDim = tensorFunctionValueDim;
+  }
+  fxnValueAsBasisDim = fxnValueDim;
+  fxnValueAsBasisDim.insert(fxnValueDim.begin()+1, numFields); // (C, F, ...)
+  
+  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+                     std::invalid_argument, "values FC numCells disagrees with cubature points container");
+  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+                     std::invalid_argument, "values FC numPoints disagrees with cubature points container");
+  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    // skip if this is a volume term, and we're only interested in the pure-boundary terms
+    if (naturalBoundaryTermsOnly && !linearSummandIsBoundaryValueOnly(ls)) {
+      continue;
+    }
+    // skip if this is a boundary term, and we're doing a volume integration:
+    if ((sideIndex == -1) && linearSummandIsBoundaryValueOnly(ls)) {
+      continue;
+    }
+    if (ls.second->ID() == varID) {
+      FieldContainer<double> fxnValues(fxnValueDim);
+      fxn->values(fxnValues, ls.second->op(), basisCache); // should always use the volume coords (compare with other LinearTerm::values() function)
+      if (applyCubatureWeights) {
+        // TODO: apply cubature weights!!
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "still need to implement cubature weighting");
+      }
+      
+      if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
+        // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
+        fxnValues.resize(fxnValueAsBasisDim);
+        ls.first->scalarMultiplyBasisValues(fxnValues,basisCache);
+        for (int i=0; i<values.size(); i++) {
+          values[i] += fxnValues[i];
+        }
+        continue;
+      }
+      
+      if (ls.first->rank() == 0) {
+        fValues.resize(scalarFunctionValueDim);
+      } else if (ls.first->rank() == 1) {
+        fValues.resize(vectorFunctionValueDim);
+      } else if (ls.first->rank() == 2) {
+        fValues.resize(tensorFunctionValueDim);
+      } else {
+        Teuchos::Array<int> fDim = tensorFunctionValueDim;
+        for (int d=3; d < ls.first->rank(); d++) {
+          fDim.append(spaceDim);
+        }
+        fValues.resize(fDim);
+      }
+      
+      ls.first->values(fValues,basisCache);
+            
+      Teuchos::Array<int> fDim(fValues.rank()); // f is the functional weight -- fxn is the function substituted for the variable
+      Teuchos::Array<int> fxnDim(fxnValues.rank());
+      
+      // compute f * basisValues
+      if ( ls.first->rank() == ls.second->rank() ) { // scalar result
+        int entriesPerPoint = 1;
+        int fRank = ls.first->rank();
+        for (int d=0; d<fRank; d++) {
+          entriesPerPoint *= spaceDim;
+        }
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+          fDim[0] = cellIndex; fxnDim[0] = cellIndex;
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+            fDim[1] = ptIndex; fxnDim[1] = ptIndex;
+            const double *fValue = &fValues[fValues.getEnumeration(fDim)];
+            const double *fxnValue = &(fxnValues[fxnValues.getEnumeration(fxnDim)]);
+            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+              values(cellIndex,ptIndex) += *fValue * *fxnValue;
+              
+              fValue++;
+              fxnValue++;
+            }
+          }
+        }
+      } else { // vector/tensor result
+        // could pretty easily fold the scalar case above into the code below
+        // (just change the logic in the pointer increments)
+        int entriesPerPoint = 1;
+        // now that we've changed so that we handle scalar function multiplication separately,
+        // we don't hit this code for scalar functions.  I.e. scalarF == false always.
+        bool scalarF = ls.first->rank() == 0;
+        int resultRank = scalarF ? ls.second->rank() : ls.first->rank();
+        for (int d=0; d<resultRank; d++) {
+          entriesPerPoint *= spaceDim;
+        }
+        Teuchos::Array<int> vDim( values.rank() );
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+          fDim[0] = cellIndex; fxnDim[0] = cellIndex; vDim[0] = cellIndex;
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+            fDim[1] = ptIndex; fxnDim[1] = ptIndex; vDim[1] = ptIndex;
+            const double *fValue = &fValues[fValues.getEnumeration(fDim)];
+            const double *fxnValue = &(fxnValues)[fxnValues.getEnumeration(fxnDim)];
+            
+            double *value = &values[values.getEnumeration(vDim)];
+            
+            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
+              *value += *fValue * *fxnValue;
+              value++; 
+              if (scalarF) {
+                fxnValue++;
+              } else {
+                fValue++;
               }
             }
           }
