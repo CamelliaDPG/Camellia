@@ -58,7 +58,7 @@ bool BilinearFormUtility::warnAboutZeroRowsAndColumns() {
   return _warnAboutZeroRowsAndColumns;
 }
 
-bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array) {
+bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array, bool checkRows, bool checkCols) {
   // for now, only support rank 3 FCs 
   double tol = 1e-15;
   static int warningsIssued = 0; // max of 20
@@ -70,44 +70,48 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
   int numCols = array.dimension(2);
   bool zeroRowOrColFound = false;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int i=0; i<numRows; i++) {
-      bool nonZeroFound = false;
-      int j=0;
-      while ((!nonZeroFound) && (j<numCols)) {
-        if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
-        j++;
-      }
-      if ( ! nonZeroFound ) {
-        if (_warnAboutZeroRowsAndColumns) {
-          warningsIssued++;
-          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
-          
-          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
-            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
-            _warnAboutZeroRowsAndColumns = false;
-          }
+    if (checkRows) {
+      for (int i=0; i<numRows; i++) {
+        bool nonZeroFound = false;
+        int j=0;
+        while ((!nonZeroFound) && (j<numCols)) {
+          if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+          j++;
         }
-        zeroRowOrColFound = true;
+        if ( ! nonZeroFound ) {
+          if (_warnAboutZeroRowsAndColumns) {
+            warningsIssued++;
+            cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
+            
+            if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+              cout << "20 warnings issued.  Suppressing future warnings about zero rows and columns\n";
+              _warnAboutZeroRowsAndColumns = false;
+            }
+          }
+          zeroRowOrColFound = true;
+        }
       }
     }
-    for (int j=0; j<numCols; j++) {
-      bool nonZeroFound = false;
-      int i=0;
-      while ((!nonZeroFound) && (i<numRows)) {
-        if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
-        i++;
-      }
-      if ( ! nonZeroFound ) {
-        if (_warnAboutZeroRowsAndColumns) {
-          warningsIssued++;
-          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
-          
-          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
-            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
-            _warnAboutZeroRowsAndColumns = false;
-          }
+    if (checkCols) {
+      for (int j=0; j<numCols; j++) {
+        bool nonZeroFound = false;
+        int i=0;
+        while ((!nonZeroFound) && (i<numRows)) {
+          if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+          i++;
         }
-        zeroRowOrColFound = true;
+        if ( ! nonZeroFound ) {
+          if (_warnAboutZeroRowsAndColumns) {
+            warningsIssued++;
+            cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+            
+            if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+              cout << "20 warnings issued.  Suppressing future warnings about zero rows and columns\n";
+              _warnAboutZeroRowsAndColumns = false;
+            }
+          }
+          zeroRowOrColFound = true;
+        }
       }
     }
   }

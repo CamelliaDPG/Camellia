@@ -84,7 +84,9 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int basisRank = BasisFactory::getBasisRank(basis);
   if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) )
       ||
-      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) ) )
+      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) )
+      ||
+      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_CURL) ) )
   {
     dimensions.push_back(spaceDim);
   } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {

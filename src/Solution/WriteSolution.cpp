@@ -1,6 +1,6 @@
 #include "Solution.h"
 
-#define USE_VTK
+//#define USE_VTK
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -809,5 +809,209 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   fout << "</VTKFile>" << endl;
   fout.close();
 }
+
+////////////////////////////////////////////////////////////////////////////////////////
+/*
+ The below are stubs to let Nate try some things without installing VTK
+ */
+// Write field variables to unstructured VTK format
+void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
+{ 
+  // Get trialIDs
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector<int> fieldTrialIDs;
+  
+  int spaceDim = 2; // TODO: generalize to 3D...
+  int totalCells = _mesh->activeElements().size();
+  // int totalSubCells = refinementLevel  * refinementLevel * totalCells;
+  // ug->Allocate(totalSubCells, totalSubCells);
+  int numFieldVars = 0;
+  for (unsigned int i=0; i < trialIDs.size(); i++)
+  {
+    if (!(_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i])))
+    {
+      numFieldVars++;
+      fieldTrialIDs.push_back(trialIDs[i]);
+    }
+  }
+  
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  
+  unsigned int total_vertices = 0;
+  
+  // Loop through Quads, Triangles, etc
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    
+    FieldContainer<double> vertexPoints;    
+    _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
+    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+    
+    int numCells = physicalCellNodes.dimension(0);
+    bool createSideCacheToo = false;
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
+    
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      cellIDs.push_back(cellID);
+    }
+    
+    int numVertices = vertexPoints.dimension(1);
+    bool isQuad = (numVertices == 4);
+    int numPoints;
+    if (isQuad)
+    {
+      numPoints = num1DPts * num1DPts;
+    }
+    else // Triangle
+    {
+      numPoints = 3;
+    }
+    FieldContainer<double> refPoints(numPoints,spaceDim);
+    if (isQuad)
+    {
+      for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+        for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
+          int pointIndex = xPointIndex*num1DPts + yPointIndex;
+          double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
+          double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
+          refPoints(pointIndex,0) = x;
+          refPoints(pointIndex,1) = y;
+        }
+      }
+    }
+    else
+    {
+      refPoints(0,0) = 0.0;
+      refPoints(0,1) = 0.0;
+      refPoints(1,0) = 1.0;
+      refPoints(1,1) = 0.0;
+      refPoints(2,0) = 0.0;
+      refPoints(2,1) = 1.0;
+    }
+    
+    basisCache->setRefCellPoints(refPoints);
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
+    
+    vector< FieldContainer<double> > computedValues;
+    computedValues.resize(numFieldVars);
+    for (int i=0; i < numFieldVars; i++)
+    {
+      computedValues[i].resize(numCells, numPoints);
+      solutionValues(computedValues[i], fieldTrialIDs[i], basisCache);
+    }
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
+    {
+      int subcellStartIndex = total_vertices;
+      if (isQuad)
+      {
+        for (int I=0; I < num1DPts-1; I++)
+        {
+          for (int J=0; J < num1DPts-1; J++)
+          {
+            subcellStartIndex++;
+          }
+          subcellStartIndex++;
+        }
+      }
+      else
+      {
+      }
+      
+      for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      {
+        total_vertices++;
+      }
+    }
+  }
+}
+
+void Solution::writeTracesToVTK(const string& filePath)
+{
+  // Get trialIDs
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector<int> traceTrialIDs;
+    
+  // Count trace variables
+  int numTraceVars = 0;
+  for (unsigned int i=0; i < trialIDs.size(); i++)
+  {
+    if (_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i]))
+    {
+      numTraceVars++;
+      traceTrialIDs.push_back(trialIDs[i]);
+    }
+  }
+  unsigned int trace_vertex_count = 0;
+  
+  BasisCachePtr basisCache;
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
+    shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+    basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo, 1) );
+    if (basisCache.get() == NULL)
+      cout << "NULL Basis" << endl;
+    int numSides = cellTopo.getSideCount();
+    
+    int numCells = physicalCellNodes.dimension(0);
+    // determine cellIDs
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: "global" lookup (independent of MPI node)
+      cellIDs.push_back(cellID);
+    }
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
+    
+    FieldContainer<double> refTracePoints(3, 1);
+    refTracePoints(0, 0) =  -1.0;
+    refTracePoints(1, 0) =  0.0;
+    refTracePoints(2, 0) =  1.0;
+    cout << "refTracePoints: \n" << refTracePoints;
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++)
+    {
+      cout << "sideIndex: " << sideIndex << endl;
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+      //TODO: Set correct reference cell points.
+      // The line below causes the code to crash
+      sideBasisCache->setRefCellPoints(refTracePoints);
+      int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+      cout << "numPoints = " << numPoints << endl;
+      if (sideBasisCache.get() == NULL)
+        cout << "NULL Side Basis" << endl;
+      
+      vector< FieldContainer<double> > computedValues;
+      computedValues.resize(numTraceVars);
+      for (int i=0; i < numTraceVars; i++)
+      {
+        computedValues[i].resize(numCells, numPoints);
+        solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
+      }
+      FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      
+      cout << "physCubPoints:\n" << physCubPoints;
+      
+      for (int cellIndex=0;cellIndex < numCells;cellIndex++)
+      {
+        for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+        {
+          trace_vertex_count++;
+        }
+      }
+    }
+  }
+}
+
 
 #endif
