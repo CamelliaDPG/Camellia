@@ -223,7 +223,7 @@ bool IP::hasBoundaryTerms() {
 void IP::operators(int testID1, int testID2, 
                    vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
                    vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2) {
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
 }
 
 void IP::printInteractions() {

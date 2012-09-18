@@ -70,7 +70,7 @@ OptimalInnerProduct::OptimalInnerProduct(Teuchos::RCP< BilinearForm > bf) : DPGI
         if (( op1 !=  IntrepidExtendedTypes::OP_VALUE)
          && ( op1 != IntrepidExtendedTypes::OP_VECTORIZE_VALUE)
          && ( !_bilinearForm->isFluxOrTrace(trialID)) ) {
-          TEST_FOR_EXCEPTION(true,
+          TEUCHOS_TEST_FOR_EXCEPTION(true,
                              std::invalid_argument,
                              "OptimalInnerProduct assumes OP_VALUE for trialIDs.")
         }
@@ -209,7 +209,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
         }
       } else {
         if (testValues1.size() / trialValues.size() != spaceDim) {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialValues is an unexpected size relative to testValues.");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialValues is an unexpected size relative to testValues.");
         }
         for (int i=0; i<trialValues.size(); i++) {
           for (int dim=0; dim<spaceDim; dim++) {
@@ -235,7 +235,7 @@ void OptimalInnerProduct::applyInnerProductData(FieldContainer<double> &testValu
         }
       } else {
         if (testValues2.size() / trialValues.size() != spaceDim) {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialValues is an unexpected size relative to testValues.");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialValues is an unexpected size relative to testValues.");
         }
         for (int i=0; i<trialValues.size(); i++) {
           for (int dim=0; dim<spaceDim; dim++) {

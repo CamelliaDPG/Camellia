@@ -4,7 +4,9 @@
 //
 //  Created by Truman Ellis on 6/4/2012.
 
-#include "CamelliaConfig.h"
+// Nate's addition because he doesn't want to Truman's build system:
+#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
+//#include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Constraint.h"
@@ -16,6 +18,7 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #else
 #endif
+
 
 double epsilon = 1e-2;
 double numRefs = 0;

@@ -93,14 +93,14 @@ void BCEasy::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, F
     valueFunction = Teuchos::rcp( new BCLogicalOrFunction(existingFunction, existingFilter,
                                                           valueFunction, spatialPoints) );
     spatialPoints = Teuchos::rcp( new SpatialFilterLogicalOr( existingFilter, spatialPoints ) );
-//    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only one Dirichlet condition is allowed per variable.");
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only one Dirichlet condition is allowed per variable.");
   }
   _dirichletBCs[ traceOrFlux->ID() ] = make_pair( spatialPoints, valueFunction );
 }
 
 void BCEasy::addZeroMeanConstraint( VarPtr field ) {
   if ( field->varType() != FIELD ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraints only supported for field vars");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraints only supported for field vars");
   }
   _zeroMeanConstraints.insert( field->ID() );
 }
@@ -121,23 +121,23 @@ void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bo
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
                      || ( dirichletValues.dimension(1) != numPoints ) 
                      || ( dirichletValues.rank() != 2  ),
                      std::invalid_argument,
                      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
                      || ( imposeHere.dimension(1) != numPoints ) 
                      || ( imposeHere.rank() != 2  ),
                      std::invalid_argument,
                      "imposeHere dimensions should be (numCells,numPoints).");
   
-  TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument,
                      "spaceDim != 2 not yet supported by imposeBC." );
   
   imposeHere.initialize(false);
   if ( _dirichletBCs.find(varID) == _dirichletBCs.end() ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
   }
   
   DirichletBC bc = _dirichletBCs[varID];

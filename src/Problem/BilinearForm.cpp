@@ -159,13 +159,13 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   int numTrialDofs = trialOrdering->totalDofs();
   
   // check that optimalTestWeights is properly dimensioned....
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
                      std::invalid_argument,
                      "physicalCellNodes.dimension(0) and optimalTestWeights.dimension(0) (numCells) do not match.");
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
                      std::invalid_argument,
                      "trialOrdering->totalDofs() and optimalTestWeights.dimension(1) do not match.");
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
                      std::invalid_argument,
                      "testOrdering->totalDofs() and optimalTestWeights.dimension(2) do not match.");
   
@@ -350,13 +350,13 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
   //cout << "testOrdering: " << *testOrdering;
   
   // check stiffness dimensions:
-  TEST_FOR_EXCEPTION( ( numCells != stiffness.dimension(0) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numCells != stiffness.dimension(0) ),
                      std::invalid_argument,
                      "numCells and stiffness.dimension(0) do not match.");
-  TEST_FOR_EXCEPTION( ( numTestDofs != stiffness.dimension(1) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numTestDofs != stiffness.dimension(1) ),
                      std::invalid_argument,
                      "numTestDofs and stiffness.dimension(1) do not match.");
-  TEST_FOR_EXCEPTION( ( numTrialDofs != stiffness.dimension(2) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numTrialDofs != stiffness.dimension(2) ),
                      std::invalid_argument,
                      "numTrialDofs and stiffness.dimension(2) do not match.");
   
@@ -389,7 +389,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
       this->trialTestOperators(trialID, testID, trialOperators, testOperators);
       vector<EOperatorExtended>::iterator trialOpIt, testOpIt;
       testOpIt = testOperators.begin();
-      TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION(trialOperators.size() != testOperators.size(), std::invalid_argument,
                          "trialOperators and testOperators must be the same length");
       int operatorIndex = -1;
       for (trialOpIt = trialOperators.begin(); trialOpIt != trialOperators.end(); trialOpIt++) {
@@ -398,7 +398,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
         IntrepidExtendedTypes::EOperatorExtended testOperator = *testOpIt;
         
         if (testOperator==OP_TIMES_NORMAL) {
-          TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
         }
         
         Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
@@ -450,7 +450,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
           int trialBasisRank = trialOrdering->getBasisRank(trialID);
           int testBasisRank = testOrdering->getBasisRank(testID);
           
-          TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
+          TEUCHOS_TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
                              std::invalid_argument,
                              "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
           
@@ -746,7 +746,7 @@ void BilinearForm::printTrialTestInteractions() {
           testWeight[0] = testValue[0];
         }
         if ((testWeight.size() == 2) && (trialWeight.size() == 2)) { // both vector values (unsupported)
-          TEST_FOR_EXCEPTION( true, std::invalid_argument, "unsupported form." );
+          TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "unsupported form." );
         } else {
           // scalar & vector: combine into one, in testWeight
           if ( (trialWeight.size() + testWeight.size()) == 3) {

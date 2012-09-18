@@ -59,7 +59,7 @@ public:
                         FieldContainer<double> &unitNormals,
                         FieldContainer<double> &dirichletValues,
                         FieldContainer<bool> &imposeHere) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "BC::imposeBC unimplemented.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BC::imposeBC unimplemented.");
   }
   
 //  virtual void imposeBC(int varID, Teuchos::RCP<BasisCache> sideBasisCache, 

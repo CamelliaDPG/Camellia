@@ -224,6 +224,7 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    solution->setReportConditionNumber(true);
     _solutions.push_back(solution);
     
     Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );

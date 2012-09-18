@@ -56,16 +56,16 @@ void PoissonBCQuartic::imposeBC(int varID, FieldContainer<double> &physicalPoint
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
                      std::invalid_argument,
                      "PoissonBCQuartic expects spaceDim==2.");  
   
-  TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
                      || ( dirichletValues.dimension(1) != numPoints ) 
                      || ( dirichletValues.rank() != 2  ),
                      std::invalid_argument,
                      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
                      || ( imposeHere.dimension(1) != numPoints ) 
                      || ( imposeHere.rank() != 2  ),
                      std::invalid_argument,

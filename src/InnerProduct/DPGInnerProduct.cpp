@@ -87,7 +87,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
       operators(testID1,testID2,test1Operators,test2Operators);
       
       // check dimensions
-      TEST_FOR_EXCEPTION( ( test1Operators.size() != test2Operators.size() ),
+      TEUCHOS_TEST_FOR_EXCEPTION( ( test1Operators.size() != test2Operators.size() ),
                          std::invalid_argument,
                          "test1Operators.size() and test2Operators.size() do not match.");
       

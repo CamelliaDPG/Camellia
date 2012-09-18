@@ -204,7 +204,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int basisCardinality = basis->getCardinality();
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                        "Unknown basis.  BasisCache only works for bases created by BasisFactory");
   }
   // first, let's check whether the exact request is already known
@@ -239,7 +239,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   
   // But let's do just check that we have a standard Intrepid operator
   if ( (op >= IntrepidExtendedTypes::OP_X) || (op <  IntrepidExtendedTypes::OP_VALUE) ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
   FCPtr result = BasisEvaluation::getValues(basis,op,cubPoints);
   _knownValues[key] = result;

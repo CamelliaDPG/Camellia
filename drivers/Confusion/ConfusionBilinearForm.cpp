@@ -192,7 +192,7 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           // we'll need to copy the values and resize the original container
           FieldContainer<double> testValuesCopy = testValues;
           testValues.resize(numCells,basisCardinality,numPoints);
-          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "ConfusionBilinearForm only supports 2 dimensions right now.");
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
@@ -227,7 +227,7 @@ void ConfusionBilinearForm::applyBilinearFormData(int trialID, int testID,
           // we'll need to copy the values and resize the original container
           FieldContainer<double> valuesCopy = trialValues;
           trialValues.resize(numCells,basisCardinality,numPoints);
-          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "ConfusionBilinearForm only supports 2 dimensions right now.");
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {

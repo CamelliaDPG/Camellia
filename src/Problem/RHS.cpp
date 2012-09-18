@@ -29,7 +29,7 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
   unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   unsigned spaceDim = cellTopo.getDimension();
     
-  TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( testOrdering->totalDofs() != rhsVector.dimension(1) ),
                      std::invalid_argument,
                      "testOrdering->totalDofs() (=" << testOrdering->totalDofs() << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
   
@@ -96,7 +96,7 @@ void RHS::integrateAgainstOptimalTests(FieldContainer<double> &rhsVector,
   // rhsVector dimensions are: (numCells, # trialOrdering Dofs) == (numCells, # optimal test functions)
   // optimalTestWeights dimensions are: (numCells, numTrial, numTest) -- numTrial is the optTest index
   
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != rhsVector.dimension(1) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != rhsVector.dimension(1) ),
                      std::invalid_argument,
                      "optimalTestWeights.dimension(1) (=" << optimalTestWeights.dimension(1) << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
   

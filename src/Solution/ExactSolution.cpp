@@ -88,10 +88,10 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
   
   // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
                      std::invalid_argument,
                      "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
                      std::invalid_argument,
                      "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   
@@ -118,7 +118,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
   if ( !boundaryIntegral ) {
     if (sideIndex != 0) {
-      TEST_FOR_EXCEPTION(sideIndex != 0,std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION(sideIndex != 0,std::invalid_argument,
                          "For field variables, sideIndex argument should always be 0.")
     }
     // volume integral

@@ -47,19 +47,19 @@ MultiBasis::MultiBasis(vector< BasisPtr > bases, FieldContainer<double> &subRefN
   this -> _cellTopo = cellTopo;
   
   if (_cellTopo.getKey() != shards::Line<2>::key ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis only supports lines right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis only supports lines right now.");
   }
   
   if (_subRefNodes.rank() != 3) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "subRefNodes should be rank 3.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subRefNodes should be rank 3.");
   }
   
   // in 1D, each subRefCell ought to have 2 nodes
   if (_subRefNodes.dimension(1) != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis requires two nodes per line segment.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis requires two nodes per line segment.");
   }
   if (_subRefNodes.dimension(2) != 1) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis requires subRefNodes to have dimensions (numSubRefCells,numNodesPerCell,spaceDim).  Right now, spaceDim must==1.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis requires subRefNodes to have dimensions (numSubRefCells,numNodesPerCell,spaceDim).  Right now, spaceDim must==1.");
   }
   
   int numSharedNodes = 0; // only valid for lines
@@ -87,10 +87,10 @@ MultiBasis::MultiBasis(vector< BasisPtr > bases, FieldContainer<double> &subRefN
   this -> basisDegree_       = basisDegree;
   
   if (bases[0]->getBaseCellTopology().getKey() != _cellTopo.getKey() ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[0] must have baseCellTopo == cellTopo");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[0] must have baseCellTopo == cellTopo");
   }
   if (bases[1]->getBaseCellTopology().getKey() != _cellTopo.getKey() ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[1] must have baseCellTopo == cellTopo");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis bases[1] must have baseCellTopo == cellTopo");
   }
   this -> basisCellTopology_ = _cellTopo;
   this -> basisType_         = bases[0]->getBasisType();
@@ -170,10 +170,10 @@ void MultiBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
 //  int numNodesPerCell = _subRefNodes.dimension(1);
   int spaceDim = inputPoints.dimension(1);
   if (spaceDim != _cellTopo.getDimension() ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo.getDimension()");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _cellTopo.getDimension()");
   }
   if (spaceDim != 1) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
   }
   //map<int,int> subRefCellForPoint; // key: pointIndex; value: subRefCellIndex
   map<int,vector<int> > pointsForSubRefCell; // key: subRefCellIndex; values: vector<pointIndex>
@@ -317,10 +317,10 @@ void MultiBasis::initializeTags() {
   
   // double-check that our assumptions about the sub-bases have not been violated:
   if (firstVertexDofOrdinal != 0) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has first vertex dofOrdinal in unexpected spot." );
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has first vertex dofOrdinal in unexpected spot." );
   }
   if (secondVertexDofOrdinal != N-1) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has second vertex dofOrdinal in unexpected spot." );
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-basis has second vertex dofOrdinal in unexpected spot." );
   }
   
   int *tags = new int[ tagSize * N ];
@@ -428,7 +428,7 @@ BasisPtr MultiBasis::getLeafBasis(int leafOrdinal) {
     }
     leafOrdinalOffset += numLeaves;
   }
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
 }
 
 vector< pair<int,int> > MultiBasis::adjacentVertexOrdinals() { // NOTE: prototype, untested code!
@@ -485,7 +485,7 @@ int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdina
     dofOffset += basis->getCardinality();
     previousMaxReachable = maxReachableLeaf;
   }
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
 }
 
 void MultiBasis::printInfo() {

@@ -63,20 +63,20 @@ void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
   } else if ( weight->rank() == 0 || var->rank() == 0) { // then we multiply each term by scalar
     rank = (weight->rank() == 0) ? var->rank() : weight->rank(); // rank is the non-zero one
   } else {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled rank combination.");
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled rank combination.");
   }
   if (_rank == -1) { // LinearTerm's rank is unassigned
     _rank = rank;
   }
   if (_rank != rank) {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of unlike rank." );
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of unlike rank." );
   }
   // check type:
   if (_termType == UNKNOWN_TYPE) {
     _termType = var->varType();
   }
   if (_termType != var->varType() ) {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
   }
   _summands.push_back( make_pair( weight, var ) );
   _varIDs.insert(var->ID());
@@ -136,7 +136,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > basis;
   bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
-  bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm;
+  bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm || basisCache->isSideCache();
   
   // boundaryTerm ==> even volume summands should be restricted to boundary
   // (if thisFluxOrTrace, there won't be any volume summands, so the above will hold trivially)
@@ -195,17 +195,29 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
         }
       }
     } else {
-      for (int sideIndex = 0; sideIndex < numSides; sideIndex++ ) {
-        int numPoints = boundaryTerm ? basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1)
-        : basisCache->getPhysicalCubaturePoints().dimension(1);
+      BasisCachePtr volumeCache;
+      int startSideIndex, endSideIndex;
+      if ( basisCache->isSideCache() ) {
+        // just one side, then:
+        startSideIndex = basisCache->getSideIndex();
+        endSideIndex = startSideIndex;
+        volumeCache = basisCache->getVolumeBasisCache();
+      } else {
+        // all sides:
+        startSideIndex = 0;
+        endSideIndex = numSides - 1;
+        volumeCache = basisCache;
+      }
+      for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++ ) {
+        int numPoints = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
         
-        basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex)
-        : thisOrdering->getBasis(varID);
+        basis = thisFluxOrTrace ? thisOrdering->getBasis(varID,sideIndex) 
+                                : thisOrdering->getBasis(varID);
         int basisCardinality = basis->getCardinality();
         ltValueDim[1] = basisCardinality;
         ltValueDim[2] = numPoints;
         ltValues.resize(ltValueDim);
-        BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+        BasisCachePtr sideBasisCache = volumeCache->getSideBasisCache(sideIndex);
         bool applyCubatureWeights = true;
         bool naturalBoundaryValuesOnly = false; // DO include volume summands restricted to boundary
         this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
@@ -217,7 +229,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
           // that the neighboring cells have opposite normal
           // ltValues should have dimensions (numCells,numFields,numCubPointsSide)
           for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+            double parity = volumeCache->getCellSideParities()(cellIndex,sideIndex);
             if (parity != 1.0) {  // otherwise, we can just leave things be...
               for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
                 for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -255,7 +267,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   set<int> otherIDs = otherTerm->varIDs();
   
   int rank = this->rank();
-  TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
+  TEUCHOS_TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
   
   set<int>::iterator thisIt;
   set<int>::iterator otherIt;
@@ -265,7 +277,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   bool thisFluxOrTrace  = (     this->termType() == FLUX) || (     this->termType() == TRACE);
   bool otherFluxOrTrace = (otherTerm->termType() == FLUX) || (otherTerm->termType() == TRACE);
 
-  bool boundaryTerm = thisFluxOrTrace || otherFluxOrTrace || forceBoundaryTerm;
+  bool boundaryTerm = thisFluxOrTrace || otherFluxOrTrace || forceBoundaryTerm || basisCache->isSideCache();
   
   Teuchos::Array<int> ltValueDim;
   ltValueDim.push_back(numCells);
@@ -274,10 +286,25 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   // num "sides" for volume integral: 1...
   int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
-  for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
+  
+  BasisCachePtr volumeCache;
+  int startSideIndex, endSideIndex;
+  if ( basisCache->isSideCache() ) {
+    // just one side, then:
+    startSideIndex = basisCache->getSideIndex();
+    endSideIndex = startSideIndex;
+    volumeCache = basisCache->getVolumeBasisCache();
+  } else {
+    // all sides:
+    startSideIndex = 0;
+    endSideIndex = numSides - 1;
+    volumeCache = basisCache;
+  }
+  
+  for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++) {
     int numPointsSide;
     if (boundaryTerm) { 
-      numPointsSide = basisCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
+      numPointsSide = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
     } else {
       numPointsSide = -1;      
     }
@@ -297,9 +324,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       FieldContainer<double> otherValues(ltValueDim1);
       bool applyCubatureWeights = true;
       if (! boundaryTerm) {
-        otherTerm->values(otherValues,otherID,otherBasis,basisCache,applyCubatureWeights);
+        otherTerm->values(otherValues,otherID,otherBasis,volumeCache,applyCubatureWeights);
       } else {
-        otherTerm->values(otherValues,otherID,otherBasis,basisCache->getSideBasisCache(sideIndex),applyCubatureWeights);
+        otherTerm->values(otherValues,otherID,otherBasis,volumeCache->getSideBasisCache(sideIndex),applyCubatureWeights);
       }
       
       for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
@@ -315,9 +342,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
         
         if (! boundaryTerm ) {
 #warning Need to add integration of boundary-only terms to the putative volume integral (for function weights defined only on element boundaries)....
-          this->values(thisValues,thisID,thisBasis,basisCache,false);
+          this->values(thisValues,thisID,thisBasis,volumeCache,false);
         } else {
-          this->values(thisValues,thisID,thisBasis,basisCache->getSideBasisCache(sideIndex),false); // false: don't apply cubature weights
+          this->values(thisValues,thisID,thisBasis,volumeCache->getSideBasisCache(sideIndex),false); // false: don't apply cubature weights
           if ( this->termType() == FLUX ) {
             // we need to multiply thisValues' entries by the parity of the normal, since
             // the trial implicitly contains an outward normal, and we need to adjust for the fact
@@ -326,7 +353,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
             int numFields = thisValues.dimension(1);
             int numPoints = thisValues.dimension(2);
             for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              double parity = volumeCache->getCellSideParities()(cellIndex,sideIndex);
               if (parity != 1.0) {  // otherwise, we can just leave things be...
                 for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
                   for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -341,7 +368,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
             int numFields = otherValues.dimension(1);
             int numPoints = otherValues.dimension(2);
             for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-              double parity = basisCache->getCellSideParities()(cellIndex,sideIndex);
+              double parity = volumeCache->getCellSideParities()(cellIndex,sideIndex);
               if (parity != 1.0) {  // otherwise, we can just leave things be...
                 for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
                   for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -400,7 +427,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   set<int> otherIDs = otherTerm->varIDs();
   
   int rank = this->rank();
-  TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
+  TEUCHOS_TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
   
   set<int>::iterator thisIt;
   set<int>::iterator otherIt;
@@ -525,7 +552,7 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
 //  bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
-  TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
                      "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
@@ -545,9 +572,9 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
   tensorFunctionValueDim.append(spaceDim);
   
-  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                      std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
@@ -626,12 +653,12 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
 }
 
 bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
-  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL) || 
-  (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
+  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   || 
+                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) || 
+                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) || 
+                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) || 
+                          (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   || 
+                          (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
   bool boundaryOnlyFunction = ls.first->boundaryValueOnly();
   return boundaryOnlyFunction || (ls.second->varType()==FLUX) || (ls.second->varType()==TRACE) || opInvolvesNormal;
 }
@@ -663,11 +690,11 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
   tensorFunctionValueDim.append(spaceDim);
   
-  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEST_FOR_EXCEPTION( numFields != basis->getCardinality(),
+  TEUCHOS_TEST_FOR_EXCEPTION( numFields != basis->getCardinality(),
                      std::invalid_argument, "values FC numFields disagrees with basis cardinality");
-  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                      std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
@@ -825,9 +852,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
   fxnValueAsBasisDim = fxnValueDim;
   fxnValueAsBasisDim.insert(fxnValueDim.begin()+1, numFields); // (C, F, ...)
   
-  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                      std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
@@ -1059,7 +1086,7 @@ void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
       cellIDs.push_back(cellID);
     }
     
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
      
     // prepare basisCache and cellIDs
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh));
@@ -1111,7 +1138,7 @@ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos:
     FieldContainer<double> rieszReps = _rieszRepresentationForElementType[elemTypePtr.get()];
     int numTestDofs = rhs.dimension(1);    
     int numCells = rhs.dimension(0);    
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
     
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       double normSquared = 0.0;
@@ -1184,14 +1211,14 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
     _rank = a.rank();
   }
   if (_rank != a.rank()) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
   }
   if (_termType == UNKNOWN_TYPE) {
     _termType = a.termType();
   }
   if (_termType != a.termType()) {
     if (!overrideTypeCheck) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
     } else {
       _termType = MIXED_TYPE;
     }

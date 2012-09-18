@@ -43,7 +43,7 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
   // test to see if we already have one matching this.  (If so, that's an error.)
   pair<int,int> key = make_pair(varID, sideIndex);
   if ( indices.find(key) != indices.end() ) {
-    TEST_FOR_EXCEPTION( true,
+    TEUCHOS_TEST_FOR_EXCEPTION( true,
                        std::invalid_argument,
                        "Already have an entry in DofOrdering for this varID, sideIndex pair.");
   } else {
@@ -83,7 +83,7 @@ void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
     sidePair1 = make_pair(side2,basisDofOrdinal2);
     sidePair2 = make_pair(side1,basisDofOrdinal1);
   } else { // side2 == side1 -- probably an exception
-    TEST_FOR_EXCEPTION( ( side1 == side2 ),
+    TEUCHOS_TEST_FOR_EXCEPTION( ( side1 == side2 ),
                        std::invalid_argument,
                        "addIdentification for side1==side2 not supported.");
   }
@@ -98,10 +98,10 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
                           const FieldContainer<double> &oldValues ) {
   // copy the coefficients for the bases that agree between the two DofOrderings
   // requires that "like" bases are actually pointers to the same memory location
-  TEST_FOR_EXCEPTION( newValues.rank() != 1, std::invalid_argument, "newValues.rank() != 1");
-  TEST_FOR_EXCEPTION( newValues.size() != totalDofs(), std::invalid_argument, "newValues.size() != totalDofs()");
-  TEST_FOR_EXCEPTION( oldValues.rank() != 1, std::invalid_argument, "oldValues.rank() != 1");
-  TEST_FOR_EXCEPTION( oldValues.size() != oldDofOrdering->totalDofs(), std::invalid_argument, "oldValues.size() != oldDofOrdering->totalDofs()");
+  TEUCHOS_TEST_FOR_EXCEPTION( newValues.rank() != 1, std::invalid_argument, "newValues.rank() != 1");
+  TEUCHOS_TEST_FOR_EXCEPTION( newValues.size() != totalDofs(), std::invalid_argument, "newValues.size() != totalDofs()");
+  TEUCHOS_TEST_FOR_EXCEPTION( oldValues.rank() != 1, std::invalid_argument, "oldValues.rank() != 1");
+  TEUCHOS_TEST_FOR_EXCEPTION( oldValues.size() != oldDofOrdering->totalDofs(), std::invalid_argument, "oldValues.size() != oldDofOrdering->totalDofs()");
   
   newValues.initialize(0.0);
   
@@ -128,20 +128,20 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
   if (entry == bases.end()) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis not found.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis not found.");
   }
   return (*entry).second;
 }
 
 int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int subSideIndex) { 
-  TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
                      std::invalid_argument,
                      "getDofIndex called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
   if (subSideIndex >= 0) {
     // then we've got a MultiBasis, and the basisDofOrdinal we have is *relative* to the subbasis
     BasisPtr basis = getBasis(varID,sideIndex);
     if ( ! BasisFactory::isMultiBasis(basis) ) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
     }
     MultiBasis* multiBasis = (MultiBasis*) basis.get();
     //cout << "(basisDofOrdinal, subSideIndex) : (" << basisDofOrdinal << ", " << subSideIndex << ") --> ";
@@ -153,23 +153,23 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
   if ( entryIt != indices.end() ) {
     int dofIndex = ((*entryIt).second)[basisDofOrdinal];
-    TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
+    TEUCHOS_TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
     return dofIndex;
   } else {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
     return -1;
   }
 }
 
 const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) {
-  TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
                      std::invalid_argument,
                      "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
   
   pair<int,int> key = make_pair(varID, sideIndex);
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
   if ( entryIt == indices.end() ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
   }
   return (*entryIt).second;
 }
