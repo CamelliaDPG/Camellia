@@ -1074,7 +1074,7 @@ int main(int argc, char *argv[]) {
 
   double ReferenceRe = 100; // galerkin can represent Re = 10 easily on a standard 8x8 mesh, so no prerefs there
   int numPreRefs = round(max(ceil(log10(Re/ReferenceRe)),0.0));
-  numPreRefs = 0;
+  numPreRefs = 2;
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
@@ -1145,6 +1145,10 @@ int main(int argc, char *argv[]) {
       //  for (int i = 0;i<numTimeSteps;i++){
       for (int j = 0;j<numNRSteps;j++){
 	solution->solve(false); 
+	cout << "num field dofs = " << mesh->numFieldDofs() << endl;
+	cout << "num flux dofs = " << mesh->numFluxDofs() << endl;
+	cout << "num dofs = " << mesh->numGlobalDofs() << endl;
+
 
 	// clear fluxes that we use for subsonic outflow, which accumulate
 	backgroundFlow->clearSolution(That->ID());
@@ -1306,6 +1310,7 @@ int main(int argc, char *argv[]) {
       
     }
   }
+
 
   return 0;
 }
