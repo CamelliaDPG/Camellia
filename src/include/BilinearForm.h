@@ -93,7 +93,7 @@ public:
   virtual bool trialTestOperator(int trialID, int testID, 
                                  IntrepidExtendedTypes::EOperatorExtended &trialOperator,
                                  IntrepidExtendedTypes::EOperatorExtended &testOperator) { 
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
   virtual void trialTestOperators(int trialID, int testID, 
@@ -104,7 +104,7 @@ public:
   virtual void applyBilinearFormData(int trialID, int testID,
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      const FieldContainer<double> &points) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
   }
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 

@@ -123,11 +123,11 @@ double PoissonExactSolution::solutionValue(int trialID,
     case PoissonBilinearForm::PSI_2:
       return sphi.dx(1); // PSI_2 == d/dy (phi)
     case PoissonBilinearForm::PSI_HAT_N:
-      TEST_FOR_EXCEPTION( trialID == PoissonBilinearForm::PSI_HAT_N,
+      TEUCHOS_TEST_FOR_EXCEPTION( trialID == PoissonBilinearForm::PSI_HAT_N,
                          std::invalid_argument,
                          "for fluxes, you must call solutionValue with unitNormal argument.");
   }
-  TEST_FOR_EXCEPTION( true,
+  TEUCHOS_TEST_FOR_EXCEPTION( true,
                      std::invalid_argument,
                      "solutionValues called with unknown trialID.");
   return 0.0;
@@ -223,16 +223,16 @@ void PoissonExactSolution::imposeBC(int varID, FieldContainer<double> &physicalP
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
                      std::invalid_argument,
                      "PoissonBCLinear expects spaceDim==2.");  
   
-  TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
                      || ( dirichletValues.dimension(1) != numPoints ) 
                      || ( dirichletValues.rank() != 2  ),
                      std::invalid_argument,
                      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
                      || ( imposeHere.dimension(1) != numPoints ) 
                      || ( imposeHere.rank() != 2  ),
                      std::invalid_argument,

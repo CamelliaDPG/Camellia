@@ -78,7 +78,7 @@ pair<int,int> Element::ancestralNeighborCellIDForSide(int sideIndex) {
   // once we get here, we have the appropriate ancestor:
   int elemSideIndexInNeighbor = elem->getSideIndexInNeighbor(sideIndex);
   if (elemSideIndexInNeighbor >= 4) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
   }
   return make_pair(elem->cellID(),elemSideIndexInNeighbor);
 }
@@ -93,7 +93,7 @@ void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborR
   // TODO: consider incorporating similar logic here, and reduce the amount of logic in neighborBasesAgreeOnSides().
   
   if ((sideIndex >= _numSides) || (_neighbors[sideIndex].first == NULL) || (_neighbors[sideIndex].first->cellID() == -1) ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "neighbor is NULL.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "neighbor is NULL.");
   }
   // 2D: assume that neighbor and element both have similarly ordered (CW or CCW) vertices, so that
   //     the transformation is just a flip from (-1,1) to (1,-1)
@@ -117,11 +117,11 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
    */
    
   if (_parent == NULL) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"parent is null");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"parent is null");
   }
   
   if (childRefPoints.size() != parentRefPoints.size()) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"childRefPoints.size() != parentRefPoints.size()");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"childRefPoints.size() != parentRefPoints.size()");
   }
   
   int parentSideIndex = parentSideForSideIndex(sideIndex);
@@ -144,7 +144,7 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
     childEdgeNodesInParentRef(0,0,0) = 0;
     childEdgeNodesInParentRef(0,1,0) = 1;
   } else {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "indexInParentSide isn't 0 or 1" );
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "indexInParentSide isn't 0 or 1" );
   }
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
@@ -173,7 +173,7 @@ int Element::numChildren() {
 }
 
 void Element::setNeighbor(int neighborsSideIndexInMe, Teuchos::RCP< Element > elemPtr, int mySideIndexInNeighbor) {
-  TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
                      std::invalid_argument,
                      "neighbor's side index in me is out of bounds.");
   // get the raw pointer, to avoid circular references.  The Mesh owns a reference to each Element, which is good
@@ -243,7 +243,7 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
 }
 
 void Element::getNeighbor(Element* &elemPtr, int & mySideIndexInNeighbor, int neighborsSideIndexInMe) {
-  TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( neighborsSideIndexInMe >= _numSides ) || (neighborsSideIndexInMe < 0),
                      std::invalid_argument,
                      "neighbor's side index in me is out of bounds.");
   elemPtr = _neighbors[neighborsSideIndexInMe].first;

@@ -193,7 +193,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh) {
                   }
                 }
                 if (leafIndexInNeighbor == -1) {
-                  TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not determine leafIndexInNeigbor.");
+                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not determine leafIndexInNeigbor.");
                 }
                 // check whether the basis is the right size:
                 MultiBasis* neighborMultiBasis = (MultiBasis*) neighbor->elementType()->trialOrderPtr->getBasis(trialID,ancestralSideIndexInNeighbor).get();

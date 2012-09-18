@@ -63,20 +63,20 @@ void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
   } else if ( weight->rank() == 0 || var->rank() == 0) { // then we multiply each term by scalar
     rank = (weight->rank() == 0) ? var->rank() : weight->rank(); // rank is the non-zero one
   } else {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled rank combination.");
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled rank combination.");
   }
   if (_rank == -1) { // LinearTerm's rank is unassigned
     _rank = rank;
   }
   if (_rank != rank) {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of unlike rank." );
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of unlike rank." );
   }
   // check type:
   if (_termType == UNKNOWN_TYPE) {
     _termType = var->varType();
   }
   if (_termType != var->varType() ) {
-    TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
   }
   _summands.push_back( make_pair( weight, var ) );
   _varIDs.insert(var->ID());
@@ -427,7 +427,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   set<int> otherIDs = otherTerm->varIDs();
   
   int rank = this->rank();
-  TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
+  TEUCHOS_TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
   
   set<int>::iterator thisIt;
   set<int>::iterator otherIt;
@@ -552,7 +552,7 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
 //  bool boundaryTerm = (sideIndex != -1);
   
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
-  TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
                      "values FC does not have the expected rank" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
@@ -572,9 +572,9 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
   tensorFunctionValueDim.append(spaceDim);
   
-  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                      std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
@@ -852,9 +852,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
   fxnValueAsBasisDim = fxnValueDim;
   fxnValueAsBasisDim.insert(fxnValueDim.begin()+1, numFields); // (C, F, ...)
   
-  TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                      std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
                      std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
@@ -1086,7 +1086,7 @@ void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
       cellIDs.push_back(cellID);
     }
     
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
      
     // prepare basisCache and cellIDs
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,mesh));
@@ -1138,7 +1138,7 @@ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos:
     FieldContainer<double> rieszReps = _rieszRepresentationForElementType[elemTypePtr.get()];
     int numTestDofs = rhs.dimension(1);    
     int numCells = rhs.dimension(0);    
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
     
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       double normSquared = 0.0;
@@ -1211,14 +1211,14 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
     _rank = a.rank();
   }
   if (_rank != a.rank()) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
   }
   if (_termType == UNKNOWN_TYPE) {
     _termType = a.termType();
   }
   if (_termType != a.termType()) {
     if (!overrideTypeCheck) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike type.");
     } else {
       _termType = MIXED_TYPE;
     }

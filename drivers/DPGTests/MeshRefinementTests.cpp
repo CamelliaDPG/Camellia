@@ -316,7 +316,7 @@ void MeshRefinementTests::preStiffnessExpectedPatch(FieldContainer<double> &preS
         agreeValue[1]    = 5.0 / 6.0;
         disagreeValue[1] = 2.0 / 3.0;
       } else {
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported indexInParentSide.");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported indexInParentSide.");
       }
     }
     

@@ -61,12 +61,12 @@ namespace Intrepid {
     
     int numFields = outputValues.dimension(0);
     int numPoints = outputValues.dimension(1);
-    TEST_FOR_EXCEPTION( numPoints != inputPoints.dimension(0), std::invalid_argument, "outputValues.dimension(1) != inputPoints.dimension(0)");
+    TEUCHOS_TEST_FOR_EXCEPTION( numPoints != inputPoints.dimension(0), std::invalid_argument, "outputValues.dimension(1) != inputPoints.dimension(0)");
     switch (operatorType) {
       case OPERATOR_DIV:
       case OPERATOR_CURL:
       {
-        TEST_FOR_EXCEPTION(true,std::invalid_argument,
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                            "Error: should use BasisEvaluation for DIV, CURL of VECTOR_HGRAD.");
         // the above exception because we haven't figured out the right way to scale
         // the results coming from below.  (We need to do the HGRAD_transform_GRAD, and compute the DIV or CURL from this...)
@@ -110,7 +110,7 @@ namespace Intrepid {
                                                                const ArrayScalar &    inputPoints,
                                                                const ArrayScalar &    cellVertices,
                                                                const EOperator        operatorType) const {
-    TEST_FOR_EXCEPTION( (true), std::logic_error,
+    TEUCHOS_TEST_FOR_EXCEPTION( (true), std::logic_error,
                        ">>> ERROR (Basis_HGRAD_2D_Cn_FEM): FEM Basis calling an FVD member function");
   }
 

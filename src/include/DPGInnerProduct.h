@@ -84,7 +84,7 @@ public:
                                      FieldContainer<double> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
                                      const FieldContainer<double>& physicalPoints) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyInnerProductData!");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyInnerProductData!");
   }
   
   virtual void applyInnerProductData(FieldContainer<double> &testValues1,

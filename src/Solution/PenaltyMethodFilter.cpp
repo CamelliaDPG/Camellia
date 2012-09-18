@@ -21,7 +21,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
   typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
   
   // assumption: filter gets elements of all the same type  
-  TEST_FOR_EXCEPTION(basisCache->cellIDs().size()==0,std::invalid_argument,"no cell IDs given to filter");
+  TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellIDs().size()==0,std::invalid_argument,"no cell IDs given to filter");
   
   ElementTypePtr elemTypePtr = mesh->elements()[basisCache->cellIDs()[0]]->elementType(); 
   int numCells = localStiffnessMatrix.dimension(0);

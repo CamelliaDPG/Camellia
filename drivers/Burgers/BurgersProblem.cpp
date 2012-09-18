@@ -102,7 +102,7 @@ void BurgersProblem::imposeBC(int varID, FieldContainer<double> &physicalPoints,
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   double tol = 1e-14;
-  TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
+  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
   
   FieldContainer<double> beta = _bf->getBeta(physicalPoints);
   for (int cellIndex=0; cellIndex < numCells; cellIndex++) {

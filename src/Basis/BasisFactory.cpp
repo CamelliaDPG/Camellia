@@ -69,7 +69,7 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
                                 int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
 
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
-    TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
+    TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
   
   BasisPtr basis;
@@ -115,7 +115,7 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
           break;
           default:
-            TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
                                   (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) &&
                                   (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) &&
                                   (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
@@ -142,7 +142,7 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             basisRank = 0;
             break;
           default:
-            TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
                                  (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) &&
                                  (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) &&
                                  (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
@@ -161,14 +161,14 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             basisRank = 0;
           break;
           default:        
-            TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
                                   (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
                                std::invalid_argument,
                               "Unhandled function space for line_2. Please use HGRAD or HVOL.");
         }
       break;
       default:
-        TEST_FOR_EXCEPTION( ( (cellTopoKey != shards::Quadrilateral<4>::key)        &&
+        TEUCHOS_TEST_FOR_EXCEPTION( ( (cellTopoKey != shards::Quadrilateral<4>::key)        &&
                               (cellTopoKey != shards::Triangle<3>::key)             &&
                               (cellTopoKey != shards::Line<2>::key) ),
                                std::invalid_argument,
@@ -200,12 +200,12 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   int basisRank;
   
   if (numBases != 2) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
   }
   
   for (int i=0; i<numBases; i++) {
     if (! basisKnown(bases[i]) ) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory can only make MultiBasis from registered Basis pointers.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory can only make MultiBasis from registered Basis pointers.");
     }
     
     polyOrder = max(polyOrder,_polyOrders[bases[i].get()]);
@@ -216,7 +216,7 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   
   if ((_cellTopoKeys[bases[0].get()] != shards::Line<2>::key)
     || (_cellTopoKeys[bases[1].get()] != shards::Line<2>::key) )  {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
   }
   int spaceDim=1, numNodesPerSubRefCell = 2; 
   FieldContainer<double> subRefNodes(numBases,numNodesPerSubRefCell,spaceDim);
@@ -238,10 +238,10 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
 }
 
 PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey) {
-  TEST_FOR_EXCEPTION(cellTopoKey != shards::Line<2>::key, std::invalid_argument, "getPatchBasis only supports lines right now.");
-  TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(0) != 2, std::invalid_argument, "should be just 2 points in patchNodes.");
-  TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(1) != 1, std::invalid_argument, "patchNodes.dimension(1) != 1.");
-  TEST_FOR_EXCEPTION(! basisKnown(parent), std::invalid_argument, "parentBasis not registered with BasisFactory.");
+  TEUCHOS_TEST_FOR_EXCEPTION(cellTopoKey != shards::Line<2>::key, std::invalid_argument, "getPatchBasis only supports lines right now.");
+  TEUCHOS_TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(0) != 2, std::invalid_argument, "should be just 2 points in patchNodes.");
+  TEUCHOS_TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(1) != 1, std::invalid_argument, "patchNodes.dimension(1) != 1.");
+  TEUCHOS_TEST_FOR_EXCEPTION(! basisKnown(parent), std::invalid_argument, "parentBasis not registered with BasisFactory.");
   vector<double> points;
   for (int i=0; i<patchNodesInParentRefCell.size(); i++) {
     points.push_back(patchNodesInParentRefCell[i]);
@@ -268,7 +268,7 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
 void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
   pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   if ( _existingBasis.find(key) != _existingBasis.end() ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "Can't register a basis for which there's already an entry...");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "Can't register a basis for which there's already an entry...");
   }
   _existingBasis[key] = basis;
   _polyOrders[basis.get()] = polyOrder;

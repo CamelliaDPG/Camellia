@@ -112,7 +112,7 @@ DofOrderingPtr DofOrderingFactory::getTrialOrdering(DofOrdering &ordering) {
   if ( orderingIt != _trialOrderings.end() ) {
     return *orderingIt;
   }
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
 }
 
 DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
@@ -121,7 +121,7 @@ DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
   if ( orderingIt != _testOrderings.end() ) {
     return *orderingIt;
   }
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
 }
 
 void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering,
@@ -178,7 +178,7 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
     // all side variables, which is a bit weird
     // if we have some idea of what the minimum poly order is for a side, then we return that.
     // otherwise, throw an exception
-    TEST_FOR_EXCEPTION( minSidePolyOrder == INT_MAX,
+    TEUCHOS_TEST_FOR_EXCEPTION( minSidePolyOrder == INT_MAX,
                        std::invalid_argument,
                        "DofOrdering appears not to have any interior (volume) varIDs--DofOrderingFactory cannot pRefine.");
     return minSidePolyOrder;
@@ -251,7 +251,7 @@ void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sid
 void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
                                           const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
                                           int childIndexInParentSide, const shards::CellTopology &childCellTopo) {
-  TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
+  TEUCHOS_TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
   map<int, BasisPtr> varIDsToUpgrade = getPatchBasisUpgradeMap(childTrialOrdering, childSideIndex, parentTrialOrdering,
                                                                parentSideIndex, childIndexInParentSide);
   childTrialOrdering = upgradeSide(childTrialOrdering,childCellTopo,varIDsToUpgrade,childSideIndex);
@@ -290,7 +290,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
       if (numSides > 1) { // a variable that lives on the sides: we need to match basis
         BasisPtr basis  = parentTrialOrdering->getBasis(varID,sideIndex);
         if (! BasisFactory::isMultiBasis(basis) ) {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
         }
         MultiBasis* multiBasis = (MultiBasis*) basis.get();
         varIDsToUpgrade[varID] = multiBasis->getSubBasis(childIndexInParentSide);
@@ -301,7 +301,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
     int upgradedSide = matchSides(childTrialOrdering,childSideIndex,childTopo,
                                   parentTrialOrdering,sideIndex,parentTopo);
     if (upgradedSide == 2) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent should never be upgraded!");  
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent should never be upgraded!");  
     }
   }
 }
@@ -328,7 +328,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
       // use cardinality instead of degree to compare so that multiBasis > singleBasis
       if ( firstBasis->getCardinality() > secondBasis->getCardinality() ) {
         if (orderingToUpgrade == 1) {
-          TEST_FOR_EXCEPTION( true,
+          TEUCHOS_TEST_FOR_EXCEPTION( true,
                              std::invalid_argument,
                              "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
         }
@@ -337,7 +337,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
         varIDsToUpgrade[varID] = firstBasis;
       } else if (secondBasis->getCardinality() > firstBasis->getCardinality() ) {
         if (orderingToUpgrade == 2) {
-          TEST_FOR_EXCEPTION( true,
+          TEUCHOS_TEST_FOR_EXCEPTION( true,
                              std::invalid_argument,
                              "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
         }
@@ -373,7 +373,7 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     if ((varIDsToUpgrade.find(varID) != varIDsToUpgrade.end()) && numSides == 1) {
-      TEST_FOR_EXCEPTION( true,
+      TEUCHOS_TEST_FOR_EXCEPTION( true,
                          std::invalid_argument,
                          "upgradeSide requested for varID on interior.");
     }

@@ -78,7 +78,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
       
       if (testID1==ConfusionBilinearForm::V ) {
 
-        if ((operatorIndex==0)) { // if the term is c*||v|| 
+        if (operatorIndex==0) { // if the term is c*||v|| 
           
           int numCells = testValues1.dimension(0);
           int basisCardinality = testValues1.dimension(1);
