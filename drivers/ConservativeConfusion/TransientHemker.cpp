@@ -21,7 +21,7 @@
 
 // =================== Local Settings =====================
 bool transient = true;
-int numTimeSteps = 1; // max time steps
+int numTimeSteps = 10; // max time steps
 bool enforceLocalConservation = true;
 double epsilon = 1e-4;
 int numRefs = 4;
@@ -365,8 +365,19 @@ int main(int argc, char *argv[]) {
 
   // ==================== Enforce Local Conservation ==================
   if (enforceLocalConservation) {
-    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-    solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+    if (transient)
+    {
+      FunctionPtr conserved_rhs = u_prev_time * invDt;
+      LinearTermPtr conserved_quantity = invDt * u;
+      conserved_quantity->addVar(-1, beta_n_u_minus_sigma_n);
+      // conserved_quantity = conserved_quantity - beta_n_u_minus_sigma_n;
+      solution->lagrangeConstraints()->addConstraint(conserved_quantity == conserved_rhs);
+    }
+    else
+    {
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+    }
   }
 
   // ==================== Register Solutions ==========================
