@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 3; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double Re = 1e3;
@@ -618,8 +618,8 @@ int main(int argc, char *argv[]) {
 
   // y-momentum conservation
   A_euler[v3->ID()][rho->ID()] = (u1_prev * u2_prev)*e1 + (u2sq + dpdrho)*e2;
-  A_euler[v3->ID()][u1->ID()] = (u2_prev * rho_prev)*e1 + (2 * u2_prev * rho_prev)*e2;
-  A_euler[v3->ID()][u2->ID()] = (u1_prev * rho_prev)*e1;
+  A_euler[v3->ID()][u1->ID()] = (u2_prev * rho_prev)*e1;
+  A_euler[v3->ID()][u2->ID()] = (u1_prev * rho_prev)*e1 + (2 * u2_prev * rho_prev)*e2;
   A_euler[v3->ID()][T->ID()] = dpdT*e2;
 
   // y-momentum viscous terms
@@ -1145,10 +1145,9 @@ int main(int argc, char *argv[]) {
       //  for (int i = 0;i<numTimeSteps;i++){
       for (int j = 0;j<numNRSteps;j++){
 	solution->solve(false); 
-	cout << "num field dofs = " << mesh->numFieldDofs() << endl;
-	cout << "num flux dofs = " << mesh->numFluxDofs() << endl;
-	cout << "num dofs = " << mesh->numGlobalDofs() << endl;
-
+	//	cout << "num field dofs = " << mesh->numFieldDofs() << endl;
+	//	cout << "num flux dofs = " << mesh->numFluxDofs() << endl;
+	//	cout << "num dofs = " << mesh->numGlobalDofs() << endl;
 
 	// clear fluxes that we use for subsonic outflow, which accumulate
 	backgroundFlow->clearSolution(That->ID());
