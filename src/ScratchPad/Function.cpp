@@ -25,9 +25,75 @@ int Function::rank() {
   return _rank; 
 }
 
+void Function::values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache) {
+  switch (op) {
+    case IntrepidExtendedTypes::OP_VALUE:
+      this->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DX:
+      this->dx()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DY:
+      this->dy()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DZ:
+      this->dz()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_GRAD:
+      this->grad()->values(values, basisCache);
+      break;
+    case IntrepidExtendedTypes::OP_DIV:
+      this->div()->values(values, basisCache);
+      break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
+      break;
+  }
+  if (op==IntrepidExtendedTypes::OP_VALUE) {
+    
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
+  }
+}
+
+FunctionPtr Function::dx() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::dy() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::dz() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::grad() {
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
+  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+    return Teuchos::rcp((Function *)NULL);
+  } else if (dzFxn.get() == NULL) {
+    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+  } else {
+    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+  }
+}
+
+FunctionPtr Function::div() {
+  FunctionPtr dxFxn = dx();
+  FunctionPtr dyFxn = dy();
+  FunctionPtr dzFxn = dz();
+  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+    return Teuchos::rcp((Function *)NULL);
+  } else if (dzFxn.get() == NULL) {
+    return dxFxn + dyFxn;
+  } else {
+    return dxFxn + dyFxn + dzFxn;
+  }
+}
+
 void Function::CHECK_VALUES_RANK(FieldContainer<double> &values) { // throws exception on bad values rank
   // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
-  TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
+  TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
 }
 
 void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache) {
@@ -43,7 +109,7 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
 
 void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache,
                          bool sumInto) {
-  TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
+  TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
   int numCells = cellIntegrals.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   FieldContainer<double> values(numCells,numPoints);
@@ -119,9 +185,9 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
 void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache) {
-  TEST_FOR_EXCEPTION( _rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION( _rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,
                      "Can't dot functions of unlike rank");
-  TEST_FOR_EXCEPTION( values.rank() != 2, std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != 2, std::invalid_argument,
                      "values container should have size (numCells, numPoints" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
@@ -169,7 +235,7 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
 
 void Function::scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                           FunctionModificationType modType) {
-  TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
+  TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
@@ -202,7 +268,7 @@ void Function::scalarModifyFunctionValues(FieldContainer<double> &values, BasisC
 
 void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                        FunctionModificationType modType) {
-  TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyBasisValues only supported for scalar functions" );
+  TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyBasisValues only supported for scalar functions" );
   int numCells = values.dimension(0);
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
@@ -452,7 +518,7 @@ int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
   if (f1->rank() == f2->rank()) return 0;
   if (f1->rank() == 0) return f2->rank();
   if (f2->rank() == 0) return f1->rank();
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank pairing for function product.");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank pairing for function product.");
 }
 
 ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( productRank(f1,f2) ) {
@@ -482,7 +548,7 @@ void ProductFunction::values(FieldContainer<double> &values, BasisCachePtr basis
 
 QuotientFunction::QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor) : Function( f->rank() ) {
   if ( scalarDivisor->rank() != 0 ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank combination.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank combination.");
   }
   _f = f;
   _scalarDivisor = scalarDivisor;
@@ -499,7 +565,7 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
 }
 
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
-  TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
   _f1 = f1;
   _f2 = f2;
 }
@@ -575,15 +641,15 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   int numPoints = values.dimension(1);
   int sideIndex = sideBasisCache->getSideIndex();
   if (sideIndex == -1) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
   }
   vector<int> cellIDs = sideBasisCache->cellIDs();
   if (cellIDs.size() != numCells) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIDs.size() != numCells");
   }
   Teuchos::RCP<Mesh> mesh = sideBasisCache->mesh();
   if (! mesh.get()) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "mesh unset in BasisCache.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mesh unset in BasisCache.");
   }
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     int parity = mesh->cellSideParitiesForCell(cellIDs[cellIndex])(0,sideIndex);
@@ -610,6 +676,39 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
       double n2 = (*sideNormals)(cellIndex,ptIndex,1);
       values(cellIndex,ptIndex,0) = n1;
       values(cellIndex,ptIndex,1) = n2;
+    }
+  }
+}
+
+VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank() + 1) {
+  TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  _fxns.push_back(f1);
+  _fxns.push_back(f2);
+}
+VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3) : Function(f1->rank() + 1) {
+  TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
+  _fxns.push_back(f1);
+  _fxns.push_back(f2);
+  _fxns.push_back(f3);
+}
+void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  // this is not going to be particularly efficient, because values from the components need to be interleaved...
+  Teuchos::Array<int> dims;
+  values.dimensions(dims);
+  int numComponents = dims[dims.size()-1];
+  TEUCHOS_TEST_FOR_EXCEPTION( numComponents != _fxns.size(), std::invalid_argument, "number of components incorrect" );
+  dims.pop_back(); // remove the last, dimensions argument
+  FieldContainer<double> compValues(dims);
+  int valuesPerComponent = compValues.size();
+  
+  int numComps = _fxns.size();
+  for (int comp=0; comp < numComps; comp++) {
+    FunctionPtr fxn = _fxns[comp];
+    fxn->values(compValues, basisCache);
+    for (int i=0; i < valuesPerComponent; i++) {
+      values[ valuesPerComponent * i + comp ] = compValues[ i ];
     }
   }
 }

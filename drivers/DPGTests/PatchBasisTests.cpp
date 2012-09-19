@@ -352,7 +352,7 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
           FCPtr childValues =  BasisEvaluation::getValues(basis,OP_VALUE,_testPoints1D);
           
           // check that they agree
-          TEST_FOR_EXCEPTION(parentValues->size() != childValues->size(), std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(parentValues->size() != childValues->size(), std::invalid_argument,
                              "parentValues and childValues don't have the same size--perhaps parentBasis and child don't have the same order?");
           double maxDiff;
           if ( !fcsAgree(*parentValues,*childValues,tol,maxDiff) ) {

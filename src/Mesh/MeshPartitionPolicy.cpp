@@ -12,11 +12,11 @@
 
 void MeshPartitionPolicy::partitionMesh(Mesh *mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells) {
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
-  TEST_FOR_EXCEPTION(numPartitions != partitionedActiveCells.dimension(0), std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION(numPartitions != partitionedActiveCells.dimension(0), std::invalid_argument,
                      "numPartitions must match the first dimension of partitionedActiveCells");
   int maxPartitionSize = partitionedActiveCells.dimension(1);
   int numActiveElements = mesh->activeElements().size();
-  TEST_FOR_EXCEPTION(numActiveElements > maxPartitionSize, std::invalid_argument,
+  TEUCHOS_TEST_FOR_EXCEPTION(numActiveElements > maxPartitionSize, std::invalid_argument,
                      "second dimension of partitionedActiveCells must be at least as large as the number of active cells.");
   
   partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition

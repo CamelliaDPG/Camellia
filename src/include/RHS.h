@@ -63,11 +63,11 @@ public:
     rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
   }
   virtual void rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-    TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
+    TEUCHOS_TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
     rhs(testVarID,physicalPoints,values);
   }
   virtual void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
   }
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)

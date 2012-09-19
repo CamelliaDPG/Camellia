@@ -39,6 +39,7 @@
 #include "Mesh.h"
 #include "Function.h"
 #include "Projector.h"
+#include "VarFactory.h"
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
@@ -102,7 +103,7 @@ void Boundary::buildLookupTables() {
   //cout << "# Boundary entries: " << _boundaryElements.size() << ":\n";
   for (entryIt=_boundaryElements.begin(); entryIt!=_boundaryElements.end(); entryIt++) {
     int cellID = (*entryIt).first;
-    TEST_FOR_EXCEPTION(cellID < 0, std::invalid_argument, "cellID should be >= 0.");
+    TEUCHOS_TEST_FOR_EXCEPTION(cellID < 0, std::invalid_argument, "cellID should be >= 0.");
     Teuchos::RCP< Element > elemPtr = _mesh->elements()[cellID]; 
     int sideIndex = (*entryIt).second;
     ElementTypePtr elemTypePtr = elemPtr->elementType();
@@ -185,7 +186,7 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
       //cout << "BC: " << globalIndices(currentIndex) << " = " << globalValues(currentIndex) << endl;
       currentIndex++;
       if (index < 0) {
-        TEST_FOR_EXCEPTION( true,
+        TEUCHOS_TEST_FOR_EXCEPTION( true,
                            std::invalid_argument,
                            "bcsToImpose: error: index < 0.");
       }
@@ -207,6 +208,15 @@ void Boundary::bcsToImpose(FieldContainer<int> &globalIndices,
 
 void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &bc, 
                            Teuchos::RCP< ElementType > elemTypePtr, map<int,bool> &isSingleton) {
+  // define a couple of important inner products:
+  IPPtr ipL2 = Teuchos::rcp( new IP );
+  IPPtr ipH1 = Teuchos::rcp( new IP );
+  VarFactory varFactory;
+  VarPtr trace = varFactory.traceVar("trace");
+  VarPtr flux = varFactory.traceVar("flux");
+  ipL2->addTerm(flux);
+  ipH1->addTerm(trace);
+  ipH1->addTerm(trace->grad());
   globalDofIndicesAndValues.clear();
   typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
@@ -218,6 +228,8 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   vector< pair< int, int > > boundaryIndicesForType = _boundaryElementsByType[elemTypePtr.get()];
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *(trialIt);
+    bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+    // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
     if ( bc.bcsImposed(trialID) ) {
       // 1. Collect the physicalCellNodes according to sideIndex
       // 2. Determine global dof indices and values, in one pass per side
@@ -279,6 +291,15 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
           Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
+          // TODO: test the below.  (New as of 9/15/12, basically.)
+          // (NOT YET WORKING, HENCE COMMENTED OUT.  NEED TO MAKE LinearTerm honor side BasisCache, basically.)
+//          if (isTrace) {
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipH1, trace);
+//          } else {
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipL2, flux);
+//
+//          }
+          // was:
           Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           
           //cout << "dirichletValues:" << endl << dirichletValues;
@@ -292,7 +313,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                 int globalDofIndex = _mesh->globalDofIndex(cellID,localDofIndex);
 //                cout << "BC: " << globalDofIndex << " = " << value << " @ (" << dofPointsSidePhysical(localCellIndex,localDofIndex,0) << ", " << dofPointsSidePhysical(localCellIndex,localDofIndex,1) << ")\n";
                 if (globalDofIndex < 0) {
-                  TEST_FOR_EXCEPTION( true,
+                  TEUCHOS_TEST_FOR_EXCEPTION( true,
                                      std::invalid_argument,
                                      "bcsToImpose: error: globalDofIndex < 0.");
                 }
@@ -312,7 +333,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     // now, deal with the singletons:
     int trialID = *trialIt;
-    TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
+    TEUCHOS_TEST_FOR_EXCEPTION((isSingleton[trialID]) && ( _mesh->bilinearForm()->isFluxOrTrace(trialID) ),
                        std::invalid_argument,
                        "Singleton BCs on traces and fluxes unsupported...");
     
@@ -354,25 +375,25 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                   if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
                     basisOrdinalForPoint = i;
                   } else if (abs(basisValues(i,ptIndex) > tol) ) {
-                    TEST_FOR_EXCEPTION(true,
+                    TEUCHOS_TEST_FOR_EXCEPTION(true,
                                        std::invalid_argument,
                                        "basis value at node neither 1.0 nor 0.0"); 
                   }
                 } else {
                   if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
-                    TEST_FOR_EXCEPTION(true,
+                    TEUCHOS_TEST_FOR_EXCEPTION(true,
                                        std::invalid_argument,
                                        "multiple basis values at node == 1.0"); 
                   } else if (abs(basisValues(i,ptIndex)) > tol) {
                     cout << "error: basisValue at node neither 1 nor 0: " << basisValues(i,ptIndex) << endl;
-                    TEST_FOR_EXCEPTION(true,
+                    TEUCHOS_TEST_FOR_EXCEPTION(true,
                                        std::invalid_argument,
                                        "basis value at node neither 1.0 nor 0.0");               
                   }            
                 }
               }
               if (basisOrdinalForPoint == -1) {
-                TEST_FOR_EXCEPTION(true,
+                TEUCHOS_TEST_FOR_EXCEPTION(true,
                                    std::invalid_argument,
                                    "no nonzero basis function found at node");
               }

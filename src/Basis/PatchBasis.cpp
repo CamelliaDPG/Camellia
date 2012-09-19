@@ -47,15 +47,15 @@ PatchBasis::PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesI
   this -> _parentTopo = parentBasis->getBaseCellTopology();
   
   if (_patchCellTopo.getKey() != shards::Line<2>::key ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
   }
   
   if (_patchNodesInParentRefCell.rank() != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes should be rank 2.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes should be rank 2.");
   }
   
   if (_parentTopo.getKey() != shards::Line<2>::key) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");
   }
   
   // resize _patchNodesInParentRefCell for convenience in mapToPhysicalFrame:
@@ -74,10 +74,10 @@ PatchBasis::PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesI
   
   // in 1D, each subRefCell ought to have 2 nodes
   if (_patchNodesInParentRefCell.dimension(1) != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes requires two nodes per line segment.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "patchNodes requires two nodes per line segment.");
   }
   if (_patchNodesInParentRefCell.dimension(2) != 1) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis requires patchNodes to have dimensions (numNodesPerCell,spaceDim).  Right now, spaceDim must==1.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis requires patchNodes to have dimensions (numNodesPerCell,spaceDim).  Right now, spaceDim must==1.");
   }
   
   this -> basisCardinality_  = _parentBasis->getCardinality();
@@ -98,13 +98,13 @@ void PatchBasis::getValues(FieldContainer<double> &outputValues, const FieldCont
   int numPoints = inputPoints.dimension(0);
   int spaceDim = inputPoints.dimension(1);
   if (spaceDim != _patchCellTopo.getDimension() ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _patchCellTopo.getDimension()");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != _patchCellTopo.getDimension()");
   }
   if (spaceDim != 1) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "spaceDim != 1");
   }
   if (operatorType != Intrepid::OPERATOR_VALUE) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports OPERATOR_VALUE right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports OPERATOR_VALUE right now.");
   }
   
   typedef CellTools<double>  CellTools;

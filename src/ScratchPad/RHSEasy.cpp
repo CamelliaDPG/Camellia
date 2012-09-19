@@ -9,8 +9,8 @@
 #include "RHSEasy.h"
 
 void RHSEasy::addTerm( LinearTermPtr rhsTerm ) {
-  TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
-  TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHSEasy only handles scalar terms.");
+  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
+  TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHSEasy only handles scalar terms.");
   _terms.push_back( rhsTerm );
   set<int> testIDs = rhsTerm->varIDs();
   _testIDs.insert(testIDs.begin(),testIDs.end());

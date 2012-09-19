@@ -74,11 +74,19 @@ public:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+  void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
+                 LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
   
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
   void values(FieldContainer<double> &values, int varID, BasisPtr basis, BasisCachePtr basisCache, 
               bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
+
+  // compute the value of linearTerm for varID = fxn
+  // values shape: (C,P), (C,P,D), or (C,P,D,D)
+  void values(FieldContainer<double> &values, int varID, FunctionPtr fxn, BasisCachePtr basisCache, 
+              bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
 
@@ -93,8 +101,11 @@ public:
   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
 
-  // -------------- end of added by Jesse --------------------
   
+  // -------------- end of added by Jesse --------------------
+
+  void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
+  void addTerm(LinearTermPtr aPtr, bool overrideTypeCheck=false);
   // operator overloading niceties:
   
   LinearTerm& operator=(const LinearTerm &rhs);

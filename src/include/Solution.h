@@ -60,6 +60,7 @@
 
 class Solver;
 class LagrangeConstraints;
+class Epetra_LinearProblem;
 
 using namespace Intrepid;
 
@@ -103,6 +104,8 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
   bool _reportConditionNumber, _reportTimingResults;
+  
+  static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…

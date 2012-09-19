@@ -181,12 +181,12 @@ double StokesManufacturedSolution::solutionValue(int trialID,
           break;
         case StokesVVPBilinearForm::U_N_HAT:
         case StokesVVPBilinearForm::U_CROSS_N_HAT:
-          TEST_FOR_EXCEPTION( true,
+          TEUCHOS_TEST_FOR_EXCEPTION( true,
                              std::invalid_argument,
                              "for fluxes, you must call solutionValue with unitNormal argument.");
           break;
       }
-      TEST_FOR_EXCEPTION( true,
+      TEUCHOS_TEST_FOR_EXCEPTION( true,
                          std::invalid_argument,
                          "solutionValues called with unknown trialID.");
     } else if ( (_formulationType == ORIGINAL_CONFORMING) || (_formulationType == ORIGINAL_NON_CONFORMING) ) {
@@ -217,12 +217,12 @@ double StokesManufacturedSolution::solutionValue(int trialID,
         case StokesBilinearForm::U_N_HAT:
         case StokesBilinearForm::SIGMA1_N_HAT:
         case StokesBilinearForm::SIGMA2_N_HAT:
-          TEST_FOR_EXCEPTION( true,
+          TEUCHOS_TEST_FOR_EXCEPTION( true,
                              std::invalid_argument,
                              "for fluxes, you must call solutionValue with unitNormal argument.");
           break;
       }
-      TEST_FOR_EXCEPTION( true,
+      TEUCHOS_TEST_FOR_EXCEPTION( true,
                      std::invalid_argument,
                      "solutionValues called with unknown trialID.");
     } else if (_formulationType == MATH_CONFORMING) {
@@ -252,7 +252,7 @@ double StokesManufacturedSolution::solutionValue(int trialID,
           break;
         case StokesMathBilinearForm::SIGMA1_N_HAT:
         case StokesMathBilinearForm::SIGMA2_N_HAT:
-          TEST_FOR_EXCEPTION( true,
+          TEUCHOS_TEST_FOR_EXCEPTION( true,
                              std::invalid_argument,
                              "for fluxes, you must call solutionValue with unitNormal argument.");
           break;
@@ -342,7 +342,7 @@ bool StokesManufacturedSolution::nonZeroRHS(int testVarID) {
   } else if ( _formulationType == MATH_CONFORMING ) {
     return (testVarID == StokesMathBilinearForm::V_1) || (testVarID == StokesMathBilinearForm::V_2);
   }
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled formulation type.");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled formulation type.");
 }
 
 void StokesManufacturedSolution::f_rhs(const FieldContainer<double> &physicalPoints, FieldContainer<double> &values, int vectorComponent) { // -1 for both
@@ -394,7 +394,7 @@ void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double>
   int spaceDim = physicalPoints.dimension(2);
   
   if (_formulationType == VVP_CONFORMING) {
-    TEST_FOR_EXCEPTION( testVarID != StokesVVPBilinearForm::Q_1, std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION( testVarID != StokesVVPBilinearForm::Q_1, std::invalid_argument,
                        "for Stokes VVP, rhs called for testVarID other than Q_1" );
     f_rhs(physicalPoints,values,-1); // -1 for both components
   } else {
@@ -406,7 +406,7 @@ void StokesManufacturedSolution::rhs(int testVarID, const FieldContainer<double>
       v1 = StokesMathBilinearForm::V_1;
       v2 = StokesMathBilinearForm::V_2;
     }
-    TEST_FOR_EXCEPTION( (testVarID != v1) && (testVarID != v2), std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION( (testVarID != v1) && (testVarID != v2), std::invalid_argument,
                        "for Stokes (non-VVP), rhs called for testVarID other than V_1 and V_2" );
     if ( testVarID == v1 ) {
       f_rhs(physicalPoints,values,0);
@@ -473,16 +473,16 @@ void StokesManufacturedSolution::imposeBC(int varID, FieldContainer<double> &phy
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
                      std::invalid_argument,
                      "PoissonBCLinear expects spaceDim==2.");  
   
-  TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
                      || ( dirichletValues.dimension(1) != numPoints ) 
                      || ( dirichletValues.rank() != 2  ),
                      std::invalid_argument,
                      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
                      || ( imposeHere.dimension(1) != numPoints ) 
                      || ( imposeHere.rank() != 2  ),
                      std::invalid_argument,

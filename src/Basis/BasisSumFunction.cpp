@@ -6,7 +6,7 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  TEST_FOR_EXCEPTION(numCells!=1,std::invalid_argument,"BasisSumFunction only projects on cell at a time (allowing for differing bases per cell)");
+  TEUCHOS_TEST_FOR_EXCEPTION(numCells!=1,std::invalid_argument,"BasisSumFunction only projects on cell at a time (allowing for differing bases per cell)");
 
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   typedef CellTools<double>  CellTools;

@@ -105,7 +105,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
     } else if (thisElementVertices.size() == 4) {
       addElement(thisElementVertices,quadElemTypePtr);
     } else {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only elements with 3 or 4 vertices are supported.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only elements with 3 or 4 vertices are supported.");
     }
   }
   rebuildLookups();
@@ -128,7 +128,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
 {
   ifstream mshFile;
   mshFile.open(filePath.c_str());
-  TEST_FOR_EXCEPTION(mshFile == NULL, std::invalid_argument, "Could not open msh file");
+  TEUCHOS_TEST_FOR_EXCEPTION(mshFile == NULL, std::invalid_argument, "Could not open msh file");
   string line;
   getline(mshFile, line);
   while (line != "$Nodes")
@@ -197,8 +197,8 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
   string eleFileName = filePath+".ele";
   nodeFile.open(nodeFileName.c_str());
   eleFile.open(eleFileName.c_str());
-  TEST_FOR_EXCEPTION(nodeFile == NULL, std::invalid_argument, "Could not open node file: "+nodeFileName);
-  TEST_FOR_EXCEPTION(eleFile == NULL, std::invalid_argument, "Could not open ele file: "+eleFileName);
+  TEUCHOS_TEST_FOR_EXCEPTION(nodeFile == NULL, std::invalid_argument, "Could not open node file: "+nodeFileName);
+  TEUCHOS_TEST_FOR_EXCEPTION(eleFile == NULL, std::invalid_argument, "Could not open ele file: "+eleFileName);
   // Read node file
   string line;
   int numNodes;
@@ -246,7 +246,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   vector<FieldContainer<double> > vertices;
   vector< vector<int> > allElementVertices;
   
-  TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
                      std::invalid_argument,
                      "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
   
@@ -323,7 +323,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadB
   vector<FieldContainer<double> > vertices;
   vector< vector<int> > allElementVertices;
   
-  TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
                      std::invalid_argument,
                      "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
   
@@ -393,21 +393,21 @@ void Mesh::quadMeshCellIDs(FieldContainer<int> &cellIDs,
   //       v: verticalElements   (indexed by j)
   //       2: triangles per quad (indexed by k)
   
-  TEST_FOR_EXCEPTION(cellIDs.dimension(0)!=horizontalElements,
+  TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.dimension(0)!=horizontalElements,
                      std::invalid_argument,
                      "cellIDs should have dimensions: (horizontalElements, verticalElements) or (horizontalElements, verticalElements,2)");
-  TEST_FOR_EXCEPTION(cellIDs.dimension(1)!=verticalElements,
+  TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.dimension(1)!=verticalElements,
                      std::invalid_argument,
                      "cellIDs should have dimensions: (horizontalElements, verticalElements) or (horizontalElements, verticalElements,2)");
   if (useTriangles) {
-    TEST_FOR_EXCEPTION(cellIDs.dimension(2)!=2,
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.dimension(2)!=2,
                        std::invalid_argument,
                        "cellIDs should have dimensions: (horizontalElements, verticalElements,2)");
-    TEST_FOR_EXCEPTION(cellIDs.rank() != 3,
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.rank() != 3,
                        std::invalid_argument,
                        "cellIDs should have dimensions: (horizontalElements, verticalElements,2)");
   } else {
-    TEST_FOR_EXCEPTION(cellIDs.rank() != 2,
+    TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.rank() != 2,
                        std::invalid_argument,
                        "cellIDs should have dimensions: (horizontalElements, verticalElements)");
   }
@@ -448,7 +448,7 @@ void Mesh::addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2)
       firstDofIndex = dofIndex2;
       secondDofIndex = dofIndex1;
     } else {
-      TEST_FOR_EXCEPTION( ( dofIndex1 == dofIndex2 ) && ( cellID1 == cellID2 ),
+      TEUCHOS_TEST_FOR_EXCEPTION( ( dofIndex1 == dofIndex2 ) && ( cellID1 == cellID2 ),
                          std::invalid_argument,
                          "attempt to identify (cellID1, dofIndex1) with itself.");
       
@@ -545,7 +545,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
     } else if (children[childIndex].size() == 4) {
       childTopos[childIndex] = quadTopoPtr;
     } else {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"child with unhandled # of vertices (not 3 or 4)");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"child with unhandled # of vertices (not 3 or 4)");
     }
     Teuchos::RCP<DofOrdering> basicTrialOrdering = _dofOrderingFactory.trialOrdering(pTrial, *(childTopos[childIndex]), true);
     childTrialOrders[childIndex] = basicTrialOrdering; // we'll upgrade as needed below
@@ -627,12 +627,12 @@ ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr el
   int numDimensions = elemType->cellTopoPtr->getDimension();
   int numVertices = vertexIndices.size();
   if ( numVertices != elemType->cellTopoPtr->getVertexCount(numDimensions,0) ) {
-    TEST_FOR_EXCEPTION(true,
+    TEUCHOS_TEST_FOR_EXCEPTION(true,
                        std::invalid_argument,
                        "incompatible number of vertices for cell topology");
   }
   if (numDimensions != 2) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                        "mesh only supports 2D right now...");
   }
   int cellID = _elements.size();
@@ -647,7 +647,7 @@ ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr el
     if ( _edgeToCellIDs.find(edgeReversed) != _edgeToCellIDs.end() ) {
       // there's already an entry for this edge
       if ( _edgeToCellIDs[edgeReversed].size() > 1 ) {
-        TEST_FOR_EXCEPTION(true,std::invalid_argument,
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                            "In 2D mesh, shouldn't have more than 2 elements per edge...");
       }
       pair<int,int> entry = _edgeToCellIDs[edgeReversed][0];
@@ -662,7 +662,7 @@ ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr el
       _boundary.addElement(cellID, i);
     }
     if ( _edgeToCellIDs.find(edge) != _edgeToCellIDs.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                          "Either a duplicate edge (3 elements with a single edge), or element vertices not setup in CCW order.");
     }
     _edgeToCellIDs[edge].push_back(myEntry);
@@ -685,7 +685,7 @@ ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &e
   // returns neighbor for side, or the neighbor of the ancestor who has a neighbor along shared side
   while (elem->getNeighborCellID(sideIndex) == -1) {
     if ( ! elem->isChild() ) {
-      //TEST_FOR_EXCEPTION(true, std::invalid_argument, "No ancestor has an active neighbor along shared side");
+      //TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No ancestor has an active neighbor along shared side");
       elemSideIndexInNeighbor = -1;
       return _nullPtr;
     }
@@ -696,7 +696,7 @@ ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &e
   // once we get here, we have the appropriate ancestor:
   elemSideIndexInNeighbor = elem->getSideIndexInNeighbor(sideIndex);
   if (elemSideIndexInNeighbor >= 4) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elemSideIndex >= 4");
   }
   return _elements[elem->getNeighborCellID(sideIndex)];
 }
@@ -747,7 +747,7 @@ void Mesh::buildLocalToGlobalMap() {
               int earlierLocalDofIndex = _dofPairingIndex[myKey].second;
               if (_localToGlobalMap.find(_dofPairingIndex[myKey]) == _localToGlobalMap.end() ) {
                 // error: we haven't processed the earlier key yet...
-                TEST_FOR_EXCEPTION( true,
+                TEUCHOS_TEST_FOR_EXCEPTION( true,
                                    std::invalid_argument,
                                    "global indices are being processed out of order (should be by cellID, then localDofIndex).");
               } else {
@@ -834,7 +834,7 @@ void Mesh::buildTypeLookups() {
         elem->setCellIndex(cellIndex++);
         elem->setGlobalCellIndex(globalCellIndices[elemType.get()]++);
         _globalCellIndexToCellID[elemType.get()][elem->globalCellIndex()] = cellID;
-        TEST_FOR_EXCEPTION( elem->cellID() != _globalCellIndexToCellID[elemType.get()][elem->globalCellIndex()],
+        TEUCHOS_TEST_FOR_EXCEPTION( elem->cellID() != _globalCellIndexToCellID[elemType.get()][elem->globalCellIndex()],
                            std::invalid_argument, "globalCellIndex -> cellID inconsistency detected" );
       }
       _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType.get()] = physicalCellNodes;
@@ -869,7 +869,7 @@ void Mesh::buildTypeLookups() {
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         int cellID = _cellIDsForElementType[partitionNumber][elemType][cellIndex];
         int globalCellIndex = _elements[cellID]->globalCellIndex();
-        TEST_FOR_EXCEPTION( cellID != _globalCellIndexToCellID[elemType][globalCellIndex],
+        TEUCHOS_TEST_FOR_EXCEPTION( cellID != _globalCellIndexToCellID[elemType][globalCellIndex],
                            std::invalid_argument, "globalCellIndex -> cellID inconsistency detected" );
         for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
           for (int dim=0; dim<spaceDim; dim++) {
@@ -936,7 +936,7 @@ void Mesh::determineDofPairings() {
     int cellID = elemPtr->cellID();
     
     if ( elemPtr->isParent() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
     }
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
@@ -959,7 +959,7 @@ void Mesh::determineDofPairings() {
             if ( ! neighbor->isParent() ) {
               int neighborNumDofs = neighbor->elementType()->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
               if ( !hasMultiBasis && (myNumDofs != neighborNumDofs) ) { // neither a multi-basis, and we differ: a problem
-                TEST_FOR_EXCEPTION(myNumDofs != neighborNumDofs,
+                TEUCHOS_TEST_FOR_EXCEPTION(myNumDofs != neighborNumDofs,
                                    std::invalid_argument,
                                    "Element and neighbor don't agree on basis along shared side.");              
               }
@@ -1086,7 +1086,7 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
         }
         if (!foundMatchingChild) {
           cout << "parent matches (" << x << ", " << y << "), but none of its children do...\n";
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent matches, but none of its children do...");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent matches, but none of its children do...");
         }
       }
     }
@@ -1128,7 +1128,7 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
   int spaceDim = 2;
   FieldContainer<double> vertices(numVertices,spaceDim);
   verticesForCell(vertices, elem->cellID());
-  TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "elementContainsPoint only supports 2D.");
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "elementContainsPoint only supports 2D.");
   double maxX = vertices(0,0), minX = vertices(0,0);
   double maxY = vertices(0,1), minY = vertices(0,1);
   for (int vertexIndex=1; vertexIndex<numVertices; vertexIndex++) {
@@ -1346,7 +1346,7 @@ void Mesh::determinePartitionDofIndices() {
         pair<int,int> key = make_pair(cellID, localDofIndex);
         map< pair<int,int>, int >::iterator mapEntryIt = _localToGlobalMap.find(key);
         if ( mapEntryIt == _localToGlobalMap.end() ) {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
         }
         int dofIndex = (*mapEntryIt).second;
         if ( previouslyClaimedDofIndices.find( dofIndex ) == previouslyClaimedDofIndices.end() ) {
@@ -1614,7 +1614,7 @@ int Mesh::globalDofIndex(int cellID, int localDofIndex) {
   pair<int,int> key = make_pair(cellID, localDofIndex);
   map< pair<int,int>, int >::iterator mapEntryIt = _localToGlobalMap.find(key);
   if ( mapEntryIt == _localToGlobalMap.end() ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
   }
   return (*mapEntryIt).second;
 }
@@ -1805,7 +1805,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           //nonParent->setElementType(nonParentType);
           // debug code:
           if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
-            TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
           }
         } else { // PatchBasis
           // check to see if non-parent needs a p-upgrade
@@ -1877,13 +1877,13 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
                                                neighborTrialOrdering, mySideIndexInNeighbor, neighborTopo);
   // changed == 1 for me, 2 for neighbor, 0 for neither, -1 for PatchBasis
   if (changed==1) {
-    TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
+    TEUCHOS_TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
                        "BilinearForm has no traces or fluxes, but somehow element was upgraded...");
     int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
     int neighborSidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
     int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
-    TEST_FOR_EXCEPTION(mySidePolyOrder != neighborSidePolyOrder,
+    TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != neighborSidePolyOrder,
                        std::invalid_argument,
                        "After matchSides(), the appropriate sides don't have the same order.");
     int testPolyOrder = _dofOrderingFactory.polyOrder(elemTestOrdering);
@@ -1898,16 +1898,16 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     //return ELEMENT_NEEDED_NEW;
   } else if (changed==2) {
     // if need be, upgrade neighborTestOrdering as well.
-    TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
+    TEUCHOS_TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
                        "BilinearForm has no traces or fluxes, but somehow neighbor was upgraded...");
-    TEST_FOR_EXCEPTION(neighborTrialOrdering.get() == neighbor->elementType()->trialOrderPtr.get(),
+    TEUCHOS_TEST_FOR_EXCEPTION(neighborTrialOrdering.get() == neighbor->elementType()->trialOrderPtr.get(),
                        std::invalid_argument,
                        "neighborTrialOrdering was supposed to be upgraded, but remains unchanged...");
     int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
     int sidePolyOrder = BasisFactory::basisPolyOrder(neighborTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
     int mySidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,sideIndex));
-    TEST_FOR_EXCEPTION(mySidePolyOrder != sidePolyOrder,
+    TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != sidePolyOrder,
                        std::invalid_argument,
                        "After matchSides(), the appropriate sides don't have the same order.");
     int testPolyOrder = _dofOrderingFactory.polyOrder(neighborTestOrdering);
@@ -1923,7 +1923,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     // 1. both element and neighbor are unbroken--leaf nodes.
     // 2. one of element or neighbor has a PatchBasis
     
-    TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
+    TEUCHOS_TEST_FOR_EXCEPTION(_bilinearForm->trialBoundaryIDs().size() == 0,
                        std::invalid_argument,
                        "BilinearForm has no traces or fluxes, but somehow neighbor was upgraded...");
     int boundaryVarID = _bilinearForm->trialBoundaryIDs()[0];
@@ -1956,7 +1956,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
                                                                         neighbor->elementType()->cellTopoPtr );
     setElementType( neighbor->cellID(), newNeighborType, true); // true: sideUpgradeOnly
     
-    // TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
+    // TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis support still a work in progress!");
   } else {
     //return NEITHER_NEEDED_NEW;
   }
@@ -2046,7 +2046,7 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
       //permute child index (this is from neighbor's point of view)
       int permutedChildIndex = neighborChildPermutation(childIndex,numChildrenInSide);
       if (! childVarIDsToUpgrade[permutedChildIndex][varID].get()) {
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "null basis");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "null basis");
       }
       bases.push_back(childVarIDsToUpgrade[permutedChildIndex][varID]);
     }
@@ -2119,7 +2119,7 @@ int Mesh::parityForSide(int cellID, int sideIndex) {
   int parity = _partitionedCellSideParitiesForElementType[partitionNumber][elemType.get()](cellIndex,sideIndex);
   
   if (_cellSideParitiesForCellID[cellID][sideIndex] != parity ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "parity lookups don't match");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parity lookups don't match");
   }
   return parity;
 }

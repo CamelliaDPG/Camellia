@@ -51,7 +51,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int basisCardinality = basis->getCardinality();
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                        "Unknown basis.  BasisCache only works for bases created by BasisFactory");
   }
   int componentOfInterest = -1;
@@ -74,7 +74,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   
   // But let's do just check that we have a standard Intrepid operator
   if ( (op >= IntrepidExtendedTypes::OP_X) || (op <  IntrepidExtendedTypes::OP_VALUE) ) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
   
   // result dimensions should be either (numPoints,basisCardinality) or (numPoints,basisCardinality,spaceDim);
@@ -84,7 +84,9 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int basisRank = BasisFactory::getBasisRank(basis);
   if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) )
       ||
-      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) ) )
+      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) )
+      ||
+      ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_CURL) ) )
   {
     dimensions.push_back(spaceDim);
   } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
@@ -116,7 +118,7 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
   if ((fs != IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
-    TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (op !=  IntrepidExtendedTypes::OP_VALUE),
+    TEUCHOS_TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (op !=  IntrepidExtendedTypes::OP_VALUE),
                        std::invalid_argument, "Only Vector HGRAD with OP_VALUE supported by getTransformedVectorValuesWithComponentBasisValues.  Please use getTransformedValuesWithBasisValues instead.");
   }
   BasisPtr componentBasis = basis->getComponentBasis();
@@ -146,7 +148,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   dimensions.insert(dimensions.begin(), numCells);
   Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
   if ((fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (op ==  IntrepidExtendedTypes::OP_VALUE)) {
-    TEST_FOR_EXCEPTION( (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (op ==  IntrepidExtendedTypes::OP_VALUE),
+    TEUCHOS_TEST_FOR_EXCEPTION( (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (op ==  IntrepidExtendedTypes::OP_VALUE),
                        std::invalid_argument, "Vector HGRAD with OP_VALUE not supported by getTransformedValuesWithBasisValues.  Please use getTransformedVectorValuesWithComponentBasisValues instead.");
   }
   switch(relatedOp) {
@@ -169,10 +171,10 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
         case IntrepidExtendedTypes::CURL_HGRAD_FOR_CONSERVATION:
           // TODO: figure out the right thing here...
-          TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
         default:
-          TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
       }
       break;
@@ -210,7 +212,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           
           break;
         default:
-          TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
       }
       break;
@@ -235,7 +237,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
         default:
-          TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
       }
       break;
@@ -247,12 +249,12 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
         default:
-          TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
       }
       break;
     default:
-      TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
       break;
   }
 
@@ -287,7 +289,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
   FCPtr result;
   if (   (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD)
       && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV)) ) {
-    TEST_FOR_EXCEPTION(values->rank() != 5, std::invalid_argument, "rank of values must be 5 for VECTOR_HGRAD_GRAD");
+    TEUCHOS_TEST_FOR_EXCEPTION(values->rank() != 5, std::invalid_argument, "rank of values must be 5 for VECTOR_HGRAD_GRAD");
     int numCells  = values->dimension(0);
     int numFields = values->dimension(1);
     int numPoints = values->dimension(2);
@@ -322,7 +324,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
   } else if (values->rank() == 4) {
     enumeratedLocation = values->getEnumeration(0,0,0,componentOfInterest);
   } else {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported values container rank.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported values container rank.");
   }
   for (int i=0; i<size; i++) {
     (*result)[i] = (*values)[enumeratedLocation];
@@ -339,12 +341,12 @@ FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const Field
   int basisCardinality = values->dimension(1);
   
   if (spaceDim != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "crossing with normal only supported for 2D right now");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "crossing with normal only supported for 2D right now");
   }
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
       || (numPoints != values->dimension(2)) || (spaceDim != values->dimension(3)) 
       ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
   }
   
   Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
@@ -374,12 +376,12 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
   int basisCardinality = values->dimension(1);
   
   if (spaceDim != 2) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "dotting with normal only supported for 2D right now");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dotting with normal only supported for 2D right now");
   }
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
       || (numPoints != values->dimension(2)) || (spaceDim != values->dimension(3)) 
       ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
   }
   
   Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
@@ -407,7 +409,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
   
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
       || (numPoints != values->dimension(2))) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
   
   Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
@@ -432,7 +434,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
   
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
       || (numPoints != values->dimension(2))) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
   
   Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));
@@ -457,7 +459,7 @@ FCPtr BasisEvaluation::getVectorizedValues(constFCPtr values, int spaceDim) {
   int numPoints = values->dimension(2);
   
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1)) || (numPoints != values->dimension(2))) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
   
   Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));

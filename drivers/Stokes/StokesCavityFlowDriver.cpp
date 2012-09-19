@@ -14,6 +14,8 @@
 #include "LagrangeConstraints.h"
 #include "MeshPolyOrderFunction.h"
 #include "MeshTestUtility.h"
+#include "PenaltyConstraints.h"
+#include "CGSolver.h"
 
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -267,12 +269,21 @@ int main(int argc, char *argv[]) {
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = false;
+  bool useCG = true;
   bool compareWithOverkillMesh = false;
   bool weightTestNormDerivativesByH = false;
   bool useAdHocHPRefinements = false;
-  bool finalSolveWithoutRamp = true;
+  bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
   int overkillPolyOrder = 7; // H1 order
+  double cgTol = 1e-8;
+  int cgMaxIt = 400000;
+  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
+  
+  if (usePenaltyConstraintsForDiscontinuousBC) {
+    // then eps should be 0 (NO RAMP)
+    eps = 0;
+  }
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -536,6 +547,10 @@ int main(int argc, char *argv[]) {
     } else {
       cout << "NOT enforcing 1-irregularity.\n";
     }
+    
+    if (usePenaltyConstraintsForDiscontinuousBC) {
+      cout << "Using penalty constraints for discontinuous BC (==> NO RAMP).\n";
+    }
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;
@@ -581,7 +596,9 @@ int main(int argc, char *argv[]) {
   FunctionPtr un_0 = Teuchos::rcp( new Un_0(eps) );
   FunctionPtr u0_cross_n = Teuchos::rcp( new U0_cross_n(eps) );
   
-  bc->addDirichlet(u1hat, entireBoundary, u1_0);
+  if (! usePenaltyConstraintsForDiscontinuousBC ) {
+    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+  }
   bc->addDirichlet(u2hat, entireBoundary, u2_0);
   bc->addZeroMeanConstraint(p);
   
@@ -608,6 +625,12 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->setReportConditionNumber(true);
+  if (usePenaltyConstraintsForDiscontinuousBC) {
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(u1hat==u1_0,entireBoundary);
+    solution->setFilter(pc);
+  }
   
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -644,7 +667,11 @@ int main(int argc, char *argv[]) {
   topCornerPoints(3,0) = 1 - 1e-12;
   topCornerPoints(3,1) = 1 - 1e-10;
 
-  solution->solve(useMumps);
+  if (!useCG) {
+    solution->solve(useMumps);
+  } else {
+    solution->solve(cgSolver);
+  }
   polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders_0.m");
   FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
   ten->writeBoundaryValuesToMATLABFile(mesh, "skeleton_0.dat");
@@ -712,7 +739,11 @@ int main(int argc, char *argv[]) {
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
     }
     // solve on the refined mesh:
-    solution->solve(useMumps);
+    if (!useCG) {
+      solution->solve(useMumps);
+    } else {
+      solution->solve(cgSolver);
+    }
     
     ostringstream meshOutputFileName, skeletonOutputFileName;
     meshOutputFileName << "cavityFlowPolyOrders_" << refIndex + 1 << ".m";
@@ -837,23 +868,7 @@ int main(int argc, char *argv[]) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
-  
-  if (finalSolveWithoutRamp) {
-    //////////////////// BCs FOR eps = 0 //////////////////////
-    Teuchos::RCP<BCEasy> bcFinalMesh = Teuchos::rcp( new BCEasy );
-    FunctionPtr u1_0_finalMesh = Teuchos::rcp( new U1_0(0.0) );
-    bcFinalMesh->addDirichlet(u1hat, entireBoundary, u1_0_finalMesh);
-    bcFinalMesh->addDirichlet(u2hat, entireBoundary, u2_0);
-    bcFinalMesh->addZeroMeanConstraint(p);
     
-    // replace solution object with one that has these BCs, and also recreate the SolutionFunctions that depend on it
-    solution = Teuchos::rcp( new Solution(mesh, bcFinalMesh, rhs, ip) );
-    solution->solve(useMumps);
-
-    u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
-    u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u2) );
-  }
-  
   ///////// SET UP & SOLVE STREAM SOLUTION /////////
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );

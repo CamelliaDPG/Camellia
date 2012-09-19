@@ -89,16 +89,16 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     v3.push_back(1.0);
     
     if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
     }
     if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
     }
     if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
     }
     if ( vertexLookup.find(v3) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
     }
     
     int v0_index = vertexLookup[v0];
@@ -131,13 +131,13 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     v2.push_back(1.0);
     
     if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
     }
     if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
     }
     if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-      TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
     }
     
     int v0_index = vertexLookup[v0];
@@ -156,7 +156,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     refSides.push_back(side1);
     refSides.push_back(side2);
   } else {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern only supports quads and triangles right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern only supports quads and triangles right now.");
   }
   _childrenForSides = vector< vector< pair< int, int> > >(numSides);
 
@@ -252,7 +252,7 @@ FieldContainer<double> RefinementPattern::verticesForRefinement(FieldContainer<d
     int numCells = cellNodes.dimension(0);
     verticesFC.resize(numCells, _vertices.dimension(0), _vertices.dimension(1));
   } else {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"cellNodes should be rank 2 or 3");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"cellNodes should be rank 2 or 3");
   }
   
   CellTools<double>::mapToPhysicalFrame(verticesFC,_vertices,cellNodes,*_cellTopoPtr);

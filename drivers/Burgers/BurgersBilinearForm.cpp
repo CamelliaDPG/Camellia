@@ -226,7 +226,7 @@ void BurgersBilinearForm::applyBilinearFormData(FieldContainer<double> &trialVal
           // we'll need to copy the values and resize the original container
           FieldContainer<double> testValuesCopy = testValues;
           testValues.resize(numCells,basisCardinality,numPoints);
-          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "BurgersBilinearForm only supports 2 dimensions right now.");
           
           FieldContainer<double> beta = getBeta(basisCache);
@@ -262,7 +262,7 @@ void BurgersBilinearForm::applyBilinearFormData(FieldContainer<double> &trialVal
           // we'll need to copy the values and resize the original container
           FieldContainer<double> valuesCopy = trialValues;
           trialValues.resize(numCells,basisCardinality,numPoints);
-          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "BurgersBilinearForm only supports 2 dimensions right now.");
           
           FieldContainer<double> beta = getBeta(basisCache);

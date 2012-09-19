@@ -69,10 +69,10 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
   unsigned spaceDim = physicalCellNodes.dimension(2);
   
   // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
 		      std::invalid_argument,
 		      "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
 		      std::invalid_argument,
 		      "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   
@@ -100,7 +100,7 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
       operators(trialID1,trialID2,trial1Operators,trial2Operators);
       
       // check dimensions
-      TEST_FOR_EXCEPTION( ( trial1Operators.size() != trial2Operators.size() ),
+      TEUCHOS_TEST_FOR_EXCEPTION( ( trial1Operators.size() != trial2Operators.size() ),
 			  std::invalid_argument,
 			  "trial1Operators.size() and trial2Operators.size() do not match.");
       
@@ -167,10 +167,10 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
   unsigned spaceDim = physicalCellNodes.dimension(2);
   
   // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
 		      std::invalid_argument,
 		      "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
 		      std::invalid_argument,
 		      "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   
@@ -211,7 +211,7 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
       operators(trialID1,trialID2,trial1Operators,trial2Operators);
       
       // check dimensions
-      TEST_FOR_EXCEPTION( ( trial1Operators.size() != trial2Operators.size() ),
+      TEUCHOS_TEST_FOR_EXCEPTION( ( trial1Operators.size() != trial2Operators.size() ),
 			  std::invalid_argument,
 			  "trial1Operators.size() and trial2Operators.size() do not match.");
       

@@ -1,0 +1,1292 @@
+\section{Analysis of the Velocity-Gradient-Pressure Stokes Formulation}
+\label{sec:StokesAnalysis}
+
+The purpose of this appendix is to present a general theory for the DPG
+method for linear PDEs and immediately specialize it to the Stokes
+problem. The presented theory summarizes results obtained in
+\cite{DPG6,BramwellDemkowiczGopalakrishnanQiu11,DemkowiczGopalakrishnanMugaZitelli12}
+for particular boundary-value problems and specializes the
+general theory for Friedrichs systems, presented in
+\cite{Bui-ThanhDemkowiczGhattas11b}, for cases in which the traces of the graph spaces
+are available.  As most of the technical results here are classical,
+we have chosen a somewhat informal format of presentation.
+
+
+\subsection{Notation and Definitions\label{section:notation}}
+
+
+Let $\Omega$ denote a bounded Lipschitz domain in $\doubleIR^n, n=2,3$,\: with boundary
+$\Gamma = \ptl \Omega$. We shall use the following standard energy spaces:
+\[
+\begin{array}{rl}
+H^1(\Omega) & := \{ u \in L^2(\Omega) \: : \: \bfnab u \in \bfL^2(\Omega) \}, \\[8pt]
+\bfH(\text{div},\Omega) & := \{ \bfsig \in \bfL^2(\Omega) \: : \: \text{div} \bfsig \in L^2(\Omega) \}, 
+\end{array}
+\]
+with the corresponding trace spaces on $\Gamma$:
+\[
+\begin{array}{rl}
+H^{1/2}(\Gamma) & := \{ 
+{\hat{u} =} u\vert_{\Gamma}, \: u \in H^1(\Omega) \},
+\\[8pt] H^{-1/2}(\Gamma) & := \{ {\hat{\sigma}_{n}} = (\bfsig \cdot
+\bfn)\vert_{\Gamma} ,\: \bfsig \in \bfH(\text{div},\Omega) \},
+\end{array}
+\] 
+where $\bfn$ denotes the outward normal unit vector to the boundary
+$\Gamma$.  The definition of trace space $H^{1/2}(\Gamma)$ is
+classical but far from trivial, see e.g.  \cite[pp. 96]{McLean}.  The
+assumption on the regularity of the domain (being Lipschitz) is
+essential; domains with ``cracks'' require a special and
+non-classical treatment. When necessary, we will formalize the use of
+the trace operator by identifying it with a separate symbol, 
+\[
+\text{tr} \: : \: H^1(\Omega) \ni u \to \text{tr } u = {\hat{u} =} u\vert_{\Gamma}
+\in H^{1/2}(\Gamma).  
+\] 
+The space $H^{-1/2}(\Gamma)$ is the topological
+dual of $H^{1/2}(\Gamma)$ and a second trace operator corresponding to it,
+\[ \text{tr} \: : \: \bfH(\text{div},\Omega) \ni \bfsig \to \text{tr
+} \bfsig = {\hat{\sigma}_n} = (\bfsig \cdot \bfn)\vert_{\Gamma} \in
+H^{-1/2}(\Gamma),
+\] 
+is usually defined by the {\em generalized Green
+  Formula}; see e.g. \cite[pp. 61]{Showalter} or
+\cite[pp. 530]{FAbook}. Note that, unless otherwise stated, in this
+paper we use the same trace notation ``tr'' for functions in both
+$H^1(\Omega)$ and $\bfH(\text{div},\Omega)$.
+
+We shall also use group variables consisting of multiple copies of functions from $H^1(\Omega),\bfH(\text{div},\Omega)$, and $H^{1/2}(\Gamma)$ or distributions from $H^{-1/2}(\Gamma)$. We will then switch to boldface notation:
+\[
+\begin{array}{rl}
+\bfH^1(\Omega) & = H^1(\Omega) \times \ldots \times H^1(\Omega),\\[8pt]
+\bfH^{1/2}(\Gamma) & = H^{1/2}(\Gamma) \times \ldots \times H^{1/2}(\Gamma), \\[8pt]
+\bfH^{-1/2}(\Gamma) & = H^{-1/2}(\Gamma) \times \ldots \times H^{-1/2}(\Gamma),
+\end{array}
+\]
+etc. In the case of tensors, the definitions will be applied row-wise:
+$$
+\bfsig = (\sigma_{ij}) \in \bfH(\text{\bf div},\Omega) \quad \Longleftrightarrow \quad
+(\sigma_{i1},\ldots,\sigma_{in}) \in \bfH(\text{div},\Omega),\: i=1,\ldots,n.
+$$
+
+\paragraph*{Broken energy spaces.}
+
+Let $\Omega$ be partitioned into finite elements $K$ such that
+\[
+  \overline{\Omega} = \bigcup_K  \bar{K},\: \quad K \text { open},
+\]
+with corresponding {\em skeleton} $\Gamma_h$ and {\em interior
+  skeleton} $\Gamma_h^0$,
+\[
+\Gamma_h := \bigcup_K \ptl K\qquad \Gamma_h^0 := \Gamma_h - \Gamma.
+\]
+The usual regularity assumptions for the elements can essentially be relaxed. 
+The elements may be general polygons in 2D, or polyhedra\footnote{Possibly curvilinear polyhedra.}
+ in 3D (with triangular and quadrilateral
+faces). Meshes may be {\em irregular}, i.e. with hanging nodes (see e.g. \cite[pp. 211]{hpbook}).
+Also, at this point, we do not make any shape regularity assumptions.
+By {\em broken} energy spaces we simply mean standard energy spaces defined element-wise:
+\[
+\begin{array}{rl}
+H^1(\Omega_h) & := \prod_K H^1(K), \\[8pt]
+\bfH(\text{div},\Omega_h) & := \prod_K \bfH(\text{div},K).
+\end{array}
+\]
+With broken energy spaces, integration by parts is performed element-wise. 
+For $\bfsig \in \bfH(\text{div},\Omega_h)$ and $v \in H^1(\Omega)$, we have
+\[
+\begin{array}{rl}
+(\text{div}_h \bfsig, v)_{\Omega_h}  := &\ds \sum_K (\text{div} \bfsig, v)_K \\[8pt]
+ = &\ds \sum_K \left( -(\bfsig, \bfnab v)_K 
++ {\langle\hat{\sigma}_n,\hat{v}\rangle _{\ptl K}} \right) \\[8pt]
+ = &\ds - (\bfsig, \bfnab v) + {\underbrace{\sum_K 
+\langle\hat{\sigma}_n,\hat{v}\rangle_{\ptl K}}
+_{=: \langle\hat{\sigma}_n,\hat{v}\rangle_{\Gamma_h}}.}
+\end{array}
+\]
+Here $(\cdot,\cdot)$ and $(\cdot,\cdot)_K$ denote the $L^2$-product over
+the whole domain and element $K$, resp., and $\langle\cdot,\cdot\rangle_{\ptl K}$
+stands for the duality pairing between $H^{-1/2}(\ptl K)$ and
+$H^{1/2}(\ptl K)$.
+
+
+Integration by parts leads naturally to the concept of the trace space over the skeleton $\Gamma_h$,
+\[
+H^{1/2}(\Gamma_h) := 
+{
+\left\{ \hat{v} = \{\hat{v}_K \} \in \prod_K H^{1/2}(\ptl K) \: :
+\: \exists v \in H^1(\Omega) : v\vert_{\ptl K} = \hat{v}_K \right\}.}
+\]
+This is not a trivial definition. First of all, to be more precise, by
+${v}\vert_{\ptl K}$ we mean the trace (for element $K)$
+of the restriction of ${v}$ to $K$. Secondly,
+$H^{1/2}(\Gamma_h)$ is a {\em closed} subspace of $\prod_K
+H^{1/2}(\ptl K)$, as we shall show momentarily. For convenience, we
+assume that all trace spaces are endowed with {\em minimum-energy
+  extension norms}, i.e.,
+\[
+ \Vert {\hat{u}}\Vert_{H^{1/2}(\ptl K)} :=
+\inf_{\substack{
+E{\hat{u}} \in H^1(K)\\ 
+E{\hat{u}}\vert_{\ptl K} = {\hat{u}}}}
+\Vert E{\hat{u}} \Vert_{H^1(K)},
+\]
+etc. Let 
+${\hat{u}}^n = \{ {\hat{u}}^n_K \} $ be a sequence of functions in
+$H^{1/2}(\Gamma_h)$ converging in the product space to a limit ${\hat{u}} =
+\{{\hat{u}}_K \} $. For each element $K$, ${\hat{u}}^n_K$ 
+is the trace of restriction
+${u}^n\vert_K$ for some ${u}^n \in H^1(\Omega)$.  By the definition of
+norms, ${u}^n\vert_K \stackrel{n \to \infty}{\longrightarrow} 
+{u}_K$ in $H^1(K)$, for
+each element $K$. The delicate question is whether we can claim that
+the union ${u}$ of ${u}_K$ is in $H^1(\Omega)$. But this follows from the
+definition of distributional derivatives. Indeed, given a test function $\phi
+\in \mathcal{D}(\Omega)$, we have for each $n$,
+\[
+ \int_\Omega {u}^n \frac{\ptl \phi}{\ptl x_i} = - \int_{\Omega}
+\frac{\ptl {u}^n}{\ptl x_i} \phi 
+\] 
+or 
+\[ \sum_K \int_K {u}^n \frac{\ptl
+  \phi}{\ptl x_i} = - \sum_K \int_K \frac{\ptl {u}^n}{\ptl x_i} \phi.
+\]
+Passing to the limit with $n \to \infty$, we get 
+\[ \int_\Omega {u}
+\frac{\ptl \phi}{\ptl x_i} = - \sum_K \int_K \frac{\ptl {u}_K}{\ptl x_i}
+\phi, 
+\] 
+which proves that the union of element-wise derivatives
+$\frac{\ptl {u}_K}{\ptl x_i}$, a function in $L^2(\Omega)$, {\em is} the
+distributional derivative of ${u}$. Consequently, ${u} \in H^1(\Omega)$.
+
+Notice that we have not attempted to extend the classical definition
+of the trace space $H^{1/2}(\Gamma)$ for Lipschitz boundary $\Gamma$
+to a non-Lipschitz skeleton $\Gamma_h$.\footnote{The definition of a
+  Lipschitz domain includes the assumption that the domain is on one
+  side of its boundary, see \cite[pp. 89]{McLean}.}  This is not
+impossible but much more technical (like for domains with cracks).
+
+A similar construction holds for globally conforming $\bfsig \in \bfH(\text{div},\Omega)$
+but broken $v \in H^1(\Omega_h)$:
+\[
+\begin{array}{ll}
+(\bfsig, \bfnab_h v)_{\Omega_h} & := \ds \sum_K (\bfsig, \bfnab v)_K \\[8pt]
+& \ds = \sum_K \left( - (\text{div} \bfsig, v)_K + \langle{\hat{\sigma}}_n,{\hat{v}}\rangle_{\ptl K} \right) \\[8pt]
+& \ds = -(\text{div} \bfsig,v) + \underbrace{\sum_K \langle{\hat{\sigma}}_n,{\hat{v}}\rangle_{\ptl K}}_{=: \langle{\hat{\sigma}}_n, {\hat{v}}\rangle_{\Gamma_h}}.
+\end{array}
+\]
+In this case, we are led to the definition of the trace space $H^{-1/2}(\Gamma_h)$:
+\[
+H^{-1/2}(\Gamma_h) := \left\{ {\hat{\sigma}}_n = \{ {\hat{\sigma}}_{Kn} \}\in \prod_K H^{-1/2}(\ptl K) \: : \: \exists \bfsig \in \bfH(\text{div},\Omega)
+: {\hat{\sigma}}_{Kn} = (\bfsig \cdot \bfn)\vert_{\ptl K} \right\}.
+\]
+We equip both trace spaces over the mesh skeleton with minimum energy extension norms
+\[
+\begin{array}{rl}
+\Vert {\hat{v}} \Vert_{H^{1/2}(\Gamma_h)} := \ds &\inf_{\substack{{u} \in H^1(\Omega)\\ {u}\vert_{\Gamma_h} = u}} 
+\Vert {u} \Vert_{H^1(\Omega)} \quad \text{ and} \\[24pt]
+\Vert {\hat{\sigma}}_n \Vert_{H^{-1/2}(\Gamma_h)} := \ds &\inf_{\substack{\text{\bfsig} \in \text{\bfH}(\text{div},\Omega)\\
+(\text{\bfsig} \cdot \text{\bfn})\vert_{\Gamma_h} = {\hat{\sigma}}_n}}
+\Vert \bfsig \Vert_{\text{$\bfH$}(\text{div},\Omega)}.
+\end{array}
+\]
+We will also need the space of traces on the internal skeleton
+\[
+\tilde{H}^{1/2}(\Gamma_h) := \left\{ {\hat{v}} = \{{\hat{v}}_K \} \in  \prod_K H^{1/2}(\ptl K) \: : \: \exists {v} \in H^1_0(\Omega) : {v}\vert_{\ptl K} = {\hat{v}}_K \right\},
+\]
+which we likewise equip with the minimum energy extension norm.
+
+
+
+To summarize, we have defined the term $\langle{\hat{\sigma}}_n,{\hat{v}}\rangle_{\Gamma_h}$ when
+one of the variables is a trace over the whole skeleton and
+the other is the trace of a function from the broken energy
+space. Also notice that, for sufficiently regular functions, 
+$\langle{\hat{\sigma}}_n,{\hat{v}}\rangle_{\Gamma_h}$ represents either the $L^2(\Gamma_h)$-product
+of trace of a conforming $\bfsig$ and inter-element jumps of $v$, or the product
+of jumps in $\sigma_n$ and the trace of a globally conforming $v$. This
+can be seen by switching from the summation over elements to the
+summation over element faces (edges in 2D).
+
+
+\subsection{Strong and Ultra-Weak Formulations}
+
+
+
+
+\paragraph*{Integration by parts.}
+
+Let $u$ now represent a group variable consisting of functions defined
+on the domain $\Omega$, and $A$ be a linear differential operator
+corresponding to a system of first order PDEs. We start with an abstract
+integration by parts formula,
+\be
+(Au,v) = (u,A^\ast v) + \langle C u, v\rangle
+\label{eq:integration_by_parts_classical}.
+\ee
+Here $(\cdot,\cdot)$ denotes the $L^2(\Omega)$-inner product, $A^\ast$ is the formal
+adjoint operator, $C$ is  a  boundary operator and at this point $\langle\cdot,\cdot\rangle$ 
+stands for just the $L^2(\Gamma)$-inner
+product on boundary $\Gamma = \ptl \Omega$. Obviously, the formula holds under
+appropriate regularity assumptions, e.g. $u,v \in C^1(\overline{\Omega})$, if all
+derivatives are understood in the classical sense.
+
+If we assume $u,v \in L^2(\Omega)$ and interpret the derivatives in a distributional sense,
+we arrive naturally at the graph energy spaces
+\[
+\begin{array}{rl}
+\ds H_A(\Omega) & \ds := \{ u \in L^2(\Omega) \: : \: A u \in L^2(\Omega) \} \quad \text{ and }\\[8pt]
+\ds H_{A^\ast}(\Omega) & \ds := \{ u \in L^2(\Omega) \: : \: A^\ast u \in L^2(\Omega) \}.
+\end{array}
+\]
+{ {\bf Assumption 1:} We take operators $A$ and $A^\ast$ to be surjections; i.e. given $f \in L^2(\Omega)$, we
+  can always find $u \in H_A(\Omega)$ and $v \in H_{A^\ast}(\Omega)$
+  such that $Au = f$ and $A^\ast v = f$.  Roughly speaking, this
+  corresponds to an assumption  that neither $A$ nor $A^\ast$ are, in a sense,
+  degenerate.\footnote{Ivo Babu\v{s}ka, private communication.}}
+
+With $u$ and $v$ coming from the energy spaces, the domain integrals $(Au,v)$ and $(u, A^\ast v)$
+are well-defined.  We now assume that the graph spaces admit
+trace operators
+\[
+\begin{array}{rlll}
+\text{tr}_A &\ds : \: H_A(\Omega) & \twoheadrightarrow  \widehat{H}_A(\Gamma) \quad \text{ and }\\[8pt]
+\text{tr}_{A^\ast} &\ds : \: H_{A^\ast}(\Omega) & \twoheadrightarrow  \widehat{H}_{A^\ast}(\Gamma).
+\end{array}
+\]
+The double arrowheads indicate that the trace operators are surjective. We equip the trace
+spaces with the minimum energy extension norms
+\[
+\Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma)} = \inf_{\substack{u \in H_A(\Omega)\\ \text{tr}_A u = \hat{u} }} \Vert u \Vert_{H_A(\Omega)} \quad \text{ and } \quad 
+\Vert \hat{v} \Vert_{\widehat{H}_{A^*}(\Gamma)} = \inf_{\substack{v \in H_{A^*}(\Omega)\\ \text{tr}_{A^*} v = \hat{v} }} \Vert v \Vert_{H_{A^*}(\Omega)}.
+\]
+
+We now generalize the classical integration by parts 
+formula~(\ref{eq:integration_by_parts_classical}) to a more general, distributional case:
+\[
+(Au,v) = (u,A^\ast v) + c(\text{tr}_A u, \text{tr}_{A^\ast} v),
+\label{eq:integration_by_parts}
+\]
+with $u \in H_A(\Omega), v \in H_{A^\ast}(\Omega)$, and 
+\[
+c(\hat{u},\hat{v}), \quad \hat{u} \in \widehat{H}_A(\Gamma), \hat{v} \in \widehat{H}_{A^\ast}(\Gamma) 
+\]
+being a duality
+pairing,\footnote{This notion extends the definition of the ``usual'' duality pairing between a space and its
+dual.} i.e. a {\em definite} continuous bilinear (sesquilinear) form. Recall that form $c(\hat{u},\hat{v})$
+is definite if
+\begin{align*}
+\left(c(\hat{u},\hat{v})\right. &= \left.0\quad \forall \hat{v} \right) \implies \hat{u} = 0 \quad \text{ and} \\[8pt]
+\left(c(\hat{u},\hat{v})\right. &= \left.0\quad \forall \hat{u} \right) \implies \hat{v} = 0.
+\end{align*}
+Equivalently, the corresponding boundary operator
+\[
+C \: : \: \widehat{H}_A(\Gamma) \to (\widehat{H}_{A^\ast}(\Gamma))^\prime,\quad
+\langle C\hat{u},\hat{v} \rangle = c(\hat{u},\hat{v})
+\]
+and its adjoint $C'$ are injective and
+therefore both $C$
+and $C'$ are isomorphisms.\footnote{$\mathcal{R}(A) = \mathcal{N}(C')^\perp$.} Above and in what follows, $\langle \cdot,\cdot\rangle$
+denotes the usual duality pairing between a space and its dual.
+
+
+
+\paragraph*{Integration by parts for the Stokes problem.}
+
+We verify (and illustrate) our general assumptions for the Stokes problem.
+Multiplying equations~(\ref{NVR:eq:StokesFirstIntro}-\ref{NVR:eq:StokesLastIntro}) with test functions $\bfv,q,\bftau$, integrating by parts
+and summing up the equations, we obtain
+\begin{align*}
+(- \text{\bf div} ( \bfsig - p \bfI ),\bfv)+
+(\text{div} \bfu,q)+
+(\bfsig  - \bfnab \bfu,\bftau)
+=& \quad ( \bfsig - p \bfI, \bfnab \bfv) + \langle  (- \bfsig + p \bfI) \bfn, \bfv\rangle\\[8pt] 
+&+ (\bfu, - \bfnab q) + \langle  \bfu \cdot \bfn,q\rangle\\[8pt]
+&+ (\bfsig,\bftau) + (\bfu, \text{\bf div} \bftau) + \langle \bfu, - \bftau \bfn\rangle\\[8pt] 
+=& \quad (\bfu, {\bf div} (\bftau - q \bfI)) + (p, - \text{div} \bfv) + (\bfsig, \bftau + \bfnab \bfv) \\[8pt]
+&+ \langle  (- \bfsig + p \bfI) \bfn, \bfv\rangle + \langle \bfu, (-\bftau + q\bfI) \bfn\rangle.
+\end{align*}
+Thus, comparing with the abstract theory, we have
+\[
+\begin{array}{rl}
+u & = (\bfu,p,\bfsig), \\[8pt]
+v & = (\bfv,q,\bftau), \\[8pt]
+Au & = (- \text{\bf div} ( \bfsig - p \bfI ),\text{div} \bfu,\bfsig  - \bfnab \bfu), \\[8pt]
+A^\ast v & = (\text{\bf div} (\bftau - q \bfI) ,- \text{div} \bfv,\bftau + \bfnab \bfv ).
+\end{array}
+\]
+The operator is not (formally) self-adjoint but the corresponding energy graph spaces are identical,
+$H_A(\Omega) = H_{A^\ast}(\Omega)$, where
+\[
+H_A(\Omega) = \{ (\bfu,p,\bfsig) \: : \: \bfsig - p\bfI \in
+\bfH(\text{\bf div},\Omega), \bfu \in \bfH^1(\Omega) \}.
+\]
+The traces are also the same; that is, $\text{tr}_A = \text{tr}_{A^\ast}$, where 
+\[
+\text{tr}_A : H_A(\Omega) \ni (\bfu,p,\bfsig) \to ((-\bfsig + p \bfI)
+\bfn, \bfu) \in \bfH^{-1/2}(\Gamma) \times \bfH^{1/2}(\Gamma).
+\]
+The
+boundary term, being the sum of standard duality pairings for
+respective components of the traces, is definite. 
+
+\begin{remark}
+The Stokes problem can be framed into a general abstract case
+discussed in \cite[Section 6.6]{FAbook}.  The boundary term is
+identified as a {\em concominant} of the corresponding
+traces. Moreover, the Stokes equation can be cast into a Friedrichs'
+system \cite{ErnGuermond08}, and hence can be studied using the
+unified DPG framework \cite{Bui-ThanhDemkowiczGhattas11b} which uses
+boundary operator and graph spaces. Here, inspired by our previous work
+\cite{Bui-ThanhDemkowiczGhattas11b}, we develop an abstract
+DPG theory using the trace operators and graph spaces, assuming the existence of
+traces, and study the Stokes equation using this framework.
+\end{remark}
+
+
+\paragraph*{Strong formulation with homogeneous BC.}
+We now return to our abstract setting and assume that the boundary operator $C$ can be split into two operators $C_1$ and $C_2$ such that
+\[
+\begin{array}{ll}
+\langle C u,v\rangle &= \langle C_1 u,v\rangle + \langle C_2 u,v\rangle \\[5pt]
+& = \langle C_1 u,v\rangle + \langle u, C_2^\prime v\rangle;\\[5pt]
+\end{array}
+\]
+we also take $C_{1}$ and $C_{2}$ to be ``reasonable'' in the sense that both have closed range. It should be pointed out that this is analogous to boundary operator splitting due to Friedrichs \cite{Friedrichs58, ErnGuermondCaplain07}.
+
+We are interested in solving a non-homogeneous boundary-value problem
+\be
+\left\{
+\begin{array}{rll}
+A u & = f \quad & \mbox{in } \Omega,\\
+C_1 u & = f_D & \mbox{on } \Gamma,
+\end{array}
+\right.
+\label{eq:nonhom_BVP}
+\ee
+with $f \in L^2(\Omega)$ and $ f_D \in \mathcal{R}(C_1)$.
+
+
+We begin with the homogeneous BC case:
+\be
+\left\{
+\begin{array}{rll}
+A u & = f \quad & \mbox{in } \Omega,\\
+C_1 u & = 0 & \mbox{on } \Gamma.
+\end{array}
+\right.
+\label{eq:hom_BVP}
+\ee
+Introducing the spaces
+\[
+\begin{array}{ll}
+U := \{ u \in H_A(\Omega) : & C_1 \: \text{tr}_A u = 0 \} \quad \text{ and } \\[8pt]
+V := \{ v \in H_{A^\ast}(\Omega) : & C_2^\prime \: \text{tr}_{A^\ast} v = 0 \},
+\end{array}
+\]
+we see that, if we restrict operators $A$ and $A^\ast$ to $U$ and $V$, the
+boundary term vanishes. However, for $A$ and $A^\ast$ to be
+$L^2$-adjoint, we have to make an additional technical
+assumption.\footnote{The domain of the adjoint operator has to be maximal in the
+  sense that it includes {\em all} $v$ for which the boundary term
+  vanishes.}\\
+{{\bf Assumption 2:} 
+\be \left( \langle u,
+  C_2^\prime v\rangle = 0 \quad \forall u \: : C_1 u = 0 \right) \implies
+  C_2^\prime v = 0.
+\label{eq:adjoint_assumption}
+\ee } 
+The following lemma allows us to use this condition to establish a decomposition of the trace space.
+\begin{lemma}
+Assume that $C: X \to
+Y$ is an isomorphism from Hilbert space $X$ onto a Hilbert space
+$Y$. Assume $C$ has been split into $C_1$ and $C_2$ that satisfy
+condition~(\ref{eq:adjoint_assumption}).  Each of following conditions is then equivalent to~(\ref{eq:adjoint_assumption}).
+\[
+\begin{array}{c}
+\mathcal{N}(C_1)^\perp \cap \mathcal{R}(C_2^\prime) = \{ 0 \},  \\[8pt]
+\mathcal{N}(C_1)^\perp \cap \mathcal{N}(C_2)^\perp = \{ 0 \},  \\[8pt]
+\mathcal{N}(C_2) \cap \mathcal{N}(C_1)  = \{ 0 \},  \\[8pt]
+X = \mathcal{N}(C_2) \oplus \mathcal{N}(C_1).
+\end{array}
+%\label{eq:adjoint_assumption_equivalent}
+\]
+\end{lemma}
+\begin{proof} Elementary with an application of the Closed Range Theorem that we recall below. \end{proof}
+Condition~(\ref{eq:adjoint_assumption}) thus decomposes the trace
+space $\widehat{H}_A(\Gamma)$ into the direct sum of the nullspaces of
+operators $C_1$ and $C_2$; \be \widehat{H}_A(\Gamma) = \widehat{H}_A^1(\Gamma)
+\oplus \widehat{H}_A^2(\Gamma),
+\label{eq:trace_split}
+\ee where $\widehat{H}_A^1(\Gamma) = \mathcal{N}(C_2)$ and
+$\widehat{H}_A^2(\Gamma) = \mathcal{N}(C_1)$. In other words, for each
+$\hat{u} \in \widehat{H}_A(\Gamma)$, there exist unique $ \hat{u}_1 \in
+\widehat{H}_A^1(\Gamma)$ and $ \hat{u}_2 \in \widehat{H}_A^2(\Gamma)$ such that
+\[
+\hat{u} = \hat{u}_1 + \hat{u}_2,
+\]
+which is analogous to the condition introduced by Friedrichs \cite{Friedrichs58} on his boundary
+operator $M$, subsequently generalized in \cite{ErnGuermondCaplain07}, and first used
+in the DPG context in \cite{Bui-ThanhDemkowiczGhattas11b}.
+
+Having reduced the problem with homogeneous BCs to the classical theory of
+$L^2$-adjoint operators, we now recall the Banach Closed Range
+Theorem. Let $T : X \to Y$ be a linear, continuous operator from a
+Hilbert space $X$ into a Hilbert space $Y$. Let $\check{T}$ be the
+corresponding operator defined on the quotient space
+$X/\mathcal{N}(T)$ or, equivalently, the restriction of $T$ to the
+$X$-orthogonal complement of null space of operator $T$,
+$\mathcal{N}(T)^\perp \subset X$. Let $\check{T}^\ast$ denote the
+analogous operator for the adjoint $T^\ast$.  The following
+conditions are then equivalent to each other.  
+\[
+\begin{array}{c}
+T \text{ has a closed range }, \\[8pt]
+T^\ast \text{ has a closed range }, \\[8pt]
+\check{T} \text{ is bounded below, i.e. } 
+\Vert T u \Vert \ge \gamma \Vert u \Vert \quad \forall u \in \mathcal{N}(T)^\perp,\\[8pt]
+\check{T}^\ast \text{ is bounded below, i.e. } 
+\Vert T^\ast v \Vert \ge \gamma \Vert v \Vert \quad \forall v \in \mathcal{N}(T^\ast)^\perp.
+\end{array}
+%\label{eq:closed_range_conditions}
+\]
+Note that the (maximal) constant $\gamma$ is the same for $T$ and $T^\ast$.
+
+{{\bf Assumption 3:} The operator $A\vert_U$, restricted to the
+  $L^2$-orthogonal complement $\mathcal{N}(A)^\perp$, is bounded
+  below.}
+
+The homogeneous problem~(\ref{eq:hom_BVP}) and its adjoint counterpart
+are thus well-posed. More precisely, for each data function $f$ which is
+$L^2$-orthogonal to the null space of the adjoint operator, a solution
+exists, is unique in the orthogonal complement of the null space
+of the operator (equivalently, in the quotient space), and
+depends continuously on $f$.  The inverse of the maximal constant $\gamma$ is precisely the norm of the inverse
+operator from $\mathcal{R}(A)$ into $\mathcal{N}(A)^\perp$ (which is equal to the norm of the solution operator from $\mathcal{R}(A^{\ast})$ into $\mathcal{N}(A^{\ast})^\perp$).
+
+
+\paragraph*{Strong formulation with homogeneous BC for the Stokes problem.}
+We have 
+\[
+C_1 u = C_1(\bfu,p,\bfsig) = \text{tr } \bfu \quad \text{and} \quad  
+C_2^\prime v = C_2^\prime(\bfv,q,\bftau) = \text{tr } \bfv.
+\]
+Condition~(\ref{eq:adjoint_assumption}) is easily satisfied.
+We have $U=V$, where
+\[
+U = \{ (\bfu,p,\bfsig) \in (\bfL^2(\Omega) \times L^2(\Omega) \times
+\bfL^2(\Omega)) \: : \: \bfsig - p\bfI \in \bfH(\text{\bf
+  div},\Omega), \bfu \in \bfH^1_0(\Omega) \}.
+\]
+Both $A$ and $A^\ast$ have non-trivial null space consisting
+of constant pressures.  To ensure uniqueness, we have to
+restrict ourselves to pressures $p$ and $q$ with zero average;
+\[ p,q \in
+L^2_{0} := \left\{ q \in L^2(\Omega) \; : \: \int_\Omega q = 0 \right\}.
+\]
+The proof that $A$ and $A^\ast$ are bounded below involves the
+Ladyzenskaya inf-sup condition; for the reader's convenience we reproduce
+the classical reasoning in Appendix \ref{sec:boundedness_below}.
+
+
+\paragraph*{Strong formulation with non-homogeneous BC.}
+
+
+We are now ready to tackle the case with a non-homogeneous boundary
+condition. We have
+\[ (Au,v) - \langle C_1 u,v\rangle = (u,A^\ast v) +
+\langle u,C_2^\prime v\rangle \quad u \in H_A(\Omega), v \in H_{A^\ast}(\Omega) .
+\]
+We are interested in the operators 
+\[
+\begin{array}{rrl}
+H_A(\Omega) \ni u \to & (Au,C_1 u) \in & L^2(\Omega) \times (\widehat{H}_{A^\ast}(\Gamma))^\prime \quad \text{ and } \\[8pt]
+H_{A^\ast}(\Omega) \ni v \to & (A^\ast v,C_2^\prime v) \in & L^2(\Omega) \times (\widehat{H}_{A}(\Gamma))^\prime.
+\end{array}
+\label{eq:bounded_below_nhom}
+\]
+We have the following classical result.
+\begin{theorem}
+Assume
+that data $f \in L^2(\Omega)$ and 
+$f_D \in \mathcal{R}(C_1)$ satisfy the compatibility condition
+\[
+(f,v) - \langle f_D,v\rangle = 0 \quad \forall v : A^\ast v = 0, C_2^\prime v = 0.
+\]
+Problem~(\ref{eq:nonhom_BVP}) has a unique solution $u$ in $\mathcal{N}(A)^\perp$ that depends
+continuously upon the data; i.e. there exists a constant $\tilde{\gamma}>0$, independent of the data, such that
+\[
+\tilde{\gamma} \Vert u \Vert_{H_A(\Omega)} \leq \left( \Vert f \Vert^2 + \Vert  f_D \Vert^2 \right)^{1/2}.
+\]
+The analogous result holds for the adjoint operator $(A^\ast, C_2^\prime)$.
+%% \tanbui{Same result holds for adjoint operator $A^\ast$}{Here we mean the pair $(A^\ast v,C_2^\prime v)$, should we say ``Similar results hold for the adjoint equation given by $(A^\ast v,C_2^\prime v)$ since the compatibility condition and the operators are different?}.
+\label{theorem:strong_nonhom_formulation}
+\end{theorem}
+\begin{proof}
+Let $\bar{C}_1$ denote the restriction of $C_1$ to $\widehat{H}_A^1(\Gamma)$. Since $\bar{C}_1$ is then
+injective and has closed range,
+it admits a continuous inverse:
+\[
+\norm{ \hat{u}_1 }_{\widehat{H}_A(\Gamma)} = \norm{ \bar{C}_1^{-1} f_D }_{\widehat{H}_A(\Gamma)} \leq \frac{1}{\delta} \norm{ f_D }_{(\widehat{H}_{A^\ast}(\Gamma))^\prime}.
+\]
+Let $\hat{u} = \LRp{\hat{u}_1,0}$ and let $\tilde{\hat{u}}$ be the
+minimum-energy extension of $\hat{u}$ in $H_A(\Omega)$.  We seek a solution $u$
+of the form 
+\[ u = u_0 + \tilde{\hat{u}},
+\]
+where $u_0 \in
+\mathcal{N}(A\vert_U)^\perp$ solves the homogeneous BVP~(\ref{eq:hom_BVP})
+with the modified right-hand side $f - A \tilde{\hat{u}}$. The load $f - A
+\tilde{\hat{u}}$ satisfies the compatibility condition for the
+homogeneous case. Indeed, 
+\[
+\begin{array}{rl}
+(f - A \tilde{\hat{u}}, v) & = (f,v) - (A \tilde{\hat{u}},v) \\[8pt]
+& = (f,v) - \left( (\tilde{\hat{u}},A^\ast v) - \langle f_D,v\rangle - \langle \tilde{\hat{u}},C_2^\prime v\rangle \right) \\[8pt]
+& = (f,v) - \langle f_D,v\rangle = 0,
+\end{array}
+\]
+for each $v$ such that $A^\ast v = 0$ and $C_2^\prime v = 0$.
+
+We now have
+\[
+\begin{array}{ll}
+\Vert u \Vert^2_{H_A} & = \Vert u_0 + \tilde{\hat{u}} \Vert^2_{H_A}\\[8pt]
+& \le 2\LRp{\Vert u_0 \Vert^2_{H_A} + \Vert  \tilde{\hat{u}} \Vert^2_{H_A}}.
+\end{array}
+\]
+Now, observe that
+\[ \Vert \tilde{\hat{u}} \Vert_{H_A(\Omega)} =
+\Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma)} \leq \frac{1}{\delta} \Vert f_D
+\Vert_{(\widehat{H}_{A^\ast}(\Gamma))^\prime}
+\] 
+and that
+\[
+\begin{array}{ll}
+\Vert u_0 \Vert^2_{H_A} & = \Vert u_0 \Vert^2 + \Vert A u_0 \Vert^2 \\[8pt]
+&\leq \ds \left(\frac{1}{\gamma^2} + 1 \right) \Vert A u_0 \Vert^2 \\[12pt]
+& \ds \leq 2 \left(\frac{1}{\gamma^2} + 1 \right) \left[ \Vert f \Vert^2 + \frac{1}{\delta^2} \Vert f_D \Vert^2 \right].
+\end{array}
+\]
+Combining these results ends the proof with
+\[
+\frac{1}{\tilde{\gamma}} \le 2\max\LRc{\sqrt{\frac{1}{\gamma^2} + 1}, \frac{1}{\delta}\sqrt{\frac{1}{\gamma^2} + \frac{3}{2}}}.
+\]
+
+\end{proof}
+
+%% \begin{corollary}
+%% Operators~(\ref{eq:bounded_below_nhom})
+%% are bounded below with common constant 
+%% \[
+%% \tilde{\gamma} \geq (2 (\frac{1}{\gamma^2} + 1 )\max \{ 1, \frac{1}{\delta^2}\} )^{-1/2}.
+%% \]
+%% \end{corollary}
+
+\paragraph*{Strong formulation with non-homogeneous BCs for the Stokes problem.}
+The ranges of operators $C_1$ and $C'_2$ coincide exactly with
+$\bfH^{1/2}(\Gamma)$.  The strong formulation for the non-homogeneous
+Stokes problem is well-posed, provided the data $g$ and $\bfu_D$ satisfy the
+compatibility condition
+\[ 
+\int_\Omega g = \int_{\Gamma} \bfu_D \cdot
+\bfn.
+\] 
+The analogous conclusion holds for the adjoint operator.
+
+
+\paragraph{Ultra-weak (variational) formulation.}
+
+
+We are now ready to formulate the {\em ultra-weak variational
+  formulation} for problem~(\ref{eq:nonhom_BVP}).  The steps are as
+follows.
+\begin{enumerate}
+  \item Integrate by parts:
+\[
+(u,A^\ast v) + \langle C \text{tr}_A u, v\rangle = (f,v).
+\]
+  \item Split the boundary operator $C$ into $C_1$ and $C_2$ according to the decomposition in ~(\ref{eq:trace_split}):
+\[
+(u,A^\ast v) + \langle C_1 (\text{tr}_A u)_1, v\rangle   +  \langle C_2 (\text{tr}_A u)_2, v\rangle = (f,v). 
+\]
+  \item Apply the BC, moving the known term $C_1 (\text{tr}_A u)_1 = f_{D} $ to the right-hand side:
+\[
+(u,A^\ast v) + \langle (\text{tr}_A u)_2, C_2^\prime v\rangle = (f,v) - \langle f_D,v\rangle.
+\]
+\item Declare $\hat{u}_2 = (\text{tr}_A u)_2$ to be an independent unknown.  The problem then becomes
+\be
+\left\{
+\begin{array}{ll}
+\text{Find } u \in L^2(\Omega), \hat{u}_2 \in \widehat{H}_A^2(\Gamma) \text{ such that} \\[8pt]
+(u,A^\ast v) + \langle \hat{u}_2, C_2^\prime v\rangle = (f,v) - \langle f_D,v\rangle \quad \forall v \in H_{A^\ast}(\Omega).
+\end{array}
+\right.
+\label{eq:ultraweak_formulation}
+\ee
+\end{enumerate}
+The bilinear form
+\be
+b((u,\hat{u}_2),v) := (u,A^\ast v) + \langle \hat{u}_2, C_2^\prime v\rangle
+= (u,A^\ast v) + c(\hat{u}_2, v)
+\label{eq:bilinear_form_ultraweak_formulation}
+\ee
+generates two associated operators $B$ and $B^{\prime}$, where
+\[
+b((u,\hat{u}_2),v) = \langle  B(u,\hat{u}_2),v\rangle = \langle (u,\hat{u}_2),B^\prime v\rangle.
+\]
+Operator $B'$ corresponds to the strong setting for the adjoint $A^\ast$ with non-homogeneous
+BCs;
+\[
+B' v = (A^\ast v, C_2^\prime v) \in L^2(\Omega) \times
+(\widehat{H}_A(\Gamma))^\prime.
+\]
+In order to determine the null-space of operator $B$, assume that
+\[
+ b((u,\hat{u}_2),v) = 0 \quad \forall v \in H_{A^\ast}(\Omega).
+\]
+Testing first with $v \in \mathcal{D}(\Omega)$, we deduce that $A u =
+0$. Integrating the first term by parts, and testing with arbitrary
+$v$, we learn that $\hat{u}_2 = u$ on $\Gamma$ and
+  $C_1 u = 0$.
+
+\begin{theorem}
+Problem~(\ref{eq:ultraweak_formulation}) is well-posed. In particular,
+for each $f$ and $f_D$ which satisfy the compatibility condition
+\be
+(f,v) - \langle f_D,v\rangle =0 \quad \forall v \in \mathcal{N}(A^\ast\vert_V),
+\label{eq:compatibility_condition_ultraweak}
+\ee a solution of (\ref{eq:ultraweak_formulation}) exists which is
+unique up to $u \in \mathcal{N}(A\vert_U)$ and corresponding
+$\hat{u}_2 \in \widehat{H}_A^2(\Gamma)$ such that $u_2 - \hat{u}_2 \in
+{\mathcal{N}(C_1)}$ where $u_2$ is the corresponding component of trace
+of $u$ in $\widehat{H}_A^2(\Gamma)$.
+
+The inf-sup constant for bilinear
+form~(\ref{eq:bilinear_form_ultraweak_formulation}) is equal to the
+inf-sup constant of the adjoint operator  $(A^\ast, C_2^\prime)$ from
+Theorem~\ref{theorem:strong_nonhom_formulation}.
+\end{theorem}
+\begin{proof}
+We observe that the conjugate
+$B^\prime$ of operator $B$ corresponding to the bilinear
+form~(\ref{eq:bilinear_form_ultraweak_formulation}) coincides with the
+strong form of operator $(A^\ast, C_2^\prime)$. The result is then a direct consequence of Theorem \ref{theorem:strong_nonhom_formulation}.
+\end{proof}
+
+
+
+\paragraph{Ultra-weak formulation for the Stokes problem.} 
+The Stokes formulation is now just a matter of interpretation. The solution consists of $u = (\bfu,p,\bfsig)$
+and unknown traction
+\[
+\hat{\bft} = (-\bfsig + p \bfI) \bfn
+\]
+Remember that only for a sufficiently regular\footnote{That is, $u \in H_A(\Omega)$.}
+ solution $u$ will $\hat{\bft}$ coincide with
+the trace $(-\bfsig + p \bfI) \bfn$. In the ultra-weak formulation, the traction $\hat{\bft}$
+appears as an {\em independent} unknown. 
+With homogeneous incompressibility constraint, the variational problem reads as follows.
+\[
+\left\{
+\begin{array}{ll}
+\text{Find }\bfu \in \bfL^2(\Omega), p \in L^2(\Omega), \bfsig \in \bfL^2(\Omega),
+\hat{\bft} \in H^{-1/2}(\Gamma) \text{ such that} \\[8pt]
+(\bfu, {\bf div} (\bftau - q \bfI)) + (p, - \text{div} q) + (\bfsig, \bftau + \bfnab \bfv) 
++ \langle \hat{\bft},\bfv\rangle = (\bff,\bfv) - \langle \bfu_D,(-\bftau + q\bfI) \bfn\rangle \\[8pt]
+\hfill \forall (\bfv,q,\bftau) \text{ such that } 
+\bftau - q\bfI \in \bfH(\text{\bf div},\Omega), \bfv \in \bfH^1(\Omega).
+\end{array}
+\right.
+\]
+The load is specified by a body force $\bff \in \bfL^2(\Omega)$ and a velocity $\bfu_D \in \bfH^{1/2}(\Gamma)$
+on the boundary with vanishing normal component:
+\[
+\int_{\Gamma} \bfu_D \cdot \bfn = 0.
+\]
+The solution is determined up to a constant pressure $p_{0}$
+{and corresponding constant traction $\hat{\vect{t}}_{0} = p_{0} \bfn$.}
+
+
+Notice that there are no boundary conditions imposed on the test functions. This is important
+from a practical point of view.
+
+{
+\begin{remark}
+{\bf Strong versus weak imposition of boundary conditions.}
+In classical variational formulations for second order PDEs, we distinguish between {\em strong}
+(Dirichlet) BCs and weak (Neumann) BCs. Dirichlet BCs are accounted for by coming up
+with a finite-energy lift of the BC data, and looking for a solution to the 
+problem with homogeneous BCs and a modified ``load vector'' that includes the action
+of the bilinear form on the lift \cite[p. 34]{hpbook}. In practice, the Dirichlet data is first projected
+(interpolated) into the trace of FE space and then lifted with FE shape functions.
+By contrast to the Dirichlet BC case, Neumann BCs only contribute to the load vector. 
+The terms ``strong'' and ``weak'' refer to the fact that, with Dirichlet data in the
+FE space, Dirichlet BCs are enforced pointwise, whereas Neumann BCs, in general, are satisfied
+only in the limit.
+}
+
+{ In an ultra-weak variational formulation, each BC may
+  be specified either in a ``strong'' or ``weak'' way. The formulation
+  discussed above corresponds to a weak imposition of the BC. Data
+  $f_D$ contributes to the load vector and is accounted for on the
+  element level, in the integration for the load vector. An alternate,
+  strong imposition of the same BC, starts with finding a trace lift
+  $\hat{u}_0$ of the BC,
+$$
+C_1 \hat{u}_0 = f_D.
+$$
+Notice that the lift may have a non-zero $\widehat{H}_A^2$-component but the final trace will
+be equal to the sum of the lift and an unknown component $\hat{u}_2 \in \widehat{H}_A^2$,
+$$
+\hat{u} = \hat{u}_0 + \hat{u}_2.
+$$
+The term $\langle f_D,v \rangle$ on the right-hand side of~(\ref{eq:bilinear_form_ultraweak_formulation})
+is simply replaced with $c(u_0,v)$. 
+The rest of the formulation remains unchanged.
+The difference between the two formulations becomes
+more visible in context of discontinuous test functions discussed next.
+\label{remark:strong_vs_weak_BC}
+\end{remark}
+}
+
+
+\subsection{DPG formulation}\label{sec:AnalysisDPGFormulation}
+
+The essence of the DPG formulation lies in extending the concept of the ultra-weak variational
+formulation to broken test spaces. We begin by partitioning domain $\Omega$ into finite elements $K$
+and integrating by parts on each element:
+\[
+(Au,v)_{K} = (u,A^\ast v)_{K} + c_{\ptl K}(u,v) \quad u \in H_A(K), v \in H_{A^\ast}(K).
+\]
+Next, we sum over all elements to obtain
+\[
+\underbrace{\sum_K (Au,v)_{K}}_{ = (Au,v)}
+ = \underbrace{\sum_K (u,A^\ast v)_{K}}_{=: (u,A_h^\ast v)_{h}}
+ + \underbrace{\sum_K c_{\ptl K}(u,v)}_{=: c_h(u,v)}
+ \quad u \in H_A(\Omega), v \in H_{A^\ast}(\Omega_h).
+\]
+Here we take $u$ to be globally conforming but allow $v$ to come from the broken graph space
+\[
+H_{A^\ast}(\Omega_h) := \left\{ v \in L^2(\Omega) \: : \: A^\ast v\vert_K \in L^2(K) \: \forall K\right\}.
+\]
+The index $h$ on the domain
+indicates that the formal adjoint operator is to be
+understood element-wise. The boundary term $c_{h}$ now extends to the whole skeleton $\Gamma_h = \cup_K \ptl K$.
+For the internal skeleton $\Gamma_h^0 = \Gamma_h - \Gamma$, this term represents the action of traces $\hat{u}$
+on the jumps of traces $\hat{v}$. As with $H^{1/2}(\Gamma_h)$ and $H^{-1/2}(\Gamma_h)$,
+we introduce a general, abstract space of traces on the skeleton,
+\[
+\widehat{H}_A(\Gamma_h) := \left\{
+\hat{u} = \{ \hat{u}_K \} \in \prod_K \widehat{H}_A(\ptl K) \: : \: \exists u \in H_A(\Omega) : 
+\text{tr}_A u\vert_K =  \hat{u}_K \right\},
+\]
+and the corresponding subspace of traces that vanish on $\Gamma = \ptl \Omega$,
+\[
+\hat{\tilde{H}}_A(\Gamma_h) := \left\{
+\hat{u} = \{ \hat{u}_K \} \in \prod_K \widehat{H}_A(\ptl K) \: : \: \exists u \in \tilde{H}_A(\Omega)
+ : 
+\text{tr}_A u\vert_K =  \hat{u}_K \right\},
+\]
+where
+\[
+\tilde{H}_A(\Omega) = \left\{ u \in H_A(\Omega) \: : \: \text{tr }u = 0 \text{ on } \Gamma \right\}.
+\]
+As usual, we equip the trace space with the minimum energy extension norm.
+
+Any function $u \in H_A(\Omega)$ can be decomposed into an extension of its trace to $\Gamma$
+and a component that vanishes on $\Gamma$:
+\[
+u = E(\text{tr } u ) + \tilde{u},\quad \tilde{u} \in \tilde{H}_A(\Omega).
+\]
+If the extension $E(\text{tr } u )$ is the minimum-energy extension, the decomposition above
+is $H_A$-orthogonal. This implies a corresponding decomposition for traces $\hat{u}
+\in \widehat{H}_A(\Gamma_h)$:
+\[
+\hat{u} = 
+{\hat{E}}\hat{u}_0 + \hat{\tilde{u}},\quad \hat{\tilde{u}} \in \hat{\tilde{H}}_A(\Gamma_h).
+\]
+Here {
+$\hat{u}_0 \in \widehat{H}_A(\Gamma)$ is the restriction of $\hat{u}$ to $\Gamma$ and  
+$\hat{E}\hat{u}_0 \in \widehat{H}_A(\Gamma_h)$ is any extension of $\hat{u}_0$ back to the whole
+skeleton $\Gamma_h$.}
+Again, if we use the minimum-energy extension, the decomposition
+is $\widehat{H}_A(\Gamma_h)$-orthogonal. We have
+\be
+\widehat{H}_A(\Gamma_h) = {\hat{E}} \widehat{H}_A(\Gamma) \oplus \hat{\tilde{H}}_A(\Gamma_h).
+\label{eq:trace_decomposition}
+\ee
+
+
+
+
+
+
+
+
+By construction, we have a generalization of the trace operator to the whole skeleton,
+\[
+\text{tr} : H_A(\Omega) \twoheadrightarrow \widehat{H}_A(\Gamma_h).
+\]
+The skeleton term
+$c_h(\hat{u},\hat{v})$ is well-defined for 
+$\hat{u} \in \widehat{H}_A(\Gamma_h)$ and $\hat{v} = \{\hat{v}_K \} \in \prod_K H_{A^\ast}(\ptl K)$.
+We also have the condition
+\[
+\begin{array}{c}
+\left((c_h(\hat{u},\hat{v}) = 0 \: \forall \hat{u} \in \hat{\tilde{H}}_A(\Gamma_h) \right)
+\Longleftrightarrow v \in H_{A^\ast}(\Omega). \\[8pt]
+\end{array}
+\]
+Indeed, if we restrict ourselves to a globally conforming test function, the skeleton term reduces
+to a term that involves only the domain boundary $\Gamma$, where the trace $\hat{u}$ vanishes. The converse follows
+from the definition of distributional derivatives. 
+Indeed, for any test function $\phi \in \mathcal{D}(\Omega)$,
+we have
+\[
+c_h (\text{tr} \phi, v) = (A \phi,v) - (\phi,A^\ast_h v)_h = 0,
+\]
+which proves that the union of element-wise values $A^\ast_h v$ (which lives in $L^2(\Omega)$) is
+equal to $A^\ast v$ in the sense of distributions.
+
+We now use the decomposition of traces~(\ref{eq:trace_decomposition})
+to set up the boundary operators. 
+{
+Recall that condition~(\ref{eq:adjoint_assumption}) decomposed the
+trace space $\widehat{H}_A(\Gamma)$
+into  the direct sum of the nullspaces of operators $C_2$ and $C_1$:
+\[
+\widehat{H}_A(\Gamma) = \widehat{H}_A^1(\Gamma) \oplus \widehat{H}_A^2(\Gamma),
+\quad \hat{u} = \hat{u}_1 + \hat{u}_2.
+%\label{eq:trace_split_h}
+\]
+The first term is known from the boundary condition; the second remains as an additional
+unknown.
+We have
+\be
+\begin{array}{ll}
+c_h(\hat{u},\hat{v}) & = c_h(\hat{E}\hat{u}_0,\hat{v}) + c_h(\hat{\tilde{u}},\hat{v}) \\[8pt]
+& 
+= c_h(\hat{E} \hat{u}_0^1, \hat{v}) + c_h(\hat{E} \hat{u}_0^2, \hat{v}) 
++  c_h(\hat{\tilde{u}},\hat{v}).
+\end{array}
+\label{eq:split_ch}
+\ee
+For conforming test functions $\hat{v} \in \widehat{H}_{A^\ast}(\Gamma_h)$, 
+the bilinear form on the skeleton reduces to the
+bilinear form on the domain boundary,
+$$
+c_h(\hat{u},\hat{v}) = c(\hat{u},\hat{v}) = c(\hat{u}_0^1,\hat{v}) + c(\hat{u}_0^2,\hat{v}) 
+= \langle f_D, \hat{v} \rangle + c(\hat{u}_0^2,\hat{v}).
+$$
+In particular, this is independent of the choice of lift $\hat{E}$.
+To impose the BC strongly, we need to find a trace lift of the BC data $f_D$,
+$$
+C_1 \hat{u}_0 = f_D,
+$$
+move the term with the lift to the right-hand side, and look for the unknown component $\hat{u}_2$
+of the trace on $\Gamma$. The final formulation reads as follows.
+\[
+\left\{
+\begin{array}{ll}
+u \in L^2(\Omega), \hat{u} \in \hat{E} \widehat{H}_A^2(\Gamma) \oplus \hat{\tilde{H}}_A(\Gamma_h)  \\[8pt]
+(u,A^\ast_h v)_h +  c_h(\hat{u},v) = (f,v) - c_h(\hat{E}\hat{u}_0,v)
+\quad \forall v \in H_{A^\ast}(\Omega_h)
+\end{array}
+\right.
+%\label{eq:abstract_DPG_formulation_strong}
+\]
+However, if we decide to enforce the BC in a weak way, we need to replace the first
+term on the right-hand side of ~(\ref{eq:split_ch}) with an extension of
+known BC data $\langle f,v\rangle$ to discontinuous test functions.
+This is always possible as the term $c_h(\hat{E} \hat{u}_0,v)$ provides an example of such an extension.
+}
+
+{
+The final abstract DPG formulation\footnote{That is, the ultra-weak variational formulation with broken test functions.}
+is then
+\be
+\left\{
+\begin{array}{ll}
+u \in L^2(\Omega), \hat{u} \in \hat{E} \widehat{H}_A^2(\Gamma) \oplus \hat{\tilde{H}}_A(\Gamma_h)  \\[8pt]
+(u,A^\ast_h v)_h +  c_h(\hat{u},v) = (f,v) - \langle f_D, v\rangle_{\Gamma_h} 
+\quad \forall v \in H_{A^\ast}(\Omega_h).
+\end{array}
+\right.
+\label{eq:abstract_DPG_formulation}
+\ee
+}
+
+
+The bilinear\footnote{Sesquilinear for complex-valued problems.} form corresponding to the formulation 
+\[
+b((u,\hat{u}),v) := (u,A^\ast_h v)_h  + c_h(\hat{u},v)
+\]
+generates operators $B$ and $B'$, where
+\[
+ b((u,\hat{u}),v) = \langle B(u,\hat{u}),v\rangle 
+= \langle (u,\hat{u}),B'v\rangle.
+\]
+The null space of conjugate operator $B'$ coincides with the null space of $A^\ast\vert_V$. Indeed, let
+\[
+b((u,\hat{u}),v) = 0 \quad \forall (u,\hat{u}).
+\label{eq:null_space_conjugate_operator}
+\]
+Taking arbitrary
+$\hat{u} \in \hat{\tilde{H}}_A(\Gamma_h)$, we conclude that $v$ must be globally conforming, 
+so the bilinear form in~(\ref{eq:null_space_conjugate_operator}) reduces to 
+the bilinear form~(\ref{eq:bilinear_form_ultraweak_formulation}).
+
+The null space of DPG operator $B$ consists of all $(u,\hat{u})$ such that
+\[
+ b((u,\hat{u}),v) = 0 \quad \forall v \in H_{A^\ast}(\Omega_h).
+\]
+As with the ultra-weak variational formulation, we first test with
+$v \in \mathcal{D}(\Omega)$ to conclude that $A u = 0$. Integrating the first term by parts
+and testing with arbitrary $v$, we conclude that $\hat{u} = u$ on $\Gamma_h$. In particular, as
+$\hat{u}\vert_\Gamma \in \widehat{H}^2_A(\Gamma)$, this implies that $C_1 u = 0$ on $\Gamma$.
+
+
+We are in a position to state our main abstract result.
+\begin{theorem}
+Problem~(\ref{eq:abstract_DPG_formulation}) is well-posed. More precisely, for any 
+data $f$ and $f_{D}$ that satisfy the compatibility condition~(\ref{eq:compatibility_condition_ultraweak}), 
+the problem has a solution $(u,\hat{u})$ such that $(u,\hat{u}\vert_\Gamma)$
+coincides with the solution of~(\ref{eq:ultraweak_formulation}).
+The bilinear form satisfies
+the inf sup condition
+\[
+\sup_{v \in H_{A^\ast}(\Omega_h)} 
+\frac{\vert (u,A^\ast_h v)_h + c_h(\hat{u},v) \vert}{\Vert v \Vert_{H_{A^\ast}(\Omega_h)}}
+\geq \gamma_{DPG} 
+\left( \Vert u \Vert_{L^2(\Omega)}^2 + \Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma_h)}^2 \right)^{1/2}
+%\sqrt{ \Vert u \Vert_{L^2(\Omega)}^2 + \Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma_h)}^2 }
+\]
+for all $\hat{u} \in \hat{E} \widehat{H}_A^2(\Gamma) \oplus
+ \hat{\tilde{H}}_A(\Gamma_h)$, and $u \in L^2(\Omega)$ {orthogonal to the null space:}
+\[
+\left\{ (u,\hat{u}) \: : \: u \in \mathcal{N}(A\vert_U) \text{ and } \hat{u} = u \text{ on }\Gamma_h \right\}
+\]
+The inf-sup constant $\gamma_{DPG}$ is mesh-independent and
+$\gamma_{DPG}=$ {$O(\gamma)$ and $O(\tilde{\gamma})$ for the adjoint operator.}
+\end{theorem}
+\begin{proof}
+We will switch the order of spaces in the inf-sup condition and prove that
+\be
+\sup_{\substack{u \in L^2(\Omega)\\ \hat{u} \in E \widehat{H}_A^2(\Gamma) \oplus
+ \hat{\tilde{H}}_A(\Gamma_h)
+}} 
+\frac{\vert (u,A^\ast_h v)_h + c_h(\hat{u},v) \vert}
+%{\sqrt{ \Vert u \Vert_{L^2(\Omega)}^2 + \Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma_h)}^2 }
+{\left( \Vert u \Vert_{L^2(\Omega)}^2 + \Vert \hat{u} \Vert_{\widehat{H}_A(\Gamma_h)}^2 \right)^{1/2}
+}
+\geq \gamma_{DPG} 
+\Vert v \Vert_{H_{A^\ast}(\Omega_h)}
+\label{eq:inverted_infsup}
+\ee
+for all $v$ $L^2$-orthogonal to $\mathcal{N}(A^\ast\vert_V)$.
+
+{\bf Step 1:} Consider first a special case when $A^\ast_h v = 0$. Consider a conforming $u \in 
+(\mathcal{N}(A\vert_U))^\perp \subset U$ such
+that $A u = v$. Since $v \in (\mathcal{N}(A^\ast\vert_V))^\perp$, such a $u$ exists. We then have
+\[
+\begin{array}{ll}
+\Vert v \Vert^2 & \ds = (A u, v) = \underbrace{(u,A^\ast_h v)}_{= 0} + c_h(\text{tr } u,v) \\[12pt]
+& \ds \le \frac{\vert  c_h(\text{tr } u,v) \vert}{\Vert \text{tr } u \Vert } \: \Vert \text{tr } u \Vert \\[12pt]
+&\ds \leq \sup_{\hat{u}} \frac{\vert  c_h(\hat{u},v) \vert}{\Vert \hat{u} \Vert } \: \Vert u \Vert_{H_A(\Omega)}
+\\[12pt]
+& \ds \leq \frac{1}{\gamma} \sup_{\hat{u}} \frac{\vert  c_h(\hat{u},v) \vert}{\Vert \hat{u} \Vert } \Vert v \Vert.
+\end{array}
+\]
+Dividing both sides by $\Vert v \Vert$, we get the required inequality.
+
+{\bf Step 2:} Now let $v$ be arbitrary. Consider a conforming $\tilde{v} \in H_{A^\ast}(\Omega)$ such that
+$A^\ast \tilde{v} = \ A^\ast_h v$. By {Assumption 1}, such a function always exists and can
+be interpreted as a solution to the strong adjoint problem with non-homogeneous BC data $f_{D} = C^\prime_2 \tilde{v}$:
+\[
+\left\{
+\begin{array}{ll}
+A^\ast \tilde{v}  = A^\ast_h v \\[8pt]
+C^\prime_2 \tilde{v}  = f_{D}.
+\end{array}
+\right.
+\]
+To ensure uniqueness and boundedness in the $L^2$-norm, we assume that $\tilde{v}$ is $L^2$-orthogonal
+to the null space $\mathcal{N}(A^\ast\vert_V)$.
+
+Now, by construction, $A_h( v - \tilde{v}) = 0$ and 
+$v - \tilde{v} \in (\mathcal{N}(A^\ast\vert_V))^\perp$
+so, by the Step 1 result,
+the difference $ v - \tilde{v}$ is bounded in both $L^2$ and 
+$H_{A^\ast}$ norms by the supremum in~(\ref{eq:inverted_infsup}). We thus need only demonstrate that
+we can control the norm of the conforming $\tilde{v}$. But, if we restrict ourselves
+in~(\ref{eq:inverted_infsup}) to conforming test functions, the bilinear form collapses 
+to~(\ref{eq:bilinear_form_ultraweak_formulation}).
+
+This finishes the proof.
+\end{proof}
+
+
+\subsection{DPG formulation for the Stokes problem}
+
+We begin by emphasizing the global character of decomposition of traces in~(\ref{eq:trace_decomposition}).
+Velocity trace $\hat{\bfu} \in \bfH^{1/2}(\Gamma_h)$ can be decomposed into 
+an extension of the velocity trace on the boundary $\Gamma$
+and the trace on the internal skeleton $\Gamma_h^0$:
+\[
+\hat{\bfu} = \hat{E} \hat{\bfu}_0 + \hat{\tilde{\bfu}}
+\]
+In FE computations, traces are approximated with functions that are globally continuous
+on the skeleton $\Gamma_h$.
+The trace $\hat{\bfu}_0$, which is known from the boundary condition, has to be lifted to the whole skeleton.
+In computations, we use FE shape functions and lift $\hat{\bfu}_0$ only into the
+ layer of elements neighboring $\Gamma$.
+The unknown part of velocity trace $\hat{\tilde{\bfu}} \in \tilde{\bfH}^{1/2}(\Gamma^0_h)$ 
+lives on the internal skeleton only.
+
+The unknown traction trace $\hat{\bft} \in \bfH^{-1/2}(\Gamma_h)$ lives on the whole skeleton.
+On the continuous level, the decomposition of traction into 
+a lift of its restriction to $\Gamma$ and the remaining component $\hat{\tilde{\bft}} 
+\in \tilde{\bfH}^{-1/2}(\Gamma)$ that lives on the internal skeleton $\Gamma_h^0$ is also global.
+In 2D for instance, 
+for $\bft$ from a {\em standard} boundary space $\bfH^{-1/2}(\Gamma)$, the corresponding
+restriction to an edge $e$ of an element $K$ adjacent to boundary $\Gamma$ lives only in $\bfH^{-1/2}(e)$
+and {\em cannot} just be extended by zero to a functional in $\bfH^{-1/2}(\ptl K)$.
+However, the conformity present in the definition of space $\bfH^{-1/2}(\Gamma_h)$ is so weak 
+that it does
+not translate into any global continuity conditions for the approximating polynomial spaces that
+are discontinuous from edge to edge.
+
+For the Stokes problem, the boundary operators represent exactly the velocity and traction components
+of the solution trace;
+\[
+C_1 (\hat{\bft},\hat{\bfu}) = \bfu,\quad C_2 (\hat{\bft},\hat{\bfu}) = \hat{\bft}.
+\]
+{
+The difference between the strong and weak imposition of BCs is, in our case, insignificant.
+The abstract $\langle f_D,v \rangle$ term corresponds to $\langle\bfu_D,\bfr\rangle_\Gamma$,
+where $\bfr$ is the traction component of the test function.
+Its extension to discontinuous test functions $v$ is constructed by lifting Dirichlet data $\bfu_D$ to the
+whole skeleton. The strong imposition of the BCs is essentially the same. The abstract lift $\hat{u}_0$
+of $\bfu_D$ can be selected to be $(\bfu_D,{\bf 0})$ (zero traction) and, if we use the same extension
+of $\bfu_D$ to the whole skeleton, the two formulations will be identical. A subtle difference
+lies in the way we treat those lifts in FE computations. Assume, e.g., that we approximate
+traces with quadratics.
+Assume that we have a non-polynomial
+data $u_D$. With the strong imposition of BCs, we first interpolate the data with quadratics
+and use quadratic shape functions to lift it to the whole skeleton. The contributions
+to the load vector will be computed by integrating the quadratic lifts against test functions.
+With the weak imposition of the BCs, the non-polynomial $\bfu_D$ on $\Gamma$
+will be integrated directly against the test functions and, in general, will yield different
+values. Additionally, 
+even if we lift the non-polynomial $\bfu_D$ to the whole skeleton
+with the same quadratic shape functions, the lifts will differ on the internal skeleton and,
+consequently, the resulting approximate traces will differ. In the limit, of course,
+the difference will disappear.}
+
+
+
+The null space of conjugate operator $B'$ coincides with the null space of adjoint $A^\ast$ with homogeneous
+BC $\bfv = {\bf 0}$ on $\Gamma$ and consists of constant pressures
+\[
+\{ ({\bf 0},c,{\bf 0}) \: : \: c \in \doubleIR \}.
+\]
+The null space of operator $B$ is the same as that for the operator corresponding to the
+ultra-weak formulation,
+\[
+\{ ((\bfu,p,\bfsig),\hat{\bft}) \: : \: \bfu = {\bf 0}, p = c , \bfsig = {\bf 0}, \hat{\bft} = c \bfn 
+\text{ where } c \in \doubleIR \}.
+\]
+The non-trivial null spaces imply the compatibility condition for the load and non-uniqueness of the solution.
+The compatibility condition for the load involves the right-hand side $g$
+of the divergence equation\footnote{$g=0$ in practice.} and
+the velocity trace BC data $\bfu_D$, and takes the form 
+\[
+\int_\Omega g = \int_{\Gamma} \bfu_D \cdot \bfn.
+\]
+This well-known condition can be obtained immediately by integrating the divergence equation
+and using the boundary condition on $\bfu$:
+\[
+\int_\Omega g = \int_\Omega \text{div } \bfu = \int_\Gamma \bfu \cdot \bfn = \int_\Gamma \bfu_D \cdot \bfn.
+\]
+Assumption 1 thus reduces to the condition that the divergence operator is surjective, a well-known
+fact.
+
+With data satisfying the compatibility condition, the solution (pressure and tractions) is determined
+up to a constant. In computations, the constant can be fixed by implementing an additional scaling
+condition. We can enforce, for instance, zero average pressure in one particular element, or zero
+average normal traction on a particular edge. The scaling will affect the ultimate values for pressure
+and tractions, but has no effect on the velocity or on its gradient and trace.
+
+\subsection{A summary}
+
+We have presented a general theory on well-posedness for DPG variational formulation for an arbitrary
+system of differential operators represented by an abstract operator $A$. 
+We have made a number of assumptions, which we now summarize.
+\begin{itemize}
+  \item Operator $A$ and its formal adjoint $A^\ast$ are surjective ({Assumption 1}).
+  \item Both energy graph spaces $H_A(\Omega)$ and $H_{A^\ast}(\Omega)$ admit corresponding
+trace spaces $\widehat{H}_A(\ptl \Omega),\widehat{H}_{A^\ast}(\ptl \Omega)$.
+  \item The boundary bilinear term $c(u,v)$ resulting from integration by parts is definite. 
+  \item Boundary operator $C_1$ has been selected in such a way that {Assumption 2}
+ is satisfied.
+  \item With homogeneous boundary condition $C_1 u = 0$ in place, operator $A$ is bounded below
+in the $L^2$-orthogonal complement of its null space ({Assumption 3}).
+\end{itemize}
+With these conditions satisfied, the DPG formulation is well-posed. The corresponding inf-sup constant
+is mesh-independent.
+Sweeping technical details under the carpet, this is the main
+take-home message: {\em boundedness below of the strong operator with homogeneous BC implies
+the inf-sup condition for the DPG formulation with a mesh-independent constant.}
+
+The general theory is guiding us how to select unknown traces on the skeleton.
+The energy setting involves graph norms for both operator $A$ and its formal adjoint $A^{\ast}$. The graph norm
+in the test space is equivalent to the {\em optimal test norm} \cite{DPG4} with {\em mesh-independent} 
+equivalence constants. The graph norm for $A$ implies the energy setting for unknown traces and
+the minimum energy extension norm.
+
+All these conditions are satisfied for the Stokes problem.
+
+\subsection{Boundedness Below of the First-Order Stokes Operator with Homogeneous BCs}
+\label{sec:boundedness_below}
+Finally, for completeness we show that the operator corresponding to our first-order Stokes problem with homogeneous BCs is bounded below.  While in the above we have taken $\mu=1$, here we consider the more general case of constant $\mu > 0$.
+
+Recall the classical strong form of the Stokes problem:
+
+\begin{align}
+- \mu \Delta \vect{u} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst1} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\vect{u} &= \vect{u}_D & \text{ on } \partial\Omega.\label{NVR:eq:stronglast1}
+\end{align}
+
+Recall also our first-order system for the Stokes equations:
+\begin{subequations}
+\eqnlab{StokesFirstOrder}
+\begin{align}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in
+} \Omega, \label{NVR:eq:strongfirst2} \\ \NVRdiv \vect{u} &=
+\NVRtensor{0} & \text{ in } \Omega, \\ \frac{1}{\mu}\NVRtensor{\sigma} - \NVRgrad
+\vect{u} &= 0 & \text{ in } \Omega,\\ \vect{u} &= \vect{u}_D & \text{ on
+} \partial\Omega.\label{NVR:eq:stronglast2}
+\end{align}
+\end{subequations}
+
+If we introduce $\A : \HA \rightarrow \L$
+with group variable $u = (\vect{u},p,\NVRtensor{\sigma})$,  the Stokes equation in first order form \eqnref{StokesFirstOrder}, ignoring the boundary conditions,
+can be written succinctly as
+\begin{align}
+\A u \NVReqdef \left[\begin{array}{c}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p\\
+\NVRdiv \vect{u}\\
+\frac{1}{\mu}\NVRtensor{\sigma} - \NVRgrad \vect{u}\end{array}\right]
+= \left[\begin{array}{c}
+\vect{f} \\
+0 \\
+\NVRtensor{0}
+\end{array}\right].\label{NVR:eq:operatorAdefined}
+\end{align}
+
+Considering linear operator $\A$ as defined in equation (\ref{NVR:eq:operatorAdefined}) operating on group variable $u = (\vect{u},p,\NVRtensor{\sigma})$, we seek to show that $||\A u||_{L^{2}} \geq \gamma ||u||_{\HA}$.\\
+
+\subsubsection{$||\A u||_{\Omega} \geq \gamma ||u||_{\HA}$}
+Adding right-hand sides $g$ and $\NVRtensor{h}$
+
+\begin{align}
+-\NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{f} & \text{ in } \Omega, \label{NVR:eq:strongfirst3} \\
+\NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+\frac{1}{\mu}\NVRtensor{\sigma} - \NVRgrad \vect{u} &= \NVRtensor{h} & \text{ in } \Omega, \label{NVR:eq:strongsecondtolast3} \\
+\vect{u} &= \vect{0} & \text{ on } \partial\Omega,\label{NVR:eq:stronglast3}
+\end{align}
+we have that $\A u = (\vect{f},g,\NVRtensor{h})$.  If we can establish bounds for the $L^{2}$ norms of each of the solution variables in terms of $L^{2}$ norms on $\vect{f},g,$ and $\NVRtensor{h}$, then we will have the required lower bound $|| \A u ||_{\Omega} \geq \gamma || u ||_{\HA}$, where $|| u ||_{\HA} \NVReqdef \left( || \A u ||_{\Omega}^{2} + || u ||_{\Omega}^{2}  \right)^{1/2}$.\\
+
+Note that, by linearity of $\A$, it suffices to consider cases in which only one of $\vect{f},g,$ and $\NVRtensor{h}$ is non-zero.  We consider each of these cases in the following three subsections.\\
+
+\subsubsection{$\vect{f} \neq \vect{0},g=0,\NVRtensor{h}=\NVRtensor{0}$}
+In this case, we have exactly the system (\ref{NVR:eq:strongfirst2})-(\ref{NVR:eq:stronglast2}), which reduces (in a distributional sense) to (\ref{NVR:eq:strongfirst1})-(\ref{NVR:eq:stronglast1}).  Testing the first equation with the velocity $\vect{u} \in \vect{H}^{1}_{0}(\Omega)$, we have
+\begin{align*}
+- (\mu \Delta \vect{u}, \vect{u})_{\Omega} + (\NVRgrad p, \vect{u})_{\Omega} &= (\vect{f},\vect{u})_{\Omega}.\\
+\end{align*}
+Integrating by parts, we obtain:
+\begin{align*}
+(\mu \NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} - \langle \mu \NVRgrad \vect{u} \cdot \vect{n}, \vect{u} \rangle_{\partial \Omega} - (p, \NVRdiv u)_{\Omega} + \langle p, \vect{u} \cdot \vect{n} \rangle_{\partial \Omega} &= (\vect{f},\vect{u})_{\Omega}.
+\end{align*}
+
+Noting that $\vect{u} = 0$ on $\partial \Omega$ and that $\NVRdiv \vect{u} = 0 $ in $\Omega$, this reduces to:
+
+\begin{align*}
+\mu (\NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} = \mu ||\NVRgrad \vect{u}||^{2}_{\Omega} = \mu || \NVRtensor{ \sigma }||^{2}_{\Omega} &= (\vect{f},\vect{u})_{\Omega} \\
+&\leq || f ||_{\Omega} || \vect{u} ||_{\Omega}\\
+&\leq C_{P} || f ||_{\Omega} || \NVRgrad \vect{u} ||_{\Omega},
+\end{align*}
+where $C_{P}$ is the Poincar\'{e} constant.  Thus $ || \NVRtensor{ \sigma }||_{\Omega} \leq \frac{C_{P}}{\mu} || f ||_{\Omega}$, and $|| \vect{u} || \leq \frac{C_{P}^{2}}{\mu} || f ||_{\Omega}$.
+
+To bound the pressure $p$, we require a result by Ladyzhenskaya \cite{Ladyzhenskaya} for $p \in L^{2}_{0} \NVReqdef \{w \in L^{2}(\Omega) : \int_{\Omega} w = 0 \}$:
+\begin{align*}
+\sup_{\vect{v} \in \vect{H}^{1}(\Omega)} \frac{(p, \NVRdiv \vect{v})_{\Omega}}{\norm{ \vect{v} }_{H^{1}(\Omega)} } \geq \beta \norm{p}_{\Omega}
+\end{align*}
+for some constant $\beta > 0$.  Testing equation (\ref{NVR:eq:strongfirst1}) with $\vect{v} \in \vect{H}^{1}_{0}(\Omega)$, we have
+\begin{align*}
+(\NVRgrad p, \vect{v})_{\Omega} = (\vect{f}, \vect{v})_{\Omega} + (\mu \Delta \vect{u}, \vect{v})_{\Omega}.
+\end{align*}
+
+Integrating by parts, dividing by $\norm{ \vect{v} }_{H^{1}(\Omega)}$ and taking the supremum:
+\begin{align*}
+\sup - \frac{(p, \NVRdiv \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}} &= \sup \left\{\frac{(\vect{f}, \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}} - \frac{\mu (\NVRgrad \vect{u}, \NVRgrad \vect{v})}{\norm{ \vect{v} }_{H^{1}(\Omega)}}\right\} \\
+&\leq \frac{\norm{\vect{f}} \norm{\vect{v}}_{L^{2}}}{\norm{ \vect{v} }_{H^{1}(\Omega)}} + \mu \norm{\NVRgrad \vect{u}} \leq \norm{\vect{f} } + \mu \frac{C_{P}}{\mu} \norm{\vect{f}} = (1 + C_{P}) \norm{\vect{f}}.
+\end{align*}
+By the Ladyzhenskaya result, we then have $\norm{p} \leq \frac{1 + C_{P}}{\beta} \norm{\vect{f}}$, bounding $p$, as required.
+
+\subsubsection{$\vect{f} = \vect{0}, g \neq 0,\NVRtensor{h}=\NVRtensor{0}$} In this case, we have
+\begin{align}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{0} & \text{ in } \Omega, \label{NVR:eq:gstrongfirst} \\
+\NVRdiv \vect{u} &= g & \text{ in } \Omega, \\
+\frac{1}{\mu} \NVRtensor{\sigma} - \NVRgrad \vect{u} &= 0 & \text{ in } \Omega, \label{NVR:eq:gstrongsigmadef}\\
+\vect{u} &= \vect{0} & \text{ on } \partial\Omega.\label{NVR:eq:gstronglast}
+\end{align}
+
+We must also assume compatibility between $g$ and the boundary condition on $\vect{u}$; that is, that $g$ has zero average on $\Omega$:
+\begin{align*}
+\int_{\Omega} g = \int_{\partial \Omega} \vect{u} \cdot \vect{n} = 0.
+\end{align*}
+
+Now, by surjectivity of $\NVRdiv : \NVRHdiv \rightarrow L^{2}$, there exists $\vect{u}_{0}$ such that $\NVRdiv \vect{u}_{0} = g$.  By the Lax-Milgram theorem, we have $\exists ! \phi \in H^{1}_{0} : \vect{u}_{0} = \NVRgrad \phi$, so that $\Delta \phi = g$ and, assuming that $\Omega$ is convex, then by the Elliptic Regularity theorem (see \cite[p. 214]{Folland} for a proof), $\phi \in H^{2}$ and:
+\begin{align*}
+\norm{\phi}_{H^{2}} &\leq C \norm{g}\\ % SEE ARBOGAST/BONA, p. 223 (Elliptic Regularity, section 8.5.4, Theorem 8.13)---references [GT] or [Fo] for a proof
+\implies \norm{\NVRgrad \phi}_{H^{1}} &\leq C \norm{g},
+\end{align*}
+for some $C > 0$ independent of $g$ and $\phi$.  That is, in fact $\vect{u}_{0} \in H^{1}$ and $\norm{ \vect{u}_{0} }_{H^{1}} \leq C \norm{g}$.
+
+Setting $\vect{w} = \vect{u} - \vect{u}_{0}$, we have $\NVRdiv \vect{w} = 0$, and $\vect{w} = 0$ on $\partial \Omega$.  Note that we can recover $-\mu \Delta \vect{u} + \NVRgrad p = 0$ by substituting (\ref{NVR:eq:gstrongsigmadef}) into (\ref{NVR:eq:gstrongfirst}).  Testing this with $\vect{w}$ and integrating by parts, we obtain:
+\begin{align*}
+\mu (\NVRgrad \vect{u},\NVRgrad \vect{w})_{\Omega} &= 0\\
+\mu (\NVRgrad \vect{w} + \NVRgrad \vect{u}_{0},\NVRgrad \vect{w})_{\Omega} &= 0\\
+\implies \norm{\NVRgrad \vect{w}}^{2} &= -(\NVRgrad \vect{u}_{0}, \NVRgrad \vect{w}) \\
+&\leq \norm{ \NVRgrad \vect{u}_{0} } \norm{ \NVRgrad \vect{w} } \\
+&\leq C \norm{g} \norm{ \NVRgrad \vect{w} },
+\end{align*}
+so that $\norm{ \NVRgrad \vect{w} } \leq  C \norm{ g }$, and therefore as before we obtain a bound on $\norm{\NVRtensor{\sigma}} = \norm{\NVRgrad \vect{u}} \leq 2 C \norm{g}$, and again by means of the Poincar\'{e} inequality we may bound $\norm{\vect{u}} \leq C_{P} \norm{\NVRgrad \vect{u}} \leq 2 C C_{P} \norm{ g }$ as well.
+
+The bound on $p$ is established exactly as before, except that now $\vect{f} = \vect{0}$, so that we obtain the bound $\norm{p} \leq \frac{\mu}{\beta} \norm{\NVRgrad \vect{u}} \leq \frac{2 \mu C C_{P}}{\beta} \norm{ g }$.
+
+
+\subsubsection{$\vect{f} = \vect{0},g=0,\NVRtensor{h} \neq \NVRtensor{0}$}  In this case, we have
+\begin{align}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p &= \vect{0} & \text{ in } \Omega, \label{NVR:eq:hstrongfirst} \\
+\NVRdiv \vect{u} &= 0 & \text{ in } \Omega, \\
+\frac{1}{\mu} \NVRtensor{\sigma} - \NVRgrad \vect{u} &= \NVRtensor{h} & \text{ in } \Omega, \\
+\vect{u} &= \vect{0} & \text{ on } \partial\Omega.\label{NVR:eq:hstronglast}
+\end{align}
+Then, $\NVRtensor{\sigma} = \mu(\NVRgrad \vect{u} + \NVRtensor{h})$, and we have:
+\begin{align*}
+- \NVRdiv \NVRtensor{\sigma} + \NVRgrad p = - \mu \Delta \vect{u} - \mu \NVRdiv \NVRtensor{h} + \NVRgrad p &= \vect{0},
+\end{align*}
+so that
+\begin{align*} - \mu \Delta \vect{u} + \NVRgrad p &= - \mu  \NVRdiv \NVRtensor{h}
+\end{align*}
+in a distributional sense.  Testing with $\vect{u}$, and integrating the left hand side by parts, again the pressure term vanishes because $\NVRdiv \vect{u} = 0$, so that much as before, we obtain:
+\begin{align*}
+\mu (\NVRgrad \vect{u}, \NVRgrad \vect{u})_{\Omega} &= \mu (\NVRdiv \NVRtensor{h}, \vect{u} )_{\Omega}\\
+&= - \mu(\NVRtensor{h}, \NVRgrad \vect{u})_{\Omega} \leq \mu \norm{\NVRtensor{h}}_{L^{2}(\Omega)} \norm{ \NVRgrad \vect{u} }_{L^{2}(\Omega)}.
+\end{align*}
+So $\norm{\NVRgrad \vect{u}} \leq \norm{\NVRtensor{h}}$, and the bounds $\norm{\vect{u} } \leq C_{P} \norm{\NVRtensor{h}}$ and $\norm{p} \leq \frac{\mu}{\beta}\left( \norm{ \NVRgrad \vect{u} } + \norm{\NVRtensor{h}} \right) \leq \frac{2 \mu}{\beta} || \NVRtensor{h} ||$ can be established in a similar fashion as above.

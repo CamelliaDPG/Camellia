@@ -94,6 +94,50 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   }
 }
 
+// compute IP vector when var==fxn
+void IP::computeInnerProductVector(FieldContainer<double> &ipVector, 
+                                   VarPtr var, FunctionPtr fxn,
+                                   Teuchos::RCP<DofOrdering> dofOrdering, 
+                                   Teuchos::RCP<BasisCache> basisCache) {
+  // ipVector FC is sized as (C,F)
+  FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+  
+  unsigned numCells = physicalCubaturePoints.dimension(0);
+  unsigned numPoints = physicalCubaturePoints.dimension(1);
+  unsigned spaceDim = physicalCubaturePoints.dimension(2);
+  unsigned numDofs = dofOrdering->totalDofs();
+  
+  shards::CellTopology cellTopo = basisCache->cellTopology();
+  
+  Teuchos::Array<int> ltValueDim;
+  ltValueDim.push_back(numCells);
+  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
+  ltValueDim.push_back(numPoints);
+  
+  ipVector.initialize(0.0);
+  
+  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
+       ltIt != _linearTerms.end(); ltIt++) {
+    LinearTermPtr lt = *ltIt;
+    // integrate lt against itself
+    lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
+  }
+  
+  // boundary terms:
+  for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();
+       btIt != _boundaryTerms.end(); btIt++) {
+    LinearTermPtr bt = *btIt;
+    bool forceBoundary = true; // force interpretation of this as a term on the element boundary
+    bt->integrate(ipVector,dofOrdering,bt,var,fxn,basisCache,forceBoundary);
+  }
+  
+  // zero mean terms:
+  for ( vector< LinearTermPtr >:: iterator ztIt = _zeroMeanTerms.begin();
+       ztIt != _zeroMeanTerms.end(); ztIt++) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zero mean terms not yet supported in IP vector computation");
+  }  
+}
+
 bool IP::hasBoundaryTerms() {
   return _boundaryTerms.size() > 0;
 }
@@ -179,7 +223,7 @@ bool IP::hasBoundaryTerms() {
 void IP::operators(int testID1, int testID2, 
                    vector<IntrepidExtendedTypes::EOperatorExtended> &testOp1,
                    vector<IntrepidExtendedTypes::EOperatorExtended> &testOp2) {
-  TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IP::operators() not implemented.");
 }
 
 void IP::printInteractions() {

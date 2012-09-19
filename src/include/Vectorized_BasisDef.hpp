@@ -63,7 +63,7 @@ namespace Intrepid {
     outputValues.dimensions(dimensions);
     int numComponents = dimensions[dimensions.size() - 1];
     if (_numComponents != numComponents) {
-      TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
                           "final dimension of outputValues must match the number of vector components.");
     }
     // get rid of last dimension:
@@ -86,19 +86,19 @@ namespace Intrepid {
                                                                   const ArrayScalar & componentOutputValues,
                                                                   int fieldIndex) const {
     //cout << "componentOutputValues: \n" << componentOutputValues;
-    TEST_FOR_EXCEPTION( outputValues.dimension(fieldIndex) != this->basisCardinality_,
+    TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(fieldIndex) != this->basisCardinality_,
                        std::invalid_argument, "outputValues.dimension(fieldIndex) != this->basisCardinality_");
-    TEST_FOR_EXCEPTION( componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality(),
+    TEUCHOS_TEST_FOR_EXCEPTION( componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality(),
                        std::invalid_argument, "componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality()");
     int pointIndex = fieldIndex+1;
-    TEST_FOR_EXCEPTION( outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex),
+    TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex),
                        std::invalid_argument, "outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex)");
     Teuchos::Array<int> dimensions;
     outputValues.dimensions(dimensions);
     outputValues.initialize(0.0);
     int numComponents = dimensions[dimensions.size() - 1];
     if (_numComponents != numComponents) {
-      TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
+      TEUCHOS_TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
                           "final dimension of outputValues must match the number of vector components.");
     }
     int componentCardinality = _componentBasis->getCardinality();

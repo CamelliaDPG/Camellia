@@ -58,56 +58,60 @@ bool BilinearFormUtility::warnAboutZeroRowsAndColumns() {
   return _warnAboutZeroRowsAndColumns;
 }
 
-bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array) {
+bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer<double> &array, bool checkRows, bool checkCols) {
   // for now, only support rank 3 FCs 
   double tol = 1e-15;
   static int warningsIssued = 0; // max of 20
   if ( array.rank() != 3) {
-    TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 FieldContainers.");
+    TEUCHOS_TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 FieldContainers.");
   }
   int numCells = array.dimension(0);
   int numRows = array.dimension(1);
   int numCols = array.dimension(2);
   bool zeroRowOrColFound = false;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int i=0; i<numRows; i++) {
-      bool nonZeroFound = false;
-      int j=0;
-      while ((!nonZeroFound) && (j<numCols)) {
-        if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
-        j++;
-      }
-      if ( ! nonZeroFound ) {
-        if (_warnAboutZeroRowsAndColumns) {
-          warningsIssued++;
-          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
-          
-          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
-            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
-            _warnAboutZeroRowsAndColumns = false;
-          }
+    if (checkRows) {
+      for (int i=0; i<numRows; i++) {
+        bool nonZeroFound = false;
+        int j=0;
+        while ((!nonZeroFound) && (j<numCols)) {
+          if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+          j++;
         }
-        zeroRowOrColFound = true;
+        if ( ! nonZeroFound ) {
+          if (_warnAboutZeroRowsAndColumns) {
+            warningsIssued++;
+            cout << "warning: in matrix " << name << " for cell " << cellIndex << ", row " << i << " is all zeros." << endl;
+            
+            if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+              cout << "20 warnings issued.  Suppressing future warnings about zero rows and columns\n";
+              _warnAboutZeroRowsAndColumns = false;
+            }
+          }
+          zeroRowOrColFound = true;
+        }
       }
     }
-    for (int j=0; j<numCols; j++) {
-      bool nonZeroFound = false;
-      int i=0;
-      while ((!nonZeroFound) && (i<numRows)) {
-        if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
-        i++;
-      }
-      if ( ! nonZeroFound ) {
-        if (_warnAboutZeroRowsAndColumns) {
-          warningsIssued++;
-          cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
-          
-          if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
-            cout << "20 warnings issued.  Suppressing future warnings about zero columns\n";
-            _warnAboutZeroRowsAndColumns = false;
-          }
+    if (checkCols) {
+      for (int j=0; j<numCols; j++) {
+        bool nonZeroFound = false;
+        int i=0;
+        while ((!nonZeroFound) && (i<numRows)) {
+          if (abs(array(cellIndex,i,j)) > tol) nonZeroFound = true;
+          i++;
         }
-        zeroRowOrColFound = true;
+        if ( ! nonZeroFound ) {
+          if (_warnAboutZeroRowsAndColumns) {
+            warningsIssued++;
+            cout << "warning: in matrix " << name << " for cell " << cellIndex << ", column " << j << " is all zeros." << endl;
+            
+            if ( (warningsIssued == 20) && _warnAboutZeroRowsAndColumns ) {
+              cout << "20 warnings issued.  Suppressing future warnings about zero rows and columns\n";
+              _warnAboutZeroRowsAndColumns = false;
+            }
+          }
+          zeroRowOrColFound = true;
+        }
       }
     }
   }
@@ -117,13 +121,13 @@ bool BilinearFormUtility::checkForZeroRowsAndColumns(string name, FieldContainer
 void BilinearFormUtility::transposeFCMatrices(FieldContainer<double> &fcTranspose,
                                               const FieldContainer<double> &fc) {
   // check dimensions
-  TEST_FOR_EXCEPTION( ( fc.dimension(0) != fcTranspose.dimension(0) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( fc.dimension(0) != fcTranspose.dimension(0) ),
                      std::invalid_argument,
                      "fc.dimension(0) and fcTranspose.dimension(0) (numCells) do not match.");
-  TEST_FOR_EXCEPTION( ( fc.dimension(1) != fcTranspose.dimension(2) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( fc.dimension(1) != fcTranspose.dimension(2) ),
                      std::invalid_argument,
                      "fc.dimension(1) and fcTranspose.dimension(2) (numRows) do not match.");
-  TEST_FOR_EXCEPTION( ( fc.dimension(2) != fcTranspose.dimension(1) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( fc.dimension(2) != fcTranspose.dimension(1) ),
                      std::invalid_argument,
                      "fc.dimension(2) and fcTranspose.dimension(1) (numCols) do not match.");
   // transposes (C,i,j) --> (C,j,i)
@@ -151,20 +155,20 @@ void BilinearFormUtility::computeStiffnessMatrix(FieldContainer<double> &stiffne
   int numTestDofs = innerProductMatrix.dimension(1);
   
   // check that all the dimensions are compatible:
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
                      std::invalid_argument,
                      "stiffness.dimension(0) and optimalTestWeights.dimension(0) (numCells) do not match.");
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
                      std::invalid_argument,
                      "numTrialDofs and optimalTestWeights.dimension(1) do not match.");
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
                      std::invalid_argument,
                      "numTestDofs and optimalTestWeights.dimension(2) do not match.");
-  TEST_FOR_EXCEPTION( ( innerProductMatrix.dimension(2) != innerProductMatrix.dimension(1) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( innerProductMatrix.dimension(2) != innerProductMatrix.dimension(1) ),
                      std::invalid_argument,
                      "innerProductMatrix.dimension(1) and innerProductMatrix.dimension(2) do not match.");
   
-  TEST_FOR_EXCEPTION( ( stiffness.dimension(1) != stiffness.dimension(2) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( stiffness.dimension(1) != stiffness.dimension(2) ),
                      std::invalid_argument,
                      "stiffness.dimension(1) and stiffness.dimension(2) do not match.");
   
@@ -269,19 +273,19 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   unsigned spaceDim = physicalCellNodes.dimension(2);
   
   // Check that cellTopo and physicalCellNodes agree
-  TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
                      std::invalid_argument,
                      "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
                      std::invalid_argument,
                      "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
   
   int numOptTestFunctions = optimalTestWeights.dimension(1); // should also == numTrialDofs
   
-  TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != stiffness.dimension(2) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != stiffness.dimension(2) ),
                      std::invalid_argument,
                      "optimalTestWeights.dimension(1) (=" << optimalTestWeights.dimension(1) << ") and stiffness.dimension(2) (=" << stiffness.dimension(2) << ") do not match.");
-  TEST_FOR_EXCEPTION( ( stiffness.dimension(1) != stiffness.dimension(2) ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( stiffness.dimension(1) != stiffness.dimension(2) ),
                      std::invalid_argument,
                      "stiffness.dimension(1) (=" << stiffness.dimension(1) << ") and stiffness.dimension(2) (=" << stiffness.dimension(2) << ") do not match.");
   
@@ -330,7 +334,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
           operatorIndex++;
           
           if (testOperator==OP_TIMES_NORMAL) {
-            TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
+            TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
           }
           
           Teuchos::RCP < const FieldContainer<double> > testValuesTransformed;
@@ -375,7 +379,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
             int trialBasisRank = trialOrdering->getBasisRank(trialID);
             int testBasisRank = testOrdering->getBasisRank(testID);
             
-            TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
+            TEUCHOS_TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
                                std::invalid_argument,
                                "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
             

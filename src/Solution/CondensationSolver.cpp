@@ -108,7 +108,7 @@ void CondensationSolver::init(){
   Epetra_SerialComm Comm;
 #endif
 
-  // _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
+  _mesh->getFieldFluxDofInds(_localFluxInds, _localFieldInds);
 
   vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
   vector< ElementPtr >::iterator elemIt;
@@ -151,11 +151,13 @@ void CondensationSolver::init(){
   for (elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();   
     int counter = 0;
-    set<int> cellFluxInds = _localFluxInds[cellID];
-    for (fluxIt = cellFluxInds.begin();fluxIt!=cellFluxInds.end();fluxIt++){      
-      int localFieldInd = *fluxIt;
+    set<int> cellFieldInds = _localFieldInds[cellID];
+    set<int>::iterator fieldIt;
+    for (fieldIt = cellFieldInds.begin();fieldIt!=cellFieldInds.end();fieldIt++){
+      int localFieldInd = *fieldIt;
       _localToCondensedFieldInds[cellID][localFieldInd] = counter;
       _condensedToLocalFieldInds[cellID][counter] = localFieldInd;
+      counter++;
     }
   }
 
@@ -169,10 +171,46 @@ void CondensationSolver::init(){
 
   // figure out nRHS for solves (nonzero coupling terms)
   Epetra_RowMatrix* K = problem().GetMatrix();
+  int numMyCols = K->RowMatrixColMap().NumMyElements();
+  int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc 
+  // get inds and values of row
+  int * globalColInds = K->RowMatrixColMap().MyGlobalElements();
+  int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
+
   int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
   for (int i = 0;i<numMyRows;++i){
     // TODO: FINISH
+    double * values = new double[numGlobalRowElements];
+    int * indices = new int[numGlobalRowElements]; 
+    int numEntries; // output from ExtractMyRowCopy
+    K->ExtractMyRowCopy(i,numGlobalRowElements,numEntries,values,indices);    
+    int rowInd = globalRowInds[i];
+    
+    bool rowIsFlux = _allFluxInds.find(rowInd)!=_allFluxInds.end();        
+    // loop through column values
+    for (int j = 0;j<numEntries;++j){
+      int colInd = globalColInds[indices[j]];
+      bool colIsFlux = _allFluxInds.find(colInd)!=_allFluxInds.end();
+      // coupling terms - if row is field, col is flux (use symmetry o/w)
+      if (!rowIsFlux && colIsFlux){
+        int cellID = cellIDForGlobalFieldIndex(rowInd);
+        _elemCouplingInds[cellID].insert(colInd);
+      }
+    }      
   }
+  
+  // create local maps between field inds and coupling matrices
+  for (elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();   
+    set<int> couplingInds = _elemCouplingInds[cellID];
+    int counter = 0;  
+    for (fluxIt = couplingInds.begin();fluxIt!=couplingInds.end();fluxIt++){      
+      int globalFluxInd = *fluxIt;
+      _globalToReducedFluxInds[cellID][globalFluxInd] = counter;
+      _reducedFluxToGlobalInds[cellID][counter] = globalFluxInd;
+      counter++;
+    }
+  }  
 
 }
 
@@ -197,11 +235,12 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
   int numGlobalRowElements = K->RowMatrixRowMap().NumGlobalElements(); // number of rows on this proc 
   // get inds and values of row
   int * globalRowInds = K->RowMatrixRowMap().MyGlobalElements();
-  double * values = new double[numGlobalRowElements];
-  int * indices = new int[numGlobalRowElements]; 
   
   int numMyRows = K->RowMatrixRowMap().NumMyElements(); // number of rows stored on this proc
   for (int i = 0;i<numMyRows;++i){
+
+    double * values = new double[numGlobalRowElements];
+    int * indices = new int[numGlobalRowElements]; 
     int numEntries; // output from ExtractMyRowCopy
     K->ExtractMyRowCopy(i,numGlobalRowElements,numEntries,values,indices);    
    
@@ -230,8 +269,8 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
 
 	} else { // if it's a coupling term, store into 
 	  
-	  //	  int localColInd = _globalToCondensedInds[colInd];
-	  //	  _couplingMatrices[cellID](condensedRowInd,localColInd) = values[j];
+    int localReducedColInd = _globalToReducedFluxInds[cellID][rowInd];
+    _couplingMatrices[cellID](localRowInd,localReducedColInd) = values[j];
 
 	}      
 
@@ -252,6 +291,17 @@ void CondensationSolver::getSubmatrices(const Epetra_RowMatrix* K,Epetra_FECrsMa
   }
   K_cond.GlobalAssemble();
   //  EpetraExt::RowMatrixToMatlabFile("test_mat.dat",*K);
+  
+  // condense out matrices
+  vector< ElementPtr > elems = _mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;
+  for (elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();   
+    Epetra_SerialDenseMatrix K_field = _elemFieldMats[cellID];
+    Epetra_SerialDenseMatrix rhs_mat = _couplingMatrices[cellID];    
+    Epetra_SerialDenseMatrix X;
+  }    
+  
 }
 
 // helper function - finds cellID for a field index

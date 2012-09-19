@@ -92,6 +92,14 @@
 #include "Solution.h"
 #include "Projector.h"
 
+double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
+  // TODO: work out how to suppress the console output here
+  double condest = -1;
+  AztecOO solverForConditionEstimate(problem);
+  solverForConditionEstimate.SetAztecOption(AZ_solver, AZ_cg_condnum);
+  solverForConditionEstimate.ConstructPreconditioner(condest);
+  return condest;
+}
 
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
@@ -135,7 +143,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
   const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
   if ( ! allowEmptyCells ) {
-    TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
+    TEUCHOS_TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
                        std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
   }
   map< int, FieldContainer<double> >::const_iterator mapIt;
@@ -145,7 +153,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     map< int, FieldContainer<double> >::iterator myMapIt = _solutionForCellIDGlobal.find(cellID);
     if (myMapIt == _solutionForCellIDGlobal.end()) {
       if ( !allowEmptyCells ) {
-        TEST_FOR_EXCEPTION(true,std::invalid_argument,
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
                            "otherSoln doesn't match Solution's solutionMap (cellID not found).");
       } else {
         // just copy, and apply the weight
@@ -156,7 +164,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     }
     FieldContainer<double>* myValues = &(myMapIt->second);
     int numValues = myValues->size();
-    TEST_FOR_EXCEPTION(numValues != otherValues->size(),
+    TEUCHOS_TEST_FOR_EXCEPTION(numValues != otherValues->size(),
                        std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (differing # of coefficients).");
     for (int dofIndex = 0; dofIndex < numValues; dofIndex++) {
       (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
@@ -470,7 +478,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 */
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
-    TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
+    TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
     for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
       int globalRowIndex = partMap.GID(localRowIndex);
       
@@ -497,7 +505,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 //      }
 //      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
       rho = 1.0;
-      cout << "in zmc, diagonal entry: " << rho << endl;
+//      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
       localRowIndex++;
@@ -579,12 +587,12 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       int meshPartitionLocalIndex = _mesh->partitionLocalIndexForGlobalDofIndex(globalIndex);
       if (meshPartitionLocalIndex != localIndex) {
         cout << "meshPartitionLocalIndex != localIndex (" << meshPartitionLocalIndex << " != " << localIndex << ")\n";
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
       }
       int partition = _mesh->partitionForGlobalDofIndex( globalIndex );
       if (partition != rank) {
         cout << "partition != rank (" << partition << " != " << rank << ")\n";
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
       }
     } else {
       // a Lagrange constraint or a ZMC
@@ -605,9 +613,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   }
   
   if (_reportConditionNumber) {
-    double oneNorm = globalStiffMatrix.NormOne();
+//    double oneNorm = globalStiffMatrix.NormOne();
+    double condest = conditionNumberEstimate(*problem);
     if (rank == 0) {
-      cout << "condition # (one-norm) of global stiffness matrix: " << oneNorm << endl;
+      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
+      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
     }
   }
   
@@ -623,9 +633,10 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-//  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-//  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-//  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
+  //  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -828,9 +839,9 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
   int sideIndex = 0;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-  TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
-  TEST_FOR_EXCEPTION(values.dimension(1) != basisCardinality,
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(1) != basisCardinality,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
@@ -846,7 +857,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
   trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
   
   if (trialValuesTransformedWeighted->rank() != 3) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateBasisFunctions only supports scalar-valued field variables at present.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateBasisFunctions only supports scalar-valued field variables at present.");
   }
   // integrate:
   int numPoints = trialValuesTransformedWeighted->dimension(2);
@@ -1095,9 +1106,9 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
   int sideIndex = 0;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-  TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr))");
-  TEST_FOR_EXCEPTION(values.rank() != 1,
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 1,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr))");
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
@@ -1111,7 +1122,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
   trialValuesTransformedWeighted = basisCache.getTransformedWeightedValues(trialBasis, OP_VALUE);
   
   if (trialValuesTransformedWeighted->rank() != 3) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateSolution only supports scalar-valued field variables at present.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateSolution only supports scalar-valued field variables at present.");
   }
   
   // integrate:
@@ -1172,7 +1183,7 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
     
     bool boundaryIntegral = _mesh()->bilinearForm()->isFluxOrTrace(trialID);
     if ( !boundaryIntegral ) {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
     } 
     
     shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
@@ -1256,25 +1267,25 @@ void Solution::solutionValues(FieldContainer<double> &values,
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   
-  TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
+  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
 		      std::invalid_argument,
 		      "for scalar values, values container should be dimensioned(numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
+  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
 		      std::invalid_argument,
 		      "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
-  TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
+  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
 		      std::invalid_argument,
 		      "values.dimension(0) != numCells.");
-  TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
+  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
 		      std::invalid_argument,
 		      "values.dimension(1) != numPoints.");
-  TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
+  TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
 		      std::invalid_argument,
 		      "vector values.dimension(1) != spaceDim.");
-  TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
+  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
 		      std::invalid_argument,
 		      "physicalPoints.rank() != 3.");
-  TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
+  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
 		      std::invalid_argument,
 		      "physicalPoints.dimension(2) != spaceDim.");
   
@@ -1385,7 +1396,7 @@ void Solution::rhsNorm(map<int,double> &rhsNormMap){
     FieldContainer<double> rhsReps = _rhsRepresentationForElementType[elemTypePtr.get()];
     int numTestDofs = rhs.dimension(1);    
     int numCells = rhs.dimension(0);    
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In rhsNorm::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In rhsNorm::numCells does not match number of elems in partition.");    
     
     for (int cellIndex=cellIndStart;cellIndex<numCells;cellIndex++){
       double normSquared = 0.0;
@@ -1497,7 +1508,7 @@ const map<int,double> & Solution::energyError() {
     FieldContainer<double> errorReps = _errorRepresentationForElementType[elemTypePtr.get()];
     int numTestDofs = residuals.dimension(1);    
     int numCells = residuals.dimension(0);    
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In energyError::numCells does not match number of elems in partition.");    
     
     for (int cellIndex=0;cellIndex<numCells;cellIndex++){
       double errorSquared = 0.0;
@@ -1584,7 +1595,7 @@ void Solution::computeErrorRepresentation() {
     int numCells = physicalCellNodes.dimension(0);
     int numTestDofs = testOrdering->totalDofs();
     
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In computeErrorRepresentation::numCells does not match number of elems in partition.");    
     FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
     
     // determine cellIDs
@@ -1708,7 +1719,7 @@ void Solution::computeResiduals() {
       cellIDs.push_back(cellID);
     }
     
-    TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
+    TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "in computeResiduals::numCells does not match number of elems in partition.");    
     /*
       cout << "Num trial/test dofs " << rank << " is " << numTrialDofs << ", " << numTestDofs << endl;
       cout << "solution dim on " << rank << " is " << solution.dimension(0) << ", " << solution.dimension(1) << endl;
@@ -1847,18 +1858,18 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
   bool forceVolumeCoords = false; // used for evaluating fields on sides...
   if ( ( sideIndex != -1 ) && !_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
     forceVolumeCoords = true;
-//    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, 
 //                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
   }
   if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) ) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, 
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, 
                        "solutionValues doesn't support evaluation of fields and fluxes variables on element interiors.");
   }
   bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
   
   int numCells = cellIDs.size();
   if (numCells != values.dimension(0)) {
-    TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
   }
   int spaceDim = values.dimension(1);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -1917,7 +1928,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
             }
           }
         } else {
-          TEST_FOR_EXCEPTION(true, std::invalid_argument, "solutionValues doesn't support values with rank > 2.");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solutionValues doesn't support values with rank > 2.");
         }
       }
     }
@@ -1932,11 +1943,11 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
 
   // the following is due to the fact that we *do not* transform basis values.
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _mesh->bilinearForm()->functionSpaceForTrial(trialID);
-  TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
+  TEUCHOS_TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) && (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD),
                      std::invalid_argument,
                      "This version of solutionValues only supports HVOL and HGRAD bases.");
   
-  TEST_FOR_EXCEPTION( values.dimension(0) != physicalPoints.dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(0) != physicalPoints.dimension(0),
                      std::invalid_argument,
                      "values.dimension(0) != physicalPoints.dimension(0).");
    
@@ -2008,22 +2019,22 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     int basisRank = trialOrder->getBasisRank(trialID);
     int basisCardinality = basis->getCardinality();
 
-    TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 1,
+    TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 1,
                        std::invalid_argument,
                        "for scalar values, values container should be dimensioned(numPoints).");
-    TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 2,
+    TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 2,
                        std::invalid_argument,
                        "for scalar values, values container should be dimensioned(numPoints,spaceDim).");
-    TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(1) != spaceDim,
+    TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(1) != spaceDim,
                        std::invalid_argument,
                        "vector values.dimension(1) != spaceDim.");
-    TEST_FOR_EXCEPTION( physicalPoints.rank() != 2,
+    TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 2,
                        std::invalid_argument,
                        "physicalPoints.rank() != 2.");
-    TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
+    TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(1) != spaceDim,
                        std::invalid_argument,
                        "physicalPoints.dimension(1) != spaceDim.");
-    TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
+    TEUCHOS_TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
                        std::invalid_argument,
                        "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
     
@@ -2065,7 +2076,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
   int spaceDim = cellTopo.getDimension();
     
-  // TODO: add TEST_FOR_EXCEPTIONs to make sure all the FC dimensions/ranks agree with expectations
+  // TODO: add TEUCHOS_TEST_FOR_EXCEPTIONs to make sure all the FC dimensions/ranks agree with expectations
   // TODO: work out what to do for boundary.  (May need to separate out into separate function: how do we
   //       figure out what side we're on, e.g.?)
   typedef CellTools<double>  CellTools;
@@ -2095,28 +2106,28 @@ void Solution::solutionValues(FieldContainer<double> &values,
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   //cout << "num Cells = " << numCells << endl;
-  TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
+  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
 		      std::invalid_argument,
 		      "for scalar values, values container should be dimensioned(numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
+  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
 		      std::invalid_argument,
 		      "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
-  TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
+  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
 		      std::invalid_argument,
 		      "values.dimension(0) != numCells.");
-  TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
+  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
 		      std::invalid_argument,
 		      "values.dimension(1) != numPoints.");
-  TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
+  TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
 		      std::invalid_argument,
 		      "vector values.dimension(1) != spaceDim.");
-  TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
+  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
 		      std::invalid_argument,
 		      "physicalPoints.rank() != 3.");
-  TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
+  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
 		      std::invalid_argument,
 		      "physicalPoints.dimension(2) != spaceDim.");
-  TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
+  TEUCHOS_TEST_FOR_EXCEPTION( _mesh->bilinearForm()->isFluxOrTrace(trialID),
 		      std::invalid_argument,
 		      "call the other solutionValues (with sideCellRefPoints argument) for fluxes and traces.");
   
@@ -2452,7 +2463,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
     // allocate new storage
     _solutionForCellIDGlobal[cellID] = FieldContainer<double>(trialOrder->totalDofs());
   }
-  TEST_FOR_EXCEPTION(solnCoeffsToSet.size() != basisCardinality, std::invalid_argument, "solnCoeffsToSet.size() != basisCardinality");
+  TEUCHOS_TEST_FOR_EXCEPTION(solnCoeffsToSet.size() != basisCardinality, std::invalid_argument, "solnCoeffsToSet.size() != basisCardinality");
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
@@ -2830,12 +2841,23 @@ void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, Element
 }
 
 void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap){
+  // TODO: finish the commented-out MPI version of this method...
+  
+//#ifdef HAVE_MPI
+//  int rank     = Teuchos::GlobalMPISession::getRank();
+//#else
+//  int rank     = 0;
+//#endif
+
   vector< ElementPtr > activeElems = _mesh->activeElements();
+//  vector< ElementPtr > activeElems = _mesh->elementsInPartition(rank);
   for (vector<ElementPtr >::iterator elemIt = activeElems.begin();elemIt!=activeElems.end();elemIt++){
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
     projectOntoCell(functionMap,cellID);
   }
+  
+  // TODO: gather the projected solutions
 }
 
 void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int cellID){

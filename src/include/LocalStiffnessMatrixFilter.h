@@ -13,7 +13,7 @@ public:
   LocalStiffnessMatrixFilter() {}
   virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, 
                       BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) {
-    TEST_FOR_EXCEPTION(true,std::invalid_argument,"LocalStiffnessMatrixFilter::filter() unimplemented.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"LocalStiffnessMatrixFilter::filter() unimplemented.");
   }
   
 //  virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,

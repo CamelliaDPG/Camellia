@@ -58,7 +58,7 @@ void MathInnerProduct::operators(int testID1, int testID2,
       } else if ( _bilinearForm->functionSpaceForTest(testID1) == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD ) {
         dOperator = IntrepidExtendedTypes::OP_GRAD; // will the integration routine do the right thing here??
       } else {
-        TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown test space.");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown test space.");
       }
       testOp1.push_back( IntrepidExtendedTypes::OP_VALUE);
       testOp1.push_back(dOperator);
