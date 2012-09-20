@@ -432,6 +432,10 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
   fout.close();
 }
 
+FunctionPtr Function::zero() {
+  static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  return _zero;
+}
 
 ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) { 
   _value = value;
@@ -447,6 +451,10 @@ ConstantScalarFunction::ConstantScalarFunction(double value, string stringDispla
 
 string ConstantScalarFunction::displayString() {
   return _stringDisplay;
+}
+
+bool ConstantScalarFunction::isZero() {
+  return 0.0 == _value;
 }
 
 void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {\
@@ -481,12 +489,29 @@ double ConstantScalarFunction::value() {
   return _value;
 }
 
+FunctionPtr ConstantScalarFunction::dx() {
+  return Function::zero();
+}
+
+FunctionPtr ConstantScalarFunction::dy() {
+  return Function::zero();
+}
+
 ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) { 
   _value = value; 
 }
 
 vector<double> ConstantVectorFunction::value() {
   return _value;
+}
+
+bool ConstantVectorFunction::isZero() {
+  for (int d=0; d < _value.size(); d++) {
+    if (0.0 != _value[d]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -512,6 +537,30 @@ void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr
   } else {
     _exactSolution->solutionValues(values,_trialID,points);
   }
+}
+
+FunctionPtr ProductFunction::dx() {
+  if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dx() + _f2 * _f1->dx();
+}
+
+FunctionPtr ProductFunction::dy() {
+  if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dy() + _f2 * _f1->dy();
+}
+
+FunctionPtr ProductFunction::dz() {
+  if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dz() + _f2 * _f1->dz();
 }
 
 int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
@@ -714,10 +763,22 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
+  if ( ( f1->rank() == f2->rank() ) && (f1->rank() == 0) ) {
+    // TODO: work out how to do this for other ranks?
+    if (f1->isZero() || f2->isZero()) {
+      return Function::zero();
+    }
+  }
   return Teuchos::rcp( new ProductFunction(f1,f2) );
 }
 
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
+  if ( (f1->rank() == 0) ) {
+    // TODO: work out how to do this for other ranks?
+    if ( f1->isZero() ) {
+      return Function::zero();
+    }
+  }
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
 }
 
@@ -770,6 +831,12 @@ FunctionPtr operator*(FunctionPtr f, vector<double> weight) {
 }
 
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
+  if ( f1->isZero() ) {
+    return f2;
+  }
+  if ( f2->isZero() ) {
+    return f1;
+  }
   return Teuchos::rcp( new SumFunction(f1, f2) );
 }
 

@@ -28,6 +28,8 @@ public:
   Function();
   Function(int rank);
   
+  virtual bool isZero() { return false; } // if true, the function is identically zero
+  
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
   
   virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
@@ -67,6 +69,7 @@ public:
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
+  static FunctionPtr zero();
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
@@ -83,18 +86,24 @@ public:
   ConstantScalarFunction(double value);
   ConstantScalarFunction(double value, string stringDisplay);
   string displayString();
+  bool isZero();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   double value();
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  // FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
 };
 
 class ConstantVectorFunction : public Function {
   vector<double> _value;
 public:
   ConstantVectorFunction(vector<double> value);
+  bool isZero();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
 };
@@ -115,6 +124,9 @@ public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
 };
 
 class QuotientFunction : public Function {

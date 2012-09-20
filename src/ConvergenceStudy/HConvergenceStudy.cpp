@@ -59,6 +59,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
+  _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
   vector<int> trialIDs = bilinearForm->trialIDs();
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
@@ -240,7 +241,10 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
   vector< Teuchos::RCP<Solution> >::iterator solutionIt;
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
-    (*solutionIt)->solve(false); // False: don't use mumps (use KLU)
+    if ( _solver.get() == NULL )
+      (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
+    else
+      (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
   }
   computeErrors();
 }
@@ -473,4 +477,8 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
   cout << "L2 norm of solution: " << l2norm  << endl;
   
   fout.close();
+}
+
+void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {
+  _solver = solver;
 }

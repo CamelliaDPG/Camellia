@@ -40,6 +40,7 @@
 
 #include "Mesh.h"
 #include "ExactSolution.h"
+#include "Solver.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
@@ -72,6 +73,8 @@ class HConvergenceStudy {
   
   map< int, double > _exactSolutionNorm;
   
+  Teuchos::RCP<Solver> _solver;
+  
   void computeErrors();
   int minNumElements();
 public:
@@ -103,6 +106,8 @@ public:
   string TeXErrorRateTable(const vector<int> &trialIDs);
   string TeXBestApproximationComparisonTable();
   string TeXBestApproximationComparisonTable(const vector<int> &trialIDs);
+  
+  void setSolver( Teuchos::RCP<Solver> solver);
   
 };
 

@@ -41,34 +41,11 @@
 #include "Projector.h"
 #include "VarFactory.h"
 
+#include "BC.h"
+#include "BCFunction.h"
+
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
-
-class BCFunction : public Function {
-  FieldContainer<bool> _imposeHere;
-  int _varID;
-  BCPtr _bc;
-public:
-  BCFunction(BCPtr bc, int varID) : Function(0) {
-    _bc = bc;
-    _varID = varID;
-  }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    int numCells = basisCache->cellIDs().size();
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    _imposeHere.resize(numCells,numPoints);
-    FieldContainer<double> unitNormals = basisCache->getSideNormals();
-    _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
-  }
-  bool imposeOnCell(int cellIndex) {
-    // returns true if at least one cubature point lies within the SpatialFilter or equivalent
-    int numPoints = _imposeHere.dimension(1);
-    for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-      if (_imposeHere(cellIndex,ptIndex)) return true;
-    }
-    return false;
-  }
-};
 
 Boundary::Boundary() {
   
@@ -292,16 +269,19 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
           Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
           // TODO: test the below.  (New as of 9/15/12, basically.)
-          // (NOT YET WORKING, HENCE COMMENTED OUT.  NEED TO MAKE LinearTerm honor side BasisCache, basically.)
-//          if (isTrace) {
-//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipH1, trace);
+          // (NOT YET WORKING.  NEED TO ADD SUPPORT FOR grad() to BCFunction, but it's unclear how best to do so...)
+//          if (isTrace && (bcFunction->grad().get() != NULL)) { // TODO: in case grad() is NULL, better to interpolate than do the L^2 projection, probably
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, 
+//                                                basisCache->getSideBasisCache(sideIndex), ipH1, trace);
 //          } else {
-//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex), ipL2, flux);
-//
+//            Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, 
+//                                                basisCache->getSideBasisCache(sideIndex), ipL2, flux);
 //          }
           // was:
-          Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
+          // Projector::projectFunctionOntoBasis(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           
+          // new idea: (trouble with this is that the basisCache already assumes a particular cubature setup, specifically violated when doing straight interpolation.  But this can probably be fixed by the interpolating BC subclass...)
+          bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
           //cout << "dirichletValues:" << endl << dirichletValues;
           
           for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
