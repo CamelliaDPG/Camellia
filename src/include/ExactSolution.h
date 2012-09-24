@@ -51,6 +51,7 @@
 
 #include "BilinearForm.h"
 #include "Function.h"
+#include "BasisCache.h"
 
 class ExactSolution {
 protected:
@@ -59,21 +60,18 @@ protected:
   Teuchos::RCP<RHS> _rhs;
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
-  typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
-  typedef Teuchos::RCP<ScalarFunctionOfNormal> ScalarFunctionOfNormalPtr;
   void squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2);
 
   int _H1Order;
-  map< int, SimpleFunctionPtr > _exactFunctions; // var ID --> function
-  map< int, ScalarFunctionOfNormalPtr > _exactNormalFunctions; // var ID --> function
+  map< int, FunctionPtr > _exactFunctions; // var ID --> function
 public:
   ExactSolution();
   ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
   Teuchos::RCP<BilinearForm> bilinearForm();
   Teuchos::RCP<BC> bc();
   Teuchos::RCP<RHS> rhs();
-  void setSolutionFunction( VarPtr var, SimpleFunctionPtr varFunction );
-  void setSolutionFunction( VarPtr var, ScalarFunctionOfNormalPtr varFunction );
+  void setSolutionFunction( VarPtr var, FunctionPtr varFunction );
+  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
   void solutionValues(FieldContainer<double> &values, 
                       int trialID,
                       FieldContainer<double> &physicalPoints);

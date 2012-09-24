@@ -911,6 +911,21 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+const vector< int > & Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
+  // returns the cell IDs for a given partition and element type
+  return _cellIDsForElementType[partitionNumber][elemTypePtr.get()];
+}
+
+vector< int > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
+  vector< int > cellIDs;
+  for (int partitionNumber=0; partitionNumber<_numPartitions; partitionNumber++) {
+    cellIDs.insert(cellIDs.end(),
+                   cellIDsOfType(partitionNumber,elemTypePtr).begin(),
+                   cellIDsOfType(partitionNumber,elemTypePtr).end());
+  }
+  return cellIDs;
+}
+
 int Mesh::cellPolyOrder(int cellID) {
   return _dofOrderingFactory.polyOrder(_elements[cellID]->elementType()->trialOrderPtr);
 }

@@ -38,7 +38,8 @@
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
-
+#include "BasisCache.h"
+#include "BasisFactory.h"
 #include "ExactSolution.h"
 
 double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegree) {
@@ -79,116 +80,41 @@ double ExactSolution::L2NormOfError(Solution &solution, int trialID, int cubDegr
 }
 
 void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
+//  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
+
+  DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
+  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = dofOrdering.getBasis(trialID,sideIndex);
+  
+  BasisCachePtr basisCache;
+  if (cubDegree <= 0) { // then take the default cub. degree
+    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh() ) );
+  } else {
+    int cubDegreeEnrichment = min(cubDegree - basis->getDegree(), 0);
+    basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh(), false, cubDegreeEnrichment) );
+  }
+  
   // much of this code is the same as what's in the volume integration in computeStiffness...
   FieldContainer<double> physicalCellNodes = solution.mesh()->physicalCellNodesGlobal(elemTypePtr);
-  
-  unsigned numCells = physicalCellNodes.dimension(0);
-  unsigned numNodesPerElem = physicalCellNodes.dimension(1);
-  unsigned spaceDim = physicalCellNodes.dimension(2);
-  
-  shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr.get());
-  
-  // Check that cellTopo and physicalCellNodes agree
-  TEUCHOS_TEST_FOR_EXCEPTION( ( numNodesPerElem != cellTopo.getNodeCount() ),
-                     std::invalid_argument,
-                     "Second dimension of physicalCellNodes and cellTopo.getNodeCount() do not match.");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != cellTopo.getDimension() ),
-                     std::invalid_argument,
-                     "Third dimension of physicalCellNodes and cellTopo.getDimension() do not match.");
-  
-  typedef CellTools<double>  CellTools;
-  typedef FunctionSpaceTools fst;
-  
-  DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
-  
-  // Get numerical integration points and weights
-  DefaultCubatureFactory<double>  cubFactory;     
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = dofOrdering.getBasis(trialID,sideIndex);
-  int basisRank = dofOrdering.getBasisRank(trialID);
-  if (cubDegree <= 0) {
-    cubDegree = 2*basis->getDegree();
-  }
-  
-  FieldContainer<double> weightedMeasure;
-  FieldContainer<double> weightedErrorSquared;
-  FieldContainer<double> physCubPoints;
-  FieldContainer<double> cubPointsSide;
-  FieldContainer<double> sideNormals;
-  int numCubPoints;
+  vector<int> cellIDs = solution.mesh()->cellIDsOfTypeGlobal(elemTypePtr);
+  basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
   
   bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
-  if ( !boundaryIntegral ) {
-    if (sideIndex != 0) {
-      TEUCHOS_TEST_FOR_EXCEPTION(sideIndex != 0,std::invalid_argument,
-                         "For field variables, sideIndex argument should always be 0.")
-    }
-    // volume integral
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree); 
-    
-    int cubDim       = cellTopoCub->getDimension();
-    numCubPoints = cellTopoCub->getNumPoints();
-    
-    FieldContainer<double> cubPoints(numCubPoints, cubDim);
-    FieldContainer<double> cubWeights(numCubPoints);
-    
-    cellTopoCub->getCubature(cubPoints, cubWeights);
-    
-    // 1. Determine Jacobians
-    // Compute cell Jacobians and their determinants (for measure)
-    // Containers for Jacobian
-    FieldContainer<double> cellJacobian(numCells, numCubPoints, spaceDim, spaceDim);
-    FieldContainer<double> cellJacobDet(numCells, numCubPoints);
-    
-    CellTools::setJacobian(cellJacobian, cubPoints, physicalCellNodes, cellTopo);
-    CellTools::setJacobianDet(cellJacobDet, cellJacobian );
-    
-    // compute weighted measure
-    weightedMeasure.resize(numCells, numCubPoints);
-    fst::computeCellMeasure<double>(weightedMeasure, cellJacobDet, cubWeights);
-    
-    // compute physicalCubaturePoints, the transformed cubature points on each cell:
-    physCubPoints.resize(numCells, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints,cubPoints,physicalCellNodes,cellTopo);
-    
-    //fst::multiplyMeasure<double>(weightedErrorSquared, weightedMeasure, errorSquared);
-  } else {
-    // boundary integral
-    shards::CellTopology side(cellTopo.getCellTopologyData(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
-    int sideDim = side.getDimension();                              
-    Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
-    numCubPoints = sideCub->getNumPoints();
-    cubPointsSide.resize(numCubPoints, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
-    FieldContainer<double> cubWeightsSide(numCubPoints);
-    FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // cubPointsSide from the pov of the ref cell
-    FieldContainer<double> jacobianSideRefCell(numCells, numCubPoints, spaceDim, spaceDim);
-    
-    sideCub->getCubature(cubPointsSide, cubWeightsSide);
-    
-    // compute geometric cell information
-    //cout << "computing geometric cell info for boundary integral." << endl;
-    CellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideIndex, cellTopo);
-    CellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-    
-    // map side cubature points in reference parent cell domain to physical space
-    physCubPoints.resize(numCells, numCubPoints, spaceDim);
-    CellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-    
-    // compute weighted edge measure
-    weightedMeasure.resize(numCells, numCubPoints);
-    FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
-                                                   cubWeightsSide, sideIndex, cellTopo);
-    
-    sideNormals.resize(numCells, numCubPoints, spaceDim);
-    FieldContainer<double> normalLengths(numCells, numCubPoints);
-    CellTools::getPhysicalSideNormals(sideNormals, jacobianSideRefCell, sideIndex, cellTopo);
-    
-    // make unit length
-    RealSpaceTools<double>::vectorNorm(normalLengths, sideNormals, NORM_TWO);
-    FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormals, normalLengths, sideNormals, true);
+  if (boundaryIntegral) {
+    basisCache = basisCache->getSideBasisCache(sideIndex);
   }
+  
+  FieldContainer<double> weightedMeasure = basisCache->getWeightedMeasures();
+  FieldContainer<double> weightedErrorSquared;
+  
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numCubPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+  
   Teuchos::Array<int> dimensions;
   dimensions.push_back(numCells);
   dimensions.push_back(numCubPoints);
+  
+  int basisRank = BasisFactory::getBasisRank(basis);
   if (basisRank==1) {
     dimensions.push_back(spaceDim);
   }
@@ -203,13 +129,8 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
     }
   }
   
-  if ( ! boundaryIntegral) {
-    solution.solutionValues(computedValues, elemTypePtr, trialID, physCubPoints);
-    this->solutionValues(exactValues,trialID, physCubPoints);
-  } else {
-    solution.solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
-    this->solutionValues(exactValues,trialID, physCubPoints, sideNormals);
-  }
+  solution.solutionValues(computedValues, trialID, basisCache);
+  this->solutionValues(exactValues, trialID, basisCache);
   
 //  cout << "ExactSolution: exact values:\n" << exactValues;
 //  cout << "ExactSolution: computed values:\n" << computedValues;
@@ -287,6 +208,22 @@ void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID,
   }
 }
 
+void ExactSolution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache) {
+  if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+    _exactFunctions[trialID]->values(values,basisCache);
+    return;
+  }
+  
+  // TODO: change ExactSolution::solutionValues (below) to take a *const* points FieldContainer, to avoid this copy:
+  FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+  if (basisCache->getSideIndex() >= 0) {
+    FieldContainer<double> unitNormals = basisCache->getSideNormals();
+    this->solutionValues(values,trialID,points,unitNormals);
+  } else {
+    this->solutionValues(values,trialID,points);
+  }
+}
+
 void ExactSolution::solutionValues(FieldContainer<double> &values, 
                                    int trialID,
                                    FieldContainer<double> &physicalPoints,
@@ -333,51 +270,49 @@ ExactSolution::ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc,
 }
 
 double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
-  int spaceDim = physicalPoint.size();
-  double x = physicalPoint(0);
-  double y = physicalPoint(1);
-  if (spaceDim == 2) {
-    if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
-      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
-      return fxn->value(x,y);
-    } else {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
-    }
-  } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//  int spaceDim = physicalPoint.size();
+//  double x = physicalPoint(0);
+//  double y = physicalPoint(1);
+//  if (spaceDim == 2) {
+//    if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+//      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+//      return fxn->value(x,y);
+//    } else {
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
+//    }
+//  } else {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
+//  }
 }
 
 double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
                                     FieldContainer<double> &unitNormal) {
-  int spaceDim = physicalPoint.size();
-  double x = physicalPoint(0);
-  double y = physicalPoint(1);
-  double n1 = unitNormal(0);
-  double n2 = unitNormal(1);
-  if (spaceDim == 2) {
-    if (_exactNormalFunctions.find(trialID) != _exactNormalFunctions.end() ) {
-      ScalarFunctionOfNormalPtr fxn = _exactNormalFunctions.find(trialID)->second;
-      return fxn->value(x,y,n1,n2);
-    } else if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
-      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
-      return fxn->value(x,y);
-    } else {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
-    }
-  } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//  int spaceDim = physicalPoint.size();
+//  double x = physicalPoint(0);
+//  double y = physicalPoint(1);
+//  double n1 = unitNormal(0);
+//  double n2 = unitNormal(1);
+//  if (spaceDim == 2) {
+//    if (_exactNormalFunctions.find(trialID) != _exactNormalFunctions.end() ) {
+//      ScalarFunctionOfNormalPtr fxn = _exactNormalFunctions.find(trialID)->second;
+//      return fxn->value(x,y,n1,n2);
+//    } else if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+//      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+//      return fxn->value(x,y);
+//    } else {
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
+//    }
+//  } else {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
+//  }
 }
 
 int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
   return _H1Order;
 }
 
-void ExactSolution::setSolutionFunction( VarPtr var, SimpleFunctionPtr varFunction ) {
+void ExactSolution::setSolutionFunction( VarPtr var, FunctionPtr varFunction ) {
   _exactFunctions[var->ID()] = varFunction;
-}
-
-void ExactSolution::setSolutionFunction( VarPtr var, ScalarFunctionOfNormalPtr varFunction ) {
-  _exactNormalFunctions[var->ID()] = varFunction;
 }

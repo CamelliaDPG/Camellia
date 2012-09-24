@@ -171,6 +171,9 @@ public:
   Boundary &boundary();
   
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
+
+  const vector< int > & cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  vector< int > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
   
   int cellPolyOrder(int cellID);
   
@@ -193,7 +196,7 @@ public:
 
   vector< ElementPtr > & elements();
   vector< ElementPtr > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
-  vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr);
+  vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
   
   vector< ElementPtr > elementsInPartition(int partitionNumber);
   

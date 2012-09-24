@@ -533,14 +533,7 @@ ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSo
   _trialID = trialID;
 }
 void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-  // TODO: change ExactSolution::solutionValues to take a *const* points FieldContainer, to avoid this copy:
-  FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-  if (basisCache->getSideIndex() >= 0) {
-    FieldContainer<double> unitNormals = basisCache->getSideNormals();
-    _exactSolution->solutionValues(values,_trialID,points,unitNormals);
-  } else {
-    _exactSolution->solutionValues(values,_trialID,points);
-  }
+  _exactSolution->solutionValues(values,_trialID,basisCache);
 }
 
 FunctionPtr ProductFunction::dx() {

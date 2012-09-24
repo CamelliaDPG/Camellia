@@ -1872,7 +1872,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
   }
   if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, 
-                       "solutionValues doesn't support evaluation of fields and fluxes variables on element interiors.");
+                       "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
   }
   bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
   
