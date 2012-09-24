@@ -1,3 +1,4 @@
+
 // @HEADER
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
@@ -318,4 +319,65 @@ Teuchos::RCP<BC> ExactSolution::bc() {
 }
 Teuchos::RCP<RHS> ExactSolution::rhs() {
   return _rhs;
+}
+
+ExactSolution::ExactSolution() {
+  
+}
+
+ExactSolution::ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order) {
+  _bilinearForm = bf;
+  _bc = bc;
+  _rhs = rhs;
+  _H1Order = H1Order;
+}
+
+double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
+  int spaceDim = physicalPoint.size();
+  double x = physicalPoint(0);
+  double y = physicalPoint(1);
+  if (spaceDim == 2) {
+    if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+      return fxn->value(x,y);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
+    }
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
+  }
+}
+
+double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
+                                    FieldContainer<double> &unitNormal) {
+  int spaceDim = physicalPoint.size();
+  double x = physicalPoint(0);
+  double y = physicalPoint(1);
+  double n1 = unitNormal(0);
+  double n2 = unitNormal(1);
+  if (spaceDim == 2) {
+    if (_exactNormalFunctions.find(trialID) != _exactNormalFunctions.end() ) {
+      ScalarFunctionOfNormalPtr fxn = _exactNormalFunctions.find(trialID)->second;
+      return fxn->value(x,y,n1,n2);
+    } else if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+      SimpleFunctionPtr fxn = _exactFunctions.find(trialID)->second;
+      return fxn->value(x,y);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No function set for trialID.");
+    }
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ExactSolution / SimpleFunction doesn't yet support spaceDim != 2");
+  }
+}
+
+int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
+  return _H1Order;
+}
+
+void ExactSolution::setSolutionFunction( VarPtr var, SimpleFunctionPtr varFunction ) {
+  _exactFunctions[var->ID()] = varFunction;
+}
+
+void ExactSolution::setSolutionFunction( VarPtr var, ScalarFunctionOfNormalPtr varFunction ) {
+  _exactNormalFunctions[var->ID()] = varFunction;
 }

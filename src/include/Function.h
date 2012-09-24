@@ -79,7 +79,14 @@ private:
 
 };
 
-class ConstantScalarFunction : public Function {
+class SimpleFunction : public Function {
+public:
+  virtual double value(double x, double y) = 0;
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
+
+class ConstantScalarFunction : public SimpleFunction {
   double _value;
   string _stringDisplay;
 public:
@@ -93,6 +100,7 @@ public:
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   double value();
+  double value(double x, double y);
   
   FunctionPtr dx();
   FunctionPtr dy();
@@ -149,13 +157,6 @@ public:
   virtual double value(double x, double y, double h);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
-
-class SimpleFunction : public Function {
-public:
-  virtual double value(double x, double y) = 0;
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-};
-typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 
 class UnitNormalFunction : public Function {
 public:

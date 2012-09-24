@@ -437,14 +437,14 @@ FunctionPtr Function::zero() {
   return _zero;
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) { 
+ConstantScalarFunction::ConstantScalarFunction(double value) { 
   _value = value;
   ostringstream valueStream;
   valueStream << value;
   _stringDisplay = valueStream.str();
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) : Function(0) { 
+ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) { 
   _value = value; 
   _stringDisplay = stringDisplay;
 }
@@ -483,6 +483,10 @@ void ConstantScalarFunction::scalarMultiplyBasisValues(FieldContainer<double> &b
 }
 void ConstantScalarFunction::scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache) {
   scalarDivideFunctionValues(basisValues,basisCache);
+}
+
+double ConstantScalarFunction::value(double x, double y) {
+  return value();
 }
 
 double ConstantScalarFunction::value() {
