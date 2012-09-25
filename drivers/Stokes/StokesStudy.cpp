@@ -260,10 +260,10 @@ int main(int argc, char *argv[]) {
   VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
   VarPtr u1 = varFactory.fieldVar("u_1");
   VarPtr u2 = varFactory.fieldVar("u_2");
-  VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
-  VarPtr sigma12 = varFactory.fieldVar("\\sigma_12");
-  VarPtr sigma21 = varFactory.fieldVar("\\sigma_21");
-  VarPtr sigma22 = varFactory.fieldVar("\\sigma_22");
+  VarPtr sigma11 = varFactory.fieldVar("\\sigma_{11}");
+  VarPtr sigma12 = varFactory.fieldVar("\\sigma_{12}");
+  VarPtr sigma21 = varFactory.fieldVar("\\sigma_{21}");
+  VarPtr sigma22 = varFactory.fieldVar("\\sigma_{22}");
   VarPtr p = varFactory.fieldVar("p");
   
   ///////////////////////////////////////////////////////////////////////////
@@ -333,8 +333,9 @@ int main(int argc, char *argv[]) {
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
 
     Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-    bc->addDirichlet(u1, entireBoundary, u1_exact);
-    bc->addDirichlet(u2, entireBoundary, u2_exact);
+    bc->addDirichlet(u1hat, entireBoundary, u1_exact);
+    bc->addDirichlet(u2hat, entireBoundary, u2_exact);
+    bc->addZeroMeanConstraint(p);
     
     FunctionPtr dpdx = p_exact->dx();
     FunctionPtr du1dx = u1_exact->dx();
