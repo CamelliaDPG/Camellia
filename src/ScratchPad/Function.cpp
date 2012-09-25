@@ -828,7 +828,7 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
     FunctionPtr fxn = _fxns[comp];
     fxn->values(compValues, basisCache);
     for (int i=0; i < valuesPerComponent; i++) {
-      values[ valuesPerComponent * i + comp ] = compValues[ i ];
+      values[ numComps * i + comp ] = compValues[ i ];
     }
   }
 }
