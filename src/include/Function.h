@@ -34,6 +34,11 @@ public:
   
   virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
+  
+  virtual FunctionPtr x();
+  virtual FunctionPtr y();
+  virtual FunctionPtr z();
+  
   virtual FunctionPtr dx();
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
@@ -112,6 +117,11 @@ class ConstantVectorFunction : public Function {
 public:
   ConstantVectorFunction(vector<double> value);
   bool isZero();
+  
+  FunctionPtr x();
+  FunctionPtr y();
+//  FunctionPtr z();
+  
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
 };
@@ -149,6 +159,15 @@ class SumFunction : public Function {
   FunctionPtr _f1, _f2;
 public:
   SumFunction(FunctionPtr f1, FunctionPtr f2);
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
+  
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
@@ -159,8 +178,13 @@ public:
 };
 
 class UnitNormalFunction : public Function {
+  int _comp;
 public:
-  UnitNormalFunction();
+  UnitNormalFunction(int comp=-1); // -1: the vector normal.  Otherwise, picks out the comp component
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  
   bool boundaryValueOnly();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
@@ -181,6 +205,10 @@ public:
 class VectorizedFunction : public Function {
   vector< FunctionPtr > _fxns;
 public:
+  virtual FunctionPtr x();
+  virtual FunctionPtr y();
+//  virtual FunctionPtr z();
+  
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);

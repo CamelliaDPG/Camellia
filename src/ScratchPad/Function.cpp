@@ -56,6 +56,16 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
   }
 }
 
+FunctionPtr Function::x() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::y() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::z() {
+  return Teuchos::rcp((Function *)NULL);
+}
+
 FunctionPtr Function::dx() {
   return Teuchos::rcp((Function *)NULL);
 }
@@ -505,6 +515,14 @@ ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(
   _value = value; 
 }
 
+FunctionPtr ConstantVectorFunction::x() {
+  return Teuchos::rcp( new ConstantScalarFunction( _value[0] ) );
+}
+
+FunctionPtr ConstantVectorFunction::y() {
+  return Teuchos::rcp( new ConstantScalarFunction( _value[1] ) );
+}
+
 vector<double> ConstantVectorFunction::value() {
   return _value;
 }
@@ -621,6 +639,47 @@ void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCach
   _f2->addToValues(values,basisCache);
 }
 
+FunctionPtr SumFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->x() + _f2->x();
+}
+
+FunctionPtr SumFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->y() + _f2->y();  
+}
+FunctionPtr SumFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->z() + _f2->z();
+}
+
+FunctionPtr SumFunction::dx() {
+  if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dx() + _f2->dx();
+}
+
+FunctionPtr SumFunction::dy() {
+  if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dy() + _f2->dy();
+}
+
+FunctionPtr SumFunction::dz() {
+  if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dz() + _f2->dz();
+}
+
 double hFunction::value(double x, double y, double h) {
     return h;
 }
@@ -705,7 +764,17 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   }
 }
 
-UnitNormalFunction::UnitNormalFunction() : Function(1) {}
+UnitNormalFunction::UnitNormalFunction(int comp) : Function( (comp<0)? 1 : 0) {
+  _comp = comp;
+}
+
+FunctionPtr UnitNormalFunction::x() {
+  return Teuchos::rcp( new UnitNormalFunction(0) );
+}
+
+FunctionPtr UnitNormalFunction::y() {
+  return Teuchos::rcp( new UnitNormalFunction(1) );
+}
 
 bool UnitNormalFunction::boundaryValueOnly() {
   return true;
@@ -718,10 +787,15 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   int numPoints = values.dimension(1);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
-      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
-      values(cellIndex,ptIndex,0) = n1;
-      values(cellIndex,ptIndex,1) = n2;
+      if (_comp == -1) {
+        double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+        double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex,0) = n1;
+        values(cellIndex,ptIndex,1) = n2;
+      } else {
+        double ni = (*sideNormals)(cellIndex,ptIndex,_comp);
+        values(cellIndex,ptIndex) = ni;
+      }
     }
   }
 }
@@ -757,6 +831,14 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
       values[ valuesPerComponent * i + comp ] = compValues[ i ];
     }
   }
+}
+
+FunctionPtr VectorizedFunction::x() {
+  return _fxns[0];
+}
+
+FunctionPtr VectorizedFunction::y() {
+  return _fxns[1];
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
