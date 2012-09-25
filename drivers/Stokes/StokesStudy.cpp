@@ -50,12 +50,79 @@
 
 #include "../MultiOrderStudy/MultiOrderStudy.h"
 
+#include "CGSolver.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
 #endif
 
 using namespace std;
+
+class EntireBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
+};
+
+class Exp_x : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return exp(x);
+  }
+  FunctionPtr dx() {
+    return Teuchos::rcp( new Exp_x );
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+};
+
+class Y : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return y;
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  }
+};
+
+class Cos_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+};
+
+class Sin_y : public SimpleFunction {
+  double value(double x, double y) {
+    return sin(y);
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new Cos_y );
+  }
+};
+
+double Cos_y::value(double x, double y) {
+  return cos(y);
+}
+FunctionPtr Cos_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Cos_y::dy() {
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  return - sin_y;
+}
 
 void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int &maxLogElements,
                StokesManufacturedSolution::StokesFormulationType &formulationType,
@@ -159,10 +226,20 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int pToAdd = 1; // for optimal test function approximation
+  bool useCG = false;
+  double cgTol = 1e-8;
+  int cgMaxIt = 400000;
+  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
 
   // parse args:
   int polyOrder, minLogElements, maxLogElements;
   bool useTriangles, useOptimalNorm, useMultiOrder;
+  
+  // NOTE: "normalize h factors" is probably a kooky idea, and I haven't even managed yet to get it to improve the conditioning
+  //       (i.e. I'm probably not introducing the right factors to normalize given the various pullbacks involved)
+  bool normalizeHFactors = false; // divide by h wherever h factors enter: a test to see if we can improve conditioning...
+  
+  
   StokesManufacturedSolution::StokesFormulationType formulationType;
   string formulationTypeStr;
   parseArgs(argc, argv, polyOrder, minLogElements, maxLogElements, formulationType, useTriangles,
@@ -170,11 +247,11 @@ int main(int argc, char *argv[]) {
 
   /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
-  VarPtr q1 = varFactory.testVar("q_1", HDIV, StokesMathBilinearForm::Q_1);
-  VarPtr q2 = varFactory.testVar("q_2", HDIV, StokesMathBilinearForm::Q_2);
+  VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV, StokesMathBilinearForm::Q_1);
+  VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV, StokesMathBilinearForm::Q_2);
   VarPtr v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
   VarPtr v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
-  VarPtr v3 = varFactory.testVar("v_3", HGRAD, StokesMathBilinearForm::V_3);
+  VarPtr q = varFactory.testVar("q", HGRAD, StokesMathBilinearForm::V_3);
   
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
@@ -191,22 +268,112 @@ int main(int argc, char *argv[]) {
   
   ///////////////////////////////////////////////////////////////////////////
   
-  Teuchos::RCP<StokesManufacturedSolution> mySolution = 
-  Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
-                                               polyOrder, formulationType) );
-  
-  int pressureID = mySolution->pressureID();
-  bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
-  
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
-    cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
   }
   
-  mySolution->setUseSinglePointBCForP(singlePointBCs);
+  Teuchos::RCP<ExactSolution> mySolution;
+  if (formulationType != StokesManufacturedSolution::MATH_CONFORMING) {
+    Teuchos::RCP<StokesManufacturedSolution> stokesExact = Teuchos::rcp(
+    new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
+                                   polyOrder, formulationType));
+    mySolution = stokesExact;
+    
+    int pressureID = stokesExact->pressureID();
+    bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
+    
+    if (rank == 0) {
+      cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
+    }
+    
+    stokesExact->setUseSinglePointBCForP(singlePointBCs);
+  } else {
+    // trying out the new ExactSolution features:
+    FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+    FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+    FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+    FunctionPtr y = Teuchos::rcp( new Y );
+    FunctionPtr u1_exact = - exp_x * ( y * cos_y + sin_y );
+    FunctionPtr u2_exact = exp_x * y * sin_y;
+    FunctionPtr p_exact = 2.0 * exp_x * sin_y;
+    double mu = 1.0;
+    
+    BFPtr stokesBFMath = Teuchos::rcp( new BF(varFactory) );
+    stokesBFMath->addTerm(u1,tau1->div());
+    stokesBFMath->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+    stokesBFMath->addTerm(sigma12,tau1->y());
+    stokesBFMath->addTerm(-u1hat, tau1->dot_normal());
+    
+    // tau2 terms:
+    stokesBFMath->addTerm(u2, tau2->div());
+    stokesBFMath->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+    stokesBFMath->addTerm(sigma22,tau2->y());
+    stokesBFMath->addTerm(-u2hat, tau2->dot_normal());
+    
+    // v1:
+    stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+    stokesBFMath->addTerm(mu * sigma12,v1->dy());
+    stokesBFMath->addTerm( - p, v1->dx() );
+    stokesBFMath->addTerm( sigma1n, v1);
+    
+    // v2:
+    stokesBFMath->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+    stokesBFMath->addTerm(mu * sigma22,v2->dy());
+    stokesBFMath->addTerm( -p, v2->dy());
+    stokesBFMath->addTerm( sigma2n, v2);
+    
+    // q:
+    stokesBFMath->addTerm(-u1,q->dx()); // (-u, grad q)
+    stokesBFMath->addTerm(-u2,q->dy());
+    stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
+    
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    bc->addDirichlet(u1, entireBoundary, u1_exact);
+    bc->addDirichlet(u2, entireBoundary, u2_exact);
+    
+    FunctionPtr dpdx = p_exact->dx();
+    FunctionPtr du1dx = u1_exact->dx();
+    FunctionPtr du1dy = u1_exact->dy();
+    FunctionPtr du2dx = u2_exact->dx();
+    FunctionPtr du2dy = u2_exact->dy();
+    
+    FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    mySolution = Teuchos::rcp( new ExactSolution(stokesBFMath, bc, rhs));
+    mySolution->setSolutionFunction(u1, u1_exact);
+    mySolution->setSolutionFunction(u1hat, u1_exact);
+    mySolution->setSolutionFunction(u2, u2_exact);
+    mySolution->setSolutionFunction(u2hat, u2_exact);
+    mySolution->setSolutionFunction(p, p_exact);
+    
+    FunctionPtr sigma11_exact = u1_exact->dx();
+    FunctionPtr sigma12_exact = u1_exact->dy();
+    FunctionPtr sigma21_exact = u2_exact->dx();
+    FunctionPtr sigma22_exact = u2_exact->dy();
+    
+    FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+//    FunctionPtr sigma1n_exact = sigma11_exact * n->x() + sigma12_exact * n->y();
+//    FunctionPtr sigma2n_exact = sigma21_exact * n->x() + sigma22_exact * n->y();
+    
+    FunctionPtr sigma1n_exact = u1_exact->grad() * n;
+    FunctionPtr sigma2n_exact = u2_exact->grad() * n;
+    
+    mySolution->setSolutionFunction(sigma11, sigma11_exact);
+    mySolution->setSolutionFunction(sigma12, sigma12_exact);
+    mySolution->setSolutionFunction(sigma21, sigma21_exact);
+    mySolution->setSolutionFunction(sigma22, sigma22_exact);
+    mySolution->setSolutionFunction(sigma1n, sigma1n_exact);
+    mySolution->setSolutionFunction(sigma2n, sigma2n_exact);
+  }
+  
   Teuchos::RCP<DPGInnerProduct> ip;
   if (useOptimalNorm) {
     if (formulationType == StokesManufacturedSolution::MATH_CONFORMING ) {
@@ -214,20 +381,41 @@ int main(int argc, char *argv[]) {
       double mu = 1.0;
       
       IPPtr qoptIP = Teuchos::rcp(new IP());
+      FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+      FunctionPtr h = Teuchos::rcp( new hFunction() );
+      FunctionPtr h_inv = one / h;
       
       double beta = 1.0;
-      qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
-      qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
-      qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
-      qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-      qoptIP->addTerm( q1->div() - v3->dx() );    // u1
-      qoptIP->addTerm( q2->div() - v3->dy() );    // u2
+      if (normalizeHFactors) {
+        cout << "WARNING: normalizeHFactors needs fixing: need to consider carefully the effects of Piola transform, etc.\n";
+//        qoptIP->addTerm( mu * h_inv * v1->dx() + h_inv * q1->x() ); // sigma11
+//        qoptIP->addTerm( mu * h_inv * v1->dy() + h_inv * q1->y() ); // sigma12
+//        qoptIP->addTerm( mu * h_inv * v2->dx() + h_inv * q2->x() ); // sigma21
+//        qoptIP->addTerm( mu * h_inv * v2->dy() + h_inv * q2->y() ); // sigma22
+//        qoptIP->addTerm( h_inv * v1->dx() + h_inv * v2->dy() );     // pressure
+//        qoptIP->addTerm( 1.0 * q1->div() - h_inv * v3->dx() );    // u1
+//        qoptIP->addTerm( 1.0 * q2->div() - h_inv * v3->dy() );    // u2
+        qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+        qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+        qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+        qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+        qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+        qoptIP->addTerm( h * tau1->div() - q->dx() );    // u1
+        qoptIP->addTerm( h * tau2->div() - q->dy() );    // u2
+      } else {
+        qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+        qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+        qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+        qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+        qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+        qoptIP->addTerm( tau1->div() - q->dx() );    // u1
+        qoptIP->addTerm( tau2->div() - q->dy() );    // u2
+      }
       qoptIP->addTerm( sqrt(beta) * v1 );
       qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * v3 );
-      qoptIP->addTerm( sqrt(beta) * q1 );
-      qoptIP->addTerm( sqrt(beta) * q2 );
+      qoptIP->addTerm( sqrt(beta) * q );
+      qoptIP->addTerm( sqrt(beta) * tau1 );
+      qoptIP->addTerm( sqrt(beta) * tau2 );
       
       ip = qoptIP;
       
@@ -239,7 +427,7 @@ int main(int argc, char *argv[]) {
     
     
   } else {
-    ip = Teuchos::rcp( new    MathInnerProduct( mySolution->bilinearForm() ) );
+    ip = Teuchos::rcp( new   MathInnerProduct( mySolution->bilinearForm() ) );
   }
   
   if (rank==0) 
@@ -285,7 +473,8 @@ int main(int argc, char *argv[]) {
                             mySolution->bc(), ip, 
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
-    study.setReportRelativeErrors(false);
+    study.setReportRelativeErrors(true);
+    if (useCG) study.setSolver(cgSolver);
     
     study.solve(quadPoints);
     
