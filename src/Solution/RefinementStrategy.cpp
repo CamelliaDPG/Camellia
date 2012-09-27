@@ -59,7 +59,7 @@ void RefinementStrategy::refine(bool printToConsole) {
   
   // record results prior to refinement
   RefinementResults results;
-  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), sqrt(totalEnergyError));
+  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
   
   vector<int> cellsToRefine;
