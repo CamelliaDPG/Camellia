@@ -86,6 +86,9 @@ public:
 };
 
 void BCEasy::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction ) {
+  if ((traceOrFlux->varType() != TRACE) && (traceOrFlux->varType() != FLUX)) {
+    cout << "WARNING: adding Dirichlet BC for variable that is neither a trace nor a flux.\n";
+  }
   if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() ) {
     // "or" the existing condition with the new one:
     SpatialFilterPtr existingFilter = _dirichletBCs[ traceOrFlux->ID() ].first;

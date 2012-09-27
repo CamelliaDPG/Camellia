@@ -56,6 +56,16 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
   }
 }
 
+FunctionPtr Function::x() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::y() {
+  return Teuchos::rcp((Function *)NULL);
+}
+FunctionPtr Function::z() {
+  return Teuchos::rcp((Function *)NULL);
+}
+
 FunctionPtr Function::dx() {
   return Teuchos::rcp((Function *)NULL);
 }
@@ -432,21 +442,29 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
   fout.close();
 }
 
+FunctionPtr Function::zero() {
+  static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  return _zero;
+}
 
-ConstantScalarFunction::ConstantScalarFunction(double value) : Function(0) { 
+ConstantScalarFunction::ConstantScalarFunction(double value) { 
   _value = value;
   ostringstream valueStream;
   valueStream << value;
   _stringDisplay = valueStream.str();
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) : Function(0) { 
+ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) { 
   _value = value; 
   _stringDisplay = stringDisplay;
 }
 
 string ConstantScalarFunction::displayString() {
   return _stringDisplay;
+}
+
+bool ConstantScalarFunction::isZero() {
+  return 0.0 == _value;
 }
 
 void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {\
@@ -477,16 +495,45 @@ void ConstantScalarFunction::scalarDivideBasisValues(FieldContainer<double> &bas
   scalarDivideFunctionValues(basisValues,basisCache);
 }
 
+double ConstantScalarFunction::value(double x, double y) {
+  return value();
+}
+
 double ConstantScalarFunction::value() {
   return _value;
+}
+
+FunctionPtr ConstantScalarFunction::dx() {
+  return Function::zero();
+}
+
+FunctionPtr ConstantScalarFunction::dy() {
+  return Function::zero();
 }
 
 ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) { 
   _value = value; 
 }
 
+FunctionPtr ConstantVectorFunction::x() {
+  return Teuchos::rcp( new ConstantScalarFunction( _value[0] ) );
+}
+
+FunctionPtr ConstantVectorFunction::y() {
+  return Teuchos::rcp( new ConstantScalarFunction( _value[1] ) );
+}
+
 vector<double> ConstantVectorFunction::value() {
   return _value;
+}
+
+bool ConstantVectorFunction::isZero() {
+  for (int d=0; d < _value.size(); d++) {
+    if (0.0 != _value[d]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -504,14 +551,31 @@ ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSo
   _trialID = trialID;
 }
 void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-  // TODO: change ExactSolution::solutionValues to take a *const* points FieldContainer, to avoid this copy:
-  FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-  if (basisCache->getSideIndex() >= 0) {
-    FieldContainer<double> unitNormals = basisCache->getSideNormals();
-    _exactSolution->solutionValues(values,_trialID,points,unitNormals);
-  } else {
-    _exactSolution->solutionValues(values,_trialID,points);
+  _exactSolution->solutionValues(values,_trialID,basisCache);
+}
+
+FunctionPtr ProductFunction::dx() {
+  if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
   }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dx() + _f2 * _f1->dx();
+}
+
+FunctionPtr ProductFunction::dy() {
+  if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dy() + _f2 * _f1->dy();
+}
+
+FunctionPtr ProductFunction::dz() {
+  if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply product rule:
+  return _f1 * _f2->dz() + _f2 * _f1->dz();
 }
 
 int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
@@ -573,6 +637,47 @@ void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCach
   CHECK_VALUES_RANK(values);
   _f1->values(values,basisCache);
   _f2->addToValues(values,basisCache);
+}
+
+FunctionPtr SumFunction::x() {
+  if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->x() + _f2->x();
+}
+
+FunctionPtr SumFunction::y() {
+  if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->y() + _f2->y();  
+}
+FunctionPtr SumFunction::z() {
+  if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->z() + _f2->z();
+}
+
+FunctionPtr SumFunction::dx() {
+  if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dx() + _f2->dx();
+}
+
+FunctionPtr SumFunction::dy() {
+  if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dy() + _f2->dy();
+}
+
+FunctionPtr SumFunction::dz() {
+  if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  return _f1->dz() + _f2->dz();
 }
 
 double hFunction::value(double x, double y, double h) {
@@ -659,7 +764,17 @@ void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr si
   }
 }
 
-UnitNormalFunction::UnitNormalFunction() : Function(1) {}
+UnitNormalFunction::UnitNormalFunction(int comp) : Function( (comp<0)? 1 : 0) {
+  _comp = comp;
+}
+
+FunctionPtr UnitNormalFunction::x() {
+  return Teuchos::rcp( new UnitNormalFunction(0) );
+}
+
+FunctionPtr UnitNormalFunction::y() {
+  return Teuchos::rcp( new UnitNormalFunction(1) );
+}
 
 bool UnitNormalFunction::boundaryValueOnly() {
   return true;
@@ -672,10 +787,15 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   int numPoints = values.dimension(1);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      double n1 = (*sideNormals)(cellIndex,ptIndex,0);
-      double n2 = (*sideNormals)(cellIndex,ptIndex,1);
-      values(cellIndex,ptIndex,0) = n1;
-      values(cellIndex,ptIndex,1) = n2;
+      if (_comp == -1) {
+        double n1 = (*sideNormals)(cellIndex,ptIndex,0);
+        double n2 = (*sideNormals)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex,0) = n1;
+        values(cellIndex,ptIndex,1) = n2;
+      } else {
+        double ni = (*sideNormals)(cellIndex,ptIndex,_comp);
+        values(cellIndex,ptIndex) = ni;
+      }
     }
   }
 }
@@ -708,16 +828,36 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
     FunctionPtr fxn = _fxns[comp];
     fxn->values(compValues, basisCache);
     for (int i=0; i < valuesPerComponent; i++) {
-      values[ valuesPerComponent * i + comp ] = compValues[ i ];
+      values[ numComps * i + comp ] = compValues[ i ];
     }
   }
 }
 
+FunctionPtr VectorizedFunction::x() {
+  return _fxns[0];
+}
+
+FunctionPtr VectorizedFunction::y() {
+  return _fxns[1];
+}
+
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
+  if ( ( f1->rank() == f2->rank() ) && (f1->rank() == 0) ) {
+    // TODO: work out how to do this for other ranks?
+    if (f1->isZero() || f2->isZero()) {
+      return Function::zero();
+    }
+  }
   return Teuchos::rcp( new ProductFunction(f1,f2) );
 }
 
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
+  if ( (f1->rank() == 0) ) {
+    // TODO: work out how to do this for other ranks?
+    if ( f1->isZero() ) {
+      return Function::zero();
+    }
+  }
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
 }
 
@@ -770,6 +910,12 @@ FunctionPtr operator*(FunctionPtr f, vector<double> weight) {
 }
 
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
+  if ( f1->isZero() ) {
+    return f2;
+  }
+  if ( f2->isZero() ) {
+    return f1;
+  }
   return Teuchos::rcp( new SumFunction(f1, f2) );
 }
 

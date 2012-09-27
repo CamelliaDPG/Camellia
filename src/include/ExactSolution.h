@@ -50,6 +50,8 @@
 #include "Solution.h"
 
 #include "BilinearForm.h"
+#include "Function.h"
+#include "BasisCache.h"
 
 class ExactSolution {
 protected:
@@ -59,10 +61,17 @@ protected:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   void squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2);
+
+  int _H1Order;
+  map< int, FunctionPtr > _exactFunctions; // var ID --> function
 public:
+  ExactSolution();
+  ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, int H1Order = -1);
   Teuchos::RCP<BilinearForm> bilinearForm();
   Teuchos::RCP<BC> bc();
   Teuchos::RCP<RHS> rhs();
+  void setSolutionFunction( VarPtr var, FunctionPtr varFunction );
+  void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
   void solutionValues(FieldContainer<double> &values, 
                       int trialID,
                       FieldContainer<double> &physicalPoints);
@@ -71,11 +80,11 @@ public:
                       FieldContainer<double> &physicalPoints,
                       FieldContainer<double> &unitNormals);
   virtual double solutionValue(int trialID,
-                              FieldContainer<double> &physicalPoint) = 0;
+                              FieldContainer<double> &physicalPoint);
   virtual double solutionValue(int trialID,
                               FieldContainer<double> &physicalPoint,
-                              FieldContainer<double> &unitNormal) = 0;
-  virtual int H1Order() = 0; // return -1 for non-polynomial solutions
+                              FieldContainer<double> &unitNormal);
+  virtual int H1Order(); // return -1 for non-polynomial solutions
   double L2NormOfError(Solution &solution, int trialID, int cubDegree=-1);
   void L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
 };

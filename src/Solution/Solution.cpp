@@ -136,6 +136,7 @@ void Solution::initialize() {
   _energyErrorComputed = false;
   _reportConditionNumber = false;
   _reportTimingResults = false;
+  _globalSystemConditionEstimate = -1;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -605,20 +606,23 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 
   timer.ResetStartTime();
   solver->setProblem(problem);
+  
+  if (_reportConditionNumber) {
+    //    double oneNorm = globalStiffMatrix.NormOne();
+    double condest = conditionNumberEstimate(*problem);
+    if (rank == 0) {
+      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
+      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
+    }
+    _globalSystemConditionEstimate = condest;
+  }
+  
   int solveSuccess = solver->solve();
 
   if (solveSuccess != 0 ) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
   
-  if (_reportConditionNumber) {
-//    double oneNorm = globalStiffMatrix.NormOne();
-    double condest = conditionNumberEstimate(*problem);
-    if (rank == 0) {
-      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
-      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
-    }
-  }
   
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
@@ -799,6 +803,11 @@ ElementTypePtr Solution::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, 
 //  //cout << "Solution maxDiff is " << maxDiff << endl;
 //  return true;
 //}
+
+double Solution::globalCondEstLastSolve() {
+  // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.
+  return _globalSystemConditionEstimate;
+}
 
 void Solution::integrateBasisFunctions(FieldContainer<int> &globalIndices, FieldContainer<double> &values, int trialID) {
   // only supports scalar-valued field bases right now...
@@ -1861,7 +1870,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
   }
   if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, 
-                       "solutionValues doesn't support evaluation of fields and fluxes variables on element interiors.");
+                       "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
   }
   bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
   
@@ -3541,3 +3550,4 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   _residualsComputed = false;
   _energyErrorComputed = false; // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
+

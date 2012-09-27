@@ -50,12 +50,81 @@
 
 #include "../MultiOrderStudy/MultiOrderStudy.h"
 
+#include "PreviousSolutionFunction.h"
+
+#include "CGSolver.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
 #endif
 
 using namespace std;
+
+class EntireBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
+};
+
+class Exp_x : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return exp(x);
+  }
+  FunctionPtr dx() {
+    return Teuchos::rcp( new Exp_x );
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+};
+
+class Y : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return y;
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  }
+};
+
+class Cos_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+};
+
+class Sin_y : public SimpleFunction {
+  double value(double x, double y) {
+    return sin(y);
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new Cos_y );
+  }
+};
+
+double Cos_y::value(double x, double y) {
+  return cos(y);
+}
+FunctionPtr Cos_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Cos_y::dy() {
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  return - sin_y;
+}
 
 void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int &maxLogElements,
                StokesManufacturedSolution::StokesFormulationType &formulationType,
@@ -86,7 +155,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
      StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
    
    where:
-   formulationTypeStr = {"original conforming"|"nonConforming"|"vvp"|"math"}
+   formulationTypeStr = {"original conforming"|"nonConforming"|"vvp"|"math"|"dev"}
    normChoice = {"opt"|"naive"}
    
    */
@@ -136,9 +205,11 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     useOptimalNorm = false; // otherwise, use naive
   }
   if (formulationTypeStr == "math") {
-    formulationType = StokesManufacturedSolution::MATH_CONFORMING;
+    formulationType = StokesManufacturedSolution::VGP_CONFORMING;
   } else if (formulationTypeStr == "vvp") {
     formulationType = StokesManufacturedSolution::VVP_CONFORMING;
+  } else if (formulationTypeStr == "dev") {
+    formulationType = StokesManufacturedSolution::DDS_CONFORMING;
   } else if (formulationTypeStr == "nonConforming") {
     formulationType = StokesManufacturedSolution::ORIGINAL_NON_CONFORMING;
   } else {
@@ -159,87 +230,281 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int pToAdd = 1; // for optimal test function approximation
+  bool useCG = false;
+  double cgTol = 1e-8;
+  int cgMaxIt = 400000;
+  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
 
   // parse args:
   int polyOrder, minLogElements, maxLogElements;
   bool useTriangles, useOptimalNorm, useMultiOrder;
+  
+  // NOTE: "normalize h factors" is probably a kooky idea, and I haven't even managed yet to get it to improve the conditioning
+  //       (i.e. I'm probably not introducing the right factors to normalize given the various pullbacks involved)
+  bool normalizeHFactors = false; // divide by h wherever h factors enter: a test to see if we can improve conditioning...
+  
+  
   StokesManufacturedSolution::StokesFormulationType formulationType;
   string formulationTypeStr;
   parseArgs(argc, argv, polyOrder, minLogElements, maxLogElements, formulationType, useTriangles,
             useMultiOrder, useOptimalNorm, formulationTypeStr);
 
-  /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
+  /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
-  VarPtr q1 = varFactory.testVar("q_1", HDIV, StokesMathBilinearForm::Q_1);
-  VarPtr q2 = varFactory.testVar("q_2", HDIV, StokesMathBilinearForm::Q_2);
-  VarPtr v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
-  VarPtr v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
-  VarPtr v3 = varFactory.testVar("v_3", HGRAD, StokesMathBilinearForm::V_3);
+  VarPtr tau1, tau2, q, p, sigma21, u1hat, u2hat; // for VGP
+  VarPtr tau11, tau12, tau22, u1n1hat, utnhat, u2n2hat; // for DDS
+  VarPtr v1, v2, sigma1n, sigma2n, u1, u2, sigma11, sigma12, sigma22; // for both, but with different meanings  
   
-  VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
-  VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
-  //  VarPtr uhatn = varFactory.fluxVar("\\widehat{u}_n");
-  VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
-  VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
-  VarPtr u1 = varFactory.fieldVar("u_1");
-  VarPtr u2 = varFactory.fieldVar("u_2");
-  VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
-  VarPtr sigma12 = varFactory.fieldVar("\\sigma_12");
-  VarPtr sigma21 = varFactory.fieldVar("\\sigma_21");
-  VarPtr sigma22 = varFactory.fieldVar("\\sigma_22");
-  VarPtr p = varFactory.fieldVar("p");
+  if (formulationType == StokesManufacturedSolution::VGP_CONFORMING ) {
+    v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
+    v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
+    tau1 = varFactory.testVar("\\tau_1", HDIV, StokesMathBilinearForm::Q_1);
+    tau2 = varFactory.testVar("\\tau_2", HDIV, StokesMathBilinearForm::Q_2);
+    q = varFactory.testVar("q", HGRAD, StokesMathBilinearForm::V_3);
+
+    u1hat = varFactory.traceVar("\\widehat{u}_1");
+    u2hat = varFactory.traceVar("\\widehat{u}_2");
+    sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
+    sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
+    u1 = varFactory.fieldVar("u_1");
+    u2 = varFactory.fieldVar("u_2");
+    sigma11 = varFactory.fieldVar("\\sigma_{11}");
+    sigma12 = varFactory.fieldVar("\\sigma_{12}");
+    sigma21 = varFactory.fieldVar("\\sigma_{21}");
+    sigma22 = varFactory.fieldVar("\\sigma_{22}");
+    p = varFactory.fieldVar("p");
+  } else {
+    v1 = varFactory.testVar("v_1", HGRAD);
+    v2 = varFactory.testVar("v_2", HGRAD);
+    
+    tau11 = varFactory.testVar("\\tau_{11}", HGRAD);
+    tau12 = varFactory.testVar("\\tau_{12}", HGRAD);
+    tau22 = varFactory.testVar("\\tau_{22}", HGRAD);
+    
+    sigma1n = varFactory.fluxVar("\\widehat{\\sigma}_{1n}");
+    sigma2n = varFactory.fluxVar("\\widehat{\\sigma}_{2n}");
+    u1n1hat = varFactory.fluxVar("\\widehat{2 \\mu u_1 n_1}");
+    utnhat  = varFactory.fluxVar("\\widehat{2 \\mu {u_2 \\choose u_1} \\cdot n}");
+    u2n2hat = varFactory.fluxVar("\\widehat{2 \\mu u_2 n_2}");
+
+    u1 = varFactory.fieldVar("u_1");
+    u2 = varFactory.fieldVar("u_2");
+    sigma11 = varFactory.fieldVar("\\sigma_{11}");
+    sigma12 = varFactory.fieldVar("\\sigma_{12}");
+    sigma21 = varFactory.fieldVar("\\sigma_{21}");
+    sigma22 = varFactory.fieldVar("\\sigma_{22}");
+  }
+
   
   ///////////////////////////////////////////////////////////////////////////
-  
-  Teuchos::RCP<StokesManufacturedSolution> mySolution = 
-  Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
-                                               polyOrder, formulationType) );
-  
-  int pressureID = mySolution->pressureID();
-  bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
-    cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
   }
   
-  mySolution->setUseSinglePointBCForP(singlePointBCs);
+  Teuchos::RCP<ExactSolution> mySolution;
+  if ((formulationType != StokesManufacturedSolution::VGP_CONFORMING) 
+      && (formulationType != StokesManufacturedSolution::DDS_CONFORMING) ) {
+    Teuchos::RCP<StokesManufacturedSolution> stokesExact = Teuchos::rcp(
+    new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, 
+                                   polyOrder, formulationType));
+    mySolution = stokesExact;
+    
+    int pressureID = stokesExact->pressureID();
+    bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
+    
+    if (rank == 0) {
+      cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
+    }
+    
+    stokesExact->setUseSinglePointBCForP(singlePointBCs);
+  } else {
+    // trying out the new ExactSolution features:
+    FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+    FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+    FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+    FunctionPtr y = Teuchos::rcp( new Y );
+    FunctionPtr u1_exact = - exp_x * ( y * cos_y + sin_y );
+    FunctionPtr u2_exact = exp_x * y * sin_y;
+    FunctionPtr p_exact = 2.0 * exp_x * sin_y;
+    double mu = 1.0;
+    
+    BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );
+    
+    switch (formulationType) {
+      case StokesManufacturedSolution::DDS_CONFORMING:
+        // v1 terms:
+        stokesBF->addTerm(-sigma11, v1->dx()); // (sigma1, grad v1)
+        stokesBF->addTerm(-sigma12, v1->dy());
+        stokesBF->addTerm(sigma1n, v1);
+        // v2 terms:
+        stokesBF->addTerm(-sigma12, v2->dx()); // (sigma2, grad v2)
+        stokesBF->addTerm(-sigma22, v2->dy());
+        stokesBF->addTerm(sigma2n, v2);
+        // tau11 terms:
+        stokesBF->addTerm(sigma11,tau11);
+        stokesBF->addTerm(2 * mu * u1,tau11->dx());
+        stokesBF->addTerm(-u1n1hat,tau11);
+        // tau12 terms:
+        stokesBF->addTerm(sigma12,tau12);
+        stokesBF->addTerm(mu * u2,tau12->dx());
+        stokesBF->addTerm(mu * u1,tau12->dy());
+        stokesBF->addTerm(-utnhat,tau12);
+        // tau22 terms:
+        stokesBF->addTerm(sigma22,tau22);
+        stokesBF->addTerm(2 * mu * u2,tau22->dx());
+        stokesBF->addTerm(-u2n2hat,tau22);
+        break;
+        
+      case StokesManufacturedSolution::VGP_CONFORMING:
+        // tau1 terms:
+        stokesBF->addTerm(u1,tau1->div());
+        stokesBF->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+        stokesBF->addTerm(sigma12,tau1->y());
+        stokesBF->addTerm(-u1hat, tau1->dot_normal());
+        
+        // tau2 terms:
+        stokesBF->addTerm(u2, tau2->div());
+        stokesBF->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+        stokesBF->addTerm(sigma22,tau2->y());
+        stokesBF->addTerm(-u2hat, tau2->dot_normal());
+        
+        // v1:
+        stokesBF->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+        stokesBF->addTerm(mu * sigma12,v1->dy());
+        stokesBF->addTerm( - p, v1->dx() );
+        stokesBF->addTerm( sigma1n, v1);
+        
+        // v2:
+        stokesBF->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+        stokesBF->addTerm(mu * sigma22,v2->dy());
+        stokesBF->addTerm( -p, v2->dy());
+        stokesBF->addTerm( sigma2n, v2);
+        
+        // q:
+        stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
+        stokesBF->addTerm(-u2,q->dy());
+        stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
+        break;
+        
+      default:
+        break;
+    }
+    
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    bc->addDirichlet(u1hat, entireBoundary, u1_exact);
+    bc->addDirichlet(u2hat, entireBoundary, u2_exact);
+    bc->addZeroMeanConstraint(p);
+    
+    FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    mySolution = Teuchos::rcp( new ExactSolution(stokesBF, bc, rhs));
+    mySolution->setSolutionFunction(u1, u1_exact);
+    mySolution->setSolutionFunction(u2, u2_exact);
+    
+    if (formulationType != StokesManufacturedSolution::DDS_CONFORMING) // then p is defined...
+      mySolution->setSolutionFunction(p, p_exact);
+    
+    if (formulationType == StokesManufacturedSolution::VGP_CONFORMING) {
+      mySolution->setSolutionFunction(sigma11, u1_exact->dx());
+      mySolution->setSolutionFunction(sigma12, u1_exact->dy());
+      mySolution->setSolutionFunction(sigma21, u2_exact->dx());
+      mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+    } else if (formulationType == StokesManufacturedSolution::DDS_CONFORMING) {
+//      FunctionPtr pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
+      mySolution->setSolutionFunction(sigma11, p_exact + 2 * mu * u1_exact->dx());
+      mySolution->setSolutionFunction(sigma12, mu * u1_exact->dy() + mu * u2_exact->dx());
+      mySolution->setSolutionFunction(sigma22, p_exact + 2 * mu * u2_exact->dy());
+    }
+  }
+  
   Teuchos::RCP<DPGInnerProduct> ip;
   if (useOptimalNorm) {
-    if (formulationType == StokesManufacturedSolution::MATH_CONFORMING ) {
+    if (formulationType == StokesManufacturedSolution::VGP_CONFORMING ) {
       
       double mu = 1.0;
       
       IPPtr qoptIP = Teuchos::rcp(new IP());
+      FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+      FunctionPtr h = Teuchos::rcp( new hFunction() );
+      FunctionPtr h_inv = one / h;
       
       double beta = 1.0;
-      qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11
-      qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma12
-      qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21
-      qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-      qoptIP->addTerm( q1->div() - v3->dx() );    // u1
-      qoptIP->addTerm( q2->div() - v3->dy() );    // u2
+      if (normalizeHFactors) {
+        cout << "WARNING: normalizeHFactors needs fixing: need to consider carefully the effects of Piola transform, etc.\n";
+//        qoptIP->addTerm( mu * h_inv * v1->dx() + h_inv * q1->x() ); // sigma11
+//        qoptIP->addTerm( mu * h_inv * v1->dy() + h_inv * q1->y() ); // sigma12
+//        qoptIP->addTerm( mu * h_inv * v2->dx() + h_inv * q2->x() ); // sigma21
+//        qoptIP->addTerm( mu * h_inv * v2->dy() + h_inv * q2->y() ); // sigma22
+//        qoptIP->addTerm( h_inv * v1->dx() + h_inv * v2->dy() );     // pressure
+//        qoptIP->addTerm( 1.0 * q1->div() - h_inv * v3->dx() );    // u1
+//        qoptIP->addTerm( 1.0 * q2->div() - h_inv * v3->dy() );    // u2
+        qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+        qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+        qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+        qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+        qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+        qoptIP->addTerm( h * tau1->div() - q->dx() );    // u1
+        qoptIP->addTerm( h * tau2->div() - q->dy() );    // u2
+      } else {
+        qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+        qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+        qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+        qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+        qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+        qoptIP->addTerm( tau1->div() - q->dx() );    // u1
+        qoptIP->addTerm( tau2->div() - q->dy() );    // u2
+      }
       qoptIP->addTerm( sqrt(beta) * v1 );
       qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * v3 );
-      qoptIP->addTerm( sqrt(beta) * q1 );
-      qoptIP->addTerm( sqrt(beta) * q2 );
+      qoptIP->addTerm( sqrt(beta) * q );
+      qoptIP->addTerm( sqrt(beta) * tau1 );
+      qoptIP->addTerm( sqrt(beta) * tau2 );
       
       ip = qoptIP;
       
       if (rank==0)
-        cout << "Stokes Math formulation: using quasi-optimal IP with beta=" << beta << endl;
+        cout << "Stokes VGP formulation: using quasi-optimal IP with beta=" << beta << endl;
+    } else if (formulationType==StokesManufacturedSolution::DDS_CONFORMING) {
+      IPPtr qoptIP = Teuchos::rcp(new IP());
+      FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+      FunctionPtr h = Teuchos::rcp( new hFunction() );
+      FunctionPtr h_inv = one / h;
+      
+      double mu = 1.0;
+      
+      double beta = 1.0;
+      
+      // TODO: change this to match the actual graph norm...
+      qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+      qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+      qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+      qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+      qoptIP->addTerm( tau1->div() - q->dx() );    // u1
+      qoptIP->addTerm( tau2->div() - q->dy() );    // u2
+      qoptIP->addTerm( sqrt(beta) * v1 );
+      qoptIP->addTerm( sqrt(beta) * v2 );
+      qoptIP->addTerm( sqrt(beta) * q );
+      qoptIP->addTerm( sqrt(beta) * tau1 );
+      qoptIP->addTerm( sqrt(beta) * tau2 );
+      
+
     } else {
       ip = Teuchos::rcp( new OptimalInnerProduct( mySolution->bilinearForm() ) );
     }
     
     
   } else {
-    ip = Teuchos::rcp( new    MathInnerProduct( mySolution->bilinearForm() ) );
+    ip = Teuchos::rcp( new   MathInnerProduct( mySolution->bilinearForm() ) );
   }
   
   if (rank==0) 
@@ -258,7 +523,7 @@ int main(int argc, char *argv[]) {
   
   int u1_trialID, u2_trialID, p_trialID;
   int u1_traceID, u2_traceID;
-  if (formulationType == StokesManufacturedSolution::MATH_CONFORMING) {
+  if (formulationType == StokesManufacturedSolution::VGP_CONFORMING) {
     u1_trialID = StokesMathBilinearForm::U1;
     u2_trialID = StokesMathBilinearForm::U2;
     p_trialID = StokesMathBilinearForm::P;
@@ -285,12 +550,13 @@ int main(int argc, char *argv[]) {
                             mySolution->bc(), ip, 
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
-    study.setReportRelativeErrors(false);
+    study.setReportRelativeErrors(true);
+    if (useCG) study.setSolver(cgSolver);
     
     study.solve(quadPoints);
     
     if (rank == 0) {
-      if ( formulationType != StokesManufacturedSolution::MATH_CONFORMING) {
+      if ( formulationType != StokesManufacturedSolution::VGP_CONFORMING) {
         ostringstream filePathPrefix;
         filePathPrefix << "stokes/u1_p" << polyOrder;
         

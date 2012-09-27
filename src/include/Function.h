@@ -28,10 +28,17 @@ public:
   Function();
   Function(int rank);
   
+  virtual bool isZero() { return false; } // if true, the function is identically zero
+  
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
   
   virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
+  
+  virtual FunctionPtr x();
+  virtual FunctionPtr y();
+  virtual FunctionPtr z();
+  
   virtual FunctionPtr dx();
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
@@ -67,6 +74,7 @@ public:
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
+  static FunctionPtr zero();
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
@@ -76,25 +84,44 @@ private:
 
 };
 
-class ConstantScalarFunction : public Function {
+class SimpleFunction : public Function {
+public:
+  virtual double value(double x, double y) = 0;
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+};
+typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
+
+class ConstantScalarFunction : public SimpleFunction {
   double _value;
   string _stringDisplay;
 public:
   ConstantScalarFunction(double value);
   ConstantScalarFunction(double value, string stringDisplay);
   string displayString();
+  bool isZero();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarDivideFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache);
   void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   double value();
+  double value(double x, double y);
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  // FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
 };
 
 class ConstantVectorFunction : public Function {
   vector<double> _value;
 public:
   ConstantVectorFunction(vector<double> value);
+  bool isZero();
+  
+  FunctionPtr x();
+  FunctionPtr y();
+//  FunctionPtr z();
+  
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
 };
@@ -115,6 +142,9 @@ public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
 };
 
 class QuotientFunction : public Function {
@@ -129,6 +159,15 @@ class SumFunction : public Function {
   FunctionPtr _f1, _f2;
 public:
   SumFunction(FunctionPtr f1, FunctionPtr f2);
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
+  
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
@@ -138,16 +177,14 @@ public:
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
-class SimpleFunction : public Function {
-public:
-  virtual double value(double x, double y) = 0;
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-};
-typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
-
 class UnitNormalFunction : public Function {
+  int _comp;
 public:
-  UnitNormalFunction();
+  UnitNormalFunction(int comp=-1); // -1: the vector normal.  Otherwise, picks out the comp component
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  
   bool boundaryValueOnly();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
@@ -168,6 +205,10 @@ public:
 class VectorizedFunction : public Function {
   vector< FunctionPtr > _fxns;
 public:
+  virtual FunctionPtr x();
+  virtual FunctionPtr y();
+//  virtual FunctionPtr z();
+  
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);

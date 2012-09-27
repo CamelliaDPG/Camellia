@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0)
     cout << "numRefinements = " << numRefs << endl;
   
-  /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
+  /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
   VarPtr q1 = varFactory.testVar("q_1", HDIV);
   VarPtr q2 = varFactory.testVar("q_2", HDIV);

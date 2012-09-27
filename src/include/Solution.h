@@ -106,6 +106,7 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
   bool _reportConditionNumber, _reportTimingResults;
+  double _globalSystemConditionEstimate;
   
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
@@ -188,6 +189,8 @@ public:
   
   void computeResiduals();
   void computeErrorRepresentation();
+  
+  double globalCondEstLastSolve(); // the condition # estimate for the last system matrix used in a solve, if _reportConditionNumber is true.
   
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
