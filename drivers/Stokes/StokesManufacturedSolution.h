@@ -49,7 +49,8 @@ public:
     ORIGINAL_NON_CONFORMING,
     ORIGINAL_CONFORMING,
     VVP_CONFORMING,
-    MATH_CONFORMING
+    VGP_CONFORMING,
+    DDS_CONFORMING
   };
   enum StokesManufacturedSolutionType {
     POLYNOMIAL = 0,
