@@ -60,7 +60,8 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
   _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
-  vector<int> trialIDs = bilinearForm->trialIDs();
+//  vector<int> trialIDs = bilinearForm->trialIDs();
+  vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
@@ -162,7 +163,7 @@ map< int, double > HConvergenceStudy::exactSolutionNorm() {
 
 void HConvergenceStudy::computeErrors() {
   SolutionPtr solution = _solutions[0];
-  vector<int> trialIDs = _bilinearForm->trialIDs();
+  vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     vector< Teuchos::RCP<Solution> >::iterator solutionIt;
