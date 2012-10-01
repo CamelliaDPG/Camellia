@@ -33,6 +33,7 @@
 #include "Element.h"
 
 #include "MeshPolyOrderFunction.h"
+#include "CondensationSolver.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
@@ -360,10 +361,10 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 3; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e3;
+  double Re = 1e4;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
 
@@ -618,8 +619,8 @@ int main(int argc, char *argv[]) {
 
   // y-momentum conservation
   A_euler[v3->ID()][rho->ID()] = (u1_prev * u2_prev)*e1 + (u2sq + dpdrho)*e2;
-  A_euler[v3->ID()][u1->ID()] = (u2_prev * rho_prev)*e1 + (2 * u2_prev * rho_prev)*e2;
-  A_euler[v3->ID()][u2->ID()] = (u1_prev * rho_prev)*e1;
+  A_euler[v3->ID()][u1->ID()] = (u2_prev * rho_prev)*e1;
+  A_euler[v3->ID()][u2->ID()] = (u1_prev * rho_prev)*e1 + (2 * u2_prev * rho_prev)*e2;
   A_euler[v3->ID()][T->ID()] = dpdT*e2;
 
   // y-momentum viscous terms
@@ -736,7 +737,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .1;
+  double dt = .2;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -775,8 +776,6 @@ int main(int argc, char *argv[]) {
   // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
   //  FunctionPtr ReScaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
-  //  FunctionPtr ReDtScaling = Teuchos::rcp( new EpsilonScaling(dt/Re) ); 
-  FunctionPtr ReDtScaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   IPPtr ip = Teuchos::rcp( new IP );
 
@@ -785,13 +784,13 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   // rho dt term
-  ip->addTerm(ReDtScaling*invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
+  ip->addTerm(invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
   // u1 dt term
-  ip->addTerm(ReDtScaling*invDt*(rho_prev*v2 + (dedu1*rho_prev)*v4));
+  ip->addTerm(invDt*(rho_prev*v2 + (dedu1*rho_prev)*v4));
   // u2 dt term
-  ip->addTerm(ReDtScaling*invDt*(rho_prev*v3 + (dedu2*rho_prev)*v4));
+  ip->addTerm(invDt*(rho_prev*v3 + (dedu2*rho_prev)*v4));
   // T dt term
-  ip->addTerm(ReDtScaling*invDt*(dedT*rho_prev*v4) );
+  ip->addTerm(invDt*(dedT*rho_prev*v4) );
 
   bool coupleTauTestTerms = true;
   bool coupleEpsVTestTerms = true;
@@ -1110,6 +1109,11 @@ int main(int argc, char *argv[]) {
   // PSEUDO-TIME SOLVE STRATEGY 
   ////////////////////////////////////////////////////////////////////
 
+  // try condnsed solver
+  //  Teuchos::RCP<Solver> condensedSolver = Teuchos::rcp(new CondensationSolver(mesh,solution));
+  //  Teuchos::RCP<CondensationSolver> condensed = Teuchos::rcp(new CondensationSolver(mesh,solution));
+  //  solution->setReportTimingResults(true);
+
   bool useAdaptTS = false;
   if (rank==0){
     cout << "doing timesteps";
@@ -1121,6 +1125,8 @@ int main(int argc, char *argv[]) {
 
   // time steps
   double time_tol = 1e-8;
+  double time_tol_factor = 1e-4;
+  double energyError = time_tol/time_tol_factor; // just to start it out
   for (int k = 0;k<=numRefs;k++){    
 
     ofstream residualFile;      
@@ -1134,17 +1140,25 @@ int main(int argc, char *argv[]) {
       dtFile.open(filename2.c_str());
       
       if (rank==0 && k==numRefs){
-	cout << "Finishing it off with the final solve" << endl;
       }
+    }
+    double rel_time_tol = max(time_tol,energyError * time_tol_factor); 
+    if (rank==0){
+      cout << "energy error = " << energyError << endl;
+      cout << "relative time tol = " << rel_time_tol << endl;
     }
     double L2_time_residual = 1e7;
     int i = 0;
     int thresh = 2; // timestep threshhold to turn on adaptive timestepping
-    while(L2_time_residual > time_tol && (i<numTimeSteps)){
+    while(L2_time_residual > rel_time_tol && (i<numTimeSteps)){
 
       //  for (int i = 0;i<numTimeSteps;i++){
       for (int j = 0;j<numNRSteps;j++){
-	solution->solve(false); 
+	//	solution->solve(false); 
+	solution->condensedSolve(false);  
+	if (mesh->numActiveElements() > 2000){
+	  solution->condensedSolve(true);  // turn on save memory flag	  
+	}
 
 	// clear fluxes that we use for subsonic outflow, which accumulate
 	backgroundFlow->clearSolution(That->ID());
@@ -1152,7 +1166,7 @@ int main(int argc, char *argv[]) {
 	backgroundFlow->clearSolution(F3nhat->ID());
 	backgroundFlow->clearSolution(F4nhat->ID());
 
-	backgroundFlow->addSolution(solution,1.0);
+	backgroundFlow->addSolution(solution,1.0); // update with dU
       }         
      
       // subtract solutions to get residual
@@ -1163,7 +1177,8 @@ int main(int argc, char *argv[]) {
       double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
       double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
       L2_time_residual= sqrt(L2_time_residual_sq)/dt;
-          
+
+      /*
       double prev_time_residual, prev_prev_time_residual;
       if (useAdaptTS){
 	if (i>=0){
@@ -1192,21 +1207,21 @@ int main(int argc, char *argv[]) {
 	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);      	
 	}
       }
-      
+      */
       if (rank==0){
        residualFile << L2_time_residual << endl;
        dtFile << dt << endl;
 
 	cout << "at timestep i = " << i << " with dt = " << dt << ", and time residual = " << L2_time_residual << endl;    	
 
+	/*
 	std::ostringstream oss;
 	oss << k << "_" << i ;
 	std::ostringstream dat;
 	dat<<".dat";
 	std::ostringstream vtu;
 	vtu<<".vtu";
-	string Ustr("U_NS");
-      
+	string Ustr("U_NS");      
 	solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
 	solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
 	solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
@@ -1214,7 +1229,6 @@ int main(int argc, char *argv[]) {
 	solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
 	solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
 	solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
-	
 	backgroundFlow->writeFluxesToFile(u1hat->ID(),"u1hat_prev" +oss.str()+dat.str());
 	backgroundFlow->writeFluxesToFile(u2hat->ID(),"u2hat_prev" +oss.str()+dat.str());
 	backgroundFlow->writeFluxesToFile(That->ID(), "That_prev" +oss.str()+dat.str());
@@ -1222,8 +1236,8 @@ int main(int argc, char *argv[]) {
 	backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
 	backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
 	backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
-
-	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
+	*/
+	//	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
 
@@ -1233,7 +1247,7 @@ int main(int argc, char *argv[]) {
     //////////////////////////////////////////////////////////////////////////
     // Check conservation by testing against one
     //////////////////////////////////////////////////////////////////////////
-
+    /*
     VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
     // Create a fake bilinear form for the testing
     BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
@@ -1282,30 +1296,54 @@ int main(int argc, char *argv[]) {
 	totalAbsMassFlux += abs( massFluxIntegral[cellID] );
       }
     }
-    
-    // Print results from processor with rank 0
     if (rank==0){
       cout << endl;
       cout << "largest mass flux: " << maxMassFluxIntegral << endl;
       cout << "total mass flux: " << totalMassFlux << endl;
       cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       cout << endl;
+    }
+    */
+    // Print results from processor with rank 0
+    if (rank==0){
       residualFile.close();
-      dtFile.close();
+      dtFile.close();	
+
+      std::ostringstream oss;
+      oss << k ;
+      std::ostringstream dat;
+      dat<<".dat";
+      std::ostringstream vtu;
+      vtu<<".vtu";
+      string Ustr("U_NS");      
+      solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
+      solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
+      solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());   
+      solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str());
+      backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
     }
 
     if (k<numRefs){
       if (rank==0){
 	cout << "Performing refinement number " << k << endl;
       }     
+      energyError = solution->energyErrorTotal();
       refinementStrategy->refine(rank==0);    
-      
+      if (rank==0){
+	cout << "Done with  refinement number " << k << endl;
+      }   
       // RESET solution every refinement - make sure discretization error doesn't creep in
-      backgroundFlow->projectOntoMesh(functionMap);
-      prevTimeFlow->projectOntoMesh(functionMap);
+      //      backgroundFlow->projectOntoMesh(functionMap);
+      //      prevTimeFlow->projectOntoMesh(functionMap);
       
+    } else {
+      if (rank==0){
+	cout << "Finishing it off with the final solve" << endl;
+      }
     }
+
   }
+
 
   return 0;
 }

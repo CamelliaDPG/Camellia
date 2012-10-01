@@ -1429,6 +1429,57 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
 }
 
 // added by Jesse - accumulates flux/field local dof indices into user-provided maps
+void Mesh::getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds){
+  
+  // determine trialIDs
+  vector< int > trialIDs = bilinearForm()->trialIDs();
+  vector< int > fieldIDs;
+  vector< int > fluxIDs;
+  vector< int >::iterator idIt;
+
+  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
+    int trialID = *(idIt);
+    if (!bilinearForm()->isFluxOrTrace(trialID)){ // if field
+      fieldIDs.push_back(trialID);
+    } else {
+      fluxIDs.push_back(trialID);
+    }
+  } 
+
+  // get all elems in mesh (more than just local info)
+  vector< ElementPtr > activeElems = activeElements();
+  vector< ElementPtr >::iterator elemIt;
+
+  // gets dof indices
+  for (elemIt=activeElems.begin();elemIt!=activeElems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    int globalCellIndex = (*elemIt)->globalCellIndex();
+    int cellIndex = (*elemIt)->cellIndex();
+    int numSides = (*elemIt)->numSides();
+    ElementTypePtr elemType = (*elemIt)->elementType();
+    
+    // get indices (for cell)
+    vector<int> inds;
+    for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
+      int trialID = (*idIt);
+      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      for (int i = 0;i<inds.size();++i){
+	fieldInds[cellID].insert(globalDofIndex(cellID,inds[i]));
+      }
+    }
+    inds.clear();
+    for (idIt = fluxIDs.begin(); idIt != fluxIDs.end(); idIt++){
+      int trialID = (*idIt);
+      for (int sideIndex = 0;sideIndex<numSides;sideIndex++){	
+	inds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
+	for (int i = 0;i<inds.size();++i){
+	  fluxInds[cellID].insert(globalDofIndex(cellID,inds[i]));
+	}	
+      }
+    }
+  }  
+}
+// added by Jesse - accumulates flux/field local dof indices into user-provided maps
 void Mesh::getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds){
   
   // determine trialIDs
@@ -2307,6 +2358,33 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
+}
+
+int Mesh::condensedRowSizeUpperBound() {
+  // includes multiplicity
+  vector< Teuchos::RCP< ElementType > >::iterator elemTypeIt;
+  int maxRowSize = 0;
+  for (int partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++) {
+    for (elemTypeIt = _elementTypesForPartition[partitionNumber].begin(); 
+         elemTypeIt != _elementTypesForPartition[partitionNumber].end();
+         elemTypeIt++) {
+      ElementTypePtr elemTypePtr = *elemTypeIt;
+      int numSides = elemTypePtr->cellTopoPtr->getSideCount();
+      vector< int > fluxIDs = _bilinearForm->trialBoundaryIDs();
+      vector< int >::iterator fluxIDIt;
+      int numFluxDofs = 0;
+      for (fluxIDIt = fluxIDs.begin(); fluxIDIt != fluxIDs.end(); fluxIDIt++) {
+        int fluxID = *fluxIDIt;
+        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+          int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideIndex);
+          numFluxDofs += numDofs;
+        }
+      }
+      int maxPossible = numFluxDofs * 2 + numSides*fluxIDs.size();  // a side can be shared by 2 elements, and vertices can be shared
+      maxRowSize = max(maxPossible, maxRowSize);
+    }
+  }
+  return maxRowSize;
 }
 
 int Mesh::rowSizeUpperBound() {

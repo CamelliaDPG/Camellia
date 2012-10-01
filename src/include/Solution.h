@@ -57,6 +57,8 @@
 #include "AbstractFunction.h"
 #include "Function.h"
 #include "LocalStiffnessMatrixFilter.h"
+#include "Epetra_SerialDenseMatrix.h"
+#include "Epetra_SerialDenseVector.h"
 
 class Solver;
 class LagrangeConstraints;
@@ -208,6 +210,12 @@ public:
   Teuchos::RCP<LocalStiffnessMatrixFilter> filter() const;
   
   // Jesse's additions:
+  void condensedSolve();
+  void condensedSolve(bool saveMemory);
+  void getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector);  
+  void getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K,Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
+  void getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
+
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
 

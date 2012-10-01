@@ -66,7 +66,7 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
-#include "Epetra_SerialDenseMatrix.h"
+//#include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
@@ -248,7 +248,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     }
   }
   int numGlobalDofs = _mesh->numGlobalDofs();
-  
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
   Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),&Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
@@ -640,7 +639,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
   //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
   //  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
-
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -2485,6 +2483,579 @@ const map< int, FieldContainer<double> > & Solution::solutionForCellIDGlobal() c
 }
 
 // Jesse's additions below:
+
+// =================================== CONDENSED SOLVE ======================================
+
+void Solution::condensedSolve(){
+  bool saveMemory = false;
+  condensedSolve(saveMemory);
+}
+void Solution::condensedSolve(bool saveMemory){
+ 
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+
+  Epetra_Time totalTime(Comm);
+  Epetra_Time timer(Comm);
+  Epetra_Time elemTimer(Comm);
+    
+  totalTime.ResetStartTime();
+
+  timer.ResetStartTime();
+  map<int, FieldContainer<double> > elemMatrices; // map from cellID to local stiffness matrix
+  map<int, FieldContainer<double> > elemLoads; // map from cellID to local rhs
+
+  // get local dof indices for reduced matrices
+  map<int,set<int> > localFluxInds, localFieldInds;  
+  _mesh->getFieldFluxDofInds(localFluxInds, localFieldInds);
+
+  // get global info for flux/traces
+  map<int,set<int> > globalFluxInds, globalFieldInds;  
+  _mesh->getGlobalFieldFluxDofInds(globalFluxInds, globalFieldInds);
+
+  // build maps/list of all flux inds
+  map<int,map<int,int> > localToCondensedMap;
+  map<int,map<int,int> > globalToLocalMap;
+  set<int> allFluxInds;  
+  vector< ElementPtr > allElems = _mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;     
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    set<int> fluxInds = localFluxInds[cellID];
+    set<int>::iterator setIt;
+    int i = 0;
+    for (setIt=fluxInds.begin();setIt!=fluxInds.end();setIt++){
+      int localInd = *setIt;
+      int globalInd = _mesh->globalDofIndex(cellID,localInd);
+      allFluxInds.insert(globalInd);
+      localToCondensedMap[cellID][localInd] = i;
+      globalToLocalMap[cellID][globalInd] = localInd;
+
+      i++;
+    }
+  }
+  // build global-condensed map
+  map<int,int> globalToCondensedMap;
+  map<int,int> condensedToGlobalMap;
+  set<int>::iterator setIt;
+  int i = 0;
+  for (setIt=allFluxInds.begin();setIt!=allFluxInds.end();setIt++){
+    int globalFluxInd = *setIt;
+    globalToCondensedMap[globalFluxInd] = i; 
+    condensedToGlobalMap[i] = globalFluxInd;
+    i++;
+  }
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time to build dof maps = " << timer.ElapsedTime() << endl;
+  }
+  timer.ResetStartTime();
+
+  // create partitioning - CAN BE MORE EFFICIENT if necessary
+  set<int> myGlobalDofInds = _mesh->globalDofIndicesForPartition(rank);
+  set<int> myGlobalFluxInds;
+  for (setIt=myGlobalDofInds.begin();setIt!=myGlobalDofInds.end();setIt++){
+    int ind = (*setIt);
+    //    cout << "global dof ind = " << ind << endl;
+    if (allFluxInds.find(ind) != allFluxInds.end()){
+      myGlobalFluxInds.insert(globalToCondensedMap[ind]); // need in condensed indices
+      //      cout << "global flux ind = " << globalToCondensedMap[ind] << endl;
+    }
+  }
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time to form dof partitions = " << timer.ElapsedTime() << endl;
+  }  
+  timer.ResetStartTime();
+
+  int numGlobalFluxDofs = _mesh->numFluxDofs();
+  Epetra_Map fluxPartMap = getPartitionMap(rank, myGlobalFluxInds, numGlobalFluxDofs, 0, &Comm);
+  /*
+  int localDofsSize = myGlobalFluxInds.size();
+  int * myCondensedInds;
+  if (localDofsSize!=0){
+    myCondensedInds = new int[ localDofsSize ];      
+    int i =0;
+    for (setIt=myGlobalFluxInds.begin();setIt!=myGlobalFluxInds.end();setIt++){
+      myCondensedInds[i] = *setIt;
+      i++;
+    }    
+  } else {
+    myCondensedInds = NULL;
+  }
+  Epetra_Map fluxPartMap(numGlobalFluxDofs,localDofsSize,myCondensedInds, 0, Comm);  
+  */
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time to form partition maps = " << timer.ElapsedTime() << endl;
+  }  
+  timer.ResetStartTime();
+
+  // size/create stiffness matrix
+  int maxNnzPerRow = min(_mesh->condensedRowSizeUpperBound(),numGlobalFluxDofs);
+  Epetra_FECrsMatrix K_cond(Copy, fluxPartMap, maxNnzPerRow); // condensed system
+  Epetra_FEVector rhs_cond(fluxPartMap);
+  Epetra_FEVector lhs_cond(fluxPartMap, true);
+  
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time to init condensed stiffness matrices = " << timer.ElapsedTime() << endl;
+  }
+  timer.ResetStartTime();
+
+  vector< ElementPtr > elems = _mesh->elementsInPartition(rank);
+  // loop thru elems
+  double localStiffnessTime = 0.0;
+  double condensationTime = 0.0;
+  double assemblyTime = 0.0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    elemTimer.ResetStartTime();
+
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    set<int> fieldInds = localFieldInds[cellID];
+    set<int> fluxInds = localFluxInds[cellID];
+    int numElemFluxDofs = fluxInds.size();
+    int numElemFieldDofs = fieldInds.size();
+
+    // get elem data and submatrix data
+    FieldContainer<double> K,rhs;
+    getElemData(elem,K,rhs);
+    if (!saveMemory){
+      elemMatrices[cellID] = K;
+      elemLoads[cellID] = rhs;
+    }
+    Epetra_SerialDenseMatrix D, B, K_flux;
+    getSubmatrices(fieldInds, fluxInds, K, D, B, K_flux);
+    
+    localStiffnessTime += elemTimer.ElapsedTime();
+    elemTimer.ResetStartTime();
+
+    // reduce matrix
+    Epetra_SerialDenseMatrix Bcopy = B;
+    Epetra_SerialDenseSolver solver;
+    Epetra_SerialDenseMatrix DinvB(numElemFieldDofs,numElemFluxDofs);
+    solver.SetMatrix(D);
+    solver.SetVectors(DinvB, Bcopy);        
+    bool equilibrated = false;
+    if ( solver.ShouldEquilibrate() ) {
+      solver.EquilibrateMatrix();
+      solver.EquilibrateRHS();
+      equilibrated = true;
+    }    
+    solver.Solve();
+    if (equilibrated) 
+      solver.UnequilibrateLHS();   
+
+    K_flux.Multiply('T','N',-1.0,B,DinvB,1.0); // assemble condensed matrix - A - B^T*inv(D)*B
+
+    // reduce vector
+    Epetra_SerialDenseVector Dinvf(numElemFieldDofs);
+    Epetra_SerialDenseVector BtDinvf(numElemFluxDofs);
+    Epetra_SerialDenseVector b_field, b_flux;
+    getSubvectors(fieldInds, fluxInds, rhs, b_field, b_flux);
+    //    solver.SetMatrix(D);
+    solver.SetVectors(Dinvf, b_field);
+    equilibrated = false;
+    if ( solver.ShouldEquilibrate() ) {
+      solver.EquilibrateMatrix();
+      solver.EquilibrateRHS();
+      equilibrated = true;
+    }    
+    solver.Solve();    
+    if (equilibrated)
+      solver.UnequilibrateLHS();
+
+    b_flux.Multiply('T','N',-1.0,B,Dinvf,1.0); // condensed RHS - f - B^T*inv(D)*g
+
+    // create vector of dof indices (and global-local maps)
+    Epetra_IntSerialDenseVector condensedFluxInds(numElemFluxDofs);
+    set<int>::iterator indIt;
+    int i = 0;
+    for (indIt = fluxInds.begin();indIt!=fluxInds.end();indIt++){
+      int localFluxInd = *indIt;
+      int globalFluxInd = _mesh->globalDofIndex(cellID, localFluxInd);
+      int condensedInd = globalToCondensedMap[globalFluxInd];
+      condensedFluxInds(i) = condensedInd;
+      i++;
+    }
+    
+    condensationTime += elemTimer.ElapsedTime();
+
+    /*
+    // Impose BCs - WARNING: *may* not work with crack BCs b/c they're shared. or maybe it will.
+    vector<int> bcGlobalIndices = bcIndices[cellID];
+    vector<double> bcGlobalValues = bcValues[cellID];
+    int numBCs = bcGlobalIndices.size();   
+    if (numBCs > 0){
+      // get BC values
+      Epetra_SerialDenseVector bc_lift_dofs(numElemFluxDofs);
+      for (int i = 0;i<numBCs;i++){
+	int localInd = globalToLocalMap[cellID][bcGlobalIndices[i]];
+	int condensedLocalInd = localToCondensedMap[cellID][localInd];
+	bc_lift_dofs(condensedLocalInd) = bcGlobalValues[i];
+      }
+    
+      // multiply bc dofs by elem matrix - rhsDirichlet stores resulting "lift" and update rhs (subtract from RHS)
+      b_flux.Multiply('N','N',-1.0,K_flux,bc_lift_dofs,1.0);   
+
+      // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges, 1 on diag
+      for (int i = 0;i<numBCs;i++){      
+	int globalInd = bcGlobalIndices[i];
+	int ind = localToCondensedMap[cellID][globalToLocalMap[cellID][globalInd]];
+	// zero out row/column
+	for (int j = 0;j<numElemFluxDofs;j++){
+	  K_flux(ind,j) = 0.0;
+	  K_flux(j,ind) = 0.0;
+	}      
+	K_flux(ind,ind) = 1.0;
+	b_flux(ind) = bcGlobalValues[i];
+      }
+    } // end of bc IF loop
+    */
+
+    // sum into FE matrices - all that's left is applying BCs
+    elemTimer.ResetStartTime();
+
+    rhs_cond.SumIntoGlobalValues(numElemFluxDofs, condensedFluxInds.Values(), b_flux.A()); 
+    K_cond.InsertGlobalValues(numElemFluxDofs, condensedFluxInds.Values(), K_flux.A());    
+
+    assemblyTime += elemTimer.ElapsedTime();
+
+  }  
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", in loop, time to get local stiff = " << localStiffnessTime << endl;
+    cout << "on rank " << rank << ", in loop, time to reduce matrix = " << condensationTime << endl;
+    cout << "on rank " << rank << ", in loop, time to assemble into global = " << assemblyTime << endl;
+  }
+
+  // globally assemble flux matrices
+  K_cond.GlobalAssemble();K_cond.FillComplete();
+  rhs_cond.GlobalAssemble();
+
+  if (_reportTimingResults)
+    cout << "on rank " << rank << ", time for assembly = " << timer.ElapsedTime() << endl;
+  
+  // ============= MORE EFFICIENT WAY TO APPLY BCS in nate's code ===================
+  
+  timer.ResetStartTime();
+
+  // getting local flux rows
+  set<int> myFluxInds;
+  int numGlobalElements = fluxPartMap.NumMyElements();
+  int * myGlobalInds = fluxPartMap.MyGlobalElements();
+  for (int i = 0;i<numGlobalElements;i++){
+    myFluxInds.insert(condensedToGlobalMap[myGlobalInds[i]]); // form flux inds of global system
+  }  
+
+  // applying BCs
+  FieldContainer<int> bcGlobalIndices;
+  FieldContainer<double> bcGlobalValues;
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myFluxInds);
+  int numBCs = bcGlobalIndices.size();
+
+  // get lift of the operator corresponding to BCs, modify RHS accordingly
+  Epetra_MultiVector u0(fluxPartMap,1);
+  u0.PutScalar(0.0);
+  for (int i = 0; i < numBCs; i++) {
+    u0.ReplaceGlobalValue(globalToCondensedMap[bcGlobalIndices(i)], 0, bcGlobalValues(i));
+  }
+  Epetra_MultiVector rhs_lift(fluxPartMap,1);
+  K_cond.Apply(u0,rhs_lift);
+  rhs_cond.Update(-1.0,rhs_lift,1.0);
+  
+  for (int i = 0; i < numBCs; i++) {
+    int ind = globalToCondensedMap[bcGlobalIndices(i)];
+    double value = bcGlobalValues(i);
+    rhs_cond.ReplaceGlobalValues(1,&ind,&value);
+  }
+  //  cout << "on proc " << rank << ", applying oaz with " << numBCs << " bcs" << endl;
+  // Zero out rows and columns of K corresponding to BC dofs, and add one to diagonal.
+  FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
+  for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
+    bcLocalIndices(i) = K_cond.LRID(globalToCondensedMap[bcGlobalIndices(i)]);
+  }
+  if (numBCs == 0) {
+    ML_Epetra::Apply_OAZToMatrix(NULL, 0, K_cond);
+  }else{
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, K_cond);
+  }
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time for applying BCs = " << timer.ElapsedTime() << endl;
+  }
+
+  // ============= /END BCS ===================  
+
+  //  EpetraExt::RowMatrixToMatlabFile("K_cond.dat",K_cond);     
+  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_cond.dat",rhs_cond,0,0,false);
+
+  timer.ResetStartTime();
+
+  // solve reduced problem
+  Teuchos::RCP<Epetra_LinearProblem> problem_cond = Teuchos::rcp( new Epetra_LinearProblem(&K_cond, &lhs_cond, &rhs_cond));
+  rhs_cond.GlobalAssemble();
+  Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
+  solver->setProblem(problem_cond);
+  solver->solve();
+  lhs_cond.GlobalAssemble();  
+
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time for solve = " << timer.ElapsedTime() << endl;
+  }
+
+  timer.ResetStartTime();
+  
+  // define global dof vector to distribute
+  int numGlobalDofs = _mesh->numGlobalDofs();
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs, 0,&Comm); // no zmc
+  Epetra_FEVector lhs_all(partMap, true);
+
+  // import condensed solution onto all processors
+  Epetra_Map     solnMap(numGlobalFluxDofs, numGlobalFluxDofs, 0, Comm);
+  Epetra_Import  solnImporter(solnMap, fluxPartMap);
+  Epetra_Vector  all_flux_coeffs(solnMap);
+  all_flux_coeffs.Import(lhs_cond, solnImporter, Insert);  
+
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time for distribution of flux dofs = " << timer.ElapsedTime() << endl;
+  }
+
+  timer.ResetStartTime();
+
+  // recover field dofs
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    set<int> fieldInds = localFieldInds[cellID];
+    set<int> fluxInds = localFluxInds[cellID];
+    int numElemFluxDofs = fluxInds.size();
+    int numElemFieldDofs = fieldInds.size();
+
+    // create vector of dof indices (and global/local maps)
+    Epetra_SerialDenseVector flux_dofs(numElemFluxDofs);    
+    Epetra_IntSerialDenseVector inds(numElemFluxDofs);
+    set<int>::iterator indIt;
+    int i = 0;
+    for (indIt = fluxInds.begin();indIt!=fluxInds.end();indIt++){
+      int localFluxInd = *indIt;
+      int globalFluxInd = _mesh->globalDofIndex(cellID, localFluxInd);
+      //      inds(i) = globalFluxInd;
+      double value = all_flux_coeffs[globalToCondensedMap[globalFluxInd]];
+      flux_dofs(i) = value;    
+      i++;
+    }
+    //    lhs_all.ReplaceGlobalValues(inds, flux_dofs); // store flux dofs in multivector while we're at it
+
+    // get elem data and submatrix data
+    FieldContainer<double> K,rhs;
+    if (saveMemory){
+      getElemData(elem,K,rhs);
+    }else{
+      K = elemMatrices[cellID];
+      rhs = elemLoads[cellID];
+    }
+    Epetra_SerialDenseMatrix D, B, fluxMat;
+    Epetra_SerialDenseVector b_field, b_flux, field_dofs(numElemFieldDofs);
+    getSubmatrices(fieldInds, fluxInds, K, D, B, fluxMat);
+    getSubvectors(fieldInds, fluxInds, rhs, b_field, b_flux);
+    b_field.Multiply('N','N',-1.0,B,flux_dofs,1.0);
+
+    // solve for field dofs
+    Epetra_SerialDenseSolver solver;
+    solver.SetMatrix(D);
+    solver.SetVectors(field_dofs,b_field);
+    bool equilibrated = false;
+    if ( solver.ShouldEquilibrate() ) {
+      solver.EquilibrateMatrix();
+      solver.EquilibrateRHS();
+      equilibrated = true;
+    }    
+    solver.Solve();
+    if (equilibrated) 
+      solver.UnequilibrateLHS();   
+
+    Epetra_IntSerialDenseVector globalFieldInds(numElemFieldDofs);
+    i = 0;
+    for (indIt = fieldInds.begin();indIt!=fieldInds.end();indIt++){
+      double value = field_dofs(i);
+      int localFieldInd = *indIt;
+      int globalFieldInd = _mesh->globalDofIndex(cellID,localFieldInd);
+      globalFieldInds(i) = globalFieldInd;
+      lhs_all.ReplaceGlobalValues(1, &globalFieldInd, &value); // store field dofs       
+      i++;
+    }								   
+    //    lhs_all.ReplaceGlobalValues(globalFieldInds, field_dofs); // store field dofs       
+  }
+  
+  // globally assemble LHS and import to all procs (WARNING: INEFFICIENT) 
+  lhs_all.GlobalAssemble();
+
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time for recovery of field dofs = " << timer.ElapsedTime() << endl;
+  }
+  timer.ResetStartTime();
+
+  // finally store flux dofs - don't want to sum them up
+  for (setIt=allFluxInds.begin();setIt!=allFluxInds.end();setIt++){
+    int globalFluxInd = *setIt;
+    double value = all_flux_coeffs[globalToCondensedMap[globalFluxInd]];
+    lhs_all.ReplaceGlobalValues(1, &globalFluxInd, &value); 
+  }
+
+  Epetra_Map     fullSolnMap(numGlobalDofs, numGlobalDofs, 0, Comm);
+  Epetra_Import  fullSolnImporter(fullSolnMap, partMap);
+  Epetra_Vector  all_coeffs(fullSolnMap);
+  all_coeffs.Import(lhs_all, fullSolnImporter, Insert);  
+
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    ElementTypePtr elemTypePtr = elem->elementType();
+    int numDofs = elemTypePtr->trialOrderPtr->totalDofs();
+    FieldContainer<double> elemDofs(numDofs);
+    for (int i = 0;i<numDofs;i++){
+      int globalDofIndex = _mesh->globalDofIndex(cellID,i);
+      elemDofs(i) = all_coeffs[globalDofIndex];
+    }
+    _solutionForCellIDGlobal[cellID] = elemDofs;    
+  }  
+  if (_reportTimingResults){
+    cout << "on rank " << rank << ", time for storage of all dofs = " << timer.ElapsedTime();
+    cout << ", and total time spent in solve = " << totalTime.ElapsedTime() << endl;
+  }
+}
+
+void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
+  int numFieldDofs = fieldInds.size();
+  int numFluxDofs = fluxInds.size();
+  K_field.Reshape(numFieldDofs,numFieldDofs);
+  K_flux.Reshape(numFluxDofs,numFluxDofs);
+  K_coupl.Reshape(numFieldDofs,numFluxDofs); // upper right hand corner matrix - symmetry gets the other
+
+  set<int>::iterator dofIt1;
+  set<int>::iterator dofIt2;
+
+  int i,j,j_flux,j_field;
+  i = 0;
+  for (dofIt1 = fieldInds.begin();dofIt1!=fieldInds.end();dofIt1++){
+    int rowInd = *dofIt1;
+    j_flux = 0;
+    j_field = 0;
+
+    // get block field matrices
+    for (dofIt2 = fieldInds.begin();dofIt2!=fieldInds.end();dofIt2++){      
+      int colInd = *dofIt2;
+      //      cout << "rowInd, colInd = " << rowInd << ", " << colInd << endl;
+      K_field(i,j_field) = K(0,rowInd,colInd);
+      j_field++;
+    }    
+
+    // get field/flux couplings
+    for (dofIt2 = fluxInds.begin();dofIt2!=fluxInds.end();dofIt2++){
+      int colInd = *dofIt2;      
+      K_coupl(i,j_flux) = K(0,rowInd,colInd);
+      j_flux++;
+    }    
+    i++;
+  }
+
+  // get flux coupling terms
+  i = 0;
+  for (dofIt1 = fluxInds.begin();dofIt1!=fluxInds.end();dofIt1++){
+    int rowInd = *dofIt1;
+    j = 0;
+    for (dofIt2 = fluxInds.begin();dofIt2!=fluxInds.end();dofIt2++){
+      int colInd = *dofIt2;
+      K_flux(i,j) = K(0,rowInd,colInd);
+      j++;
+    }
+    i++;
+  }
+}
+
+void Solution::getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux){
+  
+  int numFieldDofs = fieldInds.size();
+  int numFluxDofs = fluxInds.size();
+
+  b_field.Resize(numFieldDofs);
+  b_flux.Resize(numFluxDofs);
+  set<int>::iterator dofIt;
+  int i;
+  i = 0;  
+  for (dofIt=fieldInds.begin();dofIt!=fieldInds.end();dofIt++){
+    int ind = *dofIt;
+    b_field(i) = b(0,ind);
+    i++;
+  }
+  i = 0;
+  for (dofIt=fluxInds.begin();dofIt!=fluxInds.end();dofIt++){
+    int ind = *dofIt;
+    b_flux(i) = b(0,ind);
+    i++;
+  }
+}
+
+void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector){
+
+  typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
+  typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr; 
+  
+  int cellID = elem->cellID();
+
+  ElementTypePtr elemTypePtr = elem->elementType();   
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
+  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
+    
+  DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
+  DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+  int numTrialDofs = trialOrderingPtr->totalDofs();
+  int numTestDofs = testOrderingPtr->totalDofs();
+  //  cout << "test and trial dofs = " << numTrialDofs << ", " << numTestDofs << endl;
+
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+  FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
+
+  bool createSideCacheToo = true;
+  vector<int> cellIDs;
+  cellIDs.push_back(cellID); // just do one cell at a time
+  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+  ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
+  
+  CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+
+  FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
+      
+  _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
+  
+  FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
+  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
+					    cellSideParities, basisCache);      
+
+  //  FieldContainer<double> finalStiffness(1,numTrialDofs,numTrialDofs);
+  finalStiffness.resize(1,numTrialDofs,numTrialDofs);
+
+  BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
+      
+  //  FieldContainer<double> localRHSVector(1, numTrialDofs);
+  localRHSVector.resize(1, numTrialDofs);
+  _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
+
+  // apply filter(s) (e.g. penalty method, preconditioners, etc.)
+  if (_filter.get()) {
+    _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
+  }
+}
+
+// =================================== CONDENSED SOLVE ======================================
+
 // must write to .m file
 void Solution::writeFieldsToFile(int trialID, const string &filePath){
   typedef CellTools<double>  CellTools;

@@ -133,6 +133,24 @@ public:
 };
 
 
+class EnergyErrorFunction : public Function {
+  map<int, double> _energyErrorForCell;
+public:
+  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0) {
+    _energyErrorForCell = energyErrorForCell;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    for (int i = 0;i<cellIDs.size();i++){
+      double energyError = _energyErrorForCell[cellIDs[i]];
+      for (int j = 0;j<numPoints;j++){
+	values(i,j) = energyError;
+      }
+    }
+  }
+};
+
 // inflow values for u
 class l2NormOfVector : public Function {
   FunctionPtr _beta;
