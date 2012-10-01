@@ -61,6 +61,138 @@
 
 using namespace std;
 
+// StokesFormulation class: a prototype which I hope to reuse elsewhere once it's ready
+class StokesFormulation {
+public:
+  virtual BFPtr bf() = 0;
+  virtual RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) = 0;
+  // so far, only have support for BCs defined on the entire boundary (i.e. no outflow type conditions)
+  virtual BCPtr bc(FunctionPtr u1, FunctionPtr u2, SpatialFilterPtr entireBoundary) = 0;
+  virtual IPPtr graphNorm() = 0;
+  virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1, FunctionPtr u2, FunctionPtr p, 
+                                                    SpatialFilterPtr entireBoundary) = 0;
+};
+
+class VGPStokesFormulation : public StokesFormulation {
+  VarFactory varFactory;
+  VarPtr tau1, tau2, q, p, sigma21, u1hat, u2hat; // for VGP
+  VarPtr v1, v2, sigma1n, sigma2n, u1, u2, sigma11, sigma12, sigma22; // for both, but with different meanings  
+  
+  BFPtr _bf;
+  IPPtr _graphNorm;
+  double _mu;
+  
+public:
+  VGPStokesFormulation(double mu) {
+    _mu = mu;
+    
+    v1 = varFactory.testVar("v_1", HGRAD, StokesMathBilinearForm::V_1);
+    v2 = varFactory.testVar("v_2", HGRAD, StokesMathBilinearForm::V_2);
+    tau1 = varFactory.testVar("\\tau_1", HDIV, StokesMathBilinearForm::Q_1);
+    tau2 = varFactory.testVar("\\tau_2", HDIV, StokesMathBilinearForm::Q_2);
+    q = varFactory.testVar("q", HGRAD, StokesMathBilinearForm::V_3);
+    
+    u1hat = varFactory.traceVar("\\widehat{u}_1");
+    u2hat = varFactory.traceVar("\\widehat{u}_2");
+    sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
+    sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
+    u1 = varFactory.fieldVar("u_1");
+    u2 = varFactory.fieldVar("u_2");
+    sigma11 = varFactory.fieldVar("\\sigma_{11}");
+    sigma12 = varFactory.fieldVar("\\sigma_{12}");
+    sigma21 = varFactory.fieldVar("\\sigma_{21}");
+    sigma22 = varFactory.fieldVar("\\sigma_{22}");
+    p = varFactory.fieldVar("p");
+    
+    // construct bilinear form:
+    _bf = Teuchos::rcp( new BF(varFactory) );
+    // tau1 terms:
+    _bf->addTerm(u1,tau1->div());
+    _bf->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+    _bf->addTerm(sigma12,tau1->y());
+    _bf->addTerm(-u1hat, tau1->dot_normal());
+    
+    // tau2 terms:
+    _bf->addTerm(u2, tau2->div());
+    _bf->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+    _bf->addTerm(sigma22,tau2->y());
+    _bf->addTerm(-u2hat, tau2->dot_normal());
+    
+    // v1:
+    _bf->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+    _bf->addTerm(mu * sigma12,v1->dy());
+    _bf->addTerm( - p, v1->dx() );
+    _bf->addTerm( sigma1n, v1);
+    
+    // v2:
+    _bf->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+    _bf->addTerm(mu * sigma22,v2->dy());
+    _bf->addTerm( -p, v2->dy());
+    _bf->addTerm( sigma2n, v2);
+    
+    // q:
+    _bf->addTerm(-u1,q->dx()); // (-u, grad q)
+    _bf->addTerm(-u2,q->dy());
+    _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
+
+    _graphNorm = Teuchos::rcp( new IP );
+    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    _graphNorm->addTerm( v1->dx() + v2->dy() );     // pressure
+    _graphNorm->addTerm( tau1->div() - q->dx() );    // u1
+    _graphNorm->addTerm( tau2->div() - q->dy() );    // u2
+    
+    // L^2 terms:
+    _graphNorm->addTerm( v1 );
+    _graphNorm->addTerm( v2 );
+    _graphNorm->addTerm( q );
+    _graphNorm->addTerm( tau1 );
+    _graphNorm->addTerm( tau2 );
+  }
+  BFPtr bf() {
+    return _bf;
+  }
+  IPPtr graphNorm() {
+    return _graphNorm;
+  }
+  RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    return rhs;
+  }
+  BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
+    bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
+    bc->addZeroMeanConstraint(p);
+    return bc;
+  }
+  Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
+                                            SpatialFilterPtr entireBoundary) {
+    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
+    
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
+    mySolution->setSolutionFunction(u1, u1_exact);
+    mySolution->setSolutionFunction(u2, u2_exact);
+    
+    mySolution->setSolutionFunction(p, p_exact);
+    
+    mySolution->setSolutionFunction(sigma11, u1_exact->dx());
+    mySolution->setSolutionFunction(sigma12, u1_exact->dy());
+    mySolution->setSolutionFunction(sigma21, u2_exact->dx());
+    mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+    
+    return mySolution;
+  }
+};
+
 class EntireBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -284,14 +416,13 @@ int main(int argc, char *argv[]) {
     sigma1n = varFactory.fluxVar("\\widehat{\\sigma}_{1n}");
     sigma2n = varFactory.fluxVar("\\widehat{\\sigma}_{2n}");
     u1n1hat = varFactory.fluxVar("\\widehat{2 \\mu u_1 n_1}");
-    utnhat  = varFactory.fluxVar("\\widehat{2 \\mu {u_2 \\choose u_1} \\cdot n}");
+    utnhat  = varFactory.fluxVar("\\widehat{\\mu {u_2 \\choose u_1} \\cdot n}");
     u2n2hat = varFactory.fluxVar("\\widehat{2 \\mu u_2 n_2}");
 
     u1 = varFactory.fieldVar("u_1");
     u2 = varFactory.fieldVar("u_2");
     sigma11 = varFactory.fieldVar("\\sigma_{11}");
     sigma12 = varFactory.fieldVar("\\sigma_{12}");
-    sigma21 = varFactory.fieldVar("\\sigma_{21}");
     sigma22 = varFactory.fieldVar("\\sigma_{22}");
   }
 
@@ -305,6 +436,9 @@ int main(int argc, char *argv[]) {
     cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
   }
   
+  double mu = 1.0;
+  VGPStokesFormulation vgpForm(mu);
+  
   Teuchos::RCP<ExactSolution> mySolution;
   if ((formulationType != StokesManufacturedSolution::VGP_CONFORMING) 
       && (formulationType != StokesManufacturedSolution::DDS_CONFORMING) ) {
@@ -314,7 +448,7 @@ int main(int argc, char *argv[]) {
     mySolution = stokesExact;
     
     int pressureID = stokesExact->pressureID();
-    bool singlePointBCs = ! mySolution->bc()->imposeZeroMeanConstraint(pressureID);
+    bool singlePointBCs = ! stokesExact->bc()->imposeZeroMeanConstraint(pressureID);
     
     if (rank == 0) {
       cout << "singlePointBCs = "  << (singlePointBCs ? "true" : "false") << "\n";
@@ -330,9 +464,11 @@ int main(int argc, char *argv[]) {
     FunctionPtr u1_exact = - exp_x * ( y * cos_y + sin_y );
     FunctionPtr u2_exact = exp_x * y * sin_y;
     FunctionPtr p_exact = 2.0 * exp_x * sin_y;
-    double mu = 1.0;
     
     BFPtr stokesBF = Teuchos::rcp( new BF(varFactory) );
+    BCPtr bc;
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+
     
     switch (formulationType) {
       case StokesManufacturedSolution::DDS_CONFORMING:
@@ -355,51 +491,29 @@ int main(int argc, char *argv[]) {
         stokesBF->addTerm(-utnhat,tau12);
         // tau22 terms:
         stokesBF->addTerm(sigma22,tau22);
-        stokesBF->addTerm(2 * mu * u2,tau22->dx());
+        stokesBF->addTerm(2 * mu * u2,tau22->dy());
         stokesBF->addTerm(-u2n2hat,tau22);
+        
+        {
+          FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+          Teuchos::RCP<BCEasy> bcEasy = Teuchos::rcp( new BCEasy );;
+          bcEasy->addDirichlet(u1n1hat, entireBoundary, u1_exact * n->x());
+          bcEasy->addDirichlet(utnhat,  entireBoundary, u2_exact * n->x() + u1_exact * n->y());
+          bcEasy->addDirichlet(u2n2hat, entireBoundary, u2_exact * n->y());
+          bc = bcEasy;
+        }
+        stokesBF->printTrialTestInteractions();
         break;
         
       case StokesManufacturedSolution::VGP_CONFORMING:
-        // tau1 terms:
-        stokesBF->addTerm(u1,tau1->div());
-        stokesBF->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
-        stokesBF->addTerm(sigma12,tau1->y());
-        stokesBF->addTerm(-u1hat, tau1->dot_normal());
+        stokesBF = vgpForm.bf();
+        bc = vgpForm.bc(u1_exact,u2_exact,entireBoundary);
         
-        // tau2 terms:
-        stokesBF->addTerm(u2, tau2->div());
-        stokesBF->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
-        stokesBF->addTerm(sigma22,tau2->y());
-        stokesBF->addTerm(-u2hat, tau2->dot_normal());
-        
-        // v1:
-        stokesBF->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
-        stokesBF->addTerm(mu * sigma12,v1->dy());
-        stokesBF->addTerm( - p, v1->dx() );
-        stokesBF->addTerm( sigma1n, v1);
-        
-        // v2:
-        stokesBF->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-        stokesBF->addTerm(mu * sigma22,v2->dy());
-        stokesBF->addTerm( -p, v2->dy());
-        stokesBF->addTerm( sigma2n, v2);
-        
-        // q:
-        stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
-        stokesBF->addTerm(-u2,q->dy());
-        stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
         break;
         
       default:
         break;
     }
-    
-    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
-
-    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-    bc->addDirichlet(u1hat, entireBoundary, u1_exact);
-    bc->addDirichlet(u2hat, entireBoundary, u2_exact);
-    bc->addZeroMeanConstraint(p);
     
     FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
     FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
@@ -414,10 +528,7 @@ int main(int argc, char *argv[]) {
       mySolution->setSolutionFunction(p, p_exact);
     
     if (formulationType == StokesManufacturedSolution::VGP_CONFORMING) {
-      mySolution->setSolutionFunction(sigma11, u1_exact->dx());
-      mySolution->setSolutionFunction(sigma12, u1_exact->dy());
-      mySolution->setSolutionFunction(sigma21, u2_exact->dx());
-      mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+      mySolution = vgpForm.exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
     } else if (formulationType == StokesManufacturedSolution::DDS_CONFORMING) {
 //      FunctionPtr pTerm = 0.5 * sigma11 + 0.5 * sigma12; // p = tr(sigma) / n
       mySolution->setSolutionFunction(sigma11, p_exact + 2 * mu * u1_exact->dx());
@@ -429,7 +540,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<DPGInnerProduct> ip;
   if (useOptimalNorm) {
     if (formulationType == StokesManufacturedSolution::VGP_CONFORMING ) {
-      
+      ip = vgpForm.graphNorm();
+      /*
       double mu = 1.0;
       
       IPPtr qoptIP = Teuchos::rcp(new IP());
@@ -472,7 +584,7 @@ int main(int argc, char *argv[]) {
       ip = qoptIP;
       
       if (rank==0)
-        cout << "Stokes VGP formulation: using quasi-optimal IP with beta=" << beta << endl;
+        cout << "Stokes VGP formulation: using quasi-optimal IP with beta=" << beta << endl;*/
     } else if (formulationType==StokesManufacturedSolution::DDS_CONFORMING) {
       IPPtr qoptIP = Teuchos::rcp(new IP());
       FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
@@ -480,23 +592,19 @@ int main(int argc, char *argv[]) {
       FunctionPtr h_inv = one / h;
       
       double mu = 1.0;
+            
+      qoptIP->addTerm( tau11 - v1->dx() );            // sigma11
+      qoptIP->addTerm( tau12 - v2->dx() - v1->dy() ); // sigma12
+      qoptIP->addTerm( tau22 - v2->dy() );            // sigma22
+      qoptIP->addTerm( 2 * mu * tau11->dx() + mu * tau12->dy() );    // u1
+      qoptIP->addTerm( 2 * mu * tau22->dy() + mu * tau12->dx() );    // u2
+      qoptIP->addTerm( v1 );
+      qoptIP->addTerm( v2 );
+      qoptIP->addTerm( tau11 );
+      qoptIP->addTerm( tau12 );
+      qoptIP->addTerm( tau22 );
       
-      double beta = 1.0;
-      
-      // TODO: change this to match the actual graph norm...
-      qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-      qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-      qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-      qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-      qoptIP->addTerm( tau1->div() - q->dx() );    // u1
-      qoptIP->addTerm( tau2->div() - q->dy() );    // u2
-      qoptIP->addTerm( sqrt(beta) * v1 );
-      qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * q );
-      qoptIP->addTerm( sqrt(beta) * tau1 );
-      qoptIP->addTerm( sqrt(beta) * tau2 );
-      
+      ip = qoptIP;
 
     } else {
       ip = Teuchos::rcp( new OptimalInnerProduct( mySolution->bilinearForm() ) );
@@ -529,6 +637,11 @@ int main(int argc, char *argv[]) {
     p_trialID = StokesMathBilinearForm::P;
     u1_traceID = StokesMathBilinearForm::U1_HAT;
     u2_traceID = StokesMathBilinearForm::U2_HAT;
+  } else if (formulationType == StokesManufacturedSolution::DDS_CONFORMING) {
+    u1_trialID = u1->ID();
+    u2_trialID = u2->ID();
+    u1_traceID = -1; // no velocity traces available in DDS formulation
+    u2_traceID = -1;
   } else if (formulationType == StokesManufacturedSolution::VVP_CONFORMING) {
     u1_trialID = StokesVVPBilinearForm::U1;
     u2_trialID = StokesVVPBilinearForm::U2;
@@ -556,7 +669,9 @@ int main(int argc, char *argv[]) {
     study.solve(quadPoints);
     
     if (rank == 0) {
-      if ( formulationType != StokesManufacturedSolution::VGP_CONFORMING) {
+      if (( formulationType != StokesManufacturedSolution::VGP_CONFORMING) 
+      &&  ( formulationType != StokesManufacturedSolution::DDS_CONFORMING) )
+      {
         ostringstream filePathPrefix;
         filePathPrefix << "stokes/u1_p" << polyOrder;
         
@@ -573,7 +688,8 @@ int main(int argc, char *argv[]) {
         vector<int> primaryVariables;
         primaryVariables.push_back(u1->ID());
         primaryVariables.push_back(u2->ID());
-        primaryVariables.push_back(p->ID());
+        if ( formulationType !=  StokesManufacturedSolution::DDS_CONFORMING) // no pressure for DDS
+          primaryVariables.push_back(p->ID());
         cout << "******** Best Approximation comparison: ********\n";
         cout << study.TeXBestApproximationComparisonTable(primaryVariables);
         
@@ -585,9 +701,11 @@ int main(int argc, char *argv[]) {
         filePathPrefix << "stokes/u2_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),u2_trialID,u2_traceID);
         
-        filePathPrefix.str("");
-        filePathPrefix << "stokes/pressure_p" << polyOrder;
-        study.writeToFiles(filePathPrefix.str(),p_trialID);
+        if ( formulationType !=  StokesManufacturedSolution::DDS_CONFORMING) { // no pressure for DDS
+          filePathPrefix.str("");
+          filePathPrefix << "stokes/pressure_p" << polyOrder;
+          study.writeToFiles(filePathPrefix.str(),p_trialID);
+        }
         
         filePathPrefix.str("");
         filePathPrefix << "stokes/sigma11_p" << polyOrder;
@@ -595,9 +713,11 @@ int main(int argc, char *argv[]) {
         filePathPrefix.str("");
         filePathPrefix << "stokes/sigma12_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),sigma12->ID());
-        filePathPrefix.str("");
-        filePathPrefix << "stokes/sigma21_p" << polyOrder;
-        study.writeToFiles(filePathPrefix.str(),sigma21->ID());
+        if ( formulationType !=  StokesManufacturedSolution::DDS_CONFORMING) { // no sigma21 for DDS
+          filePathPrefix.str("");
+          filePathPrefix << "stokes/sigma21_p" << polyOrder;
+          study.writeToFiles(filePathPrefix.str(),sigma21->ID());
+        }
         filePathPrefix.str("");
         filePathPrefix << "stokes/sigma22_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),sigma22->ID());
@@ -606,7 +726,9 @@ int main(int argc, char *argv[]) {
         
         cout << study.convergenceDataMATLAB(u2->ID());
         
-        cout << study.convergenceDataMATLAB(p->ID());
+        if ( formulationType !=  StokesManufacturedSolution::DDS_CONFORMING) { // no pressure for DDS
+          cout << study.convergenceDataMATLAB(p->ID());
+        }
       }
     }
   } else {
