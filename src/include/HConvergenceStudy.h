@@ -40,11 +40,18 @@
 
 #include "Mesh.h"
 #include "ExactSolution.h"
+#include "Solver.h"
+#include "LinearTerm.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
 
 using namespace std;
+
+struct DerivedVariable {
+  string name;
+  LinearTermPtr term;
+};
 
 class HConvergenceStudy {
   Teuchos::RCP<ExactSolution> _exactSolution;
@@ -64,13 +71,22 @@ class HConvergenceStudy {
   bool _useHybrid;
   void randomlyRefine(Teuchos::RCP<Mesh> mesh);
   bool _reportRelativeErrors;
-  map< int, vector<double> > _bestApproximationErrors;
+  
+  map< int, vector<double> > _bestApproximationErrors; // trialID --> vector of errors for various meshes
   map< int, vector<double> > _solutionErrors;
+  map< int, vector<double> > _bestApproximationErrorsDerivedVariables; // derived var index --> vector of errors for various meshes
+  map< int, vector<double> > _solutionErrorsDerivedVariables;
   
   map< int, vector<double> > _bestApproximationRates;
   map< int, vector<double> > _solutionRates;
+  map< int, vector<double> > _bestApproximationRatesDerivedVariables;
+  map< int, vector<double> > _solutionRatesDerivedVariables;
   
   map< int, double > _exactSolutionNorm;
+  
+  vector< DerivedVariable > _derivedVariables;
+  
+  Teuchos::RCP<Solver> _solver;
   
   void computeErrors();
   int minNumElements();
@@ -86,6 +102,8 @@ public:
   void solve(const FieldContainer<double> &quadPoints);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
+  
+  void addDerivedVariable( LinearTermPtr derivedVar, const string & name );
   
   Teuchos::RCP<BilinearForm> bilinearForm();
   
@@ -103,6 +121,8 @@ public:
   string TeXErrorRateTable(const vector<int> &trialIDs);
   string TeXBestApproximationComparisonTable();
   string TeXBestApproximationComparisonTable(const vector<int> &trialIDs);
+  
+  void setSolver( Teuchos::RCP<Solver> solver);
   
 };
 

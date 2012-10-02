@@ -2,9 +2,6 @@
 #define PROJECTOR
 
 //#include "DPGInnerProduct.h"
-#include "L2InnerProduct.h"
-#include "Mesh.h"
-#include "Solution.h"
 #include "AbstractFunction.h"
 #include "Function.h"
 #include "IP.h"

@@ -9,7 +9,6 @@
 #ifndef Camellia_LinearTerm_h
 #define Camellia_LinearTerm_h
 
-#include "Mesh.h"
 #include "DPGInnerProduct.h"
 
 #include <Epetra_Map.h>
@@ -27,9 +26,11 @@
 #include "Function.h"
 #include "Var.h"
 #include "BasisCache.h"
-#include "Solution.h"
 
 class LinearTerm;
+class Mesh;
+class Solution;
+typedef Teuchos::RCP<Solution> SolutionPtr;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;

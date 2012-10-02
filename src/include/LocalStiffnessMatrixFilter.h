@@ -8,6 +8,8 @@
 using namespace Intrepid;
 using namespace std;
 
+class BC;
+
 class LocalStiffnessMatrixFilter {
 public:
   LocalStiffnessMatrixFilter() {}

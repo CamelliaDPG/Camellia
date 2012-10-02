@@ -4,7 +4,7 @@
 #include "PenaltyConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CondensationSolver.h"
-
+#include "ZoltanMeshPartitionPolicy.h"
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -165,13 +165,15 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  int numProcs=mpiSession.getNProc();  
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
 #else
   int rank = 0;
-  int numProcs = 1;
+  int numProcs = 1;  
+  Epetra_SerialComm Comm;
 #endif
  
-  double eps = 1.0;
+  double eps = .01;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -241,7 +243,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 1, pToAdd = 2;
+  int H1Order = 2; int pToAdd = 2;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -267,26 +269,62 @@ int main(int argc, char *argv[]) {
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                                 confusionBF, H1Order, H1Order+pToAdd);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
     
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
 
-  Teuchos::RCP<Solver> condensedSolver = Teuchos::rcp(new CondensationSolver(mesh,solution));
-  solution->solve(condensedSolver);
+  Teuchos::RCP<CondensationSolver> condensed = Teuchos::rcp(new CondensationSolver(mesh,solution));
+  Teuchos::RCP<Solver> condensedSolver = Teuchos::rcp(new CondensationSolver(mesh,solution));  
 
-  return 0;
+  Epetra_Map timeMap(numProcs,0,Comm);
+  Epetra_Time timer(Comm);
+
+  // PREREFINE TWICE
+  double energyThreshold = 0.2; // for mesh refinements
+  RefinementStrategy refinementStrategy( solution, energyThreshold );
+  int numRefs = 4;
+  if (rank==0){
+    cout << "refining..." << endl;
+  }
+  for (int i = 0;i<numRefs;i++){
+    solution->solve(false);
+    refinementStrategy.refine(rank==0); 
+  }
+
+  //  solution->setReportTimingResults(true);
+
+  // =========================================
+  
+  timer.ResetStartTime();
   solution->solve(false);
 
+  cout << "time for LU solve on proc " << rank << " is " << timer.ElapsedTime() << endl;
+  cout << "solution energy error for LU = " << solution->energyErrorTotal() << endl;
+
+  // =========================================
+
+  // =========================================
+
+  timer.ResetStartTime();
+  solution->condensedSolve();
+  condensed->writeFieldFluxIndsToFile();
+
+  cout << "time for condensed solve on proc " << rank << " is " << timer.ElapsedTime() << endl;
+  cout << "solution energy error for condensed = " << solution->energyErrorTotal() << endl;
+
   if (rank==0){
-    solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
-    solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhat.dat");
-    solution->writeToVTK("soln.vtu",min(H1Order+1,4));
+    solution->writeFluxesToFile(uhat->ID(), "uhatCond.dat");
+    solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhatCond.dat");
+    solution->writeToVTK("solnCond.vtu",min(H1Order+1,4));
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
-
+  // =========================================
 
   return 0;
 }
+
+

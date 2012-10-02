@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0)
     cout << "numRefinements = " << numRefs << endl;
   
-  /////////////////////////// "MATH_CONFORMING" VERSION ///////////////////////
+  /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
   VarPtr tau1 = varFactory.testVar("\\tau_1", HDIV);  // tau_1
   VarPtr tau2 = varFactory.testVar("\\tau_2", HDIV);  // tau_2

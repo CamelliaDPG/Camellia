@@ -13,6 +13,8 @@
 
 #include "InnerProductScratchPad.h"
 
+#include "BC.h"
+
 class NewQuadraticFunction : public SimpleFunction {
 public:
   double value(double x, double y) {

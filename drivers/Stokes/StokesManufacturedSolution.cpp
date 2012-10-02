@@ -50,7 +50,7 @@ typedef Sacado::Fad::SFad< Sacado::Fad::SFad<double,2>, 2> F2_2; // same thing, 
 
 int StokesManufacturedSolution::pressureID() {
 //  return ( _formulationType == VVP_CONFORMING) ? StokesVVPBilinearForm::P : StokesBilinearForm::P;
-  if ( _formulationType == StokesManufacturedSolution::MATH_CONFORMING ) {
+  if ( _formulationType == StokesManufacturedSolution::VGP_CONFORMING ) {
     return StokesMathBilinearForm::P;
   } else if ( _formulationType == StokesManufacturedSolution::VVP_CONFORMING ) {
     return StokesVVPBilinearForm::P;
@@ -74,7 +74,7 @@ StokesManufacturedSolution::StokesManufacturedSolution(StokesManufacturedSolutio
     _bilinearForm = Teuchos::rcp(new StokesBilinearFormConforming(_mu));
   } else if ( _formulationType == VVP_CONFORMING ) {
     _bilinearForm = Teuchos::rcp(new StokesVVPBilinearForm(_mu));
-  } else if ( _formulationType == MATH_CONFORMING ) {
+  } else if ( _formulationType == VGP_CONFORMING ) {
     _bilinearForm = Teuchos::rcp(new StokesMathBilinearForm(_mu));
   }
   if ( _formulationType == ORIGINAL_NON_CONFORMING ) {
@@ -225,7 +225,7 @@ double StokesManufacturedSolution::solutionValue(int trialID,
       TEUCHOS_TEST_FOR_EXCEPTION( true,
                      std::invalid_argument,
                      "solutionValues called with unknown trialID.");
-    } else if (_formulationType == MATH_CONFORMING) {
+    } else if (_formulationType == VGP_CONFORMING) {
       switch(trialID) {
         case StokesMathBilinearForm::U1:
         case StokesMathBilinearForm::U1_HAT:
@@ -264,7 +264,7 @@ double StokesManufacturedSolution::solutionValue(int trialID,
 double StokesManufacturedSolution::solutionValue(int trialID,
                                                  FieldContainer<double> &physicalPoint,
                                                  FieldContainer<double> &unitNormal) {
-  if (_formulationType == MATH_CONFORMING) {
+  if (_formulationType == VGP_CONFORMING) {
     if (   ( trialID != StokesMathBilinearForm::SIGMA1_N_HAT )
         && ( trialID != StokesMathBilinearForm::SIGMA2_N_HAT ) )
     {
@@ -339,7 +339,7 @@ bool StokesManufacturedSolution::nonZeroRHS(int testVarID) {
     return (testVarID == StokesVVPBilinearForm::Q_1) ;
   } else if ( (_formulationType == ORIGINAL_NON_CONFORMING) || (_formulationType == ORIGINAL_CONFORMING) ) {
     return (testVarID == StokesBilinearForm::V_1) || (testVarID == StokesBilinearForm::V_2);
-  } else if ( _formulationType == MATH_CONFORMING ) {
+  } else if ( _formulationType == VGP_CONFORMING ) {
     return (testVarID == StokesMathBilinearForm::V_1) || (testVarID == StokesMathBilinearForm::V_2);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled formulation type.");
@@ -425,7 +425,7 @@ bool StokesManufacturedSolution::bcsImposed(int varID){
     // (IT LOOKS LIKE THIS IS IN CASE WE AREN'T IMPOSING ANY CONSTRAINT ON THE PRESSURE,
     //  PROBABLY JUST SOMETHING I DID DURING DEBUGGING...)
     cout << "WARNING: StokesManufacturedSolution: no BC set for pressure, so imposing (over-determined) BCs on other variables.\n";
-    if ( _formulationType == MATH_CONFORMING ) {
+    if ( _formulationType == VGP_CONFORMING ) {
       // then we impose BCs everywhere for velocity, plus SIGMA1_N_HAT and SIGMA2_N_HAT:
       return (varID == StokesMathBilinearForm::U1_HAT)   || (varID == StokesMathBilinearForm::U2_HAT)
       || (varID == StokesMathBilinearForm::SIGMA1_N_HAT) || (varID == StokesMathBilinearForm::SIGMA2_N_HAT);
@@ -439,7 +439,7 @@ bool StokesManufacturedSolution::bcsImposed(int varID){
       || (varID == StokesBilinearForm::SIGMA2_N_HAT);
     }
   } else {
-    if ( _formulationType == MATH_CONFORMING ) {
+    if ( _formulationType == VGP_CONFORMING ) {
       return (varID == StokesMathBilinearForm::U1_HAT) || (varID == StokesMathBilinearForm::U2_HAT);
     } else if ( _formulationType == VVP_CONFORMING) {
       return (varID == StokesVVPBilinearForm::U_CROSS_N_HAT) || (varID == StokesVVPBilinearForm::U_N_HAT);

@@ -59,7 +59,9 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
-  vector<int> trialIDs = bilinearForm->trialIDs();
+  _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
+//  vector<int> trialIDs = bilinearForm->trialIDs();
+  vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
@@ -68,6 +70,13 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   
   if (_useTriangles)
     cout << "HConvergenceStudy: Using triangles\n" << endl;
+}
+
+void HConvergenceStudy::addDerivedVariable(LinearTermPtr derivedVar, const string &name) {
+  DerivedVariable dv;
+  dv.term = derivedVar;
+  dv.name = name;
+  _derivedVariables.push_back(dv);
 }
 
 Teuchos::RCP<Solution> HConvergenceStudy::getSolution(int logElements) {
@@ -161,7 +170,7 @@ map< int, double > HConvergenceStudy::exactSolutionNorm() {
 
 void HConvergenceStudy::computeErrors() {
   SolutionPtr solution = _solutions[0];
-  vector<int> trialIDs = _bilinearForm->trialIDs();
+  vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     vector< Teuchos::RCP<Solution> >::iterator solutionIt;
@@ -240,7 +249,10 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
   vector< Teuchos::RCP<Solution> >::iterator solutionIt;
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
-    (*solutionIt)->solve(false); // False: don't use mumps (use KLU)
+    if ( _solver.get() == NULL )
+      (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
+    else
+      (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
   }
   computeErrors();
 }
@@ -473,4 +485,8 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
   cout << "L2 norm of solution: " << l2norm  << endl;
   
   fout.close();
+}
+
+void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {
+  _solver = solver;
 }

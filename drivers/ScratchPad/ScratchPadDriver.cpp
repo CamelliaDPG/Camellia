@@ -353,7 +353,7 @@ int main(int argc, char *argv[]) {
   stokesBC->addZeroMeanConstraint(p);
   
   Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new StokesManufacturedSolution(StokesManufacturedSolution::EXPONENTIAL, -2,
-                                                                                           StokesManufacturedSolution::MATH_CONFORMING) );
+                                                                                           StokesManufacturedSolution::VGP_CONFORMING) );
   // for the above solution choice, RHS is actually zero
   Teuchos::RCP<RHS> zeroRHS = Teuchos::rcp( new RHSEasy() );
   
