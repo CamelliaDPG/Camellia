@@ -1,9 +1,11 @@
-//  BendDriver.cpp
+//  ConfusionDriver.cpp
 //  Driver for Conservative Convection-Diffusion
 //  Camellia
 //
 //  Created by Truman Ellis on 6/4/2012.
 
+// Nate's addition because he doesn't want to Truman's build system:
+//#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
 #include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
@@ -17,11 +19,14 @@
 #else
 #endif
 
-bool enforceLocalConservation = false;
-bool highLiftAirfoil = true;
+
 double epsilon = 1e-4;
-int numRefs = 6;
-int num1DPts = 5;
+double numRefs = 4;
+
+bool enforceLocalConservation = false;
+
+typedef Teuchos::RCP<IP> IPPtr;
+typedef Teuchos::RCP<BF> BFPtr;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -38,146 +43,67 @@ public:
   }
 };
 
-class LeftBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    return (abs(x+1) < tol);
-  }
-};
 
-class RightBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool rightMatch = (abs(x-9) < tol);
-    return rightMatch;
-  }
-};
-
-class TopBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    return (abs(y-1) < tol);
-  }
-};
-
-class BottomBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    return (abs(y+1) < tol);
-  }
-};
-
-class AirfoilInflowBoundary : public SpatialFilter {
-private:
+class InflowSquareBoundary : public SpatialFilter {
   FunctionPtr _beta;
-public:
-  AirfoilInflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
-  {
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
-    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
-    int numCells = (*points).dimension(0);
-    int numPoints = (*points).dimension(1);
-
-    FieldContainer<double> beta_pts(numCells,numPoints,2);
-    _beta->values(beta_pts,basisCache);
-
-    double tol = 1e-3;
-    bool somePointMatches = false;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        double n1 = (*normals)(cellIndex,ptIndex,0);
-        double n2 = (*normals)(cellIndex,ptIndex,1);
-        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
-        pointsMatch(cellIndex,ptIndex) = false;
-        if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol && beta_n < 0)
-        {
-          pointsMatch(cellIndex,ptIndex) = true;
-          somePointMatches = true;
-        }
-      }
-    }
-    return somePointMatches;
-  }
-};
-
-class AirfoilOutflowBoundary : public SpatialFilter {
-private:
-  FunctionPtr _beta;
-public:
-  AirfoilOutflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
-  {
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
-    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
-    int numCells = (*points).dimension(0);
-    int numPoints = (*points).dimension(1);
-
-    FieldContainer<double> beta_pts(numCells,numPoints,2);
-    _beta->values(beta_pts,basisCache);
-
-    double tol = 1e-3;
-    bool somePointMatches = false;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        double n1 = (*normals)(cellIndex,ptIndex,0);
-        double n2 = (*normals)(cellIndex,ptIndex,1);
-        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
-        pointsMatch(cellIndex,ptIndex) = false;
-        if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol && beta_n >= 0)
-        // if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol)
-        {
-          pointsMatch(cellIndex,ptIndex) = true;
-          somePointMatches = true;
-        }
-      }
-    }
-    return somePointMatches;
-  }
-};
-
-class ZeroBC : public Function {
   public:
-    ZeroBC() : Function(0) {}
+  InflowSquareBoundary(FunctionPtr beta){
+    _beta = beta;
+  }
+  // bool matchesPoint(double x, double y) {
+  //   return true;
+  // }
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *normals = &(basisCache->getSideNormals());
+    int numCells = (*points).dimension(0);
+    int numPoints = (*points).dimension(1);
+
+    FieldContainer<double> beta_pts(numCells,numPoints,2);
+    _beta->values(beta_pts,basisCache);
+
+    double tol=1e-14;
+    bool somePointMatches = false;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double n1 = (*normals)(cellIndex,ptIndex,0);
+        double n2 = (*normals)(cellIndex,ptIndex,1);
+        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
+        // cout << "beta = (" << beta_pts(cellIndex,ptIndex,0)<<", "<<
+        //   beta_pts(cellIndex,ptIndex,1)<<"), n = ("<<n1<<", "<<n2<<")"<<endl;
+        pointsMatch(cellIndex,ptIndex) = false;
+        if (beta_n < 0){
+          pointsMatch(cellIndex,ptIndex) = true;
+          somePointMatches = true;
+        }
+      }
+    }
+    return somePointMatches;
+  }
+};
+
+// inflow values for u
+class U0 : public Function {
+  public:
+    U0() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
 
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      double tol=1e-14;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0;
+          double r = sqrt(x*x + y*y); 
+          values(cellIndex,ptIndex) = r-1.0;
+          // values(cellIndex,ptIndex) = 1.0;
         }
       }
     }
 };
 
-// boundary value for sigma_n
-class OneBC : public Function {
-  public:
-    OneBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 1;
-        }
-      }
-    }
-};
 
 class Beta : public Function {
 public:
@@ -193,48 +119,15 @@ public:
         for (int d = 0; d < spaceDim; d++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = 1;
-          values(cellIndex,ptIndex,1) = .25;
+          values(cellIndex,ptIndex,0) = -y;
+          values(cellIndex,ptIndex,1) = x;
         }
       }
     }
   }
 };
 
-class IPWeight : public Function {
-  public:
-    IPWeight() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      double a = 2;
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          // if (x > 0 && abs(y) < 1+1e-3 && x < a)
-          //   values(cellIndex, ptIndex) = epsilon + (x-sqrt(1-y*y))/(a-sqrt(1-y*y));
-          // if (x > 0 && sqrt(x*x+y*y) < a)
-          // {
-          //   double dr = sqrt(x*x+y*y) - 1;
-          //   values(cellIndex, ptIndex) = epsilon + dr/(a-1);
-          // }
-          // else
-            values(cellIndex, ptIndex) = 1;
-        }
-      }
-    }
-};
-
 int main(int argc, char *argv[]) {
-  // Process command line arguments
-  if (argc > 1)
-    numRefs = atof(argv[1]);
-  if (argc > 2)
-    epsilon = atof(argv[2]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -284,7 +177,7 @@ int main(int argc, char *argv[]) {
   // quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP);
   qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / epsilon + v->grad() );
+  qoptIP->addTerm( tau / epsilon+ v->grad() );
   qoptIP->addTerm( beta * v->grad() - tau->div() );
 
   // robust test norm
@@ -293,10 +186,8 @@ int main(int argc, char *argv[]) {
   if (!enforceLocalConservation)
     robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(epsilon) * v->grad() );
-  // Weight these two terms for inflow
-  FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
-  robIP->addTerm( ip_weight * beta * v->grad() );
-  robIP->addTerm( ip_weight * tau->div() );
+  robIP->addTerm( beta * v->grad() );
+  robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
   if (enforceLocalConservation)
     robIP->addZeroMeanTerm( v );
@@ -308,38 +199,39 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
-  SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
-  SpatialFilterPtr tBoundary = Teuchos::rcp( new TopBoundary );
-  SpatialFilterPtr bBoundary = Teuchos::rcp( new BottomBoundary );
-  SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
+  // SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
+  // bc->addDirichlet(uhat, outflowBoundary, u0);
+  FunctionPtr u0 = Teuchos::rcp( new U0 );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  SpatialFilterPtr airfoilInflowBoundary = Teuchos::rcp( new AirfoilInflowBoundary(beta) );
-  SpatialFilterPtr airfoilOutflowBoundary = Teuchos::rcp( new AirfoilOutflowBoundary(beta) );
-  FunctionPtr u0 = Teuchos::rcp( new ZeroBC );
-  FunctionPtr u1 = Teuchos::rcp( new OneBC );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u0);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, bBoundary, u0);
-  // bc->addDirichlet(uhat, airfoilInflowBoundary, u1);
-  // bc->addDirichlet(uhat, tBoundary, u0);
 
-  bc->addDirichlet(beta_n_u_minus_sigma_n, airfoilInflowBoundary, beta*n*u1);
-  bc->addDirichlet(uhat, airfoilOutflowBoundary, u1);
-
-  // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, rBoundary);
-  // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, tBoundary);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u0);
+  // bc->addDirichlet(uhat, inflowBoundary, u0);
   
+  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  // pc->addConstraint(uhat==u0,inflowBoundary);
+
   ////////////////////   BUILD MESH   ///////////////////////
+  int H1Order = 3, pToAdd = 2;
   // define nodes for mesh
-  int H1Order = 2, pToAdd = 2;
-  Teuchos::RCP<Mesh> mesh;
-  if (highLiftAirfoil)
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", confusionBF, H1Order, pToAdd);
-  else
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"NACA0012/NACA0012.1", confusionBF, H1Order, pToAdd);
+  FieldContainer<double> meshBoundary(4,2);
+  
+  meshBoundary(0,0) = -1.0; // x1
+  meshBoundary(0,1) = -1.0; // y1
+  meshBoundary(1,0) =  1.0;
+  meshBoundary(1,1) = -1.0;
+  meshBoundary(2,0) =  1.0;
+  meshBoundary(2,1) =  1.0;
+  meshBoundary(3,0) = -1.0;
+  meshBoundary(3,1) =  1.0;
+  
+  int horizontalCells = 4, verticalCells = 4;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+                                                confusionBF, H1Order, H1Order+pToAdd, false);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, mathIP) );
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   // solution->setFilter(pc);
 
@@ -354,11 +246,8 @@ int main(int argc, char *argv[]) {
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
     stringstream outfile;
-    if (highLiftAirfoil)
-      outfile << "highlift_" << refIndex;
-    else
-      outfile << "airfoil_" << refIndex;
-    solution->writeToVTK(outfile.str(), num1DPts);
+    outfile << "vortex_" << refIndex;
+    solution->writeToVTK(outfile.str(), 5);
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
@@ -422,11 +311,8 @@ int main(int argc, char *argv[]) {
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     stringstream outfile;
-    if (highLiftAirfoil)
-      outfile << "highlift_" << numRefs;
-    else
-      outfile << "airfoil_" << numRefs;
-    solution->writeToVTK(outfile.str(), num1DPts);
+    outfile << "vortex_" << numRefs;
+    solution->writeToVTK(outfile.str(), 5);
   }
   
   return 0;

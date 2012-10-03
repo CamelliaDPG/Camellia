@@ -5,8 +5,8 @@
 //  Created by Truman Ellis on 6/4/2012.
 
 // Nate's addition because he doesn't want to Truman's build system:
-#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
-//#include "CamelliaConfig.h"
+//#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
+#include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Constraint.h"

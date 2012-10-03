@@ -21,14 +21,11 @@
 
 // =================== Local Settings =====================
 bool transient = true;
-int numTimeSteps = 10; // max time steps
-bool enforceLocalConservation = false;
-double epsilon = 1e-2;
+int numTimeSteps = 20; // max time steps
+bool enforceLocalConservation = true;
+double epsilon = 1e-4;
+double halfWidth = 1;
 int numRefs = 4;
-int nseg = 1;
-bool ReadMesh = false;
-bool CircleMesh = false;
-bool TriangulateMesh = false;
 int H1Order = 3, pToAdd = 2;
 
 // ===================== Mesh functions ====================
@@ -74,7 +71,7 @@ class LeftBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    return (abs(x+3) < tol);
+    return (abs(x) < tol);
   }
 };
 
@@ -82,8 +79,7 @@ class RightBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool rightMatch = (abs(x-9) < tol);
-    return rightMatch;
+    return (abs(x-4) < tol);
   }
 };
 
@@ -91,21 +87,8 @@ class TopBottomBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool topMatch = (abs(y-3) < tol);
-    bool bottomMatch;
-    // if (ReadMesh)
-    //   bottomMatch = (abs(y) < tol);
-    // else
-      bottomMatch = (abs(y+3) < tol);
-    return topMatch || bottomMatch;
-  }
-};
-
-class CircleBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-3;
-    return (abs(x*x+y*y) < 1+tol);
+    bool match = (abs(y)-2 < tol);
+    return match;
   }
 };
 
@@ -128,9 +111,9 @@ class ZeroBC : public Function {
 };
 
 // boundary value for sigma_n
-class OneBC : public Function {
+class InletBC : public Function {
   public:
-    OneBC() : Function(0) {}
+    InletBC() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -138,7 +121,12 @@ class OneBC : public Function {
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 1;
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          if (abs(y) <= halfWidth)
+            values(cellIndex, ptIndex) = -1.0*(1.0-y*y);
+          else
+            values(cellIndex, ptIndex) = 0;
         }
       }
     }
@@ -180,15 +168,7 @@ class IPWeight : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          // if (x > 0 && abs(y) < 1+1e-3 && x < a)
-          //   values(cellIndex, ptIndex) = epsilon + (x-sqrt(1-y*y))/(a-sqrt(1-y*y));
-          if (x > 0 && sqrt(x*x+y*y) < a)
-          {
-            double dr = sqrt(x*x+y*y) - 1;
-            values(cellIndex, ptIndex) = epsilon + dr/(a-1);
-          }
-          else
-            values(cellIndex, ptIndex) = 1;
+          values(cellIndex, ptIndex) = 1.0;
         }
       }
     }
@@ -200,10 +180,6 @@ int main(int argc, char *argv[]) {
   // Process command line arguments
   if (argc > 1)
     numRefs = atof(argv[1]);
-  if (argc > 2)
-    nseg = atof(argv[2]);
-  if (argc > 3)
-    epsilon = atof(argv[3]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -235,11 +211,23 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
-  Teuchos::RCP<Mesh> mesh;
-  if (ReadMesh)
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"Hemker/Hemker.1", confusionBF, H1Order, pToAdd);
-  else
-    mesh = BuildHemkerMesh(confusionBF, nseg, CircleMesh, TriangulateMesh, H1Order, pToAdd);
+
+  FieldContainer<double> meshBoundary(4,2);
+  
+  meshBoundary(0,0) =  0.0; // x1
+  meshBoundary(0,1) = -2.0; // y1
+  meshBoundary(1,0) =  4.0;
+  meshBoundary(1,1) = -2.0;
+  meshBoundary(2,0) =  4.0;
+  meshBoundary(2,1) =  2.0;
+  meshBoundary(3,0) =  0.0;
+  meshBoundary(3,1) =  2.0;
+  
+  int horizontalCells = 4, verticalCells = 4;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+                                                confusionBF, H1Order, H1Order+pToAdd, false);
   
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -285,7 +273,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = 1;
+  double dt = 0.25;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -347,14 +335,13 @@ int main(int argc, char *argv[]) {
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
   SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
   SpatialFilterPtr tbBoundary = Teuchos::rcp( new TopBottomBoundary );
-  // SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
-  SpatialFilterPtr circleBoundary = Teuchos::rcp( new CircleBoundary );
+  SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
   FunctionPtr u0 = Teuchos::rcp( new ZeroBC );
-  FunctionPtr u1 = Teuchos::rcp( new OneBC );
+  FunctionPtr u_inlet = Teuchos::rcp( new InletBC );
   // FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u0);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u_inlet);
   bc->addDirichlet(beta_n_u_minus_sigma_n, tbBoundary, u0);
-  bc->addDirichlet(uhat, circleBoundary, u1);
+  bc->addDirichlet(uhat, rBoundary, u0);
   // pc->addConstraint(beta_n_u_minus_sigma_n - uhat == u0, rBoundary);
   
   ////////////////////////////////////////////////////////////////////
@@ -412,7 +399,7 @@ int main(int argc, char *argv[]) {
       if (rank == 0)
       {
         stringstream outfile;
-        outfile << "TransientHemker_" << refIndex << "_" << i;
+        outfile << "TransientConfusion_" << refIndex << "_" << i;
         solution->writeTracesToVTK(outfile.str());
         solution->writeFieldsToVTK(outfile.str(), 5);
       }
@@ -481,9 +468,9 @@ int main(int argc, char *argv[]) {
       cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
       stringstream outfile;
-      outfile << "TransientHemker_" << refIndex << "_" << i;
-      solution->writeFieldsToVTK("grid_"+outfile.str(), 2);
+      outfile << "TransientConfusion_" << refIndex << "_" << i;
       solution->writeFieldsToVTK(outfile.str(), 5);
+      solution->writeTracesToVTK(outfile.str());
     }
 
     if (refIndex < numRefs){

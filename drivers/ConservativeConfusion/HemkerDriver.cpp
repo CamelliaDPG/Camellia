@@ -19,10 +19,10 @@
 #else
 #endif
 
-bool enforceLocalConservation = true;
+bool enforceLocalConservation = false;
 double epsilon = 1e-4;
-int numRefs = 0;
-int nseg = 32;
+int numRefs = 4;
+int nseg = 8;
 bool ReadMesh = false;
 bool CircleMesh = false;
 bool TriangulateMesh = false;
@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
     solution->solve(false);
     stringstream outfile;
     outfile << "hemker_" << refIndex;
-    solution->writeFieldsToVTK(outfile.str(), 2);
+    solution->writeToVTK(outfile.str(), 5);
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
@@ -351,7 +351,7 @@ int main(int argc, char *argv[]) {
 
     stringstream outfile;
     outfile << "hemker_" << numRefs;
-    solution->writeFieldsToVTK(outfile.str(), 2);
+    solution->writeToVTK(outfile.str(), 5);
   }
   
   return 0;

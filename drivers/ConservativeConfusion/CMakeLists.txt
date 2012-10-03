@@ -30,6 +30,16 @@ target_link_libraries(AirfoilDriver
   Camellia
 )
 
+add_executable(VortexDriver VortexDriver.cpp)
+target_link_libraries(VortexDriver 
+  Camellia
+)
+
+add_executable(TransientConfusion TransientConfusion.cpp)
+target_link_libraries(TransientConfusion 
+  Camellia
+)
+
 add_executable(TransientHemker TransientHemker.cpp)
 target_link_libraries(TransientHemker 
   Camellia

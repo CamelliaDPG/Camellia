@@ -1,6 +1,6 @@
 #include "Solution.h"
 
-//#define USE_VTK
+#define USE_VTK
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -577,7 +577,7 @@ void Solution::writeTracesToVTK(const string& filePath)
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
       // sideBasisCache->setRefCellPoints(refTracePoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
-      cout << "numPoints = " << numPoints << endl;
+      // cout << "numPoints = " << numPoints << endl;
       if (sideBasisCache.get() == NULL)
         cout << "NULL Side Basis" << endl;
 
@@ -603,12 +603,12 @@ void Solution::writeTracesToVTK(const string& filePath)
         trace_ug->InsertNextCell((int)VTK_POLY_LINE, edge);
         edge->Delete();
 
-        cout << "Physical Points: " << endl;
+        // cout << "Physical Points: " << endl;
         for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
         {
           trace_points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
               (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
-          cout << (*physicalPoints)(cellIndex, pointIndex, 0)<<" "<<(*physicalPoints)(cellIndex, pointIndex, 1) << endl;
+          // cout << (*physicalPoints)(cellIndex, pointIndex, 0)<<" "<<(*physicalPoints)(cellIndex, pointIndex, 1) << endl;
           // trace_points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
           //     physCubPoints(cellIndex, pointIndex, 1), 0.0);
           for (int varIdx=0; varIdx < numTraceVars; varIdx++)
@@ -630,11 +630,13 @@ void Solution::writeTracesToVTK(const string& filePath)
   vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
   trace_wr->SetInput(trace_ug);
   trace_ug->Delete();
-  trace_wr->SetFileName((filePath+"_trace.vtu").c_str());
+  trace_wr->SetFileName(("trace_"+filePath+".vtu").c_str());
   trace_wr->SetDataModeToAscii();
   trace_wr->Update();
   trace_wr->Write();
   trace_wr->Delete();
+
+  cout << "Wrote Trace Variables to " << "trace_"+filePath << ".vtu" << endl;
 }
 #else
 
