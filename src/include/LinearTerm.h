@@ -37,8 +37,8 @@ typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 class LinearTerm {
-  int _rank; // gets set after first var is added
   typedef pair< FunctionPtr, VarPtr > LinearSummand;
+  int _rank; // gets set after first var is added
   vector< LinearSummand > _summands;
   set<int> _varIDs;
   VarType _termType; // shouldn't mix
@@ -147,6 +147,8 @@ LinearTermPtr operator-(VarPtr v);
 LinearTermPtr operator-(LinearTermPtr a);
 
 LinearTermPtr operator-(LinearTermPtr a, VarPtr v);
+
+LinearTermPtr operator-(VarPtr v, LinearTermPtr a);
 
 LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2);
 

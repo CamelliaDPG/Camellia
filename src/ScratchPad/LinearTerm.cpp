@@ -1342,6 +1342,11 @@ LinearTermPtr operator-(LinearTermPtr a, VarPtr v) {
   return a + minus_one * v;
 }
 
+LinearTermPtr operator-(VarPtr v, LinearTermPtr a) {
+  FunctionPtr minus_one = Teuchos::rcp( new ConstantScalarFunction(-1.0, "-") );
+  return v + minus_one * a;
+}
+
 LinearTermPtr operator-(LinearTermPtr a1, LinearTermPtr a2) {
   return a1 + -a2;
 }

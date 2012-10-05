@@ -14,6 +14,8 @@
 
 #include "VarFactory.h"
 
+#include "IP.h"
+
 class BF : public BilinearForm {
   typedef pair< LinearTermPtr, LinearTermPtr > BilinearTerm;
   vector< BilinearTerm > _terms;
@@ -33,6 +35,8 @@ public:
   
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID);
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID);
+  
+  IPPtr graphNorm();
   
   bool isFluxOrTrace(int trialID);
   
