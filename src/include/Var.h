@@ -15,7 +15,7 @@ class Var;
 typedef Teuchos::RCP<Var> VarPtr;
 
 namespace VarFunctionSpaces {
-  enum Space { HGRAD, HCURL, HDIV, L2, CONSTANT_SCALAR, VECTOR_HGRAD, UNKNOWN_FS };
+  enum Space { HGRAD, HCURL, HDIV, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2, UNKNOWN_FS };
   enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
   
   IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space);
