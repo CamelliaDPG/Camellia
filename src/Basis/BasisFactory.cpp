@@ -61,6 +61,8 @@ map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > BasisFact
 map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > BasisFactory::_patchBases;
 set< Basis<double,FieldContainer<double> >* > BasisFactory::_patchBasisSet;
 
+bool BasisFactory::_useEnrichedTraces = true;
+
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
   int basisRank; // to discard
   return getBasis(basisRank,polyOrder,cellTopoKey,fs);
@@ -169,7 +171,11 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
       case shards::Line<2>::key:
         switch(fs) {
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
-            basis = Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL) );
+            if (_useEnrichedTraces) {
+              basis = Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL) );
+            } else {
+              basis = Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL) );
+            }
             basisRank = 0;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
@@ -345,4 +351,8 @@ bool BasisFactory::isMultiBasis(BasisPtr basis) {
 
 bool BasisFactory::isPatchBasis(BasisPtr basis) {
   return _patchBasisSet.find(basis.get()) != _patchBasisSet.end();
+}
+
+void BasisFactory::setUseEnrichedTraces( bool value ) {
+  _useEnrichedTraces = value;
 }

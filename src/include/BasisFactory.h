@@ -80,6 +80,8 @@ private:
   static map< vector< Basis<double,FieldContainer<double> >* >, MultiBasisPtr > _multiBasesMap;
   static map< pair<Basis<double,FieldContainer<double> >*, vector<double> >, PatchBasisPtr > _patchBases;
   static set< Basis<double,FieldContainer<double> >* > _patchBasisSet;
+  
+  static bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
 public:
   static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
   static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
@@ -98,6 +100,8 @@ public:
   static bool isPatchBasis(BasisPtr basis);
   
   static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  
+  static void setUseEnrichedTraces( bool value );
 };
 
 #endif
