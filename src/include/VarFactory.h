@@ -139,6 +139,14 @@ public:
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
   }
+  
+  const map< int, VarPtr > & testVars() {
+    return _testVarsByID;
+  }
+  
+  const map< int, VarPtr > & trialVars() {
+    return _trialVarsByID;
+  }
 };
 
 #endif

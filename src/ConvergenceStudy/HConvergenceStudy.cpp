@@ -72,6 +72,13 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
     cout << "HConvergenceStudy: Using triangles\n" << endl;
 }
 
+void HConvergenceStudy::addDerivedVariable(LinearTermPtr derivedVar, const string &name) {
+  DerivedVariable dv;
+  dv.term = derivedVar;
+  dv.name = name;
+  _derivedVariables.push_back(dv);
+}
+
 Teuchos::RCP<Solution> HConvergenceStudy::getSolution(int logElements) {
   int index = logElements - _minLogElements;
   return _solutions[index];

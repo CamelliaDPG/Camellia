@@ -42,6 +42,7 @@
 
 #include "Vectorized_Basis.hpp"
 #include "Basis_HGRAD_2D_Cn_FEM.hpp"
+#include "Basis_HGRAD_1D_Cn_FEM.hpp"
 #include "BasisFactory.h"
 
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
@@ -81,13 +82,28 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
     return basis;
   }
   
+  int spaceDim;
+  bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
+  bool oneD = (cellTopoKey == shards::Line<2>::key);
+  if (oneD) {
+    spaceDim = 1;
+  } else if (twoD) {
+    spaceDim = 2;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+  }
+  
   if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
-    //BasisPtr componentBasis = getBasis(basisRank, polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    if (spaceDim == 2)
+      basis = Teuchos::rcp(new Basis_HGRAD_2D_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,cellTopoKey));
+    else if (spaceDim == 1)
+      basis = Teuchos::rcp(new Basis_HGRAD_1D_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,cellTopoKey));
+    basisRank = 1;
+  } else if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
     // TODO: support more than just 2 dimensions here
-    basis = Teuchos::rcp(new Basis_HGRAD_2D_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,cellTopoKey));
+    basis = Teuchos::rcp(new Basis_HGRAD_2D_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,cellTopoKey));
     basisRank = 1;
   } else { 
-  
     switch (cellTopoKey) {
       case shards::Quadrilateral<4>::key:
         switch(fs) {

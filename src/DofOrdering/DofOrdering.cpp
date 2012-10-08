@@ -128,6 +128,7 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
   if (entry == bases.end()) {
+    cout << *this;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis not found.");
   }
   return (*entry).second;

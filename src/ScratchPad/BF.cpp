@@ -11,6 +11,7 @@
 #include "BilinearFormUtility.h"
 #include "Function.h"
 #include "PreviousSolutionFunction.h"
+#include "LinearTerm.h"
 
 BF::BF( VarFactory varFactory ) { // copies (note that external changes in VarFactory won't be registered by BF)
   _varFactory = varFactory;
@@ -100,6 +101,43 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     cout << "test ordering:\n" << *(elemType->testOrderPtr);
 //    cout << "stiffness:\n" << stiffness;
   }
+}
+
+IPPtr BF::graphNorm() {
+  typedef pair< FunctionPtr, VarPtr > LinearSummand;
+  map<int, LinearTermPtr> testTermsForVarID;
+  for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+       btIt != _terms.end(); btIt++) {
+    BilinearTerm bt = *btIt;
+    LinearTermPtr trialTerm = btIt->first;
+    LinearTermPtr testTerm = btIt->second;
+    vector< LinearSummand > summands = trialTerm->summands();
+    for ( vector< LinearSummand >::iterator lsIt = summands.begin(); lsIt != summands.end(); lsIt++) {
+      VarPtr trialVar = lsIt->second;
+      if (trialVar->varType() == FIELD) {
+        if (trialVar->op() != OP_VALUE) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BF::graphNorm() doesn't support non-value ops on field variables");
+        }
+        FunctionPtr f = lsIt->first;
+        if (testTermsForVarID.find(trialVar->ID()) == testTermsForVarID.end()) {
+          testTermsForVarID[trialVar->ID()] = Teuchos::rcp( new LinearTerm );
+        }
+        testTermsForVarID[trialVar->ID()]->addTerm( f * testTerm );
+      }
+    }
+  }
+  IPPtr ip = Teuchos::rcp( new IP );
+  for ( map<int, LinearTermPtr>::iterator testTermIt = testTermsForVarID.begin();
+       testTermIt != testTermsForVarID.end(); testTermIt++ ) {
+    ip->addTerm( testTermIt->second );
+  }
+  // L^2 terms:
+  map< int, VarPtr > testVars = _varFactory.testVars();
+  for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+    ip->addTerm( testVarIt->second );
+  }
+  
+  return ip;
 }
 
 LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {

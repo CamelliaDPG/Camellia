@@ -116,10 +116,11 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
 FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
-  if ((fs != IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || 
+  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  if ( vectorizedBasis || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
-    TEUCHOS_TEST_FOR_EXCEPTION( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (op !=  IntrepidExtendedTypes::OP_VALUE),
-                       std::invalid_argument, "Only Vector HGRAD with OP_VALUE supported by getTransformedVectorValuesWithComponentBasisValues.  Please use getTransformedValuesWithBasisValues instead.");
+    TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis || (op !=  IntrepidExtendedTypes::OP_VALUE),
+                       std::invalid_argument, "Only Vector HGRAD/HVOL with OP_VALUE supported by getTransformedVectorValuesWithComponentBasisValues.  Please use getTransformedValuesWithBasisValues instead.");
   }
   BasisPtr componentBasis = basis->getComponentBasis();
   Teuchos::Array<int> dimensions;
@@ -147,9 +148,10 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
   Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
-  if ((fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (op ==  IntrepidExtendedTypes::OP_VALUE)) {
-    TEUCHOS_TEST_FOR_EXCEPTION( (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (op ==  IntrepidExtendedTypes::OP_VALUE),
-                       std::invalid_argument, "Vector HGRAD with OP_VALUE not supported by getTransformedValuesWithBasisValues.  Please use getTransformedVectorValuesWithComponentBasisValues instead.");
+  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  if (vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE)) {
+    TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE),
+                       std::invalid_argument, "Vector HGRAD/HVOL with OP_VALUE not supported by getTransformedValuesWithBasisValues.  Please use getTransformedVectorValuesWithComponentBasisValues instead.");
   }
   switch(relatedOp) {
     case(Intrepid::OPERATOR_VALUE):
@@ -184,6 +186,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
         case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD: // HGRAD is the only space that supports the GRAD operator...
           fst::HGRADtransformGRAD<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
           // referenceValues has dimensions (F,P,D1,D2).  D1 is our component dimension, and D2 is the one that came from the gradient.
           // HGRADtransformGRAD expects (F,P,D) for input, and (C,F,P,D) for output.
@@ -235,6 +238,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           // in 2D, HGRADtransformCURL == HDIVtransformVALUE (because curl(H1) --> H(div))
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
@@ -247,6 +251,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
           fst::HDIVtransformDIV<double>(*transformedValues,cellJacobianDet,*referenceValues);
           break;
+        case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD: // shouldn't take the transform so late
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
@@ -268,7 +273,10 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
 Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int &componentOfInterest) {
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
-  if (   ( fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) 
+
+  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+
+  if (   vectorizedBasis
       && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV) ) ) {
     relatedOp = Intrepid::OPERATOR_GRAD;
   } else if ((op==OP_X) || (op==OP_Y) || (op==OP_Z)) {
@@ -287,7 +295,8 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(EOperatorExtended op, Intre
 
 FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtendedTypes::EOperatorExtended op, IntrepidExtendedTypes::EFunctionSpaceExtended fs, int componentOfInterest) {
   FCPtr result;
-  if (   (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD)
+  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  if (   vectorizedBasis
       && ( (op == IntrepidExtendedTypes::OP_CURL) || (op == IntrepidExtendedTypes::OP_DIV)) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(values->rank() != 5, std::invalid_argument, "rank of values must be 5 for VECTOR_HGRAD_GRAD");
     int numCells  = values->dimension(0);
