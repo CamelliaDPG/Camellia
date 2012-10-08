@@ -3035,9 +3035,27 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
       
   _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
   
+  bool estimateElemCondition = false;
+  if (estimateElemCondition){
+    Epetra_SerialDenseMatrix IPK(numTestDofs,numTestDofs);
+    Epetra_SerialDenseMatrix x(numTestDofs);
+    Epetra_SerialDenseMatrix b(numTestDofs);
+    for (int i = 0;i<numTestDofs;i++){
+      for (int j = 0;j<numTestDofs;j++){
+	IPK(i,j) = ipMatrix(0,i,j);
+      }      
+    }
+    Epetra_SerialDenseSolver solver;
+    solver.SetMatrix(IPK);
+    solver.SetVectors(x,b);
+    double invCondNumber;
+    int err = solver.ReciprocalConditionEstimate(invCondNumber);    
+    cout << "condition number of element " << cellID << " = " << 1.0/invCondNumber << endl;
+  }
+
   FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
   _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
-					    cellSideParities, basisCache);      
+					    cellSideParities, basisCache);
 
   //  FieldContainer<double> finalStiffness(1,numTrialDofs,numTrialDofs);
   finalStiffness.resize(1,numTrialDofs,numTrialDofs);
