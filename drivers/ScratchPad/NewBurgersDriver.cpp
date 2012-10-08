@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
-  double nonlinearRelativeEnergyTolerance = 0.0001; // used to determine convergence of the nonlinear solution
+  double nonlinearRelativeEnergyTolerance = 1e-8; // used to determine convergence of the nonlinear solution
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE VARIABLES 
@@ -237,6 +237,64 @@ int main(int argc, char *argv[]) {
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
     solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
+
+    // check conservation
+    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+    // Create a fake bilinear form for the testing
+    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+    // Define our mass flux
+    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_hat) );
+    LinearTermPtr massFluxTerm = massFlux * testOne;
+
+    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+    DofOrderingFactory dofOrderingFactory(fakeBF);
+    int fakeTestOrder = H1Order;
+    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+  
+    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+    map<int, double> massFluxIntegral; // cellID -> integral
+    double maxMassFluxIntegral = 0.0;
+    double totalMassFlux = 0.0;
+    double totalAbsMassFlux = 0.0;
+    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+      ElementTypePtr elemType = *elemTypeIt;
+      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+      vector<int> cellIDs;
+      for (int i=0; i<elems.size(); i++) {
+	cellIDs.push_back(elems[i]->cellID());
+      }
+      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	// pick out the ones for testOne:
+	massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+      }
+      // find the largest:
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+      }
+      for (int i=0; i<elems.size(); i++) {
+	int cellID = cellIDs[i];
+	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+	totalMassFlux += massFluxIntegral[cellID];
+	totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+      }
+    }
+    if (rank==0){
+      cout << endl;
+      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+      cout << "total mass flux: " << totalMassFlux << endl;
+      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+      cout << endl;
+    }
+
   }
   
   solveStrategy->solve(rank==0);
