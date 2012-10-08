@@ -117,9 +117,9 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
                                                                           constFCPtr componentReferenceValuesTransformed) {
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
   bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
-  if ( vectorizedBasis || 
+  if ( !vectorizedBasis || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
-    TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis || (op !=  IntrepidExtendedTypes::OP_VALUE),
+    TEUCHOS_TEST_FOR_EXCEPTION( !vectorizedBasis || (op !=  IntrepidExtendedTypes::OP_VALUE),
                        std::invalid_argument, "Only Vector HGRAD/HVOL with OP_VALUE supported by getTransformedVectorValuesWithComponentBasisValues.  Please use getTransformedValuesWithBasisValues instead.");
   }
   BasisPtr componentBasis = basis->getComponentBasis();
