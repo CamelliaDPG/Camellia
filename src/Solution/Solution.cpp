@@ -219,6 +219,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   //initialize();
   
+  bool zmcsAsRankOneUpdate = false; // not yet working!
+  
   int numProcs=1;
   int rank=0;
   
@@ -249,7 +251,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   }
   int numGlobalDofs = _mesh->numGlobalDofs();
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,zeroMeanConstraints.size(),&Comm);
+  int numZMCDofs = zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+  
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);
   //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
   
   int maxRowSize = _mesh->rowSizeUpperBound();
@@ -494,21 +498,36 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       FieldContainer<int> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       int numValues = globalIndices.size();
-      // insert row:
-      globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
-      // insert column:
-      globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-      // insert stabilizing parameter -- for now, just the sum of the entries in the extra row/column
-      double rho = 0.0;
-//      for (int i=0; i<numValues; i++) {
-//        rho += basisIntegrals[i];
-//      }
-//      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
+      
+      // define stabilizing parameter -- for now, just the sum of the entries in the extra row/column
+      double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
+      //      for (int i=0; i<numValues; i++) {
+      //        rho += basisIntegrals[i];
+      //      }
+      //      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
       rho = 1.0;
-//      cout << "in zmc, diagonal entry: " << rho << endl;
-      //rho /= numValues;
-      globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
-      localRowIndex++;
+      
+      if (zmcsAsRankOneUpdate) {
+        // TODO: debug this (not working)
+        // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
+        FieldContainer<double> product(numValues,numValues);
+        for (int i=0; i<numValues; i++) {
+          for (int j=0; j<numValues; j++) {
+            product(i,j) = - basisIntegrals(i) * basisIntegrals(j) / rho;
+          }
+        }
+        globalStiffMatrix.SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
+      } else { // otherwise, we increase the size of the system to accomodate the zmc...
+        // insert row:
+        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+        // insert column:
+        globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+
+  //      cout << "in zmc, diagonal entry: " << rho << endl;
+        //rho /= numValues;
+        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
+        localRowIndex++;
+      }
     }
   }
   

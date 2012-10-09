@@ -153,6 +153,9 @@ public:
   QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
 };
 
 class SumFunction : public Function {

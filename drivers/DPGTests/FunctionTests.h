@@ -49,6 +49,10 @@ public:
   
   bool testThatLikeFunctionsAgree();
   
+  bool testProductRule();
+  
+  bool testQuotientRule();
+  
   std::string testSuiteName();
 };
 
