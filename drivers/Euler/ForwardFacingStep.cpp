@@ -44,9 +44,6 @@ typedef Teuchos::RCP< Element > ElementPtr;
 typedef Teuchos::RCP< Mesh > MeshPtr;
 
 double GAMMA = 1.4;
-static const double PRANDTL = 0.72;
-static const double YTOP = 1.0;
-static const double airfoilThickness = 0.1;
 int numRefs = 12;
 
 using namespace std;
@@ -133,7 +130,7 @@ class OutflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool match = ((abs(x-2.0) < tol) && (y > 0.0) && (y < YTOP));
+      bool match = (abs(x-3.0) < tol);
       return match;
     }
 };
@@ -142,36 +139,18 @@ class InflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool match = ((abs(x+2.0) < tol) && (y > 0) && (y < YTOP));
-      return match;
-    }
-};
-
-class FreeStreamBoundaryTop : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(y-YTOP) < tol && (x < 2.0) && (x > -2.0));
-      return match;
-    }
-};
-
-class FreeStreamBoundaryBottom : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = ((abs(y) < tol) && (abs(x) > 1.0));
+      bool match = (abs(x) < tol);
       return match;
     }
 };
 
 class WallBoundary : public SpatialFilter {
-  public:  
+  public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool match = (abs(x) <= 1.0) && (y < airfoilThickness + tol);
+      bool match = ((x < 3.0) && (x > 0.0));
       return match;
-    }  
+    }
 };
 
 // ===================== IP helper functions ====================
@@ -210,7 +189,6 @@ int main(int argc, char *argv[]) {
 
   // define our manufactured solution or problem bilinear form:
   double Ma = 3.0;
-  // double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
   double energyThreshold = 0.2; // for mesh refinements
 
   if (rank==0){
@@ -265,35 +243,117 @@ int main(int argc, char *argv[]) {
   vector< vector<int> > elementIndices;
   vector<int> el(4);
 
-  pt(0) = -2.0; pt(1) = 0;
+  pt(0) = 0.0; pt(1) = 0.0;
   vertices.push_back(pt);
-  pt(0) = -1.0; pt(1) = 0;
+  pt(0) = 0.0; pt(1) = 0.2;
   vertices.push_back(pt);
-  pt(0) =  0.0; pt(1) = airfoilThickness;
+  pt(0) = 0.0; pt(1) = 1.0;
   vertices.push_back(pt);
-  pt(0) =  1.0; pt(1) = 0;
+  pt(0) = 0.6; pt(1) = 0.0;
   vertices.push_back(pt);
-  pt(0) =  2.0; pt(1) = 0;
+  pt(0) = 0.6; pt(1) = 0.2;
   vertices.push_back(pt);
-  pt(0) =  2.0; pt(1) = YTOP;
+  pt(0) = 0.6; pt(1) = 1.0;
   vertices.push_back(pt);
-  pt(0) =  1.0; pt(1) = YTOP;
+  pt(0) = 1.4; pt(1) = 0.2;
   vertices.push_back(pt);
-  pt(0) =  0.0; pt(1) = YTOP;
+  pt(0) = 1.4; pt(1) = 1.0;
   vertices.push_back(pt);
-  pt(0) = -1.0; pt(1) = YTOP;
+  pt(0) = 2.2; pt(1) = 0.2;
   vertices.push_back(pt);
-  pt(0) = -2.0; pt(1) = YTOP;
+  pt(0) = 2.2; pt(1) = 1.0;
+  vertices.push_back(pt);
+  pt(0) = 3.0; pt(1) = 0.2;
+  vertices.push_back(pt);
+  pt(0) = 3.0; pt(1) = 1.0;
   vertices.push_back(pt);
 
-  el[0] = 0; el[1] = 1; el[2] = 8; el[3] = 9;
+  el[0] = 0; el[1] = 3; el[2] = 4; el[3] = 1;
   elementIndices.push_back(el);
-  el[0] = 1; el[1] = 2; el[2] = 7; el[3] = 8;
+  el[0] = 1; el[1] = 4; el[2] = 5; el[3] = 2;
   elementIndices.push_back(el);
-  el[0] = 2; el[1] = 3; el[2] = 6; el[3] = 7;
+  el[0] = 4; el[1] = 6; el[2] = 7; el[3] = 5;
   elementIndices.push_back(el);
-  el[0] = 3; el[1] = 4; el[2] = 5; el[3] = 6;
+  el[0] = 6; el[1] = 8; el[2] = 9; el[3] = 7;
   elementIndices.push_back(el);
+  el[0] = 8; el[1] = 10; el[2] = 11; el[3] = 9;
+  elementIndices.push_back(el);
+
+  // pt(0) =  0.0; pt(1) = 0;
+  // vertices.push_back(pt);
+  // pt(0) =  0.6; pt(1) = 0;
+  // vertices.push_back(pt);
+  // pt(0) =  0.6; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  0.6; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  1.0; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  1.5; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  2.0; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  2.5; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  3.0; pt(1) = 0.2;
+  // vertices.push_back(pt);
+  // pt(0) =  0.0; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  0.6; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  1.0; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  1.5; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  2.0; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  2.5; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  3.0; pt(1) = 0.6;
+  // vertices.push_back(pt);
+  // pt(0) =  0.0; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  0.6; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  1.0; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  1.5; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  2.0; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  2.5; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  3.0; pt(1) = 1.0;
+  // vertices.push_back(pt);
+  // pt(0) =  0.0; pt(1) = 0.2;
+  // vertices.push_back(pt);
+
+  // el[0] = 0; el[1] = 1; el[2] = 2; el[3] = 22;
+  // elementIndices.push_back(el);
+  // el[0] = 22; el[1] = 2; el[2] = 9; el[3] = 8;
+  // elementIndices.push_back(el);
+  // el[0] = 2; el[1] = 3; el[2] = 10; el[3] = 9;
+  // elementIndices.push_back(el);
+  // el[0] = 3; el[1] = 4; el[2] = 11; el[3] = 10;
+  // elementIndices.push_back(el);
+  // el[0] = 4; el[1] = 5; el[2] = 12; el[3] = 11;
+  // elementIndices.push_back(el);
+  // el[0] = 5; el[1] = 6; el[2] = 13; el[3] = 12;
+  // elementIndices.push_back(el);
+  // el[0] = 6; el[1] = 7; el[2] = 14; el[3] = 13;
+  // elementIndices.push_back(el);
+  // el[0] = 8; el[1] = 9; el[2] = 16; el[3] = 15;
+  // elementIndices.push_back(el);
+  // el[0] = 9; el[1] = 10; el[2] = 17; el[3] = 16;
+  // elementIndices.push_back(el);
+  // el[0] = 10; el[1] = 11; el[2] = 18; el[3] = 17;
+  // elementIndices.push_back(el);
+  // el[0] = 11; el[1] = 12; el[2] = 19; el[3] = 18;
+  // elementIndices.push_back(el);
+  // el[0] = 12; el[1] = 13; el[2] = 20; el[3] = 19;
+  // elementIndices.push_back(el);
+  // el[0] = 13; el[1] = 14; el[2] = 21; el[3] = 20;
+  // elementIndices.push_back(el);
 
   Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );  
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
@@ -346,10 +406,11 @@ int main(int argc, char *argv[]) {
 
   // ==================== SET INITIAL GUESS ==========================
 
-  double rho_free = 1.0;
-  double u1_free = 1.0;
+  double rho_free = 1.4;
+  double p_free = 1.0;
+  double u1_free = Ma*sqrt(GAMMA*p_free/rho_free);
   double u2_free = 0.0;
-  double e_free = (1.0+0.5*(u1_free*u1_free + u2_free*u2_free)); // TODO - check this value - from Capon paper
+  double e_free = p_free/(rho_free*(GAMMA-1))+0.5*(u1_free*u1_free+u2_free*u2_free); 
 
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(rho_free) );
@@ -408,7 +469,7 @@ int main(int argc, char *argv[]) {
   V[v3->ID()] = v3;
   V[v4->ID()] = v4;
 
-  map<int, VarPtr> TAU;
+  // map<int, VarPtr> TAU;
   // TAU[tau1->ID()] = tau1;
   // TAU[tau2->ID()] = tau2;
   // TAU[tau3->ID()] = tau3;
@@ -563,7 +624,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .1;
+  double dt = .05;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -783,9 +844,6 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary());
   SpatialFilterPtr wallBoundary = Teuchos::rcp( new WallBoundary());
 
-  // free stream quantities for inflow
-  double p_free = rho_free * gam1 * (e_free - 0.5*(u1_free*u1_free + u2_free*u2_free));
-
   FunctionPtr m1_free = Teuchos::rcp( new ConstantScalarFunction(rho_free*u1_free) );
   FunctionPtr m2_free = Teuchos::rcp( new ConstantScalarFunction(rho_free*u2_free) );
 
@@ -815,19 +873,6 @@ int main(int argc, char *argv[]) {
   // bc->addDirichlet(u1hat, wallBoundary, zero);
   // bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets heat flux = 0
-
-  // =============================================================================================
-
-  // symmetry BCs
-  SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  bc->addDirichlet(F1nhat, freeTop, zero);
-  // bc->addDirichlet(F3nhat, freeTop, zero);
-  // bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
-
-  SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
-  bc->addDirichlet(F1nhat, freeBottom, zero);
-  // bc->addDirichlet(F3nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
-  // bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero heat-flux in free stream bottom boundary
 
   // =============================================================================================
 
@@ -887,7 +932,7 @@ int main(int argc, char *argv[]) {
 
   // double ReferenceRe = 100; // galerkin can represent Re = 10 easily on a standard 8x8 mesh, so no prerefs there
   // int numPreRefs = round(max(ceil(log10(Re/ReferenceRe)),0.0));
-  int numPreRefs = 2;
+  int numPreRefs = 1;
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
@@ -897,18 +942,7 @@ int main(int argc, char *argv[]) {
     vector<int> wallCells;    
     for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
       int cellID = (*elemIt)->cellID();
-      int numSides = mesh->getElement(cellID)->numSides();
-      FieldContainer<double> vertices(numSides,2); //for quads
-
-      mesh->verticesForCell(vertices, cellID);
-      bool cellIDset = false;	
-      for (int j = 0;j<numSides;j++){ 
-        // if (abs(vertices(j,0))<=1.0 && !cellIDset){
-        if (!cellIDset){
-          wallCells.push_back(cellID);
-          cellIDset = true;
-        }
-      }
+      wallCells.push_back(cellID);
     }
     if (i<numPreRefs){
       refinementStrategy->refineCells(wallCells);
@@ -1008,8 +1042,7 @@ int main(int argc, char *argv[]) {
 
       if (rank==0){
         stringstream outfile;
-        outfile << "DiamondAirfoil_" << k << "_" << i;
-        // solution->writeFieldsToVTK("grid_"+outfile.str(), 2);
+        outfile << "ForwardFacingStep_" << k << "_" << i;
         backgroundFlow->writeFieldsToVTK(outfile.str(), 5);
         backgroundFlow->writeTracesToVTK(outfile.str());
 

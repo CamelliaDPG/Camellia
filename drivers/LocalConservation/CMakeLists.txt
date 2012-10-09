@@ -1,4 +1,4 @@
-project(ConservativeConfusion)
+project(LocalConservation)
 
 add_executable(ConservativeConfusion ConfusionDriver.cpp)
 target_link_libraries(ConservativeConfusion 
@@ -42,5 +42,15 @@ target_link_libraries(TransientConfusion
 
 add_executable(TransientHemker TransientHemker.cpp)
 target_link_libraries(TransientHemker 
+  Camellia
+)
+
+add_executable(BurgersDriver BurgersDriver.cpp)
+target_link_libraries(BurgersDriver 
+  Camellia
+)
+
+add_executable(InviscidBurgers InviscidBurgers.cpp)
+target_link_libraries(InviscidBurgers 
   Camellia
 )
