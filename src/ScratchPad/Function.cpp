@@ -628,6 +628,30 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
   _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
 }
 
+FunctionPtr QuotientFunction::dx() {
+  if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dx() / _scalarDivisor - _f * _scalarDivisor->dx() / (_scalarDivisor * _scalarDivisor);
+}
+
+FunctionPtr QuotientFunction::dy() {
+  if ( (_f->dy().get() == NULL) || (_scalarDivisor->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dy() / _scalarDivisor - _f * _scalarDivisor->dy() / (_scalarDivisor * _scalarDivisor);
+}
+
+FunctionPtr QuotientFunction::dz() {
+  if ( (_f->dz().get() == NULL) || (_scalarDivisor->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dz() / _scalarDivisor - _f * _scalarDivisor->dz() / (_scalarDivisor * _scalarDivisor);
+}
+
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
   _f1 = f1;
