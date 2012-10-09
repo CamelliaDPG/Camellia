@@ -28,6 +28,113 @@ public:
   }
 };
 
+class Exp_x : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return exp(x);
+  }
+  FunctionPtr dx() {
+    return Teuchos::rcp( new Exp_x );
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+};
+
+class Y : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return y;
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  }
+};
+
+class Cos_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+};
+
+class Sin_y : public SimpleFunction {
+  double value(double x, double y) {
+    return sin(y);
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Teuchos::rcp( new Cos_y );
+  }
+};
+
+double Cos_y::value(double x, double y) {
+  return cos(y);
+}
+FunctionPtr Cos_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Cos_y::dy() {
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  return - sin_y;
+}
+
+class Xn : public SimpleFunction {
+  int _n;
+public:
+  Xn(int n) {
+    _n = n;
+  }
+  double value(double x, double y) {
+    double val = 1.0;
+    // NOTE: inefficient for large n!
+    for (int i=0; i<_n; i++) {
+      val *= x;
+    }
+    return val;
+  }
+  FunctionPtr dx() {
+    if (_n == 0) {
+      return Function::zero();
+    }
+    FunctionPtr x_n_minus = Teuchos::rcp( new Xn(_n-1) );
+    return _n * x_n_minus;
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }  
+};
+
+class Yn : public SimpleFunction {
+  int _n;
+public:
+  Yn(int n) {
+    _n = n;
+  }
+  double value(double x, double y) {
+    double val = 1.0;
+    // NOTE: inefficient for large n!
+    for (int i=0; i<_n; i++) {
+      val *= y;
+    }
+    return val;
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    if (_n == 0) {
+      return Function::zero();
+    }
+    FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
+    return _n * y_n_minus;
+  }
+};
+
 void FunctionTests::setup() {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -109,6 +216,18 @@ void FunctionTests::setup() {
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testThatLikeFunctionsAgree()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  setup();
+  if (testProductRule()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  setup();
+  if (testQuotientRule()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -206,6 +325,50 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
 //    cout << "f1 and f2 agree!" << endl;
   }
   return functionsAgree;
+}
+
+bool FunctionTests::testProductRule() {
+  bool success = true;
+  
+  // take f = x^2 * exp(x).  f' = 2 x * exp(x) + f
+  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  
+  FunctionPtr f = x2 * exp_x;
+  FunctionPtr f_prime = f->dx();
+  
+  FunctionPtr f_prime_expected = 2.0 * x * exp_x + f;
+  
+  if (! functionsAgree(f_prime, f_prime_expected,
+                       _basisCache) ) {
+    cout << "Product rule: expected and actual derivatives differ...\n";
+    success = false;
+  }
+
+  return success;
+}
+
+bool FunctionTests::testQuotientRule() {
+  bool success = true;
+  // take f = exp(x) / x^2.  f' = f - 2 * x * exp(x) / x^4
+  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  
+  FunctionPtr f = exp_x / x2;
+  FunctionPtr f_prime = f->dx();
+  
+  FunctionPtr f_prime_expected = f - 2 * x * exp_x / (x2 * x2);
+  
+  if (! functionsAgree(f_prime, f_prime_expected,
+                       _basisCache) ) {
+    cout << "Quotient rule: expected and actual derivatives differ...\n";
+    success = false;
+  }
+  
+  return success;
+  
 }
 
 std::string FunctionTests::testSuiteName() {
