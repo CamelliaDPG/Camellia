@@ -34,6 +34,11 @@
 
 #include "MeshPolyOrderFunction.h"
 
+double GAMMA = 1.4;
+int numRefs = 12;
+int numNRSteps = 1;
+int numPreRefs = 0;
+
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
@@ -42,14 +47,6 @@ typedef map< int, sparseFxnMatrix > sparseFxnTensor; // dim = {spatial dim, test
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
 typedef Teuchos::RCP< Mesh > MeshPtr;
-
-double GAMMA = 1.4;
-static const double PRANDTL = 0.72;
-static const double YTOP = 1.0;
-static const double airfoilThickness = 0.1;
-int numRefs = 12;
-
-using namespace std;
 
 // ===================== Mesh functions ====================
 
@@ -129,11 +126,29 @@ class EpsilonScaling : public hFunction {
 
 // ===================== Spatial filter boundary functions ====================
 
-class OutflowBoundary : public SpatialFilter {
+class BottomOutflow : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool match = ((abs(x-2.0) < tol) && (y > 0.0) && (y < YTOP));
+      bool match = ((abs(y) < tol) && (x < 0.5));
+      return match;
+    }
+};
+
+class RightOutflow : public SpatialFilter {
+  public:
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      bool match = (abs(x-1.0) < tol);
+      return match;
+    }
+};
+
+class RampBoundary : public SpatialFilter {
+  public:
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      bool match = ((abs(y) < tol) && (x >= 0.5));
       return match;
     }
 };
@@ -142,36 +157,9 @@ class InflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool match = ((abs(x+2.0) < tol) && (y > 0) && (y < YTOP));
+      bool match = ((abs(x) < tol) || (abs(y-1.0) < tol));
       return match;
     }
-};
-
-class FreeStreamBoundaryTop : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(y-YTOP) < tol && (x < 2.0) && (x > -2.0));
-      return match;
-    }
-};
-
-class FreeStreamBoundaryBottom : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = ((abs(y) < tol) && (abs(x) > 1.0));
-      return match;
-    }
-};
-
-class WallBoundary : public SpatialFilter {
-  public:  
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(x) <= 1.0) && (y < airfoilThickness + tol);
-      return match;
-    }  
 };
 
 // ===================== IP helper functions ====================
@@ -258,44 +246,23 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // CREATE MESH 
   ////////////////////////////////////////////////////////////////////
+  FieldContainer<double> meshPoints(4,2);
 
-  // create a pointer to a new mesh:
-  vector< FieldContainer<double> > vertices;
-  FieldContainer<double> pt(2);
-  vector< vector<int> > elementIndices;
-  vector<int> el(4);
+  meshPoints(0,0) = 0.0; // x1
+  meshPoints(0,1) = 0.0; // y1
+  meshPoints(1,0) = 1.0;
+  meshPoints(1,1) = 0.0;
+  meshPoints(2,0) = 1.0;
+  meshPoints(2,1) = 1.0;
+  meshPoints(3,0) = 0.0;
+  meshPoints(3,1) = 1.0;  
 
-  pt(0) = -2.0; pt(1) = 0;
-  vertices.push_back(pt);
-  pt(0) = -1.0; pt(1) = 0;
-  vertices.push_back(pt);
-  pt(0) =  0.0; pt(1) = airfoilThickness;
-  vertices.push_back(pt);
-  pt(0) =  1.0; pt(1) = 0;
-  vertices.push_back(pt);
-  pt(0) =  2.0; pt(1) = 0;
-  vertices.push_back(pt);
-  pt(0) =  2.0; pt(1) = YTOP;
-  vertices.push_back(pt);
-  pt(0) =  1.0; pt(1) = YTOP;
-  vertices.push_back(pt);
-  pt(0) =  0.0; pt(1) = YTOP;
-  vertices.push_back(pt);
-  pt(0) = -1.0; pt(1) = YTOP;
-  vertices.push_back(pt);
-  pt(0) = -2.0; pt(1) = YTOP;
-  vertices.push_back(pt);
+  int horizontalCells = 2;
+  int verticalCells = 2;
 
-  el[0] = 0; el[1] = 1; el[2] = 8; el[3] = 9;
-  elementIndices.push_back(el);
-  el[0] = 1; el[1] = 2; el[2] = 7; el[3] = 8;
-  elementIndices.push_back(el);
-  el[0] = 2; el[1] = 3; el[2] = 6; el[3] = 7;
-  elementIndices.push_back(el);
-  el[0] = 3; el[1] = 4; el[2] = 5; el[3] = 6;
-  elementIndices.push_back(el);
-
-  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );  
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshPoints, horizontalCells, 
+      verticalCells, bf, H1Order, 
+      H1Order+pToAdd, false);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   ////////////////////////////////////////////////////////////////////
@@ -348,7 +315,7 @@ int main(int argc, char *argv[]) {
 
   double rho_free = 1.0;
   double u1_free = 1.0;
-  double u2_free = 0.0;
+  double u2_free = -0.01;
   double e_free = (1.0+0.5*(u1_free*u1_free + u2_free*u2_free)); // TODO - check this value - from Capon paper
 
   map<int, Teuchos::RCP<Function> > functionMap;
@@ -379,9 +346,6 @@ int main(int argc, char *argv[]) {
   FunctionPtr dpde = gam1*rho_prev;
   FunctionPtr dedu1 = u1_prev;
   FunctionPtr dedu2 = u2_prev;
-  // double dedT = cv; 
-
-  // FunctionPtr mu = 1.0;
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
@@ -563,7 +527,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .1;
+  double dt = .5;
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
@@ -781,7 +745,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary());
-  SpatialFilterPtr wallBoundary = Teuchos::rcp( new WallBoundary());
+  SpatialFilterPtr rampBoundary = Teuchos::rcp( new RampBoundary());
 
   // free stream quantities for inflow
   double p_free = rho_free * gam1 * (e_free - 0.5*(u1_free*u1_free + u2_free*u2_free));
@@ -810,7 +774,7 @@ int main(int argc, char *argv[]) {
   // wall BCs
   // double Tscale = 1.0 + gam1*Ma*Ma/2.0; // from pj capon paper "adaptive finite element method compressible...".  Is equal to 2.8 for Mach 3 and Gamma = 1.4;
 
-  bc->addDirichlet(F1nhat, wallBoundary, zero);
+  bc->addDirichlet(F1nhat, rampBoundary, zero);
   // bc->addDirichlet(u2hat, wallBoundary, zero);
   // bc->addDirichlet(u1hat, wallBoundary, zero);
   // bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
@@ -819,13 +783,13 @@ int main(int argc, char *argv[]) {
   // =============================================================================================
 
   // symmetry BCs
-  SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  bc->addDirichlet(F1nhat, freeTop, zero);
+  // SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
+  // bc->addDirichlet(F1nhat, freeTop, zero);
   // bc->addDirichlet(F3nhat, freeTop, zero);
   // bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
 
-  SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
-  bc->addDirichlet(F1nhat, freeBottom, zero);
+  // SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
+  // bc->addDirichlet(F1nhat, freeBottom, zero);
   // bc->addDirichlet(F3nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
   // bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero heat-flux in free stream bottom boundary
 
@@ -878,16 +842,12 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
-  int numTimeSteps = 40; // max time steps
-  int numNRSteps = 1;
-
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
   ////////////////////////////////////////////////////////////////////
 
   // double ReferenceRe = 100; // galerkin can represent Re = 10 easily on a standard 8x8 mesh, so no prerefs there
   // int numPreRefs = round(max(ceil(log10(Re/ReferenceRe)),0.0));
-  int numPreRefs = 2;
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
@@ -909,195 +869,131 @@ int main(int argc, char *argv[]) {
           cellIDset = true;
         }
       }
-    }
-    if (i<numPreRefs){
-      refinementStrategy->refineCells(wallCells);
-    }else{
-      //      mesh->pRefine(wallCells);
-    }
-  }
-  // if (rank==0){
-  //   polyOrderFunction->writeValuesToMATLABFile(mesh,"polyOrder.m");
-  // }
-
-  ////////////////////////////////////////////////////////////////////
-  // PSEUDO-TIME SOLVE STRATEGY 
-  ////////////////////////////////////////////////////////////////////
-
-  // bool useAdaptTS = false;
-  // if (rank==0){
-  //   cout << "doing timesteps";
-  //   if ((rank==0) && useAdaptTS){
-  //     cout << " using adaptive timestepping";
-  //   }
-  //   cout << endl;  
-  // }
-
-  // time steps
-  double time_tol = 1e-4;
-  for (int k = 0;k<=numRefs;k++){    
-
-    ofstream residualFile;      
-    ofstream dtFile;      
-    if (rank==0){
-      std::ostringstream refNum;
-      refNum << k;
-      string filename1 = "time_res" + refNum.str()+ ".txt";
-      residualFile.open(filename1.c_str());
-      string filename2 = "dt" + refNum.str()+ ".txt";
-      dtFile.open(filename2.c_str());
-
-      if (rank==0 && k==numRefs){
-        cout << "Finishing it off with the final solve" << endl;
+      }
+      if (i<numPreRefs){
+        refinementStrategy->refineCells(wallCells);
+      }else{
+        //      mesh->pRefine(wallCells);
       }
     }
-    double L2_time_residual = 1e7;
-    int i = 0;
-    int thresh = 2; // timestep threshhold to turn on adaptive timestepping
-    while(L2_time_residual > time_tol && (i<numTimeSteps)){
+    // if (rank==0){
+    //   polyOrderFunction->writeValuesToMATLABFile(mesh,"polyOrder.m");
+    // }
 
-      for (int j = 0;j<numNRSteps;j++){
+    ////////////////////////////////////////////////////////////////////
+    // PSEUDO-TIME SOLVE STRATEGY 
+    ////////////////////////////////////////////////////////////////////
+
+    // bool useAdaptTS = false;
+    // if (rank==0){
+    //   cout << "doing timesteps";
+    //   if ((rank==0) && useAdaptTS){
+    //     cout << " using adaptive timestepping";
+    //   }
+    //   cout << endl;  
+    // }
+
+    // time steps
+    double time_tol = 1e-4;
+    for (int refIndex = 0; refIndex <= numRefs; refIndex++)
+    {    
+      double L2_time_residual = 1e7;
+      int timestepCount = 0;
+      int thresh = 2; // timestep threshhold to turn on adaptive timestepping
+      while(L2_time_residual > time_tol && (timestepCount < numTimeSteps)){
         solution->solve(false); 
-
-        // clear fluxes that we use for subsonic outflow, which accumulate
-        // backgroundFlow->clearSolution(That->ID());
-        // backgroundFlow->clearSolution(u1hat->ID());
-        // backgroundFlow->clearSolution(F3nhat->ID());
-        // backgroundFlow->clearSolution(F4nhat->ID());
-
         backgroundFlow->addSolution(solution,1.0);
-      }         
 
-      // subtract solutions to get residual
-      prevTimeFlow->addSolution(backgroundFlow,-1.0);       
-      double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
-      double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
-      double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
-      double L2e = prevTimeFlow->L2NormOfSolutionGlobal(e->ID());
-      double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2e*L2e;
-      L2_time_residual= sqrt(L2_time_residual_sq)/dt;
+        // subtract solutions to get residual
+        prevTimeFlow->addSolution(backgroundFlow,-1.0);       
+        double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
+        double L2u1 = prevTimeFlow->L2NormOfSolutionGlobal(u1->ID());
+        double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
+        double L2e = prevTimeFlow->L2NormOfSolutionGlobal(e->ID());
+        double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2e*L2e;
+        L2_time_residual= sqrt(L2_time_residual_sq)/dt;
 
-      double prev_time_residual, prev_prev_time_residual;
-      // if (useAdaptTS){
-      //   if (i>=0){
-      //     prev_time_residual = L2_time_residual;
-      //   } else if (i>0){
-      //     prev_prev_time_residual = prev_time_residual;
-      //   } 
-      //   if (i>thresh){
-      //     double e0 = prev_prev_time_residual;
-      //     double e1 = prev_time_residual;
-      //     double e2 = L2_time_residual;
-      //     double maxDt = .25;
-      //     double minDt = .025;
+        double prev_time_residual, prev_prev_time_residual;
 
-      //     // adaptive timestep controls
+        if (rank==0){
+          stringstream outfile;
+          outfile << "ramp" << refIndex << "_" << timestepCount;
+          backgroundFlow->writeToVTK(outfile.str(), 5);
+          cout << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
+        }     
+        prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
 
-      //     double k1 = .5;
-      //     double k2 = .01; 
-      //     double k3 = .05;
+        timestepCount++;
+      }
 
-      //     double factor = pow(e1/e2,k1) * pow(time_tol/e2,k2) * pow(e1/(e2*e0),k3);	
-      //     //      double factor = pow(e2-time_tol,.025);
-      //     dt *= factor;
-      //     dt = min(maxDt,dt);
-      //     dt = max(minDt,dt);
-      //     ((ScalarParamFunction*)invDt.get())->set_param(1.0/dt);      	
-      //   }
-      // }
+      //////////////////////////////////////////////////////////////////////////
+      // Check conservation by testing against one
+      //////////////////////////////////////////////////////////////////////////
 
+      VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+      // Create a fake bilinear form for the testing
+      BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+      // Define our mass flux
+      FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, F1nhat) );
+      LinearTermPtr massFluxTerm = massFlux * testOne;
+
+      Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+      DofOrderingFactory dofOrderingFactory(fakeBF);
+      int fakeTestOrder = H1Order;
+      DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+
+      int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+      vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+      map<int, double> massFluxIntegral; // cellID -> integral
+      double maxMassFluxIntegral = 0.0;
+      double totalMassFlux = 0.0;
+      double totalAbsMassFlux = 0.0;
+      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+        ElementTypePtr elemType = *elemTypeIt;
+        vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+        vector<int> cellIDs;
+        for (int i=0; i<elems.size(); i++) {
+          cellIDs.push_back(elems[i]->cellID());
+        }
+        FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+        BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+        basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+        FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+        FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+        massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          // pick out the ones for testOne:
+          massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+        }
+        // find the largest:
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+        }
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+          totalMassFlux += massFluxIntegral[cellID];
+          totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+        }
+      }
+
+      // Print results from processor with rank 0
       if (rank==0){
-        stringstream outfile;
-        outfile << "DiamondAirfoil_" << k << "_" << i;
-        // solution->writeFieldsToVTK("grid_"+outfile.str(), 2);
-        backgroundFlow->writeFieldsToVTK(outfile.str(), 5);
-        backgroundFlow->writeTracesToVTK(outfile.str());
-
-        residualFile << L2_time_residual << endl;
-        dtFile << dt << endl;
-
-        cout << "Timestep: " << i << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
-      }     
-      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
-
-      i++;
-    }
-
-    //////////////////////////////////////////////////////////////////////////
-    // Check conservation by testing against one
-    //////////////////////////////////////////////////////////////////////////
-
-    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-    // Create a fake bilinear form for the testing
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    // Define our mass flux
-    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, F1nhat) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
-
-    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemType = *elemTypeIt;
-      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
-        cellIDs.push_back(elems[i]->cellID());
+        cout << endl;
+        cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+        cout << "total mass flux: " << totalMassFlux << endl;
+        cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+        cout << endl;
       }
-      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        // pick out the ones for testOne:
-        massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+
+      if (refIndex < numRefs){
+        if (rank==0){
+          cout << "Performing refinement number " << refIndex << endl;
+        }     
+        refinementStrategy->refine(rank==0);    
       }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      }
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-        totalMassFlux += massFluxIntegral[cellID];
-        totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-      }
-    }
-
-    // Print results from processor with rank 0
-    if (rank==0){
-      cout << endl;
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-      cout << "total mass flux: " << totalMassFlux << endl;
-      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-      cout << endl;
-      residualFile.close();
-      dtFile.close();
-    }
-
-    if (k<numRefs){
-      if (rank==0){
-        cout << "Performing refinement number " << k << endl;
-      }     
-      refinementStrategy->refine(rank==0);    
-
-      // RESET solution every refinement - make sure discretization error doesn't creep in
-      // backgroundFlow->projectOntoMesh(functionMap);
-      // prevTimeFlow->projectOntoMesh(functionMap);
-
-    }
     }
 
     return 0;
