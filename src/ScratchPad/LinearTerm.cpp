@@ -14,6 +14,8 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
+#include "Function.h"
+
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 const vector< LinearSummand > & LinearTerm::summands() const { 

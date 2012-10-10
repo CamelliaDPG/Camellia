@@ -125,6 +125,8 @@ private:
   void determineJacobian();
   void determinePhysicalPoints();
   
+protected:
+  BasisCache() {} // for the sake of some hackish subclassing
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
@@ -163,7 +165,7 @@ public:
   
   void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
   
-  const FieldContainer<double> & getPhysicalCubaturePoints();
+  virtual const FieldContainer<double> & getPhysicalCubaturePoints();
   const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
   const FieldContainer<double> & getCellSideParities();
   
@@ -184,6 +186,15 @@ public:
   int getSideIndex(); // -1 if not sideCache
 };
 
-
+class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
+  FieldContainer<double> _physCubPoints;
+public:
+  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
+    _physCubPoints = physCubPoints;
+  }
+  const FieldContainer<double> & getPhysicalCubaturePoints() { // overrides super
+    return _physCubPoints;
+  }
+};
 
 #endif

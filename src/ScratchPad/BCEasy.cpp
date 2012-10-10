@@ -8,6 +8,7 @@
 
 #include "BCEasy.h"
 #include "Var.h"
+#include "Function.h"
 
 class BCLogicalOrFunction : public Function {
   FunctionPtr _f1, _f2;

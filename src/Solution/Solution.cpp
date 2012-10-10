@@ -89,6 +89,8 @@
 #include "Solver.h"
 //#include "CondensationSolver.h"
 
+#include "Function.h"
+
 #include "Solution.h"
 #include "Projector.h"
 
@@ -220,6 +222,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //initialize();
   
   bool zmcsAsRankOneUpdate = false; // not yet working!
+  double cubatureEnrichmentDegree = 0; // TODO: make this a settable parameter in Solution.
   
   int numProcs=1;
   int rank=0;
@@ -286,7 +289,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, cubatureEnrichmentDegree));
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
     
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;

@@ -3,8 +3,9 @@
 
 //#include "DPGInnerProduct.h"
 #include "AbstractFunction.h"
-#include "Function.h"
 #include "IP.h"
+
+class Function;
 
 using namespace Intrepid;
 using namespace std;

@@ -21,6 +21,8 @@
 #include "Epetra_SerialDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
+#include "Function.h"
+
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
 

@@ -7,6 +7,7 @@
 //
 
 #include "Constraint.h"
+#include "Function.h"
 
 Constraint::Constraint(LinearTermPtr linearTerm, FunctionPtr f) {
   _linearTerm = linearTerm;

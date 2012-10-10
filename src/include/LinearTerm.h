@@ -23,13 +23,16 @@
 
 #include "Intrepid_Utils.hpp"
 #include "Intrepid_Basis.hpp"
-#include "Function.h"
 #include "Var.h"
 #include "BasisCache.h"
 
 class LinearTerm;
 class Mesh;
 class Solution;
+
+class Function;
+typedef Teuchos::RCP<Function> FunctionPtr;
+
 typedef Teuchos::RCP<Solution> SolutionPtr;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
 

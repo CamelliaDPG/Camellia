@@ -91,6 +91,31 @@ public:
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
 
+class PolarizedFunction : public Function { // takes a 2D Function of x and y, interpreting it as function of r and theta
+  // i.e. to implement f(r,theta) = r sin theta
+  // pass in a Function f(x,y) = x sin y.
+  // Given the implementation, it is important that f depend *only* on x and y, and not on the mesh, etc.
+  // (the only method in BasisCache that f may call is getPhysicalCubaturePoints())
+  FunctionPtr _f;
+public:
+  PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta );
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  
+  FunctionPtr dx();
+  FunctionPtr dy();
+  
+  Teuchos::RCP<PolarizedFunction> dtheta();
+  Teuchos::RCP<PolarizedFunction> dr();
+  
+  virtual string displayString(); // for PolarizedFunction, this should be _f->displayString() + "(r,theta)";
+  
+  bool isZero();
+  
+  static Teuchos::RCP<PolarizedFunction> r();
+  static Teuchos::RCP<PolarizedFunction> sin_theta();
+  static Teuchos::RCP<PolarizedFunction> cos_theta();
+};
+
 class ConstantScalarFunction : public SimpleFunction {
   double _value;
   string _stringDisplay;
@@ -145,6 +170,8 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  
+  string displayString(); // _f1->displayString() << " " << _f2->displayString();
 };
 
 class QuotientFunction : public Function {
@@ -156,6 +183,7 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  string displayString();
 };
 
 class SumFunction : public Function {
@@ -172,6 +200,8 @@ public:
   FunctionPtr dz();
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  
+  string displayString();
 };
 
 class hFunction : public Function {
@@ -236,5 +266,57 @@ FunctionPtr operator*(FunctionPtr f, vector<double> weight);
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
 FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2);
 FunctionPtr operator-(FunctionPtr f);
+
+// here, some particular functions
+// TODO: hide the classes here, and instead implement as static FunctionPtr Function::cos_y(), e.g.
+class Cos_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Sin_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Exp_x : public SimpleFunction {
+public:
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Exp_y : public SimpleFunction {
+public:
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Xn : public SimpleFunction {
+  int _n;
+public:
+  Xn(int n);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Yn : public SimpleFunction {
+  int _n;
+public:
+  Yn(int n);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
 
 #endif

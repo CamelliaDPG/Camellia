@@ -477,6 +477,8 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   int numCubPoints = _cubPoints.dimension(0);
   
+//  cout << "physicalCellNodes:\n" << physicalCellNodes;
+  
   determineJacobian();
   
   // compute weighted measure

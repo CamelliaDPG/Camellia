@@ -10,10 +10,12 @@
 #define Camellia_Constraint_h
 
 #include "SpatialFilter.h"
-#include "Function.h"
 #include "LinearTerm.h"
 #include "SpatiallyFilteredFunction.h"
 
+class Function;
+
+typedef Teuchos::RCP<Function> FunctionPtr;
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 class Constraint {
