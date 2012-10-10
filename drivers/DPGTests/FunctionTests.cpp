@@ -28,113 +28,6 @@ public:
   }
 };
 
-class Exp_x : public SimpleFunction {
-public:
-  double value(double x, double y) {
-    return exp(x);
-  }
-  FunctionPtr dx() {
-    return Teuchos::rcp( new Exp_x );
-  }
-  FunctionPtr dy() {
-    return Function::zero();
-  }
-};
-
-class Y : public SimpleFunction {
-public:
-  double value(double x, double y) {
-    return y;
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    return Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  }
-};
-
-class Cos_y : public SimpleFunction {
-  double value(double x, double y);
-  FunctionPtr dx();
-  FunctionPtr dy();
-};
-
-class Sin_y : public SimpleFunction {
-  double value(double x, double y) {
-    return sin(y);
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    return Teuchos::rcp( new Cos_y );
-  }
-};
-
-double Cos_y::value(double x, double y) {
-  return cos(y);
-}
-FunctionPtr Cos_y::dx() {
-  return Function::zero();
-}
-FunctionPtr Cos_y::dy() {
-  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
-  return - sin_y;
-}
-
-class Xn : public SimpleFunction {
-  int _n;
-public:
-  Xn(int n) {
-    _n = n;
-  }
-  double value(double x, double y) {
-    double val = 1.0;
-    // NOTE: inefficient for large n!
-    for (int i=0; i<_n; i++) {
-      val *= x;
-    }
-    return val;
-  }
-  FunctionPtr dx() {
-    if (_n == 0) {
-      return Function::zero();
-    }
-    FunctionPtr x_n_minus = Teuchos::rcp( new Xn(_n-1) );
-    return _n * x_n_minus;
-  }
-  FunctionPtr dy() {
-    return Function::zero();
-  }  
-};
-
-class Yn : public SimpleFunction {
-  int _n;
-public:
-  Yn(int n) {
-    _n = n;
-  }
-  double value(double x, double y) {
-    double val = 1.0;
-    // NOTE: inefficient for large n!
-    for (int i=0; i<_n; i++) {
-      val *= y;
-    }
-    return val;
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    if (_n == 0) {
-      return Function::zero();
-    }
-    FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
-    return _n * y_n_minus;
-  }
-};
-
 void FunctionTests::setup() {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -232,6 +125,12 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+  setup();
+  if (testPolarizedFunctions()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
 }
 
@@ -325,6 +224,66 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
 //    cout << "f1 and f2 agree!" << endl;
   }
   return functionsAgree;
+}
+
+bool FunctionTests::testPolarizedFunctions() {
+  bool success = true;
+  
+  // take f = r cos theta.  Then: f==x, df/dx == 1, df/dy == 0
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+  
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1) );
+  FunctionPtr zero = Function::zero();
+  
+  FunctionPtr f = Teuchos::rcp( new PolarizedFunction( x * cos_y ) );
+  
+  FunctionPtr df_dx = f->dx();
+  FunctionPtr df_dy = f->dy();
+  
+  // f == x
+  if (! functionsAgree(f, x, _basisCache) ) {
+    cout << "f != x...\n";
+    success = false;
+  }
+  
+  // df/dx == 1
+  if (! functionsAgree(df_dx, one, _basisCache) ) {
+    cout << "df/dx != 1...\n";
+    success = false;
+  }
+  
+  // df/dy == 0
+  if (! functionsAgree(df_dy, zero, _basisCache) ) {
+    cout << "df/dy != 0...\n";
+    success = false;
+  }
+  
+  // take f = r sin theta.  Then: f==y, df/dx == 0, df/dy == 1
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  f = Teuchos::rcp( new PolarizedFunction( x * sin_y ) );
+  df_dx = f->dx();
+  df_dy = f->dy();
+  
+  // f == x
+  if (! functionsAgree(f, y, _basisCache) ) {
+    cout << "f != y...\n";
+    success = false;
+  }
+  
+  // df/dx == 0
+  if (! functionsAgree(df_dx, zero, _basisCache) ) {
+    cout << "df/dx != 0...\n";
+    success = false;
+  }
+  
+  // df/dy == 0
+  if (! functionsAgree(df_dy, one, _basisCache) ) {
+    cout << "df/dy != 1...\n";
+    success = false;
+  }
+  return success;
 }
 
 bool FunctionTests::testProductRule() {

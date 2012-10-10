@@ -49,6 +49,8 @@ public:
   
   bool testThatLikeFunctionsAgree();
   
+  bool testPolarizedFunctions();
+  
   bool testProductRule();
   
   bool testQuotientRule();
