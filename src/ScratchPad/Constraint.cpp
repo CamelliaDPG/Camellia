@@ -30,7 +30,7 @@ Constraint Constraint::spatiallyFilteredConstraint(const Constraint &c, SpatialF
     FunctionPtr lsWeight = ls.first;
     FunctionPtr filteredWeight = Teuchos::rcp( new SpatiallyFilteredFunction(lsWeight,sf) );
     VarPtr var = ls.second;
-    *flt += *(filteredWeight * var);
+    flt->addTerm(filteredWeight * var, true); //bypass type check...
   }
   
   return Constraint(flt,ff);
