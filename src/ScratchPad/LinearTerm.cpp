@@ -1293,7 +1293,8 @@ LinearTermPtr operator*(FunctionPtr f, LinearTermPtr a) {
     FunctionPtr lsWeight = ls.first;
     FunctionPtr newWeight = f * lsWeight;
     VarPtr var = ls.second;
-    *lt += *(newWeight * var);
+    bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
+    lt->addTerm(newWeight * var, bypassTypeCheck);
   }
   return lt;
 }
@@ -1306,7 +1307,8 @@ LinearTermPtr operator/(LinearTermPtr a, FunctionPtr f) {
     FunctionPtr lsWeight = ls.first;
     FunctionPtr newWeight = lsWeight / f;
     VarPtr var = ls.second;
-    *lt += *(newWeight * var);
+    bool bypassTypeCheck = true; // unless user bypassed it, there will already have been a type check in the construction of a.  If the user did bypass, we should bypass, too.
+    lt->addTerm(newWeight * var, bypassTypeCheck);
   }
   return lt;
 }
