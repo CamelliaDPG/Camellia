@@ -11,8 +11,8 @@
 
 #include "BC.h"
 #include "SpatialFilter.h"
-#include "Function.h"
 
+class Function;
 class Var;
 typedef Teuchos::RCP<Var> VarPtr;
 

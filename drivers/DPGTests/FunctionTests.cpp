@@ -113,6 +113,24 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+  setup();
+  if (testProductRule()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  setup();
+  if (testQuotientRule()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  setup();
+  if (testPolarizedFunctions()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
 }
 
@@ -206,6 +224,110 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
 //    cout << "f1 and f2 agree!" << endl;
   }
   return functionsAgree;
+}
+
+bool FunctionTests::testPolarizedFunctions() {
+  bool success = true;
+  
+  // take f = r cos theta.  Then: f==x, df/dx == 1, df/dy == 0
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+  
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1) );
+  FunctionPtr zero = Function::zero();
+  
+  FunctionPtr f = Teuchos::rcp( new PolarizedFunction( x * cos_y ) );
+  
+  FunctionPtr df_dx = f->dx();
+  FunctionPtr df_dy = f->dy();
+  
+  // f == x
+  if (! functionsAgree(f, x, _basisCache) ) {
+    cout << "f != x...\n";
+    success = false;
+  }
+  
+  // df/dx == 1
+  if (! functionsAgree(df_dx, one, _basisCache) ) {
+    cout << "df/dx != 1...\n";
+    success = false;
+  }
+  
+  // df/dy == 0
+  if (! functionsAgree(df_dy, zero, _basisCache) ) {
+    cout << "df/dy != 0...\n";
+    success = false;
+  }
+  
+  // take f = r sin theta.  Then: f==y, df/dx == 0, df/dy == 1
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  f = Teuchos::rcp( new PolarizedFunction( x * sin_y ) );
+  df_dx = f->dx();
+  df_dy = f->dy();
+  
+  // f == x
+  if (! functionsAgree(f, y, _basisCache) ) {
+    cout << "f != y...\n";
+    success = false;
+  }
+  
+  // df/dx == 0
+  if (! functionsAgree(df_dx, zero, _basisCache) ) {
+    cout << "df/dx != 0...\n";
+    success = false;
+  }
+  
+  // df/dy == 0
+  if (! functionsAgree(df_dy, one, _basisCache) ) {
+    cout << "df/dy != 1...\n";
+    success = false;
+  }
+  return success;
+}
+
+bool FunctionTests::testProductRule() {
+  bool success = true;
+  
+  // take f = x^2 * exp(x).  f' = 2 x * exp(x) + f
+  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  
+  FunctionPtr f = x2 * exp_x;
+  FunctionPtr f_prime = f->dx();
+  
+  FunctionPtr f_prime_expected = 2.0 * x * exp_x + f;
+  
+  if (! functionsAgree(f_prime, f_prime_expected,
+                       _basisCache) ) {
+    cout << "Product rule: expected and actual derivatives differ...\n";
+    success = false;
+  }
+
+  return success;
+}
+
+bool FunctionTests::testQuotientRule() {
+  bool success = true;
+  // take f = exp(x) / x^2.  f' = f - 2 * x * exp(x) / x^4
+  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  
+  FunctionPtr f = exp_x / x2;
+  FunctionPtr f_prime = f->dx();
+  
+  FunctionPtr f_prime_expected = f - 2 * x * exp_x / (x2 * x2);
+  
+  if (! functionsAgree(f_prime, f_prime_expected,
+                       _basisCache) ) {
+    cout << "Quotient rule: expected and actual derivatives differ...\n";
+    success = false;
+  }
+  
+  return success;
+  
 }
 
 std::string FunctionTests::testSuiteName() {

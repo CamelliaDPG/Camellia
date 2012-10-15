@@ -6,6 +6,7 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "Function.h"
 #include "MeshPolyOrderFunction.h"
 
 void MeshPolyOrderFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {

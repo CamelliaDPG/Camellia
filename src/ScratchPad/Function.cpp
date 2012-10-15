@@ -554,6 +554,12 @@ void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr
   _exactSolution->solutionValues(values,_trialID,basisCache);
 }
 
+string ProductFunction::displayString() {
+  ostringstream ss;
+  ss << _f1->displayString() << " " << _f2->displayString();
+  return ss.str();
+}
+
 FunctionPtr ProductFunction::dx() {
   if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
     return Teuchos::rcp( (Function*) NULL );
@@ -594,6 +600,10 @@ ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( pro
     _f1 = f2;
     _f2 = f1;
   }
+  // the following should be false for all the automatic products.  Added the test for debugging...
+  if ((_f1->isZero()) || (_f2->isZero())) {
+    cout << "Warning: creating a ProductFunction where one of the multiplicands is zero." << endl;
+  }
 }
 
 bool ProductFunction::boundaryValueOnly() {
@@ -616,10 +626,19 @@ QuotientFunction::QuotientFunction(FunctionPtr f, FunctionPtr scalarDivisor) : F
   }
   _f = f;
   _scalarDivisor = scalarDivisor;
+  if (scalarDivisor->isZero()) {
+    cout << "WARNING: division by zero in QuotientFunction.\n";
+  }
 }
 
 bool QuotientFunction::boundaryValueOnly() {
   return _f->boundaryValueOnly() || _scalarDivisor->boundaryValueOnly();
+}
+
+string QuotientFunction::displayString() {
+  ostringstream ss;
+  ss << _f->displayString() << " / " << _scalarDivisor->displayString();
+  return ss.str();
 }
 
 void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -628,11 +647,42 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
   _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
 }
 
+FunctionPtr QuotientFunction::dx() {
+  if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dx() / _scalarDivisor - _f * _scalarDivisor->dx() / (_scalarDivisor * _scalarDivisor);
+}
+
+FunctionPtr QuotientFunction::dy() {
+  if ( (_f->dy().get() == NULL) || (_scalarDivisor->dy().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dy() / _scalarDivisor - _f * _scalarDivisor->dy() / (_scalarDivisor * _scalarDivisor);
+}
+
+FunctionPtr QuotientFunction::dz() {
+  if ( (_f->dz().get() == NULL) || (_scalarDivisor->dz().get() == NULL) ) {
+    return Teuchos::rcp( (Function*) NULL );
+  }
+  // otherwise, apply quotient rule:
+  return _f->dz() / _scalarDivisor - _f * _scalarDivisor->dz() / (_scalarDivisor * _scalarDivisor);
+}
+
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
   _f1 = f1;
   _f2 = f2;
 }
+
+string SumFunction::displayString() {
+  ostringstream ss;
+  ss << "(" << _f1->displayString() << " + " << _f2->displayString() << ")";
+  return ss.str();
+}
+
 void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   _f1->values(values,basisCache);
@@ -713,6 +763,94 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
       values(cellIndex,ptIndex) = value(x,y);
     }
   }
+}
+
+PolarizedFunction::PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta ) : Function(f_of_xAsR_yAsTheta->rank()) {
+  _f = f_of_xAsR_yAsTheta;
+}
+
+Teuchos::RCP<PolarizedFunction> PolarizedFunction::r() {
+  static Teuchos::RCP<PolarizedFunction> _r = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Xn(1) ) ) );
+  return _r;
+}
+
+Teuchos::RCP<PolarizedFunction> PolarizedFunction::sin_theta() {
+  static Teuchos::RCP<PolarizedFunction> _sin_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Sin_y ) ) );
+  return _sin_theta;
+}
+
+Teuchos::RCP<PolarizedFunction> PolarizedFunction::cos_theta() {
+  static Teuchos::RCP<PolarizedFunction> _cos_theta = Teuchos::rcp( new PolarizedFunction( Teuchos::rcp( new Cos_y ) ) );
+  return _cos_theta;
+}
+
+string PolarizedFunction::displayString() {
+  ostringstream ss( _f->displayString());
+  ss << "(r,\\theta)";
+  return ss.str();
+}
+
+FunctionPtr PolarizedFunction::dx() {
+  // cast everything to FunctionPtrs:
+  FunctionPtr sin_theta_fxn = sin_theta();
+  FunctionPtr dtheta_fxn = dtheta();
+  FunctionPtr dr_fxn = dr();
+  FunctionPtr r_fxn = r();
+  FunctionPtr cos_theta_fxn = cos_theta();
+  return dr_fxn * cos_theta_fxn - dtheta_fxn * sin_theta_fxn / r_fxn;
+}
+FunctionPtr PolarizedFunction::dy() {
+  FunctionPtr sin_theta_fxn = sin_theta();
+  FunctionPtr dtheta_fxn = dtheta();
+  FunctionPtr dr_fxn = dr();
+  FunctionPtr r_fxn = r();
+  FunctionPtr cos_theta_fxn = cos_theta();
+  return dr_fxn * sin_theta_fxn + dtheta_fxn * cos_theta_fxn / r_fxn;
+}
+
+Teuchos::RCP<PolarizedFunction> PolarizedFunction::dtheta() {
+  return Teuchos::rcp( new PolarizedFunction( _f->dy() ) );
+}
+
+Teuchos::RCP<PolarizedFunction> PolarizedFunction::dr() {
+  return Teuchos::rcp( new PolarizedFunction( _f->dx() ) );
+}
+
+bool PolarizedFunction::isZero() {
+  return _f->isZero();
+}
+
+void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  int numCells = values.dimension(0);
+  int numPoints = values.dimension(1);
+  
+  const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  FieldContainer<double> polarPoints = *points;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double x = (*points)(cellIndex,ptIndex,0);
+      double y = (*points)(cellIndex,ptIndex,1);
+      double r = sqrt(x * x + y * y);
+      double theta = acos(x/r);
+      // now x = r cos theta, but need to guarantee that y = r sin theta (might differ in sign)
+      // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) --> theta *= -1;
+      if (y < 0) theta *= -1.0;
+      
+      polarPoints(cellIndex, ptIndex, 0) = r;
+      polarPoints(cellIndex, ptIndex, 1) = theta;
+//      if (r == 0) {
+//        cout << "r == 0!" << endl;
+//      }
+    }
+  }
+  BasisCachePtr dummyBasisCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints( polarPoints ) );
+  _f->values(values,dummyBasisCache);
+  if (_f->isZero()) {
+    cout << "Warning: in PolarizedFunction, we are being asked for values when _f is zero.  This shouldn't happen.\n";
+  }
+  //cout << "polarPoints: \n" << polarPoints;
+  //cout << "PolarizedFunction, values: \n" << values;
 }
 
 bool ScalarFunctionOfNormal::boundaryValueOnly() {
@@ -842,7 +980,7 @@ FunctionPtr VectorizedFunction::y() {
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
-  if ( ( f1->rank() == f2->rank() ) && (f1->rank() == 0) ) {
+  if ( f1->rank() == f2->rank() ) {
     // TODO: work out how to do this for other ranks?
     if (f1->isZero() || f2->isZero()) {
       return Function::zero();
@@ -925,4 +1063,118 @@ FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2) {
 
 FunctionPtr operator-(FunctionPtr f) {
   return -1.0 * f;
+}
+
+string Sin_y::displayString() {
+  return "\\sin y";
+}
+
+double Sin_y::value(double x, double y) {
+  return sin(y);
+}
+FunctionPtr Sin_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Sin_y::dy() {
+  return Teuchos::rcp( new Cos_y );
+}
+
+string Cos_y::displayString() {
+  return "\\cos y";
+}
+double Cos_y::value(double x, double y) {
+  return cos(y);
+}
+FunctionPtr Cos_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Cos_y::dy() {
+  FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
+  return - sin_y;
+}
+
+
+string Exp_x::displayString() {
+  return "e^x";
+}
+double Exp_x::value(double x, double y) {
+  return exp(x);
+}
+FunctionPtr Exp_x::dx() {
+  return Teuchos::rcp( new Exp_x );
+}
+FunctionPtr Exp_x::dy() {
+  return Function::zero();
+}
+
+
+string Exp_y::displayString() {
+  return "e^y";
+}
+double Exp_y::value(double x, double y) {
+  return exp(y);
+}
+FunctionPtr Exp_y::dx() {
+  return Function::zero();
+}
+FunctionPtr Exp_y::dy() {
+  return Teuchos::rcp( new Exp_y );
+}
+
+
+string Xn::displayString() {
+  ostringstream ss;
+  if ((_n != 1) && (_n != 0)) {
+    ss << "x^" << _n ;
+  } else if (_n == 1) {
+    ss << "x";
+  } else {
+    ss << "(1)";
+  }
+  return ss.str();
+}
+Xn::Xn(int n) {
+  _n = n;
+}
+double Xn::value(double x, double y) {
+  return pow(x,_n);
+}
+FunctionPtr Xn::dx() {
+  if (_n == 0) {
+    return Function::zero();
+  }
+  FunctionPtr x_n_minus = Teuchos::rcp( new Xn(_n-1) );
+  return _n * x_n_minus;
+}
+FunctionPtr Xn::dy() {
+  return Function::zero();
+}
+
+string Yn::displayString() {
+  ostringstream ss;
+  if ((_n != 1) && (_n != 0)) {
+    ss << "y^" << _n ;
+  } else if (_n == 1) {
+    ss << "y";
+  } else {
+    ss << "(1)";
+  }
+  return ss.str();
+}
+Yn::Yn(int n) {
+  _n = n;
+}
+double Yn::value(double x, double y) {
+  return pow(y,_n);
+}
+
+FunctionPtr Yn::dx() {
+  return Function::zero();
+}
+FunctionPtr Yn::dy() {
+  if (_n == 0) {
+    return Function::zero();
+  }
+  FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
+  return _n * y_n_minus;
 }

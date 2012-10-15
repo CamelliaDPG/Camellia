@@ -55,10 +55,12 @@
 #include "BC.h"
 #include "BasisCache.h"
 #include "AbstractFunction.h"
-#include "Function.h"
 #include "LocalStiffnessMatrixFilter.h"
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
+
+class Function;
+typedef Teuchos::RCP<Function> FunctionPtr;
 
 class Solver;
 class LagrangeConstraints;

@@ -9,7 +9,12 @@
 #ifndef Camellia_RefinementStrategy_h
 #define Camellia_RefinementStrategy_h
 
-#include "Solution.h"
+class Solution;
+class Mesh;
+
+#include "Teuchos_RCP.hpp"
+
+using namespace std;
 
 class RefinementStrategy {
 protected:
@@ -33,6 +38,8 @@ public:
   void setEnforceOneIrregurity(bool value);
   virtual void refine(bool printToConsole=false);
   virtual void refineCells(vector<int> &cellIDs);
+  static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
+  static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
   void setReportPerCellErrors(bool value);
 };
 

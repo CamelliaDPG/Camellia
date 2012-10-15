@@ -5,6 +5,8 @@
 #include "BasisCache.h"
 #include "Projector.h"
 
+#include "Function.h"
+
 using namespace Intrepid;
 
 class BC;

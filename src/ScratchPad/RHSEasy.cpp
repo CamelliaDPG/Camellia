@@ -35,4 +35,5 @@ void RHSEasy::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
     LinearTermPtr lt = *ltIt;
     lt->integrate(rhsVector, testOrdering, basisCache);
   }
+  // cout << "rhsVector: " << endl << rhsVector;
 }

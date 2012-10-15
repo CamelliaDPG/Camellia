@@ -42,6 +42,7 @@
 #include "ExactSolution.h"
 #include "Solver.h"
 #include "LinearTerm.h"
+#include "Constraint.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
@@ -59,6 +60,8 @@ class HConvergenceStudy {
   Teuchos::RCP<RHS> _rhs;  
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<DPGInnerProduct> _ip;
+  Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
+  
   int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
   vector< SolutionPtr > _solutions;
   vector< SolutionPtr > _bestApproximations;
@@ -90,6 +93,8 @@ class HConvergenceStudy {
   
   void computeErrors();
   int minNumElements();
+  
+  Teuchos::RCP<Mesh> buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements );
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                     Teuchos::RCP<BilinearForm> bilinearForm,
@@ -98,8 +103,10 @@ public:
                     Teuchos::RCP<DPGInnerProduct> ip,
                     int minLogElements, int maxLogElements, int H1Order, int pToAdd,
                     bool randomRefinements=false, bool useTriangles=false, bool useHybrid=false);
+  void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setReportRelativeErrors(bool reportRelativeErrors);
   void solve(const FieldContainer<double> &quadPoints);
+  void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
   
@@ -117,10 +124,11 @@ public:
   map< int, double > exactSolutionNorm();
 
   string convergenceDataMATLAB(int trialID);
-  string TeXErrorRateTable();
-  string TeXErrorRateTable(const vector<int> &trialIDs);
-  string TeXBestApproximationComparisonTable();
-  string TeXBestApproximationComparisonTable(const vector<int> &trialIDs);
+  string TeXErrorRateTable(const string &filePathPrefix="");
+  string TeXErrorRateTable(const vector<int> &trialIDs, const string &filePathPrefix="");
+  string TeXBestApproximationComparisonTable(const string &filePathPrefix="");
+  string TeXBestApproximationComparisonTable(const vector<int> &trialIDs, const string &filePathPrefix="");
+  string TeXNumGlobalDofsTable(const string &filePathPrefix="");
   
   void setSolver( Teuchos::RCP<Solver> solver);
   

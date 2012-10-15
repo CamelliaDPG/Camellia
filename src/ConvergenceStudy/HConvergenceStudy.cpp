@@ -35,8 +35,10 @@
  *
  */
 
+
 #include "HConvergenceStudy.h"
 #include "Function.h"
+#include "RefinementStrategy.h"
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      Teuchos::RCP<BilinearForm> bilinearForm,
@@ -186,7 +188,7 @@ void HConvergenceStudy::computeErrors() {
       double l2error = _exactSolution->L2NormOfError(*solution, trialID, 15); // 15 == cubature degree to use...
       _solutionErrors[trialID].push_back(l2error);
       
-      if (previousL2Error >= 0.0) {
+      if (previousL2Error != -1.0) {
         double rate = - log(l2error/previousL2Error) / log(2.0);
         _solutionRates[trialID].push_back(rate);
       }
@@ -212,6 +214,61 @@ void HConvergenceStudy::computeErrors() {
   }
 }
 
+void HConvergenceStudy::setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
+  _lagrangeConstraints = lagrangeConstraints;
+}
+
+Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements ) {
+  Teuchos::RCP<Mesh> mesh;
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, _bilinearForm, _H1Order, _pToAdd) );
+  
+  for (int i=0; i<numRefinements; i++) {
+    RefinementStrategy::hRefineUniformly(mesh);
+  }
+  return mesh;
+}
+
+void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices) {
+  // TODO: refactor to make this and the straight quad mesh version share code...
+  _solutions.clear();
+  int minNumElements = 1;
+  for (int i=0; i<_minLogElements; i++) {
+    minNumElements *= 2;
+  }
+  
+  int numElements = minNumElements;
+  for (int i=_minLogElements; i<=_maxLogElements; i++) {
+    Teuchos::RCP<Mesh> mesh = buildMesh(vertices, elementVertices, i);
+    if (_randomRefinements) {
+      randomlyRefine(mesh);
+    }
+    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    if (_lagrangeConstraints.get())
+      solution->setLagrangeConstraints(_lagrangeConstraints);
+    solution->setReportConditionNumber(false);
+    _solutions.push_back(solution);
+    
+    Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    _bestApproximations.push_back(bestApproximation);
+    bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+    
+    numElements *= 2;
+    if (i == _maxLogElements) {
+      // We'll use solution to compute L2 norm of true Solution
+      _fineZeroSolution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    }
+  }
+  vector< Teuchos::RCP<Solution> >::iterator solutionIt;
+  // now actually compute all the solutions:
+  for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
+    if ( _solver.get() == NULL )
+      (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
+    else
+      (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
+  }
+  computeErrors();
+}
+
 void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
   _solutions.clear();
   int minNumElements = 1;
@@ -233,7 +290,9 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
-    solution->setReportConditionNumber(true);
+    if (_lagrangeConstraints.get())
+      solution->setLagrangeConstraints(_lagrangeConstraints);
+    solution->setReportConditionNumber(false);
     _solutions.push_back(solution);
     
     Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
@@ -261,12 +320,12 @@ void HConvergenceStudy::setReportRelativeErrors(bool reportRelativeErrors) {
   _reportRelativeErrors = reportRelativeErrors;
 }
 
-string HConvergenceStudy::TeXErrorRateTable() {
+string HConvergenceStudy::TeXErrorRateTable( const string & filePathPrefix ) {
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
-  return TeXErrorRateTable(trialIDs);
+  return TeXErrorRateTable(trialIDs, filePathPrefix);
 }
 
-string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs ) {
+string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const string &filePathPrefix ) {
   ostringstream texString;
   texString << scientific;
   
@@ -303,6 +362,45 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs ) {
     texString << newLine;
   }
   texString << "\\hline \n";
+  
+  if (filePathPrefix.length() > 0) { // then write to file
+    ostringstream fileName;
+    fileName << filePathPrefix << "_best_compare_table.tex";
+    ofstream fout(fileName.str().c_str());
+    fout << texString.str();
+    fout.close();
+  }
+  return texString.str();
+}
+
+string HConvergenceStudy::TeXNumGlobalDofsTable(const string &filePathPrefix) {
+  ostringstream texString;
+  texString << scientific;
+  
+  int numColumns = 2;
+  string newLine = "\\\\\n";
+  texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
+  
+  texString << "\\hline \n";
+  texString << "\\multirow{2}{*}{Mesh Size} & Global Dofs";;
+  texString << newLine << "\\cline{2-" << numColumns << "}" << "\n";
+  texString << newLine;
+  texString << "\\hline \n";
+  vector<int> meshSizes = this->meshSizes();
+  for (int i=0; i<meshSizes.size(); i++) {
+    int size = meshSizes[i];
+    texString << size << " $\\times$ " << size;
+    texString << "\t&" << _solutions[i]->mesh()->numGlobalDofs();
+    texString << newLine;
+  }
+  texString << "\\hline \n";
+  if (filePathPrefix.length() > 0) { // then write to file
+    ostringstream fileName;
+    fileName << filePathPrefix << "_best_compare_table.tex";
+    ofstream fout(fileName.str().c_str());
+    fout << texString.str();
+    fout.close();
+  }
   return texString.str();
 }
 
@@ -328,12 +426,12 @@ string HConvergenceStudy::convergenceDataMATLAB(int trialID) {
   return ss.str();
 }
 
-string HConvergenceStudy::TeXBestApproximationComparisonTable() {
+string HConvergenceStudy::TeXBestApproximationComparisonTable(const string &filePathPrefix) {
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
-  return this->TeXBestApproximationComparisonTable(trialIDs);
+  return this->TeXBestApproximationComparisonTable(trialIDs, filePathPrefix);
 }
 
-string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int> &trialIDs ) {
+string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int> &trialIDs, const string &filePathPrefix ) {
   /*
    \multicolumn{3}{| c |}{k=3} \\
    \hline
@@ -388,6 +486,14 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
     texString << newLine;
   }
   texString << "\\hline \n";
+  
+  if (filePathPrefix.length() > 0) { // then write to file
+    ostringstream fileName;
+    fileName << filePathPrefix << "_best_compare_table.tex";
+    ofstream fout(fileName.str().c_str());
+    fout << texString.str();
+    fout.close();
+  }
   return texString.str();
 }
 
@@ -456,6 +562,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     numElements *= 2;
     previousL2Error = l2error;
   }
+  fout.close();
   
   cout << "***********  BEST APPROXIMATION ERROR for : " << _bilinearForm->trialName(trialID) << " **************\n";
   numElements = minNumElements;

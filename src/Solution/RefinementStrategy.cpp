@@ -7,6 +7,8 @@
 //
 
 #include "RefinementStrategy.h"
+#include "Mesh.h"
+#include "Solution.h"
 
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold) {
   _solution = solution;
@@ -29,8 +31,6 @@ void RefinementStrategy::refine(bool printToConsole) {
   const map<int, double>* energyError = &(_solution->energyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
-  vector<int> triangleCellsToRefine;
-  vector<int> quadCellsToRefine;
   double maxError = 0.0;
   double totalEnergyError = 0.0;
   
@@ -89,10 +89,14 @@ void RefinementStrategy::refine(bool printToConsole) {
 
 void RefinementStrategy::refineCells(vector<int> &cellIDs) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  hRefineCells(mesh, cellIDs);
+}
+
+void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
   vector<int> triangleCellsToRefine;
   vector<int> quadCellsToRefine;
   
-  for (vector< int >::iterator cellIDIt = cellIDs.begin();
+  for (vector< int >::const_iterator cellIDIt = cellIDs.begin();
        cellIDIt != cellIDs.end(); cellIDIt++){
     int cellID = *cellIDIt;
     
@@ -105,6 +109,17 @@ void RefinementStrategy::refineCells(vector<int> &cellIDs) {
   
   mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+}
+
+void RefinementStrategy::hRefineUniformly(Teuchos::RCP<Mesh> mesh) {
+  vector<int> cellsToRefine;
+  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
+       activeElemIt != activeElements.end(); activeElemIt++) {
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    cellsToRefine.push_back(current_element->cellID());
+  }
+  hRefineCells(mesh, cellsToRefine);
 }
 
 void RefinementStrategy::setResults(RefinementResults &solnResults, int numElements, int numDofs,

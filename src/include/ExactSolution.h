@@ -50,8 +50,10 @@
 #include "Solution.h"
 
 #include "BilinearForm.h"
-#include "Function.h"
 #include "BasisCache.h"
+
+class Function;
+typedef Teuchos::RCP<Function> FunctionPtr;
 
 class ExactSolution {
 protected:

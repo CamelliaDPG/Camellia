@@ -4,6 +4,9 @@
 //
 //  Created by Truman Ellis on 6/4/2012.
 
+// Nate's addition because he doesn't want to Truman's build system:
+//#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
+#include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Constraint.h"
@@ -16,11 +19,11 @@
 #else
 #endif
 
+
+double epsilon = 1e-2;
+double numRefs = 0;
+
 bool enforceLocalConservation = true;
-double epsilon = 5e-3;
-int numRefs = 12;
-double ramp = sqrt(epsilon);
-// double ramp = 1./64.;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
@@ -57,22 +60,23 @@ public:
   }
 };
 
-class RightBoundary : public SpatialFilter {
+class InflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    return (abs(x-1.0) < tol);
+    bool xMatch = (abs(x) < tol) ;
+    bool yMatch = (abs(y) < tol) ;
+    return xMatch || yMatch;
   }
 };
 
-class LeftTopBottomBoundary : public SpatialFilter {
+class OutflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool leftMatch = (abs(x) < tol);
-    bool topMatch = (abs(y-1.0) < tol);
-    bool bottomMatch = (abs(y-1.0) < tol);
-    return leftMatch || topMatch || bottomMatch;
+    bool xMatch = (abs(x-1.0) < tol);
+    bool yMatch = (abs(y-1.0) < tol);
+    return xMatch || yMatch;
   }
 };
 
@@ -102,49 +106,31 @@ class MassFluxParity : public Function
 
 // boundary value for u
 class U0 : public Function {
-  public:
-    U0() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 0;
+public:
+  U0() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        // solution with a boundary layer (section 5.2 in DPG Part II)
+        // for x = 1, y = 1: u = 0
+        if ( ( abs(x-1.0) < tol ) || (abs(y-1.0) < tol ) ) {
+          values(cellIndex,ptIndex) = 0;  
+        } else if ( abs(x) < tol ) { // for x=0: u = 1 - y
+          values(cellIndex,ptIndex) = 1.0 - y;
+        } else { // for y=0: u=1-x
+          values(cellIndex,ptIndex) = 1.0 - x;   
         }
+
       }
     }
-};
-
-class U1 : public Function {
-  public:
-    U1() : Function(1.0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          // if (y < 0.01)
-          //   values(cellIndex, ptIndex) = 100*y;
-          // else if (y > 0.99)
-          //   values(cellIndex, ptIndex) = 100*(y-1.0);
-          // else
-          if (y < ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*y;
-          else if (y > 1.0-ramp)
-            values(cellIndex, ptIndex) = 1.0/ramp*(1.0-y);
-          else
-            values(cellIndex, ptIndex) = 1.0;
-        }
-      }
-    }
+  }
 };
 
 class Beta : public Function {
@@ -161,8 +147,8 @@ public:
         for (int d = 0; d < spaceDim; d++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = 2*(2*y-1)*(1-(2*x-1)*(2*x-1));
-          values(cellIndex,ptIndex,1) = -2*(2*x-1)*(1-(2*y-1)*(2*y-1));
+          values(cellIndex,ptIndex,0) = y;
+          values(cellIndex,ptIndex,0) = -x;
         }
       }
     }
@@ -170,13 +156,6 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-  // Process command line arguments
-  if (argc > 1)
-    epsilon = atof(argv[1]);
-  if (argc > 2)
-    numRefs = atof(argv[2]);
-  if (argc > 3)
-    ramp = atof(argv[3]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -198,12 +177,9 @@ int main(int argc, char *argv[]) {
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
   
-  // vector<double> beta_const;
-  // beta_const.push_back(2.0);
-  // beta_const.push_back(1.0);
-  FunctionPtr beta = Teuchos::rcp(new Beta());
-  
-  // double eps = 1e-2;
+  vector<double> beta_const;
+  beta_const.push_back(2.0);
+  beta_const.push_back(1.0);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -216,7 +192,7 @@ int main(int argc, char *argv[]) {
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
+  confusionBF->addTerm( beta_const * u, - v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -231,17 +207,20 @@ int main(int argc, char *argv[]) {
   // quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP);
   qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / epsilon + v->grad() );
-  qoptIP->addTerm( beta * v->grad() - tau->div() );
+  qoptIP->addTerm( tau / epsilon+ v->grad() );
+  qoptIP->addTerm( beta_const * v->grad() - tau->div() );
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon
+) ); 
   // robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
+  robIP->addTerm( sqrt(epsilon
+) * v->grad() );
+  robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
+  robIP->addTerm( ip_scaling/sqrt(epsilon
+) * tau );
   if (enforceLocalConservation)
     robIP->addZeroMeanTerm( v );
   
@@ -252,32 +231,39 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr rBoundary = Teuchos::rcp( new RightBoundary );
-  SpatialFilterPtr ltbBoundary = Teuchos::rcp( new LeftTopBottomBoundary );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
-  bc->addDirichlet(uhat, ltbBoundary, u0);
-  FunctionPtr u1 = Teuchos::rcp( new U1 );
-  bc->addDirichlet(uhat, rBoundary, u1);
+  bc->addDirichlet(uhat, outflowBoundary, u0);
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta_const*n*u0);
   
+  // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  // pc->addConstraint(uhat==u0,inflowBoundary);
+
   ////////////////////   BUILD MESH   ///////////////////////
-  // define nodes for mesh
-  FieldContainer<double> meshBoundary(4,2);
-  
-  meshBoundary(0,0) = 0.0; // x1
-  meshBoundary(0,1) = 0.0; // y1
-  meshBoundary(1,0) = 1.0;
-  meshBoundary(1,1) = 0.0;
-  meshBoundary(2,0) = 1.0;
-  meshBoundary(2,1) = 1.0;
-  meshBoundary(3,0) = 0.0;
-  meshBoundary(3,1) = 1.0;
-  
   int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 1, verticalCells = 1;
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+  // Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", confusionBF, H1Order, pToAdd);
+  cout << "Camellia_MeshDir = " << Camellia_MeshDir  << endl;
+  Teuchos::RCP<Mesh> mesh = Mesh::readTriangle(Camellia_MeshDir + "Quad/quad.1", confusionBF, H1Order, pToAdd);
+  // define nodes for mesh
+  // FieldContainer<double> meshBoundary(4,2);
+  // 
+  // meshBoundary(0,0) = 0.0; // x1
+  // meshBoundary(0,1) = 0.0; // y1
+  // meshBoundary(1,0) = 1.0;
+  // meshBoundary(1,1) = 0.0;
+  // meshBoundary(2,0) = 1.0;
+  // meshBoundary(2,1) = 1.0;
+  // meshBoundary(3,0) = 0.0;
+  // meshBoundary(3,1) = 1.0;
+  // 
+  // int horizontalCells = 1, verticalCells = 1;
+  // 
+  // // create a pointer to a new mesh:
+  // Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  //                                               confusionBF, H1Order, H1Order+pToAdd, true);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
@@ -289,16 +275,11 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  double energyThreshold = 0.3; // for mesh refinements
+  double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
     solution->solve(false);
-    stringstream outfile;
-    outfile << "doubleglazing_" << refIndex;
-    solution->writeFieldsToVTK(outfile.str(), 5);
-    solution->writeFieldsToVTK("grid"+outfile.str(), 2);
-
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   // one more solve on the final refined mesh:
@@ -363,9 +344,8 @@ int main(int argc, char *argv[]) {
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
     stringstream outfile;
-    outfile << "doubleglazing_" << numRefs;
-    solution->writeFieldsToVTK(outfile.str(), 5);
-    solution->writeFieldsToVTK("grid"+outfile.str(), 2);
+    outfile << "confusion" << epsilon;
+    solution->writeToVTK(outfile.str(), 5);
   }
   
   return 0;

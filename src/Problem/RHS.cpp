@@ -86,7 +86,7 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
       }
     }
   }
-  //cout << "rhsVector: " << endl << rhsVector;
+  // cout << "rhsVector: " << endl << rhsVector;
 }
 
 void RHS::integrateAgainstOptimalTests(FieldContainer<double> &rhsVector,
