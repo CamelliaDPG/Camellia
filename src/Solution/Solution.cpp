@@ -2969,6 +2969,11 @@ void Solution::condensedSolve(bool saveMemory){
     cout << "on rank " << rank << ", time for storage of all dofs = " << timer.ElapsedTime();
     cout << ", and total time spent in solve = " << totalTime.ElapsedTime() << endl;
   }
+
+  _residualsComputed = false; // now that we've solved, will need to recompute residuals...
+  _energyErrorComputed = false;
+  _energyErrorForCellIDGlobal.clear();
+
 }
 
 void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
