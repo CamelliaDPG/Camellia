@@ -1,0 +1,10 @@
+#/bin/shell
+echo "\documentclass{article} \begin{document} \pagestyle{empty} \[" $1 "\]\end{document}" > temp.tex
+pdflatex temp.tex
+pdfcrop temp.pdf temp.pdf.out
+gs -sDEVICE=pswrite -dNOCACHE -sOutputFile=nofont-Myfile.ps -q -dbatch -dNOPAUSE temp.pdf.out -c quit
+rm temp.pdf
+rm temp.tex
+rm temp.aux
+rm temp.log
+rm temp.pdf.out
