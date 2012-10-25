@@ -131,11 +131,14 @@ FunctionPtr Function::grad() {
 }
 
 FunctionPtr Function::div() {
+  if ( (x().get() == NULL) || (y().get() == NULL) ) {
+    return null();
+  }
   FunctionPtr dxFxn = x()->dx();
   FunctionPtr dyFxn = y()->dy();
   FunctionPtr zFxn = z();
   if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Teuchos::rcp((Function *)NULL);
+    return null();
   } else if ((zFxn.get() == NULL) || (zFxn->dz().get() == NULL)) {
     return dxFxn + dyFxn;
   } else {
@@ -482,6 +485,15 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
     
   } //end of element type loop 
   fout.close();
+}
+
+FunctionPtr Function::constant(double value) {
+  return Teuchos::rcp( new ConstantScalarFunction(value) );
+}
+
+FunctionPtr Function::null() {
+  static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
+  return _null;
 }
 
 FunctionPtr Function::zero() {

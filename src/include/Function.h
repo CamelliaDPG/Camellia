@@ -78,6 +78,8 @@ public:
   
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
+  static FunctionPtr constant(double value);
+  static FunctionPtr null();
   static FunctionPtr zero();
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,

@@ -72,8 +72,7 @@ public:
   void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
                 bool applyCubatureWeights = false);
   
-  // TODO: rewrite this next so that it returns a FunctionPtr instead of actually evaluating...
-  void evaluate(FieldContainer<double> &values, map< int, FunctionPtr> &varFunctions, BasisCachePtr basisCache);
+  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
@@ -108,7 +107,7 @@ public:
   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
 
-  
+
   // -------------- end of added by Jesse --------------------
 
   void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
