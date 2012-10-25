@@ -373,7 +373,7 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   double volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
   double actualValue = boundaryIntegralSum + volumeIntegralSum;
   
-  double tol = 1e-15;
+  double tol = 1e-14;
   if (abs(expectedValue - actualValue)>tol){
     success = false;
   }
