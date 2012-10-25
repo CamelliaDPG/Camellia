@@ -92,7 +92,7 @@ void FunctionTests::setup() {
   for (int i=0; i<NUM_POINTS_1D; i++) {
     for (int j=0; j<NUM_POINTS_1D; j++) {
       _testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
-      _testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
+      _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
   }
   
@@ -283,6 +283,32 @@ bool FunctionTests::testPolarizedFunctions() {
     cout << "df/dy != 1...\n";
     success = false;
   }
+  
+  // Something a little more complicated: f(x) = x^2
+  // take f = r^2 cos^2 theta.  Then: f==x^2, df/dx == 2x, df/dy == 0
+
+  f = Teuchos::rcp( new PolarizedFunction( x * cos_y * x * cos_y ) );
+  df_dx = f->dx();
+  df_dy = f->dy();
+  
+  // f == x^2
+  if (! functionsAgree(f, x * x, _basisCache) ) {
+    cout << "f != x^2...\n";
+    success = false;
+  }
+  
+  // df/dx == 2x
+  if (! functionsAgree(df_dx, 2 * x, _basisCache) ) {
+    cout << "df/dx != 2x...\n";
+    success = false;
+  }
+  
+  // df/dy == 0
+  if (! functionsAgree(df_dy, zero, _basisCache) ) {
+    cout << "df/dy != 0...\n";
+    success = false;
+  }
+  
   return success;
 }
 

@@ -61,10 +61,12 @@ The University of Texas at Austin}
 \title[Camellia: A DPG Toolbox]{Camellia:}
 \subtitle{A Toolbox for a Class of Discontinuous Petrov-Galerkin Methods\\ Using Trilinos}
 \begin{document}
+
+%PATTER: I'm a PhD. candidate in the computational science, engineering, and mathematics program here at UT.
 \begin{frame}
-%\begin{center}
-%\includegraphics[width=.8\linewidth]{grand_logo}\\
-%\end{center}
+\begin{center}
+\includegraphics[width=.6\linewidth]{grand_logo}\\
+\end{center}
 \titlepage
 %\begin{flushright}
 %\includegraphics[scale=0.1]{asc_logo}\\
@@ -110,11 +112,29 @@ minimizes the residual.  We call the $v_{\delta u_{h}}$ \pecosbold{optimal test 
 %===============================================================================
 % Solving with DPG
 %===============================================================================
+%\begin{frame}                                                                                                                                                                          
+%\frametitle{Solving with DPG}
+%\begin{center} 
+%\includegraphics[width=0.9\linewidth]{../figures/DPGSolveCartoonNew}\\
+%\end{center}
+%\end{frame}
+
 \begin{frame}                                                                                                                                                                          
 \frametitle{Solving with DPG}
-\begin{center} 
-\includegraphics[width=0.9\linewidth]{../figures/DPGSolveCartoonNew}\\
-\end{center}
+\begin{itemize}
+\item We drive \pecosbold{adaptivity} using an energy norm in which we can precisely determine the error:
+\[
+\NVRnorm{u-u_{h}}_{E} = \NVRnorm{R_{V}^{-1}\left(Bu_{h} - l \right)}_{V}.
+\]
+\item In practice, must \pecosbold{approximate} $R_{V}^{-1}$.  We do this by using ``enriched'' test space $V_{p+\Delta p}$.  ($\Delta p=$ 1 or 2, usually.)
+\item Test functions belong to a \pecosbold{broken} (element-wise conforming) space.
+\item \pecosbold{Discontinuous} test space $\implies$ optimal test functions can be determined element-locally.
+\item The system matrix is symmetric-positive definite:
+\[
+K_{ij} = b(e_{i}, v_{e_{j}}) = (v_{e_{i}}, v_{e_{j}})_{V} = (v_{e_{j}}, v_{e_{i}})_{V} = b(e_{j}, v_{e_{i}}) = K_{ji}
+\]
+\end{itemize}
+
 \end{frame}
 
 \begin{frame}
@@ -122,8 +142,7 @@ minimizes the residual.  We call the $v_{\delta u_{h}}$ \pecosbold{optimal test 
 \begin{itemize}
 \item \pecosbold{guarantees} minimum residual in a norm that depends on the test space, \pecosbold{a free choice}
 \item for non-singularly-perturbed, well-posed linear problems, \pecosbold{provably optimal} convergence rates when the ``adjoint graph norm'' is used for the test space
-\item \pecosbold{SPD} stiffness matrix
-\item discontinuous test space $\implies$ solving for test functions is a \pecosbold{local} operation
+%\item \pecosbold{SPD} stiffness matrix
 \item nonlinear problems: so far, apply the linear method to the linearized problem
 \item have also derived a method that instead minimizes the nonlinear residual
 \end{itemize}
@@ -193,8 +212,8 @@ Recall our Poisson formulation:
   VarPtr v = varFactory.testVar("v", HGRAD);
   VarPtr q = varFactory.testVar("q", HDIV);
     
-  VarPtr psi_hat_n = varFactory.fluxVar("\\widehat{\\phi}_n");
-  VarPtr phi_hat = varFactory.traceVar("\\widehat{\\psi}");
+  VarPtr psi_hat_n = varFactory.fluxVar("\\widehat{\\psi}_n");
+  VarPtr phi_hat = varFactory.traceVar("\\widehat{\\phi}");
   VarPtr psi = varFactory.fieldVar("\\psi", VECTOR_L2);
   VarPtr phi = varFactory.fieldVar("\\phi", L2);
 \end{lstlisting}

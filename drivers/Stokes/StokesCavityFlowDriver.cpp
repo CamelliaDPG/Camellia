@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   int pToAddForStreamFunction = pToAdd;
-  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  double eps = 1.0/2.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = false;
-  bool useCG = true;
+  bool useCG = false;
   bool compareWithOverkillMesh = false;
   bool weightTestNormDerivativesByH = false;
   bool useAdHocHPRefinements = false;

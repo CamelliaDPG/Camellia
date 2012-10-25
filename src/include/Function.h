@@ -35,6 +35,8 @@ public:
   virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
   
+  static FunctionPtr op(FunctionPtr f, EOperatorExtended op);
+  
   virtual FunctionPtr x();
   virtual FunctionPtr y();
   virtual FunctionPtr z();
@@ -51,7 +53,7 @@ public:
   
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
-  double integrate(Teuchos::RCP<Mesh> mesh);
+  double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
@@ -74,6 +76,10 @@ public:
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   
+  static double evaluate(FunctionPtr f, double x, double y); // for testing
+  
+  static FunctionPtr constant(double value);
+  static FunctionPtr null();
   static FunctionPtr zero();
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,

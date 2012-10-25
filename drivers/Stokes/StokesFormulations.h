@@ -398,6 +398,31 @@ public:
   IPPtr graphNorm() {
     return _graphNorm;
   }
+  VarPtr ui(int i) {
+    if (i==0) return u1;
+    if (i==1) return u2;
+    return Teuchos::rcp( (Var*) NULL );
+  }
+  VarPtr vi(int i) {
+    if (i==0) return v1;
+    if (i==1) return v2;
+    return Teuchos::rcp( (Var*) NULL );
+  }
+  LinearTermPtr dui_dj(int i, int j) {
+    if (i==0 && j==0) {
+      return 1.0*sigma11;
+    }
+    if (i==0 && j==1) {
+      return 1.0*sigma12;
+    }
+    if (i==1 && j==0) {
+      return 1.0*sigma21;
+    }
+    if (i==1 && j==1) {
+      return 1.0*sigma22;
+    }
+    return Teuchos::rcp( (LinearTerm*) NULL );
+  }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
     rhs->addTerm( f1 * v1 + f2 * v2 );

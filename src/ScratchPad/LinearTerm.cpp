@@ -18,6 +18,17 @@
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
+bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
+  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   || 
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) || 
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) || 
+  (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) || 
+  (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   || 
+  (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
+  bool boundaryOnlyFunction = ls.first->boundaryValueOnly();
+  return boundaryOnlyFunction || (ls.second->varType()==FLUX) || (ls.second->varType()==TRACE) || opInvolvesNormal;
+}
+
 const vector< LinearSummand > & LinearTerm::summands() const { 
   return _summands; 
 }
@@ -656,15 +667,25 @@ void LinearTerm::evaluate(FieldContainer<double> &values, SolutionPtr solution, 
   }
 }
 
-bool linearSummandIsBoundaryValueOnly(LinearSummand &ls) {
-  bool opInvolvesNormal = (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL)   || 
-                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_X) || 
-                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Y) || 
-                          (ls.second->op() == IntrepidExtendedTypes::OP_TIMES_NORMAL_Z) || 
-                          (ls.second->op() == IntrepidExtendedTypes::OP_CROSS_NORMAL)   || 
-                          (ls.second->op() == IntrepidExtendedTypes::OP_DOT_NORMAL);
-  bool boundaryOnlyFunction = ls.first->boundaryValueOnly();
-  return boundaryOnlyFunction || (ls.second->varType()==FLUX) || (ls.second->varType()==TRACE) || opInvolvesNormal;
+FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+  // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
+  // and if boundaryPart is true, then we exclude terms that are defined everywhere
+  // so that the whole LinearTerm is the sum of the two options
+  FunctionPtr fxn = Function::constant(0);
+  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    if ( linearSummandIsBoundaryValueOnly(ls) && !boundaryPart) {
+      continue;
+    } else if (!linearSummandIsBoundaryValueOnly(ls) && boundaryPart) {
+      continue;
+    }
+    FunctionPtr f = ls.first;
+    VarPtr var = ls.second;
+    
+    FunctionPtr varEvaluation = Function::op(varFunctions[var->ID()],var->op());
+    fxn = fxn + f * varEvaluation;
+  }
+  return fxn;
 }
 
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis

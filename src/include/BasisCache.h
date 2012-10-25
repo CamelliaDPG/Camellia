@@ -195,6 +195,9 @@ public:
   const FieldContainer<double> & getPhysicalCubaturePoints() { // overrides super
     return _physCubPoints;
   }
+  FieldContainer<double> & writablePhysicalCubaturePoints() { // allows overwriting the contents
+    return _physCubPoints;
+  }
 };
 
 #endif

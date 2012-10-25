@@ -231,7 +231,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   // the following is not strictly necessary if the mesh has not changed since we were constructed:
   //initialize();
   
-  bool zmcsAsRankOneUpdate = false; // not yet working!
+  bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
   double cubatureEnrichmentDegree = 0; // TODO: make this a settable parameter in Solution.
   
   int numProcs=1;
@@ -469,7 +469,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   
   // compute max, min h
   // TODO: get rid of the Global calls below (MPI-enable this code)
-/*  double maxCellMeasure = 0;
+  double maxCellMeasure = 0;
   double minCellMeasure = 1e300;
   vector< ElementTypePtr > elemTypes = _mesh->elementTypes(); // global element types
   for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
@@ -485,14 +485,20 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
 
     for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
       maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
       minCellMeasure = min(minCellMeasure,cellMeasures(i));
     }
   }
   double min_h = sqrt(minCellMeasure); 
   double max_h = sqrt(maxCellMeasure);
-*/
+ 
+ // define stabilizing parameter for zero-mean constraints
+      double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
+//      for (int i=0; i<numValues; i++) {
+//        rho += basisIntegrals[i];
+//      }
+//  rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
+  rho = -1.0;
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
@@ -512,21 +518,19 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       int numValues = globalIndices.size();
       
-      // define stabilizing parameter -- for now, just the sum of the entries in the extra row/column
-      double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
-      //      for (int i=0; i<numValues; i++) {
-      //        rho += basisIntegrals[i];
-      //      }
-      //      rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
-      rho = 1.0;
-      
       if (zmcsAsRankOneUpdate) {
         // TODO: debug this (not working)
         // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
         FieldContainer<double> product(numValues,numValues);
+        double denominator = 0.0;
+        for (int i=0; i<numValues; i++) {
+          denominator += basisIntegrals(i);
+        }
+        denominator *= denominator;
+        
         for (int i=0; i<numValues; i++) {
           for (int j=0; j<numValues; j++) {
-            product(i,j) = - basisIntegrals(i) * basisIntegrals(j) / rho;
+            product(i,j) = rho * basisIntegrals(i) * basisIntegrals(j) / denominator;
           }
         }
         globalStiffMatrix.SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
@@ -538,7 +542,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 
   //      cout << "in zmc, diagonal entry: " << rho << endl;
         //rho /= numValues;
-        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho);
+        double rho_entry = - 1.0 / rho;
+        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
         localRowIndex++;
       }
     }
