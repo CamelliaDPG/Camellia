@@ -75,6 +75,7 @@
 
 #include "ml_epetra_utils.h"
 //#include "ml_common.h"
+#include "ml_epetra_preconditioner.h"
 
 #include <stdlib.h>
 
@@ -2822,9 +2823,25 @@ void Solution::condensedSolve(bool saveMemory){
   // solve reduced problem
   Teuchos::RCP<Epetra_LinearProblem> problem_cond = Teuchos::rcp( new Epetra_LinearProblem(&K_cond, &lhs_cond, &rhs_cond));
   rhs_cond.GlobalAssemble();
-  Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
-  solver->setProblem(problem_cond);
-  solver->solve();
+
+  bool useIterativeSolver = false;
+  if (!useIterativeSolver){
+    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
+    solver->setProblem(problem_cond);    
+    solver->solve();
+  }else{
+    // create the preconditioner object and compute hierarchy
+    ML_Epetra::MultiLevelPreconditioner * MLPrec = 
+      new ML_Epetra::MultiLevelPreconditioner(K_cond, true);
+
+    AztecOO Solver((*problem_cond));
+    Solver.SetPrecOperator(MLPrec);
+    Solver.SetAztecOption(AZ_solver,AZ_cg);
+    Solver.SetAztecOption(AZ_output,AZ_last);
+    //    Solver.SetAztecOption(AZ_precond, AZ_Jacobi);
+    int maxIter = round(numGlobalFluxDofs/4);
+    Solver.Iterate(maxIter,1E-9); 
+  }
   lhs_cond.GlobalAssemble();  
 
   if (_reportTimingResults){
@@ -2952,6 +2969,11 @@ void Solution::condensedSolve(bool saveMemory){
     cout << "on rank " << rank << ", time for storage of all dofs = " << timer.ElapsedTime();
     cout << ", and total time spent in solve = " << totalTime.ElapsedTime() << endl;
   }
+
+  _residualsComputed = false; // now that we've solved, will need to recompute residuals...
+  _energyErrorComputed = false;
+  _energyErrorForCellIDGlobal.clear();
+
 }
 
 void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){

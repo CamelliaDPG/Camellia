@@ -1,0 +1,222 @@
+%&pdflatex
+\documentclass[11pt,onecolumn]{scrartcl}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[top=2cm,bottom=3cm,left=2.5cm,right=2cm]{geometry}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage{subfigure}
+\usepackage[normalem]{ulem}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\Delta}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\author{Jesse Chan\textsuperscript{a}, Norbert Heuer\textsuperscript{b}, Tan Bui-Thanh\textsuperscript{a}, and Leszek Demkowicz\textsuperscript{a}}
+
+%\title{$\epsilon$-explicit analysis of DPG for convection-dominated diffusion}
+\title{Globally and locally optimal test functions}
+\date{}
+\begin{document}
+
+%\tableofcontents
+\maketitle
+\begin{center}
+\textsuperscript{a} Institute for Computational Engineering and Sciences, \\University of Texas at Austin, \\Austin, TX 78712, USA\\
+\end{center}
+
+\begin{center}
+\textsuperscript{b} Facultad de Matem\'aticas, \\Pontificia Universidad Cat\'olica de Chile,\\
+Avenida Vicu\~na Mackenna 4860, Santiago, Chile
+\end{center}
+
+\section{The ultra-weak variational formulation}
+
+\subsection{The adjoint equation and $L^2$ optimality}
+
+Assuming boundedness below of $A$, as the extra $L^2$ term disappears, we get $L^2$ optimality. The ultra-weak variational form gives
+\begin{align*}
+b(u_h,v) = \LRp{u_h,A^*v} + \LRa{\widehat{u},v} = \text{load and boundary conds} = b(u,A^*v)
+\end{align*}
+If we use for our test functions solutions of the adjoint equation $A^*v = u$ (with appropriate adjoint boundary conditions), $u_h$ is the best $L^2$ projection of the exact solution $u$ onto $U_h$. 
+
+\section{Test norms for the convection-diffusion problem}
+
+Introduce the graph norm here. 
+
+\subsection{Local and global optimal test functions}
+
+Note that globally optimal test functions only produce boundary layers at the global inflow boundary. 
+
+Show representation of global test functions in local test functions using Jay's proof using orthogonal subspaces and flux test functions. 
+
+\section{Numerical experiments}
+
+\subsection{The effect of under-resolved boundary layers}
+
+\textcolor{red}{Can we quantify the effect of under-resolving boundary layers?}
+
+\begin{align*}
+b\LRp{\LRp{u,\sigma, \uh,\fnh},\LRp{v,\tau}} = \LRp{u, \Grad_h\cdot \tau - \beta\cdot \Grad_h v}_{\Oh} + \LRp{\sigma, \frac{1}{\epsilon}\tau + \Grad_h v}_{\Oh} + \LRa{\uh,\tau_n}_{\Gh} + \LRa{\fnh,v}_{\Gh}
+\end{align*}
+Let $\boldsymbol U$ denote the trial variables $\{u,\sigma, \uh, \fnh\}$. For robustness in $u$, we can choose for $\LRp{v,\tau}$ the conforming solution to the adjoint equation such that 
+\begin{align*}
+\div \tau - \beta \cdot \grad v &= u \\
+\frac{1}{\epsilon} \tau - \grad v &= 0. 
+\end{align*}
+By doing so, we recover the $L^2$ norm of $u$ from the bilinear form, such that
+\[
+\nor{u}^2_{L^2(\Omega)} = b\LRp{{\boldsymbol U},\LRp{v,\tau}} = \frac{b\LRp{{\boldsymbol U},\LRp{v,\tau}}}{\nor{\LRp{v,\tau}}_V} \nor{\LRp{v,\tau}}_V \leq \nor{\boldsymbol U}_E \nor{\LRp{v,\tau}}_V
+\]
+Let $\lesssim$ denote a robust bound - if $ \nor{\LRp{v,\tau}}_V \lesssim \|u\|_{L^2(\Omega)}$, then we have that
+\[
+\nor{u}_{L^2(\Omega)} \lesssim \nor{\boldsymbol U}_E
+\]
+In other words, a necessary condition for a robust method is that the test norm measures solutions to the adjoint equations in a robust manner. 
+
+\textcolor{red}{Can we conclude that the same thing needs to happen for approximate test functions?}
+
+If we assume that an underresolved test function behaves similarly to a test function under a larger viscosity, we expect that the term $\nor{\div \tau - \beta \cdot \grad v}_{L^2}$ still remains relatively bounded uniformly in $\epsilon$. However, the term $\nor{\frac{1}{\epsilon}\tau - \grad v}_{L^2}$ does not --- analytical calculations in 1D show that this term grows with the Peclet number in the element at the inflow, where the adjoint solution develops a boundary layer. As the boundedness of this term determines the robustness of $\sigma$, our energy norm is
+\begin{align*}
+\nor{\boldsymbol U}_E &\coloneqq \sup_{\LRp{v,\tau}}\LRp{\frac{\LRp{u,\Grad_h \cdot \tau - \beta \cdot \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V} + \frac{\LRp{\sigma, \frac{1}{\epsilon}\tau + \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V} + \frac{\LRa{\fnh,v}_{\Gamma} - \LRa{\uh,\tau_n}_{\Gamma}}{\nor{\LRp{v,\tau}}_V}} \\
+&\approx \nor{u}_{L^2} + F(\text{Pe})\nor{\sigma}_{L^2} + \nor{\LRp{\uh,\fnh}}
+\end{align*}
+where $F(\text{Pe})$ is some non-decreasing function of the Peclet number. Numerical experiments confirm that, for the quasi-optimal test norm, underresolution of the inflow boundary layer negatively affects only the robustness of $u$. 
+
+\section{Conclusions}
+
+\begin{itemize}
+\item There are three levels at which you should look - the continuous level (the adjoint problem for $L^2$ robustness), the global level (which links the adjoint equation to the test functions), and the localized test norm (which relates local test functions to global test functions). 
+\item Your test norm may induce boundary layers even when they're not necessary for adjoint $L^2$ stability.
+\item If your test norm promises global boundary layers (that affect robustness), not approximating them leads to a loss of robustness. 
+\end{itemize}
+
+You have to account for the boundary layer/$\epsilon$ diffusion scale somehow - either by 
+\begin{itemize}
+\item adjusting the test norm to account for robustness (weighted test norm), which pushes the $\epsilon$ into the inflow area, 
+\item removing the continuous adjoint problem (``convection'' inflow boundary condition), which removes the boundary layer for $L^2$ stability altogether, 
+\item resolving the global boundary layers (demonstrated here and in Antii's Shishkin meshes)
+\end{itemize}
+\end{document}
+
+%\subsection{The strong form of the trial-to-test operator}
+%
+%Under the graph test norm 
+%\[
+%\LRp{v,\delta v}_{V(K)} = \LRp{A_h^*v,A_h^*\delta v}_{L^2(K)} + (v,\delta v)_{L^2(K)},
+%\]
+%element-local test functions are induced as solutions of 
+%\[
+%\LRp{v,\delta v}_{V(K)} = (u,A_h^*\delta v)_K + \LRa{\uh,\delta v}_{\partial K}
+%\]
+%Under proper regularity assumptions, this variational problem corresponds to the strong problem
+%\begin{align*}
+%A_hA_h^*v + v &= A_hu, \quad \text{on $K$}\\
+%\gamma\LRp{A_h^*v} &= \uh.
+%\end{align*}
