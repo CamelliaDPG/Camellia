@@ -150,8 +150,7 @@ int main(int argc, char *argv[]) {
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr sigma = varFactory.fieldVar("\\sigma", VECTOR_L2);
 
   vector<double> beta_const;
   beta_const.push_back(2.0);
@@ -160,14 +159,16 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
+  // confusionBF->addTerm(sigma1 / epsilon, tau->x());
+  // confusionBF->addTerm(sigma2 / epsilon, tau->y());
+  confusionBF->addTerm(sigma / epsilon, tau);
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(-uhat, tau->dot_normal());
 
   // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
+  // confusionBF->addTerm( sigma1, v->dx() );
+  // confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( sigma, v->grad() );
   confusionBF->addTerm( beta_const * u, - v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
 
@@ -318,7 +319,7 @@ int main(int argc, char *argv[]) {
 
       stringstream outfile;
       outfile << "confusion_" << refIndex;
-      solution->writeToVTK(outfile.str(), 5);
+      // solution->writeToVTK(outfile.str(), 5);
     }
 
     if (refIndex < numRefs)
