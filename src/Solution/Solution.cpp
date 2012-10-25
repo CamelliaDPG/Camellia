@@ -47,9 +47,14 @@
 #include "Amesos_Klu.h"
 #include "Amesos.h"
 #include "Amesos_Utils.h"
+
+#include "CamelliaConfig.h"
+
 // only use MUMPS when we have MPI
 #ifdef HAVE_MPI
+#ifdef USE_MUMPS
 #include "Amesos_Mumps.h"
+#endif
 #endif
 
 // Epetra includes
@@ -206,11 +211,15 @@ void Solution::solve() {
 
 void Solution::solve(bool useMumps) {
   Teuchos::RCP<Solver> solver;
+#ifdef USE_MUMPS
   if (useMumps) {
     solver = Teuchos::rcp(new MumpsSolver());
   } else {
     solver = Teuchos::rcp(new KluSolver());
   }
+#else
+  solver = Teuchos::rcp(new KluSolver());
+#endif
   solve(solver);
 }
 

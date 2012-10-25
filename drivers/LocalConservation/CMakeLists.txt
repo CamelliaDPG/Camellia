@@ -45,11 +45,6 @@ target_link_libraries(TransientHemker
   Camellia
 )
 
-add_executable(BurgersDriver BurgersDriver.cpp)
-target_link_libraries(BurgersDriver 
-  Camellia
-)
-
 add_executable(InviscidBurgers InviscidBurgers.cpp)
 target_link_libraries(InviscidBurgers 
   Camellia

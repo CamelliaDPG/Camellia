@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.6)
 include(ConfigureOptions.cmake)
 
 project(Camellia)
@@ -22,7 +22,8 @@ else()
 endif()
 
 # Find Trilinos
-find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
+find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos
+  ${TRILINOS_PATH} $ENV{TRILINOS_DIR})
 
 # If FIND_PACKAGE successfully found your Trilinos install, it will
 # set the Boolean flag Trilinos_FOUND.  The following IF statement
@@ -87,6 +88,7 @@ include_directories(
   ${Trilinos_TPL_INCLUDE_DIRS}
   ${Trilinos_INCLUDE_DIRS}
   ${CAMELLIA_SOURCE_DIR}/include
+  #${MUMPS_PATH}/include
 )
 
 #link_directories(
@@ -98,6 +100,7 @@ include_directories(
 link_directories(
   ${Trilinos_LIBRARY_DIRS}
   ${Trilinos_TPL_LIBRARY_DIRS}
+  #${MUMPS_PATH}/lib
 )
 
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
@@ -116,6 +119,9 @@ link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}
   ${Trilinos_TPL_LIBRARIES}
+  #  dmumps
+  #  mumps_common
+  #  pord
 )
 
 # Build Drivers

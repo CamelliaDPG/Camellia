@@ -28,7 +28,7 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 
-int numRefs = 8;
+int numRefs = 3;
 bool enforceLocalConservation = false;
 double newtonStepSize = 1.0;
 int maxNewtonIterations = 100;

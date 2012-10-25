@@ -13,6 +13,8 @@
 #include "Amesos_Klu.h"
 #include "AztecOO.h"
 
+#include "CamelliaConfig.h"
+
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
 private:
@@ -37,6 +39,7 @@ public:
 using namespace std;
 
 // only use MUMPS when we have MPI
+#ifdef USE_MUMPS
 #ifdef HAVE_MPI
 #include "Amesos_Mumps.h"
 class MumpsSolver : public Solver {
@@ -89,6 +92,8 @@ public:
     return -1;
   }
 };
+#endif
+
 #endif
 
 #endif
