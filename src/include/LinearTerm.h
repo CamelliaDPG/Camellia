@@ -72,6 +72,9 @@ public:
   void evaluate(FieldContainer<double> &values, SolutionPtr solution, BasisCachePtr basisCache, 
                 bool applyCubatureWeights = false);
   
+  // TODO: rewrite this next so that it returns a FunctionPtr instead of actually evaluating...
+  void evaluate(FieldContainer<double> &values, map< int, FunctionPtr> &varFunctions, BasisCachePtr basisCache);
+  
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);

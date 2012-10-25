@@ -56,6 +56,48 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
   }
 }
 
+FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended op) {
+  if (f.get() == NULL) {
+    return Teuchos::rcp( (Function*) NULL);
+  }
+  switch (op) {
+    case IntrepidExtendedTypes::OP_VALUE:
+      return f;  
+    case IntrepidExtendedTypes::OP_DX:
+      return f->dx();
+    case IntrepidExtendedTypes::OP_DY:
+      return f->dy();
+    case IntrepidExtendedTypes::OP_DZ:
+      return f->dz();
+    case IntrepidExtendedTypes::OP_X:
+      return f->x();
+    case IntrepidExtendedTypes::OP_Y:
+      return f->y();
+    case IntrepidExtendedTypes::OP_Z:
+      return f->z();
+    case IntrepidExtendedTypes::OP_GRAD:
+      return f->grad();
+    case IntrepidExtendedTypes::OP_DIV:
+      return f->div();
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
+      break;
+  }
+}
+
+double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; this isn't super-efficient
+  static FieldContainer<double> value(1,1);
+  static FieldContainer<double> physPoint(1,1,2);
+  static Teuchos::RCP<DummyBasisCacheWithOnlyPhysicalCubaturePoints> dummyCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints(physPoint) );
+  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
+  dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
+  if (f->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  f->values(value,dummyCache);
+  return value[0];
+}
+
 FunctionPtr Function::x() {
   return Teuchos::rcp((Function *)NULL);
 }
@@ -89,15 +131,15 @@ FunctionPtr Function::grad() {
 }
 
 FunctionPtr Function::div() {
-  FunctionPtr dxFxn = dx();
-  FunctionPtr dyFxn = dy();
-  FunctionPtr dzFxn = dz();
+  FunctionPtr dxFxn = x()->dx();
+  FunctionPtr dyFxn = y()->dy();
+  FunctionPtr zFxn = z();
   if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
     return Teuchos::rcp((Function *)NULL);
-  } else if (dzFxn.get() == NULL) {
+  } else if ((zFxn.get() == NULL) || (zFxn->dz().get() == NULL)) {
     return dxFxn + dyFxn;
   } else {
-    return dxFxn + dyFxn + dzFxn;
+    return dxFxn + dyFxn + zFxn->dz();
   }
 }
 
@@ -135,7 +177,7 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   }
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
   double integral = 0;
   
   // TODO: rewrite this to compute in distributed fashion
@@ -143,7 +185,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh) {
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh ) ); // all elements of same type
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false, cubatureDegreeEnrichment) ); // all elements of same type
     typedef Teuchos::RCP< Element > ElementPtr;
     vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
 
@@ -784,10 +826,22 @@ Teuchos::RCP<PolarizedFunction> PolarizedFunction::cos_theta() {
   return _cos_theta;
 }
 
+void findAndReplace(string &str, const string &findStr, const string &replaceStr) {
+  size_t found = str.find( findStr );
+  while (found!=string::npos) {
+    str.replace( found, findStr.length(), replaceStr );
+    found = str.find( findStr );
+  }
+}
+
 string PolarizedFunction::displayString() {
-  ostringstream ss( _f->displayString());
-  ss << "(r,\\theta)";
-  return ss.str();
+  string displayString = _f->displayString();
+  findAndReplace(displayString, "x", "r");
+  findAndReplace(displayString, "y", "\\theta");
+  return displayString;
+//  ostringstream ss( _f->displayString());
+//  ss << "(r,\\theta)";
+//  return ss.str();
 }
 
 FunctionPtr PolarizedFunction::dx() {
