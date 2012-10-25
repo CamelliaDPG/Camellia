@@ -1,6 +1,7 @@
 #include "Solution.h"
+#include "CamelliaConfig.h"
+//#define USE_VTK
 
-#define USE_VTK
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkFloatArray.h"
@@ -715,7 +716,10 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
       cellIDs.push_back(cellID);
     }
 
-    int numPoints = num1DPts * num1DPts;
+    int numPoints = num1DPts * num1DPts;  
+    FieldContainer<double> refPoints(numPoints,spaceDim);
+    for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
+      for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
         int pointIndex = xPointIndex*num1DPts + yPointIndex;
         double x = -1.0 + 2.0*(double)xPointIndex/((double)num1DPts-1.0);
         double y = -1.0 + 2.0*(double)yPointIndex/((double)num1DPts-1.0);
