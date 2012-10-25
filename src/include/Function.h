@@ -78,6 +78,8 @@ public:
   
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
+  static FunctionPtr polarize(FunctionPtr f);
+  static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr constant(double value);
   static FunctionPtr null();
   static FunctionPtr zero();

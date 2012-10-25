@@ -671,7 +671,7 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
   // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
   // and if boundaryPart is true, then we exclude terms that are defined everywhere
   // so that the whole LinearTerm is the sum of the two options
-  FunctionPtr fxn = Function::constant(0);
+  FunctionPtr fxn = Function::null();
   for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     if ( linearSummandIsBoundaryValueOnly(ls) && !boundaryPart) {
@@ -683,7 +683,11 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     VarPtr var = ls.second;
     
     FunctionPtr varEvaluation = Function::op(varFunctions[var->ID()],var->op());
-    fxn = fxn + f * varEvaluation;
+    if (fxn.get()) {
+      fxn = fxn + f * varEvaluation;
+    } else {
+      fxn = f * varEvaluation;
+    }
   }
   return fxn;
 }

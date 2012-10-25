@@ -198,9 +198,17 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
     // TODO: replace with non-global variant...
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false);
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, this->boundaryValueOnly());
     FieldContainer<double> cellIntegrals(numCells);
-    this->integrate(cellIntegrals, basisCache);
+    if ( this->boundaryValueOnly() ) {
+      // sum the integral over the sides...
+      int numSides = elemType->cellTopoPtr->getSideCount();
+      for (int i=0; i<numSides; i++) {
+        this->integrate(cellIntegrals, basisCache->getSideBasisCache(i), true);
+      }
+    } else {
+      this->integrate(cellIntegrals, basisCache);
+    }
     for (int cellID = 0; cellID < numCells; cellID++) {
       integral += cellIntegrals(cellID);
     }
@@ -491,6 +499,14 @@ FunctionPtr Function::constant(double value) {
   return Teuchos::rcp( new ConstantScalarFunction(value) );
 }
 
+FunctionPtr Function::polarize(FunctionPtr f) {
+  return Teuchos::rcp( new PolarizedFunction(f) );
+}
+
+FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
+  return Teuchos::rcp( new VectorizedFunction(f1,f2) );
+}
+
 FunctionPtr Function::null() {
   static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
   return _null;
@@ -616,7 +632,7 @@ string ProductFunction::displayString() {
 
 FunctionPtr ProductFunction::dx() {
   if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply product rule:
   return _f1 * _f2->dx() + _f2 * _f1->dx();
@@ -624,7 +640,7 @@ FunctionPtr ProductFunction::dx() {
 
 FunctionPtr ProductFunction::dy() {
   if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply product rule:
   return _f1 * _f2->dy() + _f2 * _f1->dy();
@@ -632,7 +648,7 @@ FunctionPtr ProductFunction::dy() {
 
 FunctionPtr ProductFunction::dz() {
   if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply product rule:
   return _f1 * _f2->dz() + _f2 * _f1->dz();
@@ -703,7 +719,7 @@ void QuotientFunction::values(FieldContainer<double> &values, BasisCachePtr basi
 
 FunctionPtr QuotientFunction::dx() {
   if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply quotient rule:
   return _f->dx() / _scalarDivisor - _f * _scalarDivisor->dx() / (_scalarDivisor * _scalarDivisor);
@@ -711,7 +727,7 @@ FunctionPtr QuotientFunction::dx() {
 
 FunctionPtr QuotientFunction::dy() {
   if ( (_f->dy().get() == NULL) || (_scalarDivisor->dy().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply quotient rule:
   return _f->dy() / _scalarDivisor - _f * _scalarDivisor->dy() / (_scalarDivisor * _scalarDivisor);
@@ -719,7 +735,7 @@ FunctionPtr QuotientFunction::dy() {
 
 FunctionPtr QuotientFunction::dz() {
   if ( (_f->dz().get() == NULL) || (_scalarDivisor->dz().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   // otherwise, apply quotient rule:
   return _f->dz() / _scalarDivisor - _f * _scalarDivisor->dz() / (_scalarDivisor * _scalarDivisor);
@@ -727,6 +743,8 @@ FunctionPtr QuotientFunction::dz() {
 
 SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->boundaryValueOnly() != f2->boundaryValueOnly(), std::invalid_argument,
+                              "f1 and f2 must agree on their boundary-valuedness");
   _f1 = f1;
   _f2 = f2;
 }
@@ -745,41 +763,41 @@ void SumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCach
 
 FunctionPtr SumFunction::x() {
   if ( (_f1->x().get() == NULL) || (_f2->x().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->x() + _f2->x();
 }
 
 FunctionPtr SumFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->y() + _f2->y();  
 }
 FunctionPtr SumFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->z() + _f2->z();
 }
 
 FunctionPtr SumFunction::dx() {
   if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->dx() + _f2->dx();
 }
 
 FunctionPtr SumFunction::dy() {
   if ( (_f1->dy().get() == NULL) || (_f2->dy().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->dy() + _f2->dy();
 }
 
 FunctionPtr SumFunction::dz() {
   if ( (_f1->dz().get() == NULL) || (_f2->dz().get() == NULL) ) {
-    return Teuchos::rcp( (Function*) NULL );
+    return null();
   }
   return _f1->dz() + _f2->dz();
 }

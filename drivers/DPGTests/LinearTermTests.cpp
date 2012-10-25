@@ -137,6 +137,13 @@ void LinearTermTests::teardown() {
 
 void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) { 
   setup();
+  if (testBoundaryPlusVolumeTerms()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testSums()) {
     numTestsPassed++;
   }
@@ -339,6 +346,40 @@ bool LinearTermTests::testIntegration() {
   return success;
 }
 
+bool LinearTermTests::testBoundaryPlusVolumeTerms() {
+  bool success = true;
+  
+  // notion is integration by parts:
+  // (div f, v) = < f * n, v > - (f, grad v)
+  // start simply: define f to be (x, 0)
+  // (div f, v) = (1, v)
+  // < f * n, v > - (f, grad v) = < x n1, v > - ( x, v->dx() )
+  
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  
+  FunctionPtr one = Function::constant(1);
+  LinearTermPtr identity = one*v1;
+  
+  FunctionPtr v1_value = Teuchos::rcp( new Xn(2) );
+  map< int, FunctionPtr > var_values;
+  var_values[v1->ID()] = v1_value;
+  
+  double expectedValue = identity->evaluate(var_values, false)->integrate(mesh);
+  
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  
+  LinearTermPtr ibp = x * n->x() * v1 - x * v1->dx();
+  double boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
+  double volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
+  double actualValue = boundaryIntegralSum + volumeIntegralSum;
+  
+  double tol = 1e-15;
+  if (abs(expectedValue - actualValue)>tol){
+    success = false;
+  }
+  return success;
+}
+
 bool LinearTermTests::testEnergyNorm() {
   bool success = true;
   
@@ -346,7 +387,7 @@ bool LinearTermTests::testEnergyNorm() {
   ip->addTerm(v1); // L^2 on an HGrad var
   ip->addTerm(q1); // L^2 on Hdiv var
 
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  FunctionPtr one = Function::constant(1);
   LinearTermPtr identity = one*v1; 
 
   double norm = identity->energyNormTotal(mesh,ip); // should be equal to the sqrt of the measure of the domain [-1,1]^2

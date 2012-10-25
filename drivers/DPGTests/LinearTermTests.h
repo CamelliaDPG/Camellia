@@ -48,6 +48,8 @@ class LinearTermTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
+  bool testBoundaryPlusVolumeTerms();
+  
   bool testSums();
   bool testIntegration();
 
