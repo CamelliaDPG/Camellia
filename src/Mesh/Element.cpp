@@ -56,6 +56,7 @@ Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIn
 //  }
   _elemTypePtr = elemTypePtr;
   _parent = NULL;
+  _deleted = false;
 }
 
 void Element::addChild(Teuchos::RCP< Element > childPtr) {
@@ -276,12 +277,41 @@ int Element::indexInParentSide(int parentSide) {
   return -1; // not found
 }
 
+void Element::deleteChildrenFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements) {
+  for (int i=0; i<_children.size(); i++) {
+    _children[i]->deleteFromMesh(affectedNeighborSides, deletedElements);
+  }
+  _children.clear();
+}
+
+void Element::deleteFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements) {
+  deleteChildrenFromMesh(affectedNeighborSides, deletedElements);
+  
+  ElementPtr nullPtr = Teuchos::rcp( new Element(-1,elementType(),-1) );
+
+  for (int sideIndex=0; sideIndex<_numSides; sideIndex++) {
+    if (_neighbors[sideIndex].first->cellID() != -1) {
+      affectedNeighborSides.insert(make_pair(_neighbors[sideIndex].first->cellID(),
+                                             _neighbors[sideIndex].second));
+      Element* neighbor = _neighbors[sideIndex].first;
+      int mySideIndexInNeighbor = _neighbors[sideIndex].second;
+      neighbor->setNeighbor(sideIndex, nullPtr, mySideIndexInNeighbor);
+    }
+  }
+  deletedElements.insert(this->cellID());
+  _deleted = true;
+}
+
 //int Element::subSideIndexInNeighbor(int neighborsSideIndexInMe) {
 //  return _subSideIndicesInNeighbors[neighborsSideIndexInMe];
 //}
 
 bool Element::isChild() {
   return _parent != NULL;
+}
+
+bool Element::isActive() {
+  return !isParent() && !_deleted;
 }
 
 bool Element::isParent() {

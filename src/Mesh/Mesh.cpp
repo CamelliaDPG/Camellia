@@ -624,6 +624,25 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
 }
 
 ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr elemType) {
+//  int rank = 0;
+//#ifdef HAVE_MPI
+//  rank     = Teuchos::GlobalMPISession::getRank();
+//#else
+//#endif
+//  if (rank == 0) {
+//    cout << "adding element with vertexIndices: ";
+//    for (int i=0; i<vertexIndices.size(); i++) {
+//      cout << vertexIndices[i] << " ";
+//    }
+//    cout << endl;
+//    
+//    cout << "adding element with vertices: ";
+//    for (int i=0; i<vertexIndices.size(); i++) {
+//      int index = vertexIndices[i];
+//      cout << "(" << _vertices[index](0) << ", " << _vertices[index](1) << ") ";
+//    }
+//    cout << endl;
+//  }
   int numDimensions = elemType->cellTopoPtr->getDimension();
   int numVertices = vertexIndices.size();
   if ( numVertices != elemType->cellTopoPtr->getVertexCount(numDimensions,0) ) {
@@ -952,6 +971,9 @@ void Mesh::determineDofPairings() {
     
     if ( elemPtr->isParent() ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
+    }
+    if ( ! elemPtr->isActive() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is inactive...");
     }
     for (vector<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *(trialIt);
@@ -1319,7 +1341,7 @@ void Mesh::determineActiveElements() {
   
   for (elemIterator = _elements.begin(); elemIterator != _elements.end(); elemIterator++) {
     ElementPtr elemPtr = *(elemIterator);
-    if ( ! elemPtr->isParent() ) {
+    if ( elemPtr->isActive() ) {
       _activeElements.push_back(elemPtr);
     }
   }
@@ -1796,6 +1818,68 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
+}
+
+void Mesh::hUnrefine(vector<int> cellIDs) {
+  // TODO: implement this
+  // refine any registered meshes
+  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
+       meshIt != _registeredMeshes.end(); meshIt++) {
+    (*meshIt)->hUnrefine(cellIDs);
+  }
+  
+  vector<int>::iterator cellIt;
+  set< pair<int, int> > affectedNeighborSides; // (cellID, sideIndex)
+  set< int > deletedCellIDs;
+  
+  for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    int cellID = *cellIt;
+    ElementPtr elem = _elements[cellID];
+    elem->deleteChildrenFromMesh(affectedNeighborSides, deletedCellIDs);
+  }
+  
+  set<int> affectedNeighbors;
+  // for each nullified neighbor relationship, need to figure out the correct element type...
+  for ( set< pair<int, int> >::iterator neighborIt = affectedNeighborSides.begin();
+       neighborIt != affectedNeighborSides.end(); neighborIt++) {
+    ElementPtr elem = _elements[ neighborIt->first ];
+    if (elem->isActive()) {
+      matchNeighbor( elem, neighborIt->second );
+    }
+  }
+  
+  // delete any boundary entries for deleted elements
+  for (set<int>::iterator cellIt = deletedCellIDs.begin(); cellIt != deletedCellIDs.end(); cellIt++) {
+    int cellID = *cellIt;
+    ElementPtr elem = _elements[cellID];
+    for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
+      // boundary allows us to delete even combinations that weren't there to begin with...
+      _boundary.deleteElement(cellID, sideIndex);
+    }
+  }
+  
+  // add in any new boundary elements:
+  for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    int cellID = *cellIt;
+    ElementPtr elem = _elements[cellID];
+    if (elem->isActive()) {
+      int elemSideIndexInNeighbor;
+      for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
+        if (ancestralNeighborForSide(elem, sideIndex, elemSideIndexInNeighbor)->cellID() == -1) {
+          // boundary
+          _boundary.addElement(cellID, sideIndex);
+        }
+      }
+    }
+  }
+    
+  rebuildLookups();
+  // now discard any old coefficients
+  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+       solutionIt != _registeredSolutions.end(); solutionIt++) {
+    (*solutionIt)->discardInactiveCellCoefficients();
+  }
+
 }
 
 int Mesh::neighborChildPermutation(int childIndex, int numChildrenInSide) {

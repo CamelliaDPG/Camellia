@@ -58,6 +58,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _H1Order = H1Order;
   _pToAdd = pToAdd;
   _randomRefinements = randomRefinements;
+  _reportConditionNumber = false;
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
@@ -245,7 +246,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, v
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
-    solution->setReportConditionNumber(false);
+    solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
     
     Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
@@ -292,7 +293,7 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
-    solution->setReportConditionNumber(false);
+    solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
     
     Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
@@ -314,6 +315,10 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
       (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
   }
   computeErrors();
+}
+
+void HConvergenceStudy::setReportConditionNumber(bool value) {
+  _reportConditionNumber = value;
 }
 
 void HConvergenceStudy::setReportRelativeErrors(bool reportRelativeErrors) {
@@ -552,8 +557,12 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     // now write out the solution for MATLAB plotting...
     fileName.str(""); // clear out the filename
     fileName << filePathPrefix << "_solution_" << numElements << "x" << numElements << ".m";
-//    solution.writeToFile(trialID, fileName.str());
+    //    solution.writeToFile(trialID, fileName.str());
     solution->writeFieldsToFile(trialID, fileName.str());
+    fileName.str("");
+    
+    fileName << filePathPrefix << "_exact_" << numElements << "x" << numElements << ".m";
+    _exactSolutionFunctions[trialID]->writeValuesToMATLABFile(solution->mesh(), fileName.str());
     fileName.str(""); // clear out the filename
     if (traceID != -1) {
       fileName << filePathPrefix << "_trace_solution_" << numElements << "x" << numElements << ".dat";

@@ -218,6 +218,7 @@ public:
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
   
   void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void hUnrefine(vector<int> cellIDs);
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
   

@@ -8,6 +8,8 @@
 #include "Constraint.h"
 #include "PenaltyConstraints.h"
 
+#include "Solution.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else

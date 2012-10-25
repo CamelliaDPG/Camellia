@@ -62,6 +62,8 @@ class HConvergenceStudy {
   Teuchos::RCP<DPGInnerProduct> _ip;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
   
+  bool _reportConditionNumber;
+  
   int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
   vector< SolutionPtr > _solutions;
   vector< SolutionPtr > _bestApproximations;
@@ -104,6 +106,7 @@ public:
                     int minLogElements, int maxLogElements, int H1Order, int pToAdd,
                     bool randomRefinements=false, bool useTriangles=false, bool useHybrid=false);
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
+  void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
   void solve(const FieldContainer<double> &quadPoints);
   void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices);

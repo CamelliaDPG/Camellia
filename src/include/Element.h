@@ -46,6 +46,7 @@ using namespace std;
 class Element {
   typedef Teuchos::RCP< Element > ElementPtr;
 private:
+  bool _deleted;
   int _cellID; // unique ID, also the index for the Mesh into the Elements vector
   Teuchos::RCP< ElementType > _elemTypePtr;
   int _cellIndex; // index into the Mesh's Elements vector for ElementType for a given partition
@@ -94,9 +95,13 @@ public:
   int numChildren();
   Teuchos::RCP< Element > getChild(int childIndex);
   bool isNeighbor(Teuchos::RCP<Element> putativeNeighbor, int &sideIndexForNeighbor);
+  bool isActive();
   bool isParent();
   bool isChild();
   vector< pair<int,int> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
+  
+  void deleteChildrenFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements);
+  void deleteFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements);
 //destructor:
   ~Element();
 };

@@ -70,6 +70,7 @@ public:
   static bool testSolutionForSingleElementUpgradedSide();
   static bool testHRefinement();
   static bool testHRefinementForConfusion();
+  static bool testHUnrefinementForConfusion();
   static bool testRefinementPattern();
   static bool testPointContainment();
 };

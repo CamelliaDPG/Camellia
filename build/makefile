@@ -37,6 +37,8 @@ OBJ_NAMES = DofOrdering \
        BilinearFormUtility \
        BasisFactory \
        BasisSumFunction \
+       BC \
+       BCFunction \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
@@ -84,6 +86,7 @@ OBJ_NAMES = DofOrdering \
        RefinementStrategy \
        RHS \
        SchwarzSolver \
+       CGSolver \
 			 StokesBilinearForm \
 			 StokesMathBilinearForm \
 			 StokesVVPBilinearForm \
@@ -117,7 +120,8 @@ TEST_OBJ_NAMES = ElementTests \
        PatchBasisTests \
        TestBilinearFormDx \
        TestBilinearFormFlux \
-       RHSTests 
+       RHSTests \
+       BasisCacheTests
 TEST_OBJS = $(addsuffix .o, $(TEST_OBJ_NAMES))
 # put all the object files in OBJ_DIR:
 TEST_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS))
@@ -260,6 +264,9 @@ FunctionTests.o: $(DRIVERS_DIR)/DPGTests/FunctionTests.cpp
 LinearTermTests.o: $(DRIVERS_DIR)/DPGTests/LinearTermTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
+BasisCacheTests.o: $(DRIVERS_DIR)/DPGTests/BasisCacheTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
 RHSTests.o: $(DRIVERS_DIR)/DPGTests/RHSTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
@@ -291,6 +298,9 @@ TimeMarchingBurgersProblem.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersProblem.
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+CGSolver.o: $(SRCS_DIR)/Solution/CGSolver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 SchwarzSolver.o: $(SRCS_DIR)/Solution/SchwarzSolver.cpp
@@ -408,6 +418,12 @@ ZoltanMeshPartitionPolicy.o: $(SRCS_DIR)/Mesh/ZoltanMeshPartitionPolicy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 RefinementPattern.o: $(SRCS_DIR)/Mesh/RefinementPattern.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+  
+BC.o: $(SRCS_DIR)/Problem/BC.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+  
+BCFunction.o: $(SRCS_DIR)/Problem/BCFunction.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
   
 RefinementStrategy.o: $(SRCS_DIR)/Solution/RefinementStrategy.cpp

@@ -66,6 +66,11 @@ using namespace Intrepid;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
+  cout << "WARNING: skipping unrefinement test.\n";
+//  numTestsRun++;
+//  if (testHUnrefinementForConfusion() ) {
+//    numTestsPassed++;
+//  }
   numTestsRun++;
   if (testMeshSolvePointwise() ) {
     numTestsPassed++;
@@ -1214,7 +1219,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
-
+  
   vector<int> cellsToRefine;
   cellsToRefine.clear();
   
@@ -1233,7 +1238,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
       cellsToRefine.push_back(cellID);
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
-
+    
     // same thing for north side
     descendants = mesh->elements()[0]->getDescendantsForSide(2);
     numDescendants = descendants.size();
@@ -1264,8 +1269,109 @@ bool MeshTestSuite::testHRefinementForConfusion() {
     cout << "L2 error in 'deeply' refined fine mesh: " << refinedError << endl;
   }
   
-  solution.writeFieldsToFile(ConfusionBilinearForm::U, "confusion_demo.m");
+  // solution.writeFieldsToFile(ConfusionBilinearForm::U, "confusion_demo.m");
   
+  return success;
+}
+
+bool MeshTestSuite::testHUnrefinementForConfusion() {
+  bool success = true;
+  
+  double tol = 1e-14;
+  
+  // first, build a simple mesh
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;  
+  
+  // h-convergence
+  int sqrtElements = 2;
+  
+  double epsilon = 1e-1;
+  double beta_x = 1.0, beta_y = 1.0;
+  ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
+  
+  int H1Order = 3;
+  int horizontalCells = 4; int verticalCells = 4;
+  
+  // before we hRefine, compute a solution for comparison after refinement
+  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
+
+  vector<int> cellsToRefine;
+  cellsToRefine.clear();
+  
+  // start with a fresh 2x1 mesh:
+  horizontalCells = 1; verticalCells = 1;
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
+  
+  Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
+  
+  // repeatedly refine the first element along the side shared with cellID 1
+  int numRefinements = 2;
+  for (int i=0; i<numRefinements; i++) {
+    solution.solve();
+    double errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    vector< pair<int,int> > descendants = mesh->elements()[0]->getDescendantsForSide(1);
+    int numDescendants = descendants.size();
+    cellsToRefine.clear();
+    for (int j=0; j<numDescendants; j++ ) {
+      int cellID = descendants[j].first;
+      cellsToRefine.push_back(cellID);
+    }
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    mesh->hUnrefine(cellsToRefine);
+    if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
+      success = false;
+      cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
+    }
+    solution.solve();
+    double errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    if ( abs(errorAfterUnrefinement - errorBeforeRefinement) > tol) {
+      success = false;
+      cout << "errorAfterUnrefinement != errorBeforeRefinement: " << errorAfterUnrefinement << " != " << errorBeforeRefinement << endl;
+    }
+    // redo the refinement:
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    
+    // same thing for north side
+    solution.solve();
+    errorBeforeRefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    descendants = mesh->elements()[0]->getDescendantsForSide(2);
+    numDescendants = descendants.size();
+    cellsToRefine.clear();
+    for (int j=0; j<numDescendants; j++ ) {
+      int cellID = descendants[j].first;
+      cellsToRefine.push_back(cellID);
+    }
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    mesh->hUnrefine(cellsToRefine);
+    if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
+      success = false;
+      cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
+    }
+    solution.solve();
+    errorAfterUnrefinement = exactSolution.L2NormOfError(solution,ConfusionBilinearForm::U);
+    if ( abs(errorAfterUnrefinement - errorBeforeRefinement) > tol) {
+      success = false;
+      cout << "errorAfterUnrefinement != errorBeforeRefinement: " << errorAfterUnrefinement << " != " << errorBeforeRefinement << endl;
+    }
+    // redo the refinement:
+    mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+  }
+  
+  if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
+    success = false;
+    cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
+  }
+    
   return success;
 }
 

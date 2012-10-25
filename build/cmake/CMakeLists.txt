@@ -260,3 +260,11 @@ target_link_libraries(StokesStudy
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
+
+# Truman's conservative confusion stuff below:
+add_executable(ConservativeConfusion "${DRIVERS_DIR}/ConservativeConfusion/ConfusionDriver.cpp")
+target_link_libraries(ConservativeConfusion 
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+)

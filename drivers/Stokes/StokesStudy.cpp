@@ -67,7 +67,7 @@
 
 using namespace std;
 
-class EntireBoundary : public SpatialFilter {
+class SquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
@@ -75,6 +75,47 @@ public:
     bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
     return xMatch || yMatch;
   }
+};
+
+class ReentrantCornerBoundary : public SpatialFilter {
+  // implementing the one I believe is right (contrary to what's said in the HDG paper)
+public:
+  bool equals(double a, double b, double tol) {
+    return abs(a-b)<tol;
+  }
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xIsZero = equals(x,0,tol);
+    bool yIsZero = equals(y,0,tol);
+    bool xIsOne = equals(x,1,tol);
+    bool yIsOne = equals(y,1,tol);
+    bool xIsMinusOne = equals(x,-1,tol);
+    bool yIsMinusOne = equals(y,-1,tol);
+    if (xIsOne) return true;
+    if (yIsOne) return true;
+    if (xIsMinusOne && (y > 0)) return true;
+    if (yIsZero && (x < 0)) return true;
+    if (xIsZero && (y < 0)) return true;
+    if (yIsMinusOne && (x > 0)) return true;
+    return false;
+  }
+  // here's the one from the HDG paper:
+//  bool matchesPoint(double x, double y) {
+//    double tol = 1e-14;
+//    bool xIsZero = equals(x,0,tol);
+//    bool yIsZero = equals(y,0,tol);
+//    bool xIsOne = equals(x,1,tol);
+//    bool yIsOne = equals(y,1,tol);
+//    bool xIsMinusOne = equals(x,-1,tol);
+//    bool yIsMinusOne = equals(y,-1,tol);
+//    if (xIsMinusOne) return true;
+//    if (yIsOne) return true;
+//    if (xIsOne && (y > 0)) return true;
+//    if (yIsZero && (x > 0)) return true;
+//    if (xIsZero && (y < 0)) return true;
+//    if (yIsMinusOne && (x < 0)) return true;
+//    return false;
+//  }
 };
 
 class Cos_ay : public SimpleFunction {
@@ -153,6 +194,37 @@ public:
     return ss.str();
   }
 };
+
+bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
+  static const int NUM_POINTS_1D = 10;
+  double x[NUM_POINTS_1D] = {-1.0,-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8};
+  double y[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8,1.0};
+  
+  FieldContainer<double> testPoints(1,NUM_POINTS_1D*NUM_POINTS_1D,2);
+  for (int i=0; i<NUM_POINTS_1D; i++) {
+    for (int j=0; j<NUM_POINTS_1D; j++) {
+      testPoints(0,i*NUM_POINTS_1D + j, 0) = x[i];
+      testPoints(0,i*NUM_POINTS_1D + j, 1) = y[i];
+    }
+  }
+  BasisCachePtr basisCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints(testPoints) );
+  
+  FunctionPtr zeroExpected = u1_exact->dx() + u2_exact->dy();
+  
+  FieldContainer<double> values(1,NUM_POINTS_1D*NUM_POINTS_1D);
+  
+  zeroExpected->values(values,basisCache);
+  
+  bool success = true;
+  double tol = 1e-14;
+  for (int i=0; i<values.size(); i++) {
+    if (abs(values[i]) > tol) {
+      success = false;
+      cout << "value not within tolerance: " << values[i] << endl;
+    }
+  }
+  return success;
+}
 
 void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int &maxLogElements,
                StokesFormulationChoice &formulationType,
@@ -246,8 +318,6 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
 }
 
 void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, bool useTriangles) {
-  // builds a domain for (-1,1)^2 \ (0,1) x (-1,0)
-  // points start in the lower left and proceed clockwise around the domain
   FieldContainer<double> p1(2);
   FieldContainer<double> p2(2);
   FieldContainer<double> p3(2);
@@ -257,15 +327,29 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
   FieldContainer<double> p7(2);
   FieldContainer<double> p8(2);
   
-  p1(0) = -1.0; p1(1) = -1.0;
-  p2(0) = -1.0; p2(1) =  0.0;
-  p3(0) = -1.0; p3(1) =  1.0;
-  p4(0) =  0.0; p4(1) =  1.0;
-  p5(0) =  1.0; p5(1) =  1.0;
-  p6(0) =  1.0; p6(1) =  0.0;
-  p7(0) =  0.0; p7(1) =  0.0;
-  p8(0) =  0.0; p8(1) = -1.0;
+// this is what's claimed to be the domain in the Cockburn/Gopalakrishnan paper.
+// below is the one that I think they actually used...
+// builds a domain for (-1,1)^2 \ (0,1) x (-1,0)  
+//  p1(0) = -1.0; p1(1) = -1.0;
+//  p2(0) = -1.0; p2(1) =  0.0;
+//  p3(0) = -1.0; p3(1) =  1.0;
+//  p4(0) =  0.0; p4(1) =  1.0;
+//  p5(0) =  1.0; p5(1) =  1.0;
+//  p6(0) =  1.0; p6(1) =  0.0;
+//  p7(0) =  0.0; p7(1) =  0.0;
+//  p8(0) =  0.0; p8(1) = -1.0;
   
+// build a domain for (-1,1)^2 \ (-1,0) x (-1,0)
+// (this is a rotation about the origin of the points above)
+  p1(0) = -1.0; p1(1) =  1.0;
+  p2(0) =  0.0; p2(1) =  1.0;
+  p3(0) =  1.0; p3(1) =  1.0;
+  p4(0) =  1.0; p4(1) =  0.0;
+  p5(0) =  1.0; p5(1) = -1.0;
+  p6(0) =  0.0; p6(1) = -1.0;
+  p7(0) =  0.0; p7(1) =  0.0;
+  p8(0) = -1.0; p8(1) =  0.0;
+
   vertices.push_back(p1);
   vertices.push_back(p2);
   vertices.push_back(p3);
@@ -283,34 +367,36 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
     elementVertices.push_back(element);
     element.clear();
     
-    element.push_back(6);
-    element.push_back(1);
-    element.push_back(0);
-    elementVertices.push_back(element);
-    element.clear();
-    
-    element.push_back(1);
-    element.push_back(6);
-    element.push_back(2);
-    elementVertices.push_back(element);
-    element.clear();
-    
-    element.push_back(2);
-    element.push_back(6);
-    element.push_back(3);
-    elementVertices.push_back(element);
-    element.clear();
-    
-    element.push_back(6);
-    element.push_back(4);
-    element.push_back(3);
-    elementVertices.push_back(element);
-    element.clear();
-    
-    element.push_back(6);
-    element.push_back(5);
-    element.push_back(4);
-    elementVertices.push_back(element);
+    // DEBUGGING by commenting out most of the mesh creation
+//    
+//    element.push_back(6);
+//    element.push_back(1);
+//    element.push_back(0);
+//    elementVertices.push_back(element);
+//    element.clear();
+//    
+//    element.push_back(1);
+//    element.push_back(6);
+//    element.push_back(2);
+//    elementVertices.push_back(element);
+//    element.clear();
+//    
+//    element.push_back(2);
+//    element.push_back(6);
+//    element.push_back(3);
+//    elementVertices.push_back(element);
+//    element.clear();
+//    
+//    element.push_back(6);
+//    element.push_back(4);
+//    element.push_back(3);
+//    elementVertices.push_back(element);
+//    element.clear();
+//    
+//    element.push_back(6);
+//    element.push_back(5);
+//    element.push_back(4);
+//    elementVertices.push_back(element);
   } else {
     vector<int> element;
     element.push_back(0);
@@ -335,6 +421,29 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
   }
 }
 
+void printSamplePoints(FunctionPtr fxn, string fxnName) {
+  int rank = 0;
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+#else
+#endif
+  if (rank==0) {
+    vector< pair<double, double> > points;
+    points.push_back( make_pair(0, 0) );
+    points.push_back( make_pair(1, 0) );
+    points.push_back( make_pair(0, 1) );
+    points.push_back( make_pair(1, 1) );
+    points.push_back( make_pair(-1, 0) );
+    points.push_back( make_pair(0, -1) );
+    points.push_back( make_pair(1, -1) );
+    points.push_back( make_pair(-1, -1) );
+    for (int i=0; i<points.size(); i++) {
+      cout << fxnName << "(" << points[i].first << ", " << points[i].second << ") = ";
+      cout << Function::evaluate(fxn, points[i].first, points[i].second) << endl;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
@@ -347,15 +456,16 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
-  bool useHDGManufacturedSolution = true;
-  bool useKanschatSoln = false;
+  bool useHDGSingularSolution = false;
+  bool useKanschatSoln = true;
+  bool reportConditionNumber = false;
   bool useCG = false;
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
   Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
 
-  if (useHDGManufacturedSolution && useKanschatSoln ) {
+  if (useHDGSingularSolution && useKanschatSoln ) {
     cout << "Error: cannot use both HDG and Kanschat solution simultaneously!\n";
     exit(1);
   }
@@ -376,7 +486,8 @@ int main(int argc, char *argv[]) {
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
-    cout << "useHDGManufacturedSolution = "  << (useHDGManufacturedSolution ? "true" : "false") << "\n";
+    cout << "useHDGSingularSolution = "  << (useHDGSingularSolution ? "true" : "false") << "\n";
+    cout << "reportConditionNumber = " << (reportConditionNumber ? "true" : "false") << "\n";
   }
   
   double mu = 1.0;
@@ -402,6 +513,8 @@ int main(int argc, char *argv[]) {
       break;
   }
   
+  FunctionPtr u1_exact, u2_exact, p_exact;
+
   Teuchos::RCP<ExactSolution> mySolution;
   if (! stokesForm.get() ) {
     cout << "\n\n ERROR: stokesForm undefined!!\n\n";
@@ -417,13 +530,17 @@ int main(int argc, char *argv[]) {
     FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
     FunctionPtr y = Teuchos::rcp( new Yn(1) );
     
-    FunctionPtr u1_exact, u2_exact, p_exact;
+    
+    SpatialFilterPtr entireBoundary;
     
     if (useKanschatSoln) {
       u1_exact = - exp_x * ( y * cos_y + sin_y );
       u2_exact = exp_x * y * sin_y;
       p_exact = 2.0 * exp_x * sin_y;
-    } else if (useHDGManufacturedSolution) {
+      entireBoundary = Teuchos::rcp( new SquareBoundary );
+    } else if (useHDGSingularSolution) {
+      entireBoundary = Teuchos::rcp( new ReentrantCornerBoundary );
+      
       const double PI  = 3.141592653589793238462;
       const double lambda = 0.54448373678246;
       const double omega = 3.0 * PI / 2.0;
@@ -446,15 +563,56 @@ int main(int argc, char *argv[]) {
       
       FunctionPtr x_to_lambda = Teuchos::rcp( new Xp(lambda) );
       FunctionPtr x_to_lambda_minus = Teuchos::rcp( new Xp(lambda_minus) );
+      FunctionPtr x_to_lambda_plus = Teuchos::rcp( new Xp(lambda_plus) );
       FunctionPtr r_to_lambda = Teuchos::rcp( new PolarizedFunction( x_to_lambda ) );
       FunctionPtr r_to_lambda_minus = Teuchos::rcp( new PolarizedFunction( x_to_lambda_minus ) );
+      FunctionPtr r_to_lambda_plus = Teuchos::rcp( new PolarizedFunction( x_to_lambda_plus ) );
       
       FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction(Teuchos::rcp( new Cos_y ) ) );
       FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction(Teuchos::rcp( new Sin_y ) ) );
-      
-      u1_exact = r_to_lambda * (  lambda_plus * sin_theta * (FunctionPtr) phi_theta + cos_theta * phi_theta_prime );
-      u2_exact = r_to_lambda * ( -lambda_plus * cos_theta * (FunctionPtr) phi_theta + sin_theta * phi_theta_prime );
+
+      // define stream function:
+      FunctionPtr psi = r_to_lambda_plus * (FunctionPtr) phi_theta;
+      u1_exact = psi->dy();
+      u2_exact = - psi->dx();
+//      u1_exact = r_to_lambda * (  lambda_plus * sin_theta * (FunctionPtr) phi_theta + cos_theta * phi_theta_prime );
+//      u2_exact = r_to_lambda * ( -lambda_plus * cos_theta * (FunctionPtr) phi_theta + sin_theta * phi_theta_prime );
       p_exact = -r_to_lambda_minus * ( (lambda_plus * lambda_plus) * phi_theta_prime + phi_theta_triple_prime) / lambda_minus;
+      
+      double p_avg = 9.00146834554765 / 3.0; // numerically determined: want a zero-mean pressure (3.0 being the domain measure)
+      p_exact = p_exact - (FunctionPtr) Teuchos::rcp( new ConstantScalarFunction(p_avg) );
+      
+      // test code to check
+      if (! checkDivergenceFree(u1_exact, u2_exact) ) {
+        cout << "WARNING: exact solution does not appear to be divergence-free.\n";
+      }
+      
+      printSamplePoints(u1_exact, "u1_exact");
+      printSamplePoints(u2_exact, "u1_exact");
+//      cout << "u1_exact(-1, 0) = " << Function::evaluate(u1_exact, -1, 0) << endl;
+//      cout << "u2_exact(-1, 0) = " << Function::evaluate(u2_exact, -1, 0) << endl;
+//      cout << "u1_exact(-0.5, 0) = " << Function::evaluate(u1_exact, -0.5, 0) << endl;
+//      cout << "u2_exact(-0.5, 0) = " << Function::evaluate(u2_exact, -0.5, 0) << endl;
+//      cout << "u1_exact(0, -1) = " << Function::evaluate(u1_exact, 0, -1) << endl;
+//      cout << "u2_exact(0, -1) = " << Function::evaluate(u2_exact, 0, -1) << endl;
+//      cout << "u1_exact(0, -0.5) = " << Function::evaluate(u1_exact, 0, -0.5) << endl;
+//      cout << "u2_exact(0, -0.5) = " << Function::evaluate(u2_exact, 0, -0.5) << endl;
+//      
+//      cout << "u1_exact(1, 0) = " << Function::evaluate(u1_exact, 1, 0) << endl;
+//      cout << "u2_exact(1, 0) = " << Function::evaluate(u2_exact, 1, 0) << endl;
+//      cout << "u1_exact(0.5, 0) = " << Function::evaluate(u1_exact, 0.5, 0) << endl;
+//      cout << "u2_exact(0.5, 0) = " << Function::evaluate(u2_exact, 0.5, 0) << endl;
+//      cout << "u1_exact(0, 1) = " << Function::evaluate(u1_exact, 0, 1) << endl;
+//      cout << "u2_exact(0, 1) = " << Function::evaluate(u2_exact, 0, 1) << endl;
+//      cout << "u1_exact(0, 0.5) = " << Function::evaluate(u1_exact, 0, 0.5) << endl;
+//      cout << "u2_exact(0, 0.5) = " << Function::evaluate(u2_exact, 0, 0.5) << endl;
+      
+      FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+      FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+      
+      printSamplePoints(f1, "f1");
+      printSamplePoints(f2, "f2");
+      
     } else {
       computeRelativeErrors = false;
       u1_exact = Function::zero();
@@ -462,7 +620,6 @@ int main(int argc, char *argv[]) {
       p_exact = y; // odd function: zero mean on our domain
     }
     
-    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
     BFPtr stokesBF = stokesForm->bf();
     if (rank==0)
       stokesBF->printTrialTestInteractions();
@@ -521,16 +678,47 @@ int main(int argc, char *argv[]) {
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
+    study.setReportConditionNumber(reportConditionNumber);
     if (useCG) study.setSolver(cgSolver);
-    
-    if (! useHDGManufacturedSolution) {
+        
+    if (! useHDGSingularSolution) {
       study.solve(quadPoints);
     } else {
       // L-shaped domain
       vector<FieldContainer<double> > vertices;
       vector< vector<int> > elementVertices;
       LShapedDomain(vertices, elementVertices, useTriangles);
+       // claim from [18] is homogeneous RHS -- we're not seeing that, so as a test,
+      // let's impose that.  (If we now converge, that will give a clue where the bug is...)
+//      RHSPtr zeroRHS = Teuchos::rcp( new RHSEasy );
+//      
+//      study = HConvergenceStudy(mySolution,
+//                              mySolution->bilinearForm(),
+//                              zeroRHS,
+//                              mySolution->bc(), ip,  
+//                              minLogElements, maxLogElements, 
+//                              polyOrder+1, pToAdd, false, useTriangles, false);
+      
+      // DEBUGGING: as a test, remove the reentrant corner:
+      // immediate motivation is simply that my MATLAB plotters don't handle the L-shape well.
+//      quadPoints(0,0) = -1.0; // x1
+//      quadPoints(0,1) =  0.0; // y1
+//      quadPoints(1,0) =  1.0;
+//      quadPoints(1,1) =  0.0;
+//      quadPoints(2,0) =  1.0;
+//      quadPoints(2,1) =  1.0;
+//      quadPoints(3,0) = -1.0;
+//      quadPoints(3,1) =  1.0;
+//      
+//      study.solve(quadPoints);
+      
       study.solve(vertices,elementVertices);
+      
+      // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
+      // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)
+      int cubatureEnrichment = useTriangles ? 0 : 15;
+      double p_integral = p_exact->integrate(study.getSolution(maxLogElements)->mesh(), cubatureEnrichment);
+      cout << "Integral of pressure: " << setprecision(15) << p_integral << endl;
     }
     
     if (rank == 0) {
@@ -559,6 +747,14 @@ int main(int argc, char *argv[]) {
         ostringstream filePathPrefix;
         filePathPrefix << "stokes/" << fieldName << "_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
+      }
+      
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        ostringstream filePath;
+        int numElements = pow(2.0,i);
+        filePath << "stokes/soln" << numElements << "x";
+        filePath << numElements << "_p" << polyOrder << ".vtk";
+        study.getSolution(i)->writeToVTK(filePath.str());
       }
       
       for (int i=0; i<primaryVariables.size(); i++) {
