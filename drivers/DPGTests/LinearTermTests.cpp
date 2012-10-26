@@ -351,6 +351,14 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   // notion is integration by parts:
   // (div f, v) = < f * n, v > - (f, grad v)
+  
+  // We perform two subtests for each test: first we try with a particular
+  // function substituted for the variable.  Second, we integrate over the
+  // basis for the mesh (i.e. we test a whole bunch of functions, whose
+  // precise definition is a bit complicated).
+  
+  /////////////   FIRST TEST  ////////////////
+  
   // start simply: define f to be (x, 0)
   // (div f, v) = (1, v)
   // < f * n, v > - (f, grad v) = < x n1, v > - ( x, v->dx() )
@@ -362,18 +370,21 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   FunctionPtr x3 = Teuchos::rcp( new Xn(3) );
   FunctionPtr y3 = Teuchos::rcp( new Yn(3) );
   
-  FunctionPtr one = Function::constant(1);
-  LinearTermPtr identity = one*v1;
+  FunctionPtr vector_fxn = Function::vectorize( x, Function::zero() ); // div of this = 1
+  LinearTermPtr lt_v = vector_fxn->div()*v1;
+  
+  // part a: substitute v1 = y^2
   
   FunctionPtr v1_value = y2;
   map< int, FunctionPtr > var_values;
   var_values[v1->ID()] = v1_value;
   
-  double expectedValue = identity->evaluate(var_values, false)->integrate(mesh);
+  double expectedValue = lt_v->evaluate(var_values, false)->integrate(mesh);
   
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr n = Function::normal();
   
-  LinearTermPtr ibp = x * n->x() * v1 - x * v1->dx();
+  LinearTermPtr ibp = vector_fxn * n * v1 - vector_fxn * v1->grad();
+  
   double boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
   double volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
   double actualValue = boundaryIntegralSum + volumeIntegralSum;
@@ -382,11 +393,37 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   if (abs(expectedValue - actualValue)>tol){
     success = false;
   }
+
+  // part b: integrate the bases over each of the cells:
+  FieldContainer<double> integrals_expected( mesh->numElements(), testOrder->totalDofs() );
+  FieldContainer<double> integrals_actual( mesh->numElements(), testOrder->totalDofs() );
   
-  FunctionPtr vector_fxn = Function::vectorize( x2 / 6.0, x2 * y / 2.0 ); // div of this = x / 3 + x^2 / 2
+  lt_v->integrate(integrals_expected,testOrder,basisCache);
+  ibp->integrate(integrals_actual,testOrder,basisCache);
   
-  LinearTermPtr lt_v = vector_fxn->div()*v1;
+  double maxDiff = 0;
+  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
   
+  // just on the odd chance that ordering makes a difference, repeat this test with the opposite order in ibp:
+  ibp =  - vector_fxn * v1->grad() + vector_fxn * n * v1;
+  ibp->integrate(integrals_actual,testOrder,basisCache);
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+  
+  /////////////   SECOND TEST    ////////////////
+  
+  vector_fxn = Function::vectorize( x2 / 6.0, x2 * y / 2.0 ); // div of this = x / 3 + x^2 / 2
+  
+  lt_v = vector_fxn->div()*v1;
+  
+  // part a: substitute v1 = y^2
   expectedValue = lt_v->evaluate(var_values, false)->integrate(mesh);
   
   // integrating x2v by parts:
@@ -397,6 +434,29 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   tol = 1e-14;
   if (abs(expectedValue - actualValue)>tol){
+    success = false;
+  }
+  
+  // part b: integrate the bases over each of the cells:
+  integrals_expected.initialize(0.0);
+  integrals_actual.initialize(0.0);
+  
+  lt_v->integrate(integrals_expected,testOrder,basisCache);
+  ibp->integrate(integrals_actual,testOrder,basisCache);
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+  
+  // just on the odd chance that ordering makes a difference, repeat this test with the opposite order in ibp:
+  ibp =  - vector_fxn * v1->grad() + vector_fxn * n * v1;
+  ibp->integrate(integrals_actual,testOrder,basisCache);
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
     success = false;
   }
   
