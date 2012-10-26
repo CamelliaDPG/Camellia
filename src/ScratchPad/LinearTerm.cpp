@@ -71,7 +71,6 @@ LinearTerm::LinearTerm( const LinearTerm &a ) {
 }
 
 void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
-  if (weight->isZero()) return; // nothing to do in that case.
   // check ranks:
   int rank; // rank of weight * var
   if (weight->rank() == var->rank() ) { // then we dot like terms together, getting a scalar
@@ -94,6 +93,7 @@ void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
   if (_termType != var->varType() ) {
     TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
   }
+  if (weight->isZero()) return; // in that case, we can skip the actual adding...
   _summands.push_back( make_pair( weight, var ) );
   _varIDs.insert(var->ID());
 }
@@ -1253,7 +1253,6 @@ LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
 }
 
 void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
-  if (a.isZero()) return;
   if (_rank == -1) { // we're empty -- adopt rhs's rank
     _rank = a.rank();
   }
@@ -1270,6 +1269,7 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
       _termType = MIXED_TYPE;
     }
   }
+  if (a.isZero()) return; // we can skip the actual adding in this case
   _summands.insert(_summands.end(), a.summands().begin(), a.summands().end());
   _varIDs.insert( a.varIDs().begin(), a.varIDs().end() );
 }
@@ -1279,8 +1279,7 @@ void LinearTerm::addTerm(LinearTermPtr aPtr, bool overrideTypeCheck) {
 }
 
 LinearTerm& LinearTerm::operator+=(const LinearTerm &rhs) {
-  if (!rhs.isZero())
-    this->addTerm(rhs);
+  this->addTerm(rhs);
   return *this;
 }
 
