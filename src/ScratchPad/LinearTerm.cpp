@@ -144,10 +144,9 @@ VarType LinearTerm::termType() const {
 // fluxes are only defined on the element boundary.
 // TODO: make the code below match the description above.
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                           BasisCachePtr basisCache, bool forceBoundaryTerm) {
+                           BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto) {
   // values has dimensions (numCells, thisFields)
-  
-  values.initialize();
+  if (!sumInto) values.initialize();
   
   set<int> varIDs = this->varIDs();
   
@@ -276,10 +275,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering, 
                            LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
-                           BasisCachePtr basisCache, bool forceBoundaryTerm) {
+                           BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto) {
   // values has dimensions (numCells, otherFields, thisFields)
-  
-  values.initialize();
+  if (!sumInto) values.initialize();
   
   int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -563,14 +561,16 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
 }
 
 bool LinearTerm::isZero() const { // true if the LinearTerm is identically zero
-  for (vector< LinearSummand >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+  // DEBUGGING test: pretend we're NEVER zero
+  return false;
+  /*for (vector< LinearSummand >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
     LinearSummand ls = *lsIt;
     FunctionPtr f = ls.first;
     if (! f->isZero() ) {
       return false;
     }
   }
-  return true;
+  return true;*/
 }
 
 // compute the value of linearTerm for solution at the BasisCache points

@@ -357,6 +357,10 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   // basis for the mesh (i.e. we test a whole bunch of functions, whose
   // precise definition is a bit complicated).
   
+  // A third test is against the two-term LinearTerm::integrate() method.
+  // This doesn't do integration by parts, but rather tests that
+  // (u + u->dot_normal(), v) = (u,v) + (u->dot_normal(), v)
+  
   /////////////   FIRST TEST  ////////////////
   
   // start simply: define f to be (x, 0)
@@ -395,8 +399,9 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   }
 
   // part b: integrate the bases over each of the cells:
-  FieldContainer<double> integrals_expected( mesh->numElements(), testOrder->totalDofs() );
-  FieldContainer<double> integrals_actual( mesh->numElements(), testOrder->totalDofs() );
+  int num_dofs = testOrder->totalDofs();
+  FieldContainer<double> integrals_expected( mesh->numElements(), num_dofs );
+  FieldContainer<double> integrals_actual( mesh->numElements(), num_dofs );
   
   lt_v->integrate(integrals_expected,testOrder,basisCache);
   ibp->integrate(integrals_actual,testOrder,basisCache);
@@ -409,11 +414,26 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   // just on the odd chance that ordering makes a difference, repeat this test with the opposite order in ibp:
   ibp =  - vector_fxn * v1->grad() + vector_fxn * n * v1;
-  ibp->integrate(integrals_actual,testOrder,basisCache);
+  ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
   
   maxDiff = 0;
   if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
     cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+  
+  // part c: two-term integrals
+  FieldContainer<double> integrals_expected_two_term( mesh->numElements(), num_dofs, num_dofs);
+  FieldContainer<double> integrals_actual_two_term( mesh->numElements(), num_dofs, num_dofs );
+  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache);
+  LinearTermPtr ibp1 = vector_fxn * n * v1;
+  LinearTermPtr ibp2 = - vector_fxn * v1->grad();
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, true);  // DO sumInto
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
     success = false;
   }
   
@@ -437,12 +457,9 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     success = false;
   }
   
-  // part b: integrate the bases over each of the cells:
-  integrals_expected.initialize(0.0);
-  integrals_actual.initialize(0.0);
-  
-  lt_v->integrate(integrals_expected,testOrder,basisCache);
-  ibp->integrate(integrals_actual,testOrder,basisCache);
+  // part b: integrate the bases over each of the cells
+  lt_v->integrate(integrals_expected,testOrder,basisCache, false, false);
+  ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
   
   maxDiff = 0;
   if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
@@ -452,11 +469,24 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   // just on the odd chance that ordering makes a difference, repeat this test with the opposite order in ibp:
   ibp =  - vector_fxn * v1->grad() + vector_fxn * n * v1;
-  ibp->integrate(integrals_actual,testOrder,basisCache);
+  ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
   
   maxDiff = 0;
   if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
     cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+  
+  // part c: two-term integrals
+  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache);
+  ibp1 = vector_fxn * n * v1;
+  ibp2 = - vector_fxn * v1->grad();
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, true);  // DO sumInto
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
     success = false;
   }
   

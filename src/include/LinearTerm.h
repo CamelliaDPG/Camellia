@@ -76,10 +76,10 @@ public:
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, DofOrderingPtr otherDofOrdering, 
-                 BasisCachePtr basisCache, bool forceBoundaryTerm = false);
+                 BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisDofOrdering, 
                  LinearTermPtr otherTerm, VarPtr otherVarID, FunctionPtr fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
