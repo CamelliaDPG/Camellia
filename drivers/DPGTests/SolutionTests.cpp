@@ -4,6 +4,11 @@
 #include "Intrepid_FieldContainer.hpp"
 #include "Mesh.h"
 
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
 #include "ConfusionBilinearForm.h"
 #include "ConfusionManufacturedSolution.h"
 #include "PoissonBilinearForm.h"
@@ -180,6 +185,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testPRefinementInitialization()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+ setup();
+  if (testScratchPadSolution()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -712,5 +724,125 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   
   // TODO: test for side caches, too (both traces & fluxes and fields restricted to sides...)
   
+  return success;
+}
+
+bool SolutionTests::testScratchPadSolution() {
+
+  bool success = true;
+  double tol = 1e-12;
+
+  int numProcs=1;
+  int rank=0;
+
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+//  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+//  Epetra_SerialComm Comm;
+#endif
+
+  
+  int nCells = 2;
+
+  double eps = .1;
+ 
+  double squareSize = 1.0;
+  
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  // robust test norm
+  IPPtr robIP = Teuchos::rcp(new IP);
+
+  robIP->addTerm( v);
+  robIP->addTerm( sqrt(eps) * v->grad() );
+  robIP->addTerm( beta * v->grad() );
+  robIP->addTerm( tau->div() );
+  robIP->addTerm( 1.0/sqrt(eps) * tau );
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = zero;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  bc->addDirichlet(uhat, squareBoundary, one);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int H1Order = 1; int pToAdd = 1;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = squareSize;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = squareSize;
+  quadPoints(2,1) = squareSize;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = squareSize;
+ 
+  int horizontalCells = nCells, verticalCells = nCells;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                confusionBF, H1Order, H1Order+pToAdd);
+    
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  solution->solve(false);
+  double uL2Norm = solution->L2NormOfSolutionGlobal(u->ID());
+  double sigma1L2Norm = solution->L2NormOfSolutionGlobal(sigma1->ID()); // should be 0
+  double sigma2L2Norm = solution->L2NormOfSolutionGlobal(sigma2->ID()); // shoudl be 0
+  double L1L2Norm = uL2Norm + sigma1L2Norm + sigma2L2Norm;
+
+  if (abs(L1L2Norm-1.0)>tol){
+    success = false;
+  }  
   return success;
 }
