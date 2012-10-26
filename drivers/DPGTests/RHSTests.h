@@ -31,7 +31,8 @@ public:
   bool testComputeRHSLegacy(); // test copied from DPGTests
   bool testIntegrateAgainstStandardBasis();
   bool testRHSEasy();
-  
+  bool testTrivialRHS();
+
   std::string testSuiteName();
 };
 

@@ -46,6 +46,13 @@ void RHSTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testTrivialRHS()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
 }
 
 
@@ -380,6 +387,67 @@ bool RHSTests::testRHSEasy() {
   }
   
   return success;
+}
+
+bool RHSTests::testTrivialRHS(){
+  
+  bool success = true;
+  double tol = 1e-14;
+  
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  //  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  //  Epetra_SerialComm Comm;
+#endif
+  Teuchos::RCP<ElementType> elemType = _mesh->getElement(0)->elementType();
+  
+  vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemType);
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemType);
+  
+  int numCells = elemsInPartitionOfType.size();
+  int numTestDofs = elemType->testOrderPtr->totalDofs();
+
+  // determine cellIDs
+  vector<int> cellIDs;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    int cellID = _mesh->cellID(elemType, cellIndex, rank);
+    cellIDs.push_back(cellID);
+  }
+  
+  // prepare basisCache and cellIDs
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
+  bool createSideCacheToo = true;
+  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+  
+  FieldContainer<double> rhsExpected(numCells,numTestDofs);
+  
+  VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
+  //  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
+  VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = zero;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  rhs->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
+  for (int i = 0;i<numCells;i++){
+    for (int j = 0;j<numTestDofs;j++){
+      if (abs(rhsExpected(i,j))>tol){
+	success = false;
+      }
+    }
+  }
+
+  // if we get this far and don't fail, 
+  return success;
+
+
 }
 
 std::string RHSTests::testSuiteName() {
