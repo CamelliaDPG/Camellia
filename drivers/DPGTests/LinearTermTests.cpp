@@ -425,11 +425,21 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   // part c: two-term integrals
   FieldContainer<double> integrals_expected_two_term( mesh->numElements(), num_dofs, num_dofs);
   FieldContainer<double> integrals_actual_two_term( mesh->numElements(), num_dofs, num_dofs );
-  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache);
+  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache, false, false);
   LinearTermPtr ibp1 = vector_fxn * n * v1;
   LinearTermPtr ibp2 = - vector_fxn * v1->grad();
   lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, true);  // DO sumInto
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, true);  // DO sumInto
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+  
+  // now, same thing but with the roles of ibp{1|2} and lt_v reversed:
+  ibp1->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
+  ibp2->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, true);  // DO sumInto
   
   maxDiff = 0;
   if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
@@ -478,11 +488,21 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   }
   
   // part c: two-term integrals
-  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache);
+  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache, false, false);
   ibp1 = vector_fxn * n * v1;
   ibp2 = - vector_fxn * v1->grad();
   lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, true);  // DO sumInto
+  lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, true);  // DO sumInto
+  
+  maxDiff = 0;
+  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
+    success = false;
+  }
+
+  // now, same thing but with the roles of ibp{1|2} and lt_v reversed:
+  ibp1->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
+  ibp2->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, true);  // DO sumInto
   
   maxDiff = 0;
   if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
