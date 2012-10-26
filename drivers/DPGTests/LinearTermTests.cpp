@@ -356,11 +356,16 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   // < f * n, v > - (f, grad v) = < x n1, v > - ( x, v->dx() )
   
   FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr x2 = Teuchos::rcp( new Xn(2) );
+  FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
+  FunctionPtr x3 = Teuchos::rcp( new Xn(3) );
+  FunctionPtr y3 = Teuchos::rcp( new Yn(3) );
   
   FunctionPtr one = Function::constant(1);
   LinearTermPtr identity = one*v1;
   
-  FunctionPtr v1_value = Teuchos::rcp( new Xn(2) );
+  FunctionPtr v1_value = y2;
   map< int, FunctionPtr > var_values;
   var_values[v1->ID()] = v1_value;
   
@@ -377,6 +382,24 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   if (abs(expectedValue - actualValue)>tol){
     success = false;
   }
+  
+  FunctionPtr vector_fxn = Function::vectorize( x2 / 6.0, x2 * y / 2.0 ); // div of this = x / 3 + x^2 / 2
+  
+  LinearTermPtr lt_v = vector_fxn->div()*v1;
+  
+  expectedValue = lt_v->evaluate(var_values, false)->integrate(mesh);
+  
+  // integrating x2v by parts:
+  ibp = vector_fxn * n * v1 - vector_fxn * v1->grad();
+  boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
+  volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
+  actualValue = boundaryIntegralSum + volumeIntegralSum;
+  
+  tol = 1e-14;
+  if (abs(expectedValue - actualValue)>tol){
+    success = false;
+  }
+  
   return success;
 }
 
