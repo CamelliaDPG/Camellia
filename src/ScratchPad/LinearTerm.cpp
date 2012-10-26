@@ -71,6 +71,7 @@ LinearTerm::LinearTerm( const LinearTerm &a ) {
 }
 
 void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
+  if (weight->isZero()) return; // nothing to do in that case.
   // check ranks:
   int rank; // rank of weight * var
   if (weight->rank() == var->rank() ) { // then we dot like terms together, getting a scalar
@@ -145,6 +146,9 @@ VarType LinearTerm::termType() const {
 void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
+  
+  values.initialize();
+  
   set<int> varIDs = this->varIDs();
   
   int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
@@ -274,6 +278,8 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
                            LinearTermPtr otherTerm, DofOrderingPtr otherOrdering, 
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, otherFields, thisFields)
+  
+  values.initialize();
   
   int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -554,6 +560,17 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       }
     }
   }
+}
+
+bool LinearTerm::isZero() const { // true if the LinearTerm is identically zero
+  for (vector< LinearSummand >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    FunctionPtr f = ls.first;
+    if (! f->isZero() ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // compute the value of linearTerm for solution at the BasisCache points
@@ -1236,6 +1253,7 @@ LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {
 }
 
 void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
+  if (a.isZero()) return;
   if (_rank == -1) { // we're empty -- adopt rhs's rank
     _rank = a.rank();
   }
@@ -1261,7 +1279,8 @@ void LinearTerm::addTerm(LinearTermPtr aPtr, bool overrideTypeCheck) {
 }
 
 LinearTerm& LinearTerm::operator+=(const LinearTerm &rhs) {
-  this->addTerm(rhs);
+  if (!rhs.isZero())
+    this->addTerm(rhs);
   return *this;
 }
 

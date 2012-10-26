@@ -81,6 +81,7 @@ public:
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr constant(double value);
+  static FunctionPtr normal(); // unit outward-facing normal on each element boundary
   static FunctionPtr null();
   static FunctionPtr zero();
 private:

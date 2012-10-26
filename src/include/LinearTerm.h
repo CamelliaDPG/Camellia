@@ -96,6 +96,8 @@ public:
   
   int rank() const;  // 0 for scalar, 1 for vector, etc.
 
+  bool isZero() const; // true if the LinearTerm is identically zero
+  
   string displayString(); // TeX by convention
   
   // -------------- added by Jesse --------------------

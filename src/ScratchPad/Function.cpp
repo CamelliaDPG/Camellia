@@ -499,6 +499,11 @@ FunctionPtr Function::constant(double value) {
   return Teuchos::rcp( new ConstantScalarFunction(value) );
 }
 
+FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
+  static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
+  return _normal;
+}
+
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
 }
