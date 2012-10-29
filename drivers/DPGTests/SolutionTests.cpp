@@ -745,11 +745,7 @@ bool SolutionTests::testScratchPadSolution() {
 #endif
 
   
-  int nCells = 2;
-
   double eps = .1;
- 
-  double squareSize = 1.0;
   
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -792,7 +788,7 @@ bool SolutionTests::testScratchPadSolution() {
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
-  robIP->addTerm( 1.0/sqrt(eps) * tau );
+  robIP->addTerm( Function::constant(1.0)/sqrt(eps) * tau );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
 
@@ -818,13 +814,14 @@ bool SolutionTests::testScratchPadSolution() {
   
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = squareSize;
+  quadPoints(1,0) = 1.0;
   quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = squareSize;
-  quadPoints(2,1) = squareSize;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = squareSize;
+  quadPoints(3,1) = 1.0;
  
+  int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
