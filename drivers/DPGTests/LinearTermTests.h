@@ -55,6 +55,8 @@ public:
 
   bool testEnergyNorm();
 
+  bool testRieszInversion();
+
   std::string testSuiteName();
 };
 

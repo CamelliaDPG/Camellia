@@ -15,7 +15,7 @@
 #include "IP.h"
 #include "BCEasy.h"
 #include "RHSEasy.h"
-
+#include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
@@ -159,6 +159,13 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testEnergyNorm()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown(); 
+
+  setup();
+  if (testRieszInversion()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -532,6 +539,53 @@ bool LinearTermTests::testEnergyNorm() {
   return success;
 }
 
+// tests Riesz inversion by integration by parts
+bool LinearTermTests::testRieszInversion() {
+  bool success = true;
+  
+  LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;  
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr testFxn1 = X;
+  FunctionPtr testFxn2 = Y;
+  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
+  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
+
+  integrand->addTerm(divTestFxn*v1);
+  integrandIBP->addTerm(vectorTest*n*v1 - vectorTest*v1->grad() ); // boundary term
+
+  IPPtr sobolevIP = Teuchos::rcp(new IP);
+  sobolevIP->addTerm(v1);
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrand));
+  riesz->computeRieszRep();
+  Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrandIBP));
+  rieszIBP->computeRieszRep();
+
+  FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v1->ID(),riesz));
+  FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v1->ID(),rieszIBP));
+  double tol = 1e-15;
+  double maxDiff;  
+  int nCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
+
+  FieldContainer<double> valOriginal( nCells, numPts);
+  FieldContainer<double> valIBP( nCells, numPts);
+  rieszOrigFxn->values(valOriginal,basisCache);
+  rieszIBPFxn->values(valIBP,basisCache);
+
+  success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
+  if (success==false){
+    cout << "Test Riesz inversion fails with maxDiff = " << maxDiff << endl;
+  }
+  return success;
+}
 std::string LinearTermTests::testSuiteName() {
   return "LinearTermTests";
 }
