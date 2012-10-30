@@ -561,10 +561,11 @@ bool LinearTermTests::testRieszInversion() {
 
   integrand->addTerm(divTestFxn*v1);
   integrandIBP->addTerm(vectorTest*n*v1 + -vectorTest*v1->grad()); // boundary term
-  integrandIBPReordered->addTerm(-vectorTest*v1->grad() + vectorTest*n*v1); // boundary term
+  integrandIBPReordered->addTerm(vectorTest*n*v1 -vectorTest*v1->grad()); // boundary term
 
   IPPtr sobolevIP = Teuchos::rcp(new IP);
   sobolevIP->addTerm(v1);
+  sobolevIP->addTerm(q1); // dummy var - shouldn't show up in solves
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrand));
   riesz->computeRieszRep();
   Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrandIBP));
@@ -575,7 +576,6 @@ bool LinearTermTests::testRieszInversion() {
   FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v1->ID(),riesz));
   FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v1->ID(),rieszIBP));
   FunctionPtr rieszIBPReorderFxn = Teuchos::rcp(new RepFunction(v1->ID(),rieszIBPReorder));
-  double tol = 1e-15;
   int nCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 
@@ -587,6 +587,7 @@ bool LinearTermTests::testRieszInversion() {
   rieszIBPReorderFxn->values(valIBPReorder,basisCache);
 
   double maxDiff,maxDiff1,maxDiff2;
+  double tol = 1e-15;
   bool success1 = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff1);
   bool success2 = TestSuite::fcsAgree(valOriginal,valIBPReorder,tol,maxDiff2);
   maxDiff = max(maxDiff1,maxDiff2);
@@ -594,7 +595,7 @@ bool LinearTermTests::testRieszInversion() {
   bool bothFailed = ((success1==false) && (success2==false));
   if (bothFailed){
     success = false;
-    cout << "Test Riesz inversion fails both ordered/reordered LT with maxDiff = " << maxDiff << endl;
+    cout << "Test Riesz inversion fails both ordered/reordered LT with maxDiff = " << maxDiff1 << ", " << maxDiff2 << endl;
   }else if (oneFailed){
     success = false;
     cout << "Test Riesz inversion fails just one LT with maxDiff = " << maxDiff << endl;
