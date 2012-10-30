@@ -198,7 +198,7 @@ which, as $\delta \rightarrow 0$, gives an equivalent result.
 \frametitle{Globally optimal test functions}
 Recall that DPG optimal test functions are from a local inversion of the Riesz operator.  We can choose a \textcolor{red}{conforming} test space and invert the Riesz operator over the entire domain: 
 \begin{align*}
-V_{\rm global} &\coloneqq \{v\in \oplus V_K: \LRa{\uh_h, \jump{v}}_{\Gh^0}, \forall \uh_h \in \widehat{U}_h\} \\
+V_{\rm global} &\coloneqq \{v\in \oplus V_K: \LRa{\uh_h, \jump{v}}_{\Gh}, \forall \uh_h \in \widehat{U}_h\} \\
 \LRp{v,\delta v}_{\Omega} &= b(u_h,\delta v), \quad v\in V_{\rm global}
 \end{align*}
 We refer to these as \textit{globally} optimal test functions.\footnote{Selecting these test functions removes internal traces from the big picture!}  The test space resulting from the local inversion of the Riesz operator is related to the \textit{globally} optimal test space through the following lemma: 
@@ -262,10 +262,10 @@ We expect that the term $\nor{\div \tau - \beta \cdot \grad v}_{L^2}$ is bounded
 
 As the boundedness of this term determines the robustness of $\sigma$, our energy norm is
 \begin{align*}
-\nor{\boldsymbol U}_E &\coloneqq \sup_{\LRp{v,\tau}}\LRp{\frac{\LRp{u,\Grad_h \cdot \tau - \beta \cdot \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V} + \frac{\LRp{\sigma, \frac{1}{\epsilon}\tau + \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V}} + \text{etc} \\
+\nor{\boldsymbol U}_E &\simeq \sup_{\LRp{v,\tau}}\LRp{\frac{\LRp{u,\Grad_h \cdot \tau - \beta \cdot \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V} + \frac{\LRp{\sigma, \frac{1}{\epsilon}\tau + \Grad_h v}_{\Omega}}{\nor{\LRp{v,\tau}}_V}} + \text{etc} \\
 &\approx \nor{u}_{L^2} + C_{\text{Pe}}\nor{\sigma}_{L^2} + \nor{\LRp{\uh,\fnh}}
 \end{align*}
-where $\text{Pe}$ is the element Peclet number near the inflow.  
+where $\text{Pe}$ is the element Peclet number near the inflow, and $C_{\text{Pe}}$ accounts for the underresolution of the inflow layer.
 %For the quasi-optimal test norm, underresolution of the inflow boundary layer negatively affects only the robustness of $u$. 
 }
 
