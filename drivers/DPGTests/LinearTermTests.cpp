@@ -545,6 +545,7 @@ bool LinearTermTests::testRieszInversion() {
   
   LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
   LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrandIBPReordered = Teuchos::rcp(new LinearTerm);// residual
 
   vector<double> e1(2); // (1,0)
   vector<double> e2(2); // (0,1)
@@ -559,7 +560,8 @@ bool LinearTermTests::testRieszInversion() {
   FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
 
   integrand->addTerm(divTestFxn*v1);
-  integrandIBP->addTerm(vectorTest*n*v1 - vectorTest*v1->grad() ); // boundary term
+  integrandIBP->addTerm(vectorTest*n*v1 + -vectorTest*v1->grad()); // boundary term
+  integrandIBPReordered->addTerm(-vectorTest*v1->grad() + vectorTest*n*v1); // boundary term
 
   IPPtr sobolevIP = Teuchos::rcp(new IP);
   sobolevIP->addTerm(v1);
@@ -567,22 +569,35 @@ bool LinearTermTests::testRieszInversion() {
   riesz->computeRieszRep();
   Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrandIBP));
   rieszIBP->computeRieszRep();
+  Teuchos::RCP<RieszRep> rieszIBPReorder = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrandIBPReordered));
+  rieszIBPReorder->computeRieszRep();
 
   FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v1->ID(),riesz));
   FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v1->ID(),rieszIBP));
+  FunctionPtr rieszIBPReorderFxn = Teuchos::rcp(new RepFunction(v1->ID(),rieszIBPReorder));
   double tol = 1e-15;
-  double maxDiff;  
   int nCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 
   FieldContainer<double> valOriginal( nCells, numPts);
   FieldContainer<double> valIBP( nCells, numPts);
+  FieldContainer<double> valIBPReorder( nCells, numPts);
   rieszOrigFxn->values(valOriginal,basisCache);
   rieszIBPFxn->values(valIBP,basisCache);
+  rieszIBPReorderFxn->values(valIBPReorder,basisCache);
 
-  success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
-  if (success==false){
-    cout << "Test Riesz inversion fails with maxDiff = " << maxDiff << endl;
+  double maxDiff,maxDiff1,maxDiff2;
+  bool success1 = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff1);
+  bool success2 = TestSuite::fcsAgree(valOriginal,valIBPReorder,tol,maxDiff2);
+  maxDiff = max(maxDiff1,maxDiff2);
+  bool oneFailed = ((success1==false) || (success2==false));
+  bool bothFailed = ((success1==false) && (success2==false));
+  if (bothFailed){
+    success = false;
+    cout << "Test Riesz inversion fails both ordered/reordered LT with maxDiff = " << maxDiff << endl;
+  }else if (oneFailed){
+    success = false;
+    cout << "Test Riesz inversion fails just one LT with maxDiff = " << maxDiff << endl;
   }
   return success;
 }
