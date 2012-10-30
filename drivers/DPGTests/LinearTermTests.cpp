@@ -137,6 +137,13 @@ void LinearTermTests::teardown() {
 
 void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) { 
   setup();
+  if (testRieszInversion()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testBoundaryPlusVolumeTerms()) {
     numTestsPassed++;
   }
@@ -159,13 +166,6 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testEnergyNorm()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown(); 
-
-  setup();
-  if (testRieszInversion()) {
     numTestsPassed++;
   }
   numTestsRun++;

@@ -50,6 +50,14 @@ class LinearTerm {
   map< ElementType*, FieldContainer<double> > _rieszRepresentationForElementType;
   map< ElementType*, FieldContainer<double> > _rieszRHSForElementType;
   map< int, double > _energyNormForCellIDGlobal;
+  
+  // some private utility methods:
+  static void integrate(FieldContainer<double> &values, 
+                        LinearTermPtr u, DofOrderingPtr uOrdering, 
+                        LinearTermPtr v, DofOrderingPtr vOrdering, 
+                        BasisCachePtr basisCache, bool sumInto=true);
+  static void multiplyFluxValuesByParity(FieldContainer<double> &fluxValues, BasisCachePtr sideBasisCache);
+
 public: // was protected; changed for debugging (no big deal either way, I think)
   const vector< LinearSummand > & summands() const;
 public:
@@ -73,6 +81,10 @@ public:
                 bool applyCubatureWeights = false);
   
   FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+  
+  LinearTermPtr getBoundaryOnlyPart();
+  LinearTermPtr getNonBoundaryOnlyPart();
+  LinearTermPtr getPart(bool boundaryOnlyPart);
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
@@ -108,7 +120,6 @@ public:
   double functionalNorm();
   const map<int,double> & energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
-
 
   // -------------- end of added by Jesse --------------------
 

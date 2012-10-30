@@ -114,6 +114,13 @@ void ScratchPadTests::teardown() {
 
 void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testPenaltyConstraints()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testSpatiallyFilteredFunction()) {
     numTestsPassed++;
   }
@@ -122,13 +129,6 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testConstantFunctionProduct()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testPenaltyConstraints()) {
     numTestsPassed++;
   }
   numTestsRun++;

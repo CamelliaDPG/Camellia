@@ -11,8 +11,18 @@
 #include "ExactSolution.h"
 #include "Mesh.h"
 
-class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
+// private class SimpleSolutionFunction:
+class SimpleSolutionFunction : public Function {
+  SolutionPtr _soln;
+  VarPtr _var;
+public:
+  SimpleSolutionFunction(VarPtr var, SolutionPtr soln);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
+  // for reasons of efficiency, may want to implement div() and grad() as well
+};
 
 Function::Function() {
   _rank = 0;
@@ -508,6 +518,10 @@ FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
 }
 
+FunctionPtr Function::solution(VarPtr var, SolutionPtr soln) {
+  return Teuchos::rcp( new SimpleSolutionFunction(var, soln) );
+}
+
 FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new VectorizedFunction(f1,f2) );
 }
@@ -542,7 +556,7 @@ bool ConstantScalarFunction::isZero() {
   return 0.0 == _value;
 }
 
-void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {\
+void ConstantScalarFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   for (int i=0; i < values.size(); i++) {
     values[i] = _value;
@@ -1266,4 +1280,38 @@ FunctionPtr Yn::dy() {
   }
   FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
   return _n * y_n_minus;
+}
+
+SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {
+  _var = var;
+  _soln = soln;
+}
+
+void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  bool dontWeightForCubature = false;
+  _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
+}
+
+FunctionPtr SimpleSolutionFunction::dx() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->dx(), _soln);
+  }
+}
+
+FunctionPtr SimpleSolutionFunction::dy() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->dy(), _soln);
+  }
+}
+
+FunctionPtr SimpleSolutionFunction::dz() {
+  if (_var->op() != IntrepidExtendedTypes::OP_VALUE) {
+    return Function::null();
+  } else {
+    return Function::solution(_var->dz(), _soln);
+  }
 }

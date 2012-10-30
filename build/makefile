@@ -61,6 +61,7 @@ OBJ_NAMES = DofOrdering \
        Projector \
        MultiBasis \
        PatchBasis \
+       RieszRep \
        Solution \
        WriteSolution \
        DPGInnerProduct \
@@ -298,6 +299,9 @@ TimeMarchingBurgersProblem.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersProblem.
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfusionBilinearForm.o: $(DRIVERS_DIR)/Confusion/ConfusionBilinearForm.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+RieszRep.o: $(SRCS_DIR)/Solution/RieszRep.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 CGSolver.o: $(SRCS_DIR)/Solution/CGSolver.cpp

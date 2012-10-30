@@ -14,9 +14,13 @@
 
 class Mesh;
 class ExactSolution;
+class Solution;
+class Var;
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
+typedef Teuchos::RCP<Var> VarPtr;
+typedef Teuchos::RCP<Solution> SolutionPtr;
 
 class Function {
 private:
@@ -78,12 +82,15 @@ public:
   
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
+  
+  // static Function construction methods:
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr constant(double value);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
   static FunctionPtr null();
   static FunctionPtr zero();
+  static FunctionPtr solution(VarPtr var, SolutionPtr soln);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);

@@ -98,7 +98,8 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
   bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
   bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
   if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
-    cout << "test ordering:\n" << *(elemType->testOrderPtr);
+    cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
+//    cout << "test ordering:\n" << *(elemType->testOrderPtr);
 //    cout << "stiffness:\n" << stiffness;
   }
 }
