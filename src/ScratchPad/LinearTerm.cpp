@@ -285,6 +285,9 @@ void LinearTerm::integrate(FieldContainer<double> &values,
   
   if (u->isZero() || v->isZero()) return; // nothing to do, then.
   
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(1) != uOrdering->totalDofs(), std::invalid_argument, "values.dim(1) != uOrdering->totalDofs()");
+  TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != vOrdering->totalDofs(), std::invalid_argument, "values.dim(2) != vOrdering->totalDofs()");
+  
   // values has dimensions (numCells, uFields, vFields)
   int numCells = values.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -339,6 +342,10 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       
       FunctionSpaceTools::integrate<double>(miniMatrix,uValues,vValues,COMP_CPP);
       
+//      cout << "uValues:" << endl << uValues;
+//      cout << "vValues:" << endl << vValues;
+//      cout << "miniMatrix:" << endl << miniMatrix;
+      
       vector<int> uDofIndices = uOrdering->getDofIndices(uID,uSideIndex);
       vector<int> vDofIndices = vOrdering->getDofIndices(vID,vSideIndex);
       
@@ -350,6 +357,7 @@ void LinearTerm::integrate(FieldContainer<double> &values,
           for (unsigned k=0; k < numCells; k++) {
             double value = miniMatrix(k,i,j); // separate line for debugger inspection
             values(k,uDofIndex,vDofIndex) += value;
+//            cout << "values(" << k << ", " << uDofIndex << ", " << vDofIndex << ") += " << value << endl;
           }
         }
       }

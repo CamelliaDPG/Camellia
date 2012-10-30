@@ -27,6 +27,11 @@ public:
     int numCells  = localStiffnessMatrix.dimension(0);
     int numFields = localStiffnessMatrix.dimension(1);
     
+    TEUCHOS_TEST_FOR_EXCEPTION(numFields != localStiffnessMatrix.dimension(2), std::invalid_argument,
+                               "localStiffnessMatrix.dim(1) != localStiffnessMatrix.dim(2)");
+    TEUCHOS_TEST_FOR_EXCEPTION(numFields != localRHSVector.dimension(1), std::invalid_argument,
+                               "localRHSVector.dim(1) != localStiffnessMatrix.dim(1)");
+    
     double penaltyWeight = 1e7;
     
     // Assumes that all elements are of like type--but they'd have to be, to have a single localStiffness FC

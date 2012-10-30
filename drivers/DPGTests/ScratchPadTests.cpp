@@ -16,6 +16,7 @@ public:
     double tol = 1e-14;
     bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
     bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
+//    cout << "UnitSquareBoundary: for (" << x << ", " << y << "), (xMatch, yMatch) = (" << xMatch << ", " << yMatch << ")\n";
     return xMatch || yMatch;
   }
 };
@@ -47,7 +48,7 @@ void ScratchPadTests::setup() {
   
   double eps = 1e-2;
   
-  _confusionBF; // standard confusion bilinear form
+  // standard confusion bilinear form
   _confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   _confusionBF->addTerm(sigma1 / eps, tau->x());
@@ -209,7 +210,10 @@ bool ScratchPadTests::testPenaltyConstraints() {
 
   pc->filter(localStiffness, localRHSVector, _basisCache, _spectralConfusionMesh, bc);
   
+//  cout << "testPenaltyConstraints: expectedStiffnessSparsity:\n" << expectedSparsity;
 //  cout << "testPenaltyConstraints: localStiffness:\n" << localStiffness;
+//  
+//  cout << "testPenaltyConstraints: expectedRHSSparsity:\n" << expectedRHSSparsity;
 //  cout << "testPenaltyConstraints: localRHSVector:\n" << localRHSVector;
   
   // compare sparsity
@@ -239,7 +243,6 @@ bool ScratchPadTests::testPenaltyConstraints() {
       }
     }
   }
-  // TODO: add RHSVector sparsity test
   return success;
 }
 

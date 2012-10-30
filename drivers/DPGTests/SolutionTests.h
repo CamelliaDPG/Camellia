@@ -42,14 +42,4 @@ public:
 
 };
 
-class UnitSquareBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool xMatch = (abs(x-1.0)<tol) || (abs(x)<tol);
-    bool yMatch = (abs(y-1.0)<tol) || (abs(y)<tol);
-    return xMatch || yMatch;
-  }
-};
-
 #endif
