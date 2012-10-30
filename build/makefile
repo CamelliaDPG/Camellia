@@ -100,6 +100,7 @@ OBJ_NAMES = DofOrdering \
 			 LinearTerm \
 			 Var \
 			 BCEasy \
+			 SpatiallyFilteredFunction \
 			 Function \
 			 RHSEasy \
 			 IP \
@@ -398,6 +399,9 @@ Constraint.o: $(SRCS_DIR)/ScratchPad/Constraint.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
   
 Function.o: $(SRCS_DIR)/ScratchPad/Function.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+SpatiallyFilteredFunction.o: $(SRCS_DIR)/ScratchPad/SpatiallyFilteredFunction.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 BF.o: $(SRCS_DIR)/ScratchPad/BF.cpp
