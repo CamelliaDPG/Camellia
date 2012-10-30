@@ -601,11 +601,12 @@ bool LinearTermTests::testRieszInversion() {
 
   integrand->addTerm(divTestFxn*v1);
   integrandIBP->addTerm(vectorTest*n*v1 + -vectorTest*v1->grad()); // boundary term
-  integrandIBPReordered->addTerm(vectorTest*n*v1 -vectorTest*v1->grad()); // boundary term
+  integrandIBPReordered->addTerm(-vectorTest*v1->grad() + vectorTest*n*v1); // boundary term
 
   IPPtr sobolevIP = Teuchos::rcp(new IP);
   sobolevIP->addTerm(v1);
   sobolevIP->addTerm(q1); // dummy var - shouldn't show up in solves
+
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrand));
   riesz->computeRieszRep();
   Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, integrandIBP));
