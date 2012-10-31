@@ -255,7 +255,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
      StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
    
    where:
-   formulationTypeStr = {"original conforming"|"nonConforming"|"vvp"|"math"|"dev"}
+   formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"}
    normChoice = {"opt"|"naive"}
    
    */
@@ -456,22 +456,28 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
-  bool useHDGSingularSolution = false;
-  bool useKanschatSoln = true;
+  bool useHDGSingularSolution = true;
+  bool useKanschatSoln = false;
   bool reportConditionNumber = false;
+  
   bool useCG = false;
+  bool useMumps = false;
+  
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
   Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
-
+#ifdef HAVE_MPI
+  Teuchos::RCP<Solver> mumpsSolver = Teuchos::rcp( new MumpsSolver );
+#endif
+  
   if (useHDGSingularSolution && useKanschatSoln ) {
     cout << "Error: cannot use both HDG and Kanschat solution simultaneously!\n";
     exit(1);
   }
   
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
-  
+    
   // parse args:
   int polyOrder, minLogElements, maxLogElements;
   bool useTriangles, useOptimalNorm, useMultiOrder;
@@ -488,6 +494,7 @@ int main(int argc, char *argv[]) {
     cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
     cout << "useHDGSingularSolution = "  << (useHDGSingularSolution ? "true" : "false") << "\n";
     cout << "reportConditionNumber = " << (reportConditionNumber ? "true" : "false") << "\n";
+    cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
   }
   
   double mu = 1.0;
@@ -587,31 +594,14 @@ int main(int argc, char *argv[]) {
         cout << "WARNING: exact solution does not appear to be divergence-free.\n";
       }
       
-      printSamplePoints(u1_exact, "u1_exact");
-      printSamplePoints(u2_exact, "u1_exact");
-//      cout << "u1_exact(-1, 0) = " << Function::evaluate(u1_exact, -1, 0) << endl;
-//      cout << "u2_exact(-1, 0) = " << Function::evaluate(u2_exact, -1, 0) << endl;
-//      cout << "u1_exact(-0.5, 0) = " << Function::evaluate(u1_exact, -0.5, 0) << endl;
-//      cout << "u2_exact(-0.5, 0) = " << Function::evaluate(u2_exact, -0.5, 0) << endl;
-//      cout << "u1_exact(0, -1) = " << Function::evaluate(u1_exact, 0, -1) << endl;
-//      cout << "u2_exact(0, -1) = " << Function::evaluate(u2_exact, 0, -1) << endl;
-//      cout << "u1_exact(0, -0.5) = " << Function::evaluate(u1_exact, 0, -0.5) << endl;
-//      cout << "u2_exact(0, -0.5) = " << Function::evaluate(u2_exact, 0, -0.5) << endl;
+//      printSamplePoints(u1_exact, "u1_exact");
+//      printSamplePoints(u2_exact, "u1_exact");
 //      
-//      cout << "u1_exact(1, 0) = " << Function::evaluate(u1_exact, 1, 0) << endl;
-//      cout << "u2_exact(1, 0) = " << Function::evaluate(u2_exact, 1, 0) << endl;
-//      cout << "u1_exact(0.5, 0) = " << Function::evaluate(u1_exact, 0.5, 0) << endl;
-//      cout << "u2_exact(0.5, 0) = " << Function::evaluate(u2_exact, 0.5, 0) << endl;
-//      cout << "u1_exact(0, 1) = " << Function::evaluate(u1_exact, 0, 1) << endl;
-//      cout << "u2_exact(0, 1) = " << Function::evaluate(u2_exact, 0, 1) << endl;
-//      cout << "u1_exact(0, 0.5) = " << Function::evaluate(u1_exact, 0, 0.5) << endl;
-//      cout << "u2_exact(0, 0.5) = " << Function::evaluate(u2_exact, 0, 0.5) << endl;
-      
-      FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-      
-      printSamplePoints(f1, "f1");
-      printSamplePoints(f2, "f2");
+//      FunctionPtr f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+//      FunctionPtr f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+//      
+//      printSamplePoints(f1, "f1");
+//      printSamplePoints(f2, "f2");
       
     } else {
       computeRelativeErrors = false;
@@ -680,6 +670,11 @@ int main(int argc, char *argv[]) {
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setReportConditionNumber(reportConditionNumber);
     if (useCG) study.setSolver(cgSolver);
+    else if (useMumps){
+#ifdef HAVE_MPI
+      study.setSolver(mumpsSolver);
+#endif
+    } // otherwise, use default solver (KLU)
         
     if (! useHDGSingularSolution) {
       study.solve(quadPoints);
@@ -745,25 +740,37 @@ int main(int argc, char *argv[]) {
         int traceID = traceIDs[i];
         string fieldName = fieldFileNames[i];
         ostringstream filePathPrefix;
-        filePathPrefix << "stokes/" << fieldName << "_p" << polyOrder;
+        filePathPrefix << "stokes/" << formulationTypeStr << "_" << fieldName << "_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
       }
       
-      for (int i=minLogElements; i<=maxLogElements; i++) {
-        ostringstream filePath;
-        int numElements = pow(2.0,i);
-        filePath << "stokes/soln" << numElements << "x";
-        filePath << numElements << "_p" << polyOrder << ".vtk";
-        study.getSolution(i)->writeToVTK(filePath.str());
-      }
+//      for (int i=minLogElements; i<=maxLogElements; i++) {
+//        ostringstream filePath;
+//        int numElements = pow(2.0,i);
+//        filePath << "stokes/soln" << numElements << "x";
+//        filePath << numElements << "_p" << polyOrder << ".vtk";
+//        study.getSolution(i)->writeToVTK(filePath.str());
+//      }
+      
+      filePathPrefix.str("");
+      filePathPrefix << "stokes/" << formulationTypeStr << "_p" << polyOrder << "_convDataMATLAB.dat";
+
+      ofstream fout(filePathPrefix.str().c_str());
       
       for (int i=0; i<primaryVariables.size(); i++) {
-        cout << study.convergenceDataMATLAB(primaryVariables[i]);  
+        string convDataMATLAB = study.convergenceDataMATLAB(primaryVariables[i]);
+        cout << convDataMATLAB;
+        fout << convDataMATLAB;
       }
+      fout.close();
       
       filePathPrefix.str("");
       filePathPrefix << "stokes/" << formulationTypeStr << "_p" << polyOrder << "_numDofs";
-      cout << study.TeXNumGlobalDofsTable();
+      ofstream fout2(filePathPrefix.str().c_str());
+      string texGlobalDofsTable = study.TeXNumGlobalDofsTable();
+      fout2 << texGlobalDofsTable;
+      cout << texGlobalDofsTable;
+      fout2.close();
     }
   } else {
     cout << "Generating mixed-order 16x16 mesh" << endl;
