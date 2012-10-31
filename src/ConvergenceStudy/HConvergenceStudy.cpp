@@ -502,7 +502,7 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
   return texString.str();
 }
 
-void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID, int traceID) {
+void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID, int traceID, bool writeMATLABPlotData) {
   vector< Teuchos::RCP<Solution> >::iterator solutionIt;
   int minNumElements = 1;
   for (int i=0; i<_minLogElements; i++) {
@@ -554,19 +554,21 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
 //      cout << "solnCoeffs for cell " << cellID << ":" << endl << solnCoeffs;
 //    }
     
-    // now write out the solution for MATLAB plotting...
-    fileName.str(""); // clear out the filename
-    fileName << filePathPrefix << "_solution_" << numElements << "x" << numElements << ".m";
-    //    solution.writeToFile(trialID, fileName.str());
-    solution->writeFieldsToFile(trialID, fileName.str());
-    fileName.str("");
-    
-    fileName << filePathPrefix << "_exact_" << numElements << "x" << numElements << ".m";
-    _exactSolutionFunctions[trialID]->writeValuesToMATLABFile(solution->mesh(), fileName.str());
-    fileName.str(""); // clear out the filename
-    if (traceID != -1) {
-      fileName << filePathPrefix << "_trace_solution_" << numElements << "x" << numElements << ".dat";
-      solution->writeFluxesToFile(traceID, fileName.str());
+    if (writeMATLABPlotData) {
+      // now write out the solution for MATLAB plotting...
+      fileName.str(""); // clear out the filename
+      fileName << filePathPrefix << "_solution_" << numElements << "x" << numElements << ".m";
+      //    solution.writeToFile(trialID, fileName.str());
+      solution->writeFieldsToFile(trialID, fileName.str());
+      fileName.str("");
+      
+      fileName << filePathPrefix << "_exact_" << numElements << "x" << numElements << ".m";
+      _exactSolutionFunctions[trialID]->writeValuesToMATLABFile(solution->mesh(), fileName.str());
+      fileName.str(""); // clear out the filename
+      if (traceID != -1) {
+        fileName << filePathPrefix << "_trace_solution_" << numElements << "x" << numElements << ".dat";
+        solution->writeFluxesToFile(traceID, fileName.str());
+      }
     }
     numElements *= 2;
     previousL2Error = l2error;
@@ -599,8 +601,6 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
 
   
   cout << "L2 norm of solution: " << l2norm  << endl;
-  
-  fout.close();
 }
 
 void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {

@@ -111,7 +111,7 @@ public:
   void solve(const FieldContainer<double> &quadPoints);
   void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
-  void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1);
+  void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
   
   void addDerivedVariable( LinearTermPtr derivedVar, const string & name );
   

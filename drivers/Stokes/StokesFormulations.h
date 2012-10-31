@@ -269,7 +269,7 @@ public:
     FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
     FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
-    cout << "VVP rhs: f_1 = " << f1->displayString() << "; f_2 = " << f2->displayString() << endl;
+//    cout << "VVP rhs: f_1 = " << f1->displayString() << "; f_2 = " << f2->displayString() << endl;
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
