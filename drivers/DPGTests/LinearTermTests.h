@@ -45,6 +45,8 @@ class LinearTermTests : public TestSuite {
   
   void setup();
   void teardown();
+  
+  void transposeFieldContainer(FieldContainer<double> &fc);
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   

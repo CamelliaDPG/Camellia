@@ -317,6 +317,15 @@ void LinearTerm::integrate(FieldContainer<double> &values,
     FieldContainer<double> uValues(ltValueDim);
     bool applyCubatureWeights = true, dontApplyCubatureWeights = false;
     u->values(uValues,uID,uBasis,basisCache,applyCubatureWeights);
+    
+//    cout << "uValues for u = " << u->displayString() << ":" << endl;
+//    cout << uValues;
+//    double debugSum = 0.0;
+//    for (int i=0; i<uValues.size(); i++) {
+//      debugSum += uValues[i];
+//    }
+//    cout << "uValues debug sum for u = " << u->displayString() << ": " << debugSum << endl;
+    
     if ( u->termType() == FLUX ) {
       // we need to multiply uValues' entries by the parity of the normal, since
       // the trial implicitly contains an outward normal, and we need to adjust for the fact
@@ -333,6 +342,10 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       ltValueDim[1] = vBasisCardinality;
       FieldContainer<double> vValues(ltValueDim);
       v->values(vValues, vID, vBasis, basisCache, dontApplyCubatureWeights);
+      
+//      cout << "vValues for v = " << v->displayString() << ":" << endl;
+//      cout << vValues;
+      
       // same flux consideration, for the vValues
       if ( v->termType() == FLUX ) {
         multiplyFluxValuesByParity(vValues, basisCache);
@@ -417,130 +430,6 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
       integrate(values, otherNonBoundaryOnly, otherOrdering, thisBoundaryOnly, thisOrdering, basisCache->getSideBasisCache(sideIndex));
     }
   }
-  
-/*  int numCells = values.dimension(0);
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
-  
-  set<int> otherIDs = otherTerm->varIDs();
-  
-  int rank = this->rank();
-  TEUCHOS_TEST_FOR_EXCEPTION( rank != otherTerm->rank(), std::invalid_argument, "other and this ranks disagree." );
-  
-  set<int>::iterator thisIt;
-  set<int>::iterator otherIt;
-  
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > thisBasis, otherBasis;
-  
-  bool thisFluxOrTrace  = (     this->termType() == FLUX) || (     this->termType() == TRACE);
-  bool otherFluxOrTrace = (otherTerm->termType() == FLUX) || (otherTerm->termType() == TRACE);
-
-  bool boundaryTerm = thisFluxOrTrace || otherFluxOrTrace || forceBoundaryTerm || basisCache->isSideCache();
-  
-  Teuchos::Array<int> ltValueDim;
-  ltValueDim.push_back(numCells);
-  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
-  ltValueDim.push_back(numPoints);
-  
-  // num "sides" for volume integral: 1...
-  int numSides = boundaryTerm ? basisCache->cellTopology().getSideCount() : 1;
-  
-  BasisCachePtr volumeCache;
-  int startSideIndex, endSideIndex;
-  if ( basisCache->isSideCache() ) {
-    // just one side, then:
-    startSideIndex = basisCache->getSideIndex();
-    endSideIndex = startSideIndex;
-    volumeCache = basisCache->getVolumeBasisCache();
-  } else {
-    // all sides:
-    startSideIndex = 0;
-    endSideIndex = numSides - 1;
-    volumeCache = basisCache;
-  }
-  
-  for (int sideIndex = startSideIndex; sideIndex <= endSideIndex; sideIndex++) {
-    int numPointsSide;
-    if (boundaryTerm) { 
-      numPointsSide = volumeCache->getPhysicalCubaturePointsForSide(sideIndex).dimension(1);
-    } else {
-      numPointsSide = -1;      
-    }
-    
-    for (otherIt= otherIDs.begin(); otherIt != otherIDs.end(); otherIt++) {
-      int otherID = *otherIt;
-      otherBasis = otherFluxOrTrace ? otherOrdering->getBasis(otherID,sideIndex) : otherOrdering->getBasis(otherID);
-      int otherBasisCardinality = otherBasis->getCardinality();
-      
-      // set up values container for other
-      Teuchos::Array<int> ltValueDim1 = ltValueDim;
-      ltValueDim1[1] = otherBasisCardinality;
-      for (int d=0; d<rank; d++) {
-        ltValueDim1.push_back(spaceDim);
-      }
-      ltValueDim1[2] = boundaryTerm ? numPointsSide : numPoints;
-      FieldContainer<double> otherValues(ltValueDim1);
-      bool applyCubatureWeights = true;
-      if (! boundaryTerm) {
-        otherTerm->values(otherValues,otherID,otherBasis,volumeCache,applyCubatureWeights);
-      } else {
-        otherTerm->values(otherValues,otherID,otherBasis,volumeCache->getSideBasisCache(sideIndex),applyCubatureWeights);
-      }
-      
-      for (thisIt= _varIDs.begin(); thisIt != _varIDs.end(); thisIt++) {
-        int thisID = *thisIt;
-        thisBasis = thisFluxOrTrace ? thisOrdering->getBasis(thisID,sideIndex) : thisOrdering->getBasis(thisID);
-        int thisBasisCardinality = thisBasis->getCardinality();
-        
-        // set up values container this term:
-        Teuchos::Array<int> ltValueDim2 = ltValueDim1;
-        ltValueDim2[1] = thisBasisCardinality;
-        
-        FieldContainer<double> thisValues(ltValueDim2);
-        
-        if (! boundaryTerm ) {
-#warning Need to add integration of boundary-only terms to the putative volume integral (for function weights defined only on element boundaries)....
-        
-          this->values(thisValues,thisID,thisBasis,volumeCache,false);
-        } else {
-          this->values(thisValues,thisID,thisBasis,volumeCache->getSideBasisCache(sideIndex),false); // false: don't apply cubature weights
-          if ( this->termType() == FLUX ) {
-            // we need to multiply thisValues' entries by the parity of the normal, since
-            // the trial implicitly contains an outward normal, and we need to adjust for the fact
-            // that the neighboring cells have opposite normal
-            // thisValues should have dimensions (numCells,numFields,numCubPointsSide)
-            multiplyFluxValuesByParity(thisValues, volumeCache->getSideBasisCache(sideIndex));
-          }
-          // same thing, for otherTerm:
-          if ( otherTerm->termType() == FLUX ) {
-            multiplyFluxValuesByParity(otherValues, volumeCache->getSideBasisCache(sideIndex));
-          }
-        }
-        
-        FieldContainer<double> miniMatrix( numCells, otherBasisCardinality, thisBasisCardinality );
-        
-        FunctionSpaceTools::integrate<double>(miniMatrix,otherValues,thisValues,COMP_CPP);
-        
-        vector<int> thisDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(thisID,sideIndex)
-                                                     : thisOrdering->getDofIndices(thisID);
-        
-        vector<int> otherDofIndices = otherFluxOrTrace ? otherOrdering->getDofIndices(otherID,sideIndex)
-                                                       : otherOrdering->getDofIndices(otherID);
-        
-        // there may be a more efficient way to do this copying:
-        for (int i=0; i < otherBasisCardinality; i++) {
-          int otherDofIndex = otherDofIndices[i];
-          for (int j=0; j < thisBasisCardinality; j++) {
-            int thisDofIndex = thisDofIndices[j];
-            for (unsigned k=0; k < numCells; k++) {
-              double value = miniMatrix(k,i,j); // separate line for debugger inspection
-              values(k,otherDofIndex,thisDofIndex) += value;
-            }
-          }
-        }
-      }
-    }
-  }*/
 }
 
 // integrate this against otherTerm, where otherVar == fxn

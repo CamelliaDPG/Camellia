@@ -464,6 +464,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp1->integrate(integrals_expected_two_term, testOrder, lt_v, testOrder, basisCache, false, false);
     lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false);
     
+    // we expect the integrals to commute up to a transpose, so let's transpose one of the containers:
+    transposeFieldContainer(integrals_expected_two_term);
     maxDiff = 0;
     if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
       cout << "two-term integration does not commute for boundary value (ibp1); maxDiff: " << maxDiff << endl;
@@ -473,6 +475,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp2->integrate(integrals_expected_two_term, testOrder, lt_v, testOrder, basisCache, false, false);
     lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, false);
     
+    // we expect the integrals to commute up to a transpose, so let's transpose one of the containers:
+    transposeFieldContainer(integrals_expected_two_term);
     maxDiff = 0;
     if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
       cout << "two-term integration does not commute for volume value (ibp2); maxDiff: " << maxDiff << endl;
@@ -498,7 +502,7 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     FieldContainer<double> integrals_ibp1_first( mesh->numElements(), num_dofs, num_dofs );
     FieldContainer<double> integrals_ibp2_first( mesh->numElements(), num_dofs, num_dofs );
     
-    double lt_v_first_integral = 0.0, ibp1_first_integral = 0.0, ibp2_first_integral;
+    double lt_v_first_integral = 0.0, ibp1_first_integral = 0.0, ibp2_first_integral = 0.0;
     
     double integral = (ibp1_at_v1_equals_one * lt_v_at_v1_equals_one)->integrate(mesh);
     ibp1->integrate(integrals_ibp1_first,  testOrder, lt_v, testOrder, basisCache, false, false);
@@ -513,12 +517,16 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
       double diff = abs(lt_v_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp1) with lt_v as this. diff = " << diff << "\n";
+      cout << "lt_v_first_integral = " << lt_v_first_integral << endl;
+      cout << "    (true) integral = " << integral << endl;
     }
     
     if (abs(ibp1_first_integral - integral) > tol) {
       double diff = abs(ibp1_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp1) with ibp1 as this. diff = " << diff << "\n";
+      cout << "ibp1_first_integral = " << ibp1_first_integral << endl;
+      cout << "    (true) integral = " << integral << endl;
     }
     
     // now, do the same but for ibp2
@@ -526,6 +534,10 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp2->integrate(integrals_ibp2_first,  testOrder, lt_v, testOrder, basisCache, false, false);
     lt_v->integrate(integrals_lt_v_first,  testOrder, ibp2, testOrder, basisCache, false, false);
     
+    // reset the sums:
+    lt_v_first_integral = 0.0;
+    ibp1_first_integral = 0.0;
+    ibp2_first_integral = 0.0;
     for (int i=0; i<integrals_lt_v_first.size(); i++) {
       lt_v_first_integral += integrals_lt_v_first[i];
       ibp2_first_integral += integrals_ibp2_first[i];
@@ -535,97 +547,18 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
       double diff = abs(lt_v_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp2) with lt_v as this. diff = " << diff << "\n";
+      cout << "lt_v_first_integral = " << lt_v_first_integral << endl;
+      cout << "    (true) integral = " << integral << endl;
     }
     
     if (abs(ibp2_first_integral - integral) > tol) {
       double diff = abs(ibp2_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp2) with ibp2 as this. diff = " << diff << "\n";
+      cout << "ibp1_first_integral = " << ibp1_first_integral << endl;
+      cout << "    (true) integral = " << integral << endl;
     }
   }
-  
-/*  /////////////   SECOND TEST    ////////////////
-  
-  vector_fxn = Function::vectorize( x2 / 6.0, x2 * y / 2.0 ); // div of this = x / 3 + x^2 / 2
-  
-  lt_v = vector_fxn->div()*v1;
-  
-  // part a: substitute v1 = y^2
-  expectedValue = lt_v->evaluate(var_values, false)->integrate(mesh);
-  
-  // integrating x2v by parts:
-  ibp = vector_fxn * n * v1 - vector_fxn * v1->grad();
-  boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
-  volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
-  actualValue = boundaryIntegralSum + volumeIntegralSum;
-  
-  tol = 1e-14;
-  if (abs(expectedValue - actualValue)>tol){
-    success = false;
-  }
-  
-  // part b: integrate the bases over each of the cells
-  lt_v->integrate(integrals_expected,testOrder,basisCache, false, false);
-  ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
-    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
-    success = false;
-  }
-  
-  // just on the odd chance that ordering makes a difference, repeat this test with the opposite order in ibp:
-  ibp =  - vector_fxn * v1->grad() + vector_fxn * n * v1;
-  ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
-    cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
-    success = false;
-  }
-  
-  // part c: two-term integrals
-  lt_v->integrate(integrals_expected_two_term, testOrder, ibp, testOrder, basisCache, false, false);
-  ibp1 = vector_fxn * n * v1;
-  ibp2 = - vector_fxn * v1->grad();
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, true);  // DO sumInto
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
-    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
-    success = false;
-  }
-
-  // now, same thing but with the roles of ibp{1|2} and lt_v reversed:
-  (ibp1 + ibp2)->integrate(integrals_expected_two_term, testOrder, lt_v, testOrder, basisCache, false, false);
-  ibp1->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, false); // don't forceBoundary, don't sumInto
-  ibp2->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, true);  // DO sumInto
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
-    cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
-    success = false;
-  }
-  
-  // now, test that two-term integration commutes in the two terms:
-  ibp1->integrate(integrals_expected_two_term, testOrder, lt_v, testOrder, basisCache, false, false);
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp1, testOrder, basisCache, false, false);
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
-    cout << "two-term integration does not commute for boundary value (ibp1); maxDiff: " << maxDiff << endl;
-    success = false;
-  }
-  
-  ibp2->integrate(integrals_expected_two_term, testOrder, lt_v, testOrder, basisCache, false, false);
-  lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, false);
-  
-  maxDiff = 0;
-  if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
-    cout << "two-term integration does not commute for volume value (ibp2); maxDiff: " << maxDiff << endl;
-    success = false;
-  }*/
   
   return success;
 }
@@ -782,4 +715,20 @@ bool LinearTermTests::testRieszInversion() {
 
 std::string LinearTermTests::testSuiteName() {
   return "LinearTermTests";
+}
+
+void LinearTermTests::transposeFieldContainer(FieldContainer<double> &fc) {
+  // this is NOT meant for production code.  Could do the transpose in place if we were concerned with efficiency.
+  FieldContainer<double> fcCopy = fc;
+  int numCells = fc.dimension(0);
+  int dim1 = fc.dimension(1);
+  int dim2 = fc.dimension(2);
+  fc.resize(numCells,dim2,dim1);
+  for (int i=0; i<numCells; i++) {
+    for (int j=0; j<dim1; j++) {
+      for (int k=0; k<dim2; k++) {
+        fc(i,k,j) = fcCopy(i,j,k);
+      }
+    }
+  }
 }
