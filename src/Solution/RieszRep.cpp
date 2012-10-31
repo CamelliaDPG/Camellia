@@ -37,6 +37,39 @@
 */
 #include "RieszRep.h"
 
+map<int,FieldContainer<double> > RieszRep::integrateRHS(){
+
+  map<int,FieldContainer<double> > cellRHS;
+  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
+  vector< ElementPtr >::iterator elemIt;     
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+
+    ElementTypePtr elemTypePtr = elem->elementType();   
+    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+    int numTestDofs = testOrderingPtr->totalDofs();
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+
+    vector<int> cellIDs;
+    cellIDs.push_back(cellID); // just do one cell at a time
+
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values 
+
+    FieldContainer<double> rhsValues(1,numTestDofs);
+    _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
+
+    FieldContainer<double> rhsVals(numTestDofs);
+    for (int i = 0;i<numTestDofs;i++){
+      rhsVals(i) = rhsValues(0,i);
+    }
+    cellRHS[cellID] = rhsVals;
+  }
+  return cellRHS;
+}
+
 void RieszRep::computeRieszRep(){
 
   int numProcs=1;
@@ -51,7 +84,6 @@ void RieszRep::computeRieszRep(){
 #endif  
 
   vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
-  //  vector< ElementPtr > allElems = _mesh->elementsInPartition(rank); // CHANGE TO DISTRIBUTED COMPUTATION
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
 
@@ -59,31 +91,21 @@ void RieszRep::computeRieszRep(){
     int cellID = elem->cellID();
 
     ElementTypePtr elemTypePtr = elem->elementType();   
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
-    
-    DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-    int numTrialDofs = trialOrderingPtr->totalDofs();
     int numTestDofs = testOrderingPtr->totalDofs();
-
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-    FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
 
-    bool createSideCacheToo = true;
     vector<int> cellIDs;
     cellIDs.push_back(cellID); // just do one cell at a time
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-    ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-  
-    CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
 
-    FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
-      
-    _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
-   
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values 
+
     FieldContainer<double> rhsValues(1,numTestDofs);
-    _rhs->integrate(rhsValues, testOrderingPtr, ipBasisCache);
+    _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
+    FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);      
+    _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
+
     Epetra_SerialDenseMatrix rhsVector(numTestDofs,1);
     Epetra_SerialDenseMatrix R_V(numTestDofs,numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
@@ -92,8 +114,12 @@ void RieszRep::computeRieszRep(){
 	R_V(i,j) = ipMatrix(0,i,j);
       }
     }
+    rhsValues.clear();
+    if (_printAll){
+      cout << "rhs vector values for cell " << cellID << " are = " << rhsVector << endl;
+    }
+    
     //    cout << "matrix = " << R_V << endl;
-    //    cout << "rhs vector values = " << rhsVector << endl;
     Epetra_SerialDenseSolver solver;
     Epetra_SerialDenseMatrix rieszRepDofs(numTestDofs,1);
     solver.SetMatrix(R_V);
@@ -111,16 +137,13 @@ void RieszRep::computeRieszRep(){
     Epetra_SerialDenseMatrix normSq(1,1);
     rieszRepDofs.Multiply(true,rhsVector, normSq); // equivalent to e^T * R_V * e    
     _rieszRepNormSquared[cellID] = normSq(0,0);
-
+  
     FieldContainer<double> dofs(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
       dofs(i) = rieszRepDofs(i,0);
       //      cout << "dofs = " << dofs(i) << endl;
     }
     _rieszRepDofs[cellID] = dofs;
-    for (int i = 0;i<numTestDofs;i++){
-      //      cout << "dofs = " << _rieszRepDofs[cellID](i) << endl;
-    }
   }
   distributeDofs();
 }
