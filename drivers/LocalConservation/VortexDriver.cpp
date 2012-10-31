@@ -23,7 +23,7 @@
 double epsilon = 1e-4;
 double numRefs = 4;
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
 
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<BF> BFPtr;
