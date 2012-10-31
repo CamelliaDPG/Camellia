@@ -82,7 +82,7 @@ class RieszRep {
   bool _printAll;
  
  public:
-  RieszRep(MeshPtr mesh, IPPtr ip, LtPtr rhs){
+  RieszRep(MeshPtr mesh, IPPtr ip, LtPtr &rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
@@ -96,7 +96,7 @@ class RieszRep {
   void setFunctional(LtPtr rhs){
     _rhs = rhs;
   }
-
+  LtPtr getRHS();
   map<int,FieldContainer<double> > integrateRHS();
   void computeRieszRep();
   double getNorm();

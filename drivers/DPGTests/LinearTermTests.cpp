@@ -810,12 +810,14 @@ bool LinearTermTests::testMixedTermConsistency() {
 
     FieldContainer<double> rhsIBPValues(1,numTestDofs);
     integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
+    FieldContainer<double> rieszValues(1,numTestDofs);
+    (riesz->getRHS())->integrate(rieszValues, testOrderingPtr, basisCache);
     double maxDiff;
     double tol = 1e-13;
     FieldContainer<double> rhsIBPVals(numTestDofs);
     for (int i = 0;i< numTestDofs; i++){
       rhsIBPVals(i) = rhsIBPValues(0,i);
-      cout << "riesz rhs values = " << rieszRHS[cellID](i) << ", rhsIBPValues = " << rhsIBPVals(i) << endl;
+      //      cout << "riesz rhs values = " << rieszRHS[cellID](i) << ", rhsIBPValues = " << rhsIBPVals(i) << ", riesz returned values = " << rieszValues(0,i) << endl;
     }
     bool fcsAgree = TestSuite::fcsAgree(rieszRHS[cellID],rhsIBPVals,tol,maxDiff);
     if (!fcsAgree){

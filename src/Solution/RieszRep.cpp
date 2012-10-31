@@ -37,6 +37,10 @@
 */
 #include "RieszRep.h"
 
+LtPtr RieszRep::getRHS(){
+  return _rhs;
+}
+
 map<int,FieldContainer<double> > RieszRep::integrateRHS(){
 
   map<int,FieldContainer<double> > cellRHS;
@@ -56,7 +60,8 @@ map<int,FieldContainer<double> > RieszRep::integrateRHS(){
     cellIDs.push_back(cellID); // just do one cell at a time
 
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values 
+
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
@@ -99,7 +104,7 @@ void RieszRep::computeRieszRep(){
     cellIDs.push_back(cellID); // just do one cell at a time
 
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values 
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
