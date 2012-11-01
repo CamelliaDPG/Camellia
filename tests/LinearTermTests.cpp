@@ -458,3 +458,359 @@ TEST_F(LinearTermTest, TestBoundaryPlusVolumeTerms)
       << "    (true) integral = " << integral << endl;
   }
 }
+
+TEST_F(LinearTermTest, TestEnergyNorm)
+{
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(v1); // L^2 on an HGrad var
+  ip->addTerm(q1); // L^2 on Hdiv var
+
+  FunctionPtr one = Function::constant(1);
+  LinearTermPtr identity = one*v1; 
+
+  double norm = identity->energyNormTotal(mesh,ip); // should be equal to the sqrt of the measure of the domain [-1,1]^2
+
+  double tol = 1e-15;
+  EXPECT_NEAR(2.0, norm, tol);
+}
+
+TEST_F(LinearTermTest, TestRieszInversionAsProjection)
+{
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  double eps = .01;
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int H1Order = 2; int pToAdd = 2;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+ 
+  int nCells = 2;
+  int horizontalCells = nCells, verticalCells = nCells;
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+						  confusionBF, H1Order, H1Order+pToAdd);    
+
+  ElementTypePtr elemType = myMesh->getElement(0)->elementType();
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
+  
+  vector<int> cellIDs;
+  cellIDs.push_back(0); 
+  cellIDs.push_back(1);
+  cellIDs.push_back(2);
+  cellIDs.push_back(3);
+  bool createSideCacheToo = true;
+  
+  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+
+
+  LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrandIBPReordered = Teuchos::rcp(new LinearTerm);// residual
+
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;  
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr testFxn1 = X;
+  FunctionPtr testFxn2 = Y;
+  FunctionPtr fxnToProject = X*Y + Function::constant(1.0);
+
+  integrand->addTerm(fxnToProject*v);
+
+  IPPtr sobolevIP = Teuchos::rcp(new IP);
+  sobolevIP->addTerm(v);
+  sobolevIP->addTerm(tau);
+
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrand));
+  riesz->computeRieszRep();
+
+  FunctionPtr rieszFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
+
+  FieldContainer<double> valProject( numCells, numPts);
+  FieldContainer<double> valExpected( numCells, numPts);
+  rieszFxn->values(valProject,basisCache);
+  fxnToProject->values(valExpected,basisCache);
+  
+  double maxDiff;
+  double tol = 1e-13;
+  EXPECT_TRUE(fcsAgree(valProject,valExpected,tol,maxDiff))
+    << "Failed Riesz Inversion Projection test with maxDiff = " << maxDiff << endl;
+}
+
+TEST_F(LinearTermTest, TestMixedTermConsistency)
+{
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  double eps = .01;
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+ 
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int H1Order = 1; int pToAdd = 1;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+ 
+  int nCells = 1;
+  int horizontalCells = nCells, verticalCells = nCells;
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+						  confusionBF, H1Order, H1Order+pToAdd);    
+
+  ElementTypePtr elemType = myMesh->getElement(0)->elementType();
+  //  DofOrderingPtr testOrder = elemType->testOrderPtr;
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh, true));
+  
+
+  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;  
+  FunctionPtr n = Teuchos::rcp(new UnitNormalFunction );
+  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr testFxn1 = X;
+  FunctionPtr testFxn2 = Y;
+  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
+  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
+
+  integrandIBP->addTerm(vectorTest*n*v + -vectorTest*v->grad()); // boundary term
+
+  // define dummy IP to initialize riesz rep class, but just integrate RHS
+  IPPtr dummyIP = Teuchos::rcp(new IP);
+  dummyIP->addTerm(v);
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));  
+  map<int,FieldContainer<double> > rieszRHS = riesz->integrateRHS();
+
+  vector< ElementPtr > allElems = myMesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
+  vector< ElementPtr >::iterator elemIt;     
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+
+    ElementTypePtr elemTypePtr = elem->elementType();   
+    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+    int numTestDofs = testOrderingPtr->totalDofs();
+    FieldContainer<double> physicalCellNodes = myMesh->physicalCellNodesForCell(cellID);
+
+    vector<int> cellIDs;
+    cellIDs.push_back(cellID); // just do one cell at a time
+
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,myMesh, true));
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
+
+    FieldContainer<double> rhsIBPValues(1,numTestDofs);
+    integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
+    FieldContainer<double> rieszValues(1,numTestDofs);
+    (riesz->getRHS())->integrate(rieszValues, testOrderingPtr, basisCache);
+    double maxDiff;
+    double tol = 1e-13;
+    FieldContainer<double> rhsIBPVals(numTestDofs);
+    for (int i = 0;i< numTestDofs; i++){
+      rhsIBPVals(i) = rhsIBPValues(0,i);
+      //      cout << "riesz rhs values = " << rieszRHS[cellID](i) << ", rhsIBPValues = " << rhsIBPVals(i) << ", riesz returned values = " << rieszValues(0,i) << endl;
+    }
+    EXPECT_TRUE(fcsAgree(rieszRHS[cellID],rhsIBPVals,tol,maxDiff))
+      << "Failed mixed term consistency test with maxDiff = " << maxDiff << " on cellID " << cellID<< endl; 
+  }
+}
+
+TEST_F(LinearTermTest, TestRieszInversion)
+{
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  double eps = .01;
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int H1Order = 1; int pToAdd = 1;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+ 
+  int nCells = 1;
+  int horizontalCells = nCells, verticalCells = nCells;
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+						  confusionBF, H1Order, H1Order+pToAdd);    
+
+  ElementTypePtr elemType = myMesh->getElement(0)->elementType();
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
+  
+  vector<int> cellIDs;
+  vector<ElementPtr> elems = myMesh->activeElements();
+  vector<ElementPtr>::iterator elemIt;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    cellIDs.push_back(cellID); 
+  }
+  bool createSideCacheToo = true;
+  
+  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+
+  LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
+  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;  
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  FunctionPtr Y = Teuchos::rcp(new Yn(1));
+  FunctionPtr testFxn1 = X;
+  FunctionPtr testFxn2 = Y;
+  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
+  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
+
+  integrand->addTerm(divTestFxn*v);
+  integrandIBP->addTerm(vectorTest*n*v + -vectorTest*v->grad()); // boundary term
+
+  IPPtr sobolevIP = Teuchos::rcp(new IP);
+  sobolevIP->addTerm(v);
+  //  sobolevIP->addTerm(tau);
+
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrand));  
+  //  riesz->setPrintOption(true);
+  riesz->computeRieszRep();
+  Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrandIBP));
+  riesz->setFunctional(integrandIBP);
+  //  rieszIBP->setPrintOption(true);
+  rieszIBP->computeRieszRep();
+
+  FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
+  FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v->ID(),rieszIBP));
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
+
+  FieldContainer<double> valOriginal( numCells, numPts);
+  FieldContainer<double> valIBP( numCells, numPts);
+  rieszOrigFxn->values(valOriginal,basisCache);
+  rieszIBPFxn->values(valIBP,basisCache);
+
+  double maxDiff,maxDiff1,maxDiff2;
+  double tol = 1e-15;
+  EXPECT_TRUE(fcsAgree(valOriginal,valIBP,tol,maxDiff))
+    << "Failed TestRieszInversion with maxDiff = " << maxDiff << endl;
+}
