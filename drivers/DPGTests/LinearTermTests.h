@@ -57,6 +57,8 @@ public:
 
   bool testEnergyNorm();
 
+  bool testRieszInversionAsProjection();
+  bool testMixedTermConsistency();
   bool testRieszInversion();
 
   std::string testSuiteName();
