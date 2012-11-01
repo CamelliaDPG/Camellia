@@ -17,9 +17,12 @@
 #endif
 
 bool enforceLocalConservation = false;
+bool steady = false;
 double epsilon = 1e-3;
+double dt = 0.25;
+int numTimeSteps = 20; // max time steps
 double halfWidth = 1;
-int numRefs = 3;
+int numRefs = 0;
 int H1Order = 3, pToAdd = 2;
 
 typedef Teuchos::RCP<IP> IPPtr;
@@ -37,6 +40,24 @@ public:
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
+  }
+};
+
+class ScalarParamFunction : public Function {
+  double _a;
+  public:
+  ScalarParamFunction(double a) : Function(0){
+    _a = a;
+  }
+  void set_param(double a){
+    _a = a;
+  }
+  double get_param(){
+    return _a;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    values.initialize(_a);
   }
 };
 
@@ -142,6 +163,12 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  // FunctionPtr beta = Teuchos::rcp(new Beta());
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -155,24 +182,37 @@ int main(int argc, char *argv[]) {
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
   
-  // vector<double> beta_const;
-  // beta_const.push_back(2.0);
-  // beta_const.push_back(1.0);
-  FunctionPtr beta = Teuchos::rcp(new Beta());
-  
-  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+  ////////////////////   BUILD MESH   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
-  // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  // define nodes for mesh
+  FieldContainer<double> meshBoundary(4,2);
   
-  // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  meshBoundary(0,0) =  0.0; // x1
+  meshBoundary(0,1) = -2.0; // y1
+  meshBoundary(1,0) =  4.0;
+  meshBoundary(1,1) = -2.0;
+  meshBoundary(2,0) =  4.0;
+  meshBoundary(2,1) =  2.0;
+  meshBoundary(3,0) =  0.0;
+  meshBoundary(3,1) =  2.0;
+
+  int horizontalCells = 4, verticalCells = 4;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+                                                confusionBF, H1Order, H1Order+pToAdd);
+
+  ////////////////////////////////////////////////////////////////////
+  // INITIALIZE FLOW FUNCTIONS
+  ////////////////////////////////////////////////////////////////////
+
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  SolutionPtr flowResidual = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+
+  FunctionPtr u_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u) );
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   // mathematician's norm
@@ -192,17 +232,38 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  if (!enforceLocalConservation)
+  if (!enforceLocalConservation || !steady)
     robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(epsilon) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  if (enforceLocalConservation)
+  if (enforceLocalConservation && steady)
     robIP->addZeroMeanTerm( v );
   
-  ////////////////////   SPECIFY RHS   ///////////////////////
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+
+  // tau terms:
+  confusionBF->addTerm(sigma1 / epsilon, tau->x());
+  confusionBF->addTerm(sigma2 / epsilon, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(-uhat, tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( beta * u, - v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+
+  if (!steady)
+  {
+    confusionBF->addTerm( u, invDt*v );
+    rhs->addTerm( u_prev_time * invDt * v );
+  }
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
@@ -216,105 +277,200 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, u1);
   bc->addDirichlet(beta_n_u_minus_sigma_n, tbBoundary, u0);
   bc->addDirichlet(uhat, rBoundary, u0);
-  
-  ////////////////////   BUILD MESH   ///////////////////////
-  // define nodes for mesh
-  FieldContainer<double> meshBoundary(4,2);
-  
-  meshBoundary(0,0) =  0.0; // x1
-  meshBoundary(0,1) = -2.0; // y1
-  meshBoundary(1,0) =  4.0;
-  meshBoundary(1,1) = -2.0;
-  meshBoundary(2,0) =  4.0;
-  meshBoundary(2,1) =  2.0;
-  meshBoundary(3,0) =  0.0;
-  meshBoundary(3,1) =  2.0;
 
-  int horizontalCells = 4, verticalCells = 4;
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
-  
-  ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   // solution->setFilter(pc);
 
+  // ==================== Register Solutions ==========================
+  mesh->registerSolution(solution);
+  mesh->registerSolution(prevTimeFlow);
+  mesh->registerSolution(flowResidual);
+
+  // ==================== SET INITIAL GUESS ==========================
+  double u_free = 0.0;
+  double sigma1_free = 0.0;
+  double sigma2_free = 0.0;
+  map<int, Teuchos::RCP<Function> > functionMap;
+  functionMap[u->ID()]      = Teuchos::rcp( new ConstantScalarFunction(u_free) );
+  functionMap[sigma1->ID()] = Teuchos::rcp( new ConstantScalarFunction(sigma1_free) );
+  functionMap[sigma2->ID()] = Teuchos::rcp( new ConstantScalarFunction(sigma2_free) );
+
+  prevTimeFlow->projectOntoMesh(functionMap);
+  
+  ////////////////////   SOLVE & REFINE   ///////////////////////
   if (enforceLocalConservation) {
-    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-    solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+    if (steady)
+    {
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+    }
   }
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
-    solution->solve(false);
-    stringstream outfile;
-    outfile << "SimpleConfusion_" << refIndex;
-    solution->writeToVTK(outfile.str(), 5);
+    if (steady)
+    {
+      solution->solve(false);
 
-    // Check conservation by testing against one
-    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-    // Create a fake bilinear form for the testing
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    // Define our mass flux
-    FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
+      if (rank == 0)
+      {
+        stringstream outfile;
+        outfile << "SimpleConfusion_" << refIndex;
+        solution->writeToVTK(outfile.str(), 5);
+      }
 
-    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+      // Check conservation by testing against one
+      VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+      // Create a fake bilinear form for the testing
+      BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+      // Define our mass flux
+      FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+      LinearTermPtr massFluxTerm = massFlux * testOne;
 
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemType = *elemTypeIt;
-      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
-        cellIDs.push_back(elems[i]->cellID());
+      Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+      DofOrderingFactory dofOrderingFactory(fakeBF);
+      int fakeTestOrder = H1Order;
+      DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+
+      int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+      vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+      map<int, double> massFluxIntegral; // cellID -> integral
+      double maxMassFluxIntegral = 0.0;
+      double totalMassFlux = 0.0;
+      double totalAbsMassFlux = 0.0;
+      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+        ElementTypePtr elemType = *elemTypeIt;
+        vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+        vector<int> cellIDs;
+        for (int i=0; i<elems.size(); i++) {
+          cellIDs.push_back(elems[i]->cellID());
+        }
+        FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+        BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+        basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+        FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+        FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+        massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          // pick out the ones for testOne:
+          massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+        }
+        // find the largest:
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+          totalMassFlux += massFluxIntegral[cellID];
+          totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+        }
       }
-      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        // pick out the ones for testOne:
-        massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-      }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      }
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-        totalMassFlux += massFluxIntegral[cellID];
-        totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+
+      // Print results from processor with rank 0
+      if (rank==0){
+        cout << "Mass flux: Largest Local = " << maxMassFluxIntegral 
+          << ", Global = " << totalMassFlux << ", Sum Abs = " << totalAbsMassFlux << endl;
       }
     }
+    else
+    {
+      int timestepCount = 0;
+      double time_tol = 1e-8;
+      double L2_time_residual = 1e9;
+      while((L2_time_residual > time_tol) && (timestepCount < numTimeSteps))
+      {
+        solution->solve(false);
+        // Subtract solutions to get residual
+        flowResidual->setSolution(solution);
+        flowResidual->addSolution(prevTimeFlow, -1.0);       
+        double L2u = flowResidual->L2NormOfSolutionGlobal(u->ID());
+        double L2sigma1 = flowResidual->L2NormOfSolutionGlobal(sigma1->ID());
+        double L2sigma2 = flowResidual->L2NormOfSolutionGlobal(sigma2->ID());
+        L2_time_residual = sqrt(L2u*L2u + L2sigma1*L2sigma1 + L2sigma2*L2sigma2);
+        cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
 
+        if (rank == 0)
+        {
+          stringstream outfile;
+          outfile << "TransientConfusion_" << refIndex << "-" << timestepCount;
+          solution->writeToVTK(outfile.str(), 5);
+        }
 
-    // Print results from processor with rank 0
-    if (rank==0){
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-      cout << "total mass flux: " << totalMassFlux << endl;
-      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+        // Check conservation by testing against one
+        VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
+        // Create a fake bilinear form for the testing
+        BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+        // Define our mass flux
+        FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+        FunctionPtr delta_u = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
+        LinearTermPtr surfaceFlux = -1.0 * flux * testOne;
+        LinearTermPtr volumeChange = delta_u * invDt * testOne;
+        // LinearTermPtr massFluxTerm = volumeChange;
+        // massFluxTerm->addTerm(surfaceFlux);
+        //TODO: Evaluate these separately then compare
+
+        Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+        DofOrderingFactory dofOrderingFactory(fakeBF);
+        int fakeTestOrder = H1Order;
+        DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+
+        int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+        vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+        map<int, double> massFluxIntegral; // cellID -> integral
+        double maxMassFluxIntegral = 0.0;
+        double totalMassFlux = 0.0;
+        double totalAbsMassFlux = 0.0;
+        for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+          ElementTypePtr elemType = *elemTypeIt;
+          vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+          vector<int> cellIDs;
+          for (int i=0; i<elems.size(); i++) {
+            cellIDs.push_back(elems[i]->cellID());
+          }
+          FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+          BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+          basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+          FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+          // FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+          FieldContainer<double> surfaceIntegrals(elems.size(),testOrdering->totalDofs());
+          FieldContainer<double> volumeIntegrals(elems.size(),testOrdering->totalDofs());
+          // massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+          surfaceFlux->integrate(surfaceIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+          volumeChange->integrate(volumeIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+          for (int i=0; i<elems.size(); i++) {
+            int cellID = cellIDs[i];
+            // pick out the ones for testOne:
+            // massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+            massFluxIntegral[cellID] = surfaceIntegrals(i,testOneIndex) + volumeIntegrals(i,testOneIndex);
+          }
+          // find the largest:
+          for (int i=0; i<elems.size(); i++) {
+            int cellID = cellIDs[i];
+            maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+          }
+          for (int i=0; i<elems.size(); i++) {
+            int cellID = cellIDs[i];
+            maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+            totalMassFlux += massFluxIntegral[cellID];
+            totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+          }
+        }
+
+        // Print results from processor with rank 0
+        if (rank==0){
+          cout << "Mass flux: Largest Local = " << maxMassFluxIntegral 
+            << ", Global = " << totalMassFlux << ", Sum Abs = " << totalAbsMassFlux << endl;
+        }
+        prevTimeFlow->setSolution(solution); // reset previous time solution to current time sol
+        timestepCount++;
+      }
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(rank==0); // print to console on rank 0
+    cout << endl;
   }
   
   return 0;
