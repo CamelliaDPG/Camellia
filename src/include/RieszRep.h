@@ -79,18 +79,25 @@ class RieszRep {
   MeshPtr _mesh;
   IPPtr _ip;
   LtPtr _rhs;
+  bool _printAll;
  
  public:
-  RieszRep(MeshPtr mesh, IPPtr ip, LtPtr rhs){
+  RieszRep(MeshPtr mesh, IPPtr ip, LtPtr &rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
+    _printAll = false;
   }
-  
+
+  void setPrintOption(bool printAll){
+    _printAll = printAll;
+  }
+
   void setFunctional(LtPtr rhs){
     _rhs = rhs;
   }
-
+  LtPtr getRHS();
+  map<int,FieldContainer<double> > integrateRHS();
   void computeRieszRep();
   double getNorm();
   void distributeDofs();
