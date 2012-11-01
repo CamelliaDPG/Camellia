@@ -86,10 +86,10 @@ void RieszRep::computeRieszRep(){
     _rhs->integrate(rhsValues, testOrderingPtr, ipBasisCache);
     Epetra_SerialDenseMatrix rhsVector(numTestDofs,1);
     Epetra_SerialDenseMatrix R_V(numTestDofs,numTestDofs);
-    for (int i = 0;i<numTestDofs;i++){
+    for (int i = 0;i<numTestDofs;i++) {
       rhsVector(i,0) = rhsValues(0,i);
-      for (int j = 0;j<numTestDofs;j++){
-	R_V(i,j) = ipMatrix(0,i,j);
+      for (int j = 0;j<numTestDofs;j++) {
+        R_V(i,j) = ipMatrix(0,i,j);
       }
     }
     //    cout << "matrix = " << R_V << endl;
@@ -126,12 +126,12 @@ void RieszRep::computeRieszRep(){
 }
 
 // TODO: distribute and 
-double RieszRep::getNorm(){
+double RieszRep::getNorm() {
   
   vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED - THIS SHOULD GATHER AND DISTRIBUTE NORM INFO
   vector< ElementPtr >::iterator elemIt;     
   double normSum = 0.0;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++) {
 
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
@@ -141,7 +141,7 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-void RieszRep::distributeDofs(){
+void RieszRep::distributeDofs() {
   int numProcs=1;
   int rank=0;  
 #ifdef HAVE_MPI
@@ -158,7 +158,7 @@ void RieszRep::distributeDofs(){
 }
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized NumDofs/)
-void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &values, BasisCachePtr basisCache){
+void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &values, BasisCachePtr basisCache) {
 
   vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
 
@@ -169,7 +169,7 @@ void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &v
   values.initialize(0.0);
   vector<int> cellIDs = basisCache->cellIDs();
   
-  for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
+  for (int cellIndex = 0;cellIndex<numCells;cellIndex++) {
     int cellID = cellIDs[cellIndex];
     ElementPtr elem = allElems[cellID];
     ElementTypePtr elemTypePtr = elem->elementType();   
@@ -181,10 +181,10 @@ void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &v
     BasisPtr testBasis = testOrderingPtr->getBasis(testID);
     FieldContainer<double> basisValues = *(basisCache->getValues(testBasis,IntrepidExtendedTypes::OP_VALUE));    
 
-    for (int i = 0;i<numPoints;i++){
-      for (int j = 0;j<numTestDofsForVarID;j++){
-	int dofIndex = testOrderingPtr->getDofIndex(testID, j);
-	values(cellIndex,i) += basisValues(j,i)*_rieszRepDofsGlobal[cellID](dofIndex);
+    for (int i = 0;i<numPoints;i++) {
+      for (int j = 0;j<numTestDofsForVarID;j++) {
+        int dofIndex = testOrderingPtr->getDofIndex(testID, j);
+        values(cellIndex,i) += basisValues(j,i)*_rieszRepDofsGlobal[cellID](dofIndex);
 	//	cout << "dof values at cell " << cellID << " and pt " << i << " and basis " << j << " = " << _rieszRepDofs[cellID](dofIndex) << ", " << basisValues(j,i) << endl;
       }
     }
