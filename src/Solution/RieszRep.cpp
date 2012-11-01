@@ -36,7 +36,8 @@
 #endif
 */
 #include "RieszRep.h"
-
+#include "Epetra_Vector.h"
+#include "Epetra_Import.h"
 LtPtr RieszRep::getRHS(){
   return _rhs;
 }
@@ -88,7 +89,8 @@ void RieszRep::computeRieszRep(){
   Epetra_SerialComm Comm;
 #endif  
 
-  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
+  //  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
+  vector< ElementPtr > allElems = _mesh->elementsInPartition(rank); // CHANGE TO DISTRIBUTED COMPUTATION
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
 
@@ -104,7 +106,7 @@ void RieszRep::computeRieszRep(){
     cellIDs.push_back(cellID); // just do one cell at a time
 
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs, true); // create side cache if ip has boundary values 
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
@@ -153,10 +155,9 @@ void RieszRep::computeRieszRep(){
   distributeDofs();
 }
 
-// TODO: distribute and 
 double RieszRep::getNorm(){
   
-  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED - THIS SHOULD GATHER AND DISTRIBUTE NORM INFO
+  vector< ElementPtr > allElems = _mesh->activeElements(); 
   vector< ElementPtr >::iterator elemIt;     
   double normSum = 0.0;
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
@@ -180,15 +181,59 @@ void RieszRep::distributeDofs(){
 #else
   Epetra_SerialComm Comm;
 #endif  
-  
-  _rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call
+
+  // loop thru elements in partition, export data to other processors
+  //  vector< ElementPtr > elems = _mesh->elementsInPartition(rank); 
+  vector< ElementPtr > elems = _mesh->activeElements(); 
+  vector< ElementPtr >::iterator elemIt;     
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();    
+    ElementTypePtr elemTypePtr = elem->elementType();   
+    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+    int numDofs = testOrderingPtr->totalDofs();
+    
+    int cellIDPartition = _mesh->partitionForCellID(cellID);
+    bool isInPartition = (cellIDPartition == rank);
+
+    int numMyDofs;
+    FieldContainer<double> dofs(numDofs);
+    if (isInPartition){  // if in partition
+      numMyDofs = numDofs;
+      dofs = _rieszRepDofs[cellID];
+    }else{
+      numMyDofs = 0;
+    }
+    
+    Epetra_Map dofMap(numDofs,numMyDofs,0,Comm); 
+    Epetra_Vector distributedRieszDofs(dofMap);
+    if (isInPartition){
+      for (int i = 0;i<numMyDofs;i++){ // shouldn't activate on off-proc partitions
+	distributedRieszDofs.ReplaceGlobalValues(1,&dofs(i),&i);
+      }
+    }
+
+    Epetra_Map importMap(numDofs,numDofs,0,Comm); // every proc should own their own copy of the dofs
+    Epetra_Import testDofImporter(importMap, dofMap); 
+    Epetra_Vector globalRieszDofs(importMap);
+    globalRieszDofs.Import(distributedRieszDofs, testDofImporter, Insert);  
+    if (!isInPartition){
+      for (int i = 0;i<numDofs;i++){
+	dofs(i) = globalRieszDofs[i];
+      }
+    }
+    _rieszRepDofsGlobal[cellID] = dofs;
+  }
+
+  //_rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call 
   
 }
 
-// computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized NumDofs/)
+// computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &values, BasisCachePtr basisCache){
 
-  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
+  vector< ElementPtr > allElems = _mesh->activeElements();
 
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
@@ -203,7 +248,6 @@ void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &v
     ElementTypePtr elemTypePtr = elem->elementType();   
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
-    //  int numTestDofs = testOrderingPtr->totalDofs(); 
     int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
 
     BasisPtr testBasis = testOrderingPtr->getBasis(testID);
@@ -213,7 +257,6 @@ void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &v
       for (int j = 0;j<numTestDofsForVarID;j++){
 	int dofIndex = testOrderingPtr->getDofIndex(testID, j);
 	values(cellIndex,i) += basisValues(j,i)*_rieszRepDofsGlobal[cellID](dofIndex);
-	//	cout << "dof values at cell " << cellID << " and pt " << i << " and basis " << j << " = " << _rieszRepDofs[cellID](dofIndex) << ", " << basisValues(j,i) << endl;
       }
     }
   }

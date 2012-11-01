@@ -96,11 +96,18 @@ class RieszRep {
   void setFunctional(LtPtr rhs){
     _rhs = rhs;
   }
+
   LtPtr getRHS();
+
+  // for testing
   map<int,FieldContainer<double> > integrateRHS();
+
   void computeRieszRep();
+
   double getNorm();
+
   void distributeDofs();
+
   void computeRepresentationValues(int testID,FieldContainer<double> &values,BasisCachePtr basisCache);
 
 };
