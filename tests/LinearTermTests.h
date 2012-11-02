@@ -4,9 +4,6 @@
 #include "gtest/gtest.h"
 #include "TestUtil.h"
 
-#include "Teuchos_RCP.hpp"
-#include "Intrepid_FieldContainer.hpp"
-
 #include "LinearTerm.h"
 #include "VarFactory.h"
 #include "Mesh.h"
@@ -18,10 +15,6 @@
 #include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
 
-using namespace Intrepid;
-
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 class LinearTermTests : public ::testing::Test {
