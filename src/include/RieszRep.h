@@ -108,7 +108,7 @@ class RieszRep {
 
   void distributeDofs();
 
-  void computeRepresentationValues(int testID,FieldContainer<double> &values,BasisCachePtr basisCache);
+  void computeRepresentationValues(FieldContainer<double> &values, int testID, BasisCachePtr basisCache);
 
 };
 
@@ -122,7 +122,7 @@ public:
     _rep = rep;
   }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    _rep->computeRepresentationValues(_testID,values,basisCache);
+    _rep->computeRepresentationValues(values, _testID, basisCache);
   }
 };
 
