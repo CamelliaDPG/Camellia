@@ -78,12 +78,12 @@ double EricksonConfectionSolution::solutionValue(int trialID,
     value = u_y; // SIGMA_2 == eps * d/dy (u)
     break;
   case ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT:
-    TEST_FOR_EXCEPTION( trialID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT,
+    TEUCHOS_TEST_FOR_EXCEPTION( trialID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT,
 			std::invalid_argument,
 			"for fluxes, you must call solutionValue with unitNormal argument.");
     break;
   default:
-    TEST_FOR_EXCEPTION( true, std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,
 			"solutionValues called with unknown trialID.");
   }
   return value;
@@ -167,16 +167,16 @@ void EricksonConfectionSolution::imposeBC(int varID, FieldContainer<double> &phy
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
+  TEUCHOS_TEST_FOR_EXCEPTION( ( spaceDim != 2  ),
 		      std::invalid_argument,
 		      "ConfusionBC expects spaceDim==2.");  
   
-  TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
 		      || ( dirichletValues.dimension(1) != numPoints ) 
 		      || ( dirichletValues.rank() != 2  ),
 		      std::invalid_argument,
 		      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
 		      || ( imposeHere.dimension(1) != numPoints ) 
 		      || ( imposeHere.rank() != 2  ),
 		      std::invalid_argument,
@@ -238,7 +238,7 @@ void EricksonConfectionSolution::getConstraints(FieldContainer<double> &physical
       double beta_n = _beta_x*unitNormals(cellIndex,pointIndex,0)+_beta_y*unitNormals(cellIndex,pointIndex,1);
       
       if ( abs(x-1.0) < tol ) { // if on outflow boundary
-	TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
+	TEUCHOS_TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
 	
 	// this combo isolates sigma_n
 	//	  uCoeffs(cellIndex,pointIndex) = 1.0;

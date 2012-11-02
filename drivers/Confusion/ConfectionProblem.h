@@ -45,7 +45,7 @@ public:
     double tol = 1e-14;
     double x_cut = 1.0;
     double y_cut = 1.0;
-    TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
+    TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
     for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
         double x = physicalPoints(cellIndex, ptIndex, 0);
