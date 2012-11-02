@@ -93,7 +93,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             physicalPointForCell(0,0) = physicalPoints(cellIndex,0,0); // assuming that all all pts corresponding to 1 cell index are the same...
             physicalPointForCell(0,1) = physicalPoints(cellIndex,0,1);
             vector<ElementPtr> elemVector = _mesh->elementsForPoints(physicalPointForCell);
-            TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
+            TEUCHOS_TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
                                "More than one element returned for a single pt!");
             ElementPtr elem = elemVector[0];            
             FieldContainer<double> allPhysicalNodesForType = _mesh->physicalCellNodes(elem->elementType());
@@ -128,7 +128,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
           int numPoints = testValues1.dimension(2);
           //	  cout << "dimensions are " << numCells <<","<<basisCardinality<<","<<numPoints<<","<<spaceDim<< endl;
           
-          TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
+          TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument,
                              "ConfusionBilinearForm only supports 2 dimensions right now.");
           
           // because we change dimensions of the values, by dotting with beta, 
@@ -172,7 +172,7 @@ class ConfusionInnerProduct : public DPGInnerProduct {
             physicalPointForCell(0,0) = physicalPoints(cellIndex,0,0); // assuming that all all pts corresponding to 1 cell index are the same...
             physicalPointForCell(0,1) = physicalPoints(cellIndex,0,1);
             vector<ElementPtr> elemVector = _mesh->elementsForPoints(physicalPointForCell);
-            TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
+            TEUCHOS_TEST_FOR_EXCEPTION(elemVector.size()>1, std::invalid_argument,
                                "More than one element returned for a single pt!");
             ElementPtr elem = elemVector[0];
             

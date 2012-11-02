@@ -55,12 +55,12 @@ double VortexManufacturedSolution::solutionValue(int trialID,
     value = _epsilon * su.dx(1); // SIGMA_2 == eps * d/dy (u)
     break;
   case ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT:
-    TEST_FOR_EXCEPTION( trialID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT,
+    TEUCHOS_TEST_FOR_EXCEPTION( trialID == ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT,
 			std::invalid_argument,
 			"for fluxes, you must call solutionValue with unitNormal argument.");
     break;
   default:
-    TEST_FOR_EXCEPTION( true, std::invalid_argument,
+    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,
 			"solutionValues called with unknown trialID.");
   }
   return value;
@@ -126,7 +126,7 @@ void VortexManufacturedSolution::imposeBC(int varID, FieldContainer<double> &phy
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   double tol = 1e-14;
-  TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
+  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument, "spaceDim != 2" );
   for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
       double x = physicalPoints(cellIndex, ptIndex, 0);

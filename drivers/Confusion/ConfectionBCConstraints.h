@@ -42,7 +42,7 @@ class ConfectionBCConstraints : public Constraints {
 
 	
 	if ((abs(x-1.0) < tol) || (abs(y-1.0) < tol)) { // if on outflow boundary
-	  TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
+	  TEUCHOS_TEST_FOR_EXCEPTION(beta_n < 0,std::invalid_argument,"Inflow condition on boundary");
 	  
 	  // this combo isolates sigma_n
 	  //	  uCoeffs(cellIndex,pointIndex) = 1.0;

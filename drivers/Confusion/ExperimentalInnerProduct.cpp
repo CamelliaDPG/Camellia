@@ -110,7 +110,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  } else if (operatorIndex==1) { // div tau
 	    // do nothing, both are already correct
 	  } else {
-	    TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+	    TEUCHOS_TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
 	  }
 	}
 
@@ -128,7 +128,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	    testValues2(cellIndex,basisOrdinal,ptIndex)  = beta_x * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,0)
 	      + beta_y * testValuesCopy2(cellIndex,basisOrdinal,ptIndex,1);	      
 	  } else {
-	    TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+	    TEUCHOS_TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
 	  }
 	}
       }
@@ -142,7 +142,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
       if (operatorIndex==0){ // beta dot grad v * div d_tau
 	if (testValues2.rank()==4){ 
 	  testValues2.resize(numCells,basisCardinality2,numPoints);	      
-	  TEST_FOR_EXCEPTION(testValues1.rank()!=3,std::invalid_argument,"Div tau not rank 3");
+	  TEUCHOS_TEST_FOR_EXCEPTION(testValues1.rank()!=3,std::invalid_argument,"Div tau not rank 3");
 	}
 	for (int basisOrdinal=0; basisOrdinal<basisCardinality2; basisOrdinal++) {
 	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -156,8 +156,8 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  }
 	}
       } else if (operatorIndex==1) { // tau dot grad d_v
-	TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
-	TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
+	TEUCHOS_TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
+	TEUCHOS_TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
 
 	for (int basisOrdinal=0; basisOrdinal<basisCardinality2; basisOrdinal++) {
 	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -166,7 +166,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  }
 	}
       } else {
-	TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+	TEUCHOS_TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
       }	    
     }
     
@@ -188,8 +188,8 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  }
 	}
       } else if (operatorIndex==1) { // grad v dot d_tau
-	TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
-	TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
+	TEUCHOS_TEST_FOR_EXCEPTION(testValues1.rank()!=4,std::invalid_argument,"Wrong rank 1");
+	TEUCHOS_TEST_FOR_EXCEPTION(testValues2.rank()!=4,std::invalid_argument,"Wrong rank 2");
 
 	for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
 	  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -198,7 +198,7 @@ void ExperimentalInnerProduct::applyInnerProductData(FieldContainer<double> &tes
 	  }
 	}
       } else {
-	TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
+	TEUCHOS_TEST_FOR_EXCEPTION(false, std::invalid_argument,"Op index too big");
       }
     }
   
