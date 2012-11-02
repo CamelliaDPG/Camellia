@@ -405,10 +405,12 @@ int main(int argc, char *argv[]) {
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
   
   vector<int> cellIDs;
-  cellIDs.push_back(0); 
-  cellIDs.push_back(1);
-  cellIDs.push_back(2);
-  cellIDs.push_back(3);
+  vector< ElementPtr > allElems = mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    cellIDs.push_back((*elemIt)->cellID());
+  }
+
   bool createSideCacheToo = true;
   
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
@@ -424,7 +426,7 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   int numRefs = 0;
   if (rank==0){
-    cout << "refining..." << endl;
+    cout << "solving/refining..." << endl;
   }
   for (int i = 0;i<numRefs;i++){
     solution->solve(false);
@@ -471,11 +473,15 @@ int main(int argc, char *argv[]) {
   //  sobolevIP->addTerm(v->grad());
   sobolevIP->addTerm(tau);
   sobolevIP->addTerm(tau->div());
+
+  cout << "making riesz representations" << endl;
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, sobolevIP, residual));
+  cout << "computing riesz representations" << endl;
   riesz->computeRieszRep();
   Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, residualIBP));
   rieszIBP->computeRieszRep();
 
+  cout << "making rep fxns" << endl;
   FunctionPtr rieszRepFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
   FunctionPtr rieszRepIBPFxn = Teuchos::rcp(new RepFunction(v->ID(),rieszIBP));
 
@@ -483,9 +489,11 @@ int main(int argc, char *argv[]) {
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
   FieldContainer<double> valOriginal( numCells, numPts);
   FieldContainer<double> valIBP( numCells, numPts);
+  cout << "getting rep fxn values" << endl;
   rieszRepFxn->values(valOriginal,basisCache);
   rieszRepIBPFxn->values(valIBP,basisCache);
 
+  cout << "getting max diff " << endl;
   double maxDiff = 0.0;
   double tol = 1e-15;
   for (int i = 0;i<numCells;i++){

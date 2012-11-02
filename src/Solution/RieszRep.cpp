@@ -184,6 +184,7 @@ void RieszRep::distributeDofs(){
 
   // loop thru elements in partition, export data to other processors
   //  vector< ElementPtr > elems = _mesh->elementsInPartition(rank); 
+  
   vector< ElementPtr > elems = _mesh->activeElements(); 
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
@@ -226,18 +227,17 @@ void RieszRep::distributeDofs(){
     _rieszRepDofsGlobal[cellID] = dofs;
   }
 
-  //_rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call 
+  //  _rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call 
   
 }
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
-void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &values, BasisCachePtr basisCache){
+void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, BasisCachePtr basisCache){
 
   vector< ElementPtr > allElems = _mesh->activeElements();
 
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  //  cout << "num cells = " << numCells << endl;
 
   values.initialize(0.0);
   vector<int> cellIDs = basisCache->cellIDs();
@@ -249,14 +249,14 @@ void RieszRep::computeRepresentationValues(int testID, FieldContainer<double> &v
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
-
     BasisPtr testBasis = testOrderingPtr->getBasis(testID);
-    FieldContainer<double> basisValues = *(basisCache->getValues(testBasis,IntrepidExtendedTypes::OP_VALUE));    
+    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,IntrepidExtendedTypes::OP_VALUE);    
 
-    for (int i = 0;i<numPoints;i++){
-      for (int j = 0;j<numTestDofsForVarID;j++){
+    for (int j = 0;j<numTestDofsForVarID;j++){
+      for (int i = 0;i<numPoints;i++){	
 	int dofIndex = testOrderingPtr->getDofIndex(testID, j);
-	values(cellIndex,i) += basisValues(j,i)*_rieszRepDofsGlobal[cellID](dofIndex);
+	double basisValue = (*basisValues)(j,i);
+	values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
       }
     }
   }
