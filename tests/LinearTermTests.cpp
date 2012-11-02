@@ -1,191 +1,78 @@
-#include "gtest/gtest.h"
-#include "TestUtil.h"
+#include "LinearTermTests.h"
 
-#include "Teuchos_RCP.hpp"
-#include "Intrepid_FieldContainer.hpp"
+void LinearTermTests::SetUp()
+{
+  //  VarPtr v1, v2, v3; // HGRAD members (test variables)
+  //  VarPtr q1, q2, q3; // HDIV members (test variables)
+  //  VarPtr u1, u2, u3; // L2 members (trial variables)
+  //  VarPtr u1_hat, u2_hat; // trace variables
+  //  VarPtr u3_hat_n; // flux variable
 
-#include "LinearTerm.h"
-#include "VarFactory.h"
-#include "Mesh.h"
-#include "BasisCache.h"
-#include "BF.h"
-#include "IP.h"
-#include "BCEasy.h"
-#include "RHSEasy.h"
-#include "RieszRep.h"
-#include "PreviousSolutionFunction.h"
+  sine_x = Teuchos::rcp( new Sine_x );
+  cos_y = Teuchos::rcp( new Cosine_y );
 
-using namespace Intrepid;
+  v1 = varFactory.testVar("v_1", HGRAD);
+  v2 = varFactory.testVar("v_2", HGRAD);
+  v3 = varFactory.testVar("v_3", HGRAD);
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-typedef pair< FunctionPtr, VarPtr > LinearSummand;
+  q1 = varFactory.testVar("q_1", HDIV);
+  q2 = varFactory.testVar("q_2", HDIV);
+  q3 = varFactory.testVar("q_3", HDIV);
 
-class Sine_x : public Function {
-  public:
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+  u1 = varFactory.fieldVar("u_1", HGRAD);
+  u2 = varFactory.fieldVar("u_2", HGRAD);
+  u3 = varFactory.fieldVar("u_3", HGRAD);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex) = sin(x);
-        }
-      }
-    }
-};
+  u1_hat = varFactory.traceVar("\\widehat{u}_1");
+  u2_hat = varFactory.traceVar("\\widehat{u}_2");
 
+  u3_hat_n = varFactory.fluxVar("\\widehat{u}_3n");
 
-class Cosine_y : public Function {
-  public:
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+  bf = Teuchos::rcp(new BF(varFactory)); // made-up bf for Mesh + previous solution tests
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex) = cos(y);
-        }
-      }
-    }
-};
+  bf->addTerm(u1_hat, q1->dot_normal());
+  bf->addTerm(u1, q1->x());
+  bf->addTerm(u2, q1->y());
 
-bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofOrdering, BasisCachePtr basisCache) {
-  double tol = 1e-14;
+  bf->addTerm(u3_hat_n, v1);
+  bf->addTerm(u3, v1);
 
-  int numCells = basisCache->cellIDs().size();
-  int numDofs = dofOrdering->totalDofs();
-  bool forceBoundaryTerm = false;
-  FieldContainer<double> aValues(numCells,numDofs), bValues(numCells,numDofs), sumValues(numCells,numDofs);
-  a->integrate(aValues,dofOrdering,basisCache,forceBoundaryTerm);
-  b->integrate(bValues,dofOrdering,basisCache,forceBoundaryTerm);
-  (a+b)->integrate(sumValues, dofOrdering, basisCache, forceBoundaryTerm);
+  int polyOrder = 3, testToAdd = 2;
+  Teuchos::RCP<shards::CellTopology> quadTopoPtr;
+  //  quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
 
-  int size = aValues.size();
+  // define nodes for mesh
+  FieldContainer<double> quadPoints(4,2);
 
-  for (int i=0; i<size; i++) {
-    double expectedValue = aValues[i] + bValues[i];
-    double diff = abs( expectedValue - sumValues[i] );
-    if (diff > tol) {
-      return false;
-    }
-  }
-  return true;
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
+  int horizontalElements = 2, verticalElements = 2;
+
+  mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
+
+  ElementTypePtr elemType = mesh->getElement(0)->elementType();
+  trialOrder = elemType->trialOrderPtr;
+  testOrder = elemType->testOrderPtr;
+
+  basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
+
+  vector<int> cellIDs;
+  cellIDs.push_back(0); 
+  cellIDs.push_back(1);
+  cellIDs.push_back(2);
+  cellIDs.push_back(3);
+  bool createSideCacheToo = true;
+
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
 }
 
-class LinearTermTest : public ::testing::Test {
-  protected:
-    virtual void SetUp() {
-      //  VarPtr v1, v2, v3; // HGRAD members (test variables)
-      //  VarPtr q1, q2, q3; // HDIV members (test variables)
-      //  VarPtr u1, u2, u3; // L2 members (trial variables)
-      //  VarPtr u1_hat, u2_hat; // trace variables
-      //  VarPtr u3_hat_n; // flux variable
-
-      sine_x = Teuchos::rcp( new Sine_x );
-      cos_y = Teuchos::rcp( new Cosine_y );
-
-      v1 = varFactory.testVar("v_1", HGRAD);
-      v2 = varFactory.testVar("v_2", HGRAD);
-      v3 = varFactory.testVar("v_3", HGRAD);
-
-      q1 = varFactory.testVar("q_1", HDIV);
-      q2 = varFactory.testVar("q_2", HDIV);
-      q3 = varFactory.testVar("q_3", HDIV);
-
-      u1 = varFactory.fieldVar("u_1", HGRAD);
-      u2 = varFactory.fieldVar("u_2", HGRAD);
-      u3 = varFactory.fieldVar("u_3", HGRAD);
-
-      u1_hat = varFactory.traceVar("\\widehat{u}_1");
-      u2_hat = varFactory.traceVar("\\widehat{u}_2");
-
-      u3_hat_n = varFactory.fluxVar("\\widehat{u}_3n");
-
-      bf = Teuchos::rcp(new BF(varFactory)); // made-up bf for Mesh + previous solution tests
-
-      bf->addTerm(u1_hat, q1->dot_normal());
-      bf->addTerm(u1, q1->x());
-      bf->addTerm(u2, q1->y());
-
-      bf->addTerm(u3_hat_n, v1);
-      bf->addTerm(u3, v1);
-
-      int polyOrder = 3, testToAdd = 2;
-      Teuchos::RCP<shards::CellTopology> quadTopoPtr;
-      //  quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-
-      // define nodes for mesh
-      FieldContainer<double> quadPoints(4,2);
-
-      quadPoints(0,0) = -1.0; // x1
-      quadPoints(0,1) = -1.0; // y1
-      quadPoints(1,0) = 1.0;
-      quadPoints(1,1) = -1.0;
-      quadPoints(2,0) = 1.0;
-      quadPoints(2,1) = 1.0;
-      quadPoints(3,0) = -1.0;
-      quadPoints(3,1) = 1.0;
-      int horizontalElements = 2, verticalElements = 2;
-
-      mesh = Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, polyOrder+1, polyOrder+1+testToAdd);
-
-      ElementTypePtr elemType = mesh->getElement(0)->elementType();
-      trialOrder = elemType->trialOrderPtr;
-      testOrder = elemType->testOrderPtr;
-
-      basisCache = Teuchos::rcp(new BasisCache(elemType, mesh));
-
-      vector<int> cellIDs;
-      cellIDs.push_back(0); 
-      cellIDs.push_back(1);
-      cellIDs.push_back(2);
-      cellIDs.push_back(3);
-      bool createSideCacheToo = true;
-
-      basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
-    }
-
-    void transposeFieldContainer(FieldContainer<double> &fc){
-      // this is NOT meant for production code.  Could do the transpose in place if we were concerned with efficiency.
-      FieldContainer<double> fcCopy = fc;
-      int numCells = fc.dimension(0);
-      int dim1 = fc.dimension(1);
-      int dim2 = fc.dimension(2);
-      fc.resize(numCells,dim2,dim1);
-      for (int i=0; i<numCells; i++) {
-        for (int j=0; j<dim1; j++) {
-          for (int k=0; k<dim2; k++) {
-            fc(i,k,j) = fcCopy(i,j,k);
-          }
-        }
-      }
-    }
-
-    VarFactory varFactory;
-
-    VarPtr v1, v2, v3; // HGRAD members (test variables)
-    VarPtr q1, q2, q3; // HDIV members (test variables)
-    VarPtr u1, u2, u3; // L2 members (trial variables)
-    VarPtr u1_hat, u2_hat; // trace variables
-    VarPtr u3_hat_n; // flux variable
-    FunctionPtr sine_x, cos_y;
-    Teuchos::RCP<Mesh> mesh;
-
-    DofOrderingPtr trialOrder, testOrder;
-
-    BasisCachePtr basisCache;
-
-    BFPtr bf;
-};
-
-TEST_F(LinearTermTest, TestSums)
+TEST_F(LinearTermTests, TestSums)
 {
   LinearTermPtr sum = v1 + v2;
 
@@ -211,7 +98,7 @@ TEST_F(LinearTermTest, TestSums)
   ASSERT_EQ(2, sum->varIDs().size()) << "sum->varIDs() doesn't have the expected size (expected 2; is " << sum->varIDs().size() << ")";
 }
 
-TEST_F(LinearTermTest, TestIntegration)
+TEST_F(LinearTermTests, TestIntegration)
 {
   // for now, we just check the consistency: for LinearTerm a = b + c, does a->integrate
   // give the same values as b->integrate + c->integrate ?
@@ -273,7 +160,7 @@ TEST_F(LinearTermTest, TestIntegration)
     << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
 }
 
-TEST_F(LinearTermTest, TestBoundaryPlusVolumeTerms)
+TEST_F(LinearTermTests, TestBoundaryPlusVolumeTerms)
 {
   // notion is integration by parts:
   // (div f, v) = < f * n, v > - (f, grad v)
@@ -459,7 +346,7 @@ TEST_F(LinearTermTest, TestBoundaryPlusVolumeTerms)
   }
 }
 
-TEST_F(LinearTermTest, TestEnergyNorm)
+TEST_F(LinearTermTests, TestEnergyNorm)
 {
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm(v1); // L^2 on an HGrad var
@@ -474,7 +361,7 @@ TEST_F(LinearTermTest, TestEnergyNorm)
   EXPECT_NEAR(2.0, norm, tol);
 }
 
-TEST_F(LinearTermTest, TestRieszInversionAsProjection)
+TEST_F(LinearTermTests, TestRieszInversionAsProjection)
 {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -582,7 +469,7 @@ TEST_F(LinearTermTest, TestRieszInversionAsProjection)
     << "Failed Riesz Inversion Projection test with maxDiff = " << maxDiff << endl;
 }
 
-TEST_F(LinearTermTest, TestMixedTermConsistency)
+TEST_F(LinearTermTests, TestMixedTermConsistency)
 {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -699,7 +586,7 @@ TEST_F(LinearTermTest, TestMixedTermConsistency)
   }
 }
 
-TEST_F(LinearTermTest, TestRieszInversion)
+TEST_F(LinearTermTests, TestRieszInversion)
 {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
