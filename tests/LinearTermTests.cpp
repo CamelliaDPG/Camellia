@@ -103,15 +103,15 @@ TEST_F(LinearTermTests, TestIntegration)
   // for now, we just check the consistency: for LinearTerm a = b + c, does a->integrate
   // give the same values as b->integrate + c->integrate ?
 
-  ASSERT_TRUE(checkLTSumConsistency(1 * v1, 1 * v2, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(1 * v1, 1 * v2, testOrder, basisCache))
     << "(v1 + v2)->integrate not consistent with sum of summands integration";
-  ASSERT_TRUE(checkLTSumConsistency(sine_x * v1, 1 * v2, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(sine_x * v1, 1 * v2, testOrder, basisCache))
     << "(sine_x * v1 + v2)->integrate not consistent with sum of summands integration.\n";
-  ASSERT_TRUE(checkLTSumConsistency(1 * q1->div(), 1 * q2->x(), testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(1 * q1->div(), 1 * q2->x(), testOrder, basisCache))
     << "(q1->div() + q2->x())->integrate not consistent with sum of summands integration.\n";
-  ASSERT_TRUE(checkLTSumConsistency(1 * u1, 1 * u2, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(1 * u1, 1 * u2, testOrder, basisCache))
     << "(u1 + u2)->integrate not consistent with sum of summands integration.\n";
-  ASSERT_TRUE(checkLTSumConsistency(1 * u1, sine_x * u2, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(1 * u1, sine_x * u2, testOrder, basisCache))
     << "(u1 + sine_x * u2)->integrate not consistent with sum of summands integration.\n";
 
   // now, same thing, but with boundary-value-only functions in the mix:
@@ -152,11 +152,11 @@ TEST_F(LinearTermTests, TestIntegration)
   FunctionPtr u3_hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u3_hat_n) );
   LinearTermPtr testFunctionalBoundaryValues = u1_hat_prev * q1->dot_normal() + u3_hat_prev * v1;
 
-  ASSERT_TRUE(checkLTSumConsistency(testFunctionalNoBoundaryValues, testFunctionalBoundaryValues, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(testFunctionalNoBoundaryValues, testFunctionalBoundaryValues, testOrder, basisCache))
     << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
-  ASSERT_TRUE(checkLTSumConsistency(testFunctionalBoundaryValues, bfTestFunctional - testFunctionalBoundaryValues, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(testFunctionalBoundaryValues, bfTestFunctional - testFunctionalBoundaryValues, testOrder, basisCache))
     << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
-  ASSERT_TRUE(checkLTSumConsistency(testFunctionalNoBoundaryValues, bfTestFunctional - testFunctionalNoBoundaryValues, testOrder, basisCache))
+  EXPECT_TRUE(checkLTSumConsistency(testFunctionalNoBoundaryValues, bfTestFunctional - testFunctionalNoBoundaryValues, testOrder, basisCache))
     << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
 }
 
