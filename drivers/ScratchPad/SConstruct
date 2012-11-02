@@ -8,39 +8,17 @@ Help("""
 import os
 import multiprocessing
 
-# Build with max cores
-job_count = multiprocessing.cpu_count()/2
-SetOption('num_jobs', job_count)
-print 'Building with ' + str(job_count) + ' jobs'
-
 env = Environment(ENV=os.environ)
 
 # Compiler Settings
-CC_OPTS     = '-O3'
+CC_OPTS     = '-O0'
 DEBUG_OPTS  = '-g -Wall'
 CPP_COMP    = 'mpicxx'
 C_COMP      = 'mpicc'
 
 env['CXX'] = CPP_COMP
 env['CC'] = C_COMP
-
-build_message = 'Building '
-# Serial version
-parallel = int(ARGUMENTS.get('parallel', 1))
-if parallel:
-    build_message += 'parallel '
-else:
-    env.Replace(CXX = 'cpp')
-    build_message += 'serial '
-
-# Debug options
-debug = int(ARGUMENTS.get('debug', 1))
-if debug:
-    env.Append(CCFLAGS = DEBUG_OPTS)
-    build_message += 'debug version'
-else:
-    env.Append(CCFLAGS = CC_OPTS)
-    build_message += 'optimized version'
+#env.Append(CCFLAGS = DEBUG_OPTS) # for debugging - comment out if no debug
 
 # Build Camellia Library
 Export('env')
@@ -48,4 +26,3 @@ SConscript('../../SConscript')
 
 # Build Driver
 SConscript('SConscript')
-
