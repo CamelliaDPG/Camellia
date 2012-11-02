@@ -15,6 +15,7 @@ add_executable( RunTests
   LinearTermTests.cpp 
   BasisCacheTests.cpp 
   ElementTests.cpp 
+  FunctionTests.cpp 
 )
 # Link test executable against gtest & gtest_main
 target_link_libraries(RunTests gtest gtest_main Camellia)
