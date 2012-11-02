@@ -22,7 +22,6 @@ PoissonRHSQuartic.cpp
 for i in range(len(Poisson_files)):
     Poisson_files[i]=Poisson_dir+"/"+Poisson_files[i]
 
-
 Confusion_dir = "../Confusion"
 Confusion_files = Split("""
 ConfusionBilinearForm.cpp
@@ -33,7 +32,7 @@ ConfusionManufacturedSolution.cpp
 for i in range(len(Confusion_files)):
     Confusion_files[i]=Confusion_dir+"/"+Confusion_files[i]
 
-print Confusion_files    
+# print Confusion_files    
 
 src_obj = env.Object(['BasisCacheTests.cpp','FunctionTests.cpp','ScratchPadTests.cpp','LinearTermTests.cpp','TestBilinearFormDx.cpp','TestBilinearFormFlux.cpp','PatchBasisTests.cpp','VectorizedBasisTestSuite.cpp','MeshTestSuite.cpp','SolutionTests.cpp','RHSTests.cpp','MultiBasisTests.cpp','ElementTests.cpp','MeshRefinementTests.cpp',Poisson_files,Confusion_files,Glob('../MultiOrderStudy/*.cpp'),'../Stokes/StokesBilinearForm.cpp'])
 
