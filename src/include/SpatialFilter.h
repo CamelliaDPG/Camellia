@@ -54,6 +54,12 @@ public:
   //  }
 };
 
+class SpatialFilterUnfiltered : public SpatialFilter {
+  bool matchesPoint(double x, double y) {
+    return true;
+  }
+};
+
 class SpatialFilterLogicalOr : public SpatialFilter {
   SpatialFilterPtr _sf1, _sf2;
 public:
