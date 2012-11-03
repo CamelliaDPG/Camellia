@@ -387,7 +387,7 @@ string HConvergenceStudy::TeXNumGlobalDofsTable(const string &filePathPrefix) {
   texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
   
   texString << "\\hline \n";
-  texString << "\\multirow{2}{*}{Mesh Size} & Global Dofs";;
+  texString << "Mesh Size & Global Dofs";
   texString << newLine << "\\cline{2-" << numColumns << "}" << "\n";
   texString << newLine;
   texString << "\\hline \n";
