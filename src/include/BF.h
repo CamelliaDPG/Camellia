@@ -37,6 +37,8 @@ public:
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID);
   
   IPPtr graphNorm();
+  IPPtr l2Norm();
+  IPPtr naiveNorm();
   
   bool isFluxOrTrace(int trialID);
   

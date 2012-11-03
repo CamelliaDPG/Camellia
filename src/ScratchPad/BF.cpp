@@ -141,6 +141,36 @@ IPPtr BF::graphNorm() {
   return ip;
 }
 
+IPPtr BF::l2Norm() {
+  // L2 norm on test space:
+  IPPtr ip = Teuchos::rcp( new IP );
+  map< int, VarPtr > testVars = _varFactory.testVars();
+  for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+    ip->addTerm( testVarIt->second );
+  }
+  return ip;
+}
+
+IPPtr BF::naiveNorm() {
+  IPPtr ip = Teuchos::rcp( new IP );
+  map< int, VarPtr > testVars = _varFactory.testVars();
+  for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+    VarPtr var = testVarIt->second;
+    ip->addTerm( var );
+    // HGRAD, HCURL, HDIV, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2
+    if ( (var->space() == HGRAD) || (var->space() == VECTOR_HGRAD) ) {
+      ip->addTerm( var->grad() );
+    } else if ( (var->space() == L2) || (var->space() == VECTOR_L2) ) {
+      // do nothing (we already added the L2 term
+    } else if (var->space() == HCURL) {
+      ip->addTerm( var->curl() );
+    } else if (var->space() == HDIV) {
+      ip->addTerm( var->div() );
+    }
+  }
+  return ip;  
+}
+
 LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {
   LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
