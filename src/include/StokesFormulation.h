@@ -135,8 +135,8 @@ public:
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                             SpatialFilterPtr entireBoundary) {
-    FunctionPtr f1 = - p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = - p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
@@ -217,9 +217,9 @@ public:
     _mu = mu;
     _trueTraces = trueTraces;
     
-    tau = varFactory.testVar("\\tau", VECTOR_HGRAD);
-    v = varFactory.testVar("v", HGRAD);
-    q = varFactory.testVar("q", HGRAD);
+    tau = varFactory.testVar("\\boldsymbol{v}", VECTOR_HGRAD);
+    v = varFactory.testVar("q_1", HGRAD);
+    q = varFactory.testVar("q_2", HGRAD);
     
     if (!trueTraces) {
       u1hat = varFactory.traceVar("\\widehat{u}_1");
