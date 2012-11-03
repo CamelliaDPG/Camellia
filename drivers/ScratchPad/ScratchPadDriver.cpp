@@ -336,11 +336,11 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new SquareBoundary() );
   
   // quick test of the boundary implementation:
-  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
-  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(-1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
-  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.0,-1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
-  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.5,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
-  TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEUCHOS_TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEUCHOS_TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(-1.0,0.5), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEUCHOS_TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.0,-1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEUCHOS_TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(0.5,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
+  TEUCHOS_TEST_FOR_EXCEPTION( ! entireBoundary->matchesPoint(1.0,1.0), std::invalid_argument, "Boundary point not matched by entireBoundary.");
   
   FunctionPtr u1fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u1() );
   FunctionPtr u2fn = Teuchos::rcp( new StokesManufacturedSolutionBC_u2() );
