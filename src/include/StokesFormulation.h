@@ -200,7 +200,7 @@ class VVPStokesFormulation : public StokesFormulation {
   // these are the true traces for u:
   VarPtr u_n, u_xn; // dot with n and cross with n.  Both should be fluxes.
   // tests:
-  VarPtr tau, v, q;
+  VarPtr v, q1, q2;
   BFPtr _bf;
   IPPtr _graphNorm;
   double _mu;
@@ -208,18 +208,12 @@ class VVPStokesFormulation : public StokesFormulation {
   
 public:
   VVPStokesFormulation(double mu, bool trueTraces = false) {
-    //    if (mu != 1.0) {
-    //      cout << "\n************************************************\n";
-    //      cout <<   "*    ERROR: VVP formulation assumes mu==1.0    *\n";
-    //      cout << "\n************************************************\n";
-    //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "bad mu value");
-    //    }
     _mu = mu;
     _trueTraces = trueTraces;
     
-    tau = varFactory.testVar("\\boldsymbol{v}", VECTOR_HGRAD);
-    v = varFactory.testVar("q_1", HGRAD);
-    q = varFactory.testVar("q_2", HGRAD);
+    v = varFactory.testVar("\\boldsymbol{v}", VECTOR_HGRAD);
+    q1 = varFactory.testVar("q_1", HGRAD);
+    q2 = varFactory.testVar("q_2", HGRAD);
     
     if (!trueTraces) {
       u1hat = varFactory.traceVar("\\widehat{u}_1");
@@ -238,44 +232,44 @@ public:
     
     // construct bilinear form:
     _bf = Teuchos::rcp( new BF(varFactory) );
-    // tau terms:
-    _bf->addTerm(- mu * omega_hat, tau->cross_normal());
-    _bf->addTerm(p_hat,tau->dot_normal()); // (sigma1, tau1)
-    _bf->addTerm(- mu * omega,tau->curl());
-    _bf->addTerm(-p, tau->div());
-    
     // v terms:
-    if (!trueTraces) {
-      _bf->addTerm( u1hat->times_normal_y() - u2hat->times_normal_x(), v); // <u x n, v>
-    } else {
-      _bf->addTerm( u_xn, v); // <u x n, v>
-    }
-    _bf->addTerm(-u1, v->dy()); // ( -u, curl v)
-    _bf->addTerm( u2, v->dx());
-    _bf->addTerm(omega, v);
+    _bf->addTerm(mu * omega_hat, v->cross_normal());
+    _bf->addTerm(- p_hat,v->dot_normal()); // (sigma1, tau1)
+    _bf->addTerm(mu * omega,v->curl());
+    _bf->addTerm(p, v->div());
     
-    // q terms:
+    // q1 terms:
     if (!trueTraces) {
-      _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q); // <u * n, q>
+      _bf->addTerm( u1hat->times_normal_y() - u2hat->times_normal_x(), q1); // <u x n, q1>
     } else {
-      _bf->addTerm(u_n, q); // <u * n, q>
+      _bf->addTerm( u_xn, q1); // <u x n, q1>
     }
-    _bf->addTerm(-u1, q->dx()); // (-u, grad q)
-    _bf->addTerm(-u2, q->dy());
+    _bf->addTerm(-u1, q1->dy()); // ( -u, curl q1)
+    _bf->addTerm( u2, q1->dx());
+    _bf->addTerm(omega, q1);
+    
+    // q2 terms:
+    if (!trueTraces) {
+      _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q2); // <u * n, q2>
+    } else {
+      _bf->addTerm(u_n, q2); // <u * n, q2>
+    }
+    _bf->addTerm(-u1, q2->dx()); // (-u, grad q2)
+    _bf->addTerm(-u2, q2->dy());
     
     //    _graphNorm = _bf->graphNorm();
     _graphNorm = Teuchos::rcp( new IP );
-    _graphNorm->addTerm( v + mu * tau->curl() ); // omega
-    _graphNorm->addTerm( tau->div() ); // p
-    _graphNorm->addTerm( q->grad() + v->curl() ); // (u1,u2)
+    _graphNorm->addTerm( q1 + mu * v->curl() ); // omega
+    _graphNorm->addTerm( v->div() ); // p
+    _graphNorm->addTerm( q2->grad() + q1->curl() ); // (u1,u2)
     
     // L^2 terms:
-    //    _graphNorm->addTerm( tau );
+    //    _graphNorm->addTerm( v );
     // experiment on suspicion of the above line:
-    _graphNorm->addTerm( tau->x() );
-    _graphNorm->addTerm( tau->y() );
-    _graphNorm->addTerm( v );
-    _graphNorm->addTerm( q );
+    _graphNorm->addTerm( v->x() );
+    _graphNorm->addTerm( v->y() );
+    _graphNorm->addTerm( q1 );
+    _graphNorm->addTerm( q2 );
   }
   BFPtr bf() {
     return _bf;
@@ -285,7 +279,7 @@ public:
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-    rhs->addTerm( f1 * tau->x() + f2 * tau->y() );
+    rhs->addTerm( f1 * v->x() + f2 * v->y() );
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
@@ -303,8 +297,8 @@ public:
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                             SpatialFilterPtr entireBoundary) {
-    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1 = - p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = - p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
     //    cout << "VVP rhs: f_1 = " << f1->displayString() << "; f_2 = " << f2->displayString() << endl;
     
@@ -403,16 +397,16 @@ public:
     _bf->addTerm(-u2hat, tau2->dot_normal());
     
     // v1:
-    _bf->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
-    _bf->addTerm(mu * sigma12,v1->dy());
-    _bf->addTerm( - p, v1->dx() );
-    _bf->addTerm( sigma1n, v1);
+    _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+    _bf->addTerm(- mu * sigma12,v1->dy());
+    _bf->addTerm( p, v1->dx() );
+    _bf->addTerm(- sigma1n, v1);
     
     // v2:
-    _bf->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-    _bf->addTerm(mu * sigma22,v2->dy());
-    _bf->addTerm( -p, v2->dy());
-    _bf->addTerm( sigma2n, v2);
+    _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+    _bf->addTerm(- mu * sigma22,v2->dy());
+    _bf->addTerm(p, v2->dy());
+    _bf->addTerm(- sigma2n, v2);
     
     // q:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)
@@ -480,8 +474,8 @@ public:
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                             SpatialFilterPtr entireBoundary) {
-    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
@@ -573,14 +567,14 @@ public:
     _bf = Teuchos::rcp( new BF(varFactory) );
     
     // v1 terms:
-    _bf->addTerm(sigma11, v1->dx()); // (sigma1, grad v1)
-    _bf->addTerm(sigma12, v1->dy());
-    _bf->addTerm(-sigma1n, v1);
+    _bf->addTerm(-sigma11, v1->dx()); // (sigma1, grad v1)
+    _bf->addTerm(-sigma12, v1->dy());
+    _bf->addTerm(sigma1n, v1);
     
     // v2 terms:
-    _bf->addTerm(sigma12, v2->dx()); // (sigma2, grad v2)
-    _bf->addTerm(sigma22, v2->dy());
-    _bf->addTerm(-sigma2n, v2);
+    _bf->addTerm(-sigma12, v2->dx()); // (sigma2, grad v2)
+    _bf->addTerm(-sigma22, v2->dy());
+    _bf->addTerm(sigma2n, v2);
     
     // tau11 terms:
     _bf->addTerm(sigma11 - sigma22,tau11);
@@ -631,8 +625,8 @@ public:
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                             SpatialFilterPtr entireBoundary) {
-    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
@@ -724,14 +718,14 @@ public:
     _bf = Teuchos::rcp( new BF(varFactory) );
     
     // v1 terms:
-    _bf->addTerm(sigma11, v1->dx()); // (sigma1, grad v1)
-    _bf->addTerm(sigma12, v1->dy());
-    _bf->addTerm(-sigma1n, v1);
+    _bf->addTerm(-sigma11, v1->dx()); // (sigma1, grad v1)
+    _bf->addTerm(-sigma12, v1->dy());
+    _bf->addTerm(sigma1n, v1);
     
     // v2 terms:
-    _bf->addTerm(sigma12, v2->dx()); // (sigma2, grad v2)
-    _bf->addTerm(sigma22, v2->dy());
-    _bf->addTerm(-sigma2n, v2);
+    _bf->addTerm(-sigma12, v2->dx()); // (sigma2, grad v2)
+    _bf->addTerm(-sigma22, v2->dy());
+    _bf->addTerm(sigma2n, v2);
     
     // v3 terms:
     _bf->addTerm(p + 0.5 * sigma11 + 0.5 * sigma22, v3);
@@ -786,8 +780,8 @@ public:
   }
   Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                             SpatialFilterPtr entireBoundary) {
-    FunctionPtr f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-    FunctionPtr f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    FunctionPtr f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
