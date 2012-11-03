@@ -200,7 +200,8 @@ VarType Var::varType() {
 
 VarPtr Var::grad() {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  IntrepidExtendedTypes::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "grad() only supported for vars of rank 0.");
+  if (space() != VECTOR_HGRAD)
+    TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "grad() only supported for vars of rank 0.");
   return Teuchos::rcp( new Var(_id, _rank + 1, _name, IntrepidExtendedTypes::OP_GRAD, UNKNOWN_FS, _varType ) );
 }
 
