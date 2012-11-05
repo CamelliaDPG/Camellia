@@ -60,6 +60,7 @@
 //#include "LinearTerm.h"
 #include "BasisCache.h"
 
+
 typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<LinearTerm> LtPtr;
@@ -108,7 +109,7 @@ class RieszRep {
 
   void distributeDofs();
 
-  void computeRepresentationValues(FieldContainer<double> &values, int testID, BasisCachePtr basisCache);
+  void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache);
 
 };
 
@@ -116,14 +117,37 @@ class RepFunction : public Function {
 private:
   int _testID;
   Teuchos::RCP<RieszRep> _rep;
+  IntrepidExtendedTypes::EOperatorExtended _op;
 public:
-  RepFunction(int testID,Teuchos::RCP<RieszRep> rep){
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
     _testID = testID;
-    _rep = rep;
+    _rep = rep;   
+    _op =  IntrepidExtendedTypes::OP_VALUE; // default to OPERATOR_VALUE
   }
+
+  // optional specification of operator to apply 
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op): Function(0){
+    _testID = testID;
+    _rep = rep;   
+    _op = op;
+  }   
+
+  FunctionPtr dx(){
+    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DX));
+  }
+  FunctionPtr dy(){
+    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DY));
+  }
+
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    _rep->computeRepresentationValues(values, _testID, basisCache);
+    _rep->computeRepresentationValues(values, _testID, _op, basisCache);        
   }
+
+  // for specifying an operator
+  void values(FieldContainer<double> &values, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
+    _rep->computeRepresentationValues(values, _testID, op, basisCache);
+  }
+
 };
 
 

@@ -83,6 +83,13 @@ void BF::printTrialTestInteractions() {
 
 void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                          FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+  stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache, true); // default to checking
+}
+
+// can override check for zero cols (i.e. in hessian matrix)
+void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+                         FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+			 bool checkForZeroCols) {
   // stiffness is sized as (C, FTest, FTrial)
   stiffness.initialize(0.0);
   basisCache->setCellSideParities(cellSideParities);
@@ -95,13 +102,33 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     trialTerm->integrate(stiffness, elemType->trialOrderPtr,
                          testTerm,  elemType->testOrderPtr, basisCache);
   }
-  bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
-  bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-  if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
-    cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
-//    cout << "test ordering:\n" << *(elemType->testOrderPtr);
-//    cout << "stiffness:\n" << stiffness;
+  if (checkForZeroCols){
+    bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
+    bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+    if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
+      cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
+      //    cout << "test ordering:\n" << *(elemType->testOrderPtr);
+      //    cout << "stiffness:\n" << stiffness;
+    }
   }
+}
+
+// No cellSideParities required, no checking of columns, integrates in a bubnov fashion
+void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+			 FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+  // stiffness is sized as (C, FTrial, FTrial)
+  stiffness.initialize(0.0);
+  basisCache->setCellSideParities(cellSideParities);
+
+  for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+       btIt != _terms.end(); btIt++) {
+    BilinearTerm bt = *btIt;
+    LinearTermPtr trialTerm = btIt->first;
+    LinearTermPtr testTerm = btIt->second;
+    trialTerm->integrate(stiffness, elemType->trialOrderPtr,
+                         testTerm,  elemType->trialOrderPtr, basisCache);
+  }
+ 
 }
 
 IPPtr BF::graphNorm() {

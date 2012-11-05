@@ -46,6 +46,11 @@ public:
   
   void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                        FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+		       bool checkForZeroCols);
+  void bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
   LinearTermPtr testFunctional(SolutionPtr trialSolution);
 };
