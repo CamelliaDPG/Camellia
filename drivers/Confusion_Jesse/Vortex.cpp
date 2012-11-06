@@ -9,7 +9,7 @@
 #else
 #endif  
 
-bool enforceLocalConservation = true;
+bool enforceLocalConservation = false;
 
 
 typedef Teuchos::RCP<IP> IPPtr;
@@ -141,6 +141,26 @@ public:
   }
 };
 
+class SqrtFunction : public Function {
+  FunctionPtr _f;
+public:
+  SqrtFunction(FunctionPtr f) : Function(0) {
+    _f = f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    _f->values(values,basisCache);    
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double value = values(cellIndex,ptIndex);
+        values(cellIndex,ptIndex) = sqrt(value);
+      }
+    }
+  }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -205,24 +225,27 @@ int main(int argc, char *argv[]) {
   FunctionPtr invH = Teuchos::rcp( new invHScaling ); 
   FunctionPtr betaNorm = Teuchos::rcp( new l2NormOfVector(beta));
 
-  if (enforceLocalConservation){
-    robIP->addZeroMeanTerm( v );
-  }else{
-    robIP->addTerm( ip_scaling * v);
-  }
-  FunctionPtr epsFxn = Teuchos::rcp(new ConstantScalarFunction(eps));
   FunctionPtr one = Teuchos::rcp(new ConstantScalarFunction(1.0));
+  FunctionPtr epsFxn = Teuchos::rcp(new ConstantScalarFunction(eps));
   FunctionPtr scale = one/(betaNorm + epsFxn);
+  FunctionPtr epsScaled = eps*scale;
+  FunctionPtr sqrtEpsScaled = Teuchos::rcp(new SqrtFunction(epsScaled));
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
-  
+
+  if (enforceLocalConservation){
+    robIP->addZeroMeanTerm( v );
+  }else{
+    robIP->addTerm(v);
+    //    robIP->addTerm( ip_scaling * v);    
+  }  
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = zero;
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  //  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );

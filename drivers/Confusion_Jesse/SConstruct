@@ -18,7 +18,7 @@ C_COMP      = 'mpicc'
 
 env['CXX'] = CPP_COMP
 env['CC'] = C_COMP
-env.Append(CCFLAGS = DEBUG_OPTS) # for debugging - comment out if no debug
+#env.Append(CCFLAGS = DEBUG_OPTS) # for debugging - comment out if no debug
 
 # Build Camellia Library
 Export('env')
