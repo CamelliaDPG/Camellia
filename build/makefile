@@ -113,6 +113,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 TEST_OBJ_NAMES = ElementTests \
        MeshTestSuite \
        FunctionTests \
+       IncompressibleFormulationTests \
        LinearTermTests \
        MeshRefinementTests \
        ScratchPadTests \
