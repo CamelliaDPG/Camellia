@@ -98,12 +98,16 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
 
 bool IncompressibleFormulationsTests::testVGPStokesFormulation() {
   bool success = true;
+
+  cout << "Warning: testVGPStokesFormulation() is trivial.\n";
   
   return success;
 }
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulation() {
   bool success = true;
+  
+  cout << "Warning: testVGPNavierStokesFormulation() is trivial.\n";
   
   return success;
 }
