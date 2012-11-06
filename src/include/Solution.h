@@ -116,7 +116,9 @@ protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
 public:  
-  Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip);
+  Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc,
+           Teuchos::RCP<RHS> rhs = Teuchos::rcp( (RHS*) NULL),
+           Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( (DPGInnerProduct*)NULL) );
   Solution(const Solution &soln);
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
@@ -210,6 +212,9 @@ public:
   Teuchos::RCP<RHS> rhs() const;
   Teuchos::RCP<DPGInnerProduct> ip() const;
   Teuchos::RCP<LocalStiffnessMatrixFilter> filter() const;
+  
+  void setRHS( Teuchos::RCP<RHS> );
+  void setIP( Teuchos::RCP<DPGInnerProduct>);
   
   // Jesse's additions:
   void condensedSolve();

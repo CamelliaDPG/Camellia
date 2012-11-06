@@ -2483,6 +2483,10 @@ void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }
 
+void Solution::setIP( Teuchos::RCP<DPGInnerProduct> ip) {
+  _ip = ip;
+}
+
 void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
   _lagrangeConstraints = lagrangeConstraints;
 }
@@ -2493,6 +2497,10 @@ void Solution::setReportConditionNumber(bool value) {
 
 void Solution::setReportTimingResults(bool value) {
   _reportTimingResults = value;
+}
+
+void Solution::setRHS( Teuchos::RCP<RHS> rhs) {
+  _rhs = rhs;
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
