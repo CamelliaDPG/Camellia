@@ -168,7 +168,7 @@ public:
   }
   double value(double x, double y, double h) {
     // h = sqrt(|K|), or measure of one side of a quad elem
-    double scaling = min(_epsilon/(h*h), 1.0);
+    double scaling = min(_epsilon/(h), 1.0);
     // sqrt because it's inserted into an IP form in a symmetric fashion
     return sqrt(scaling);
   }
@@ -369,6 +369,19 @@ public:
 
 // ===================== IP helper functions ====================
 
+class RadialWeightFunction : public SimpleFunction {
+  double _eps;
+public:
+  RadialWeightFunction(double epsilon){
+    _eps = epsilon;
+  }
+  double value(double x, double y) {
+    double xdiff = x-1.0;
+    double ydiff = y-0.0;
+    return sqrt(_eps + sqrt(xdiff*xdiff + ydiff*ydiff)); // sqrt so it can go into an IP
+  }
+};
+
 void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
 
   FunctionPtr zero = Teuchos::rcp(new ConstantScalarFunction(0.0));
@@ -398,10 +411,10 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 3; // for tests
+  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e4;
+  double Re = 1e3;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
 
@@ -510,7 +523,7 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u1) );
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u2) );
-  FunctionPtr rho_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, rho) );
+  FunctionPtr rho_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, rho) );  
   FunctionPtr T_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, T) );
 
   // linearized stresses (q_i is linear, so doesn't need linearizing)
@@ -583,7 +596,7 @@ int main(int argc, char *argv[]) {
   double dedT = cv; 
 
   //  double beta = 2.0/3.0;
-  double beta = 2.0/3.0;
+  double beta = 0.0;
   FunctionPtr T_visc;
   if (abs(beta)<1e-14){
     T_visc = Teuchos::rcp( new ConstantScalarFunction(1.0) );  
@@ -772,10 +785,10 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double CFL = .75; // not exactly CFL, just how we want our timestep to change w/min h
+  double CFL = .9; // not exactly CFL, just how we want our timestep to change w/min h
   double hmin = sqrt(meshInfo.getMinCellMeasure());
   bool useCFL = true; // rescale dt with min mesh size
-  double dtMin = .05;
+  double dtMin = .25;
 
   double dt = max(dtMin,hmin*CFL);
   //  double dt = .1;
@@ -842,6 +855,7 @@ int main(int argc, char *argv[]) {
   // Rescaled L2 portion of TAU - has Re built into it
   ////////////////////////////////////////////////////////////////////
 
+  //  FunctionPtr radialWeight = Teuchos::rcp(new RadialWeightFunction(1.0/Re));
   map<int, LinearTermPtr> tauVec;
   initLinearTermVector(eps_visc,tauVec); // initialize to LinearTermPtrs of dimensions of eps_visc
 
@@ -1011,13 +1025,17 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, wallBoundary, zero);
   bc->addDirichlet(u1hat, wallBoundary, zero);
   bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
+
+  //  bc->addDirichlet(F2nhat, wallBoundary, zero); // sets zero y-stress in free stream bottom boundary
+  //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets zero heat-flux in free stream bottom boundary
+
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets heat flux = 0
 
   // =============================================================================================
 
   // symmetry BCs
   SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  bc->addDirichlet(u2hat,  freeTop, zero); // top sym bc
+  //  bc->addDirichlet(u2hat,  freeTop, zero); // top sym bc
   bc->addDirichlet(F1nhat, freeTop, zero); // for consistency
   bc->addDirichlet(F2nhat, freeTop, zero);
   bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
@@ -1026,7 +1044,7 @@ int main(int argc, char *argv[]) {
 
   SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
   bc->addDirichlet(F1nhat, freeBottom, zero); // for consistency
-  //  bc->addDirichlet(u2hat,  freeBottom, zero); // sym bcs
+  bc->addDirichlet(u2hat,  freeBottom, zero); // sym bcs
   bc->addDirichlet(F2nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
   bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero heat-flux in free stream bottom boundary
 
@@ -1104,8 +1122,8 @@ int main(int argc, char *argv[]) {
       mesh->verticesForCell(vertices, cellID);
       bool cellIDset = false;	
       for (int j = 0;j<numSides;j++){ 	
-	//	if (vertices(j,0)>=1.0 && vertices(j,1)==0 && !cellIDset){ // if at the wall
-	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
+	if (vertices(j,0)>=1.0 && vertices(j,1)==0 && !cellIDset){ // if at the wall
+	  //	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
 	  wallCells.push_back(cellID);
 	  cellIDset = true;
 	}
@@ -1184,7 +1202,7 @@ int main(int argc, char *argv[]) {
 
        cout << "at timestep i = " << i << " with dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << ", and time residual = " << L2_time_residual << endl;    	
 
-	/*
+       
 	std::ostringstream oss;
 	oss << k << "_" << i ;
 	std::ostringstream dat;
@@ -1206,8 +1224,8 @@ int main(int argc, char *argv[]) {
 	backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
 	backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
 	backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
-	*/
-	//	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
+	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
+       
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
 
@@ -1286,7 +1304,7 @@ int main(int argc, char *argv[]) {
       std::ostringstream vtu;
       vtu<<".vtu";
       string Ustr("U_NS");      	
-      solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
+      solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );      
       solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
       solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
       solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());   
