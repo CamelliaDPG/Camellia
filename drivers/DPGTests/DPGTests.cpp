@@ -72,6 +72,7 @@
 #include "FunctionTests.h"
 #include "LinearTermTests.h"
 #include "ScratchPadTests.h"
+#include "IncompressibleFormulationsTests.h"
 
 #include "Projector.h"
 #include "BasisCache.h"
@@ -149,8 +150,9 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
