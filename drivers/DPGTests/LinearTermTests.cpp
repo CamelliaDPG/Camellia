@@ -944,18 +944,7 @@ bool LinearTermTests::testRieszInversion() {
   double maxDiff,maxDiff1,maxDiff2;
   double tol = 1e-15;
   success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
-  /*
-  maxDiff = max(maxDiff1,maxDiff2);
-  bool oneFailed = ((success1==false) || (success2==false));
-  bool bothFailed = ((success1==false) && (success2==false));
-  if (bothFailed){
-    success = false;
-    cout << "Test Riesz inversion fails both ordered/reordered LT with maxDiff = " << maxDiff1 << ", " << maxDiff2 << endl;
-  }else if (oneFailed){
-    success = false;
-    cout << "Test Riesz inversion fails just one LT with maxDiff = " << maxDiff << endl;
-  }
-  */
+
   if (success==false){
     cout << "Failed TestRieszInversion with maxDiff = " << maxDiff << endl;
   }

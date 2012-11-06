@@ -233,14 +233,13 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v->ID(),riesz));
-  e_v->writeValuesToMATLABFile(mesh, "e_v.m");
+  //  e_v->writeValuesToMATLABFile(mesh, "e_v.m");
   //  solution->writeToVTK("dU.vtu",min(H1Order+1,4));
-  //  FunctionPtr e_v = Function::constant(.1);
-
+  //  FunctionPtr e_v = Function::constant(1.0);
   hessianBF->addTerm(e_v->dx()*u,du); 
   Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
   
-  solution->setFilter(hessianFilter);
+  //  solution->setFilter(hessianFilter);
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
@@ -340,3 +339,4 @@ int main(int argc, char *argv[]) {
   
   return 0;
 }
+

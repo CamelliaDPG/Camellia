@@ -85,7 +85,8 @@ public:
 	double u = C0;
 	double u_x = 0.0;
 	double u_y = 0.0;  	
-	for (int n = 1;n<20;n++){
+	int numTerms = 1;
+	for (int n = 1;n<numTerms+1;n++){
 
 	  double lambda = n*n*pi*pi*_eps;
 	  double d = sqrt(1.0+4.0*_eps*lambda);
@@ -93,15 +94,16 @@ public:
 	  double r2 = (1.0-d)/(2.0*_eps);
     
 	  double Cn = 0.0;            
-	  //	  if (n==1){
-	  //	    Cn = 1.0; // first term only
-	  //	  }    
-	  
+	  if (n==1){
+	    Cn = 1.0; // first term only
+	  } 
+	  /*
 	  // discontinuous hat 
 	  Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
 	  Cn /= (n*pi);
 	  Cn /= (n*pi);    
-	  
+	  */
+
 	  // normal stress outflow
 	  double Xbottom;
 	  double Xtop;
@@ -131,7 +133,6 @@ public:
     }
   }
 };
-
 
 class EnergyErrorFunction : public Function {
   map<int, double> _energyErrorForCell;
@@ -252,18 +253,21 @@ int main(int argc, char *argv[]) {
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
   //  FunctionPtr ip_scaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
-  robIP->addTerm( ip_scaling * v);
-  //  robIP->addTerm( v );
+  //  robIP->addTerm( ip_scaling * v);
+  robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+
+  robIP->addTerm( v );
+  //  robIP->addTerm( 1.0/sqrt(eps) * tau );
+
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+  robIP->addTerm( tau->div() );  
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = zero;
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  //  FunctionPtr f = zero;
+  //  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -276,14 +280,20 @@ int main(int argc, char *argv[]) {
   FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
 
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;
+  FunctionPtr sigma = sig1_exact*e1 + sig2_exact*e2;
+
   bc->addDirichlet(uhat, outflowBoundary, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact-sigma*n);  
   //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact/eps);  
   //  bc->addDirichlet(uhat, inflowBoundary, u_exact);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3, pToAdd = 2;
+  int H1Order = 3, pToAdd = 5;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -296,7 +306,7 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
-  int nCells = 1;
+  int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
@@ -319,10 +329,11 @@ int main(int argc, char *argv[]) {
    
   ofstream convOut;
   stringstream convOutFile;
-  convOutFile << "erickson_conv_" << eps <<".txt";
+  convOutFile << "erickson_conv_" << round(-log(eps)/log(10.0)) <<".txt";
   convOut.open(convOutFile.str().c_str());
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
-    solution->solve(false);
+    solution->condensedSolve(false);
+    //    solution->solve(false);
 
     FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
     FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
@@ -344,12 +355,12 @@ int main(int argc, char *argv[]) {
       cout << "u squared L2 error = " << u_L2_error << ", sigma squared l2 error = " << sigma_L2_error << ", num dofs = " << mesh->numGlobalDofs() << endl;
     }
 
-    refinementStrategy.refine(); // print to console on rank 0
+    refinementStrategy.refine(rank==0); // print to console on rank 0
   }
-  // one more solve on the final refined mesh:
-  solution->solve(false);
-
   convOut.close();  
+  return 0; 
+  // one more solve on the final refined mesh:
+  solution->condensedSolve(false);
 
   if (rank==0){
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
@@ -359,7 +370,7 @@ int main(int argc, char *argv[]) {
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
 
-  
+  /*
   // determine trialIDs
   vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
   vector< int > fieldIDs;
@@ -429,4 +440,5 @@ int main(int argc, char *argv[]) {
   }
   
   return 0;
+  */
 }

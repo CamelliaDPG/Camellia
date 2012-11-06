@@ -234,6 +234,10 @@ void RieszRep::distributeDofs(){
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
 
+  //  if (op==IntrepidExtendedTypes::OP_DX){
+  //    cout << "computing rep values for op_dx" << endl;
+  //  }
+
   vector< ElementPtr > allElems = _mesh->elements();
 
   int numCells = values.dimension(0);
@@ -241,7 +245,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
 
   values.initialize(0.0);
   vector<int> cellIDs = basisCache->cellIDs();
-  
+
   for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
     int cellID = cellIDs[cellIndex];
     ElementPtr elem = allElems[cellID];
@@ -254,7 +258,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
 
     for (int j = 0;j<numTestDofsForVarID;j++){
       for (int i = 0;i<numPoints;i++){	
-	int dofIndex = testOrderingPtr->getDofIndex(testID, j);
+	int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
 	double basisValue = (*basisValues)(j,i);
 	values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
       }

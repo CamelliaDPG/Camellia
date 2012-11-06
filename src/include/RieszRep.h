@@ -38,10 +38,10 @@
  *
  */
 
-#include <Teuchos_GlobalMPISession.hpp>
 // Epetra includes
 #include <Epetra_Map.h>
 #ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
 #include "Epetra_MpiComm.h"
 #else
 #include "Epetra_SerialComm.h"
@@ -134,9 +134,13 @@ public:
 
   FunctionPtr dx(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DX));
+    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_D1));
+    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_VALUE));
   }
   FunctionPtr dy(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DY));
+    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_D2));
+    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_VALUE));
   }
 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
