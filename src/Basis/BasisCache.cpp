@@ -226,7 +226,10 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
       FCPtr relatedResults = BasisEvaluation::getValues(basis,(EOperatorExtended)relatedOp,cubPoints);
       _knownValues[relatedKey] = relatedResults;
     }
-    constFCPtr relatedResults = _knownValues[key];
+    pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> gradKey = make_pair(basis.get(), IntrepidExtendedTypes::OP_GRAD);
+  
+    constFCPtr relatedResults = _knownValues[relatedKey];
+    //    constFCPtr relatedResults = _knownValues[key];
     constFCPtr result = BasisEvaluation::getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 ) {
       result = relatedResults;
