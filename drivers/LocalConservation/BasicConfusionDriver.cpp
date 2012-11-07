@@ -1,4 +1,4 @@
-#include "StandardConfusionProblem.h"
+#include "BasicConfusionProblem.h"
 
 int main(int argc, char *argv[]) {
   StandardConfusionProblem confusionProb;

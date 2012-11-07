@@ -1,4 +1,4 @@
-#include "StandardConfusionProblem.h"
+#include "BasicConfusionProblem.h"
 
 #include "Mesh.h"
 
