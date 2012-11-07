@@ -56,6 +56,7 @@
 
 #include "BasisFactory.h"
 
+#include "Solver.h"
 #include "CGSolver.h"
 
 #ifdef HAVE_MPI
@@ -63,7 +64,7 @@
 #else
 #endif
 
-#include "StokesFormulations.h"
+#include "StokesFormulation.h"
 
 using namespace std;
 
@@ -151,6 +152,29 @@ public:
   }
 };
 
+
+class Exp_ax : public SimpleFunction {
+  double _a;
+public:
+  Exp_ax(double a) {
+    _a = a;
+  }
+  double value(double x, double y) {
+    return exp( _a * x);
+  }
+  FunctionPtr dx() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\exp( " << _a << " x )";
+    return ss.str();
+  }
+};
+
 Cos_ay::Cos_ay(double a) {
   _a = a;
 }
@@ -226,21 +250,29 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
   return success;
 }
 
+enum NormChoice {
+  GraphNorm, NaiveNorm, L2Norm
+};
+
+enum ExactSolutionChoice {
+  HDGSingular, HDGSmooth, KanschatSmooth, TestPolynomial
+};
+
 void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int &maxLogElements,
                StokesFormulationChoice &formulationType,
-               bool &useTriangles, bool &useMultiOrder, bool &useOptimalNorm, string &formulationTypeStr) {
+               bool &useTriangles, bool &useMultiOrder, NormChoice &normChoice, string &formulationTypeStr) {
   polyOrder = 2; minLogElements = 0; maxLogElements = 4;
   
   // set up defaults:
   useTriangles = false;
-  useOptimalNorm = true; 
+  normChoice = GraphNorm; 
   formulationType = VSP;
   formulationTypeStr = "original conforming";
   string multiOrderStudyType = "multiOrderQuad";
   
   useMultiOrder = false;
   
-  string normChoice = "opt";
+  string normChoiceStr = "opt";
   
   /* Usage:
    Multi-Order, naive norm:
@@ -269,26 +301,26 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
       useTriangles = false;
     }
     useMultiOrder = true;
-    useOptimalNorm = false; // using naive norm for paper
+    normChoice = NaiveNorm; // using naive norm for paper
     polyOrder = 1;
   } else if (argc == 4) {
     polyOrder = atoi(argv[1]);
     minLogElements = atoi(argv[2]);
     maxLogElements = atoi(argv[3]);
   } else if (argc == 5) {
-    normChoice = argv[1];
+    normChoiceStr = argv[1];
     polyOrder = atoi(argv[2]);
     minLogElements = atoi(argv[3]);
     maxLogElements = atoi(argv[4]);
   } else if (argc == 6) {
-    normChoice = argv[1];
+    normChoiceStr = argv[1];
 
     formulationTypeStr = argv[2];
     polyOrder = atoi(argv[3]);
     minLogElements = atoi(argv[4]);
     maxLogElements = atoi(argv[5]);
   } else if (argc == 7) {
-    normChoice = argv[1];
+    normChoiceStr = argv[1];
     formulationTypeStr = argv[2];
     polyOrder = atoi(argv[3]);
     minLogElements = atoi(argv[4]);
@@ -300,8 +332,10 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
       useTriangles = false;
     } // otherwise, just use whatever was defined above
   }
-  if (normChoice == "naive") {
-    useOptimalNorm = false; // otherwise, use naive
+  if (normChoiceStr == "naive") {
+    normChoice = NaiveNorm;
+  } else if (normChoiceStr == "l2") {
+    normChoice = L2Norm;
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
@@ -366,37 +400,35 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
     element.push_back(6);
     elementVertices.push_back(element);
     element.clear();
+        
+    element.push_back(6);
+    element.push_back(1);
+    element.push_back(0);
+    elementVertices.push_back(element);
+    element.clear();
     
-    // DEBUGGING by commenting out most of the mesh creation
-//    
-//    element.push_back(6);
-//    element.push_back(1);
-//    element.push_back(0);
-//    elementVertices.push_back(element);
-//    element.clear();
-//    
-//    element.push_back(1);
-//    element.push_back(6);
-//    element.push_back(2);
-//    elementVertices.push_back(element);
-//    element.clear();
-//    
-//    element.push_back(2);
-//    element.push_back(6);
-//    element.push_back(3);
-//    elementVertices.push_back(element);
-//    element.clear();
-//    
-//    element.push_back(6);
-//    element.push_back(4);
-//    element.push_back(3);
-//    elementVertices.push_back(element);
-//    element.clear();
-//    
-//    element.push_back(6);
-//    element.push_back(5);
-//    element.push_back(4);
-//    elementVertices.push_back(element);
+    element.push_back(1);
+    element.push_back(6);
+    element.push_back(2);
+    elementVertices.push_back(element);
+    element.clear();
+    
+    element.push_back(2);
+    element.push_back(6);
+    element.push_back(3);
+    elementVertices.push_back(element);
+    element.clear();
+    
+    element.push_back(6);
+    element.push_back(4);
+    element.push_back(3);
+    elementVertices.push_back(element);
+    element.clear();
+    
+    element.push_back(6);
+    element.push_back(5);
+    element.push_back(4);
+    elementVertices.push_back(element);
   } else {
     vector<int> element;
     element.push_back(0);
@@ -456,12 +488,15 @@ int main(int argc, char *argv[]) {
 #endif
   int pToAdd = 1; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
-  bool useHDGSingularSolution = true;
-  bool useKanschatSoln = false;
+  
+  ExactSolutionChoice exactSolnChoice = HDGSingular;
+  
   bool reportConditionNumber = false;
   
+  bool useTrueTracesForVVP = true;
+  
   bool useCG = false;
-  bool useMumps = false;
+  bool useMumps = true;
   
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   double cgTol = 1e-8;
@@ -471,33 +506,47 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solver> mumpsSolver = Teuchos::rcp( new MumpsSolver );
 #endif
   
-  if (useHDGSingularSolution && useKanschatSoln ) {
-    cout << "Error: cannot use both HDG and Kanschat solution simultaneously!\n";
-    exit(1);
-  }
-  
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
     
   // parse args:
   int polyOrder, minLogElements, maxLogElements;
-  bool useTriangles, useOptimalNorm, useMultiOrder;
-  
+  bool useTriangles, useMultiOrder;
+  NormChoice normChoice;
+  string normChoiceStr;
+
   StokesFormulationChoice formulationType;
   string formulationTypeStr;
   parseArgs(argc, argv, polyOrder, minLogElements, maxLogElements, formulationType, useTriangles,
-            useMultiOrder, useOptimalNorm, formulationTypeStr);
+            useMultiOrder, normChoice, formulationTypeStr);
+  
+  if (normChoice == NaiveNorm) normChoiceStr = "naive";
+  else if (normChoice == GraphNorm) normChoiceStr = "graph";
+  else if (normChoice == L2Norm) normChoiceStr = "l2";
+  else normChoiceStr = "unknownNorm";
+  
+  string exactSolnChoiceStr;
+  if (exactSolnChoice == KanschatSmooth)   exactSolnChoiceStr = "Kanschat Smooth";
+  else if (exactSolnChoice == HDGSmooth)   exactSolnChoiceStr = "HDG Smooth (Kovasnay)";
+  else if (exactSolnChoice == HDGSingular) exactSolnChoiceStr = "HDG Singular";
+  else exactSolnChoiceStr = "test polynomial";
 
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
-    cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
-    cout << "useHDGSingularSolution = "  << (useHDGSingularSolution ? "true" : "false") << "\n";
+    cout << "test space norm: "  << normChoiceStr << "\n";
+    cout << "exact solution choice: "  << exactSolnChoiceStr << "\n";
     cout << "reportConditionNumber = " << (reportConditionNumber ? "true" : "false") << "\n";
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
+    cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
   }
   
   double mu = 1.0;
+  
+  if (exactSolnChoice == HDGSmooth) {
+    mu = 0.1; // what they use in their paper
+  }
+  
   Teuchos::RCP<StokesFormulation> stokesForm;
   
   switch (formulationType) {
@@ -511,7 +560,7 @@ int main(int argc, char *argv[]) {
       stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu));
       break;
     case VVP:
-      stokesForm = Teuchos::rcp(new VVPStokesFormulation(mu));
+      stokesForm = Teuchos::rcp(new VVPStokesFormulation(mu, useTrueTracesForVVP));
       break;
     case VSP:
       stokesForm = Teuchos::rcp(new VSPStokesFormulation(mu));
@@ -537,16 +586,13 @@ int main(int argc, char *argv[]) {
     FunctionPtr y2 = Teuchos::rcp( new Yn(2) );
     FunctionPtr y = Teuchos::rcp( new Yn(1) );
     
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
     
-    SpatialFilterPtr entireBoundary;
-    
-    if (useKanschatSoln) {
+    if (exactSolnChoice == KanschatSmooth) {
       u1_exact = - exp_x * ( y * cos_y + sin_y );
       u2_exact = exp_x * y * sin_y;
       p_exact = 2.0 * exp_x * sin_y;
-      entireBoundary = Teuchos::rcp( new SquareBoundary );
-    } else if (useHDGSingularSolution) {
-      entireBoundary = Teuchos::rcp( new ReentrantCornerBoundary );
+    } else if (exactSolnChoice == HDGSingular) {
       
       const double PI  = 3.141592653589793238462;
       const double lambda = 0.54448373678246;
@@ -603,10 +649,32 @@ int main(int argc, char *argv[]) {
 //      printSamplePoints(f1, "f1");
 //      printSamplePoints(f2, "f2");
       
+    } else if (exactSolnChoice == HDGSmooth) {
+      // u1 = 1 - exp( lambda x ) cos (2 PI y)
+      // u2 = lambda / (2 PI) exp( lambda x ) sin ( 2 PI y )
+      //  p = 0.5 exp ( 2 lamba x )
+      //
+      // where lambda = Re / 2 - sqrt( (Re/2)^2 + (2 PI)^2 )
+      //   and     Re = 1 / mu = 10.0
+            
+      const double PI  = 3.141592653589793238462;
+      double Re = 1.0 / mu;
+      double lambda = Re / 2 - sqrt ( (Re / 2) * (Re / 2) + (2 * PI) * (2 * PI) );
+      
+      FunctionPtr exp_lambda_x = Teuchos::rcp( new Exp_ax( lambda ) );
+      FunctionPtr exp_2lambda_x = Teuchos::rcp( new Exp_ax( 2 * lambda ) );
+      FunctionPtr sin_2pi_y = Teuchos::rcp( new Sin_ay( 2 * PI ) );
+      FunctionPtr cos_2pi_y = Teuchos::rcp( new Cos_ay( 2 * PI ) );
+      
+      u1_exact = Function::constant(1.0) - exp_lambda_x * cos_2pi_y;
+      u2_exact = (lambda / (2 * PI)) * exp_lambda_x * sin_2pi_y;
+      
+      double p_average_value = 3.41501262705947 / 4.0; // 4.0 is the measure of the domain
+      p_exact = 0.5 * exp_2lambda_x - Function::constant(p_average_value); // make it have zero average
     } else {
       computeRelativeErrors = false;
-      u1_exact = Function::zero();
-      u2_exact = Function::zero();
+      u1_exact = Function::zero();// x2;
+      u2_exact = Function::zero();//-2*x*y;
       p_exact = y; // odd function: zero mean on our domain
     }
     
@@ -618,14 +686,20 @@ int main(int argc, char *argv[]) {
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;
-  if (useOptimalNorm) {
+  if (normChoice == GraphNorm) {
     if ( stokesForm.get() ) {
       ip = stokesForm->graphNorm();
     } else {
       ip = Teuchos::rcp( new OptimalInnerProduct( mySolution->bilinearForm() ) );
     }
-  } else {
-    ip = Teuchos::rcp( new   MathInnerProduct( mySolution->bilinearForm() ) );
+  } else if (normChoice == NaiveNorm) {
+    if (stokesForm.get() ) {
+      ip = stokesForm->bf()->naiveNorm();
+    } else {
+      ip = Teuchos::rcp( new   MathInnerProduct( mySolution->bilinearForm() ) );
+    }
+  } else if (normChoice == L2Norm) {
+    ip = stokesForm->bf()->l2Norm();
   }
   
   if (rank==0) 
@@ -633,15 +707,26 @@ int main(int argc, char *argv[]) {
   
   FieldContainer<double> quadPoints(4,2);
   
-  quadPoints(0,0) = -1.0; // x1
-  quadPoints(0,1) = -1.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = -1.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = -1.0;
-  quadPoints(3,1) = 1.0;
-  
+  if ( exactSolnChoice != HDGSmooth ) {
+    quadPoints(0,0) = -1.0; // x1
+    quadPoints(0,1) = -1.0; // y1
+    quadPoints(1,0) = 1.0;
+    quadPoints(1,1) = -1.0;
+    quadPoints(2,0) = 1.0;
+    quadPoints(2,1) = 1.0;
+    quadPoints(3,0) = -1.0;
+    quadPoints(3,1) = 1.0;
+  } else {
+    quadPoints(0,0) = -0.5; // x1
+    quadPoints(0,1) =  0.0; // y1
+    quadPoints(1,0) =  1.5;
+    quadPoints(1,1) =  0.0;
+    quadPoints(2,0) =  1.5;
+    quadPoints(2,1) =  2.0;
+    quadPoints(3,0) = -0.5;
+    quadPoints(3,1) =  2.0;    
+  }
+    
   int u1_trialID, u2_trialID, p_trialID;
   int u1_traceID, u2_traceID;
   if ( stokesForm.get() ) {
@@ -676,7 +761,7 @@ int main(int argc, char *argv[]) {
 #endif
     } // otherwise, use default solver (KLU)
         
-    if (! useHDGSingularSolution) {
+    if ( exactSolnChoice != HDGSingular ) {
       study.solve(quadPoints);
     } else {
       // L-shaped domain
@@ -711,12 +796,12 @@ int main(int argc, char *argv[]) {
       
       // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
       // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)
-      int cubatureEnrichment = useTriangles ? 0 : 15;
-      double p_integral = p_exact->integrate(study.getSolution(maxLogElements)->mesh(), cubatureEnrichment);
-      cout << "Integral of pressure: " << setprecision(15) << p_integral << endl;
     }
+    int cubatureEnrichment = useTriangles ? 0 : 15;
+    double p_integral = p_exact->integrate(study.getSolution(maxLogElements)->mesh(), cubatureEnrichment);
     
     if (rank == 0) {
+      cout << "Integral of pressure: " << setprecision(15) << p_integral << endl;
 
       cout << study.TeXErrorRateTable();
       vector<int> primaryVariables;

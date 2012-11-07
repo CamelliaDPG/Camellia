@@ -37,6 +37,8 @@ public:
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID);
   
   IPPtr graphNorm();
+  IPPtr l2Norm();
+  IPPtr naiveNorm();
   
   bool isFluxOrTrace(int trialID);
   
@@ -44,6 +46,11 @@ public:
   
   void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                        FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+		       bool checkForZeroCols);
+  void bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
   LinearTermPtr testFunctional(SolutionPtr trialSolution);
 };

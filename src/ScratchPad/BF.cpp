@@ -83,6 +83,13 @@ void BF::printTrialTestInteractions() {
 
 void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                          FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+  stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache, true); // default to checking
+}
+
+// can override check for zero cols (i.e. in hessian matrix)
+void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+                         FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+			 bool checkForZeroCols) {
   // stiffness is sized as (C, FTest, FTrial)
   stiffness.initialize(0.0);
   basisCache->setCellSideParities(cellSideParities);
@@ -95,13 +102,33 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     trialTerm->integrate(stiffness, elemType->trialOrderPtr,
                          testTerm,  elemType->testOrderPtr, basisCache);
   }
-  bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
-  bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
-  if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
-    cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
-//    cout << "test ordering:\n" << *(elemType->testOrderPtr);
-//    cout << "stiffness:\n" << stiffness;
+  if (checkForZeroCols){
+    bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
+    bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+    if (! BilinearFormUtility::checkForZeroRowsAndColumns("BF stiffness", stiffness, checkRows, checkCols) ) {
+      cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
+      //    cout << "test ordering:\n" << *(elemType->testOrderPtr);
+      //    cout << "stiffness:\n" << stiffness;
+    }
   }
+}
+
+// No cellSideParities required, no checking of columns, integrates in a bubnov fashion
+void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
+			 FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache) {
+  // stiffness is sized as (C, FTrial, FTrial)
+  stiffness.initialize(0.0);
+  basisCache->setCellSideParities(cellSideParities);
+
+  for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
+       btIt != _terms.end(); btIt++) {
+    BilinearTerm bt = *btIt;
+    LinearTermPtr trialTerm = btIt->first;
+    LinearTermPtr testTerm = btIt->second;
+    trialTerm->integrate(stiffness, elemType->trialOrderPtr,
+                         testTerm,  elemType->trialOrderPtr, basisCache);
+  }
+ 
 }
 
 IPPtr BF::graphNorm() {
@@ -139,6 +166,36 @@ IPPtr BF::graphNorm() {
   }
   
   return ip;
+}
+
+IPPtr BF::l2Norm() {
+  // L2 norm on test space:
+  IPPtr ip = Teuchos::rcp( new IP );
+  map< int, VarPtr > testVars = _varFactory.testVars();
+  for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+    ip->addTerm( testVarIt->second );
+  }
+  return ip;
+}
+
+IPPtr BF::naiveNorm() {
+  IPPtr ip = Teuchos::rcp( new IP );
+  map< int, VarPtr > testVars = _varFactory.testVars();
+  for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+    VarPtr var = testVarIt->second;
+    ip->addTerm( var );
+    // HGRAD, HCURL, HDIV, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2
+    if ( (var->space() == HGRAD) || (var->space() == VECTOR_HGRAD) ) {
+      ip->addTerm( var->grad() );
+    } else if ( (var->space() == L2) || (var->space() == VECTOR_L2) ) {
+      // do nothing (we already added the L2 term
+    } else if (var->space() == HCURL) {
+      ip->addTerm( var->curl() );
+    } else if (var->space() == HDIV) {
+      ip->addTerm( var->div() );
+    }
+  }
+  return ip;  
 }
 
 LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {

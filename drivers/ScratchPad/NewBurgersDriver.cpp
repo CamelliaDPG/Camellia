@@ -28,6 +28,8 @@
 #include "TestSuite.h"
 #include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
+#include "RieszRep.h"
+#include "HessianFilter.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
@@ -74,11 +76,11 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 3;
+  int polyOrder = 2;
   int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-4;
+  double epsilon = 1e-3;
   bool useTriangles = false;
   
   FieldContainer<double> quadPoints(4,2);
@@ -181,7 +183,7 @@ int main(int argc, char *argv[]) {
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm( epsilonOverHScaling * (1.0/sqrt(epsilon))* tau);
   ip->addTerm( tau->div());
-  ip->addTerm( epsilonOverHScaling * v );
+  ip->addTerm( v );
   ip->addTerm( sqrt(epsilon) * v->grad() );
   ip->addTerm( beta * v->grad() );
 
@@ -190,21 +192,15 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
-  rhs->addTerm( (e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
-
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE PENALTY BC
-  ////////////////////////////////////////////////////////////////////
-  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary );
-  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
-  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-  LinearTermPtr sigma_hat = beta * uhat->times_normal() - beta_n_u_minus_sigma_hat;
-  //  pc->addConstraint(sigma_hat==zero,outflowBoundary);
   
+  rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE DIRICHLET BC
   ////////////////////////////////////////////////////////////////////
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary);
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
   FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
   inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, 
@@ -215,7 +211,35 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
   mesh->registerSolution(solution);
-  //  solution->setFilter(pc);
+
+  solution->solve(false); // do one solve to initialize things...
+  backgroundFlow->addSolution(solution,.5);
+
+  ////////////////////////////////////////////////////////////////////
+  // WARNING: UNFINISHED HESSIAN BIT
+  ////////////////////////////////////////////////////////////////////
+  VarFactory hessianVars = varFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL);
+  VarPtr du = hessianVars.test(u->ID());
+  BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form
+  //  FunctionPtr e_v = Function::constant(1.0); // dummy error rep function for now - should do nothing
+  
+  FunctionPtr sig1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
+  FunctionPtr sig2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
+  FunctionPtr fnhat = Teuchos::rcp(new PreviousSolutionFunction(solution,beta_n_u_minus_sigma_hat));
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
+  residual->addTerm((e1 * (u_prev_squared_div2-sig1_prev) + e2 * (u_prev - sig2_prev)) * v->grad() - fnhat*v);
+  // don't need to add the stress eqn residual b/c of the decoupled IP
+
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  riesz->computeRieszRep();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v->ID(),riesz));
+  //  e_v->writeValuesToMATLABFile(mesh, "e_v.m");
+  //  solution->writeToVTK("dU.vtu",min(H1Order+1,4));
+  //  FunctionPtr e_v = Function::constant(1.0);
+  hessianBF->addTerm(e_v->dx()*u,du); 
+  Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
+  
+  //  solution->setFilter(hessianFilter);
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
@@ -223,7 +247,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
-  int numRefs = 5;
+  int numRefs = 2;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -238,6 +262,7 @@ int main(int argc, char *argv[]) {
     solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
 
+    /*
     // check conservation
     VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
     // Create a fake bilinear form for the testing
@@ -294,6 +319,7 @@ int main(int argc, char *argv[]) {
       cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       cout << endl;
     }
+    */
 
   }
   
@@ -307,8 +333,10 @@ int main(int argc, char *argv[]) {
     backgroundFlow->writeFieldsToFile(BurgersBilinearForm::SIGMA_2, "sigmay.m");
     */
     backgroundFlow->writeToVTK("Burgers.vtu",min(H1Order+1,4));
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "du_hat_ref.dat");
+    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "burgers.dat");
+    cout << "wrote solution files" << endl;
   }
   
   return 0;
 }
+
