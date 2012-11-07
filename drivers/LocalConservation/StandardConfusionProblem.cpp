@@ -1,12 +1,6 @@
 #include "StandardConfusionProblem.h"
-#include "Solution.h"
-#include "RefinementStrategy.h"
-#include "Mesh.h"
 
-#ifdef HAVE_MPI
-#include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
+#include "Mesh.h"
 
 class InflowBoundary : public SpatialFilter {
   public:
@@ -114,53 +108,13 @@ void StandardConfusionProblem::defineMesh()
 
 void StandardConfusionProblem::runProblem(int argc, char *argv[])
 {
-#ifdef HAVE_MPI
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
-#else
-  int rank = 0;
-  int numProcs = 1;
-#endif
-
-  cout << "Define Variables" << endl;
   defineVariables();
   beta.push_back(2);
   beta.push_back(1);
-  cout << "Define BF" << endl;
   defineBilinearForm(beta);
-  cout << "Define IP" << endl;
   defineInnerProduct(beta);
-  cout << "Define RHS" << endl;
   defineRightHandSide();
-  cout << "Define BC" << endl;
   defineBoundaryConditions();
-  cout << "Define Mesh" << endl;
   defineMesh();
-
-  ////////////////////   SOLVE & REFINE   ///////////////////////
-  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-
-  double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
-
-  for (int refIndex=0; refIndex<=numRefs; refIndex++)
-  {
-    solution->solve(false);
-    cout << "Solve" << endl;
-    if (rank==0)
-    {
-      stringstream outfile;
-      outfile << "confusion_" << refIndex;
-      solution->writeToVTK(outfile.str(), 5);
-      cout << "Wrote" << endl;
-    }
-    if (refIndex < numRefs)
-    {
-      if (rank==0){
-        cout << "Performing refinement number " << refIndex << endl;
-      }     
-      refinementStrategy.refine(rank==0); // print to console on rank 0
-    }
-  }
+  solveSteady(argc, argv, "Confusion");
 }

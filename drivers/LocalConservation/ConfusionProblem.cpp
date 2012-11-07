@@ -1,6 +1,30 @@
 #include "ConfusionProblem.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "RefinementStrategy.h"
+#include "PreviousSolutionFunction.h"
+#include "Solution.h"
+#include "Mesh.h"
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
+class EpsilonScaling : public hFunction {
+  double _epsilon;
+  public:
+  EpsilonScaling(double epsilon) {
+    _epsilon = epsilon;
+  }
+  double value(double x, double y, double h) {
+    // should probably by sqrt(_epsilon/h) instead (note parentheses)
+    // but this is what was in the old code, so sticking with it for now.
+    double scaling = min(_epsilon/(h*h), 1.0);
+    // since this is used in inner product term a like (a,a), take square root
+    return sqrt(scaling);
+  }
+};
 
 ////////////////////   DECLARE VARIABLES   ///////////////////////
 void ConfusionProblem::defineVariables()
@@ -69,6 +93,52 @@ void ConfusionProblem::defineRightHandSide()
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 }
 
+////////////////////   SOLVE & REFINE   ///////////////////////
+void ConfusionProblem::solveSteady(int argc, char *argv[], string filename, double energyThreshold)
+{
+#ifdef HAVE_MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  int rank=mpiSession.getRank();
+  int numProcs=mpiSession.getNProc();
+#else
+  int rank = 0;
+  int numProcs = 1;
+#endif
+
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  RefinementStrategy refinementStrategy( solution, energyThreshold );
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
+    solution->solve(false);
+    if (rank==0)
+    {
+      if (checkLocalConservation)
+      {
+        FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+        FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+        Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero);
+        cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+          << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      }
+      if (filename != "")
+      {
+        stringstream outfile;
+        outfile << filename << "_" << refIndex;
+        solution->writeToVTK(outfile.str(), 5);
+      }
+    }
+    if (refIndex < numRefs)
+    {
+      if (rank==0){
+        cout << "Performing refinement number " << refIndex << endl;
+      }     
+      refinementStrategy.refine(rank==0); // print to console on rank 0
+    }
+  }
+}
+
 void ConfusionProblem::setMathIP()
 {
   // mathematician's norm
@@ -128,7 +198,7 @@ void ConfusionProblem::setRobustZeroMeanIP(FunctionPtr beta)
   ip->addZeroMeanTerm( v );
 }
 
-void ConfusionProblem::checkConservation(FunctionPtr flux, FunctionPtr source)
+Teuchos::Tuple<double, 3> ConfusionProblem::checkConservation(FunctionPtr flux, FunctionPtr source)
 {
   // Check conservation by testing against one
   VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
@@ -187,7 +257,7 @@ void ConfusionProblem::checkConservation(FunctionPtr flux, FunctionPtr source)
     }
   }
 
-  // Teuchos::Tuple<double, 3> fluxImbalances(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
+  Teuchos::Tuple<double, 3> fluxImbalances = Teuchos::tuple(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
 
-  // return fluxImbalances;
+  return fluxImbalances;
 }

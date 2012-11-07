@@ -5,30 +5,16 @@
 
 #include <Teuchos_Tuple.hpp>
 
-class EpsilonScaling : public hFunction {
-  double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
-    _epsilon = epsilon;
-  }
-  double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/(h*h), 1.0);
-    // since this is used in inner product term a like (a,a), take square root
-    return sqrt(scaling);
-  }
-};
-
 class ConfusionProblem
 {
   public:
-    void init(double _epsilon = 1.0, int _numRefs = 0, int _H1Order = 3, int _pToAdd = 2)
+    void init(double _epsilon = 1.0, int _numRefs = 0, int _H1Order = 3, int _pToAdd = 2, bool _checkLocalConservation=true)
     {
       epsilon = _epsilon;
       numRefs = _numRefs;
       H1Order = _H1Order;
       pToAdd  = _pToAdd;
+      checkLocalConservation = _checkLocalConservation;
     }
     void defineVariables();
     void defineBilinearForm(vector<double> beta);
@@ -38,8 +24,9 @@ class ConfusionProblem
     virtual void defineRightHandSide();
     virtual void defineBoundaryConditions() = 0;
     virtual void defineMesh() = 0;
+    virtual void solveSteady(int argc, char *argv[], string filename="", double energyThreshold=0.2);
     virtual void runProblem(int argc, char *argv[]) = 0;
-    virtual void checkConservation(FunctionPtr flux, FunctionPtr source);
+    virtual Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source);
     // Functions to swap inner product (defaults to graph norm)
     void setMathIP();
     void setRobustIP(vector<double> beta);
@@ -53,6 +40,8 @@ class ConfusionProblem
 
     int H1Order;
     int pToAdd;
+
+    bool checkLocalConservation;
 
     // define test variables
     VarFactory varFactory; 
