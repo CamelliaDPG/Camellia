@@ -22,18 +22,27 @@
 #include "NavierStokesFormulation.h"
 #include "StokesFormulation.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
+typedef vector< pair< FunctionPtr, int > > PolyExactFunctions; // (u1, u2, p) -> poly degree
 
 class IncompressibleFormulationsTests : public TestSuite {
+  FunctionPtr x, x2, x3, y, y2, y3, zero;
+  
+  VarPtr u1_vgp, u2_vgp, sigma11_vgp, sigma12_vgp, sigma21_vgp, sigma22_vgp, p_vgp;
+  vector< VarPtr > vgpFields;
+  
+  vector< PolyExactFunctions > polyExactFunctions;
+  vector< pair< int, int > > meshDimensions; // horizontal x vertical cells
+  vector< int > pToAddValues;
+  vector< double > muValues;
+  
+  FieldContainer<double> quadPoints;
+  
   Teuchos::RCP<Mesh> _vgpStokesMesh; // used for both Stokes and Navier-Stokes
   Teuchos::RCP< VGPStokesFormulation > _vgpStokesFormulation;
   Teuchos::RCP< VGPNavierStokesFormulation > _vgpNavierStokesFormulation;
   Teuchos::RCP< Solution > _vgpStokesSolution, _vgpNavierStokesSolution;
   
   FieldContainer<double> _testPoints;
-  ElementTypePtr _elemType;
-  BasisCachePtr _basisCache;
   
   Teuchos::RCP<ExactSolution> _vgpStokesExactSolution;
   Teuchos::RCP<ExactSolution> _vgpNavierStokesExactSolution;
@@ -44,9 +53,11 @@ class IncompressibleFormulationsTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
-  bool testVGPStokesFormulation();
+  bool testVGPStokesFormulationConsistency();
+  bool testVGPStokesFormulationCorrectness();
   
-  bool testVGPNavierStokesFormulation();
+  bool testVGPNavierStokesFormulationConsistency();
+  bool testVGPNavierStokesFormulationCorrectness();
   
   std::string testSuiteName();
 };
