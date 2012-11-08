@@ -119,7 +119,13 @@ private:
   Teuchos::RCP<RieszRep> _rep;
   IntrepidExtendedTypes::EOperatorExtended _op;
 public:
- RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
+  RepFunction( VarPtr var, Teuchos::RCP<RieszRep> rep) : Function( var->rank() ) {
+    _testID = var->ID();
+    _op = var->op();
+    _rep = rep;
+  }
+  
+  RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
     _testID = testID;
     _rep = rep;   
     _op =  IntrepidExtendedTypes::OP_VALUE; // default to OPERATOR_VALUE
