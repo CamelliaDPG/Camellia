@@ -75,7 +75,7 @@ public:
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache);
   
-  virtual string displayString() { return "f"; }
+  virtual string displayString();
   
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
