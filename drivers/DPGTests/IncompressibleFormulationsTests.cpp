@@ -506,10 +506,25 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           vgpNavierStokesSolutionIncrement->setRHS( vgpNavierStokesExactSolution->rhs() );
           vgpNavierStokesSolutionIncrement->setIP( vgpNavierStokesFormulation->graphNorm() );
           
-          int numIters = 20;
-          for (int i=0; i<numIters; i++) {
+          int maxIters = 20;
+          vgpNavierStokesSolutionIncrement->solve();
+          vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0);
+
+          FunctionPtr u1_incr = Function::solution(u1_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr u2_incr = Function::solution(u2_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr p_incr = Function::solution(p_vgp, vgpNavierStokesSolutionIncrement);
+          
+          FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+          
+          int i=0;
+          while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (i<maxIters) )  {
+            i++;
+            
             vgpNavierStokesSolutionIncrement->solve();
             vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0); // optimistic?
+          }
+          if (printToConsole) {
+            cout << "# iters to converge: " << i << endl;
           }
           
           int cubatureDegree = maxPolyOrder;
