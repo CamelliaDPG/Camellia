@@ -11,7 +11,13 @@
 void RHSEasy::addTerm( LinearTermPtr rhsTerm ) {
   TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->termType() != TEST, std::invalid_argument, "RHS should only involve test functions (no trials)");
   TEUCHOS_TEST_FOR_EXCEPTION( rhsTerm->rank() != 0, std::invalid_argument, "RHSEasy only handles scalar terms.");
-  _terms.push_back( rhsTerm );
+  if (_lt.get()) {
+    _lt = _lt + rhsTerm;
+  } else {
+    _lt = rhsTerm;
+  }
+//  _terms.push_back( rhsTerm );
+  
   set<int> testIDs = rhsTerm->varIDs();
   _testIDs.insert(testIDs.begin(),testIDs.end());
 }
@@ -31,9 +37,12 @@ void RHSEasy::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
   // rhsVector: (numCells, numTestDofs)
   rhsVector.initialize(0.0);
   
-  for (vector< LinearTermPtr >::iterator ltIt = _terms.begin(); ltIt != _terms.end(); ltIt++) {
-    LinearTermPtr lt = *ltIt;
-    lt->integrate(rhsVector, testOrdering, basisCache);
+  if ( _lt.get() ) {
+    _lt->integrate(rhsVector, testOrdering, basisCache);
   }
   // cout << "rhsVector: " << endl << rhsVector;
+}
+
+LinearTermPtr RHSEasy::linearTerm() {
+  return _lt;
 }

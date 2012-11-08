@@ -444,7 +444,6 @@ bool RHSTests::testTrivialRHS(){
     }
   }
 
-  // if we get this far and don't fail, 
   return success;
 
 

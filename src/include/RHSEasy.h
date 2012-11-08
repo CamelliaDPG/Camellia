@@ -13,7 +13,7 @@
 #include "LinearTerm.h"
 
 class RHSEasy : public RHS {
-  vector< LinearTermPtr > _terms;
+  LinearTermPtr _lt;
   set<int> _testIDs;
 public:
   void addTerm( LinearTermPtr rhsTerm );
@@ -24,6 +24,9 @@ public:
   
   void integrateAgainstStandardBasis(FieldContainer<double> &rhsVector, 
                                      Teuchos::RCP<DofOrdering> testOrdering, 
-                                     BasisCachePtr basisCache);};
+                                     BasisCachePtr basisCache);
+  
+  LinearTermPtr linearTerm();
+};
 
 #endif
