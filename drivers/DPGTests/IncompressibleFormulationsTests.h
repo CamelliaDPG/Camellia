@@ -31,6 +31,7 @@ class IncompressibleFormulationsTests : public TestSuite {
   VarPtr v1_vgp, v2_vgp, tau1_vgp, tau2_vgp, q_vgp;
   vector< VarPtr > vgpFields;
   vector< VarPtr > vgpTests;
+  VarFactory vgpVarFactory;
   
   vector< PolyExactFunctions > polyExactFunctions;
   vector< pair< int, int > > meshDimensions; // horizontal x vertical cells
@@ -45,7 +46,8 @@ class IncompressibleFormulationsTests : public TestSuite {
   void teardown() {}
   bool functionsAgree(FunctionPtr f1, FunctionPtr f2, Teuchos::RCP<Mesh> mesh);
   
-  bool ltsAgree(LinearTermPtr lt1, LinearTermPtr lt2, Teuchos::RCP<Mesh> mesh);
+  bool ltsAgree(LinearTermPtr lt1, LinearTermPtr lt2,
+                Teuchos::RCP<Mesh> mesh, VarFactory &varFactory);
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
