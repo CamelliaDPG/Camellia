@@ -12,7 +12,7 @@
 #include "BasisEvaluation.h"
 
 #include "ConfusionManufacturedSolution.h"
-#include "ConfusionProblem.h"
+#include "ConfusionProblemLegacy.h"
 #include "ConfusionBilinearForm.h"
 #include "ConfusionInnerProduct.h"
 
@@ -410,7 +410,7 @@ void MultiBasisTests::setup() {
   
   Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
 
 //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
 

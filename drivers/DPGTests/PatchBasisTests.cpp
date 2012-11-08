@@ -12,7 +12,7 @@
 
 #include "ConfusionManufacturedSolution.h"
 #include "ConfusionBilinearForm.h"
-#include "ConfusionProblem.h"
+#include "ConfusionProblemLegacy.h"
 #include "ConfusionInnerProduct.h"
 #include "MathInnerProduct.h"
 
@@ -495,7 +495,7 @@ void PatchBasisTests::setup() {
 
   Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
   
-  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
   
   //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
   
@@ -759,7 +759,7 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(confusionBF) );
   
-  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
   
   Teuchos::RCP<Solution> mbSolution = Teuchos::rcp(new Solution(multiBasisMesh, confusionProblem, confusionProblem, ip));
 //  cout << "solving MultiBasis...\n";

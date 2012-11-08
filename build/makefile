@@ -42,7 +42,7 @@ OBJ_NAMES = DofOrdering \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
-       ConfusionProblem \
+       ConfusionProblemLegacy \
        Constraint \
        MathInnerProduct \
        Element \
@@ -321,7 +321,7 @@ PenaltyMethodFilter.o: $(SRCS_DIR)/Solution/PenaltyMethodFilter.cpp
 ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
-ConfusionProblem.o: $(DRIVERS_DIR)/Confusion/ConfusionProblem.cpp
+ConfusionProblemLegacy.o: $(DRIVERS_DIR)/Confusion/ConfusionProblemLegacy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
 ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp

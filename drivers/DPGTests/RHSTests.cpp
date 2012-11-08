@@ -23,7 +23,7 @@
 #include "BilinearFormUtility.h"
 
 #include "ConfusionBilinearForm.h"
-#include "ConfusionProblem.h"
+#include "ConfusionProblemLegacy.h"
 
 #include "InnerProductScratchPad.h"
 
@@ -77,7 +77,7 @@ void RHSTests::setup() {
   double beta_y = 1.0;
   
   Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
-  Teuchos::RCP<ConfusionProblem> confusionProblem = Teuchos::rcp( new ConfusionProblem(confusionBF) );
+  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
   _rhs = confusionProblem;
   _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
   _mesh->setUsePatchBasis(false);
