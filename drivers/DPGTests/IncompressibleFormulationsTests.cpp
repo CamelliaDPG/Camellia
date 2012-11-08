@@ -99,6 +99,7 @@ void IncompressibleFormulationsTests::setup() {
 }
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  cout << "Running IncompressibleFormulationsTests.  (This takes 30-60 seconds.)" << endl;
   setup();
   if (testVGPNavierStokesFormulationCorrectness()) {
     numTestsPassed++;

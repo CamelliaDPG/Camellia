@@ -150,7 +150,6 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
@@ -163,6 +162,9 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+
+  // slow tests: put at the end:
+  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests ) );
   
   for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin();
        testSuiteIt != testSuites.end(); testSuiteIt++) {
