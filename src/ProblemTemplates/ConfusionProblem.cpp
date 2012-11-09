@@ -107,6 +107,11 @@ void ConfusionProblem::solveSteady(int argc, char *argv[], string filename, doub
 
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
+  if (enforceLocalConservation) {
+    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+    solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+  }
+
   RefinementStrategy refinementStrategy( solution, energyThreshold );
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -118,9 +123,10 @@ void ConfusionProblem::solveSteady(int argc, char *argv[], string filename, doub
       {
         FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
         FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-        Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero);
-        cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-          << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+        fluxImbalances = checkConservation(flux, zero);
+        if (printLocalConservation)
+          cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+            << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
       }
       if (filename != "")
       {

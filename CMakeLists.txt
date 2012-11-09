@@ -82,12 +82,14 @@ ENDIF()
 FILE(GLOB_RECURSE LIB_SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
 set(HEADERS 
   ${CAMELLIA_SOURCE_DIR}/include
+  ${CAMELLIA_SOURCE_DIR}/ProblemTemplates
 )
 
 include_directories(
   ${Trilinos_TPL_INCLUDE_DIRS}
   ${Trilinos_INCLUDE_DIRS}
   ${CAMELLIA_SOURCE_DIR}/include
+  ${CAMELLIA_SOURCE_DIR}/ProblemTemplates
   #${MUMPS_PATH}/include
 )
 

@@ -8,14 +8,25 @@
 class ConfusionProblem
 {
   public:
-    void init(double _epsilon = 1.0, int _numRefs = 0, int _H1Order = 3, int _pToAdd = 2, bool _checkLocalConservation=true)
-    {
-      epsilon = _epsilon;
-      numRefs = _numRefs;
-      H1Order = _H1Order;
-      pToAdd  = _pToAdd;
-      checkLocalConservation = _checkLocalConservation;
-    }
+    ConfusionProblem() : epsilon(1e-2), numRefs(0), 
+      H1Order(3), pToAdd(2), checkLocalConservation(false), 
+      printLocalConservation(false), enforceLocalConservation(false) { }
+    // double getEpsilon() { return epsilon; }
+    // void setEpsilon(double _epsilon) { epsilon = _epsilon; }
+    // int getNumRefs() { return numRefs; }
+    // void setNumRefs(int _numRefs) { numRefs = _numRefs; }
+    // int getH1Order() { return H1Order; }
+    // void setH1Order(int _H1Order) { H1Order = _H1Order; }
+    // int getPToAdd() { return pToAdd; }
+    // void setPToAdd(int _pToAdd) { pToAdd = _pToAdd; }
+    // bool getCheckLocalConservation() { return checkLocalConservation; }
+    // void setCheckLocalConservation(bool _checkLocalConservation) { checkLocalConservation = _checkLocalConservation; }
+    // bool getPrintLocalConservation() { return printLocalConservation; }
+    // void setPrintLocalConservation(bool _printLocalConservation) { printLocalConservation = _printLocalConservation; }
+    // bool getEnforceLocalConservation() { return enforceLocalConservation; }
+    // void setEnforceLocalConservation(bool _enforceLocalConservation) { enforceLocalConservation = _enforceLocalConservation; }
+    // Teuchos::Tuple<double, 3> getFluxImbalances() { return fluxImbalances; }
+
     void defineVariables();
     void defineBilinearForm(vector<double> beta);
     void defineBilinearForm(FunctionPtr beta);
@@ -34,7 +45,8 @@ class ConfusionProblem
     void setRobustZeroMeanIP(vector<double> beta);
     void setRobustZeroMeanIP(FunctionPtr beta);
 
-  protected:
+    // Making these public for easier introspection
+  public:
     double epsilon;
     int numRefs;
 
@@ -42,6 +54,9 @@ class ConfusionProblem
     int pToAdd;
 
     bool checkLocalConservation;
+    bool printLocalConservation;
+
+    bool enforceLocalConservation;
 
     // define test variables
     VarFactory varFactory; 
@@ -53,6 +68,8 @@ class ConfusionProblem
     VarPtr u;
     VarPtr sigma1;
     VarPtr sigma2;
+
+    Teuchos::Tuple<double, 3> fluxImbalances;
 
     BFPtr confusionBF;
 

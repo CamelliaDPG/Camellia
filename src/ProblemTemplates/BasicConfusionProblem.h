@@ -3,20 +3,26 @@
 
 #include "ConfusionProblem.h"
 
-class StandardConfusionProblem : public ConfusionProblem
+class BasicConfusionProblem : public ConfusionProblem
 {
   public:
-    void init()
-    {
-      ConfusionProblem::init(1e-2, 2);
-    }
+    // vector<double> getBeta()
+    // {
+    //   return beta;
+    // }
+    // void setBeta(double beta_x, double beta_y)
+    // {
+    //   beta.push_back(beta_x);
+    //   beta.push_back(beta_y);
+    // }
 
     void defineInnerProduct(vector<double> beta);
     void defineBoundaryConditions();
     void defineMesh();
     void runProblem(int argc, char *argv[]);
 
-  protected:
+    // Making this public for easier introspection
+  public:
     vector<double> beta;
 };
 

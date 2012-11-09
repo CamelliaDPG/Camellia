@@ -66,13 +66,13 @@ class InletBC : public Function {
 };
 
 ////////////////////   DEFINE INNER PRODUCT   ///////////////////////
-void StandardConfusionProblem::defineInnerProduct(vector<double> beta)
+void BasicConfusionProblem::defineInnerProduct(vector<double> beta)
 {
   setRobustIP(beta);
 }
 
 ////////////////////   CREATE BCs   ///////////////////////
-void StandardConfusionProblem::defineBoundaryConditions()
+void BasicConfusionProblem::defineBoundaryConditions()
 {
   bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary );
@@ -86,7 +86,7 @@ void StandardConfusionProblem::defineBoundaryConditions()
 }
 
 ////////////////////   BUILD MESH   ///////////////////////
-void StandardConfusionProblem::defineMesh()
+void BasicConfusionProblem::defineMesh()
 {
   FieldContainer<double> meshBoundary(4,2);
 
@@ -106,7 +106,7 @@ void StandardConfusionProblem::defineMesh()
       confusionBF, H1Order, H1Order+pToAdd, false);
 }
 
-void StandardConfusionProblem::runProblem(int argc, char *argv[])
+void BasicConfusionProblem::runProblem(int argc, char *argv[])
 {
   defineVariables();
   beta.push_back(2);
