@@ -13,7 +13,6 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
     ElementTypePtr elemTypePtr = mesh->elements()[cellIDs[0]]->elementType(); // assumes all elements in basisCache are of the same type.
 
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
-    int numTestDofs = elemTypePtr->testOrderPtr->totalDofs();
     //    cout << "num Cells = " << numCells << ",num Trial dofs = " << numTrialDofs << ", numTest = " << numTestDofs << endl;
 
     FieldContainer<double> cellSideParities = mesh->cellSideParities(elemTypePtr);
@@ -27,11 +26,11 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
     double maxDiff = 0.0;
     for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
       for (int i = 0;i<numTrialDofs;i++){
-	for (int j = 0;j<numTrialDofs;j++){
-	  maxDiff = max(maxDiff,abs(hessianStiffness(cellIndex,i,j)-hessianStiffness(cellIndex,j,i)));
-	  cout << hessianStiffness(cellIndex,i,j) << " ";
-	}
-	cout << endl;
+        for (int j = 0;j<numTrialDofs;j++){
+          maxDiff = max(maxDiff,abs(hessianStiffness(cellIndex,i,j)-hessianStiffness(cellIndex,j,i)));
+          cout << hessianStiffness(cellIndex,i,j) << " ";
+        }
+        cout << endl;
       }
     }
     cout << "symmetry max diff in Hessian = " << maxDiff << endl;
@@ -46,9 +45,9 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
 
     for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
       for (int i = 0;i<numTrialDofs;i++){
-	for (int j = 0;j<numTrialDofs;j++){
-	  localStiffnessMatrix(cellIndex,i,j) += hessianStiffness(cellIndex,i,j);
-	}    
+        for (int j = 0;j<numTrialDofs;j++){
+          localStiffnessMatrix(cellIndex,i,j) += hessianStiffness(cellIndex,i,j);
+        }    
       }
     }
   }
