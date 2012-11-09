@@ -9,12 +9,12 @@ class HessianFilter : public LocalStiffnessMatrixFilter {
   BFPtr _hessianBF;
   VarFactory hessianVarFactory;
  public: 
-  HessianFilter(BFPtr hessianBF ){
-    
+  HessianFilter(BFPtr hessianBF ) {
     _hessianBF = hessianBF;
   };
   
-  virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) ;
+  virtual void filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
+                      BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) ;
 };
 
 #endif
