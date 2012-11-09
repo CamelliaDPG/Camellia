@@ -267,12 +267,12 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     cout << endl;
     */
     
-    for (int j = 0;j<numTestDofsForVarID;j++){
-      for (int i = 0;i<numPoints;i++){	
-	int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
-	//	double basisValue = (*basisValues)(j,i);
-	double basisValue = (*transformedBasisValues)(cellIndex,j,i);
-	values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+    for (int j = 0;j<numTestDofsForVarID;j++) {
+      for (int i = 0;i<numPoints;i++) {
+        int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
+        //	double basisValue = (*basisValues)(j,i);
+        double basisValue = (*transformedBasisValues)(cellIndex,j,i);
+        values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
       }
     }
   }
