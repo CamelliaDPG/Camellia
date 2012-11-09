@@ -138,15 +138,18 @@ public:
     _op = op;
   }   
 
+  FunctionPtr x(){
+    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_X));
+  }
+  FunctionPtr y(){
+    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_Y));
+  }
+
   FunctionPtr dx(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DX));
-    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_D1));
-    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_VALUE));
   }
   FunctionPtr dy(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DY));
-    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_D2));
-    //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_VALUE));
   }
 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
