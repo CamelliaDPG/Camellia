@@ -94,11 +94,13 @@ public:
     
     initVars();
     
+    _stokesBF = stokesBF(mu);
+    
     // construct bilinear form:
     _bf = stokesBF(mu);
 
-    _bf->addTerm(sigma11_prev * u1 + sigma12_prev * u2 + u1_prev * sigma11 + u2_prev * sigma12, v1);
-    _bf->addTerm(sigma21_prev * u1 + sigma22_prev * u2 + u1_prev * sigma21 + u2_prev * sigma22, v2);
+    _bf->addTerm(- sigma11_prev * u1 - sigma12_prev * u2 - u1_prev * sigma11 - u2_prev * sigma12, v1);
+    _bf->addTerm(- sigma21_prev * u1 - sigma22_prev * u2 - u1_prev * sigma21 - u2_prev * sigma22, v2);
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
   }
@@ -111,6 +113,12 @@ public:
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
     rhs->addTerm( f1 * v1 + f2 * v2 );
+    // add the subtraction of the stokes BF here!
+    rhs->addTerm( -_stokesBF->testFunctional(_soln) );
+    // finally, add the u sigma term:
+    rhs->addTerm( (u1_prev * sigma11_prev + u2_prev * sigma12_prev) * v1 );
+    rhs->addTerm( (u1_prev * sigma21_prev + u2_prev * sigma22_prev) * v2 );
+    
     return rhs;
   }
   BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {

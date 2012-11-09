@@ -28,28 +28,26 @@ class IncompressibleFormulationsTests : public TestSuite {
   FunctionPtr x, x2, x3, y, y2, y3, zero;
   
   VarPtr u1_vgp, u2_vgp, sigma11_vgp, sigma12_vgp, sigma21_vgp, sigma22_vgp, p_vgp;
+  VarPtr v1_vgp, v2_vgp, tau1_vgp, tau2_vgp, q_vgp;
   vector< VarPtr > vgpFields;
+  vector< VarPtr > vgpTests;
+  VarFactory vgpVarFactory;
   
   vector< PolyExactFunctions > polyExactFunctions;
   vector< pair< int, int > > meshDimensions; // horizontal x vertical cells
   vector< int > pToAddValues;
   vector< double > muValues;
   
+  SpatialFilterPtr entireBoundary;
+  
   FieldContainer<double> quadPoints;
-  
-  Teuchos::RCP<Mesh> _vgpStokesMesh; // used for both Stokes and Navier-Stokes
-  Teuchos::RCP< VGPStokesFormulation > _vgpStokesFormulation;
-  Teuchos::RCP< VGPNavierStokesFormulation > _vgpNavierStokesFormulation;
-  Teuchos::RCP< Solution > _vgpStokesSolution, _vgpNavierStokesSolution;
-  
-  FieldContainer<double> _testPoints;
-  
-  Teuchos::RCP<ExactSolution> _vgpStokesExactSolution;
-  Teuchos::RCP<ExactSolution> _vgpNavierStokesExactSolution;
   
   void setup();
   void teardown() {}
-  bool functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache);
+  bool functionsAgree(FunctionPtr f1, FunctionPtr f2, Teuchos::RCP<Mesh> mesh);
+  
+  bool ltsAgree(LinearTermPtr lt1, LinearTermPtr lt2,
+                Teuchos::RCP<Mesh> mesh, VarFactory &varFactory);
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   

@@ -118,7 +118,7 @@ void RieszRep::computeRieszRep(){
     for (int i = 0;i<numTestDofs;i++){
       rhsVector(i,0) = rhsValues(0,i);
       for (int j = 0;j<numTestDofs;j++){
-	R_V(i,j) = ipMatrix(0,i,j);
+        R_V(i,j) = ipMatrix(0,i,j);
       }
     }
     rhsValues.clear();
@@ -187,7 +187,7 @@ void RieszRep::distributeDofs(){
   
   vector< ElementPtr > elems = _mesh->activeElements(); 
   vector< ElementPtr >::iterator elemIt;     
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++) {
     
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();    
@@ -203,15 +203,15 @@ void RieszRep::distributeDofs(){
     if (isInPartition){  // if in partition
       numMyDofs = numDofs;
       dofs = _rieszRepDofs[cellID];
-    }else{
+    } else{
       numMyDofs = 0;
     }
     
     Epetra_Map dofMap(numDofs,numMyDofs,0,Comm); 
     Epetra_Vector distributedRieszDofs(dofMap);
-    if (isInPartition){
-      for (int i = 0;i<numMyDofs;i++){ // shouldn't activate on off-proc partitions
-	distributedRieszDofs.ReplaceGlobalValues(1,&dofs(i),&i);
+    if (isInPartition) {
+      for (int i = 0;i<numMyDofs;i++) { // shouldn't activate on off-proc partitions
+        distributedRieszDofs.ReplaceGlobalValues(1,&dofs(i),&i);
       }
     }
 
@@ -221,7 +221,7 @@ void RieszRep::distributeDofs(){
     globalRieszDofs.Import(distributedRieszDofs, testDofImporter, Insert);  
     if (!isInPartition){
       for (int i = 0;i<numDofs;i++){
-	dofs(i) = globalRieszDofs[i];
+        dofs(i) = globalRieszDofs[i];
       }
     }
     _rieszRepDofsGlobal[cellID] = dofs;
@@ -254,13 +254,25 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
     BasisPtr testBasis = testOrderingPtr->getBasis(testID);
-    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,op);
-
-    for (int j = 0;j<numTestDofsForVarID;j++){
-      for (int i = 0;i<numPoints;i++){	
-	int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
-	double basisValue = (*basisValues)(j,i);
-	values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+    //    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,op);
+    Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op);
+    /*
+    for (int i = 0;i<basisValues->rank();i++){
+      cout << "value dimension " << i << " = " << basisValues->dimension(i) << ", ";
+    }
+    cout << endl;
+    for (int i = 0;i<transformedBasisValues->rank();i++){
+      cout << "transformed value dimension " << i << " = " << transformedBasisValues->dimension(i) << ", ";
+    }
+    cout << endl;
+    */
+    
+    for (int j = 0;j<numTestDofsForVarID;j++) {
+      for (int i = 0;i<numPoints;i++) {
+        int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
+        //	double basisValue = (*basisValues)(j,i);
+        double basisValue = (*transformedBasisValues)(cellIndex,j,i);
+        values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
       }
     }
   }

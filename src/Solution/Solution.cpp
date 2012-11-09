@@ -109,6 +109,14 @@ double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   return condest;
 }
 
+double Solution::cubatureEnrichmentDegree() const {
+  return _cubatureEnrichmentDegree;
+}
+
+void Solution::setCubatureEnrichmentDegree(double value) {
+  _cubatureEnrichmentDegree = value;
+}
+
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 typedef Teuchos::RCP< Element > ElementPtr;
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
@@ -125,6 +133,7 @@ Solution::Solution(const Solution &soln) {
   _lagrangeConstraints = soln.lagrangeConstraints();
   _reportConditionNumber = false;
   _reportTimingResults = false;
+  _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
 }
 
 Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RHS> rhs, Teuchos::RCP<DPGInnerProduct> ip) {
@@ -145,6 +154,7 @@ void Solution::initialize() {
   _reportConditionNumber = false;
   _reportTimingResults = false;
   _globalSystemConditionEstimate = -1;
+  _cubatureEnrichmentDegree = 0;
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -232,7 +242,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //initialize();
   
   bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
-  double cubatureEnrichmentDegree = 0; // TODO: make this a settable parameter in Solution.
   
   int numProcs=1;
   int rank=0;
@@ -299,8 +308,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, cubatureEnrichmentDegree));
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
     
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;

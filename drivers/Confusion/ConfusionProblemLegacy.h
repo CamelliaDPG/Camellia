@@ -6,11 +6,11 @@
 
 #include "ConfusionBilinearForm.h"
 
-class ConfusionProblem : public RHS, public BC {
+class ConfusionProblemLegacy : public RHS, public BC {
  private:
   Teuchos::RCP<ConfusionBilinearForm> _cbf;
  public:
-  ConfusionProblem(Teuchos::RCP<ConfusionBilinearForm> cbf);
+  ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf);
     
   // RHS:
   bool nonZeroRHS(int testVarID);

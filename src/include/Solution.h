@@ -75,6 +75,8 @@ private:
   typedef Teuchos::RCP< BasisCache > BasisCachePtr;
   typedef Teuchos::RCP<Solution> SolutionPtr;
   
+  double _cubatureEnrichmentDegree;
+  
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
   map< int, double > _energyErrorForCellIDGlobal;
   
@@ -134,6 +136,9 @@ public:
   
   void clearSolution(int trialID);
 
+  double cubatureEnrichmentDegree() const;
+  void setCubatureEnrichmentDegree(double value);
+  
   void setSolution(Teuchos::RCP<Solution> soln); // thisSoln = soln
   
   virtual void solutionValues(FieldContainer<double> &values, 

@@ -1,23 +1,23 @@
 //
-//  ConfusionProblem.cpp
+//  ConfusionProblemLegacy.cpp
 //  Camellia
 //
 //  Created by Nathan Roberts on 2/16/12.
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
-#include "ConfusionProblem.h"
+#include "ConfusionProblemLegacy.h"
 
-ConfusionProblem::ConfusionProblem(Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(), BC() {
+ConfusionProblemLegacy::ConfusionProblemLegacy(Teuchos::RCP<ConfusionBilinearForm> cbf) : RHS(), BC() {
   _cbf = cbf;  
 }
 
 // RHS:
-bool ConfusionProblem::nonZeroRHS(int testVarID) {
+bool ConfusionProblemLegacy::nonZeroRHS(int testVarID) {
   return testVarID == ConfusionBilinearForm::V;
 }
 
-void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+void ConfusionProblemLegacy::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
@@ -27,12 +27,12 @@ void ConfusionProblem::rhs(int testVarID, const FieldContainer<double> &physical
 }
 
 // BC
-bool ConfusionProblem::bcsImposed(int varID) {
+bool ConfusionProblemLegacy::bcsImposed(int varID) {
   return (varID == ConfusionBilinearForm::U_HAT || varID==ConfusionBilinearForm::BETA_N_U_MINUS_SIGMA_HAT);
 //  return varID == ConfusionBilinearForm::U_HAT;
 }
 
-void ConfusionProblem::imposeBC(int varID, FieldContainer<double> &physicalPoints, 
+void ConfusionProblemLegacy::imposeBC(int varID, FieldContainer<double> &physicalPoints, 
                                 FieldContainer<double> &unitNormals,
                                 FieldContainer<double> &dirichletValues,
                                 FieldContainer<bool> &imposeHere) {

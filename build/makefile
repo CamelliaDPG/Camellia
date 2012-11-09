@@ -42,7 +42,7 @@ OBJ_NAMES = DofOrdering \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
-       ConfusionProblem \
+       ConfusionProblemLegacy \
        Constraint \
        MathInnerProduct \
        Element \
@@ -93,6 +93,7 @@ OBJ_NAMES = DofOrdering \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
 			 LidDrivenFlowRefinementStrategy \
+       HessianFilter \
        TimeMarchingProblem \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
@@ -321,7 +322,7 @@ PenaltyMethodFilter.o: $(SRCS_DIR)/Solution/PenaltyMethodFilter.cpp
 ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
-ConfusionProblem.o: $(DRIVERS_DIR)/Confusion/ConfusionProblem.cpp
+ConfusionProblemLegacy.o: $(DRIVERS_DIR)/Confusion/ConfusionProblemLegacy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
 ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp
@@ -364,6 +365,9 @@ Basis%.o: $(SRCS_DIR)/Basis/Basis%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %InnerProduct.o: $(SRCS_DIR)/InnerProduct/%InnerProduct.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+HessianFilter.o: $(SRCS_DIR)/Problem/HessianFilter.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 TimeMarchingProblem.o: $(SRCS_DIR)/Problem/TimeMarchingProblem.cpp
