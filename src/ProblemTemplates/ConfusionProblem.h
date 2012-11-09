@@ -11,21 +11,6 @@ class ConfusionProblem
     ConfusionProblem() : epsilon(1e-2), numRefs(0), 
       H1Order(3), pToAdd(2), checkLocalConservation(false), 
       printLocalConservation(false), enforceLocalConservation(false) { }
-    // double getEpsilon() { return epsilon; }
-    // void setEpsilon(double _epsilon) { epsilon = _epsilon; }
-    // int getNumRefs() { return numRefs; }
-    // void setNumRefs(int _numRefs) { numRefs = _numRefs; }
-    // int getH1Order() { return H1Order; }
-    // void setH1Order(int _H1Order) { H1Order = _H1Order; }
-    // int getPToAdd() { return pToAdd; }
-    // void setPToAdd(int _pToAdd) { pToAdd = _pToAdd; }
-    // bool getCheckLocalConservation() { return checkLocalConservation; }
-    // void setCheckLocalConservation(bool _checkLocalConservation) { checkLocalConservation = _checkLocalConservation; }
-    // bool getPrintLocalConservation() { return printLocalConservation; }
-    // void setPrintLocalConservation(bool _printLocalConservation) { printLocalConservation = _printLocalConservation; }
-    // bool getEnforceLocalConservation() { return enforceLocalConservation; }
-    // void setEnforceLocalConservation(bool _enforceLocalConservation) { enforceLocalConservation = _enforceLocalConservation; }
-    // Teuchos::Tuple<double, 3> getFluxImbalances() { return fluxImbalances; }
 
     void defineVariables();
     void defineBilinearForm(vector<double> beta);

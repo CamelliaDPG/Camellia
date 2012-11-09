@@ -6,16 +6,6 @@
 class BasicConfusionProblem : public ConfusionProblem
 {
   public:
-    // vector<double> getBeta()
-    // {
-    //   return beta;
-    // }
-    // void setBeta(double beta_x, double beta_y)
-    // {
-    //   beta.push_back(beta_x);
-    //   beta.push_back(beta_y);
-    // }
-
     void defineInnerProduct(vector<double> beta);
     void defineBoundaryConditions();
     void defineMesh();

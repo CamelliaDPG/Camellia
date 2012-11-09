@@ -5,11 +5,18 @@
 
 #include "BasicConfusionProblem.h"
 
-class LocalConservationTests : public ::testing::Test {
+class SteadyConservationTests : public ::testing::Test {
   protected:
     virtual void SetUp();
 
-    BasicConfusionProblem confusionProb;
+    BasicConfusionProblem cp;
+};
+
+class TransientConservationTests : public ::testing::Test {
+  protected:
+    virtual void SetUp();
+
+    BasicConfusionProblem cp;
 };
 
 #endif /* end of include guard: LOCALCONSERVATIONTESTS_H */
