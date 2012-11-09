@@ -254,12 +254,24 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
     BasisPtr testBasis = testOrderingPtr->getBasis(testID);
-    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,op);
-
+    //    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,op);
+    Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op);
+    /*
+    for (int i = 0;i<basisValues->rank();i++){
+      cout << "value dimension " << i << " = " << basisValues->dimension(i) << ", ";
+    }
+    cout << endl;
+    for (int i = 0;i<transformedBasisValues->rank();i++){
+      cout << "transformed value dimension " << i << " = " << transformedBasisValues->dimension(i) << ", ";
+    }
+    cout << endl;
+    */
+    
     for (int j = 0;j<numTestDofsForVarID;j++){
       for (int i = 0;i<numPoints;i++){	
 	int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
-	double basisValue = (*basisValues)(j,i);
+	//	double basisValue = (*basisValues)(j,i);
+	double basisValue = (*transformedBasisValues)(cellIndex,j,i);
 	values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
       }
     }
