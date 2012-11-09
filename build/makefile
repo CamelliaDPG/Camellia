@@ -42,7 +42,7 @@ OBJ_NAMES = DofOrdering \
        ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
-       ConfusionProblem \
+       ConfusionProblemLegacy \
        Constraint \
        MathInnerProduct \
        Element \
@@ -113,6 +113,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 TEST_OBJ_NAMES = ElementTests \
        MeshTestSuite \
        FunctionTests \
+       IncompressibleFormulationsTests \
        LinearTermTests \
        MeshRefinementTests \
        ScratchPadTests \
@@ -266,6 +267,9 @@ FunctionTests.o: $(DRIVERS_DIR)/DPGTests/FunctionTests.cpp
 LinearTermTests.o: $(DRIVERS_DIR)/DPGTests/LinearTermTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
+IncompressibleFormulationsTests.o: $(DRIVERS_DIR)/DPGTests/IncompressibleFormulationsTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
 BasisCacheTests.o: $(DRIVERS_DIR)/DPGTests/BasisCacheTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
@@ -317,7 +321,7 @@ PenaltyMethodFilter.o: $(SRCS_DIR)/Solution/PenaltyMethodFilter.cpp
 ConfusionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfusionManufacturedSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
-ConfusionProblem.o: $(DRIVERS_DIR)/Confusion/ConfusionProblem.cpp
+ConfusionProblemLegacy.o: $(DRIVERS_DIR)/Confusion/ConfusionProblemLegacy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@
 
 ConfusionStudy.o: $(DRIVERS_DIR)/Confusion/ConfusionStudy.cpp

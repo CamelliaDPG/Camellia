@@ -93,9 +93,9 @@ void LinearTerm::addVar(FunctionPtr weight, VarPtr var) {
   if (_termType != var->varType() ) {
     TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Attempting to add terms of differing type." );
   }
+  _varIDs.insert(var->ID());
   if (weight->isZero()) return; // in that case, we can skip the actual adding...
   _summands.push_back( make_pair( weight, var ) );
-  _varIDs.insert(var->ID());
 }
 
 void LinearTerm::addVar(double weight, VarPtr var) {
@@ -615,12 +615,18 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     FunctionPtr f = ls.first;
     VarPtr var = ls.second;
     
+    // if there isn't an entry for var, we take it to be zero:
+    if (varFunctions.find(var->ID()) == varFunctions.end()) continue;
+    
     FunctionPtr varEvaluation = Function::op(varFunctions[var->ID()],var->op());
     if (fxn.get()) {
       fxn = fxn + f * varEvaluation;
     } else {
       fxn = f * varEvaluation;
     }
+  }
+  if (!fxn.get() && (this->rank()==0)) {
+    fxn = Function::zero();
   }
   return fxn;
 }
@@ -1203,9 +1209,9 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
       _termType = MIXED_TYPE;
     }
   }
+  _varIDs.insert( a.varIDs().begin(), a.varIDs().end() );
   if (a.isZero()) return; // we can skip the actual adding in this case
   _summands.insert(_summands.end(), a.summands().begin(), a.summands().end());
-  _varIDs.insert( a.varIDs().begin(), a.varIDs().end() );
 }
 
 void LinearTerm::addTerm(LinearTermPtr aPtr, bool overrideTypeCheck) {

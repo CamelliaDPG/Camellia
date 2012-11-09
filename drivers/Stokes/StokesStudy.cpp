@@ -486,17 +486,17 @@ int main(int argc, char *argv[]) {
   numProcs=mpiSession.getNProc();
 #else
 #endif
-  int pToAdd = 2; // for optimal test function approximation
+  int pToAdd = 1; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = TestPolynomial;
+  ExactSolutionChoice exactSolnChoice = HDGSingular;
   
   bool reportConditionNumber = false;
   
   bool useTrueTracesForVVP = true;
   
   bool useCG = false;
-  bool useMumps = false;
+  bool useMumps = true;
   
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   double cgTol = 1e-8;

@@ -347,6 +347,25 @@ public:
   }
 };
 
+const static string VGP_V1_S = "v_1";
+const static string VGP_V2_S = "v_2";
+const static string VGP_TAU1_S = "\\tau_1";
+const static string VGP_TAU2_S = "\\tau_2";
+const static string VGP_Q_S = "q";
+
+const static string VGP_U1HAT_S = "\\widehat{u}_1";
+const static string VGP_U2HAT_S = "\\widehat{u}_2";
+const static string VGP_T1HAT_S = "\\boldsymbol{t}_{1n}";
+const static string VGP_T2HAT_S = "\\boldsymbol{t}_{2n}";
+
+const static string VGP_U1_S = "u_1";
+const static string VGP_U2_S = "u_2";
+const static string VGP_SIGMA11_S = "\\sigma_{11}";
+const static string VGP_SIGMA12_S = "\\sigma_{12}";
+const static string VGP_SIGMA21_S = "\\sigma_{21}";
+const static string VGP_SIGMA22_S = "\\sigma_{22}";
+const static string VGP_P_S = "p";
+
 class VGPStokesFormulation : public StokesFormulation {
   VarFactory varFactory;
   // fields:
@@ -360,27 +379,63 @@ class VGPStokesFormulation : public StokesFormulation {
   double _mu;
   
 public:
+  static VarFactory vgpVarFactory() {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+    
+    VarFactory varFactory;
+    VarPtr myVar;
+    myVar = varFactory.testVar(VGP_V1_S, HGRAD);
+    myVar = varFactory.testVar(VGP_V2_S, HGRAD);
+    myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
+    myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
+    myVar = varFactory.testVar(VGP_Q_S, HGRAD);
+    
+    myVar = varFactory.traceVar(VGP_U1HAT_S);
+    myVar = varFactory.traceVar(VGP_U2HAT_S);
+    
+    myVar = varFactory.fluxVar(VGP_T1HAT_S);
+    myVar = varFactory.fluxVar(VGP_T2HAT_S);
+    myVar = varFactory.fieldVar(VGP_U1_S);
+    myVar = varFactory.fieldVar(VGP_U2_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA11_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA12_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA21_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA22_S);
+    myVar = varFactory.fieldVar(VGP_P_S);
+    return varFactory;
+  }
+  
+  void initVars() {
+    // create the VarPtrs:
+    varFactory = vgpVarFactory();
+    
+    // look up the created VarPtrs:
+    v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+    v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+    tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+    tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+    q = varFactory.testVar(VGP_Q_S, HGRAD);
+    
+    u1hat = varFactory.traceVar(VGP_U1HAT_S);
+    u2hat = varFactory.traceVar(VGP_U2HAT_S);
+    
+    sigma1n = varFactory.fluxVar(VGP_T1HAT_S);
+    sigma2n = varFactory.fluxVar(VGP_T2HAT_S);
+    u1 = varFactory.fieldVar(VGP_U1_S);
+    u2 = varFactory.fieldVar(VGP_U2_S);
+    sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
+    sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
+    sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
+    sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
+    p = varFactory.fieldVar(VGP_P_S);
+  }
+  
   VGPStokesFormulation(double mu) {
     _mu = mu;
     
-    v1 = varFactory.testVar("v_1", HGRAD);
-    v2 = varFactory.testVar("v_2", HGRAD);
-    tau1 = varFactory.testVar("\\tau_1", HDIV);
-    tau2 = varFactory.testVar("\\tau_2", HDIV);
-    q = varFactory.testVar("q", HGRAD);
-    
-    u1hat = varFactory.traceVar("\\widehat{u}_1");
-    u2hat = varFactory.traceVar("\\widehat{u}_2");
-    
-    sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
-    sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
-    u1 = varFactory.fieldVar("u_1");
-    u2 = varFactory.fieldVar("u_2");
-    sigma11 = varFactory.fieldVar("\\sigma_{11}");
-    sigma12 = varFactory.fieldVar("\\sigma_{12}");
-    sigma21 = varFactory.fieldVar("\\sigma_{21}");
-    sigma22 = varFactory.fieldVar("\\sigma_{22}");
-    p = varFactory.fieldVar("p");
+    initVars();
     
     // construct bilinear form:
     _bf = Teuchos::rcp( new BF(varFactory) );

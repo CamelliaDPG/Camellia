@@ -189,15 +189,12 @@ int main(int argc, char *argv[]) {
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon
-        ) ); 
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
   // robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon
-        ) * v->grad() );
+  robIP->addTerm( sqrt(epsilon) * v->grad() );
   robIP->addTerm( beta_const * v->grad() );
   robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon
-        ) * tau );
+  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
   if (enforceLocalConservation)
     robIP->addZeroMeanTerm( v );
 

@@ -110,6 +110,11 @@ public:
     }
     return functionMap;
   }
+  string displayString() {
+    ostringstream str;
+    str << "\\overline{" << _solnExpression->displayString() << "} ";
+    return str.str();
+  }
 };
 
 #endif

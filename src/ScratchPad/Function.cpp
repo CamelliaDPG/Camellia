@@ -22,6 +22,8 @@ public:
   FunctionPtr dy();
   FunctionPtr dz();
   // for reasons of efficiency, may want to implement div() and grad() as well
+  
+  string displayString();
 };
 
 Function::Function() {
@@ -29,6 +31,10 @@ Function::Function() {
 }
 Function::Function(int rank) { 
   _rank = rank; 
+}
+
+string Function::displayString() {
+  return "f";
 }
 
 int Function::rank() { 
@@ -89,6 +95,8 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
       return f->grad();
     case IntrepidExtendedTypes::OP_DIV:
       return f->div();
+    case IntrepidExtendedTypes::OP_DOT_NORMAL:
+      return f * Function::normal();
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
       break;
@@ -1285,6 +1293,12 @@ FunctionPtr Yn::dy() {
 SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {
   _var = var;
   _soln = soln;
+}
+
+string SimpleSolutionFunction::displayString() {
+  ostringstream str;
+  str << "\\overline{" << _var->displayString() << "} ";
+  return str.str();
 }
 
 void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
