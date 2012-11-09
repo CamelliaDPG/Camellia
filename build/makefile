@@ -93,6 +93,7 @@ OBJ_NAMES = DofOrdering \
 			 StokesVVPBilinearForm \
 			 StokesManufacturedSolution \
 			 LidDrivenFlowRefinementStrategy \
+       HessianFilter \
        TimeMarchingProblem \
 			 HConvergenceStudy \
 			 OptimalInnerProduct \
@@ -364,6 +365,9 @@ Basis%.o: $(SRCS_DIR)/Basis/Basis%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 %InnerProduct.o: $(SRCS_DIR)/InnerProduct/%InnerProduct.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+
+HessianFilter.o: $(SRCS_DIR)/Problem/HessianFilter.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 TimeMarchingProblem.o: $(SRCS_DIR)/Problem/TimeMarchingProblem.cpp
