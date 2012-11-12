@@ -20,7 +20,7 @@ set( POISSON_SOURCES
 )
 set( CONFUSION_SOURCES
   "${DRIVERS_DIR}/Confusion/ConfusionManufacturedSolution.cpp"
-  "${DRIVERS_DIR}/Confusion/ConfusionProblem.cpp"
+  "${DRIVERS_DIR}/Confusion/ConfusionProblemLegacy.cpp"
   "${DRIVERS_DIR}/Confusion/ConfusionBilinearForm.cpp"
 )
 include_directories("${DRIVERS_DIR}/Poisson") # for certain tests in DPGTests
@@ -31,28 +31,3 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 target_link_libraries(DPGTests 
   Camellia
 )
-
-#add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)
-#target_link_libraries(DoubleGlazingDriver 
-#  Camellia
-#)
-#
-#add_executable(EricksonDriver EricksonDriver.cpp)
-#target_link_libraries(EricksonDriver 
-#  Camellia
-#)
-#
-#add_executable(BendDriver BendDriver.cpp)
-#target_link_libraries(BendDriver 
-#  Camellia
-#)
-#
-#add_executable(HemkerDriver HemkerDriver.cpp)
-#target_link_libraries(HemkerDriver 
-#  Camellia
-#)
-#
-#add_executable(AirfoilDriver AirfoilDriver.cpp)
-#target_link_libraries(AirfoilDriver 
-#  Camellia
-#)
