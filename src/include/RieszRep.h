@@ -76,6 +76,7 @@ class RieszRep {
   map<int, FieldContainer<double> > _rieszRepDofs; // from cellID to dofs of riesz representation
   map<int, FieldContainer<double> > _rieszRepDofsGlobal; // from cellID to dofs of riesz representation
   map<int, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
+  map<int, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
   
   MeshPtr _mesh;
   IPPtr _ip;
@@ -115,6 +116,7 @@ class RieszRep {
 
 class RepFunction : public Function {
 private:
+  
   int _testID;
   Teuchos::RCP<RieszRep> _rep;
   IntrepidExtendedTypes::EOperatorExtended _op;
@@ -125,6 +127,7 @@ public:
     _rep = rep;
   }
   
+  // WARNING: DOES NOT WORK FOR 
   RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
     _testID = testID;
     _rep = rep;   
