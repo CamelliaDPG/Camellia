@@ -82,6 +82,7 @@ class RieszRep {
   IPPtr _ip;
   LtPtr _rhs;
   bool _printAll;
+  bool _repsNotComputed;
  
  public:
   RieszRep(MeshPtr mesh, IPPtr ip, LtPtr &rhs){
@@ -89,6 +90,7 @@ class RieszRep {
     _ip = ip;
     _rhs = rhs;
     _printAll = false;
+    _repsNotComputed = true;
   }
 
   void setPrintOption(bool printAll){
