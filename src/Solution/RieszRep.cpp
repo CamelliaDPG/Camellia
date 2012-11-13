@@ -269,7 +269,7 @@ void RieszRep::distributeDofs(){
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
 
-  //  
+  //
   
   vector< ElementPtr > allElems = _mesh->elements();
 
@@ -288,7 +288,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op);
   
   int rank = 0; // scalar
-  if (values.rank()>2){ // if values != (C,P)
+  if (values.rank()>2) { // if values != (C,P)
     rank = spaceDim;
   }
   values.initialize(0.0);
@@ -297,15 +297,15 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     for (int j = 0;j<numTestDofsForVarID;j++) {
       for (int i = 0;i<numPoints;i++) {
         int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector	
-	if (rank==0){
-	  double basisValue = (*transformedBasisValues)(cellIndex,j,i);
-	  values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
-	}else{
-	  for (int r = 0;r<rank-1;r++){
-	    double basisValue = (*transformedBasisValues)(cellIndex,j,i,r);
-	    values(cellIndex,i,r) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);	  
-	  }
-	}
+        if (rank==0) {
+          double basisValue = (*transformedBasisValues)(cellIndex,j,i);
+          values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+        } else {
+          for (int r = 0;r<rank-1;r++) {
+            double basisValue = (*transformedBasisValues)(cellIndex,j,i,r);
+            values(cellIndex,i,r) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+          }
+        }
       }
     }
   }
