@@ -454,7 +454,7 @@ TEST_F(LinearTermTests, TestRieszInversionAsProjection)
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, sobolevIP, integrand));
   riesz->computeRieszRep();
 
-  FunctionPtr rieszFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
+  FunctionPtr rieszFxn = Teuchos::rcp(new RepFunction(v,riesz));
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 
@@ -686,8 +686,8 @@ TEST_F(LinearTermTests, TestRieszInversion)
   //  rieszIBP->setPrintOption(true);
   rieszIBP->computeRieszRep();
 
-  FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
-  FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v->ID(),rieszIBP));
+  FunctionPtr rieszOrigFxn = Teuchos::rcp(new RepFunction(v,riesz));
+  FunctionPtr rieszIBPFxn = Teuchos::rcp(new RepFunction(v,rieszIBP));
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
 

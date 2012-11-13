@@ -164,8 +164,7 @@ double RieszRep::getNorm(){
 
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
-    
-    normSum+= _rieszRepNormSquared[cellID];
+    normSum+= _rieszRepNormSquaredGlobal[cellID];
   }
   return sqrt(normSum);
 }
@@ -182,9 +181,6 @@ void RieszRep::distributeDofs(){
   Epetra_SerialComm Comm;
 #endif  
 
-  // loop thru elements in partition, export data to other processors
-  //  vector< ElementPtr > elems = _mesh->elementsInPartition(rank); 
-  
   vector< ElementPtr > elems = _mesh->activeElements(); 
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++) {
@@ -212,9 +208,8 @@ void RieszRep::distributeDofs(){
     if (isInPartition) {
       for (int i = 0;i<numMyDofs;i++) { // shouldn't activate on off-proc partitions
         distributedRieszDofs.ReplaceGlobalValues(1,&dofs(i),&i);
-      }
+      }     
     }
-
     Epetra_Map importMap(numDofs,numDofs,0,Comm); // every proc should own their own copy of the dofs
     Epetra_Import testDofImporter(importMap, dofMap); 
     Epetra_Vector globalRieszDofs(importMap);
@@ -222,9 +217,49 @@ void RieszRep::distributeDofs(){
     if (!isInPartition){
       for (int i = 0;i<numDofs;i++){
         dofs(i) = globalRieszDofs[i];
-      }
+      }      
     }
-    _rieszRepDofsGlobal[cellID] = dofs;
+    _rieszRepDofsGlobal[cellID] = dofs;    
+  }
+  
+  // distribute norms as well
+  int numElems = _mesh->numElements();
+  int numMyElems = _mesh->elementsInPartition(rank).size();
+  int myElems[numMyElems];
+  // build cell index
+  int cellIndex = 0;
+  int myCellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
+      myElems[myCellIndex] = cellIndex;
+      myCellIndex++;
+    }
+    cellIndex++;
+  }
+  Epetra_Map normMap(numElems,numMyElems,myElems,0,Comm);
+
+  Epetra_Vector distributedRieszNorms(normMap);
+  cellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
+      int ind = cellIndex;
+      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);      
+    }
+    cellIndex++;
+  }
+
+  Epetra_Map normImportMap(numElems,numElems,0,Comm);
+  Epetra_Import normImporter(normImportMap,normMap); 
+  Epetra_Vector globalNorms(normImportMap);
+  globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
+
+  cellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];          
+    cellIndex++;
   }
 
   //  _rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call 
@@ -234,45 +269,43 @@ void RieszRep::distributeDofs(){
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
 
-  //  if (op==IntrepidExtendedTypes::OP_DX){
-  //    cout << "computing rep values for op_dx" << endl;
-  //  }
-
+  //
+  
   vector< ElementPtr > allElems = _mesh->elements();
 
+  int spaceDim = 2; // hardcoded 2D for now
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-
-  values.initialize(0.0);
   vector<int> cellIDs = basisCache->cellIDs();
 
+  // all elems coming in should be of same type
+  ElementPtr elem = allElems[cellIDs[0]];
+  ElementTypePtr elemTypePtr = elem->elementType();   
+  DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+  CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+  int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
+  BasisPtr testBasis = testOrderingPtr->getBasis(testID);
+  Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op);
+  
+  int rank = 0; // scalar
+  if (values.rank()>2) { // if values != (C,P)
+    rank = spaceDim;
+  }
+  values.initialize(0.0);
   for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
     int cellID = cellIDs[cellIndex];
-    ElementPtr elem = allElems[cellID];
-    ElementTypePtr elemTypePtr = elem->elementType();   
-    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-    CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
-    int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
-    BasisPtr testBasis = testOrderingPtr->getBasis(testID);
-    //    Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(testBasis,op);
-    Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op);
-    /*
-    for (int i = 0;i<basisValues->rank();i++){
-      cout << "value dimension " << i << " = " << basisValues->dimension(i) << ", ";
-    }
-    cout << endl;
-    for (int i = 0;i<transformedBasisValues->rank();i++){
-      cout << "transformed value dimension " << i << " = " << transformedBasisValues->dimension(i) << ", ";
-    }
-    cout << endl;
-    */
-    
     for (int j = 0;j<numTestDofsForVarID;j++) {
       for (int i = 0;i<numPoints;i++) {
-        int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector
-        //	double basisValue = (*basisValues)(j,i);
-        double basisValue = (*transformedBasisValues)(cellIndex,j,i);
-        values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+        int dofIndex = testOrderingPtr->getDofIndex(testID, j); // to index into total test dof vector	
+        if (rank==0) {
+          double basisValue = (*transformedBasisValues)(cellIndex,j,i);
+          values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+        } else {
+          for (int r = 0;r<rank-1;r++) {
+            double basisValue = (*transformedBasisValues)(cellIndex,j,i,r);
+            values(cellIndex,i,r) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
+          }
+        }
       }
     }
   }

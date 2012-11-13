@@ -776,6 +776,11 @@ SumFunction::SumFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank()) 
   _f2 = f2;
 }
 
+bool SumFunction::boundaryValueOnly() {
+  // if either summand is BVO, then so is the sum...
+  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+}
+
 string SumFunction::displayString() {
   ostringstream ss;
   ss << "(" << _f1->displayString() << " + " << _f2->displayString() << ")";
@@ -1328,4 +1333,23 @@ FunctionPtr SimpleSolutionFunction::dz() {
   } else {
     return Function::solution(_var->dz(), _soln);
   }
+}
+
+Cos_ay::Cos_ay(double a) {
+  _a = a;
+}
+double Cos_ay::value(double x, double y) {
+  return cos( _a * y );
+}
+FunctionPtr Cos_ay::dx() {
+  return Function::zero();
+}
+FunctionPtr Cos_ay::dy() {
+  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ay(_a));
+}
+
+string Cos_ay::displayString() {
+  ostringstream ss;
+  ss << "\\cos( " << _a << " y )";
+  return ss.str();
 }
