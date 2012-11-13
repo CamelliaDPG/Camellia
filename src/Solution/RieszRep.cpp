@@ -164,7 +164,6 @@ double RieszRep::getNorm(){
 
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
-    
     normSum+= _rieszRepNormSquaredGlobal[cellID];
   }
   return sqrt(normSum);
@@ -226,31 +225,40 @@ void RieszRep::distributeDofs(){
   // distribute norms as well
   int numElems = _mesh->numElements();
   int numMyElems = _mesh->elementsInPartition(rank).size();
-  Epetra_Map normMap(numElems,numMyElems,0,Comm);
-  Epetra_Vector distributedRieszNorms(normMap);
+  int myElems[numMyElems];
+  // build cell index
   int cellIndex = 0;
+  int myCellIndex = 0;
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
     if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
-      cout << "on rank " << rank << " for cell " << cellIndex << ", norm = " << _rieszRepNormSquared[cellID] << endl;    
-      distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&cellIndex);
-    }else{
-      // do nothing
+      myElems[myCellIndex] = cellIndex;
+      myCellIndex++;
     }
     cellIndex++;
   }
-  Epetra_Map normImportMap(numElems,numElems,0,Comm);
-  Epetra_Import normImporter(normMap,normImportMap); 
-  Epetra_Vector globalNorms(normImportMap);
-  globalNorms.Import(distributedRieszNorms, normImporter, Insert);  // add should be OK (everything should be zeros)
+  Epetra_Map normMap(numElems,numMyElems,myElems,0,Comm);
 
-  cout << "imported" << endl;
+  Epetra_Vector distributedRieszNorms(normMap);
+  cellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
+      int ind = cellIndex;
+      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);      
+    }
+    cellIndex++;
+  }
+
+  Epetra_Map normImportMap(numElems,numElems,0,Comm);
+  Epetra_Import normImporter(normImportMap,normMap); 
+  Epetra_Vector globalNorms(normImportMap);
+  globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
 
   cellIndex = 0;
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
-    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];
-    cout << "on rank " << rank << ", for cellIndex " << cellIndex << ", distributed norm = " << globalNorms[cellIndex] << endl;
+    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];          
     cellIndex++;
   }
 
