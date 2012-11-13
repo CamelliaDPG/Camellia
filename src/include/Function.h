@@ -216,6 +216,7 @@ public:
   FunctionPtr dz();
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
   
   string displayString();
 };
@@ -334,5 +335,62 @@ public:
   FunctionPtr dy();
   string displayString();
 };
+
+class Cos_ay : public SimpleFunction {
+  double _a;
+public:
+  Cos_ay(double a);
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  
+  string displayString();
+};
+
+class Sin_ay : public SimpleFunction {
+  double _a;
+public:
+  Sin_ay(double a) {
+    _a = a;
+  }
+  double value(double x, double y) {
+    return sin( _a * y);
+  }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\sin( " << _a << " y )";
+    return ss.str();
+  }
+};
+
+
+class Exp_ax : public SimpleFunction {
+  double _a;
+public:
+  Exp_ax(double a) {
+    _a = a;
+  }
+  double value(double x, double y) {
+    return exp( _a * x);
+  }
+  FunctionPtr dx() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\exp( " << _a << " x )";
+    return ss.str();
+  }
+};
+
 
 #endif
