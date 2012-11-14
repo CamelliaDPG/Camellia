@@ -234,6 +234,24 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
   return mesh;
 }
 
+Teuchos::RCP<Mesh> Mesh::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+  FieldContainer<double> quadPoints(4,2);
+  double squareSize = 1.0;
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = squareSize;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = squareSize;
+  quadPoints(2,1) = squareSize;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = squareSize;
+ 
+  int horizontalCells = nCells, verticalCells = nCells;
+  
+  // create a pointer to a new mesh:
+  return buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
+}
+
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
