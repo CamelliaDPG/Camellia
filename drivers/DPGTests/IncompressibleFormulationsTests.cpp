@@ -141,10 +141,19 @@ void IncompressibleFormulationsTests::teardown() {
   meshDimensions.clear();
   pToAddValues.clear();
   muValues.clear();
+  vgpFields.clear();
+  vgpTests.clear();
 }
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "Running IncompressibleFormulationsTests.  (This takes 30-60 seconds.)" << endl;
+  
+  setup();
+  if (testVGPNavierStokesFormulationKovasnayConvergence()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testVGPStokesFormulationCorrectness()) {
@@ -162,13 +171,6 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   
   setup();
   if (testVGPNavierStokesFormulationConsistency()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testVGPNavierStokesFormulationKovasnayConvergence()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -563,6 +565,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency() {
   bool success = true;
+  bool printToConsole = false;
     
   // consistency: check that solving using the BF, RHS, BCs, etc. in the Formulation
   //              gives the ExactSolution specified by the Formulation
@@ -571,7 +574,6 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
   
   double tol = 1e-11;
-  bool printToConsole = true;
   vector<bool> useHessianList;
   useHessianList.push_back(false);
   useHessianList.push_back(true);
@@ -742,7 +744,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness() {
   bool success = true;
-  bool printToConsole = true;
+  bool printToConsole = false;
   
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
@@ -864,7 +866,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       Teuchos::RCP<RieszRep> rieszRepRHS_naiveNorm = Teuchos::rcp( new RieszRep(mesh, stokesBF->naiveNorm(), rhsLT) );
       rieszRepRHS_naiveNorm->computeRieszRep();
-      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
+//      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
       vgpNavierStokesSolution->setRHS(rhs);
       vgpNavierStokesSolution->setIP(vgpNavierStokesFormulation->graphNorm());
@@ -957,7 +959,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       
       rieszRepRHS_naiveNorm->computeRieszRep();
-      cout << "norm of RHS with exact solution projected, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
+//      cout << "norm of RHS with exact solution projected, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
       rieszRepRHS->computeRieszRep();
       double norm = rieszRepRHS->getNorm();
@@ -990,8 +992,6 @@ map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionP
                                                                        double Re) {
   
   double mu = 1.0 / Re;
-  
-  cout << "Returning solution for Re = " << Re << endl;
   
   map<int, FunctionPtr > solnMap;
   solnMap[ u1_vgp->ID() ] = u1_exact;
@@ -1057,11 +1057,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
           
           // create a pointer to a new mesh:
-          Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
+          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
                                                         vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
           
           double Re = 1.0 / mu;
-          NavierStokesFormulation::setKovasznay( Re, mesh, u1_exact, u2_exact, p_exact );
+          NavierStokesFormulation::setKovasznay( Re, stokesMesh, u1_exact, u2_exact, p_exact );
           
           if (printToConsole) {
             cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;
@@ -1073,9 +1073,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
           
           BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
-          
-          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                              vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+//          
+//          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
+//                                                              vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
           
           Teuchos::RCP< Solution > vgpNavierStokesSolution = Teuchos::rcp( new Solution(stokesMesh, vgpBC) );
           
@@ -1133,7 +1133,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           
           map<int, FunctionPtr > solnMap = vgpSolutionMap(u1_exact, u2_exact, p_exact, Re);
           vgpNavierStokesSolution->projectOntoMesh( solnMap );
-          int maxIters = 0;
+          int maxIters = 1;
           // solve with the true BCs (commented out because we project the exact solution)
 //          vgpNavierStokesSolution->solve();
           vgpNavierStokesSolutionIncrement->solve();
@@ -1152,31 +1152,10 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           FunctionPtr t1n_incr = Function::solution(t1n_vgp, vgpNavierStokesSolutionIncrement);
           FunctionPtr t2n_incr = Function::solution(t2n_vgp, vgpNavierStokesSolutionIncrement);
           
-/*          cout << "u1^2 = " << (u1_incr * u1_incr)->integrate(mesh) << endl;
-          cout << "u2^2 = " << (u2_incr * u2_incr)->integrate(mesh) << endl;
-          cout << "p^2 = " << (p_incr * p_incr)->integrate(mesh) << endl;
-          cout << "sigma11^2 = " << (sigma11_incr * sigma11_incr)->integrate(mesh) << endl;
-          cout << "sigma12^2 = " << (sigma12_incr * sigma12_incr)->integrate(mesh) << endl;
-          cout << "sigma21^2 = " << (sigma21_incr * sigma21_incr)->integrate(mesh) << endl;
-          cout << "sigma22^2 = " << (sigma22_incr * sigma22_incr)->integrate(mesh) << endl;
-          
-          u1_incr->writeValuesToMATLABFile(mesh, "u1_incr.m");
-          u2_incr->writeValuesToMATLABFile(mesh, "u2_incr.m");
-          p_incr->writeValuesToMATLABFile(mesh, "p_incr.m");
-          sigma11_incr->writeValuesToMATLABFile(mesh, "sigma11_incr.m");
-          sigma12_incr->writeValuesToMATLABFile(mesh, "sigma12_incr.m");
-          sigma21_incr->writeValuesToMATLABFile(mesh, "sigma21_incr.m");
-          sigma22_incr->writeValuesToMATLABFile(mesh, "sigma22_incr.m");
-          
-          u1hat_incr->writeBoundaryValuesToMATLABFile(mesh, "u1hat_incr.dat");
-          u2hat_incr->writeBoundaryValuesToMATLABFile(mesh, "u2hat_incr.dat");
-          t1n_incr->writeBoundaryValuesToMATLABFile(mesh, "t1n_incr.dat");
-          t2n_incr->writeBoundaryValuesToMATLABFile(mesh, "t2n_incr.dat");*/
-          
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
           
           int i=0;
-          while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (i<maxIters) )  {
+          while ( (sqrt(l2_incr->integrate(stokesMesh)) > tol) && (i<maxIters) )  {
             i++;
             
             if ( rieszRep.get() ) {
@@ -1192,7 +1171,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             cout << ", # iters to converge: " << i << endl;
           }
           
-          double l2NormOfIncr = sqrt(l2_incr->integrate(mesh));
+          double l2NormOfIncr = sqrt(l2_incr->integrate(stokesMesh));
           if (l2NormOfIncr > tol) {
             string withHessian = useHessian ? "using the hessian" : "not using the hessian";
             cout << "Kovasnay solution failed to converge while " << withHessian << "; l2NormOfIncr = " << l2NormOfIncr << endl;
