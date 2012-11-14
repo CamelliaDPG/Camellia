@@ -1031,7 +1031,7 @@ bool LinearTermTests::testIntegrateMixedBasis() {
     for (int i = 0;i<numTrialDofs;i++){
       cout << "lt at cell " << c << " and dof " << i << "= " << integrals(c,i) << endl;
     }
-  }!
+  }
  
   double tol = 1e-12;
   double maxDiff;
