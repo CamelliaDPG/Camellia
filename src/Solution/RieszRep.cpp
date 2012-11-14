@@ -153,10 +153,16 @@ void RieszRep::computeRieszRep(){
     _rieszRepDofs[cellID] = dofs;
   }
   distributeDofs();
+  _repsNotComputed = false;
 }
 
 double RieszRep::getNorm(){
-  
+
+  if (_repsNotComputed){    
+    cout << "Computing riesz rep dofs" << endl;
+    computeRieszRep();
+  }
+
   vector< ElementPtr > allElems = _mesh->activeElements(); 
   vector< ElementPtr >::iterator elemIt;     
   double normSum = 0.0;
@@ -269,7 +275,10 @@ void RieszRep::distributeDofs(){
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache){
 
-  //
+  if (_repsNotComputed){
+    cout << "Computing riesz rep dofs" << endl;
+    computeRieszRep();
+  }
   
   vector< ElementPtr > allElems = _mesh->elements();
 
