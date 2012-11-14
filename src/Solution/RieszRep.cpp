@@ -121,16 +121,17 @@ void RieszRep::computeRieszRep(){
         R_V(i,j) = ipMatrix(0,i,j);
       }
     }
+    Epetra_SerialDenseMatrix rhsVectorCopy = rhsVector;
     rhsValues.clear();
     if (_printAll){
       cout << "rhs vector values for cell " << cellID << " are = " << rhsVector << endl;
     }
     
-    //    cout << "matrix = " << R_V << endl;
     Epetra_SerialDenseSolver solver;
     Epetra_SerialDenseMatrix rieszRepDofs(numTestDofs,1);
     solver.SetMatrix(R_V);
     solver.SetVectors(rieszRepDofs, rhsVector);        
+
     bool equilibrated = false;
     if ( solver.ShouldEquilibrate() ) {
       solver.EquilibrateMatrix();
@@ -142,13 +143,22 @@ void RieszRep::computeRieszRep(){
       solver.UnequilibrateLHS();   
 
     Epetra_SerialDenseMatrix normSq(1,1);
-    rieszRepDofs.Multiply(true,rhsVector, normSq); // equivalent to e^T * R_V * e    
+    rieszRepDofs.Multiply(true,rhsVectorCopy, normSq); // equivalent to e^T * R_V * e    
     _rieszRepNormSquared[cellID] = normSq(0,0);
-  
+
+    bool printOutRiesz = false;
+    if (printOutRiesz){
+      cout << " ============================ In RIESZ ==========================" << endl;
+      cout << "matrix = " << R_V << endl;
+      cout << "rhs = " << rhsVectorCopy << endl;
+      cout << "dofs = " << rieszRepDofs << endl;
+      cout << " ================================================================" << endl;
+    }
+
+
     FieldContainer<double> dofs(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
       dofs(i) = rieszRepDofs(i,0);
-      //      cout << "dofs = " << dofs(i) << endl;
     }
     _rieszRepDofs[cellID] = dofs;
   }
