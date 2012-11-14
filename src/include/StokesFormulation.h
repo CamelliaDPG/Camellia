@@ -371,7 +371,7 @@ class VGPStokesFormulation : public StokesFormulation {
   // fields:
   VarPtr u1, u2, p, sigma11, sigma12, sigma21, sigma22;
   // fluxes & traces:
-  VarPtr u1hat, u2hat, sigma1n, sigma2n;
+  VarPtr u1hat, u2hat, t1n, t2n;
   // tests:
   VarPtr tau1, tau2, q, v1, v2;
   BFPtr _bf;
@@ -421,8 +421,8 @@ public:
     u1hat = varFactory.traceVar(VGP_U1HAT_S);
     u2hat = varFactory.traceVar(VGP_U2HAT_S);
     
-    sigma1n = varFactory.fluxVar(VGP_T1HAT_S);
-    sigma2n = varFactory.fluxVar(VGP_T2HAT_S);
+    t1n = varFactory.fluxVar(VGP_T1HAT_S);
+    t2n = varFactory.fluxVar(VGP_T2HAT_S);
     u1 = varFactory.fieldVar(VGP_U1_S);
     u2 = varFactory.fieldVar(VGP_U2_S);
     sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
@@ -455,13 +455,13 @@ public:
     _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
     _bf->addTerm(- mu * sigma12,v1->dy());
     _bf->addTerm( p, v1->dx() );
-    _bf->addTerm(- sigma1n, v1);
+    _bf->addTerm( t1n, v1);
     
     // v2:
     _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
     _bf->addTerm(- mu * sigma22,v2->dy());
     _bf->addTerm(p, v2->dy());
-    _bf->addTerm(- sigma2n, v2);
+    _bf->addTerm( t2n, v2);
     
     // q:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)

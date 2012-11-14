@@ -24,6 +24,11 @@ void IncompressibleFormulationsTests::setup() {
   sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   p_vgp = varFactory.fieldVar(VGP_P_S);
   
+  u1hat_vgp = vgpVarFactory.traceVar(VGP_U1HAT_S);
+  u2hat_vgp = vgpVarFactory.traceVar(VGP_U2HAT_S);
+  t1n_vgp = vgpVarFactory.fluxVar(VGP_T1HAT_S);
+  t2n_vgp = vgpVarFactory.fluxVar(VGP_T2HAT_S);
+  
   v1_vgp = varFactory.testVar(VGP_V1_S, HGRAD);
   v2_vgp = varFactory.testVar(VGP_V2_S, HGRAD);
   tau1_vgp = varFactory.testVar(VGP_TAU1_S, HDIV);
@@ -49,6 +54,8 @@ void IncompressibleFormulationsTests::setup() {
   // set up test containers.  Each test should try every combination here:
   // exact solutions:
   
+  polyExactFunctions.clear();
+  
   PolyExactFunctions exactFxns;
   
 //  exactFxns.push_back( make_pair(zero, 0) ); // u1
@@ -60,6 +67,20 @@ void IncompressibleFormulationsTests::setup() {
   exactFxns.push_back( make_pair(zero, 0) ); // u1
   exactFxns.push_back( make_pair(zero, 0) ); // u2 (chosen to have zero divergence)
   exactFxns.push_back( make_pair(y, 1) ); // p: odd function: zero mean on our domain
+  polyExactFunctions.push_back(exactFxns);
+  exactFxns.clear();
+  
+  // nonzero u, sigma diagonal only
+  exactFxns.push_back( make_pair(x, 1) );    // u1
+  exactFxns.push_back( make_pair(-y, 1) );   // u2 (chosen to have zero divergence)
+  exactFxns.push_back( make_pair(zero, 0) );
+  polyExactFunctions.push_back(exactFxns);
+  exactFxns.clear();
+  
+  // nonzero u, sigma off-diagonal only
+  exactFxns.push_back( make_pair(y, 1) ); // u1
+  exactFxns.push_back( make_pair(x, 1) ); // u2 (chosen to have zero divergence)
+  exactFxns.push_back( make_pair(zero, 0) );
   polyExactFunctions.push_back(exactFxns);
   exactFxns.clear();
   
@@ -80,10 +101,14 @@ void IncompressibleFormulationsTests::setup() {
 //  meshDimensions.push_back( make_pair(1, 2));
   meshDimensions.push_back( make_pair(2, 1));
   
-  pToAddValues.push_back(1);
+  pToAddValues.push_back(2);
   
-  muValues.push_back(1.0);
-  muValues.push_back(0.1);
+  double mu = 1.0;
+  muValues.clear();
+  for (int i=0; i<4; i++) {
+    muValues.push_back(mu);
+    mu /= 10;
+  }
   
   entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
   
@@ -99,13 +124,30 @@ void IncompressibleFormulationsTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = -1.0;
   quadPoints(3,1) = 1.0;
+  
+  quadPointsKovasznay.resize(4,2);
+  quadPointsKovasznay(0,0) = -0.5; // x1
+  quadPointsKovasznay(0,1) =  0.0; // y1
+  quadPointsKovasznay(1,0) =  1.5;
+  quadPointsKovasznay(1,1) =  0.0;
+  quadPointsKovasznay(2,0) =  1.5;
+  quadPointsKovasznay(2,1) =  2.0;
+  quadPointsKovasznay(3,0) = -0.5;
+  quadPointsKovasznay(3,1) =  2.0;
+}
+
+void IncompressibleFormulationsTests::teardown() {
+  polyExactFunctions.clear();
+  meshDimensions.clear();
+  pToAddValues.clear();
+  muValues.clear();
 }
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "Running IncompressibleFormulationsTests.  (This takes 30-60 seconds.)" << endl;
   
   setup();
-  if (testVGPNavierStokesFormulationConsistency()) {
+  if (testVGPStokesFormulationCorrectness()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -119,37 +161,53 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   teardown();
   
   setup();
-  if (testVGPStokesFormulationConsistency()) {
+  if (testVGPNavierStokesFormulationConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
   setup();
-  if (testVGPStokesFormulationCorrectness()) {
+  if (testVGPNavierStokesFormulationKovasnayConvergence()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  setup();
+  if (testVGPStokesFormulationConsistency()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
 }
 
-bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, Teuchos::RCP<Mesh> mesh) {
+bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr f2,
+                                                     Teuchos::RCP<Mesh> mesh, double tol) {
+  // if one of the functions is boundaryValueOnly, we compare the functions on the boundary.
+  bool boundaryValueOnly = f1->boundaryValueOnly() || f2->boundaryValueOnly();
   bool functionsAgree = true;
-  if (f1->isZero() && f2->isZero()) {
-    return true;
-  }
-  
-  if (f1->isZero() != f2->isZero()) {
-    cout << "f1->isZero() != f2->isZero()\n";
-  }
+  double pointwiseTol = tol * 10; // relax tolerance somewhat for pointwise comparisons
   
   if (f2->rank() != f1->rank() ) {
     cout << "f1->rank() " << f1->rank() << " != f2->rank() " << f2->rank() << endl;
     return false;
   }
-  if (f1->boundaryValueOnly() != f2->boundaryValueOnly()) {
+  if (f1->isZero() && f2->isZero()) {
+    // then we can exit early.  Note that not every zero function knows it is zero,
+    // so we can't return false just because f1->isZero() != f2->isZero().
+    return true;
+  }
+  
+  FunctionPtr diff = f1-f2;
+  double l2NormOfDifference = sqrt((diff * diff)->integrate(mesh));
+  
+  if (l2NormOfDifference > tol) {
+    cout << "f1 != f2; L^2 norm of difference on mesh = " << l2NormOfDifference << endl;
     return false;
   }
+  
   // TODO: rewrite this to compute in distributed fashion
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   
@@ -165,7 +223,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
     // TODO: replace with non-global variant...
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, f1->boundaryValueOnly());
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, boundaryValueOnly);
     
     int numSides = 1; // interior only
     if (f1->boundaryValueOnly()) {
@@ -173,7 +231,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
     }
     for (int sideIndex = 0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr basisCacheForTest;
-      if (f1->boundaryValueOnly()) {
+      if (boundaryValueOnly) {
         basisCacheForTest = basisCache->getSideBasisCache(sideIndex);
       } else {
         basisCacheForTest = basisCache;
@@ -191,10 +249,9 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
       FieldContainer<double> f2Values(dim);
       f1->values(f1Values,basisCacheForTest);
       f2->values(f2Values,basisCacheForTest);
-      
-      double tol = 1e-14;
+    
       double maxDiff;
-      functionsAgree = TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff);
+      functionsAgree = TestSuite::fcsAgree(f1Values,f2Values,pointwiseTol,maxDiff);
       if ( ! functionsAgree ) {
         functionsAgree = false;
         cout << "f1->displayString(): " << f1->displayString() << endl;
@@ -210,8 +267,41 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
   return functionsAgree;
 }
 
+// tests norm of the difference
 bool IncompressibleFormulationsTests::ltsAgree(LinearTermPtr lt1, LinearTermPtr lt2,
-                                               Teuchos::RCP<Mesh> mesh, VarFactory &varFactory) {
+                                               Teuchos::RCP<Mesh> mesh, IPPtr ip, double tol) {
+//  cout << "lt1: " << lt1->displayString() << endl;
+//  cout << "lt2: " <<lt2->displayString() << endl;
+  if (lt1->isZero() && lt2->isZero()) return true;
+  LinearTermPtr diff = lt1-lt2;
+  Teuchos::RCP<RieszRep> rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, diff) );
+  rieszRep->computeRieszRep();
+  double norm = rieszRep->getNorm();
+  if (norm > tol) {
+    cout << "norm of the difference between LTs is " << norm << endl;
+    
+    // to help get a little insight into where the difference is:
+    LinearTermPtr boundaryDiff = lt1->getBoundaryOnlyPart() - lt2->getBoundaryOnlyPart();
+    Teuchos::RCP<RieszRep> boundaryRep = Teuchos::rcp( new RieszRep(mesh, ip, boundaryDiff) );
+    boundaryRep->computeRieszRep();
+    cout << "norm of the difference of boundary-only parts is " << boundaryRep->getNorm() << endl;
+    
+    
+    LinearTermPtr nonBoundaryDiff = lt1->getNonBoundaryOnlyPart() - lt2->getNonBoundaryOnlyPart();
+    Teuchos::RCP<RieszRep> nonBoundaryRep = Teuchos::rcp( new RieszRep(mesh, ip, nonBoundaryDiff) );
+    nonBoundaryRep->computeRieszRep();
+    cout << "norm of the difference of non-boundary-only parts is " << nonBoundaryRep->getNorm() << endl;
+    
+    return false;
+  } else {
+    return true;
+  }
+}
+
+// this one tests "pointwise"--i.e. evaluated at functions.  The other one tests the norm of the difference
+bool IncompressibleFormulationsTests::ltsAgree(LinearTermPtr lt1, LinearTermPtr lt2,
+                                               Teuchos::RCP<Mesh> mesh, VarFactory &varFactory,
+                                               double tol) {
   bool ltsAgree = true;
   
   if (lt1->isZero() != lt2->isZero()) {
@@ -279,7 +369,7 @@ bool IncompressibleFormulationsTests::ltsAgree(LinearTermPtr lt1, LinearTermPtr 
       FunctionPtr lt1_fxn_volume = lt1->evaluate(var_substitution, false);
       FunctionPtr lt2_fxn_volume = lt2->evaluate(var_substitution, false);
       
-      if (! functionsAgree(lt1_fxn_volume, lt2_fxn_volume, mesh) ) {
+      if (! functionsAgree(lt1_fxn_volume, lt2_fxn_volume, mesh, tol) ) {
         cout << "lt1 != lt2;\nlt1: " <<lt1->displayString() << "\nlt2: " <<lt2->displayString();
         return false;
       }
@@ -287,13 +377,31 @@ bool IncompressibleFormulationsTests::ltsAgree(LinearTermPtr lt1, LinearTermPtr 
       FunctionPtr lt1_fxn_boundary = lt1->evaluate(var_substitution, true);
       FunctionPtr lt2_fxn_boundary = lt2->evaluate(var_substitution, true);
       
-      if (! functionsAgree(lt1_fxn_boundary, lt2_fxn_boundary, mesh) ) {
+      if (! functionsAgree(lt1_fxn_boundary, lt2_fxn_boundary, mesh, tol) ) {
         return false;
       }
     }
   }
   
   return ltsAgree;
+}
+
+vector< VarPtr > IncompressibleFormulationsTests::nonZeroComponents( LinearTermPtr lt, vector< VarPtr > &varsToTry, MeshPtr mesh, IPPtr ip ) {
+  vector< VarPtr > nonZeros;
+  double tol = 1e-11;
+  for (vector< VarPtr >::iterator varIt = varsToTry.begin(); varIt != varsToTry.end(); varIt++) {
+    VarPtr var = *varIt;
+    LinearTermPtr ltFiltered = lt->getPartMatchingVariable(var);
+    Teuchos::RCP<RieszRep> rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, ltFiltered) );
+    rieszRep->computeRieszRep();
+    double norm = rieszRep->getNorm();
+    cout << "part matching var " << var->displayString() << " is: " << ltFiltered->displayString() << endl;
+    cout << "norm is " << norm << endl;
+    if (norm > tol) {
+      nonZeros.push_back(var);
+    }
+  }
+  return nonZeros;
 }
 
 bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
@@ -334,7 +442,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
         
           // create a pointer to a new mesh:
           Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                               vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+                                                        vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
           
           FunctionPtr u1_exact = exactFxns[0].first;
           FunctionPtr u2_exact = exactFxns[1].first;
@@ -362,6 +470,20 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
               cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
               cout << " exceeds tol " << tol << endl;
             }
+          }
+          
+          FunctionPtr u1_soln = Function::solution(u1_vgp, vgpStokesSolution);
+          FunctionPtr u2_soln = Function::solution(u2_vgp, vgpStokesSolution);
+          FunctionPtr p_soln  = Function::solution( p_vgp, vgpStokesSolution);
+          
+          if ( ! functionsAgree(u1_soln, u1_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPStokesFormulationConsistency(): after solve, u1_soln != u1_exact.\n";
+          }
+          if ( ! functionsAgree(u2_soln, u2_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPStokesFormulationConsistency(): after solve, u2_soln != u2_exact.\n";
+          }
+          if ( ! functionsAgree(p_soln, p_exact, mesh, tol) ) {
+            cout << "FAILURE: testVGPStokesFormulationConsistency(): after solve, p_soln != p_exact.\n";
           }
         }
       }
@@ -419,7 +541,18 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
       Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, 1, 1,
                                                     vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
       
-      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory)) {
+      double tol = 1e-14;
+      if (maxPolyOrder >= 10) {
+        // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
+        tol = 1e-10;
+      }
+      
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
+        success = false;
+      }
+      
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpStokesFormulation->bf()->graphNorm(), tol)) {
+        cout << "VGP Stokes Correctness Failure: rhsLT and expectedRHS differ, according to RieszRep norm.\n";
         success = false;
       }
     }
@@ -502,6 +635,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             // the incremental solutions have zero BCs enforced:
             BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
             Teuchos::RCP< Solution > vgpNavierStokesSolutionIncrement = Teuchos::rcp( new Solution(stokesMesh, zeroBC) );
+            vgpNavierStokesSolutionIncrement->setCubatureEnrichmentDegree( maxPolyOrder ); // can have weights with poly degree = trial degree
             
             Teuchos::RCP< VGPNavierStokesFormulation > vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(1.0 / mu,
                                                                                                                                  vgpNavierStokesSolution));
@@ -518,7 +652,6 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             
             Teuchos::RCP< RieszRep > rieszRep;
             if (useHessian) {
-              cout << "Setting Hessian Filter.\n";
               LinearTermPtr rhsLT = ((RHSEasy*) vgpNavierStokesExactSolution->rhs().get())->linearTerm();
               IPPtr ip = vgpNavierStokesFormulation->graphNorm();
               rieszRep = Teuchos::rcp( new RieszRep(stokesMesh,ip,rhsLT));
@@ -543,7 +676,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
               rieszRep->computeRieszRep();
             }
             
-            int maxIters = 20;
+            int maxIters = 100;
             vgpNavierStokesSolutionIncrement->solve();
             vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0);
 
@@ -565,7 +698,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
               vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0); // optimistic?
             }
             if (printToConsole) {
-              cout << "# iters to converge: " << i << endl;
+              string withHessian = useHessian ? "using hessian term" : "without hessian term";
+              cout << "with Re = " << 1.0 / mu << " and " << withHessian;
+              cout << ", # iters to converge: " << i << endl;
             }
             
             int cubatureDegree = maxPolyOrder;
@@ -583,6 +718,20 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   //              cout << " is within tolerance! " << tol << endl;
               }
             }
+            
+            FunctionPtr u1_soln = Function::solution(u1_vgp, vgpNavierStokesSolution);
+            FunctionPtr u2_soln = Function::solution(u2_vgp, vgpNavierStokesSolution);
+            FunctionPtr p_soln  = Function::solution( p_vgp, vgpNavierStokesSolution);
+            
+            if ( ! functionsAgree(u1_soln, u1_exact, mesh, tol) ) {
+              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u1_soln != u1_exact.\n";
+            }
+            if ( ! functionsAgree(u2_soln, u2_exact, mesh, tol) ) {
+              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u2_soln != u2_exact.\n";
+            }
+            if ( ! functionsAgree(p_soln, p_exact, mesh, tol) ) {
+              cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, p_soln != p_exact.\n";
+            }
           }
         }
       }
@@ -593,7 +742,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness() {
   bool success = true;
-  bool printToConsole = false;
+  bool printToConsole = true;
   
   Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation;
   Teuchos::RCP< Solution > vgpStokesSolution;
@@ -607,6 +756,27 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   
   // exact solution functions: store these as vector< pair< Function, int > >
   // in the order u1, u2, p, where the paired int is the polynomial degree of the function
+  
+  PolyExactFunctions kovasznaySoln; // not actually a polynomial, so we call it a 10th-degree polynomial...
+  FunctionPtr u1_k, u2_k, p_k;
+  double Re_k = 10;
+  // temp mesh to allow integration of the pressure:
+  Teuchos::RCP<Mesh> mesh_k = Mesh::buildQuadMesh(quadPoints, 5, 5,
+                                                  VGPStokesFormulation(1.0/Re_k).bf(), 5, 6);
+  NavierStokesFormulation::setKovasznay( Re_k, mesh_k, u1_k, u2_k, p_k );
+  int polyOrder = 10;
+  kovasznaySoln.push_back( make_pair(u1_k, polyOrder) );
+  kovasznaySoln.push_back( make_pair(u2_k, polyOrder) );
+  kovasznaySoln.push_back( make_pair( p_k, polyOrder) );
+  
+  // DEBUGGING: write solution to disk
+  u1_k->writeValuesToMATLABFile(mesh_k, "u1_k.m");
+  u2_k->writeValuesToMATLABFile(mesh_k, "u2_k.m");
+  p_k->writeValuesToMATLABFile(mesh_k, "p_k.m");
+  
+  double tol_k = 1e-3; // tolerance for kovasznay
+  
+  polyExactFunctions.push_back(kovasznaySoln);
   
   for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
        exactIt != polyExactFunctions.end(); exactIt++) {
@@ -628,11 +798,14 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
     
     for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
       double mu = *muIt;
-      
+      if (printToConsole) {
+        cout << "testing with mu = " << mu << endl;
+      }
+    
       vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
       int H1Order = maxPolyOrder + 1;
       int pToAdd = 1;
-      Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, 1, 1,
+      Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, 2, 2,
                                                     vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
       
       BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
@@ -666,23 +839,380 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       BFPtr stokesBF = vgpNavierStokesFormulation->stokesBF(mu);
       expectedRHS = expectedRHS - stokesBF->testFunctional(vgpNavierStokesSolution);
-            
-      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory)) {
+      
+      double tol = 1e-14;
+      if (maxPolyOrder >= 10) {
+        // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
+        tol = 1e-10;        
+      }
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: before first solve (i.e. with zero background flow), LTs disagree\n";
         success = false;
       }
+      
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, stokesBF->graphNorm(), tol)) {
+        cout << "VGP Navier-Stokes Correctness Failure: rhsLT and expectedRHS differ, according to RieszRep norm, before first solve.\n";
+        success = false;
+      }
+      
+      Teuchos::RCP<RieszRep> rieszRepRHS = Teuchos::rcp( new RieszRep(mesh, vgpNavierStokesFormulation->graphNorm(), rhsLT));
+      rieszRepRHS->computeRieszRep();
+      if (rieszRepRHS->getNorm() < tol) {
+        cout << "norm of RHS with zero background flow should not be zero! " << rieszRepRHS->getNorm() << endl;
+        success = false;
+      }
+      
+      Teuchos::RCP<RieszRep> rieszRepRHS_naiveNorm = Teuchos::rcp( new RieszRep(mesh, stokesBF->naiveNorm(), rhsLT) );
+      rieszRepRHS_naiveNorm->computeRieszRep();
+      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
       vgpNavierStokesSolution->setRHS(rhs);
       vgpNavierStokesSolution->setIP(vgpNavierStokesFormulation->graphNorm());
       vgpNavierStokesSolution->solve();
       
-      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory)) {
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: after first solve (i.e. with non-zero background flow), LTs disagree\n";
         success = false;
+      }
+      
+      if ( !ltsAgree(rhsLT, expectedRHS, mesh, stokesBF->graphNorm(), tol)) {
+        cout << "VGP Navier-Stokes Correctness Failure: rhsLT and expectedRHS differ, according to RieszRep norm, after first solve.\n";
+        success = false;
+      }
+      
+      // now, try projecting the exact solution:
+      double Re = 1.0 / mu;
+      map<int, FunctionPtr > solnMap = vgpSolutionMap(u1_exact, u2_exact, p_exact, Re);
+      vgpNavierStokesSolution->projectOntoMesh(solnMap);
+      
+      if (u1_exact->isZero() && u2_exact->isZero()) {
+        if (functionsAgree(p_exact,y,mesh)) {
+          // for this case, check some hand-computed values:
+          IPPtr ip = stokesBF->naiveNorm();
+          // test functional: stokes background flow = - v2
+//          LinearTermPtr testFunctionalExpected = - v2_vgp;
+          // experimentally, try with the IBP version:
+          // (y, div v) - < y, v * n>
+          FunctionPtr n = Function::normal();
+          LinearTermPtr testFunctionalExpected = y * v1_vgp->dx() + y * v2_vgp->dy() - y * n->x() * v1_vgp - y * n->y() * v2_vgp;
+          LinearTermPtr testFunctionalActual = stokesBF->testFunctional(vgpNavierStokesSolution);
+          if (! ltsAgree(testFunctionalExpected, testFunctionalActual, mesh, ip) ) {
+            success = false;
+            cout << "for p=y solution, bf->testFunctional doesn't match expected (-v2 expected, actual is ";
+            cout << testFunctionalActual->displayString() << ")" << endl;
+            cout << "boundary-only part of bf->testFunctional is: " << testFunctionalActual->getBoundaryOnlyPart()->displayString() << endl;
+            
+            // now, try to get clearer on where they differ
+            vector< VarPtr > testVars = vgpTests;
+            for ( vector< VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
+              VarPtr testVar = *testVarIt;
+              map< int, FunctionPtr > varFunctions;
+              if (testVar->rank() == 0) {
+                varFunctions[testVar->ID()] = y;
+              } else if (testVar->rank() == 1) {
+                varFunctions[testVar->ID()] = Function::vectorize(x, y);
+              }
+              FunctionPtr fxnExpected = testFunctionalExpected->evaluate(varFunctions, true); // true: boundary part
+              FunctionPtr fxnActual = testFunctionalActual->evaluate(varFunctions, true);
+              if ( functionsAgree(fxnExpected, fxnActual, mesh) ) {
+                cout << "boundary parts appear to agree for var " << testVar->displayString() << endl;
+              } else {
+                cout << "boundary parts disagree for var " << testVar->displayString() << endl;
+                cout << "expected: " << fxnExpected->displayString() << endl;
+                cout << "actual: " << fxnActual->displayString() << endl;
+              }
+            }
+            
+            // now, let's check that the background flow is what we expect it to be:
+            FunctionPtr u1hat_soln = Function::solution(u1hat_vgp, vgpNavierStokesSolution);
+            FunctionPtr u2hat_soln = Function::solution(u2hat_vgp, vgpNavierStokesSolution);
+            FunctionPtr t1n_soln = Function::solution(t1n_vgp, vgpNavierStokesSolution);
+            FunctionPtr t2n_soln = Function::solution(t2n_vgp, vgpNavierStokesSolution);
+            
+            FunctionPtr n = Function::normal();
+            FunctionPtr sideParity = Function::sideParity();
+            FunctionPtr t1n_exact = - p_exact * n->x() * sideParity;
+            FunctionPtr t2n_exact = - p_exact * n->y() * sideParity;
+            
+            if ( !functionsAgree(u1hat_soln - u1_exact, zero, mesh) ) {
+              cout << "u1_hat != 0 \n";
+            }
+            if ( !functionsAgree(u2hat_soln - u2_exact, zero, mesh) ) {
+              cout << "u2_hat != 0 \n";
+            }
+            if ( !functionsAgree(t1n_soln - t1n_exact, zero, mesh) ) {
+              cout << "t1n_soln != t1n_exact \n";
+            }
+            if ( !functionsAgree(t2n_soln - t2n_exact, zero, mesh) ) {
+              cout << "t2n_soln != t2n_exact \n";
+            }
+            
+            success = false;
+          }
+//          cout << "RHS for p=y solution is " << expectedRHS->displayString() << endl;
+        }
+      }
+      
+      // now, for polynomials, the RHS should be zero.  For Kovasznay, it should be small-ish.
+      
+      
+      rieszRepRHS_naiveNorm->computeRieszRep();
+      cout << "norm of RHS with exact solution projected, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
+      
+      rieszRepRHS->computeRieszRep();
+      double norm = rieszRepRHS->getNorm();
+      if (maxPolyOrder < 10) { // polynomial solution: should have essentially zero RHS
+//        cout << "norm of RHS after projection of polynomial exact solution: " << norm << endl;
+        if (norm > tol) {
+          cout << "Failure: Navier-Stokes does not have a zero RHS after exact solution projected; norm of RHS is " << norm << "\n";
+          vector< VarPtr > nonZeros = nonZeroComponents(expectedRHS, vgpTests, mesh, stokesBF->naiveNorm());
+          cout << "Expected RHS is non-zero in components: " << endl;
+          for (vector< VarPtr >::iterator varIt = nonZeros.begin(); varIt != nonZeros.end(); varIt++) {
+            VarPtr var = *varIt;
+            cout << var->displayString() << ": " << expectedRHS->getPartMatchingVariable(var)->displayString() << endl;
+          }
+          
+          success = false;
+        }
+      } else {
+        if (norm > tol_k) {
+          success = false;
+          cout << "Failure: Norm of RHS after Kovasznay solution projected onto mesh exceeds tolerance: " << norm << endl;
+        }
       }
     }
   }
  
+  return success;
+}
+
+map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
+                                                                       double Re) {
+  
+  double mu = 1.0 / Re;
+  
+  cout << "Returning solution for Re = " << Re << endl;
+  
+  map<int, FunctionPtr > solnMap;
+  solnMap[ u1_vgp->ID() ] = u1_exact;
+  solnMap[ u2_vgp->ID() ] = u2_exact;
+  solnMap[  p_vgp->ID() ] =  p_exact;
+  solnMap[  sigma11_vgp->ID() ] = u1_exact->dx();
+  solnMap[  sigma12_vgp->ID() ] = u1_exact->dy();
+  solnMap[  sigma21_vgp->ID() ] = u2_exact->dx();
+  solnMap[  sigma22_vgp->ID() ] = u2_exact->dy();
+  
+  solnMap[ u1hat_vgp->ID() ] = u1_exact;
+  solnMap[ u2hat_vgp->ID() ] = u2_exact;
+  
+  FunctionPtr t1 = Function::vectorize( mu * u1_exact->dx() - p_exact, mu * u1_exact->dy() );
+  FunctionPtr t2 = Function::vectorize( mu * u2_exact->dx(), mu * u2_exact->dy() - p_exact);
+  FunctionPtr n = Function::normal();
+  FunctionPtr sgn_n = Function::sideParity();
+  // since \hat {t}_n is defined as t * n * sgn_n to make it uniquely valued,
+  // that's what we should project...
+  solnMap[ t1n_vgp->ID() ] = t1 * n * sgn_n;
+  solnMap[ t2n_vgp->ID() ] = t2 * n * sgn_n;
+  
+  return solnMap;
+}
+
+bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConvergence() {
+  bool success = true;
+  double tol = 1e-11;
+  bool printToConsole = true;
+  vector<bool> useHessianList;
+  useHessianList.push_back(false);
+  useHessianList.push_back(true);
+  
+  bool useNaiveNorm = true;
+  cout << "testVGPNavierStokesFormulationKovasnayConvergence: useNaiveNorm = " << useNaiveNorm << endl;
+  
+  meshDimensions.clear();
+  meshDimensions.push_back( make_pair(5,5) ); // fine-ish mesh...
+  
+  muValues.clear();
+  muValues.push_back(0.1);  // this may be the only valid one for Kovasznay; I'm not sure...
+  
+  // exact solution functions: store these as vector< pair< Function, int > >
+  // in the order u1, u2, p, where the paired int is the polynomial degree of the function
+  
+  for (vector<bool>::iterator useHessianIt = useHessianList.begin();
+       useHessianIt != useHessianList.end(); useHessianIt++) {
+    bool useHessian = *useHessianIt;
+    double maxPolyOrder = 3; // just picking something for Kovasznay...
+    
+    FunctionPtr u1_exact, u2_exact, p_exact;
+        
+    int H1Order = maxPolyOrder + 1;
+    for (vector<int>::iterator pToAddIt = pToAddValues.begin(); pToAddIt != pToAddValues.end(); pToAddIt++) {
+      int pToAdd = *pToAddIt;
+      
+      for (vector< pair<int, int> >::iterator meshDimIt = meshDimensions.begin(); meshDimIt != meshDimensions.end(); meshDimIt++) {
+        int horizontalCells = meshDimIt->first, verticalCells = meshDimIt->second;
+        
+        for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
+          double mu = *muIt;
+          
+          Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
+          
+          // create a pointer to a new mesh:
+          Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
+                                                        vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+          
+          double Re = 1.0 / mu;
+          NavierStokesFormulation::setKovasznay( Re, mesh, u1_exact, u2_exact, p_exact );
+          
+          if (printToConsole) {
+            cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;
+            cout << "u1_exact: " << u1_exact->displayString() << endl;
+            cout << "u2_exact: " << u2_exact->displayString() << endl;
+            cout << "p_exact: " << p_exact->displayString() << endl;
+          }
+          
+          SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+          
+          BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
+          
+          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                              vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+          
+          Teuchos::RCP< Solution > vgpNavierStokesSolution = Teuchos::rcp( new Solution(stokesMesh, vgpBC) );
+          
+          // the incremental solutions have zero BCs enforced:
+          BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
+          Teuchos::RCP< Solution > vgpNavierStokesSolutionIncrement = Teuchos::rcp( new Solution(stokesMesh, zeroBC) );
+          vgpNavierStokesSolutionIncrement->setCubatureEnrichmentDegree( maxPolyOrder ); // can have weights with poly degree = trial degree
+          
+          Teuchos::RCP< VGPNavierStokesFormulation > vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation( Re,
+                                                                                                                               vgpNavierStokesSolution));
+          
+          Teuchos::RCP<ExactSolution> vgpNavierStokesExactSolution = vgpNavierStokesFormulation->exactSolution(u1_exact, u2_exact,
+                                                                                                               p_exact, entireBoundary);
+          
+          IPPtr ip;
+          if ( useNaiveNorm ) {
+            ip =  vgpNavierStokesFormulation->bf()->naiveNorm();
+          } else {
+            ip = vgpNavierStokesFormulation->graphNorm();
+          }
+          
+          RHSPtr rhs = vgpNavierStokesExactSolution->rhs();
+          
+          vgpNavierStokesSolution->setRHS( rhs );
+          vgpNavierStokesSolution->setIP( ip );
+          
+          vgpNavierStokesSolutionIncrement->setRHS( rhs );
+          vgpNavierStokesSolutionIncrement->setIP( ip );
+          
+          Teuchos::RCP< RieszRep > rieszRep;
+          if (useHessian) {
+            LinearTermPtr rhsLT = ((RHSEasy*) rhs.get())->linearTerm();
+
+            rieszRep = Teuchos::rcp( new RieszRep(stokesMesh,ip,rhsLT));
+            FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
+            FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
+            // set up the hessian term itself:
+            // we want basically u * sigma * v where "*" is a dot product
+            // u * sigma = (u1 sigma11 + u2 sigma12, u1 sigma21 + u2 sigma22)
+            BFPtr hessianBF = Teuchos::rcp( new BF(vgpVarFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL)) );
+            hessianBF->addTerm(v1_rep * u1_vgp, sigma11_vgp);
+            hessianBF->addTerm(v1_rep * u2_vgp, sigma12_vgp);
+            hessianBF->addTerm(v2_rep * u1_vgp, sigma21_vgp);
+            hessianBF->addTerm(v2_rep * u2_vgp, sigma22_vgp);
+            // now the symmetric counterparts:
+            hessianBF->addTerm(sigma11_vgp, v1_rep * u1_vgp);
+            hessianBF->addTerm(sigma12_vgp, v1_rep * u2_vgp);
+            hessianBF->addTerm(sigma21_vgp, v2_rep * u1_vgp);
+            hessianBF->addTerm(sigma22_vgp, v2_rep * u2_vgp);
+            
+            Teuchos::RCP< HessianFilter > hessianFilter = Teuchos::rcp( new HessianFilter(hessianBF) );
+            vgpNavierStokesSolutionIncrement->setFilter(hessianFilter);
+            rieszRep->computeRieszRep();
+          }
+          
+          map<int, FunctionPtr > solnMap = vgpSolutionMap(u1_exact, u2_exact, p_exact, Re);
+          vgpNavierStokesSolution->projectOntoMesh( solnMap );
+          int maxIters = 0;
+          // solve with the true BCs (commented out because we project the exact solution)
+//          vgpNavierStokesSolution->solve();
+          vgpNavierStokesSolutionIncrement->solve();
+          vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0);
+          
+          FunctionPtr u1_incr = Function::solution(u1_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr u2_incr = Function::solution(u2_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr p_incr = Function::solution(p_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, vgpNavierStokesSolutionIncrement);
+          
+          FunctionPtr u1hat_incr = Function::solution(u1hat_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr u2hat_incr = Function::solution(u2hat_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr t1n_incr = Function::solution(t1n_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr t2n_incr = Function::solution(t2n_vgp, vgpNavierStokesSolutionIncrement);
+          
+/*          cout << "u1^2 = " << (u1_incr * u1_incr)->integrate(mesh) << endl;
+          cout << "u2^2 = " << (u2_incr * u2_incr)->integrate(mesh) << endl;
+          cout << "p^2 = " << (p_incr * p_incr)->integrate(mesh) << endl;
+          cout << "sigma11^2 = " << (sigma11_incr * sigma11_incr)->integrate(mesh) << endl;
+          cout << "sigma12^2 = " << (sigma12_incr * sigma12_incr)->integrate(mesh) << endl;
+          cout << "sigma21^2 = " << (sigma21_incr * sigma21_incr)->integrate(mesh) << endl;
+          cout << "sigma22^2 = " << (sigma22_incr * sigma22_incr)->integrate(mesh) << endl;
+          
+          u1_incr->writeValuesToMATLABFile(mesh, "u1_incr.m");
+          u2_incr->writeValuesToMATLABFile(mesh, "u2_incr.m");
+          p_incr->writeValuesToMATLABFile(mesh, "p_incr.m");
+          sigma11_incr->writeValuesToMATLABFile(mesh, "sigma11_incr.m");
+          sigma12_incr->writeValuesToMATLABFile(mesh, "sigma12_incr.m");
+          sigma21_incr->writeValuesToMATLABFile(mesh, "sigma21_incr.m");
+          sigma22_incr->writeValuesToMATLABFile(mesh, "sigma22_incr.m");
+          
+          u1hat_incr->writeBoundaryValuesToMATLABFile(mesh, "u1hat_incr.dat");
+          u2hat_incr->writeBoundaryValuesToMATLABFile(mesh, "u2hat_incr.dat");
+          t1n_incr->writeBoundaryValuesToMATLABFile(mesh, "t1n_incr.dat");
+          t2n_incr->writeBoundaryValuesToMATLABFile(mesh, "t2n_incr.dat");*/
+          
+          FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+          
+          int i=0;
+          while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (i<maxIters) )  {
+            i++;
+            
+            if ( rieszRep.get() ) {
+              rieszRep->computeRieszRep();
+            }
+            
+            vgpNavierStokesSolutionIncrement->solve();
+            vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0); // optimistic?
+          }
+          if (printToConsole) {
+            string withHessian = useHessian ? " using hessian term " : " without hessian term ";
+            cout << "with Re = " << 1.0 / mu << " and " << withHessian;
+            cout << ", # iters to converge: " << i << endl;
+          }
+          
+          double l2NormOfIncr = sqrt(l2_incr->integrate(mesh));
+          if (l2NormOfIncr > tol) {
+            string withHessian = useHessian ? "using the hessian" : "not using the hessian";
+            cout << "Kovasnay solution failed to converge while " << withHessian << "; l2NormOfIncr = " << l2NormOfIncr << endl;
+            success = false;
+          }
+
+          int cubatureDegree = maxPolyOrder;
+          for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
+            VarPtr field = *fieldIt;
+            double l2Error = vgpNavierStokesExactSolution->L2NormOfError(*vgpNavierStokesSolution, field->ID(), cubatureDegree);
+            if (printToConsole) {
+              cout << "Kovasznay solution has ";
+              cout << "L^2 error of " << l2Error << " for variable " << field->displayString() << "." << endl;
+            }
+          }
+          
+        }
+      }
+    }
+  }
   return success;
 }
 
