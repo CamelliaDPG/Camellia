@@ -1637,7 +1637,7 @@ void Solution::computeErrorRepresentation() {
   vector<ElementTypePtr>::iterator elemTypeIt;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true,_cubatureEnrichmentDegree));
     
     Teuchos::RCP<DofOrdering> testOrdering = elemTypePtr->testOrderPtr;
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
@@ -1790,7 +1790,7 @@ void Solution::computeResiduals() {
     FieldContainer<double> residuals(numCells,numTestDofs);
     
     // prepare basisCache and cellIDs
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,false,_cubatureEnrichmentDegree));
     bool createSideCacheToo = true;
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
     _rhs->integrateAgainstStandardBasis(residuals, testOrdering, basisCache);
@@ -3086,8 +3086,10 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
   int cellID = elem->cellID();
 
   ElementTypePtr elemTypePtr = elem->elementType();   
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
-  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
+  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
+  //  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
+  //  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
     
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
