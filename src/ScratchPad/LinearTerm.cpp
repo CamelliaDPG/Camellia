@@ -604,6 +604,25 @@ LinearTermPtr LinearTerm::getPart(bool boundaryOnlyPart) {
   return lt;
 }
 
+LinearTermPtr LinearTerm::getPartMatchingVariable( VarPtr varToMatch ) {
+  LinearTermPtr lt = Teuchos::rcp( new LinearTerm );
+  for (vector< LinearSummand >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++) {
+    LinearSummand ls = *lsIt;
+    
+    FunctionPtr f = ls.first;
+    VarPtr var = ls.second;
+    
+    if (var->ID() == varToMatch->ID()) {
+      if (lt.get()) {
+        lt = lt + f * var;
+      } else {
+        lt = f * var;
+      }
+    }
+  }
+  return lt;
+}
+
 FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
   // and if boundaryPart is true, then we exclude terms that are defined everywhere
