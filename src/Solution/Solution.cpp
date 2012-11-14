@@ -109,11 +109,11 @@ double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   return condest;
 }
 
-double Solution::cubatureEnrichmentDegree() const {
+int Solution::cubatureEnrichmentDegree() const {
   return _cubatureEnrichmentDegree;
 }
 
-void Solution::setCubatureEnrichmentDegree(double value) {
+void Solution::setCubatureEnrichmentDegree(int value) {
   _cubatureEnrichmentDegree = value;
 }
 
