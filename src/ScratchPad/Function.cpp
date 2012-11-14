@@ -24,6 +24,7 @@ public:
   // for reasons of efficiency, may want to implement div() and grad() as well
   
   string displayString();
+  bool boundaryValueOnly();
 };
 
 Function::Function() {
@@ -522,6 +523,12 @@ FunctionPtr Function::normal() { // unit outward-facing normal on each element b
   return _normal;
 }
 
+FunctionPtr Function::sideParity() { // canonical direction on boundary (used for defining fluxes)
+  static FunctionPtr _sideParity = Teuchos::rcp( new SideParityFunction );
+  return _sideParity;
+}
+
+
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
 }
@@ -653,7 +660,7 @@ void ExactSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr
 
 string ProductFunction::displayString() {
   ostringstream ss;
-  ss << _f1->displayString() << " " << _f2->displayString();
+  ss << _f1->displayString() << " \\cdot " << _f2->displayString();
   return ss.str();
 }
 
@@ -990,8 +997,16 @@ void ScalarFunctionOfNormal::values(FieldContainer<double> &values, BasisCachePt
   }
 }
 
+SideParityFunction::SideParityFunction() : Function(0) {
+//  cout << "SideParityFunction constructor.\n";
+}
+
 bool SideParityFunction::boundaryValueOnly() {
   return true;
+}
+
+string SideParityFunction::displayString() {
+  return "sgn(n)";
 }
 
 void SideParityFunction::values(FieldContainer<double> &values, BasisCachePtr sideBasisCache) {
@@ -1032,6 +1047,23 @@ FunctionPtr UnitNormalFunction::y() {
 
 bool UnitNormalFunction::boundaryValueOnly() {
   return true;
+}
+
+string UnitNormalFunction::displayString() {
+  if (_comp == -1) {
+    return " \\boldsymbol{n} ";
+  } else {
+    if (_comp == 0) {
+      return " n_x ";
+    }
+    if (_comp == 1) {
+      return " n_y ";
+    }
+    if (_comp == 2) {
+      return " n_z ";
+    }
+    return "UnitNormalFunction with unexpected component";
+  }
 }
 
 void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -1298,6 +1330,10 @@ FunctionPtr Yn::dy() {
 SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {
   _var = var;
   _soln = soln;
+}
+
+bool SimpleSolutionFunction::boundaryValueOnly() {
+  return (_var->varType() == FLUX) || (_var->varType() == TRACE);
 }
 
 string SimpleSolutionFunction::displayString() {
