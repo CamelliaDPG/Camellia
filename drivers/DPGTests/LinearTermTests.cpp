@@ -1010,7 +1010,10 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   double sidelengthOfCell = 1.0 / nCells;
   DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
   int dofForField = trialOrdering->getDofIndex(u->ID(), 0);
-  vector<int> dofsForFlux = trialOrdering->getDofIndices(beta_n_u_hat->ID());
+  vector<int> dofsForFlux;
+  for (int sideIndex=0; sideIndex < trialOrdering->getNumSidesForVarID(beta_n_u_hat->ID()); sideIndex++) {
+    dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 0, sideIndex));
+  }
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     expectedIntegrals(cellIndex, dofForField) = areaPerCell;
     for (vector<int>::iterator dofIt = dofsForFlux.begin(); dofIt != dofsForFlux.end(); dofIt++) {
@@ -1018,6 +1021,8 @@ bool LinearTermTests::testIntegrateMixedBasis() {
       expectedIntegrals(cellIndex, fluxDofIndex) = sidelengthOfCell;
     }
   }
+  
+//  cout << "expectedIntegrals:\n" << expectedIntegrals;
 
   // setup: with constant degrees of freedom, we expect that the integral of int_dK (flux) + int_K (field) will be ones for each degree of freedom, assuming the basis functions for these constants field/flux variables are just C = 1.0.  
   //
@@ -1027,11 +1032,11 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   LinearTermPtr field =  1.0 * u;
   lt->addTerm(field,true);
   lt->integrate(integrals, elemType->trialOrderPtr, basisCache);
-  for (int c = 0;c<numCells;c++){
-    for (int i = 0;i<numTrialDofs;i++){
-      cout << "lt at cell " << c << " and dof " << i << "= " << integrals(c,i) << endl;
-    }
-  }
+//  for (int c = 0;c<numCells;c++) {
+//    for (int i = 0;i<numTrialDofs;i++){
+//      cout << "lt at cell " << c << " and dof " << i << "= " << integrals(c,i) << endl;
+//    }
+//  }
  
   double tol = 1e-12;
   double maxDiff;

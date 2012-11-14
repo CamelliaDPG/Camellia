@@ -201,6 +201,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
           numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
           ltValueDim[2] = numPoints;
           ltValues.resize(ltValueDim);
+          if (thisOrdering->getNumSidesForVarID(varID) > 1) {
+            varDofIndices = thisOrdering->getDofIndices(varID,sideIndex);
+          }
           bool naturalBoundaryValuesOnly = true; // don't restrict volume summands to boundary
           this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
           // compute integrals:
@@ -243,22 +246,6 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
         this->values(ltValues, varID, basis, sideBasisCache, applyCubatureWeights, naturalBoundaryValuesOnly);
         if ( this->termType() == FLUX ) {
           multiplyFluxValuesByParity(ltValues, sideBasisCache);
-          /*int numFields = ltValues.dimension(1);
-          int numPoints = ltValues.dimension(2);
-          // we need to multiply ltValues' entries by the parity of the normal, since
-          // the trial implicitly contains an outward normal, and we need to adjust for the fact
-          // that the neighboring cells have opposite normal
-          // ltValues should have dimensions (numCells,numFields,numCubPointsSide)
-          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            double parity = volumeCache->getCellSideParities()(cellIndex,sideIndex);
-            if (parity != 1.0) {  // otherwise, we can just leave things be...
-              for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
-                for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-                  ltValues(cellIndex,fieldIndex,ptIndex) *= parity;
-                }
-              }
-            }
-          }*/
         }
         vector<int> varDofIndices = thisFluxOrTrace ? thisOrdering->getDofIndices(varID,sideIndex)
         : thisOrdering->getDofIndices(varID);
