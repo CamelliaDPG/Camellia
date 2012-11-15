@@ -2,8 +2,6 @@ project(LocalConservation)
 
 add_executable(ConservativeConfusion ConfusionDriver.cpp)
 
-add_executable(BasicConfusion BasicConfusionDriver.cpp)
-
 add_executable(SimpleConfusion SimpleConfusion.cpp)
 
 add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)
