@@ -133,6 +133,8 @@ public:
   string TeXBestApproximationComparisonTable(const vector<int> &trialIDs, const string &filePathPrefix="");
   string TeXNumGlobalDofsTable(const string &filePathPrefix="");
   
+  void setSolutions( vector< SolutionPtr > &solutions); // must be in the right order, from minLogElements to maxLogElements
+  
   void setSolver( Teuchos::RCP<Solver> solver);
   
 };
