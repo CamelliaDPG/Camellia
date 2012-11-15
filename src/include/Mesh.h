@@ -164,6 +164,7 @@ public:
   FieldContainer<double> cellSideParitiesForCell( int cellID );
   
   Teuchos::RCP<BilinearForm> bilinearForm();
+  void setBilinearForm( Teuchos::RCP<BilinearForm>);
   
   vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints);
   bool elementContainsPoint(ElementPtr elem, double x, double y);

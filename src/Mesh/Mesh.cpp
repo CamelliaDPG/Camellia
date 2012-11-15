@@ -923,7 +923,12 @@ Teuchos::RCP<BilinearForm> Mesh::bilinearForm() {
   return _bilinearForm; 
 }
 
-Boundary & Mesh::boundary() { 
+void Mesh::setBilinearForm( Teuchos::RCP<BilinearForm> bf) {
+  // must match the original in terms of variable IDs, etc...
+  _bilinearForm = bf;
+}
+
+Boundary & Mesh::boundary() {
   return _boundary; 
 }
 
