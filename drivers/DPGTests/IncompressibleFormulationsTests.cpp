@@ -1063,14 +1063,18 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
         for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
           double mu = *muIt;
           
-          Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
-          
-          // create a pointer to a new mesh:
-          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
-                                                        vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-          
           double Re = 1.0 / mu;
-          NavierStokesFormulation::setKovasznay( Re, stokesMesh, u1_exact, u2_exact, p_exact );
+          VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
+                                                                      horizontalCells, verticalCells,
+                                                                      H1Order, pToAdd,
+                                                                      zero, zero, zero);
+          
+          NavierStokesFormulation::setKovasznay( Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact );
+          
+          VGPNavierStokesProblem kProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
+                                                                   horizontalCells, verticalCells,
+                                                                   H1Order, pToAdd,
+                                                                   u1_exact, u2_exact, p_exact);
           
           if (printToConsole) {
             cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;
@@ -1079,48 +1083,28 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             cout << "p_exact: " << p_exact->displayString() << endl;
           }
           
-          SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+          int cubatureEnrichmentDegree = kProblem.solutionIncrement()->cubatureEnrichmentDegree();
+          cubatureEnrichmentDegree += overIntegrationForKovasznay;
           
-          BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
-//          
-//          Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPointsKovasznay, horizontalCells, verticalCells,
-//                                                              vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-          
-          Teuchos::RCP< Solution > vgpNavierStokesSolution = Teuchos::rcp( new Solution(stokesMesh, vgpBC) );
-          
-          // the incremental solutions have zero BCs enforced:
-          BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
-          Teuchos::RCP< Solution > vgpNavierStokesSolutionIncrement = Teuchos::rcp( new Solution(stokesMesh, zeroBC) );
-          vgpNavierStokesSolutionIncrement->setCubatureEnrichmentDegree( maxPolyOrder + overIntegrationForKovasznay ); // can have weights with poly degree = trial degree
-          
-          Teuchos::RCP< VGPNavierStokesFormulation > vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation( Re,
-                                                                                                                               vgpNavierStokesSolution));
-          
-          stokesMesh->setBilinearForm(vgpNavierStokesFormulation->bf());
-          
-          Teuchos::RCP<ExactSolution> vgpNavierStokesExactSolution = vgpNavierStokesFormulation->exactSolution(u1_exact, u2_exact,
-                                                                                                               p_exact, entireBoundary);
+          SolutionPtr solnIncrement = kProblem.solutionIncrement();
+          SolutionPtr backgroundFlow = kProblem.backgroundFlow();
+          solnIncrement->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
+          backgroundFlow->setCubatureEnrichmentDegree(cubatureEnrichmentDegree);
           
           IPPtr ip;
           if ( useNaiveNorm ) {
-            ip =  vgpNavierStokesFormulation->bf()->naiveNorm();
+            ip = kProblem.bf()->naiveNorm();
           } else {
-            ip = vgpNavierStokesFormulation->graphNorm();
+            ip = kProblem.bf()->graphNorm();
           }
           
-          RHSPtr rhs = vgpNavierStokesExactSolution->rhs();
-          
-          vgpNavierStokesSolution->setRHS( rhs );
-          vgpNavierStokesSolution->setIP( ip );
-          
-          vgpNavierStokesSolutionIncrement->setRHS( rhs );
-          vgpNavierStokesSolutionIncrement->setIP( ip );
+          RHSPtr rhs = solnIncrement->rhs();
           
           Teuchos::RCP< RieszRep > rieszRep;
           if (useHessian) {
             LinearTermPtr rhsLT = ((RHSEasy*) rhs.get())->linearTerm();
 
-            rieszRep = Teuchos::rcp( new RieszRep(stokesMesh,ip,rhsLT));
+            rieszRep = Teuchos::rcp( new RieszRep(kProblem.mesh(),ip,rhsLT));
             FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
             FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
             // set up the hessian term itself:
@@ -1138,52 +1122,44 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
             hessianBF->addTerm(sigma22_vgp, v2_rep * u2_vgp);
             
             Teuchos::RCP< HessianFilter > hessianFilter = Teuchos::rcp( new HessianFilter(hessianBF) );
-            vgpNavierStokesSolutionIncrement->setFilter(hessianFilter);
+            solnIncrement->setFilter(hessianFilter);
             rieszRep->computeRieszRep();
           }
           
 //          map<int, FunctionPtr > solnMap = vgpSolutionMap(u1_exact, u2_exact, p_exact, Re);
 //          vgpNavierStokesSolution->projectOntoMesh( solnMap );
           int maxIters = 100;
-          // solve with the true BCs (commented out because we project the exact solution)
-          vgpNavierStokesSolution->solve();
-//          vgpNavierStokesSolutionIncrement->solve();
-//          vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, nonlinear_step_weight);
+
+          FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
+          FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
+          FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+          FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
+          FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, solnIncrement);
+          FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, solnIncrement);
+          FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
           
-          FunctionPtr u1_incr = Function::solution(u1_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr u2_incr = Function::solution(u2_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr p_incr = Function::solution(p_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, vgpNavierStokesSolutionIncrement);
-          
-          FunctionPtr u1hat_incr = Function::solution(u1hat_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr u2hat_incr = Function::solution(u2hat_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr t1n_incr = Function::solution(t1n_vgp, vgpNavierStokesSolutionIncrement);
-          FunctionPtr t2n_incr = Function::solution(t2n_vgp, vgpNavierStokesSolutionIncrement);
+          FunctionPtr u1hat_incr = Function::solution(u1hat_vgp, solnIncrement);
+          FunctionPtr u2hat_incr = Function::solution(u2hat_vgp, solnIncrement);
+          FunctionPtr t1n_incr = Function::solution(t1n_vgp, solnIncrement);
+          FunctionPtr t2n_incr = Function::solution(t2n_vgp, solnIncrement);
           
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
           
-          int i=1;
           do {
-            i++;
+            kProblem.iterate();
             
             if ( rieszRep.get() ) {
               rieszRep->computeRieszRep();
             }
             
-            vgpNavierStokesSolutionIncrement->solve();
-            vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, nonlinear_step_weight); // is the weight here optimistic?
-            
             int cubatureDegree = maxPolyOrder;
             double combinedL2Error = 0.0;
             if (printToConsole) {
-              cout << "After " << i << " nonlinear steps, Kovasznay solution:\n";
+              cout << "After " << kProblem.iterationCount() << " nonlinear steps, Kovasznay solution:\n";
             }
             for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
               VarPtr field = *fieldIt;
-              double l2Error = vgpNavierStokesExactSolution->L2NormOfError(*vgpNavierStokesSolution, field->ID(), cubatureDegree);
+              double l2Error = kProblem.exactSolution()->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
               if (printToConsole) {
                 cout << "L^2 error of " << l2Error << " for variable " << field->displayString() << "." << endl;
               }
@@ -1197,15 +1173,17 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
               cout << "combined L2 error > 1e6; giving up.\n";
               break;
             }
-          } while ( (sqrt(l2_incr->integrate(stokesMesh)) > tol) && (i<maxIters) );
+            
+            
+          } while ( (sqrt(l2_incr->integrate(kProblem.mesh())) > tol) && (kProblem.iterationCount()<maxIters) );
           
           if (printToConsole) {
             string withHessian = useHessian ? " using hessian term " : " without hessian term ";
             cout << "with Re = " << 1.0 / mu << " and " << withHessian;
-            cout << ", # iters to converge: " << i << endl;
+            cout << ", # iters to converge: " << kProblem.iterationCount() << endl;
           }
           
-          double l2NormOfIncr = sqrt(l2_incr->integrate(stokesMesh));
+          double l2NormOfIncr = sqrt(l2_incr->integrate(kProblem.mesh()));
           if (l2NormOfIncr > tol) {
             string withHessian = useHessian ? "using the hessian" : "not using the hessian";
             cout << "Kovasnay solution failed to converge while " << withHessian << "; l2NormOfIncr = " << l2NormOfIncr << endl;

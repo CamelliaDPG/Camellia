@@ -188,4 +188,89 @@ public:
   }
 };
 
+class VGPNavierStokesProblem {
+  SolutionPtr _backgroundFlow, _solnIncrement;
+  Teuchos::RCP<Mesh> _mesh;
+  Teuchos::RCP<BC> _bc, _bcForIncrement;
+  Teuchos::RCP< ExactSolution > _exactSolution;
+  Teuchos::RCP<BF> _bf;
+  
+  Teuchos::RCP< NavierStokesFormulation > _vgpNavierStokesFormulation;
+  int _iterations;
+  double _iterationWeight;
+public:
+  VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
+                         int verticalCells, int H1Order, int pToAdd,
+                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact) {
+    double mu = 1/Re;
+    _iterations = 0;
+    _iterationWeight = 1.0;
+    
+    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
+    
+    // create a new mesh:
+    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+    
+    
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+    
+    Teuchos::RCP<ExactSolution> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
+    
+    BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
+    
+    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+    
+    _backgroundFlow = Teuchos::rcp( new Solution(_mesh, vgpBC) );
+    
+    // the incremental solutions have zero BCs enforced:
+    FunctionPtr zero = Function::zero();
+    BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
+    _solnIncrement = Teuchos::rcp( new Solution(_mesh, zeroBC) );
+    _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
+    
+    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
+    
+    _exactSolution = _vgpNavierStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
+    _backgroundFlow->setRHS( _exactSolution->rhs() );
+    _backgroundFlow->setIP( _vgpNavierStokesFormulation->graphNorm() );
+    
+    _mesh->setBilinearForm(_vgpNavierStokesFormulation->bf());
+    
+    _solnIncrement->setRHS( _exactSolution->rhs() );
+    _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
+  }
+  SolutionPtr backgroundFlow() {
+    return _backgroundFlow;
+  }
+  BFPtr bf() {
+    return _vgpNavierStokesFormulation->bf();
+  }
+  Teuchos::RCP<ExactSolution> exactSolution() {
+    return _exactSolution;
+  }
+  SolutionPtr solutionIncrement() {
+    return _solnIncrement;
+  }
+  void iterate() {
+    if (_iterations==0) {
+      _backgroundFlow->solve();
+    } else {
+      _solnIncrement->solve();
+      _backgroundFlow->addSolution(_solnIncrement, _iterationWeight);
+    }
+  }
+  int iterationCount() {
+    return _iterations;
+  }
+  Teuchos::RCP<Mesh> mesh() {
+    return _mesh;
+  }
+  void setIP( IPPtr ip ) {
+    _backgroundFlow->setIP( ip );
+    _solnIncrement->setIP( ip );
+  }
+};
+
 #endif
