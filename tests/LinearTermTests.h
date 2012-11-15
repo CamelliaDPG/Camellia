@@ -38,6 +38,20 @@ class LinearTermTests : public ::testing::Test {
     BFPtr bf;
 };
 
+class ConvectionTests : public ::testing::Test {
+  protected:
+    virtual void SetUp();
+
+    VarFactory varFactory; 
+    VarPtr v;
+    VarPtr beta_n_u_hat;
+    VarPtr u;
+
+    vector<double> beta;
+
+    BFPtr convectionBF;
+};
+
 void transposeFieldContainer(FieldContainer<double> &fc){
   // this is NOT meant for production code.  Could do the transpose in place if we were concerned with efficiency.
   FieldContainer<double> fcCopy = fc;

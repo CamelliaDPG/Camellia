@@ -17,7 +17,7 @@
 #else
 #endif
 
-bool enforceLocalConservation = true;
+bool enforceLocalConservation = false;
 bool steady = false;
 double epsilon = 1e-1;
 double dt = 0.25;
