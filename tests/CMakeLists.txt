@@ -19,6 +19,8 @@ add_executable( RunTests
   MeshRefinementTests.cpp 
   TestBilinearFormFlux.cpp 
   MeshTests.cpp 
+  LocalConservationTests.cpp 
+  #MultiBasisTests.cpp 
 )
 # Link test executable against gtest & gtest_main
 target_link_libraries(RunTests gtest gtest_main Camellia)
