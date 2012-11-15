@@ -60,6 +60,7 @@ public:
   bool testRieszInversionAsProjection();
   bool testMixedTermConsistency();
   bool testRieszInversion();
+  bool testIntegrateMixedBasis();
 
   std::string testSuiteName();
 };

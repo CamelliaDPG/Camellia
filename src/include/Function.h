@@ -89,8 +89,9 @@ public:
   static FunctionPtr constant(double value);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
   static FunctionPtr null();
-  static FunctionPtr zero();
+  static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
+  static FunctionPtr zero();
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
@@ -236,6 +237,7 @@ public:
   FunctionPtr y();
   
   bool boundaryValueOnly();
+  string displayString();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 
@@ -248,7 +250,9 @@ public:
 
 class SideParityFunction : public Function {
 public:
+  SideParityFunction();
   bool boundaryValueOnly();
+  string displayString();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 

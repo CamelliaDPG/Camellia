@@ -144,6 +144,8 @@ public:
   
   static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
+  static Teuchos::RCP<Mesh> buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm, 
@@ -162,6 +164,7 @@ public:
   FieldContainer<double> cellSideParitiesForCell( int cellID );
   
   Teuchos::RCP<BilinearForm> bilinearForm();
+  void setBilinearForm( Teuchos::RCP<BilinearForm>);
   
   vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints);
   bool elementContainsPoint(ElementPtr elem, double x, double y);

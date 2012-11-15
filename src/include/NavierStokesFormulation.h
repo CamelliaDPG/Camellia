@@ -12,8 +12,6 @@
 #include "StokesFormulation.h"
 
 // implementation of some standard Navier-Stokes Formulations.
-
-
 class NavierStokesFormulation {
 protected:
   double _Re;
@@ -33,6 +31,29 @@ public:
   virtual void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) = 0; // corr. ID == -1 if there isn't one
   virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1, FunctionPtr u2, FunctionPtr p, 
                                                     SpatialFilterPtr entireBoundary) = 0;
+  
+  // the classical Kovasznay solution
+  static void setKovasznay(double Re, Teuchos::RCP<Mesh> mesh,
+                           FunctionPtr &u1_exact, FunctionPtr &u2_exact, FunctionPtr &p_exact) {
+    const double PI  = 3.141592653589793238462;
+    double lambda = Re / 2 - sqrt ( (Re / 2) * (Re / 2) + (2 * PI) * (2 * PI) );
+    
+    FunctionPtr exp_lambda_x = Teuchos::rcp( new Exp_ax( lambda ) );
+    FunctionPtr exp_2lambda_x = Teuchos::rcp( new Exp_ax( 2 * lambda ) );
+    FunctionPtr sin_2pi_y = Teuchos::rcp( new Sin_ay( 2 * PI ) );
+    FunctionPtr cos_2pi_y = Teuchos::rcp( new Cos_ay( 2 * PI ) );
+    
+    u1_exact = Function::constant(1.0) - exp_lambda_x * cos_2pi_y;
+    u2_exact = (lambda / (2 * PI)) * exp_lambda_x * sin_2pi_y;
+    
+    FunctionPtr one = Function::constant(1.0);
+    double meshMeasure = one->integrate(mesh);
+    
+    p_exact = 0.5 * exp_2lambda_x;
+    // adjust p to have zero average:
+    double pMeasure = p_exact->integrate(mesh);
+    p_exact = p_exact - Function::constant(pMeasure / meshMeasure);
+  }
 };
 
 class VGPNavierStokesFormulation : public NavierStokesFormulation {

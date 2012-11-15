@@ -85,6 +85,7 @@ public:
   LinearTermPtr getBoundaryOnlyPart();
   LinearTermPtr getNonBoundaryOnlyPart();
   LinearTermPtr getPart(bool boundaryOnlyPart);
+  LinearTermPtr getPartMatchingVariable( VarPtr var );
   
   // integrate into values:
   void integrate(FieldContainer<double> &values, DofOrderingPtr thisOrdering,
