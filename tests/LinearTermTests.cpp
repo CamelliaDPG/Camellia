@@ -701,3 +701,139 @@ TEST_F(LinearTermTests, TestRieszInversion)
   EXPECT_TRUE(fcsAgree(valOriginal,valIBP,tol,maxDiff))
     << "Failed TestRieszInversion with maxDiff = " << maxDiff << endl;
 }
+
+void ConvectionTests::SetUp()
+{
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  beta_n_u_hat = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  u = varFactory.fieldVar("u");
+
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM/Mesh   ///////////////////////
+
+  convectionBF = Teuchos::rcp( new BF(varFactory) );
+  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u_hat, v);
+  convectionBF->addTerm( u, v);
+}
+
+TEST_F(ConvectionTests, TestIntegrateMixedBasisConstants)
+{
+  // build CONSTANT SINGLE ELEMENT MESH
+  int order = 0;
+  int H1Order = order+1;
+  int pToAdd = 1;
+  int nCells = 2; // along a side
+
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
+  ElementTypePtr elemType = mesh->getElement(0)->elementType();
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
+  vector<int> cellIDs;
+  vector< ElementPtr > allElems = mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    cellIDs.push_back((*elemIt)->cellID());
+  }
+  bool createSideCacheToo = true; 
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+
+  int numTrialDofs = elemType->trialOrderPtr->totalDofs();
+  int numCells = mesh->numElements();
+  double areaPerCell = 1.0 / numCells;
+  FieldContainer<double> integrals(numCells,numTrialDofs);
+  FieldContainer<double> expectedIntegrals(numCells,numTrialDofs);
+  double sidelengthOfCell = 1.0 / nCells;
+  DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
+  int dofForField = trialOrdering->getDofIndex(u->ID(), 0);
+  vector<int> dofsForFlux;
+  for (int sideIndex=0; sideIndex < trialOrdering->getNumSidesForVarID(beta_n_u_hat->ID()); sideIndex++) {
+    dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 0, sideIndex));
+  }
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+    expectedIntegrals(cellIndex, dofForField) = areaPerCell;
+    for (vector<int>::iterator dofIt = dofsForFlux.begin(); dofIt != dofsForFlux.end(); dofIt++) {
+      int fluxDofIndex = *dofIt;
+      expectedIntegrals(cellIndex, fluxDofIndex) = sidelengthOfCell;
+    }
+  }
+  // setup: with constant degrees of freedom, we expect that the integral of int_dK (flux) + int_K (field) will be ones for each degree of freedom, assuming the basis functions for these constants field/flux variables are just C = 1.0.  
+  //
+  //On a unit square, int_K (constant) = 1.0, and int_dK (u_i) = 1, for i = 0,...,3. 
+
+  LinearTermPtr lt = 1.0 * beta_n_u_hat;
+  LinearTermPtr field =  1.0 * u;
+  lt->addTerm(field,true);
+  lt->integrate(integrals, elemType->trialOrderPtr, basisCache);
+ 
+  double tol = 1e-12;
+  double maxDiff;
+  EXPECT_TRUE(fcsAgree(integrals, expectedIntegrals, tol, maxDiff))
+    << "Failed testIntegrateMixedBasis with maxDiff = " << maxDiff << endl;
+}
+
+TEST_F(ConvectionTests, TestIntegrateMixedBasisLinears)
+{
+  // build CONSTANT SINGLE ELEMENT MESH
+  int order = 1;
+  int H1Order = order+1;
+  int pToAdd = 1;
+  int nCells = 2; // along a side
+
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
+  ElementTypePtr elemType = mesh->getElement(0)->elementType();
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
+  vector<int> cellIDs;
+  vector< ElementPtr > allElems = mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    cellIDs.push_back((*elemIt)->cellID());
+  }
+  bool createSideCacheToo = true; 
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+
+  int numTrialDofs = elemType->trialOrderPtr->totalDofs();
+  int numCells = mesh->numElements();
+  double areaPerCell = 1.0 / numCells;
+  FieldContainer<double> integrals(numCells,numTrialDofs);
+  FieldContainer<double> expectedIntegrals(numCells,numTrialDofs);
+  double sidelengthOfCell = 1.0 / nCells;
+  DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
+  vector<int> dofsForField = trialOrdering->getDofIndices(u->ID());
+  vector<int> dofsForFlux;
+  for (int sideIndex=0; sideIndex < trialOrdering->getNumSidesForVarID(beta_n_u_hat->ID()); sideIndex++) {
+    dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 0, sideIndex));
+    dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 1, sideIndex));
+  }
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+    for (int i = 0; i < trialOrdering->getBasisCardinality(u->ID(), 0); i++)
+        expectedIntegrals(cellIndex, dofsForField[i]) = 0.25*areaPerCell;
+    for (vector<int>::iterator dofIt = dofsForFlux.begin(); dofIt != dofsForFlux.end(); dofIt++) {
+      int fluxDofIndex = *dofIt;
+      expectedIntegrals(cellIndex, fluxDofIndex) = 0.5*sidelengthOfCell;
+    }
+  }
+  // cout << "expectedIntegrals:\\\\n" << expectedIntegrals;
+  // setup: with constant degrees of freedom, we expect that the integral of int_dK (flux) + int_K (field) will be ones for each degree of freedom, assuming the basis functions for these constants field/flux variables are just C = 1.0.  
+  //
+  //On a unit square, int_K (constant) = 1.0, and int_dK (u_i) = 1, for i = 0,...,3. 
+
+  LinearTermPtr lt = 1.0 * beta_n_u_hat;
+  LinearTermPtr field =  1.0 * u;
+  lt->addTerm(field,true);
+  lt->integrate(integrals, elemType->trialOrderPtr, basisCache);
+ 
+  double tol = 1e-12;
+  double maxDiff;
+  EXPECT_TRUE(fcsAgree(integrals, expectedIntegrals, tol, maxDiff))
+    << "Failed testIntegrateMixedBasis with maxDiff = " << maxDiff << endl;
+}

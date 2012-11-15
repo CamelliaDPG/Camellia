@@ -98,6 +98,8 @@ set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
 
 set(NAVIER_STOKES_DIR "${DRIVERS_DIR}/NavierStokes" )
 
+set(INCOMPRESSIBLE_NS_DIR "${DRIVERS_DIR}/IncompressibleNS" )
+
 set(SCRATCHPAD_DRIVER_DIR "${DRIVERS_DIR}/ScratchPad" )
 
 set(STOKES_DIR "${DRIVERS_DIR}/Stokes" )
@@ -139,6 +141,10 @@ set( STOKES_CAVITY_FLOW_DRIVER
 set( STOKES_STUDY
   "${STOKES_DIR}/StokesStudy.cpp"
   )
+  
+set( INCOMP_NS_STUDY
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesStudy.cpp"
+  )
 
 set( STOKES_SOURCES
   "${STOKES_DIR}/StokesManufacturedSolution.cpp"
@@ -167,7 +173,7 @@ set( POISSON_SOURCES
 
 set( CONFUSION_SOURCES
   "${DRIVERS_DIR}/Confusion/ConfusionManufacturedSolution.cpp"
-  "${DRIVERS_DIR}/Confusion/ConfusionProblem.cpp"
+  "${DRIVERS_DIR}/Confusion/ConfusionProblemLegacy.cpp"
   "${DRIVERS_DIR}/Confusion/ConfusionBilinearForm.cpp"
 )
 
@@ -206,6 +212,7 @@ MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
+add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(NavierStokesCavityFlowDriver ${STOKES_SOURCES} ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
@@ -256,6 +263,11 @@ target_link_libraries(StokesBackwardFacingStepDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(StokesStudy
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesStudy
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
