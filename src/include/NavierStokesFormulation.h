@@ -260,10 +260,13 @@ public:
   void iterate() {
     if (_iterations==0) {
       _backgroundFlow->solve();
+      // want _solnIncrement to store the initial solution as the first increment:
+      _solnIncrement->addSolution(_backgroundFlow, 1.0, true); // true: allow adds of empty cells
     } else {
       _solnIncrement->solve();
       _backgroundFlow->addSolution(_solnIncrement, _iterationWeight);
     }
+    _iterations++;
   }
   int iterationCount() {
     return _iterations;

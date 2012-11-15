@@ -621,51 +621,26 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           
           for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
             double mu = *muIt;
+            double Re = 1 / mu;
             
-            Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
-            
-            // create a pointer to a new mesh:
-            Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                          vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-            
+            VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
+                                                                    horizontalCells, verticalCells,
+                                                                    H1Order, pToAdd,
+                                                                    u1_exact, u2_exact, p_exact);
             
             
-            SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+            SolutionPtr solnIncrement = problem.solutionIncrement();
+            SolutionPtr backgroundFlow = problem.backgroundFlow();
             
-            Teuchos::RCP<ExactSolution> vgpStokesExactSolution = vgpStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
-            
-            BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
-            
-            Teuchos::RCP<Mesh> stokesMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-            
-            Teuchos::RCP< Solution > vgpNavierStokesSolution = Teuchos::rcp( new Solution(stokesMesh, vgpBC) );
-            
-            // the incremental solutions have zero BCs enforced:
-            BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
-            Teuchos::RCP< Solution > vgpNavierStokesSolutionIncrement = Teuchos::rcp( new Solution(stokesMesh, zeroBC) );
-            vgpNavierStokesSolutionIncrement->setCubatureEnrichmentDegree( maxPolyOrder ); // can have weights with poly degree = trial degree
-            
-            Teuchos::RCP< VGPNavierStokesFormulation > vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(1.0 / mu,
-                                                                                                                                 vgpNavierStokesSolution));
-            
-            Teuchos::RCP<ExactSolution> vgpNavierStokesExactSolution = vgpNavierStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
-            vgpNavierStokesSolution->setRHS( vgpNavierStokesExactSolution->rhs() );
-            vgpNavierStokesSolution->setIP( vgpNavierStokesFormulation->graphNorm() );
-            
-            stokesMesh->setBilinearForm(vgpNavierStokesFormulation->bf());
-            
-            // solve with the true BCs
-            vgpNavierStokesSolution->solve();
-            
-            vgpNavierStokesSolutionIncrement->setRHS( vgpNavierStokesExactSolution->rhs() );
-            vgpNavierStokesSolutionIncrement->setIP( vgpNavierStokesFormulation->graphNorm() );
+            // solve once:
+            Teuchos::RCP<ExactSolution> exactSolution = problem.exactSolution();
+            MeshPtr mesh = problem.mesh();
             
             Teuchos::RCP< RieszRep > rieszRep;
             if (useHessian) {
-              LinearTermPtr rhsLT = ((RHSEasy*) vgpNavierStokesExactSolution->rhs().get())->linearTerm();
-              IPPtr ip = vgpNavierStokesFormulation->graphNorm();
-              rieszRep = Teuchos::rcp( new RieszRep(stokesMesh,ip,rhsLT));
+              LinearTermPtr rhsLT = ((RHSEasy*) exactSolution->rhs().get())->linearTerm();
+              IPPtr ip = problem.bf()->graphNorm();
+              rieszRep = Teuchos::rcp( new RieszRep(mesh,ip,rhsLT));
               FunctionPtr v1_rep = Teuchos::rcp( new RepFunction(v1_vgp, rieszRep) );
               FunctionPtr v2_rep = Teuchos::rcp( new RepFunction(v2_vgp, rieszRep) );
               // set up the hessian term itself:
@@ -683,41 +658,34 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
               hessianBF->addTerm(sigma22_vgp, v2_rep * u2_vgp);
               
               Teuchos::RCP< HessianFilter > hessianFilter = Teuchos::rcp( new HessianFilter(hessianBF) );
-              vgpNavierStokesSolutionIncrement->setFilter(hessianFilter);
+              solnIncrement->setFilter(hessianFilter);
               rieszRep->computeRieszRep();
             }
             
             int maxIters = 100;
-            vgpNavierStokesSolutionIncrement->solve();
-            vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0);
 
-            FunctionPtr u1_incr = Function::solution(u1_vgp, vgpNavierStokesSolutionIncrement);
-            FunctionPtr u2_incr = Function::solution(u2_vgp, vgpNavierStokesSolutionIncrement);
-            FunctionPtr p_incr = Function::solution(p_vgp, vgpNavierStokesSolutionIncrement);
+            FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
+            FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
+            FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
             
             FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
             
-            int i=1;
             do {
-              i++;
-              
+              problem.iterate();
               if ( rieszRep.get() ) {
                 rieszRep->computeRieszRep();
               }
-              
-              vgpNavierStokesSolutionIncrement->solve();
-              vgpNavierStokesSolution->addSolution(vgpNavierStokesSolutionIncrement, 1.0); // optimistic?
-            }  while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (i<maxIters) );
+            }  while ( (sqrt(l2_incr->integrate(mesh)) > tol) && (problem.iterationCount() < maxIters) );
             if (printToConsole) {
               string withHessian = useHessian ? "using hessian term" : "without hessian term";
               cout << "with Re = " << 1.0 / mu << " and " << withHessian;
-              cout << ", # iters to converge: " << i << endl;
+              cout << ", # iters to converge: " << problem.iterationCount() << endl;
             }
             
             int cubatureDegree = maxPolyOrder;
             for (vector< VarPtr >::iterator fieldIt = vgpFields.begin(); fieldIt != vgpFields.end(); fieldIt++ ) {
               VarPtr field = *fieldIt;
-              double l2Error = vgpNavierStokesExactSolution->L2NormOfError(*vgpNavierStokesSolution, field->ID(), cubatureDegree);
+              double l2Error = exactSolution->L2NormOfError(*backgroundFlow, field->ID(), cubatureDegree);
               if (l2Error > tol) {
                 success = false;
                 cout << "testVGPNavierStokesFormulationConsistency(): ";
@@ -730,9 +698,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
               }
             }
             
-            FunctionPtr u1_soln = Function::solution(u1_vgp, vgpNavierStokesSolution);
-            FunctionPtr u2_soln = Function::solution(u2_vgp, vgpNavierStokesSolution);
-            FunctionPtr p_soln  = Function::solution( p_vgp, vgpNavierStokesSolution);
+            FunctionPtr u1_soln = Function::solution(u1_vgp, backgroundFlow);
+            FunctionPtr u2_soln = Function::solution(u2_vgp, backgroundFlow);
+            FunctionPtr p_soln  = Function::solution( p_vgp, backgroundFlow);
             
             if ( ! functionsAgree(u1_soln, u1_exact, mesh, tol) ) {
               cout << "FAILURE: testVGPNavierStokesFormulationConsistency(): after solve, u1_soln != u1_exact.\n";
