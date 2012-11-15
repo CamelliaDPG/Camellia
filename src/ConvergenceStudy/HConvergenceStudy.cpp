@@ -229,6 +229,32 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<dou
   return mesh;
 }
 
+void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
+  // alternative to solve() if you want to do your own solving (e.g. for nonlinear problems)
+  //
+  // must be in the right order, from minLogElements to maxLogElements
+  // check the count is right:
+  if (solutions.size() != _maxLogElements - _minLogElements + 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solutions doesn't match the expected length");
+  }
+  _solutions = solutions;
+  for (int i=_minLogElements; i<=_maxLogElements; i++) {
+    SolutionPtr soln = solutions[i-_minLogElements];
+    Teuchos::RCP<Mesh> mesh = soln->mesh();
+    
+    Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    _bestApproximations.push_back(bestApproximation);
+    bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+    
+    if (i == _maxLogElements) {
+      // We'll use solution to compute L2 norm of true Solution
+      _fineZeroSolution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    }
+  }
+  computeErrors();
+}
+
+
 void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices) {
   // TODO: refactor to make this and the straight quad mesh version share code...
   _solutions.clear();
