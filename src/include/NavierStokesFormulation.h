@@ -32,6 +32,10 @@ public:
   virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1, FunctionPtr u2, FunctionPtr p, 
                                                     SpatialFilterPtr entireBoundary) = 0;
   
+  double Re() {
+    return _Re;
+  }
+  
   // the classical Kovasznay solution
   static void setKovasznay(double Re, Teuchos::RCP<Mesh> mesh,
                            FunctionPtr &u1_exact, FunctionPtr &u2_exact, FunctionPtr &p_exact) {
@@ -270,6 +274,10 @@ public:
   void setIP( IPPtr ip ) {
     _backgroundFlow->setIP( ip );
     _solnIncrement->setIP( ip );
+  }
+  BFPtr stokesBF() {
+    double mu =  1.0 / _vgpNavierStokesFormulation->Re();
+    return VGPNavierStokesFormulation::stokesBF( mu );
   }
 };
 
