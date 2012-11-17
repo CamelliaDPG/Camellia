@@ -367,10 +367,18 @@ bool FunctionTests::testQuotientRule() {
 bool FunctionTests::testIntegrate(){
   bool success = true;
 
+  // we must create our own basisCache here because _basisCache
+  // has had its ref cell points set, which basically means it's
+  // opted out of having any help with integration.
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
+  vector<int> cellIDs;
+  cellIDs.push_back(0);
+  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
+  
   FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  int numCells = _basisCache->cellIDs().size();
+  int numCells = basisCache->cellIDs().size();
   FieldContainer<double> integrals(numCells);
-  x->integrate(integrals,_basisCache);
+  x->integrate(integrals,basisCache);
   double value = 0.0;
   for (int i = 0;i<numCells;i++){
     value += integrals(i);
