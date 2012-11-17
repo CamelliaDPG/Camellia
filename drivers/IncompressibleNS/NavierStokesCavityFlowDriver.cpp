@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order
   
-  int maxIters = 300; // for nonlinear steps
+  int maxIters = 30; // for nonlinear steps
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -247,7 +247,7 @@ int main(int argc, char *argv[]) {
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles;
   
-  double minL2Increment = 1e-10;
+  double minL2Increment = 1e-8;
 
   // get variable definitions:
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
@@ -538,8 +538,8 @@ int main(int argc, char *argv[]) {
 
     for (int refIndex=0; refIndex<numRefs; refIndex++){
       // start with a fresh (zero) initial guess for each adaptive mesh:
-//      solution->clear();
-//      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+      solution->clear();
+      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
       
       double incr_norm;
       do {
