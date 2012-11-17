@@ -107,6 +107,14 @@ void FunctionTests::setup() {
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+
+  setup();
+  if (testIntegrate()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
   setup();
   if (testThatLikeFunctionsAgree()) {
     numTestsPassed++;
@@ -354,6 +362,25 @@ bool FunctionTests::testQuotientRule() {
   
   return success;
   
+}
+
+bool FunctionTests::testIntegrate(){
+  bool success = true;
+
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  int numCells = _basisCache->cellIDs().size();
+  FieldContainer<double> integrals(numCells);
+  x->integrate(integrals,_basisCache);
+  double value = 0.0;
+  for (int i = 0;i<numCells;i++){
+    value += integrals(i);
+  }
+  double tol = 1e-11;
+  if (abs(value)>tol){ // should get zero if integrating x over [-1,1]
+    success = false;
+    cout << "failing testIntegrate()" << endl;
+  }
+  return success;
 }
 
 std::string FunctionTests::testSuiteName() {

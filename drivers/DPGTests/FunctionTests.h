@@ -54,7 +54,9 @@ public:
   bool testProductRule();
   
   bool testQuotientRule();
-  
+
+  bool testIntegrate();
+
   std::string testSuiteName();
 };
 
