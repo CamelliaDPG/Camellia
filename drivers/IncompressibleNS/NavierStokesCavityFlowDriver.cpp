@@ -6,9 +6,26 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "HConvergenceStudy.h"
+
+#include "InnerProductScratchPad.h"
+
+#include "PreviousSolutionFunction.h"
+
+#include "LagrangeConstraints.h"
+
+#include "BasisFactory.h"
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
+#include "NavierStokesFormulation.h"
+
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
-#include "LidDrivenFlowRefinementStrategy.h"
+//#include "LidDrivenFlowRefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
@@ -27,25 +44,8 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 using namespace std;
 
-static double REYN = 100;
-//const static double REYN = 400; // matches John Evans's dissertation, p. 183
-
-const static string S_TAU1 = "\\tau_1";
-const static string S_TAU2 = "\\tau_2";
-const static string S_V1 = "v_1";
-const static string S_V2 = "v_2";
-const static string S_Q = "q";
-const static string S_U1_HAT = "\\widehat{u}_1";
-const static string S_U2_HAT = "\\widehat{u}_2";
-const static string S_TRACTION_1N = "\\widehat{P - \\mu \\sigma_{1n}}";
-const static string S_TRACTION_2N = "\\widehat{P - \\mu \\sigma_{2n}}";
-const static string S_U1 = "u_1";
-const static string S_U2 = "u_2";
-const static string S_SIGMA11 = "\\sigma_{11}";
-const static string S_SIGMA12 = "\\sigma_{12}";
-const static string S_SIGMA21 = "\\sigma_{21}";
-const static string S_SIGMA22 = "\\sigma_{22}";
-const static string S_P = "p";
+// static double REYN = 100;
+static double Re = 400; // matches John Evans's dissertation, p. 183
 
 VarFactory varFactory; 
 // test variables:
@@ -55,25 +55,6 @@ VarPtr u1hat, u2hat, t1n, t2n;
 // field variables:
 VarPtr u1, u2, sigma11, sigma12, sigma21, sigma22, p;
 
-void initVariables() {
-  tau1 = varFactory.testVar(S_TAU1, HDIV);  // tau_1
-  tau2 = varFactory.testVar(S_TAU2, HDIV);  // tau_2
-  v1 = varFactory.testVar(S_V1, HGRAD); // v_1
-  v2 = varFactory.testVar(S_V2, HGRAD); // v_2
-  q = varFactory.testVar(S_Q, HGRAD); // q
-  
-  u1hat = varFactory.traceVar(S_U1_HAT);
-  u2hat = varFactory.traceVar(S_U2_HAT);
-  t1n = varFactory.fluxVar(S_TRACTION_1N);
-  t2n = varFactory.fluxVar(S_TRACTION_2N);
-  u1 = varFactory.fieldVar(S_U1);
-  u2 = varFactory.fieldVar(S_U2);
-  sigma11 = varFactory.fieldVar(S_SIGMA11);
-  sigma12 = varFactory.fieldVar(S_SIGMA12);
-  sigma21 = varFactory.fieldVar(S_SIGMA21);
-  sigma22 = varFactory.fieldVar(S_SIGMA22);
-  p = varFactory.fieldVar(S_P);
-}
 
 class U1_0 : public SimpleFunction {
   double _eps;
@@ -153,16 +134,6 @@ public:
   }
 };
 
-class UnitSquareBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
-    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
-    return xMatch || yMatch;
-  }
-};
-
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
                       SolutionPtr solution, VarPtr u1, string filename) {
   vector<double> points1D_x, points1D_y;
@@ -205,155 +176,6 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   fout.close();
 }
 
-void initStokesBilinearForm(BFPtr emptyBF, FunctionPtr mu) {  
-  // the velocity-gradient-pressure (VGP) stokes form
-  BFPtr stokesBFMath = emptyBF;
-  // the tau equations define sigma = grad u
-  // tau1 terms:
-  stokesBFMath->addTerm(u1,tau1->div());
-  stokesBFMath->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
-  stokesBFMath->addTerm(sigma12,tau1->y());
-  stokesBFMath->addTerm(-u1hat, tau1->dot_normal());
-  
-  // tau2 terms:
-  stokesBFMath->addTerm(u2, tau2->div());
-  stokesBFMath->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
-  stokesBFMath->addTerm(sigma22,tau2->y());
-  stokesBFMath->addTerm(-u2hat, tau2->dot_normal());
-  
-  // the v equations are the momentum equations
-  // v1:
-  stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
-  stokesBFMath->addTerm(mu * sigma12,v1->dy());
-  stokesBFMath->addTerm( - p, v1->dx() );
-  stokesBFMath->addTerm( t1n, v1);
-  
-  // v2:
-  stokesBFMath->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-  stokesBFMath->addTerm(mu * sigma22,v2->dy());
-  stokesBFMath->addTerm( -p, v2->dy());
-  stokesBFMath->addTerm( t2n, v2);
-  
-  // the q equation is the conservation of mass
-  // q:
-  stokesBFMath->addTerm(-u1,q->dx()); // (-u, grad q)
-  stokesBFMath->addTerm(-u2,q->dy());
-  stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-  
-//  return stokesBFMath;
-}
-
-void initNavierStokesBilinearForm(BFPtr emptyBF, FunctionPtr mu, SolutionPtr prevSolution) {
-  initStokesBilinearForm(emptyBF, mu);
-  
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u2) );
-  FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma11) );
-  FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma12) );
-  FunctionPtr sigma21_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma21) );
-  FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma22) );
-  
-  emptyBF->addTerm(sigma11_prev * u1 + sigma12_prev * u2 + u1_prev * sigma11 + u2_prev * sigma12, v1);
-  emptyBF->addTerm(sigma21_prev * u1 + sigma22_prev * u2 + u1_prev * sigma21 + u2_prev * sigma22, v2);
-}
-
-IPPtr initGraphInnerProductStokes(FunctionPtr mu) {
-  // TODO: implement one of these for Navier-Stokes as well
-  IPPtr qoptIP = Teuchos::rcp(new IP());
-  
-  double beta = 1.0;
-  
-  qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-  qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-  qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-  qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-  qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
-  qoptIP->addTerm( tau1->div() - q->dx() );     // u1
-  qoptIP->addTerm( tau2->div() - q->dy() );     // u2
-  
-  qoptIP->addTerm( sqrt(beta) * v1 );
-  qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * q );
-  qoptIP->addTerm( sqrt(beta) * tau1 );
-  qoptIP->addTerm( sqrt(beta) * tau2 );
-
-  return qoptIP;
-}
-
-void initRHSNavierStokes( Teuchos::RCP<RHSEasy> rhs, BFPtr stokesBF, FunctionPtr mu, SolutionPtr prevSolution) {
-  bool useBFTestFunctional = true; // just because this is new and untested, don't entirely trust it...
-
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u2) );
-  FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma11) );
-  FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma12) );
-  FunctionPtr sigma21_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma21) );
-  FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, sigma22) );
-  FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, p) );
-  
-  FunctionPtr u1hat_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u1hat) );
-  FunctionPtr u2hat_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, u2hat) );
-  FunctionPtr t1n_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, t1n) );
-  FunctionPtr t2n_prev = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, t2n) );
-  
-  if (useBFTestFunctional) {
-    // subtract stokesBF evaluated at previous solution from the RHS
-    rhs->addTerm(-stokesBF->testFunctional(prevSolution));
-  } else {
-    // for now, omit fluxes and traces:
-    
-//    // tau1 terms:
-//    stokesBFMath->addTerm(u1,tau1->div());
-//    stokesBFMath->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
-//    stokesBFMath->addTerm(sigma12,tau1->y());
-//    stokesBFMath->addTerm(-u1hat, tau1->dot_normal());
-    
-    rhs->addTerm(- u1_prev * tau1->div() - sigma11_prev * tau1->x() - sigma12_prev * tau1->y());
-    rhs->addTerm(u1hat_prev * tau1->dot_normal() );
-    
-//    // tau2 terms:
-//    stokesBFMath->addTerm(u2, tau2->div());
-//    stokesBFMath->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
-//    stokesBFMath->addTerm(sigma22,tau2->y());
-//    stokesBFMath->addTerm(-u2hat, tau2->dot_normal());
-    
-    rhs->addTerm( -u2_prev * tau2->div() - sigma21_prev * tau2->x() - sigma22_prev * tau2->y());
-    rhs->addTerm( u2hat_prev * tau2->dot_normal() );
-//    
-//    // v1:
-//    stokesBFMath->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
-//    stokesBFMath->addTerm(mu * sigma12,v1->dy());
-//    stokesBFMath->addTerm( - p, v1->dx() );
-//    stokesBFMath->addTerm( t1n, v1);
-    
-    rhs->addTerm( - mu * sigma11_prev * v1->dx() - mu * sigma12_prev * v1->dy() + p_prev * v1->dx() );
-    rhs->addTerm( - t1n_prev * v1 );
-//    
-//    // v2:
-//    stokesBFMath->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-//    stokesBFMath->addTerm(mu * sigma22,v2->dy());
-//    stokesBFMath->addTerm( -p, v2->dy());
-//    stokesBFMath->addTerm( t2n, v2);
-    
-    rhs->addTerm( -mu * sigma21_prev * v2->dx() - mu * sigma22_prev * v2->dy() + p_prev * v2->dy() );
-    rhs->addTerm( - t2n_prev * v2 );
-//    
-//    // q:
-//    stokesBFMath->addTerm(-u1,q->dx()); // (-u, grad q)
-//    stokesBFMath->addTerm(-u2,q->dy());
-//    stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-    
-    rhs->addTerm( u1_prev * q->dx()  + u2_prev * q->dy() );
-    rhs->addTerm( - u1hat_prev * q->times_normal_x() - u2hat_prev * q->times_normal_y() );
-  }
-  // now add in the nonlinear (convective) term:
-//  double rho = 1.0; // density fixed at 1.0
-  // rho * ( - u * sigma_i, v_i)
-
-  rhs->addTerm(- u1_prev * sigma11_prev * v1 - u2_prev * sigma21_prev * v1);
-  rhs->addTerm(- u1_prev * sigma12_prev * v2 - u2_prev * sigma22_prev * v2);
-}
-
 int main(int argc, char *argv[]) {
   int rank = 0;
 #ifdef HAVE_MPI
@@ -371,7 +193,7 @@ int main(int argc, char *argv[]) {
 //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
-  //  double eps = 0.0; // John Evans's problem: not in H^1
+//  double eps = 0.0; // John Evans's problem: not in H^1
   bool enforceLocalConservation = false;
   bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
   bool enforceOneIrregularity = true;
@@ -379,14 +201,18 @@ int main(int argc, char *argv[]) {
   bool useMumps = false;
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
-  bool usePicardIteration = true; // instead of newton-raphson
+  
+  bool artificialTimeStepping = false;
+  
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order
+  
+  int maxIters = 300; // for nonlinear steps
   
   // usage: polyOrder [numRefinements]
   // parse args:
   if ((argc != 4) && (argc != 3) && (argc != 2)) {
-    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10]\n";
+    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [Reyn=400]]\n";
     return -1;
   }
   int polyOrder = atoi(argv[1]);
@@ -396,15 +222,13 @@ int main(int argc, char *argv[]) {
   }
   if ( argc == 4) {
     numRefs = atoi(argv[2]);
-    REYN = atof(argv[3]);
+    Re = atof(argv[3]);
   }
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
-    cout << "REYN = " << REYN << endl;
-    cout << "dt = " << dt << endl;
+    cout << "Re = " << Re << endl;
+    if (artificialTimeStepping) cout << "dt = " << dt << endl;
   }
-  
-  FunctionPtr mu = Teuchos::rcp( new ConstantScalarFunction(1.0 / REYN, "\\mu") );
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -417,68 +241,98 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
 
-  initVariables();
-  BFPtr navierStokesBF = Teuchos::rcp(new BF(varFactory));
-  
   // define meshes:
   int H1Order = polyOrder + 1;
-  int horizontalCells = 4, verticalCells = 4;
+  int horizontalCells = 16, verticalCells = 16;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles;
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
+  
+  double minL2Increment = 1e-10;
 
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
-  IPPtr ip = initGraphInnerProductStokes(mu);
+  // get variable definitions:
+  VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+  u1 = varFactory.fieldVar(VGP_U1_S);
+  u2 = varFactory.fieldVar(VGP_U2_S);
+  sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
+  sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
+  sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
+  sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
+  p = varFactory.fieldVar(VGP_P_S);
+  
+  u1hat = varFactory.traceVar(VGP_U1HAT_S);
+  u2hat = varFactory.traceVar(VGP_U2HAT_S);
+  t1n = varFactory.fluxVar(VGP_T1HAT_S);
+  t2n = varFactory.fluxVar(VGP_T2HAT_S);
+  
+  v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+  v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+  tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+  tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+  q = varFactory.testVar(VGP_Q_S, HGRAD);
+  
+//  // create a pointer to a new mesh:
+//  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+//                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
 
-  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) ); // accumulated solution
-  SolutionPtr solnIncrement = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  solnIncrement->setReportConditionNumber(false);
+//  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+//  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+//  IPPtr ip = initGraphInnerProductStokes(mu);
+
+//  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) ); // accumulated solution
+//  SolutionPtr solnIncrement = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+//  solnIncrement->setReportConditionNumber(false);
+  
+  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
+  FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
+  FunctionPtr zero = Function::zero();
+  
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPoints,
+                                                          horizontalCells,verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_0, u2_0,  // BC for u
+                                                          zero, zero); // zero forcing function
+  SolutionPtr solution = problem.backgroundFlow();
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  
+  Teuchos::RCP<Mesh> mesh = problem.mesh();
   mesh->registerSolution(solution);
   mesh->registerSolution(solnIncrement);
-  
-  initNavierStokesBilinearForm(navierStokesBF, mu, solution);
-  
-  BFPtr stokesBFMath = Teuchos::rcp(new BF(varFactory));
-  initStokesBilinearForm( stokesBFMath, mu );
 
-  if ( ! usePicardIteration ) { // Picard solves not for increments, but successive full solutions
-    initRHSNavierStokes( rhs, stokesBFMath, mu, solution );
-  }
-  
-  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
-    // add time marching terms for momentum equations (v1 and v2):
+//  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
+//    // add time marching terms for momentum equations (v1 and v2):
+  if (artificialTimeStepping) {
     FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
-    // LHS gets u_inc / dt:
-    navierStokesBF->addTerm(-dt_inv * u1, v1);
-    navierStokesBF->addTerm(-dt_inv * u2, v2);
+//    // LHS gets u_inc / dt:
+    BFPtr bf = problem.bf();
+    bf->addTerm(-dt_inv * u1, v1);
+    bf->addTerm(-dt_inv * u2, v2);
+    problem.setIP( bf->graphNorm() );
   }
+//  }
   
-  if (rank==0) {
-    cout << "********** STOKES BF **********\n";
-    stokesBFMath->printTrialTestInteractions();
-    cout << "\n\n********** NAVIER-STOKES BF **********\n";
-    navierStokesBF->printTrialTestInteractions();
-    cout << "\n\n";
-  }
+//  if (rank==0) {
+//    cout << "********** STOKES BF **********\n";
+//    stokesBFMath->printTrialTestInteractions();
+//    cout << "\n\n********** NAVIER-STOKES BF **********\n";
+//    navierStokesBF->printTrialTestInteractions();
+//    cout << "\n\n";
+//  }
   
   // set initial guess (all zeros is probably a decent initial guess here)
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
-  map< int, FunctionPtr > initialGuesses;
-  initialGuesses[u1->ID()] = zero;
-  initialGuesses[u2->ID()] = zero;
-  initialGuesses[sigma11->ID()] = zero;
-  initialGuesses[sigma12->ID()] = zero;
-  initialGuesses[sigma21->ID()] = zero;
-  initialGuesses[sigma22->ID()] = zero;
-  initialGuesses[p->ID()] = zero;
-  initialGuesses[u1hat->ID()] = zero;
-  initialGuesses[u2hat->ID()] = zero;
-  initialGuesses[t1n->ID()] = zero;
-  initialGuesses[t2n->ID()] = zero;
-  solution->projectOntoMesh(initialGuesses);
+//  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
+//  map< int, FunctionPtr > initialGuesses;
+//  initialGuesses[u1->ID()] = zero;
+//  initialGuesses[u2->ID()] = zero;
+//  initialGuesses[sigma11->ID()] = zero;
+//  initialGuesses[sigma12->ID()] = zero;
+//  initialGuesses[sigma21->ID()] = zero;
+//  initialGuesses[sigma22->ID()] = zero;
+//  initialGuesses[p->ID()] = zero;
+//  initialGuesses[u1hat->ID()] = zero;
+//  initialGuesses[u2hat->ID()] = zero;
+//  initialGuesses[t1n->ID()] = zero;
+//  initialGuesses[t2n->ID()] = zero;
+//  solution->projectOntoMesh(initialGuesses);
   
   ///////////////////////////////////////////////////////////////////////////
   
@@ -504,7 +358,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> streamMesh, overkillMesh;
   
   streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                   streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
+                                   streamBF, H1Order+pToAddForStreamFunction,
+                                   H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
   
@@ -541,59 +396,51 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  
-  if (rank==0) 
-    ip->printInteractions();
-  
   ////////////////////   CREATE BCs   ///////////////////////
-  SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
-  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
-  FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
-  FunctionPtr un_0 = Teuchos::rcp( new Un_0(eps) );
-  FunctionPtr u0_cross_n = Teuchos::rcp( new U0_cross_n(eps) );
+  SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
+
+  FunctionPtr u1_prev = Function::solution(u1,solution);
+  FunctionPtr u2_prev = Function::solution(u2,solution);
   
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2) );
-  
-  FunctionPtr u1hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat) );
-  FunctionPtr u2hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2hat) );
+  FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
+  FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
     
-  if ( ! usePicardIteration ) {
-    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
-    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
-  // as long as we don't subtract from the RHS, I think the following is actually right:
-//    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-//    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-  } else {
-//    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-//    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-    // experiment:
-    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-    pc->addConstraint(u1hat==u1_0,entireBoundary);
-    pc->addConstraint(u2hat==u2_0,entireBoundary);
-    solnIncrement->setFilter(pc);
-  }
-  bc->addZeroMeanConstraint(p);
-  
+//  if ( ! usePicardIteration ) {
+//    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
+//    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
+//  // as long as we don't subtract from the RHS, I think the following is actually right:
+////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+//  } else {
+////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+//    // experiment:
+//    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+//    pc->addConstraint(u1hat==u1_0,entireBoundary);
+//    pc->addConstraint(u2hat==u2_0,entireBoundary);
+//    solnIncrement->setFilter(pc);
+//  }
+//  bc->addZeroMeanConstraint(p);
+//  
   /////////////////// SOLVE OVERKILL //////////////////////
-  if (compareWithOverkillMesh) {
-    // TODO: fix this to make it work with Navier-Stokes
-    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
-    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
-                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
-    
-    if (rank == 0) {
-      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
-      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
-    }
-    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-    overkillSolution->solve();
-    if (rank == 0)
-      cout << "...solved.\n";
-    double overkillEnergyError = overkillSolution->energyErrorTotal();
-    if (rank == 0)
-      cout << "overkill energy error: " << overkillEnergyError << endl;
-  }
+//  if (compareWithOverkillMesh) {
+//    // TODO: fix this to make it work with Navier-Stokes
+//    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
+//    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
+//                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
+//    
+//    if (rank == 0) {
+//      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
+//      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
+//    }
+//    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+//    overkillSolution->solve();
+//    if (rank == 0)
+//      cout << "...solved.\n";
+//    double overkillEnergyError = overkillSolution->energyErrorTotal();
+//    if (rank == 0)
+//      cout << "overkill energy error: " << overkillEnergyError << endl;
+//  }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   
@@ -618,7 +465,8 @@ int main(int argc, char *argv[]) {
   SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
   
   if (enforceLocalConservation) {
-    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+    FunctionPtr zero = Function::zero();
+    solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
     solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
@@ -626,11 +474,13 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  if (useAdHocHPRefinements) 
+  if (useAdHocHPRefinements) {
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-  else
+//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "need to build against LidDrivenFlowRefinementStrategy before using ad hoc hp refinements");
+  } else {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
+  }
   
   refinementStrategy->setEnforceOneIrregurity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
@@ -646,7 +496,7 @@ int main(int argc, char *argv[]) {
 
   
   
-  solveStrategy->setUsePicardIteration(usePicardIteration);
+//  solveStrategy->setUsePicardIteration(usePicardIteration);
   
   // run some refinements on the initial linear problem
 //  int numInitialRefs = 5;
@@ -674,8 +524,44 @@ int main(int argc, char *argv[]) {
     topCornerPoints(3,1) = 1 - 1e-10;
     
     bool printToConsole = rank==0;
-    for (int refIndex=0; refIndex<numRefs; refIndex++){    
-      solveStrategy->solve(printToConsole);
+    FunctionPtr u1_incr = Function::solution(u1, solnIncrement);
+    FunctionPtr u2_incr = Function::solution(u2, solnIncrement);
+    FunctionPtr sigma11_incr = Function::solution(sigma11, solnIncrement);
+    FunctionPtr sigma12_incr = Function::solution(sigma12, solnIncrement);
+    FunctionPtr sigma21_incr = Function::solution(sigma21, solnIncrement);
+    FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
+    FunctionPtr p_incr = Function::solution(p, solnIncrement);
+    
+    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+    + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+    + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+
+    for (int refIndex=0; refIndex<numRefs; refIndex++){
+      // start with a fresh (zero) initial guess for each adaptive mesh:
+//      solution->clear();
+//      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+      
+      double incr_norm;
+      do {
+        problem.iterate();
+        incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+        if (rank==0) {
+          cout << "\x1B[2K"; // Erase the entire current line.
+          cout << "\x1B[0E"; // Move to the beginning of the current line.
+          cout << "Refinement # " << refIndex << ", iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+          flush(cout);
+        }
+      } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+
+      if (rank==0)
+        cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
+      
+      // reset iteration count to 1 (for the background flow):
+      problem.setIterationCount(1);
+      
+//      solveStrategy->solve(printToConsole);
+      
+      
 //      if (compareWithOverkillMesh) {
 //        Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
 //        solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
@@ -704,7 +590,9 @@ int main(int argc, char *argv[]) {
 //          cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
 //        dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
 //      }
+      
       refinementStrategy->refine(rank==0); // print to console on rank 0
+      
 //      if (! MeshTestUtility::checkMeshConsistency(mesh)) {
 //        if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
 //      }
@@ -791,7 +679,7 @@ int main(int argc, char *argv[]) {
       cellIDs.push_back(elems[i]->cellID());
     }
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,polyOrder) ); // enrich by trial space order
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
     FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
