@@ -131,7 +131,7 @@ set( STOKES_BACKWARD_FACING_STEP_DRIVER
   )
   
 set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
-  "${STOKES_DIR}/NavierStokesCavityFlowDriver.cpp"
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowDriver.cpp"
   )
   
 set( STOKES_CAVITY_FLOW_DRIVER
@@ -214,7 +214,7 @@ add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
-add_executable(NavierStokesCavityFlowDriver ${STOKES_SOURCES} ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
+add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${BURGERS_SOURCES} ${NEW_BURGERS_DRIVER})

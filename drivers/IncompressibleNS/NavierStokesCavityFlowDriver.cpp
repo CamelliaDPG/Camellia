@@ -6,9 +6,26 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "HConvergenceStudy.h"
+
+#include "InnerProductScratchPad.h"
+
+#include "PreviousSolutionFunction.h"
+
+#include "LagrangeConstraints.h"
+
+#include "BasisFactory.h"
+
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#else
+#endif
+
+#include "NavierStokesFormulation.h"
+
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
-#include "LidDrivenFlowRefinementStrategy.h"
+//#include "LidDrivenFlowRefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
@@ -16,8 +33,6 @@
 #include "MeshTestUtility.h"
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
-
-#include "NavierStokesFormulation.h"
 
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -30,7 +45,7 @@ typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 using namespace std;
 
 // static double REYN = 100;
-const static double REYN = 400; // matches John Evans's dissertation, p. 183
+static double Re = 400; // matches John Evans's dissertation, p. 183
 
 VarFactory varFactory; 
 // test variables:
@@ -98,6 +113,27 @@ public:
   }
 };
 
+class SqrtFunction : public Function {
+  FunctionPtr _f;
+public:
+  SqrtFunction(FunctionPtr f) : Function(0) {
+    _f = f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    _f->values(values,basisCache);
+    
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double value = values(cellIndex,ptIndex);
+        values(cellIndex,ptIndex) = sqrt(value);
+      }
+    }
+  }
+};
+
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
                       SolutionPtr solution, VarPtr u1, string filename) {
   vector<double> points1D_x, points1D_y;
@@ -157,7 +193,7 @@ int main(int argc, char *argv[]) {
 //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
-  //  double eps = 0.0; // John Evans's problem: not in H^1
+//  double eps = 0.0; // John Evans's problem: not in H^1
   bool enforceLocalConservation = false;
   bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
   bool enforceOneIrregularity = true;
@@ -165,13 +201,18 @@ int main(int argc, char *argv[]) {
   bool useMumps = false;
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
+  
+  bool artificialTimeStepping = false;
+  
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order
+  
+  int maxIters = 300; // for nonlinear steps
   
   // usage: polyOrder [numRefinements]
   // parse args:
   if ((argc != 4) && (argc != 3) && (argc != 2)) {
-    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10]\n";
+    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [Reyn=400]]\n";
     return -1;
   }
   int polyOrder = atoi(argv[1]);
@@ -181,12 +222,12 @@ int main(int argc, char *argv[]) {
   }
   if ( argc == 4) {
     numRefs = atoi(argv[2]);
-    REYN = atof(argv[3]);
+    Re = atof(argv[3]);
   }
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
-    cout << "REYN = " << REYN << endl;
-    cout << "dt = " << dt << endl;
+    cout << "Re = " << Re << endl;
+    if (artificialTimeStepping) cout << "dt = " << dt << endl;
   }
   
   FieldContainer<double> quadPoints(4,2);
@@ -202,9 +243,33 @@ int main(int argc, char *argv[]) {
 
   // define meshes:
   int H1Order = polyOrder + 1;
-  int horizontalCells = 4, verticalCells = 4;
-//  bool useTriangles = false;
-//  bool meshHasTriangles = useTriangles;
+  int horizontalCells = 16, verticalCells = 16;
+  bool useTriangles = false;
+  bool meshHasTriangles = useTriangles;
+  
+  double minL2Increment = 1e-10;
+
+  // get variable definitions:
+  VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+  u1 = varFactory.fieldVar(VGP_U1_S);
+  u2 = varFactory.fieldVar(VGP_U2_S);
+  sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
+  sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
+  sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
+  sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
+  p = varFactory.fieldVar(VGP_P_S);
+  
+  u1hat = varFactory.traceVar(VGP_U1HAT_S);
+  u2hat = varFactory.traceVar(VGP_U2HAT_S);
+  t1n = varFactory.fluxVar(VGP_T1HAT_S);
+  t2n = varFactory.fluxVar(VGP_T2HAT_S);
+  
+  v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+  v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+  tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+  tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+  q = varFactory.testVar(VGP_Q_S, HGRAD);
+  
 //  // create a pointer to a new mesh:
 //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
 //                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
@@ -217,34 +282,41 @@ int main(int argc, char *argv[]) {
 //  SolutionPtr solnIncrement = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 //  solnIncrement->setReportConditionNumber(false);
   
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                                          numCells1D,numCells1D,
-                                                          H1Order, pToAdd,
-                                                          u1_exact, u2_exact, p_exact);
-  SolutionPtr solution = problem.solution();
-  SolutionPtr solnIncrement = problem.solnIncrement();
+  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
+  FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
+  FunctionPtr zero = Function::zero();
   
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPoints,
+                                                          horizontalCells,verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_0, u2_0,  // BC for u
+                                                          zero, zero); // zero forcing function
+  SolutionPtr solution = problem.backgroundFlow();
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  
+  Teuchos::RCP<Mesh> mesh = problem.mesh();
   mesh->registerSolution(solution);
   mesh->registerSolution(solnIncrement);
-  
-  BFPtr stokesBFMath = Teuchos::rcp(new BF(varFactory));
-  initStokesBilinearForm( stokesBFMath, mu );
-  
+
 //  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
 //    // add time marching terms for momentum equations (v1 and v2):
-//    FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
+  if (artificialTimeStepping) {
+    FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
 //    // LHS gets u_inc / dt:
-//    navierStokesBF->addTerm(-dt_inv * u1, v1);
-//    navierStokesBF->addTerm(-dt_inv * u2, v2);
+    BFPtr bf = problem.bf();
+    bf->addTerm(-dt_inv * u1, v1);
+    bf->addTerm(-dt_inv * u2, v2);
+    problem.setIP( bf->graphNorm() );
+  }
 //  }
   
-  if (rank==0) {
-    cout << "********** STOKES BF **********\n";
-    stokesBFMath->printTrialTestInteractions();
-    cout << "\n\n********** NAVIER-STOKES BF **********\n";
-    navierStokesBF->printTrialTestInteractions();
-    cout << "\n\n";
-  }
+//  if (rank==0) {
+//    cout << "********** STOKES BF **********\n";
+//    stokesBFMath->printTrialTestInteractions();
+//    cout << "\n\n********** NAVIER-STOKES BF **********\n";
+//    navierStokesBF->printTrialTestInteractions();
+//    cout << "\n\n";
+//  }
   
   // set initial guess (all zeros is probably a decent initial guess here)
 //  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
@@ -286,7 +358,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> streamMesh, overkillMesh;
   
   streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                   streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
+                                   streamBF, H1Order+pToAddForStreamFunction,
+                                   H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
   
@@ -323,59 +396,51 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  
-  if (rank==0) 
-    ip->printInteractions();
-  
   ////////////////////   CREATE BCs   ///////////////////////
-  SpatialFilterPtr entireBoundary = Teuchos::rcp( new UnitSquareBoundary );
-  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
-  FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
-  FunctionPtr un_0 = Teuchos::rcp( new Un_0(eps) );
-  FunctionPtr u0_cross_n = Teuchos::rcp( new U0_cross_n(eps) );
+  SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
+
+  FunctionPtr u1_prev = Function::solution(u1,solution);
+  FunctionPtr u2_prev = Function::solution(u2,solution);
   
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2) );
-  
-  FunctionPtr u1hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat) );
-  FunctionPtr u2hat_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2hat) );
+  FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
+  FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
     
-  if ( ! usePicardIteration ) {
-    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
-    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
-  // as long as we don't subtract from the RHS, I think the following is actually right:
-//    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-//    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-  } else {
-//    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-//    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-    // experiment:
-    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-    pc->addConstraint(u1hat==u1_0,entireBoundary);
-    pc->addConstraint(u2hat==u2_0,entireBoundary);
-    solnIncrement->setFilter(pc);
-  }
-  bc->addZeroMeanConstraint(p);
-  
+//  if ( ! usePicardIteration ) {
+//    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
+//    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
+//  // as long as we don't subtract from the RHS, I think the following is actually right:
+////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+//  } else {
+////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
+////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
+//    // experiment:
+//    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+//    pc->addConstraint(u1hat==u1_0,entireBoundary);
+//    pc->addConstraint(u2hat==u2_0,entireBoundary);
+//    solnIncrement->setFilter(pc);
+//  }
+//  bc->addZeroMeanConstraint(p);
+//  
   /////////////////// SOLVE OVERKILL //////////////////////
-  if (compareWithOverkillMesh) {
-    // TODO: fix this to make it work with Navier-Stokes
-    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
-    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
-                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
-    
-    if (rank == 0) {
-      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
-      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
-    }
-    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-    overkillSolution->solve();
-    if (rank == 0)
-      cout << "...solved.\n";
-    double overkillEnergyError = overkillSolution->energyErrorTotal();
-    if (rank == 0)
-      cout << "overkill energy error: " << overkillEnergyError << endl;
-  }
+//  if (compareWithOverkillMesh) {
+//    // TODO: fix this to make it work with Navier-Stokes
+//    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
+//    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
+//                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
+//    
+//    if (rank == 0) {
+//      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
+//      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
+//    }
+//    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+//    overkillSolution->solve();
+//    if (rank == 0)
+//      cout << "...solved.\n";
+//    double overkillEnergyError = overkillSolution->energyErrorTotal();
+//    if (rank == 0)
+//      cout << "overkill energy error: " << overkillEnergyError << endl;
+//  }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   
@@ -400,7 +465,8 @@ int main(int argc, char *argv[]) {
   SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
   
   if (enforceLocalConservation) {
-    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+    FunctionPtr zero = Function::zero();
+    solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
     solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
@@ -408,11 +474,13 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  if (useAdHocHPRefinements) 
+  if (useAdHocHPRefinements) {
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-  else
+//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "need to build against LidDrivenFlowRefinementStrategy before using ad hoc hp refinements");
+  } else {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
+  }
   
   refinementStrategy->setEnforceOneIrregurity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
@@ -428,7 +496,7 @@ int main(int argc, char *argv[]) {
 
   
   
-  solveStrategy->setUsePicardIteration(usePicardIteration);
+//  solveStrategy->setUsePicardIteration(usePicardIteration);
   
   // run some refinements on the initial linear problem
 //  int numInitialRefs = 5;
@@ -456,8 +524,44 @@ int main(int argc, char *argv[]) {
     topCornerPoints(3,1) = 1 - 1e-10;
     
     bool printToConsole = rank==0;
-    for (int refIndex=0; refIndex<numRefs; refIndex++){    
-      solveStrategy->solve(printToConsole);
+    FunctionPtr u1_incr = Function::solution(u1, solnIncrement);
+    FunctionPtr u2_incr = Function::solution(u2, solnIncrement);
+    FunctionPtr sigma11_incr = Function::solution(sigma11, solnIncrement);
+    FunctionPtr sigma12_incr = Function::solution(sigma12, solnIncrement);
+    FunctionPtr sigma21_incr = Function::solution(sigma21, solnIncrement);
+    FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
+    FunctionPtr p_incr = Function::solution(p, solnIncrement);
+    
+    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+    + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+    + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+
+    for (int refIndex=0; refIndex<numRefs; refIndex++){
+      // start with a fresh (zero) initial guess for each adaptive mesh:
+//      solution->clear();
+//      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+      
+      double incr_norm;
+      do {
+        problem.iterate();
+        incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+        if (rank==0) {
+          cout << "\x1B[2K"; // Erase the entire current line.
+          cout << "\x1B[0E"; // Move to the beginning of the current line.
+          cout << "Refinement # " << refIndex << ", iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+          flush(cout);
+        }
+      } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+
+      if (rank==0)
+        cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
+      
+      // reset iteration count to 1 (for the background flow):
+      problem.setIterationCount(1);
+      
+//      solveStrategy->solve(printToConsole);
+      
+      
 //      if (compareWithOverkillMesh) {
 //        Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
 //        solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
@@ -486,7 +590,9 @@ int main(int argc, char *argv[]) {
 //          cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
 //        dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
 //      }
+      
       refinementStrategy->refine(rank==0); // print to console on rank 0
+      
 //      if (! MeshTestUtility::checkMeshConsistency(mesh)) {
 //        if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
 //      }
