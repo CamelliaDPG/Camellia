@@ -145,6 +145,11 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
   initialize();
 }
 
+void Solution::clear() {
+  // clears all solution values.  Leaves everything else intact.
+  _solutionForCellIDGlobal.clear();
+}
+
 void Solution::initialize() {
   // clear the data structure in case it already stores some stuff
   _solutionForCellIDGlobal.clear();
@@ -3547,7 +3552,7 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
     
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,_cubatureEnrichmentDegree) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
     
     if (fluxOrTrace) {
