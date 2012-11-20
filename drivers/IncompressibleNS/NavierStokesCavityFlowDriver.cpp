@@ -202,7 +202,7 @@ int main(int argc, char *argv[]) {
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
   
-  bool artificialTimeStepping = true;
+  bool artificialTimeStepping = false;
   
   int horizontalCells = 16, verticalCells = 16;
   
@@ -487,7 +487,9 @@ int main(int argc, char *argv[]) {
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "need to build against LidDrivenFlowRefinementStrategy before using ad hoc hp refinements");
   } else {
-    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
+    if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
+//    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
   }
   
   refinementStrategy->setEnforceOneIrregurity(enforceOneIrregularity);
