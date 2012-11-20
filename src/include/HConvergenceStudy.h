@@ -96,6 +96,8 @@ class HConvergenceStudy {
   void computeErrors();
   int minNumElements();
   
+  Teuchos::RCP<Solution> bestApproximation(Teuchos::RCP<Mesh> mesh);
+  
   Teuchos::RCP<Mesh> buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements );
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,

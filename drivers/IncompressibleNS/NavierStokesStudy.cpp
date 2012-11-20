@@ -52,23 +52,35 @@ int main(int argc, char *argv[]) {
   
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
-  quadPointsKovasznay(0,0) = -0.5; // x1
-  quadPointsKovasznay(0,1) =  0.0; // y1
-  quadPointsKovasznay(1,0) =  1.5;
-  quadPointsKovasznay(1,1) =  0.0;
-  quadPointsKovasznay(2,0) =  1.5;
-  quadPointsKovasznay(2,1) =  2.0;
-  quadPointsKovasznay(3,0) = -0.5;
-  quadPointsKovasznay(3,1) =  2.0;
+  // domain from Cockburn Kanschat for Stokes:
+//  quadPointsKovasznay(0,0) = -0.5; // x1
+//  quadPointsKovasznay(0,1) =  0.0; // y1
+//  quadPointsKovasznay(1,0) =  1.5;
+//  quadPointsKovasznay(1,1) =  0.0;
+//  quadPointsKovasznay(2,0) =  1.5;
+//  quadPointsKovasznay(2,1) =  2.0;
+//  quadPointsKovasznay(3,0) = -0.5;
+//  quadPointsKovasznay(3,1) =  2.0;
+  
+  // Domain from Evans Hughes for Navier-Stokes:
+  quadPointsKovasznay(0,0) =  0.0; // x1
+  quadPointsKovasznay(0,1) = -0.5; // y1
+  quadPointsKovasznay(1,0) =  1.0;
+  quadPointsKovasznay(1,1) = -0.5;
+  quadPointsKovasznay(2,0) =  1.0;
+  quadPointsKovasznay(2,1) =  0.5;
+  quadPointsKovasznay(3,0) =  0.0;
+  quadPointsKovasznay(3,1) =  0.5;
 
-  double Re = 100.0;
+//  double Re = 10.0;  // Cockburn Kanschat Stokes
+  double Re = 40.0; // Evans Hughes Navier-Stokes
+//  double Re = 1000.0;
   
   FunctionPtr u1_exact, u2_exact, p_exact;
   
   int numCellsFineMesh = 20; // for computing a zero-mean pressure
   int H1OrderFineMesh = 5;
   int H1Order = 3;
-  
   
   int polyOrder = H1Order - 1;
   if (rank==0) {
@@ -86,6 +98,10 @@ int main(int argc, char *argv[]) {
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
   VarPtr u2_vgp = varFactory.fieldVar(VGP_U2_S);
+  VarPtr sigma11_vgp = varFactory.fieldVar(VGP_SIGMA11_S);
+  VarPtr sigma12_vgp = varFactory.fieldVar(VGP_SIGMA12_S);
+  VarPtr sigma21_vgp = varFactory.fieldVar(VGP_SIGMA21_S);
+  VarPtr sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   VarPtr p_vgp = varFactory.fieldVar(VGP_P_S);
     
   VGPStokesFormulation stokesForm(1/Re);
@@ -93,11 +109,11 @@ int main(int argc, char *argv[]) {
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
   int minLogElements = 0;
-  int maxLogElements = 5;
+  int maxLogElements = 3;
   
   int numCells1D = pow(2.0,minLogElements);
-  int maxIters = 50; // max nonlinear steps
-  double minL2Increment = 1e-11;
+  int maxIters = 25; // max nonlinear steps
+  double minL2Increment = 1e-12;
   vector< VGPNavierStokesProblem > problems;
   do {
     VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
@@ -107,6 +123,10 @@ int main(int argc, char *argv[]) {
     problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
     problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
     problems.push_back(problem);
+    if ( !useOptimalNorm ) {
+      // then use the naive:
+      problem.setIP(problem.bf()->naiveNorm());
+    }
     if (rank==0) {
       cout << numCells1D << " x " << numCells1D << ": " << problem.mesh()->numGlobalDofs() << " dofs " << endl;
     }
@@ -129,9 +149,15 @@ int main(int argc, char *argv[]) {
     SolutionPtr solnIncrement = problem->solutionIncrement();
     FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
     FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
+    FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
+    FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, solnIncrement);
+    FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, solnIncrement);
+    FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
     FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
     
-    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+                        + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+                        + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
     do {
       problem->iterate();
     } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters));

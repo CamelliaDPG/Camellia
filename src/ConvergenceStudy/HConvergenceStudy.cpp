@@ -229,6 +229,13 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<dou
   return mesh;
 }
 
+Teuchos::RCP<Solution> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mesh) {
+  Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+  bestApproximation->setCubatureEnrichmentDegree(3); // might be nice to make this settable--right now, I'm afraid to set it too high for fear we break triangles
+  bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+  return bestApproximation;
+}
+
 void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   // alternative to solve() if you want to do your own solving (e.g. for nonlinear problems)
   //
@@ -241,10 +248,7 @@ void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
     SolutionPtr soln = solutions[i-_minLogElements];
     Teuchos::RCP<Mesh> mesh = soln->mesh();
-    
-    Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
-    _bestApproximations.push_back(bestApproximation);
-    bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+    _bestApproximations.push_back(bestApproximation(mesh));
     
     if (i == _maxLogElements) {
       // We'll use solution to compute L2 norm of true Solution
@@ -253,7 +257,6 @@ void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   }
   computeErrors();
 }
-
 
 void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices) {
   // TODO: refactor to make this and the straight quad mesh version share code...
@@ -275,9 +278,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, v
     solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
     
-    Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
-    _bestApproximations.push_back(bestApproximation);
-    bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+    _bestApproximations.push_back(bestApproximation(mesh));
     
     numElements *= 2;
     if (i == _maxLogElements) {
@@ -322,9 +323,8 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
     solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
     
-    Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
-    _bestApproximations.push_back(bestApproximation);
-    bestApproximation->projectOntoMesh(_exactSolutionFunctions);
+    _bestApproximations.push_back(bestApproximation(mesh));
+
 
     numElements *= 2;
     if (i == _maxLogElements) {

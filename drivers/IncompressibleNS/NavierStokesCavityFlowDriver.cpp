@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   int pToAddForStreamFunction = 2;
   double nonlinearStepSize = 1.0;
-  double dt = 0.01;
+  double dt = 0.5;
   double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
 //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
@@ -202,16 +202,18 @@ int main(int argc, char *argv[]) {
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
   
-  bool artificialTimeStepping = false;
+  bool artificialTimeStepping = true;
+  
+  int horizontalCells = 16, verticalCells = 16;
   
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order
   
-  int maxIters = 30; // for nonlinear steps
+  int maxIters = 50; // for nonlinear steps
   
   // usage: polyOrder [numRefinements]
   // parse args:
-  if ((argc != 4) && (argc != 3) && (argc != 2)) {
+  if ((argc != 4) && (argc != 3) && (argc != 2) && (argc != 5)) {
     cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [Reyn=400]]\n";
     return -1;
   }
@@ -224,9 +226,16 @@ int main(int argc, char *argv[]) {
     numRefs = atoi(argv[2]);
     Re = atof(argv[3]);
   }
+  if ( argc == 5) {
+    numRefs = atoi(argv[2]);
+    Re = atof(argv[3]);
+    horizontalCells = atoi(argv[4]);
+    verticalCells = atoi(argv[4]);
+  }
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
     cout << "Re = " << Re << endl;
+    cout << "initial mesh: " << horizontalCells << " x " << verticalCells << endl;
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
   }
   
@@ -243,7 +252,6 @@ int main(int argc, char *argv[]) {
 
   // define meshes:
   int H1Order = polyOrder + 1;
-  int horizontalCells = 16, verticalCells = 16;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles;
   
@@ -606,11 +614,28 @@ int main(int argc, char *argv[]) {
       }
     }
     // one more solve on the final refined mesh:
-    if (enforceLocalConservationInFinalSolve && !enforceLocalConservation) {
-      solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
-    }
+    if (rank==0) cout << "Final solve:\n";
+    // start with a fresh (zero) initial guess for each adaptive mesh:
+    solution->clear();
+    problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+    double incr_norm;
+    do {
+      problem.iterate();
+      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+      if (rank==0) {
+        cout << "\x1B[2K"; // Erase the entire current line.
+        cout << "\x1B[0E"; // Move to the beginning of the current line.
+        cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+        flush(cout);
+      }
+    } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+    if (rank==0) cout << endl;
     
-    finalSolveStrategy->solve(printToConsole);
+//    if (enforceLocalConservationInFinalSolve && !enforceLocalConservation) {
+//      solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+//    }
+//    
+//    finalSolveStrategy->solve(printToConsole);
   }
 //  if (compareWithOverkillMesh) {
 //    Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
