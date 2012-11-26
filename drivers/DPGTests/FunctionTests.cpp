@@ -107,6 +107,14 @@ void FunctionTests::setup() {
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+
+  setup();
+  if (testIntegrate()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
   setup();
   if (testThatLikeFunctionsAgree()) {
     numTestsPassed++;
@@ -354,6 +362,33 @@ bool FunctionTests::testQuotientRule() {
   
   return success;
   
+}
+
+bool FunctionTests::testIntegrate(){
+  bool success = true;
+
+  // we must create our own basisCache here because _basisCache
+  // has had its ref cell points set, which basically means it's
+  // opted out of having any help with integration.
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
+  vector<int> cellIDs;
+  cellIDs.push_back(0);
+  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
+  
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  int numCells = basisCache->cellIDs().size();
+  FieldContainer<double> integrals(numCells);
+  x->integrate(integrals,basisCache);
+  double value = 0.0;
+  for (int i = 0;i<numCells;i++){
+    value += integrals(i);
+  }
+  double tol = 1e-11;
+  if (abs(value)>tol){ // should get zero if integrating x over [-1,1]
+    success = false;
+    cout << "failing testIntegrate()" << endl;
+  }
+  return success;
 }
 
 std::string FunctionTests::testSuiteName() {

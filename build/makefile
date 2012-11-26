@@ -355,7 +355,7 @@ Poisson%.o: $(DRIVERS_DIR)/Poisson/Poisson%.cpp
 LidDrivenFlowRefinementStrategy.o: $(DRIVERS_DIR)/Stokes/LidDrivenFlowRefinementStrategy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
-NavierStokesCavityFlowDriver.o: $(DRIVERS_DIR)/Stokes/NavierStokesCavityFlowDriver.cpp
+NavierStokesCavityFlowDriver.o: $(DRIVERS_DIR)/IncompressibleNS/NavierStokesCavityFlowDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 NavierStokesStudy.o: $(DRIVERS_DIR)/IncompressibleNS/NavierStokesStudy.cpp

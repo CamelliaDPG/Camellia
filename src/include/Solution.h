@@ -134,6 +134,7 @@ public:
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   
+  void clear();
   void clearSolution(int trialID);
 
   int cubatureEnrichmentDegree() const;
