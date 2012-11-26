@@ -1,0 +1,66 @@
+\documentclass[letterpaper]{article}
+\usepackage[margin=1.0in]{geometry}
+\usepackage{authblk}
+
+\title{Locally Conservative Discontinuous Petrov-Galerkin Finite Elements for
+Fluid Problems}
+\author{Truman Ellis} 
+\author{Leszek Demkowicz}
+\author{Jesse Chan}
+\affil{Institute for Computational Engineering and Sciences,\\
+The University of Texas at Austin, \\
+Austin, TX 78712}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\end{abstract}
+
+\section{Intoduction}
+Verteeg and Malalasekera, in \emph{An Introduction to Computational Fluid
+Dynamics: The Finite Volume Method}\cite[p. 110-113]{IntroCFD} cite three
+characteristics that they consider essential to any numerical discretization
+of convection-diffusion type problems: conservativeness, boundedness, and
+transportiveness.
+
+Perot\cite{Perot2011} argues
+\begin{quote}
+Accuracy, stability, and consistency are the mathematical concepts that are
+typically used to analyze numerical methods for partial differential equations
+(PDEs). These important tools quantify how well the mathematics of a PDE is
+represented, but they fail to say anything about how well the physics of the
+system is represented by a particular numerical method. In practice, physical
+fidelity of a numerical solution can be just as important (perhaps even more
+important to a physicist) as these more traditional mathematical concepts. A
+numerical solution that violates the underlying physics (destroying mass or
+entropy, for example) is in many respects just as flawed as an unstable
+solution.
+\end{quote}
+
+The discontinuous Petrov-Galerkin finite element method has been described as
+least squares finite elements with a twist. The key difference is that least
+square methods seek to minimize the residual of the solution in some Hilbert
+space norm, while DPG seeks the minimization in a dual norm through the
+inverse Riesz map. Exact mass conservation has been an issue that has plagued
+least squares finite elements for a long time. Several approaches have been
+used to try to adress this. Chang and Nelson\cite{ChangNelson1997} developed
+the 'restricted LSFEM'\cite{ChangNelson1997} be augmenting the least squares
+equations with a Lagrange multiplier explicitly enforcing mass conservation
+element-wise. Our conservative formulation of DPG takes a similar approach and
+both methods share similar negative of transforming a minimization method to a
+saddle-point problem.
+
+The discontinuous Petrov-Galerkin finite element method has shown a lot of
+promise for convection-diffusion type problems including robustness in the
+face of singularly perturbed problems.
+
+\section{DPG is a Minimum Residual Method}
+
+
+\bibliographystyle{plain}
+\bibliography{../DPG}
+\end{document}
+
+
