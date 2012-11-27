@@ -397,4 +397,13 @@ public:
 };
 
 
+class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
+  FieldContainer<double> _physCubPoints;
+public:
+  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints);
+  const FieldContainer<double> & getPhysicalCubaturePoints();
+  FieldContainer<double> & writablePhysicalCubaturePoints();
+};
+
+
 #endif

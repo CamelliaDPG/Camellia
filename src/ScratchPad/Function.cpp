@@ -1389,3 +1389,13 @@ string Cos_ay::displayString() {
   ss << "\\cos( " << _a << " y )";
   return ss.str();
 }
+
+DummyBasisCacheWithOnlyPhysicalCubaturePoints::DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
+  _physCubPoints = physCubPoints;
+}
+const FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::getPhysicalCubaturePoints() { // overrides super
+  return _physCubPoints;
+}
+FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::writablePhysicalCubaturePoints() { // allows overwriting the contents
+  return _physCubPoints;
+}

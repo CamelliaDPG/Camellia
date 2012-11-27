@@ -186,18 +186,4 @@ public:
   int getSideIndex(); // -1 if not sideCache
 };
 
-class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
-  FieldContainer<double> _physCubPoints;
-public:
-  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
-    _physCubPoints = physCubPoints;
-  }
-  const FieldContainer<double> & getPhysicalCubaturePoints() { // overrides super
-    return _physCubPoints;
-  }
-  FieldContainer<double> & writablePhysicalCubaturePoints() { // allows overwriting the contents
-    return _physCubPoints;
-  }
-};
-
 #endif
