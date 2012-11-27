@@ -51,6 +51,8 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
+#include "CamelliaIntrepidExtendedTypes.h"
+
 class BasisEvaluation { 
   typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
   typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;

@@ -42,8 +42,11 @@
 
 #include "Mesh.h"
 
+#include "CamelliaIntrepidExtendedTypes.h"
+
 using namespace std;
 using namespace Intrepid;
+using namespace IntrepidExtendedTypes;
 
 class DPGTests;
 

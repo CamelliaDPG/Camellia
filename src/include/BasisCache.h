@@ -46,8 +46,6 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
-#include "BilinearForm.h"
-
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -55,16 +53,17 @@
 
 #include "DofOrdering.h"
 
+#include "CamelliaIntrepidExtendedTypes.h"
+
 using namespace Intrepid;
 using namespace std;
 using namespace IntrepidExtendedTypes;
 
-class BasisCache;
 class Mesh;
-
+class Function; // Function.h and BasisCache.h refer to each other...
+typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
@@ -84,6 +83,11 @@ private:
   FieldContainer<double> _physCubPoints;
   FieldContainer<double> _cellSideParities;
   FieldContainer<double> _physicalCellNodes;
+  
+  FunctionPtr _transformationFxn;
+  bool _composeTransformationFxnWithMeshTransformation;
+  // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
+  //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   DofOrdering _trialOrdering;
@@ -139,7 +143,7 @@ public:
              FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
              FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
              FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, BasisCachePtr volumeCache);
+             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, Teuchos::RCP<BasisCache> volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> & getWeightedMeasures();
@@ -184,6 +188,10 @@ public:
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
   
   int getSideIndex(); // -1 if not sideCache
+  
+  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
 };
+
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 #endif
