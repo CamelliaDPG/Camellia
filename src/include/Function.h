@@ -52,7 +52,6 @@ public:
   virtual FunctionPtr grad();
   
   virtual FunctionPtr inverse();
-  virtual FunctionPtr jacobian();
   
   int rank();
   
