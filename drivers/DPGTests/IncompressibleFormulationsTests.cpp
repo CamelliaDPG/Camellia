@@ -3,6 +3,10 @@
 #include "HessianFilter.h"
 #include "RieszRep.h"
 
+IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
+  _thoroughMode = thorough;
+}
+
 void IncompressibleFormulationsTests::setup() {
   
   x = Teuchos::rcp ( new Xn(1) );
@@ -64,31 +68,33 @@ void IncompressibleFormulationsTests::setup() {
 //  polyExactFunctions.push_back(exactFxns);
 //  exactFxns.clear();
 //
-  exactFxns.push_back( make_pair(zero, 0) ); // u1
-  exactFxns.push_back( make_pair(zero, 0) ); // u2 (chosen to have zero divergence)
-  exactFxns.push_back( make_pair(y, 1) ); // p: odd function: zero mean on our domain
-  polyExactFunctions.push_back(exactFxns);
-  exactFxns.clear();
+  if (_thoroughMode) {
+    exactFxns.push_back( make_pair(zero, 0) ); // u1
+    exactFxns.push_back( make_pair(zero, 0) ); // u2 (chosen to have zero divergence)
+    exactFxns.push_back( make_pair(y, 1) ); // p: odd function: zero mean on our domain
+    polyExactFunctions.push_back(exactFxns);
+    exactFxns.clear();
+
+//    // nonzero u, sigma diagonal only
+//    exactFxns.push_back( make_pair(x, 1) );    // u1
+//    exactFxns.push_back( make_pair(-y, 1) );   // u2 (chosen to have zero divergence)
+//    exactFxns.push_back( make_pair(zero, 0) );
+//    polyExactFunctions.push_back(exactFxns);
+//    exactFxns.clear();
+//    
+//    // nonzero u, sigma off-diagonal only
+//    exactFxns.push_back( make_pair(y, 1) ); // u1
+//    exactFxns.push_back( make_pair(x, 1) ); // u2 (chosen to have zero divergence)
+//    exactFxns.push_back( make_pair(zero, 0) );
+//    polyExactFunctions.push_back(exactFxns);
+//    exactFxns.clear();
 //
-//  // nonzero u, sigma diagonal only
-//  exactFxns.push_back( make_pair(x, 1) );    // u1
-//  exactFxns.push_back( make_pair(-y, 1) );   // u2 (chosen to have zero divergence)
-//  exactFxns.push_back( make_pair(zero, 0) );
-//  polyExactFunctions.push_back(exactFxns);
-//  exactFxns.clear();
-//  
-//  // nonzero u, sigma off-diagonal only
-//  exactFxns.push_back( make_pair(y, 1) ); // u1
-//  exactFxns.push_back( make_pair(x, 1) ); // u2 (chosen to have zero divergence)
-//  exactFxns.push_back( make_pair(zero, 0) );
-//  polyExactFunctions.push_back(exactFxns);
-//  exactFxns.clear();
-  
-//  exactFxns.push_back( make_pair(x2, 2) );     // u1
-//  exactFxns.push_back( make_pair(-2*x*y, 2) ); // u2 (chosen to have zero divergence)
-//  exactFxns.push_back( make_pair(y, 1) );      // p: odd function: zero mean on our domain
-//  polyExactFunctions.push_back(exactFxns);
-//  exactFxns.clear();
+//    exactFxns.push_back( make_pair(x2, 2) );     // u1
+//    exactFxns.push_back( make_pair(-2*x*y, 2) ); // u2 (chosen to have zero divergence)
+//    exactFxns.push_back( make_pair(y, 1) );      // p: odd function: zero mean on our domain
+//    polyExactFunctions.push_back(exactFxns);
+//    exactFxns.clear();    
+  }
   
   exactFxns.push_back( make_pair(x2 * y, 3) );  // u1
   exactFxns.push_back( make_pair(-x*y2, 3) );   // u2 (chosen to have zero divergence)
@@ -97,17 +103,27 @@ void IncompressibleFormulationsTests::setup() {
   exactFxns.clear();
   
   // mesh choices (horizontal x vertical cells)
-//  meshDimensions.push_back( make_pair(1, 1));
-//  meshDimensions.push_back( make_pair(1, 2));
+  meshDimensions.clear();
+  if (_thoroughMode) {
+    meshDimensions.push_back( make_pair(1, 1));
+    meshDimensions.push_back( make_pair(1, 2));
+  }
   meshDimensions.push_back( make_pair(2, 1));
   
+  pToAddValues.clear();
   pToAddValues.push_back(2);
   
-  double mu = 1.0;
-  muValues.clear();
-  for (int i=0; i<4; i++) {
-    muValues.push_back(mu);
-    mu /= 10;
+  if ( _thoroughMode ) {
+    double mu = 1.0;
+    muValues.clear();
+    for (int i=0; i<4; i++) {
+      muValues.push_back(mu);
+      mu /= 10;
+    }
+  } else {
+    // just do mu = 0.1:
+    muValues.clear();
+    muValues.push_back(0.1);
   }
   
   entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
@@ -749,9 +765,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   kovasznaySoln.push_back( make_pair( p_k, polyOrder) );
   
   // DEBUGGING: write solution to disk
-  u1_k->writeValuesToMATLABFile(mesh_k, "u1_k.m");
-  u2_k->writeValuesToMATLABFile(mesh_k, "u2_k.m");
-  p_k->writeValuesToMATLABFile(mesh_k, "p_k.m");
+//  u1_k->writeValuesToMATLABFile(mesh_k, "u1_k.m");
+//  u2_k->writeValuesToMATLABFile(mesh_k, "u2_k.m");
+//  p_k->writeValuesToMATLABFile(mesh_k, "p_k.m");
   
   double tol_k = 1e-3; // tolerance for kovasznay
   
@@ -1009,7 +1025,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
   }
   
   meshDimensions.clear();
-  meshDimensions.push_back( make_pair(5,5) ); // fine-ish mesh...
+  if (_thoroughMode) {
+    meshDimensions.push_back( make_pair(5,5) ); // fine-ish mesh...
+  } else {
+    meshDimensions.push_back( make_pair(2,2) ); // less fine mesh...
+  }
   
   muValues.clear();
   muValues.push_back(0.1);  // this may be the only valid one for Kovasznay; I'm not sure...
