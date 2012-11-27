@@ -75,25 +75,27 @@ void IncompressibleFormulationsTests::setup() {
     polyExactFunctions.push_back(exactFxns);
     exactFxns.clear();
 
-//    // nonzero u, sigma diagonal only
-//    exactFxns.push_back( make_pair(x, 1) );    // u1
-//    exactFxns.push_back( make_pair(-y, 1) );   // u2 (chosen to have zero divergence)
-//    exactFxns.push_back( make_pair(zero, 0) );
-//    polyExactFunctions.push_back(exactFxns);
-//    exactFxns.clear();
-//    
-//    // nonzero u, sigma off-diagonal only
-//    exactFxns.push_back( make_pair(y, 1) ); // u1
-//    exactFxns.push_back( make_pair(x, 1) ); // u2 (chosen to have zero divergence)
-//    exactFxns.push_back( make_pair(zero, 0) );
-//    polyExactFunctions.push_back(exactFxns);
-//    exactFxns.clear();
-//
+    // nonzero u, sigma diagonal only
+    exactFxns.push_back( make_pair(x, 1) );    // u1
+    exactFxns.push_back( make_pair(-y, 1) );   // u2 (chosen to have zero divergence)
+    exactFxns.push_back( make_pair(zero, 0) );
+    polyExactFunctions.push_back(exactFxns);
+    exactFxns.clear();
+    
+    // nonzero u, sigma off-diagonal only
+    exactFxns.push_back( make_pair(y, 1) ); // u1
+    exactFxns.push_back( make_pair(x, 1) ); // u2 (chosen to have zero divergence)
+    exactFxns.push_back( make_pair(zero, 0) );
+    polyExactFunctions.push_back(exactFxns);
+    exactFxns.clear();
+
+    // for some reason, this one and only this one fails to converge when using the Hessian term:
+    // (fails in testVGPNavierStokesFormulationConsistency)
 //    exactFxns.push_back( make_pair(x2, 2) );     // u1
 //    exactFxns.push_back( make_pair(-2*x*y, 2) ); // u2 (chosen to have zero divergence)
 //    exactFxns.push_back( make_pair(y, 1) );      // p: odd function: zero mean on our domain
 //    polyExactFunctions.push_back(exactFxns);
-//    exactFxns.clear();    
+//    exactFxns.clear();
   }
   
   exactFxns.push_back( make_pair(x2 * y, 3) );  // u1
@@ -162,17 +164,17 @@ void IncompressibleFormulationsTests::teardown() {
 }
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  cout << "Running IncompressibleFormulationsTests.  (This takes 30-60 seconds.)" << endl;
+  cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
   
   setup();
-  if (testVGPNavierStokesFormulationKovasnayConvergence()) {
+  if (testVGPNavierStokesFormulationConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-
+  
   setup();
-  if (testVGPNavierStokesFormulationConsistency()) {
+  if (testVGPNavierStokesFormulationKovasnayConvergence()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -707,6 +709,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
                 cout << "testVGPNavierStokesFormulationConsistency(): ";
                 cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
                 cout << " exceeds tol " << tol << endl;
+                string withHessian = useHessian ? "using hessian term" : "without hessian term";
+                cout << "Failure for Re = " << 1.0 / mu << " and " << withHessian;
+                cout << "; # iters to converge: " << problem.iterationCount() << endl;
               } else {
   //              cout << "PASS: testVGPStokesFormulationConsistency(): ";
   //              cout << "L^2 error of " << l2Error << " for variable " << field->displayString();
