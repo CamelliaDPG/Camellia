@@ -118,35 +118,38 @@ double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; t
 }
 
 FunctionPtr Function::x() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::y() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::z() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 
 FunctionPtr Function::dx() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::dy() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::dz() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::grad() {
   FunctionPtr dxFxn = dx();
   FunctionPtr dyFxn = dy();
   FunctionPtr dzFxn = dz();
   if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Teuchos::rcp((Function *)NULL);
+    return Function::null();
   } else if (dzFxn.get() == NULL) {
     return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
   } else {
     return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
   }
+}
+FunctionPtr Function::inverse() {
+  return Function::null();
 }
 
 FunctionPtr Function::div() {

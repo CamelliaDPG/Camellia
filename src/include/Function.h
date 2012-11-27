@@ -51,6 +51,8 @@ public:
   virtual FunctionPtr div();
   virtual FunctionPtr grad();
   
+  virtual FunctionPtr inverse();
+  
   int rank();
   
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
