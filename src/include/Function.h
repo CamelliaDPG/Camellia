@@ -52,6 +52,7 @@ public:
   virtual FunctionPtr grad();
   
   virtual FunctionPtr inverse();
+  virtual FunctionPtr jacobian();
   
   int rank();
   
@@ -84,6 +85,7 @@ public:
   
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
+  static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
   static FunctionPtr polarize(FunctionPtr f);
@@ -100,6 +102,7 @@ private:
   
   void scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
+
 
 };
 
@@ -259,15 +262,24 @@ public:
 };
 
 class VectorizedFunction : public Function {
+private:
   vector< FunctionPtr > _fxns;
+  FunctionPtr di(int i); // derivative in the ith coordinate direction
 public:
   virtual FunctionPtr x();
   virtual FunctionPtr y();
-//  virtual FunctionPtr z();
+  virtual FunctionPtr z();
   
+  virtual FunctionPtr dx();
+  virtual FunctionPtr dy();
+  virtual FunctionPtr dz();
+  
+  VectorizedFunction(const vector< FunctionPtr > &fxns);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  
+  int dim();
 };
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
