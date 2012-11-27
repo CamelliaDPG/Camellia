@@ -4,7 +4,7 @@
  */
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -70,6 +70,33 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   _cubWeights.resize(numCubPoints);
   
   cellTopoCub->getCubature(_cubPoints, _cubWeights);
+  
+  // now, create side caches
+  if ( createSideCacheToo ) {
+    _numSides = _cellTopo.getSideCount();
+    vector<int> sideTrialIDs;
+    vector<int> trialIDs = trialOrdering.getVarIDs();
+    int numTrialIDs = trialIDs.size();
+    for (int i=0; i<numTrialIDs; i++) {
+      if (_trialOrdering.getNumSidesForVarID(trialIDs[i]) == _numSides) {
+        sideTrialIDs.push_back(trialIDs[i]);
+      }
+    }
+    int numSideTrialIDs = sideTrialIDs.size();
+    for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+      BasisPtr maxDegreeBasisOnSide;
+      // loop through looking for highest-degree basis
+      int maxTrialDegree = 0;
+      for (int i=0; i<numSideTrialIDs; i++) {
+        if (_trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
+          maxDegreeBasisOnSide = _trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+        }
+      }
+      BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
+      BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxDegreeBasisOnSide));
+      _basisCacheSides.push_back(sideCache);
+    }
+  }
 }
 
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
@@ -106,9 +133,44 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, 
+// side constructor
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDegreeBasis) {
+  _isSideCache = true;
+  _sideIndex = sideIndex;
+  _basisCacheVolume = volumeCache;
+  _cubDegree = volumeCache->cubatureDegree();
+  _maxTestDegree = volumeCache->maxTestDegree();
+
+  _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
+  _spaceDim = _cellTopo.getDimension();
+  
+  shards::CellTopology side(_cellTopo.getCellTopologyData(_spaceDim-1,sideIndex)); // create relevant subcell (side) topology
+  int sideDim = side.getDimension();
+  Teuchos::RCP<Cubature<double> > sideCub = _cubFactory.create(side, _cubDegree);
+  int numCubPointsSide = sideCub->getNumPoints();
+  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
+  _cubWeights.resize(numCubPointsSide);
+  
+  if ( ! BasisFactory::isMultiBasis(maxDegreeBasis) ) {
+    sideCub->getCubature(_cubPoints, _cubWeights);
+  } else {
+    MultiBasis* multiBasis = (MultiBasis*) maxDegreeBasis.get();
+    multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree);
+    numCubPointsSide = _cubPoints.dimension(0);
+  }
+  
+  _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
+  
+  // compute geometric cell information
+  //cout << "computing geometric cell info for boundary integral." << endl;
+  typedef CellTools<double>  CellTools;
+  
+  CellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+}
+
+BasisCache::BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim,
                        FieldContainer<double> &cubPointsSidePhysical,
-                       FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
+                       FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell,
                        FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
                        FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
                        FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
@@ -145,6 +207,10 @@ const vector<int> & BasisCache::cellIDs() {
 
 shards::CellTopology BasisCache::cellTopology() {
   return _cellTopo;
+}
+
+int BasisCache::cubatureDegree() {
+  return _cubDegree;
 }
 
 Teuchos::RCP<Mesh> BasisCache::mesh() {
@@ -392,7 +458,6 @@ const FieldContainer<double> BasisCache::getRefCellPoints() {
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
-    // TODO: map pointsRefCell (on side) into volume coordinates
     int numPoints = pointsRefCell.dimension(0);
     // for side cache, _spaceDim is the spatial dimension of the volume cache
     _cubPointsSideRefCell.resize(numPoints, _spaceDim); 
@@ -474,7 +539,6 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   _numCells = physicalCellNodes.dimension(0);
   _spaceDim = physicalCellNodes.dimension(2);
   
-  _basisCacheSides.clear();  // it would be better not to have to recreate these every time the physicalCellNodes changes, but this is a first pass.
   _cellIDs = cellIDs;
   // 1. Determine Jacobians
   // Compute cell Jacobians, their inverses and their determinants
@@ -496,6 +560,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints();
   
+  _basisCacheSides.clear();  // it would be better not to have to recreate these every time the physicalCellNodes changes, but this is a first pass.
   if ( createSideCacheToo ) {
     _numSides = _cellTopo.getSideCount();
     vector<int> sideTrialIDs;
@@ -589,6 +654,9 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   }
 }
 
+int BasisCache::maxTestDegree() {
+  return _maxTestDegree;
+}
 
 void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation) {
   _transformationFxn = f;
