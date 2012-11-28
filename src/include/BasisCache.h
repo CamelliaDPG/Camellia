@@ -129,16 +129,11 @@ private:
   void determineJacobian();
   void determinePhysicalPoints();
   
-  // (private) side cache constructors:
-  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis); // work in progress
-  BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
-             FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell,
-             FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
-             FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, Teuchos::RCP<BasisCache> volumeCache);
+  // (private) side cache constructor:
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis);
   
   int maxTestDegree();
+  void createSideCaches();
 protected:
   BasisCache() {} // for the sake of some hackish subclassing
 public:
