@@ -55,7 +55,8 @@ public:
   virtual FunctionPtr div();
   virtual FunctionPtr grad();
   
-  virtual FunctionPtr inverse();
+// inverse() presently unused: and unclear how useful...
+//  virtual FunctionPtr inverse();
   
   int rank();
   

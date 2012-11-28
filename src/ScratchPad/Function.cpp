@@ -148,9 +148,9 @@ FunctionPtr Function::grad() {
     return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
   }
 }
-FunctionPtr Function::inverse() {
-  return Function::null();
-}
+//FunctionPtr Function::inverse() {
+//  return Function::null();
+//}
 
 bool Function::isNull(FunctionPtr f) {
   return f.get() == NULL;
