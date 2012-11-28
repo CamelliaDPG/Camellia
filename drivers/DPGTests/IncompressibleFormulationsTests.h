@@ -25,6 +25,8 @@
 typedef vector< pair< FunctionPtr, int > > PolyExactFunctions; // (u1, u2, p) -> poly degree
 
 class IncompressibleFormulationsTests : public TestSuite {
+  bool _thoroughMode; // if true, tests take considerably longer...
+  
   FunctionPtr x, x2, x3, y, y2, y3, zero;
   
   VarPtr u1_vgp, u2_vgp, sigma11_vgp, sigma12_vgp, sigma21_vgp, sigma22_vgp, p_vgp;
@@ -43,6 +45,8 @@ class IncompressibleFormulationsTests : public TestSuite {
   SpatialFilterPtr entireBoundary;
   
   FieldContainer<double> quadPoints, quadPointsKovasznay;
+  
+  
   
   void setup();
   void teardown();
@@ -67,6 +71,8 @@ class IncompressibleFormulationsTests : public TestSuite {
   bool testVGPNavierStokesFormulationCorrectness();
   bool testVGPNavierStokesFormulationKovasnayConvergence();
   
+public:
+  IncompressibleFormulationsTests(bool thorough = true);
   std::string testSuiteName();
 };
 

@@ -37,6 +37,8 @@
 
 #include "DofOrderingFactory.h"
 
+#include "BilinearForm.h"
+
 typedef Teuchos::RCP<Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 

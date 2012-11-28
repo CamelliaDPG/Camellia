@@ -36,6 +36,7 @@
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
 #include "Mesh.h"
+#include "Function.h"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
@@ -586,4 +587,12 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
       _basisCacheSides.push_back( Teuchos::rcp(sideCache) );
     }
   }
+}
+
+
+void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation) {
+  _transformationFxn = f;
+  _composeTransformationFxnWithMeshTransformation = composeWithMeshTransformation;
+  // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
+  //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
 }

@@ -150,11 +150,12 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
+  
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
@@ -162,9 +163,9 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
-
-  // slow tests: put at the end:
-  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests ) );
+  
+  // slow tests: keep at the end, except when debugging these...
+  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   
   for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin();
        testSuiteIt != testSuites.end(); testSuiteIt++) {

@@ -48,10 +48,12 @@
 #include "Teuchos_RCP.hpp"
 
 // DPG includes
-#include "BilinearForm.h"
+#include "CamelliaIntrepidExtendedTypes.h"
 #include "DofOrdering.h"
 
 using namespace std;
+
+class BilinearForm;
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 

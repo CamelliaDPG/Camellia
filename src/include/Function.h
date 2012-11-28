@@ -12,15 +12,19 @@
 #include "BasisCache.h"
 #include "BilinearForm.h"
 
+using namespace IntrepidExtendedTypes;
+
 class Mesh;
 class ExactSolution;
 class Solution;
 class Var;
 
 class Function;
+class BasisCache; // BasisCache.h and Function.h #include each other...
 typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP<Var> VarPtr;
 typedef Teuchos::RCP<Solution> SolutionPtr;
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class Function {
 private:
@@ -50,6 +54,8 @@ public:
   virtual FunctionPtr dz();
   virtual FunctionPtr div();
   virtual FunctionPtr grad();
+  
+  virtual FunctionPtr inverse();
   
   int rank();
   
@@ -82,6 +88,7 @@ public:
   
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
+  static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
   static FunctionPtr polarize(FunctionPtr f);
@@ -98,6 +105,7 @@ private:
   
   void scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
+
 
 };
 
@@ -257,15 +265,24 @@ public:
 };
 
 class VectorizedFunction : public Function {
+private:
   vector< FunctionPtr > _fxns;
+  FunctionPtr di(int i); // derivative in the ith coordinate direction
 public:
   virtual FunctionPtr x();
   virtual FunctionPtr y();
-//  virtual FunctionPtr z();
+  virtual FunctionPtr z();
   
+  virtual FunctionPtr dx();
+  virtual FunctionPtr dy();
+  virtual FunctionPtr dz();
+  
+  VectorizedFunction(const vector< FunctionPtr > &fxns);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  
+  int dim();
 };
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
@@ -394,6 +411,15 @@ public:
     ss << "\\exp( " << _a << " x )";
     return ss.str();
   }
+};
+
+
+class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
+  FieldContainer<double> _physCubPoints;
+public:
+  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints);
+  const FieldContainer<double> & getPhysicalCubaturePoints();
+  FieldContainer<double> & writablePhysicalCubaturePoints();
 };
 
 
