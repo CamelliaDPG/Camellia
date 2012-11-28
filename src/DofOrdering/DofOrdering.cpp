@@ -187,6 +187,17 @@ const vector<int> & DofOrdering::getVarIDs() {
   return varIDs;
 }
 
+bool DofOrdering::hasSideVarIDs() {
+  // returns true if there are any varIDs defined on more than one side
+  for (vector<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    if (numSidesForVarID[varID] > 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int DofOrdering::maxBasisDegree() {
   map< pair<int,int>, Teuchos::RCP< Basis<double,FieldContainer<double> > > >::iterator basisIterator;
   
@@ -197,6 +208,24 @@ int DofOrdering::maxBasisDegree() {
     Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = (*basisIterator).second;
     if (maxBasisDegree < basis->getDegree() ) {
       maxBasisDegree = basis->getDegree();
+    }
+  }
+  return maxBasisDegree;
+}
+
+int DofOrdering::maxBasisDegreeForVolume() { // max degree among the varIDs with numSides == 1
+  
+  int maxBasisDegree = 0;
+  int volumeSideIndex = 0;
+  
+  for (vector<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    if (numSidesForVarID[varID]==1) {
+      pair<int,int> key = make_pair(varID, volumeSideIndex);
+      int degree = bases[key]->getDegree();
+      if (maxBasisDegree < degree ) {
+        maxBasisDegree = degree;
+      }
     }
   }
   return maxBasisDegree;

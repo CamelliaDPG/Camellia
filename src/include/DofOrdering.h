@@ -65,6 +65,8 @@ public:
   
   void addEntry(int varID, Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis, int basisRank, int sideIndex = 0);
   
+  bool hasSideVarIDs();
+  
   void copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
                             const FieldContainer<double> &oldValues );
   
@@ -91,6 +93,7 @@ public:
   Teuchos::RCP< shards::CellTopology > cellTopology(int sideIndex = -1);
   
   int maxBasisDegree();
+  int maxBasisDegreeForVolume();
   
   int totalDofs() {
     return _nextIndex;
