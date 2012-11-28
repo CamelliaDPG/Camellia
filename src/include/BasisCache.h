@@ -94,10 +94,6 @@ private:
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  // _cubFactory, _cubDegree, _maxTestDegree instance variables are just a temporary addition -- can be deleted once we separate
-  // the creation of the reference from physical side cache info.  (i.e. once we can push the side cache creation
-  // back into init().)
-  DefaultCubatureFactory<double> _cubFactory;
   int _cubDegree, _maxTestDegree;
   
   // containers specifically for sides:

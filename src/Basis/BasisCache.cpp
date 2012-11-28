@@ -4,7 +4,8 @@
  */
 // @HEADER
 //
-// Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original version copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Revisions copyright © 2012 Nathan Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -38,10 +39,10 @@
 #include "Mesh.h"
 #include "Function.h"
 
+typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
 
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
@@ -55,12 +56,10 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   
   _cellTopo = cellTopo;
   
-  // _cubDegree, _maxTestDegree, and _cubFactory should become local to init() once we
-  // put side cache creation back here, where it belongs.)
-  // (same might be true of _trialOrdering.)
   _cubDegree = trialOrdering.maxBasisDegree() + maxTestDegree;
   _maxTestDegree = maxTestDegree;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = _cubFactory.create(cellTopo, _cubDegree); 
+  DefaultCubatureFactory<double> cubFactory;
+  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree); 
   _trialOrdering = trialOrdering; // makes a copy--would be better to have an RCP here
   
   int cubDim       = cellTopoCub->getDimension();
@@ -150,7 +149,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
   
   shards::CellTopology side(_cellTopo.getCellTopologyData(_spaceDim-1,sideIndex)); // create relevant subcell (side) topology
   int sideDim = side.getDimension();
-  Teuchos::RCP<Cubature<double> > sideCub = _cubFactory.create(side, _cubDegree);
+  DefaultCubatureFactory<double> cubFactory;
+  Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
   int numCubPointsSide = sideCub->getNumPoints();
   _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
   _cubWeights.resize(numCubPointsSide);
@@ -164,12 +164,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
   }
   
   _cubPointsSideRefCell.resize(numCubPointsSide, _spaceDim); // cubPointsSide from the pov of the ref cell
-  
-  // compute geometric cell information
-  //cout << "computing geometric cell info for boundary integral." << endl;
-  typedef CellTools<double>  CellTools;
-  
-  CellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+  CellTools<double>::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
 }
 
 const vector<int> & BasisCache::cellIDs() {
@@ -236,7 +231,6 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   } else {
     cubPoints = _cubPoints;
   }
-  //cout << "cubPoints:\n" << cubPoints;
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
@@ -362,7 +356,6 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, IntrepidExte
     return _knownValuesTransformedWeighted[key];
   }
   constFCPtr unWeightedValues = getTransformedValues(basis,op, useCubPointsSideRefCell);
-  typedef FunctionSpaceTools fst;
   Teuchos::Array<int> dimensions;
   unWeightedValues->dimensions(dimensions);
   Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
@@ -442,7 +435,7 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _knownValuesTransformedWeighted.clear();
   
   _cubWeights.resize(0); // will force an exception if you try to compute weighted values.
-//  discardPhysicalNodeInfo();
+
   // allow reuse of physicalNode info; just map the new points...
   if (_physCubPoints.size() > 0) {
     determinePhysicalPoints();
@@ -467,14 +460,12 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
 }
 
 void BasisCache::determinePhysicalPoints() {
+  int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+  // _spaceDim for side cache refers to the volume cache's spatial dimension:
+  _physCubPoints.resize(_numCells, numPoints, _spaceDim);
   if ( ! isSideCache() ) {
-    int numPoints = _cubPoints.dimension(0);
-    _physCubPoints = FieldContainer<double>(_numCells, numPoints, _spaceDim);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
   } else {
-    int numPoints = _cubPointsSideRefCell.dimension(0);
-    // _spaceDim for side cache refers to the volume cache's spatial dimension:
-    _physCubPoints.resize(_numCells, numPoints, _spaceDim);
     CellTools<double>::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
   }
 }
@@ -515,8 +506,6 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   
-//  cout << "physicalCellNodes:\n" << physicalCellNodes;
-  
   determineJacobian();
   
   // compute weighted measure
@@ -527,9 +516,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     if (! isSideCache()) {
       fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
     } else {
-      // compute geometric cell information
-      //cout << "computing geometric cell info for boundary integral." << endl;
-      
+      // compute geometric cell information      
       _weightedMeasure.resize(_numCells, numCubPoints);
       // compute weighted edge measure
       FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
