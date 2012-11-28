@@ -482,7 +482,7 @@ void BasisCache::determinePhysicalPoints() {
 void BasisCache::determineJacobian() {
   // Compute cell Jacobians, their inverses and their determinants
   
-  int numCubPoints = _cubPoints.dimension(0);
+  int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   
   // Containers for Jacobian
   _cellJacobian.resize(_numCells, numCubPoints, _spaceDim, _spaceDim);
