@@ -5,6 +5,11 @@
 \usepackage{graphicx}
 \usepackage{subfigure}
 
+\def\btau{\boldsymbol\tau}
+\def\bsigma{\boldsymbol\sigma}
+\def\bbeta{\boldsymbol\beta}
+\def\blambda{\boldsymbol\lambda}
+
 \newcommand{\bs}[1]{\boldsymbol{#1}}
 \DeclareMathOperator{\diag}{diag}
 \DeclareMathOperator*{\argmin}{\arg\,\min}
@@ -234,6 +239,43 @@ order equations:
 \div(\bs\beta u-\bs\sigma)&=g\\
 \frac{1}{\epsilon}\bs\sigma-\grad u&=\bs0\,.
 \end{align*}
+If we then multiply the top equation by some scalar test function $v$ and the
+bottom equation by some vector-valued test function $\tau$, we can integrate by
+parts over each element $K$:
+\begin{equation}
+\label{eq:preultraweak}
+\begin{aligned}
+-(\bbeta u-\bsigma,\nabla v)_K+((\bbeta
+u-\bsigma)\cdot\mathbf{n},v)_{\partial K}&=(g,v)_K\\
+\frac{1}{\epsilon}(\bsigma,\btau)_K+(u,\nabla\cdot\btau)_K
+-(u,\tau_n)_{\partial K}&=0\,.
+\end{aligned}
+\end{equation}
+The discontinuous Petrov-Galerkin method refers to the fact that we are using
+discontinuous optimal test functions that come from a space differing from the
+trial space. It does not specify our choice of trial space. Nevertheless, many
+considerations of DPG in the literature \cite{} associate DPG with the
+so-called ``ultra-weak formulation.'' We will follow the same derivation for
+the convection-diffusion equation, but we emphasize that other formulations
+are available. Thus, we seek field variables $u\in L^2(K)$ and
+$\bsigma\in\mb{L^2}(K)$. Mathematically, this leaves their traces on element
+boundaries undefined, and in a manner similar to the hybridized discontinuous
+Galerkin method, we define new unknowns for trace $\hat u$ and flux $\hat f$.
+Applying these definitions to \eqnref{preultraweak} and adding the two
+equations together, we arrive at our desired bilinear form,
+\begin{equation}
+\label{eq:confusionBF}
+-(\bbeta u-\bsigma,\nabla v)_K+(\hat f,v)_{\partial K}
++ \frac{1}{\epsilon}(\bsigma,\btau)_K
++(u,\nabla\cdot\btau)_K
+-(\hat u,\tau_n)_{\partial K}=(g,v)_K\,.
+\end{equation}
+% Function Spaces
+
+Within each element, we perform a Bubnov-Galerkin solve for the optimal test
+functions. %Problem description
+As mentioned earlier the choice of test norm on $V$ can have profound
+influence on the robustness of our method.
 
 \bibliographystyle{plain}
 \bibliography{../DPG}
