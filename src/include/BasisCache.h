@@ -94,10 +94,6 @@ private:
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  // _cubFactory, _cubDegree, _maxTestDegree instance variables are just a temporary addition -- can be deleted once we separate
-  // the creation of the reference from physical side cache info.  (i.e. once we can push the side cache creation
-  // back into init().)
-  DefaultCubatureFactory<double> _cubFactory;
   int _cubDegree, _maxTestDegree;
   
   // containers specifically for sides:
@@ -129,6 +125,11 @@ private:
   void determineJacobian();
   void determinePhysicalPoints();
   
+  // (private) side cache constructor:
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis);
+  
+  int maxTestDegree();
+  void createSideCaches();
 protected:
   BasisCache() {} // for the sake of some hackish subclassing
 public:
@@ -136,14 +137,6 @@ public:
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
-  
-  // side cache constructor:
-  BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
-             FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
-             FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
-             FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, Teuchos::RCP<BasisCache> volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> & getWeightedMeasures();
@@ -164,6 +157,8 @@ public:
   const vector<int> & cellIDs();
   
   shards::CellTopology cellTopology();
+  
+  int cubatureDegree();
   
   Teuchos::RCP<Mesh> mesh();
   
