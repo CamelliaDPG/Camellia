@@ -243,6 +243,11 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   return integral;
 }
 
+double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) { // the total cubature degree (i.e. exact for 10th-degree polynomials)
+  FunctionPtr thisPtr = Teuchos::rcp( this, false );
+  return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment) );
+}
+
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
 void Function::scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache) {
   // functionValues has dimensions (C,P,...)

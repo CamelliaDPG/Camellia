@@ -66,6 +66,8 @@ public:
   
   double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
+  double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
   
