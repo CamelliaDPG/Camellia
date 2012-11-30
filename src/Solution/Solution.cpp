@@ -3298,12 +3298,12 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       FieldContainer<double> cellCentroid(spaceDim);
       cellCentroid.initialize(0.0);
       for (int vertIndex=0;vertIndex<numVertices;vertIndex++){	
-	for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-	  cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
-	}
+        for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
+          cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
+        }
       }
       for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-	cellCentroid(dimIndex) /= numVertices;
+        cellCentroid(dimIndex) /= numVertices;
       }
       cellCentroid.resize(1,spaceDim); // only one cell
       int cellID = _mesh->elementsForPoints(cellCentroid)[0]->cellID();      
@@ -3337,7 +3337,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
 
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
-	FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
+        FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
         for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
           for (int dimInd=0;dimInd<spaceDim;dimInd++){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
