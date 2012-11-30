@@ -298,6 +298,20 @@ void LinearTerm::integrate(FieldContainer<double> &values,
     bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
     int uSideIndex = uVolVar ? 0 : basisCache->getSideIndex();
     
+    if (! uOrdering->hasBasisEntry(uID, uSideIndex) ) {
+      // this is a bit of a mess: a hack to allow us to do projections on side bases
+      // we could avoid this if either LinearTerm or DofOrdering did things better, if either
+      // 1. LinearTerm knew about VarPtrs instead of merely varIDs--then we could learn that u was a trace or flux
+      //     OR
+      // 2. DofOrdering used a sideIndex of -1 for volume variables, instead of the ambiguous 0.
+      if (basisCache->isSideCache()) {
+        uSideIndex = basisCache->getSideIndex();
+      }
+      // now, test again, and throw an exception if the issue wasn't corrected:
+      if (! uOrdering->hasBasisEntry(uID, uSideIndex) ) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no entry for uSideIndex");
+      }
+    }
     BasisPtr uBasis = uOrdering->getBasis(uID,uSideIndex);
     int uBasisCardinality = uBasis->getCardinality();
     ltValueDim[1] = uBasisCardinality;
@@ -324,6 +338,21 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       int vID = *vIt;
       bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
       int vSideIndex = vVolVar ? 0 : basisCache->getSideIndex();
+      if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
+        // this is a bit of a mess: a hack to allow us to do projections on side bases
+        // we could avoid this if either LinearTerm or DofOrdering did things better, if either
+        // 1. LinearTerm knew about VarPtrs instead of merely varIDs--then we could learn that u was a trace or flux
+        //     OR
+        // 2. DofOrdering used a sideIndex of -1 for volume variables, instead of the ambiguous 0.
+        if (basisCache->isSideCache()) {
+          vSideIndex = basisCache->getSideIndex();
+        }
+        // now, test again, and throw an exception if the issue wasn't corrected:
+        if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no entry for uSideIndex");
+        }
+      }
+      
       BasisPtr vBasis = vOrdering->getBasis(vID,vSideIndex);
       int vBasisCardinality = vBasis->getCardinality();
       ltValueDim[1] = vBasisCardinality;
@@ -380,8 +409,9 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   // we are then computing (u + du, v + dv) where e.g. (du,v) will be integrated along boundary
   // so the only non-boundary term is (u,v), and that only comes into it if forceBoundaryTerm is false.
-  
+
   if (basisCache->isSideCache() && !forceBoundaryTerm) {
+    // if sideCache, then we'd better forceBoundaryTerm
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: forceBoundaryTerm is false but basisCache is a sideBasisCache...");
   }
   

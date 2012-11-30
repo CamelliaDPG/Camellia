@@ -62,6 +62,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
+  _cubatureDegreeForExact = 10;
   _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
 //  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
@@ -201,7 +202,16 @@ void HConvergenceStudy::computeErrors() {
     previousL2Error = -1;
     for (solutionIt = _bestApproximations.begin(); solutionIt != _bestApproximations.end(); solutionIt++) {
       SolutionPtr bestApproximation = *solutionIt;
-      double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, 15); // 15 == cubature degree to use...
+      
+      // OLD CODE: testing this by reimplementing in terms of Functions
+      double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact * 2);
+
+      // test code below--doesn't seem to be much difference
+//      VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
+//      
+//      FunctionPtr bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
+//      double l2error = sqrt( (bestFxnError * bestFxnError)->integrate(bestApproximation->mesh(), _cubatureEnrichmentForExact ) );
+      
       _bestApproximationErrors[trialID].push_back(l2error);
       
       if (previousL2Error >= 0.0) {
@@ -213,6 +223,10 @@ void HConvergenceStudy::computeErrors() {
       previousL2Error = l2error;
     }
   }
+}
+
+void HConvergenceStudy::setCubatureDegreeForExact(int value) {
+  _cubatureDegreeForExact = value;
 }
 
 void HConvergenceStudy::setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
@@ -231,7 +245,7 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<dou
 
 Teuchos::RCP<Solution> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mesh) {
   Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
-  bestApproximation->setCubatureEnrichmentDegree(3); // might be nice to make this settable--right now, I'm afraid to set it too high for fear we break triangles
+  bestApproximation->setCubatureEnrichmentDegree(_cubatureDegreeForExact);
   bestApproximation->projectOntoMesh(_exactSolutionFunctions);
   return bestApproximation;
 }
@@ -435,11 +449,13 @@ string HConvergenceStudy::TeXNumGlobalDofsTable(const string &filePathPrefix) {
   return texString.str();
 }
 
-string HConvergenceStudy::convergenceDataMATLAB(int trialID) {
+string HConvergenceStudy::convergenceDataMATLAB(int trialID, int minPolyOrder) {
   ostringstream ss;
   int k = _H1Order - 1; // order of the solution
+  int matlabIndex = k - minPolyOrder + 1;
+//  cout << "matlabIndex:" << matlabIndex << endl;
   ss << scientific;
-  ss << _bilinearForm->trialName(trialID) << "Error{" << k << "} = [";
+  ss << _bilinearForm->trialName(trialID) << "Error{" << matlabIndex << "} = [";
 
   vector<int> meshSizes = this->meshSizes();
   for (int i=0; i<meshSizes.size(); i++) {
@@ -451,6 +467,21 @@ string HConvergenceStudy::convergenceDataMATLAB(int trialID) {
       l2error /= _exactSolutionNorm[trialID];
     }
     ss << l2error << "\n";
+  }
+  
+  ss << "];\n";
+
+  ss << _bilinearForm->trialName(trialID) << "BestError{" << matlabIndex << "} = [";
+  
+  for (int i=0; i<meshSizes.size(); i++) {
+    int size = meshSizes[i];
+    double h = 1.0 / size;
+    ss << k << " " << h << " ";
+    double bestError = _bestApproximationErrors[trialID][i];
+    if (_reportRelativeErrors) {
+      bestError /= _exactSolutionNorm[trialID];
+    }
+    ss << bestError << "\n";
   }
   
   ss << "];\n";
@@ -492,7 +523,6 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
   }
   texString << newLine << "\\cline{2-" << numColumns << "}" << "\n";
   for (vector<int>::const_iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *trialIt;
     texString << " & actual & best ";
   }
   texString << newLine;

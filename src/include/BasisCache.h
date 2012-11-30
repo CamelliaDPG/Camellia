@@ -94,7 +94,7 @@ private:
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  int _cubDegree, _maxTestDegree;
+  int _cubDegree, _maxTestDegree, _cubatureMultiplier; // cub. degree = cub. multiplier * whatever it would otherwise be...
   
   // containers specifically for sides:
   FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -133,7 +133,8 @@ private:
 protected:
   BasisCache() {} // for the sake of some hackish subclassing
 public:
-  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
+             int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
@@ -159,6 +160,7 @@ public:
   shards::CellTopology cellTopology();
   
   int cubatureDegree();
+  int cubatureMultiplier();
   
   Teuchos::RCP<Mesh> mesh();
   
