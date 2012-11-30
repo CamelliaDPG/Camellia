@@ -413,13 +413,6 @@ bool SolutionTests::testNewProjectFunction() {
   bool success = true;
   double tol = 1e-14;
   
-  { // DEBUGGING CODE: can be deleted shortly
-    map<int, FunctionPtr > functionMap;
-    FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
-    functionMap[1] = quadraticFunction;
-    _confusionUnsolved->projectOntoMesh(functionMap);
-  }
-  
   Teuchos::RCP<BilinearForm> bf = _confusionUnsolved->mesh()->bilinearForm();
   
   vector<int> trialIDs = bf->trialIDs();
@@ -481,6 +474,7 @@ bool SolutionTests::testNewProjectFunction() {
       }
     }
   }
+
   // now, try something a little different: project various functions onto
   // a constant mesh.
   
@@ -529,17 +523,19 @@ bool SolutionTests::testNewProjectFunction() {
     
     ElementTypePtr elemType = mesh->elementTypes()[0];
     bool testVsTest=false;
-    int cubatureDegreeEnrichment = 5;
+    int cubatureDegreeEnrichment = 25;
+    
+//    cout << "testNewProjectFunction: integral of f on whole mesh = " << f->integrate(mesh,cubatureDegreeEnrichment) << endl;
     
     vector<int> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
     
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false); // false: no side cache
-    (f*f)->integrate(expectedValues, basisCache);
+    f->integrate(expectedValues, basisCache);
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
     
     for (int i=0; i<expectedValues.size(); i++) {
-      expectedValues(i) = sqrt(expectedValues(i) / cellMeasures(i));
+      expectedValues(i) /= cellMeasures(i);
     }
     
     soln->setCubatureEnrichmentDegree(cubatureDegreeEnrichment);
