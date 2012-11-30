@@ -496,7 +496,7 @@ bool SolutionTests::testNewProjectFunction() {
   Teuchos::RCP< BCEasy > bc = Teuchos::rcp( new BCEasy );
   
   int H1Order = 1; // constant L^2 ==> the projection on each cell should be the L^2 norm on that cell
-  int horizontalCells = 1, verticalCells = 1;
+  int horizontalCells = 4, verticalCells = 4;
   int pTest = 1; // doesn't matter
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, emptyBF, H1Order, pTest);
   SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc) );
