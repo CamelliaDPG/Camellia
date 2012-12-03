@@ -289,6 +289,8 @@ public:
   void unregisterSolution(Teuchos::RCP<Solution> solution);
   
   void writeMeshPartitionsToFile(const string & fileName);
+  
+  double getCellMeasure(int cellID);
 };
 
 #endif
