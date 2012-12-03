@@ -30,16 +30,17 @@ protected:
   SolutionPtr _solution;
   double _relativeEnergyThreshold;
   bool _enforceOneIrregularity;
-  bool _reportPerCellErrors;
-  
+  bool _reportPerCellErrors;  
   vector< RefinementResults > _results;
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
-  void setEnforceOneIrregurity(bool value);
+  void setEnforceOneIrregularity(bool value);
   virtual void refine(bool printToConsole=false);
   virtual void refineCells(vector<int> &cellIDs);
+  static void pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
   static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
   static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
+  void getCellsAboveErrorThreshhold(vector<int> &cellsToRefine);
   void setReportPerCellErrors(bool value);
 };
 
