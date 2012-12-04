@@ -22,6 +22,8 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
 // Write field variables to unstructured VTK format
 void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
 {
+  bool defaultPts = (num1DPts == 0);
+
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
   vector<vtkFloatArray*> fieldData;
   vtkPoints* points = vtkPoints::New();
@@ -84,7 +86,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     int numVertices = vertexPoints.dimension(1);
     bool isQuad = (numVertices == 4);
     int numPoints = 0;
-    if (!num1DPts)
+    if (defaultPts)
       num1DPts = pow(2, pOrder-1);
     if (isQuad)
       numPoints = num1DPts*num1DPts;
