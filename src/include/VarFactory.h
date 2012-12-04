@@ -66,10 +66,20 @@ public:
   }
   // accessors:
   VarPtr test(int testID) {
-    return _testVarsByID[testID];
+    map< int, VarPtr >::iterator testIt = _testVarsByID.find(testID);
+    if (testIt == _testVarsByID.end()) {
+      // return null, then
+      return Teuchos::rcp((Var*)NULL);
+    }
+    return testIt->second;
   }
   VarPtr trial(int trialID) {
-    return _trialVarsByID[trialID];
+    map< int, VarPtr >::iterator trialIt = _trialVarsByID.find(trialID);
+    if (trialIt == _trialVarsByID.end()) {
+      // return null, then
+      return Teuchos::rcp((Var*)NULL);
+    }
+    return trialIt->second;
   }
   
   vector<int> testIDs() {

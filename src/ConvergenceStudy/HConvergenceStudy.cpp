@@ -181,13 +181,13 @@ void HConvergenceStudy::computeErrors() {
     
     int numElements = minNumElements();
     
-    double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, 15); // 15 == cubature degree to use...
+    double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
     _exactSolutionNorm[trialID] = l2norm;
     
     double previousL2Error = -1.0;
     for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
       SolutionPtr solution = *solutionIt;
-      double l2error = _exactSolution->L2NormOfError(*solution, trialID, 15); // 15 == cubature degree to use...
+      double l2error = _exactSolution->L2NormOfError(*solution, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
       _solutionErrors[trialID].push_back(l2error);
       
       if (previousL2Error != -1.0) {
@@ -204,18 +204,21 @@ void HConvergenceStudy::computeErrors() {
       SolutionPtr bestApproximation = *solutionIt;
       
       // OLD CODE: testing this by reimplementing in terms of Functions
-      double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact * 2);
+      double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact);
 
       // test code below--doesn't seem to be much difference
 //      VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
 //      
 //      FunctionPtr bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
-//      double l2error = sqrt( (bestFxnError * bestFxnError)->integrate(bestApproximation->mesh(), _cubatureEnrichmentForExact ) );
+//      double l2error = bestFxnError->l2norm(bestApproximation->mesh(),_cubatureDegreeForExact); // here the cubature is actually an enrichment....
+//      
+//      cout << "HConvergenceStudy: best l2Error for trial ID " << trialID << ": " << l2error << endl;
       
       _bestApproximationErrors[trialID].push_back(l2error);
       
       if (previousL2Error >= 0.0) {
         double rate = - log(l2error/previousL2Error) / log(2.0);
+//        cout << "HConvergenceStudy: best rate for trial ID " << trialID << ": " << rate << endl;
         _bestApproximationRates[trialID].push_back(rate);
       }
       
@@ -410,7 +413,7 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
   
   if (filePathPrefix.length() > 0) { // then write to file
     ostringstream fileName;
-    fileName << filePathPrefix << "_best_compare_table.tex";
+    fileName << filePathPrefix << "_error_rate_table.tex";
     ofstream fout(fileName.str().c_str());
     fout << texString.str();
     fout.close();
@@ -441,7 +444,7 @@ string HConvergenceStudy::TeXNumGlobalDofsTable(const string &filePathPrefix) {
   texString << "\\hline \n";
   if (filePathPrefix.length() > 0) { // then write to file
     ostringstream fileName;
-    fileName << filePathPrefix << "_best_compare_table.tex";
+    fileName << filePathPrefix << "_mesh_sizes.tex";
     ofstream fout(fileName.str().c_str());
     fout << texString.str();
     fout.close();
@@ -559,7 +562,6 @@ string HConvergenceStudy::TeXBestApproximationComparisonTable( const vector<int>
 }
 
 void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID, int traceID, bool writeMATLABPlotData) {
-  vector< Teuchos::RCP<Solution> >::iterator solutionIt;
   int minNumElements = 1;
   for (int i=0; i<_minLogElements; i++) {
     minNumElements *= 2;
@@ -578,12 +580,13 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
   }
   cout << "L2 error for variable " << _bilinearForm->trialName(trialID) << ":" << endl;
   
-  double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, 15); // 15 == cubature degree to use...
+  double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact);
   
-  double previousL2Error = -1.0;
-  for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
-    SolutionPtr solution = *solutionIt;
-    double l2error = _exactSolution->L2NormOfError(*solution, trialID, 15); // 15 == cubature degree to use...
+  for (int i=0; i<_solutions.size(); i++) {
+    SolutionPtr solution = _solutions[i];
+    SolutionPtr bestApproximation = _bestApproximations[i];
+    double l2error = _solutionErrors[trialID][i];
+    
     if (_reportRelativeErrors) {
       l2error /= l2norm;
     }
@@ -594,10 +597,8 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     fout << scientific;
     cout << numElements << "x" << numElements << " mesh:" << spaces << setprecision(1) <<  l2error;
     fout << numElements << "x" << numElements << "\t" << setprecision(1) << l2error;
-    if (previousL2Error >= 0.0) {
-      double rate = - log(l2error/previousL2Error) / log(2.0);
-//      cout.unsetf(ios::floatfield); // don't show rates with exponents (they'll be 0 anyway)
-//      fout.unsetf(ios::floatfield);
+    if (i > 0) {
+      double rate = _solutionRates[trialID][i-1];
       cout << "\t(rate: " << setprecision(2) << fixed << rate << ")";
       fout << "\t(rate: " << setprecision(2) << fixed << rate << ")"; 
     }
@@ -617,6 +618,12 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
       //    solution.writeToFile(trialID, fileName.str());
       solution->writeFieldsToFile(trialID, fileName.str());
       fileName.str("");
+
+      fileName.str(""); // clear out the filename
+      fileName << filePathPrefix << "_best_approximation_" << numElements << "x" << numElements << ".m";
+      //    solution.writeToFile(trialID, fileName.str());
+      bestApproximation->writeFieldsToFile(trialID, fileName.str());
+      fileName.str("");
       
       fileName << filePathPrefix << "_exact_" << numElements << "x" << numElements << ".m";
       _exactSolutionFunctions[trialID]->writeValuesToMATLABFile(solution->mesh(), fileName.str());
@@ -627,16 +634,19 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
       }
     }
     numElements *= 2;
-    previousL2Error = l2error;
   }
   fout.close();
   
   cout << "***********  BEST APPROXIMATION ERROR for : " << _bilinearForm->trialName(trialID) << " **************\n";
   numElements = minNumElements;
-  previousL2Error = -1;
-  for (solutionIt = _bestApproximations.begin(); solutionIt != _bestApproximations.end(); solutionIt++) {
-    SolutionPtr bestApproximation = *solutionIt;
-    double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, 15); // 15 == cubature degree to use...
+  for (int i=0; i<_bestApproximations.size(); i++) {
+    SolutionPtr bestApproximation = _bestApproximations[i];
+    double l2error = _bestApproximationErrors[trialID][i];
+    double newl2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
+    if (l2error != newl2error) {
+      cout << "best L2 error has changed since computeErrors() was called.\n";
+      cout << "old error: " << l2error << "; new: " << newl2error << endl;
+    }
     if (_reportRelativeErrors) {
       l2error /= l2norm;
     }
@@ -644,17 +654,15 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     string spaces = (numElements > 10) ? " " : "   ";
     cout << scientific;
     cout << numElements << "x" << numElements << " mesh:" << spaces << setprecision(1) <<  l2error;
-    if (previousL2Error >= 0.0) {
-      double rate = - log(l2error/previousL2Error) / log(2.0);
+    if (i > 0) {
+      double rate = _bestApproximationRates[trialID][i-1];
       cout << "\t(rate: " << setprecision(2) << fixed << rate << ")";
     }
     cout << endl;
 
     numElements *= 2;
-    previousL2Error = l2error;
   }
   cout << "**************************************************************\n";
-
   
   cout << "L2 norm of solution: " << l2norm  << endl;
 }
