@@ -232,8 +232,9 @@ public:
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
 
-  void writeToVTK(const string& filePath, unsigned int num1DPts=3);
-  void writeFieldsToVTK(const string& filePath, unsigned int num1DPts=3);
+  // Default of 0 adapts the number of points based on poly order
+  void writeToVTK(const string& filePath, unsigned int num1DPts=0);
+  void writeFieldsToVTK(const string& filePath, unsigned int num1DPts=0);
   void writeTracesToVTK(const string& filePath);
   
   // statistics accessors:

@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 2, pToAdd = 2;
+  int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
   if (highLiftAirfoil)
     mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", confusionBF, H1Order, pToAdd);
@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
         outfile << "highlift_" << refIndex;
       else
         outfile << "naca0012_" << refIndex;
-      solution->writeToVTK(outfile.str(), 5);
+      solution->writeToVTK(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -383,7 +383,13 @@ int main(int argc, char *argv[]) {
       refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
       for (int i=0; i < cellsToRefine.size(); i++)
         if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < epsilon)
-          cells_p.push_back(cellsToRefine[i]);
+        {
+          int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
+          if (pOrder < 8)
+            cells_p.push_back(cellsToRefine[i]);
+          else
+            cells_h.push_back(cellsToRefine[i]);
+        }
         else
           cells_h.push_back(cellsToRefine[i]);
       refinementStrategy.pRefineCells(mesh, cells_p);
