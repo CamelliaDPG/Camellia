@@ -20,6 +20,8 @@
 
 #include "NavierStokesFormulation.h"
 
+#include "ExactSolution.h"
+
 #include "BC.h"
 
 class NewQuadraticFunction : public SimpleFunction {
@@ -480,14 +482,24 @@ bool SolutionTests::testNewProjectFunction() {
   
   FieldContainer<double> quadPoints(4,2);
   
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
+//  quadPoints(0,0) = 0.0; // x1
+//  quadPoints(0,1) = 0.0; // y1
+//  quadPoints(1,0) = 1.0;
+//  quadPoints(1,1) = 0.0;
+//  quadPoints(2,0) = 1.0;
+//  quadPoints(2,1) = 1.0;
+//  quadPoints(3,0) = 0.0;
+//  quadPoints(3,1) = 1.0;
+  
+  // Domain from Evans Hughes for Navier-Stokes Kovasznay flow:
+  quadPoints(0,0) =  0.0; // x1
+  quadPoints(0,1) = -0.5; // y1
+  quadPoints(1,0) =  1.0;
+  quadPoints(1,1) = -0.5;
+  quadPoints(2,0) =  1.0;
+  quadPoints(2,1) =  0.5;
+  quadPoints(3,0) =  0.0;
+  quadPoints(3,1) =  0.5;
   
   VarFactory varFactory;
   VarPtr u = varFactory.fieldVar("u");
@@ -496,8 +508,11 @@ bool SolutionTests::testNewProjectFunction() {
   Teuchos::RCP< BCEasy > bc = Teuchos::rcp( new BCEasy );
   
   int H1Order = 1; // constant L^2 ==> the projection on each cell should be the L^2 norm on that cell
-  int horizontalCells = 4, verticalCells = 4;
+  int horizontalCells = 2, verticalCells = 2;
   int pTest = 1; // doesn't matter
+  
+  Teuchos::RCP<Mesh> fineMesh = Mesh::buildQuadMesh(quadPoints, 16, 16, emptyBF, H1Order, pTest);
+  
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, emptyBF, H1Order, pTest);
   SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc) );
   
@@ -523,14 +538,19 @@ bool SolutionTests::testNewProjectFunction() {
     
     ElementTypePtr elemType = mesh->elementTypes()[0];
     bool testVsTest=false;
-    int cubatureDegreeEnrichment = 25;
+    int cubatureDegreeEnrichment = 5;
     
-//    cout << "testNewProjectFunction: integral of f on whole mesh = " << f->integrate(mesh,cubatureDegreeEnrichment) << endl;
+    double fIntegral = f->integrate(mesh,cubatureDegreeEnrichment);
+//    cout << "testNewProjectFunction: integral of f on whole mesh = " << fIntegral << endl;
+    
+    double l2ErrorOfAverage = (Function::constant(fIntegral) - f)->l2norm(fineMesh,cubatureDegreeEnrichment);
+//    cout << "testNewProjectFunction: l2 error of fIntegral: " << l2ErrorOfAverage << endl;
     
     vector<int> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
     
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
     basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false); // false: no side cache
+    
     f->integrate(expectedValues, basisCache);
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
     
@@ -552,6 +572,8 @@ bool SolutionTests::testNewProjectFunction() {
       actualValues(i) /= cellMeasures(i);
     }
     
+//    cout << "expectedValues for projection of f onto constants:\n" << expectedValues;
+    
     double maxDiff;
     if ( !fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
       cout << "testNewProjectFunction() failure in projection of Function " << j << " onto constants: maxDiff is " << maxDiff << endl;
@@ -559,6 +581,26 @@ bool SolutionTests::testNewProjectFunction() {
       cout << "actualValues:\n" << actualValues << endl;
       
       success = false;
+    }
+    
+    int trialID = u->ID();
+    VarPtr trialVar = u;
+    
+    // this maybe doesn't exactly belong here (better to have an ExactSolution test),
+    // but this is convenient for now:
+    Teuchos::RCP<ExactSolution> exactSoln = Teuchos::rcp( new ExactSolution );
+    exactSoln->setSolutionFunction(trialVar, f);
+    // test the L2 error measured in two ways
+    double l2errorActual = exactSoln->L2NormOfError(*soln, trialID, 15);
+    
+    FunctionPtr bestFxnError = Function::solution(trialVar, soln) - f;
+    int matchingCubatureEnrichment = 15 - (pTest + H1Order - 1); // chosen so that the effective cubature degree below will match that above
+    double l2errorExpected = bestFxnError->l2norm(soln->mesh(),matchingCubatureEnrichment); // here the cubature is actually an enrichment....
+    
+    if (abs(l2errorExpected - l2errorActual) > tol) {
+      success = false;
+      cout << "testNewProjectFunction: for function " << j << ", ExactSolution error doesn't match";
+      cout << " that measured by Function: " << l2errorActual << " vs " << l2errorExpected << endl;
     }
   }
   

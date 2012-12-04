@@ -9,6 +9,12 @@
 #ifndef Camellia_StokesFormulation_h
 #define Camellia_StokesFormulation_h
 
+#include "BF.h"
+#include "BCEasy.h"
+#include "RHSEasy.h"
+#include "VarFactory.h"
+#include "Var.h"
+
 // implementation of some standard Stokes Formulations.
 
 enum StokesFormulationChoice {
