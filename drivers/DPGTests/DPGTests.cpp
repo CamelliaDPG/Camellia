@@ -73,6 +73,7 @@
 #include "LinearTermTests.h"
 #include "ScratchPadTests.h"
 #include "IncompressibleFormulationsTests.h"
+#include "HConvergenceStudyTests.h"
 
 #include "Projector.h"
 #include "BasisCache.h"
@@ -151,7 +152,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
@@ -163,6 +164,7 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   
   // slow tests: keep at the end, except when debugging these...
   testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off

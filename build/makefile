@@ -114,6 +114,7 @@ OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(OBJS))
 TEST_OBJ_NAMES = ElementTests \
        MeshTestSuite \
        FunctionTests \
+       HConvergenceStudyTests \
        IncompressibleFormulationsTests \
        LinearTermTests \
        MeshRefinementTests \
@@ -269,6 +270,9 @@ FunctionTests.o: $(DRIVERS_DIR)/DPGTests/FunctionTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 LinearTermTests.o: $(DRIVERS_DIR)/DPGTests/LinearTermTests.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
+
+HConvergenceStudyTests.o: $(DRIVERS_DIR)/DPGTests/HConvergenceStudyTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 IncompressibleFormulationsTests.o: $(DRIVERS_DIR)/DPGTests/IncompressibleFormulationsTests.cpp
