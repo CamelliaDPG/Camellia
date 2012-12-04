@@ -87,11 +87,22 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
   Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = dofOrdering.getBasis(trialID,sideIndex);
   
+  bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
+  
   BasisCachePtr basisCache;
   if (cubDegree <= 0) { // then take the default cub. degree
     basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh() ) );
   } else {
-    int cubDegreeEnrichment = min(cubDegree - basis->getDegree(), 0);
+    // we could eliminate the logic below if we just added BasisCache::setCubatureDegree()...
+    // (the logic below is just to make the enriched cubature match the requested cubature degree...)
+    int maxTrialDegree;
+    if (!boundaryIntegral) {
+      maxTrialDegree = elemTypePtr->trialOrderPtr->maxBasisDegreeForVolume();
+    } else {
+      maxTrialDegree = elemTypePtr->trialOrderPtr->maxBasisDegree(); // generally, this will be the trace degree
+    }
+    int maxTestDegree = elemTypePtr->testOrderPtr->maxBasisDegree();
+    int cubDegreeEnrichment = max(cubDegree - (maxTrialDegree + maxTestDegree), 0);
     basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution.mesh(), false, cubDegreeEnrichment) );
   }
   
@@ -100,7 +111,6 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   vector<int> cellIDs = solution.mesh()->cellIDsOfTypeGlobal(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
   
-  bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
   if (boundaryIntegral) {
     basisCache = basisCache->getSideBasisCache(sideIndex);
   }

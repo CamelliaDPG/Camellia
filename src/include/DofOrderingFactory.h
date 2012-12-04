@@ -48,10 +48,12 @@
 #include "Teuchos_RCP.hpp"
 
 // DPG includes
-#include "BilinearForm.h"
+#include "CamelliaIntrepidExtendedTypes.h"
 #include "DofOrdering.h"
 
 using namespace std;
+
+class BilinearForm;
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
@@ -60,13 +62,13 @@ private:
   struct Comparator {
     bool operator() (const DofOrderingPtr &lhs, const DofOrderingPtr &rhs) {
       // return true if lhs < rhs
-      vector<int> lhsVarIDs = lhs->getVarIDs();
-      vector<int> rhsVarIDs = rhs->getVarIDs();
+      set<int> lhsVarIDs = lhs->getVarIDs();
+      set<int> rhsVarIDs = rhs->getVarIDs();
       if ( lhsVarIDs.size() != rhsVarIDs.size() ) {
         return lhsVarIDs.size() < rhsVarIDs.size();
       }
-      vector<int>::iterator lhsVarIterator;
-      vector<int>::iterator rhsVarIterator = rhsVarIDs.begin();
+      set<int>::iterator lhsVarIterator;
+      set<int>::iterator rhsVarIterator = rhsVarIDs.begin();
       for (lhsVarIterator = lhsVarIDs.begin(); lhsVarIterator != lhsVarIDs.end(); lhsVarIterator++) {
         int lhsVarID = *lhsVarIterator;
         int rhsVarID = *rhsVarIterator;

@@ -37,6 +37,8 @@
 
 #include "DofOrderingFactory.h"
 
+#include "BilinearForm.h"
+
 typedef Teuchos::RCP<Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 
@@ -155,8 +157,8 @@ void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr d
 }
 
 int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
-  vector<int> varIDs = dofOrdering->getVarIDs();
-  vector<int>::iterator idIt;
+  set<int> varIDs = dofOrdering->getVarIDs();
+  set<int>::iterator idIt;
   int interiorVariable;
   bool interiorVariableFound = false;
   int minSidePolyOrder = INT_MAX;
@@ -189,9 +191,9 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
 
 map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide) {
   vector< BasisPtr > bases;
-  vector<int> varIDs = (childTrialOrdersForSide[0].first)->getVarIDs();
+  set<int> varIDs = (childTrialOrdersForSide[0].first)->getVarIDs();
   map<int, BasisPtr> varIDsToUpgrade;
-  vector<int>::iterator idIt;
+  set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = childTrialOrdersForSide[0].first->getNumSidesForVarID(varID);
@@ -218,9 +220,9 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
 map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrderingPtr childTrialOrdering, int childSideIndex,
                                                                const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
                                                                int childIndexInParentSide) {
-  vector<int> varIDs = childTrialOrdering->getVarIDs();
+  set<int> varIDs = childTrialOrdering->getVarIDs();
   map<int, BasisPtr> varIDsToUpgrade;
-  vector<int>::iterator idIt;
+  set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = childTrialOrdering->getNumSidesForVarID(varID);
@@ -258,8 +260,8 @@ void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, in
 }
 
 bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex) {
-  vector<int> varIDs = trialOrdering->getVarIDs();
-  vector<int>::iterator idIt;
+  set<int> varIDs = trialOrdering->getVarIDs();
+  set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = trialOrdering->getNumSidesForVarID(varID);
@@ -281,9 +283,9 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
   // basic strategy: if parent has MultiBasis on that side, then child should get a piece of that
   //                 otherwise, we can simply use matchSides as it is...
   if ( sideHasMultiBasis(parentTrialOrdering,sideIndex) ) {
-    vector<int> varIDs = parentTrialOrdering->getVarIDs();
+    set<int> varIDs = parentTrialOrdering->getVarIDs();
     map<int, BasisPtr> varIDsToUpgrade;
-    vector<int>::iterator idIt;
+    set<int>::iterator idIt;
     for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
       int varID = *idIt;
       int numSides = parentTrialOrdering->getNumSidesForVarID(varID);
@@ -313,8 +315,8 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
   // upgrades the lesser-order basis 
   map<int, BasisPtr> varIDsToUpgrade;
   int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
-  vector<int> varIDs = firstOrdering->getVarIDs();
-  vector<int>::iterator idIt;
+  set<int> varIDs = firstOrdering->getVarIDs();
+  set<int>::iterator idIt;
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = firstOrdering->getNumSidesForVarID(varID);
@@ -366,8 +368,8 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
   
-  vector<int> varIDs = dofOrdering->getVarIDs();
-  vector<int>::iterator idIt;
+  set<int> varIDs = dofOrdering->getVarIDs();
+  set<int>::iterator idIt;
 
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
@@ -407,12 +409,12 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
                                            const shards::CellTopology &cellTopo, int pToAdd) {
   // could consider adding a cache that lets you go from (DofOrdering*,pToAdd) --> enrichedDofOrdering...
   // (since likely we'll be upgrading the same DofOrdering a bunch of times)
-  vector<int> varIDs = dofOrdering->getVarIDs();
+  set<int> varIDs = dofOrdering->getVarIDs();
   int interiorPolyOrder = polyOrder(dofOrdering); // rule is, any bases with polyOrder < interiorPolyOrder+pToAdd get upgraded 
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
-  for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     IntrepidExtendedTypes::EFunctionSpaceExtended fs;
@@ -443,9 +445,9 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
                                                     int newPolyOrder, bool replacePatchBasis) {
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
-  vector<int> varIDs = dofOrdering->getVarIDs();
+  set<int> varIDs = dofOrdering->getVarIDs();
   Teuchos::RCP< shards::CellTopology > cellTopoPtr = dofOrdering->cellTopology();
-  for (vector<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     IntrepidExtendedTypes::EFunctionSpaceExtended fs;

@@ -49,7 +49,9 @@ typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 class DofOrdering {
   int _indexNeedsToBeRebuilt;
   int _nextIndex;
-  vector<int> varIDs;
+//  vector<int> varIDs;
+  set<int> varIDs;
+  vector<int> varIDsVector;
 // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   map< pair<int, pair<int, int> >, pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
                                                                         // values: <sideIndex, dofOrdinal>
@@ -65,6 +67,9 @@ public:
   
   void addEntry(int varID, Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis, int basisRank, int sideIndex = 0);
   
+  bool hasBasisEntry(int varID, int sideIndex);
+  bool hasSideVarIDs();
+  
   void copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
                             const FieldContainer<double> &oldValues );
   
@@ -73,7 +78,7 @@ public:
   
   const vector<int> & getDofIndices(int varID, int sideIndex=0);
   
-  const vector<int> & getVarIDs();
+  const set<int> & getVarIDs();
   
   int getNumSidesForVarID(int varID);
   
@@ -91,6 +96,7 @@ public:
   Teuchos::RCP< shards::CellTopology > cellTopology(int sideIndex = -1);
   
   int maxBasisDegree();
+  int maxBasisDegreeForVolume();
   
   int totalDofs() {
     return _nextIndex;

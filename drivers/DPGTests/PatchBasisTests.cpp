@@ -331,8 +331,8 @@ bool PatchBasisTests::patchBasesAgreeWithParentInMesh() {
     ElementPtr elem = _mesh->getElement(cellID);
     
     Teuchos::RCP< DofOrdering > trialOrdering = elem->elementType()->trialOrderPtr;
-    vector<int> varIDs = trialOrdering->getVarIDs();
-    for (vector<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+    set<int> varIDs = trialOrdering->getVarIDs();
+    for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
       int varID = *varIDIt;
       int numSides = trialOrdering->getNumSidesForVarID(varID);
       for (int sideIndex = 0; sideIndex < numSides; sideIndex++) {
@@ -653,7 +653,30 @@ bool PatchBasisTests::testPatchBasis1D() {
 bool PatchBasisTests::testSimpleRefinement() {
   // refine in the sw, and then check that the right elements have PatchBases
   bool success = true;
+  
+//  cout << "Before testSimpleRefinement, boundary: " << endl;
+//  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
+//    cout << "cellID " << cellID << ":";
+//    for (int sideIndex=0; sideIndex<4; sideIndex++) {
+//      if (_mesh->boundary().boundaryElement(cellID,sideIndex)) {
+//        cout << sideIndex << " ";
+//      }
+//    }
+//    cout << endl;
+//  }
+  
   makeSimpleRefinement();
+  
+//  cout << "After testSimpleRefinement, boundary: " << endl;
+//  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
+//    cout << "cellID " << cellID << ":";
+//    for (int sideIndex=0; sideIndex<4; sideIndex++) {
+//      if (_mesh->boundary().boundaryElement(cellID,sideIndex)) {
+//        cout << sideIndex << " ";
+//      }
+//    }
+//    cout << endl;
+//  }
   
   if ( !meshLooksGood() || (! refinementsHaveNotIncreasedError()) ) {
     success = false;

@@ -1834,8 +1834,8 @@ bool MeshTestSuite::checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOr
   // (won't be true for orderings that have H1 dofs that are conforming)
   bool noOverlap = true;
   set<int> dofIndices;
-  vector<int> varIDs = dofOrdering->getVarIDs();
-  vector<int>::iterator varIDIt;
+  set<int> varIDs = dofOrdering->getVarIDs();
+  set<int>::iterator varIDIt;
   for (varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);

@@ -22,6 +22,7 @@
 #include "Epetra_DataAccess.h"
 
 #include "Function.h"
+#include "VarFactory.h"
 
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
@@ -45,8 +46,15 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   
   FieldContainer<double> gramMatrix(numCells,numDofs,numDofs);
   FieldContainer<double> ipVector(numCells,numDofs);
+
+  // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
-  dofOrdering->addEntry(v->ID(), basis, v->rank());
+  if (! basisCache->isSideCache()) {
+    dofOrdering->addEntry(v->ID(), basis, v->rank());
+  } else {
+    dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
+  }
+  
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, basisCache);
   ip->computeInnerProductVector(ipVector, v, fxn, dofOrdering, basisCache);
   
@@ -64,6 +72,22 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     Epetra_SerialDenseVector b(Copy,
                                &ipVector(cellIndex,0),
                                ipVector.dimension(1));
+    
+//    if (cellIndex==0) {
+//      cout << "new projectFunctionOntoBasis: matrix A for cellIndex 0 = " << endl;
+//      for (int i=0;i<gramMatrix.dimension(2);i++){
+//        for (int j=0;j<gramMatrix.dimension(1);j++){
+//          cout << A(i,j) << " ";
+//        }
+//        cout << endl;
+//      }
+//      cout << endl;
+//      
+//      cout << "new projectFunctionOntoBasis: vector B for cellIndex 0 = " << endl << endl;
+//      for (int i=0;i<ipVector.dimension(1);i++){
+//        cout << b(i) << endl;
+//      }
+//    }
     
     Epetra_SerialDenseVector x(gramMatrix.dimension(1));
     
@@ -101,6 +125,22 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache) {
+  VarFactory varFactory;
+  VarPtr var;
+  if (! basisCache->isSideCache()) {
+    var = varFactory.fieldVar("dummyField");
+  } else {
+    // for present purposes, distinction between trace and flux doesn't really matter,
+    // except that parities come into the IP computation for fluxes (even though they'll cancel),
+    // and since basisCache doesn't necessarily have parities defined (especially in tests),
+    // it's simpler all around to use traces.
+    var = varFactory.traceVar("dummyTrace");
+  }
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(var); // simple L^2 IP
+  projectFunctionOntoBasis(basisCoefficients, fxn, basis, basisCache, ip, var);
+  
+  /*
   // TODO: rewrite this to use the version above (define L2 inner product for a dummy variable, then pass in this ip and varPtr)
   shards::CellTopology cellTopo = basis->getBaseCellTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
@@ -141,22 +181,22 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
                                ipVector.dimension(1));
     
     Epetra_SerialDenseVector x(gramMatrix.dimension(1));
-    
-    /*
-     cout << "matrix A = " << endl;
-     for (int i=0;i<gramMatrix.dimension(2);i++){
-     for (int j=0;j<gramMatrix.dimension(1);j++){
-     cout << A(i,j) << " ";
-     }
-     cout << endl;
-     }
-     cout << endl;
-     
-     cout << "vector B = " << endl;
-     for (int i=0;i<functionValues.dimension(1);i++){
-     cout << b(i) << endl;
-     }
-     */
+        
+    if (cellIndex==0) {
+      cout << "legacy projectFunctionOntoBasis: matrix A for cellIndex 0 = " << endl;
+      for (int i=0;i<gramMatrix.dimension(2);i++){
+        for (int j=0;j<gramMatrix.dimension(1);j++){
+          cout << A(i,j) << " ";
+        }
+        cout << endl;
+      }
+      cout << endl;
+      
+      cout << "legacy projectFunctionOntoBasis: vector B for cellIndex 0 = " << endl;
+      for (int i=0;i<ipVector.dimension(1);i++){
+        cout << b(i) << endl;
+      }
+    }
     
     solver.SetMatrix(A);
     int info = solver.SetVectors(x,b);
@@ -185,9 +225,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     
     for (int i=0;i<numDofs;i++){
       basisCoefficients(cellIndex,i) = x(i);
-    }   
-    
-  } 
+    }
+  }*/
 }
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, const FieldContainer<double> &physicalCellNodes) {

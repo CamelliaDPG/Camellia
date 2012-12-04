@@ -33,8 +33,8 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
                      std::invalid_argument,
                      "testOrdering->totalDofs() (=" << testOrdering->totalDofs() << ") and rhsVector.dimension(1) (=" << rhsVector.dimension(1) << ") do not match.");
   
-  vector<int> testIDs = testOrdering->getVarIDs();
-  vector<int>::iterator testIterator;
+  set<int> testIDs = testOrdering->getVarIDs();
+  set<int>::iterator testIterator;
   
   Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
   

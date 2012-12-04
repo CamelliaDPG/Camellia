@@ -65,6 +65,7 @@ class HConvergenceStudy {
   bool _reportConditionNumber;
   
   int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
+  int _cubatureDegreeForExact;
   vector< SolutionPtr > _solutions;
   vector< SolutionPtr > _bestApproximations;
   
@@ -128,12 +129,14 @@ public:
   
   map< int, double > exactSolutionNorm();
 
-  string convergenceDataMATLAB(int trialID);
+  string convergenceDataMATLAB(int trialID, int minPolyOrder = 1);
   string TeXErrorRateTable(const string &filePathPrefix="");
   string TeXErrorRateTable(const vector<int> &trialIDs, const string &filePathPrefix="");
   string TeXBestApproximationComparisonTable(const string &filePathPrefix="");
   string TeXBestApproximationComparisonTable(const vector<int> &trialIDs, const string &filePathPrefix="");
   string TeXNumGlobalDofsTable(const string &filePathPrefix="");
+  
+  void setCubatureDegreeForExact(int value);
   
   void setSolutions( vector< SolutionPtr > &solutions); // must be in the right order, from minLogElements to maxLogElements
   

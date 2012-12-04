@@ -46,8 +46,6 @@
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
-#include "BilinearForm.h"
-
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -55,16 +53,17 @@
 
 #include "DofOrdering.h"
 
+#include "CamelliaIntrepidExtendedTypes.h"
+
 using namespace Intrepid;
 using namespace std;
 using namespace IntrepidExtendedTypes;
 
-class BasisCache;
 class Mesh;
-
+class Function; // Function.h and BasisCache.h refer to each other...
+typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
   typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
@@ -85,16 +84,17 @@ private:
   FieldContainer<double> _cellSideParities;
   FieldContainer<double> _physicalCellNodes;
   
+  FunctionPtr _transformationFxn;
+  bool _composeTransformationFxnWithMeshTransformation;
+  // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
+  //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
+  
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   DofOrdering _trialOrdering;
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  // _cubFactory, _cubDegree, _maxTestDegree instance variables are just a temporary addition -- can be deleted once we separate
-  // the creation of the reference from physical side cache info.  (i.e. once we can push the side cache creation
-  // back into init().)
-  DefaultCubatureFactory<double> _cubFactory;
-  int _cubDegree, _maxTestDegree;
+  int _cubDegree, _maxTestDegree, _cubatureMultiplier; // cub. degree = cub. multiplier * whatever it would otherwise be...
   
   // containers specifically for sides:
   FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -125,21 +125,19 @@ private:
   void determineJacobian();
   void determinePhysicalPoints();
   
+  // (private) side cache constructor:
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis);
+  
+  int maxTestDegree();
+  void createSideCaches();
 protected:
   BasisCache() {} // for the sake of some hackish subclassing
 public:
-  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
+             int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
-  
-  // side cache constructor:
-  BasisCache(int sideIndex, shards::CellTopology &cellTopo, int numCells, int spaceDim, FieldContainer<double> &cubPointsSidePhysical,
-             FieldContainer<double> &cubPointsSide, FieldContainer<double> &cubPointsSideRefCell, 
-             FieldContainer<double> &cubWeightsSide, FieldContainer<double> &sideMeasure,
-             FieldContainer<double> &sideNormals, FieldContainer<double> &jacobianSideRefCell,
-             FieldContainer<double> &jacobianInvSideRefCell, FieldContainer<double> &jacobianDetSideRefCell,
-             const vector<int> &cellIDs, FieldContainer<double> &physicalCellNodes, BasisCachePtr volumeCache);
   
   Teuchos::RCP< const FieldContainer<double> > getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, bool useCubPointsSideRefCell = false);
   FieldContainer<double> & getWeightedMeasures();
@@ -160,6 +158,9 @@ public:
   const vector<int> & cellIDs();
   
   shards::CellTopology cellTopology();
+  
+  int cubatureDegree();
+  int cubatureMultiplier();
   
   Teuchos::RCP<Mesh> mesh();
   
@@ -184,20 +185,10 @@ public:
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
   
   int getSideIndex(); // -1 if not sideCache
+  
+  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
 };
 
-class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
-  FieldContainer<double> _physCubPoints;
-public:
-  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
-    _physCubPoints = physCubPoints;
-  }
-  const FieldContainer<double> & getPhysicalCubaturePoints() { // overrides super
-    return _physCubPoints;
-  }
-  FieldContainer<double> & writablePhysicalCubaturePoints() { // allows overwriting the contents
-    return _physCubPoints;
-  }
-};
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 #endif

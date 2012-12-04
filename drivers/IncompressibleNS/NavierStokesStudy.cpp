@@ -36,6 +36,12 @@ int main(int argc, char *argv[]) {
   numProcs=mpiSession.getNProc();
 #else
 #endif
+  int minLogElements = 0;
+  int maxLogElements = 3;
+  
+  int minPolyOrder = 3;
+  int maxPolyOrder = 3;
+  
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
@@ -76,19 +82,13 @@ int main(int argc, char *argv[]) {
   double Re = 40.0; // Evans Hughes Navier-Stokes
 //  double Re = 1000.0;
   
+  string formulationTypeStr = "vgp";
+  
   FunctionPtr u1_exact, u2_exact, p_exact;
   
   int numCellsFineMesh = 20; // for computing a zero-mean pressure
   int H1OrderFineMesh = 5;
-  int H1Order = 3;
-  
-  int polyOrder = H1Order - 1;
-  if (rank==0) {
-    cout << "L^2 order: " << polyOrder << endl;
-    cout << "Re = " << Re << endl;
-  }
-  
-  int kovasznayCubatureEnrichment = H1Order - 1 + 5;
+
   FunctionPtr zero = Function::zero();
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
@@ -108,102 +108,127 @@ int main(int argc, char *argv[]) {
   
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
-  int minLogElements = 0;
-  int maxLogElements = 3;
+  map< string, string > convergenceDataForMATLAB; // key: field file name
   
-  int numCells1D = pow(2.0,minLogElements);
   int maxIters = 25; // max nonlinear steps
   double minL2Increment = 1e-12;
-  vector< VGPNavierStokesProblem > problems;
-  do {
-    VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                                            numCells1D,numCells1D,
-                                                            H1Order, pToAdd,
-                                                            u1_exact, u2_exact, p_exact);
-    problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
-    problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
-    problems.push_back(problem);
-    if ( !useOptimalNorm ) {
-      // then use the naive:
-      problem.setIP(problem.bf()->naiveNorm());
-    }
-    if (rank==0) {
-      cout << numCells1D << " x " << numCells1D << ": " << problem.mesh()->numGlobalDofs() << " dofs " << endl;
-    }
-    numCells1D *= 2;
-  } while (pow(2.0,maxLogElements) >= numCells1D);
-  
-  HConvergenceStudy study(problems[0].exactSolution(),
-                          problems[0].mesh()->bilinearForm(),
-                          problems[0].exactSolution()->rhs(),
-                          problems[0].backgroundFlow()->bc(),
-                          problems[0].bf()->graphNorm(),
-                          minLogElements, maxLogElements, 
-                          H1Order, pToAdd, false, useTriangles, false);
-  study.setReportRelativeErrors(computeRelativeErrors);
-  
-  vector< SolutionPtr > solutions;
-  numCells1D = pow(2.0,minLogElements);
-  for (vector< VGPNavierStokesProblem >::iterator problem = problems.begin();
-       problem != problems.end(); problem++) {
-    SolutionPtr solnIncrement = problem->solutionIncrement();
-    FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
-    FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
-    FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
-    FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, solnIncrement);
-    FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, solnIncrement);
-    FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
-    FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+  for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++) {
+    int H1Order = polyOrder + 1;
     
-    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-                        + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
-                        + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
-    do {
-      problem->iterate();
-    } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters));
-    solutions.push_back( problem->backgroundFlow() );
-    if (rank==0) {
-      cout << numCells1D << " x " << numCells1D << ": " << problem->iterationCount() << " iterations " << endl;
-    }
-    numCells1D *= 2;
-  }
-  
-  study.setSolutions(solutions);
-  string formulationTypeStr = "vgp";
-  
-  if (rank == 0) {
-    cout << study.TeXErrorRateTable();
-    vector<int> primaryVariables;
-    stokesForm.primaryTrialIDs(primaryVariables);
-    vector<int> fieldIDs,traceIDs;
-    vector<string> fieldFileNames;
-    stokesForm.trialIDs(fieldIDs,traceIDs,fieldFileNames);
-    cout << "******** Best Approximation comparison: ********\n";
-    cout << study.TeXBestApproximationComparisonTable(primaryVariables);
-    
-    ostringstream filePathPrefix;
-    filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_velpressure";
-    study.TeXBestApproximationComparisonTable(primaryVariables,filePathPrefix.str());
-    filePathPrefix.str("");
-    filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_all";
-    study.TeXBestApproximationComparisonTable(fieldIDs); 
+    int numCells1D = pow(2.0,minLogElements);
 
-    // for now, not interested in plots, etc. of individual variables.
-    for (int i=0; i<fieldIDs.size(); i++) {
-      int fieldID = fieldIDs[i];
-      int traceID = traceIDs[i];
-      string fieldName = fieldFileNames[i];
+    if (rank==0) {
+      cout << "L^2 order: " << polyOrder << endl;
+      cout << "Re = " << Re << endl;
+    }
+    
+    int kovasznayCubatureEnrichment = 10;
+
+    vector< VGPNavierStokesProblem > problems;
+    do {
+      VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
+                                                              numCells1D,numCells1D,
+                                                              H1Order, pToAdd,
+                                                              u1_exact, u2_exact, p_exact);
+      problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+      problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+      problems.push_back(problem);
+      if ( !useOptimalNorm ) {
+        // then use the naive:
+        problem.setIP(problem.bf()->naiveNorm());
+      }
+      if (rank==0) {
+        cout << numCells1D << " x " << numCells1D << ": " << problem.mesh()->numGlobalDofs() << " dofs " << endl;
+      }
+      numCells1D *= 2;
+    } while (pow(2.0,maxLogElements) >= numCells1D);
+    
+    HConvergenceStudy study(problems[0].exactSolution(),
+                            problems[0].mesh()->bilinearForm(),
+                            problems[0].exactSolution()->rhs(),
+                            problems[0].backgroundFlow()->bc(),
+                            problems[0].bf()->graphNorm(),
+                            minLogElements, maxLogElements, 
+                            H1Order, pToAdd, false, useTriangles, false);
+    study.setReportRelativeErrors(computeRelativeErrors);
+    study.setCubatureDegreeForExact(kovasznayCubatureEnrichment);
+    
+    vector< SolutionPtr > solutions;
+    numCells1D = pow(2.0,minLogElements);
+    for (vector< VGPNavierStokesProblem >::iterator problem = problems.begin();
+         problem != problems.end(); problem++) {
+      SolutionPtr solnIncrement = problem->solutionIncrement();
+      FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
+      FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
+      FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
+      FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, solnIncrement);
+      FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, solnIncrement);
+      FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
+      FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+      
+      FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+                          + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+                          + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+      do {
+        problem->iterate();
+      } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters));
+      solutions.push_back( problem->backgroundFlow() );
+      if (rank==0) {
+        cout << numCells1D << " x " << numCells1D << ": " << problem->iterationCount() << " iterations " << endl;
+      }
+      numCells1D *= 2;
+    }
+    
+    study.setSolutions(solutions);
+    
+    if (rank == 0) {
+      cout << study.TeXErrorRateTable();
+      vector<int> primaryVariables;
+      stokesForm.primaryTrialIDs(primaryVariables);
+      vector<int> fieldIDs,traceIDs;
+      vector<string> fieldFileNames;
+      stokesForm.trialIDs(fieldIDs,traceIDs,fieldFileNames);
+      cout << "******** Best Approximation comparison: ********\n";
+      cout << study.TeXBestApproximationComparisonTable(primaryVariables);
+      
       ostringstream filePathPrefix;
-      filePathPrefix << "navierStokes/" << fieldName << "_p" << polyOrder;
-      study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
+      filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_velpressure";
+      study.TeXBestApproximationComparisonTable(primaryVariables,filePathPrefix.str());
+      filePathPrefix.str("");
+      filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_all";
+      study.TeXBestApproximationComparisonTable(fieldIDs); 
+
+      // for now, not interested in plots, etc. of individual variables.
+      for (int i=0; i<fieldIDs.size(); i++) {
+        int fieldID = fieldIDs[i];
+        int traceID = traceIDs[i];
+        string fieldName = fieldFileNames[i];
+        ostringstream filePathPrefix;
+        filePathPrefix << "navierStokes/" << fieldName << "_p" << polyOrder;
+        study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
+      }
+      
+      for (int i=0; i<primaryVariables.size(); i++) {
+        string convData = study.convergenceDataMATLAB(primaryVariables[i], minPolyOrder);
+        cout << convData;
+        convergenceDataForMATLAB[fieldFileNames[i]] += convData;
+      }
+      
+      filePathPrefix.str("");
+      filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_numDofs";
+      cout << study.TeXNumGlobalDofsTable();
     }
-    
-    for (int i=0; i<primaryVariables.size(); i++) {
-      cout << study.convergenceDataMATLAB(primaryVariables[i]);  
+  }
+  if (rank==0) {
+    ostringstream filePathPrefix;
+    filePathPrefix << "navierStokes/" << formulationTypeStr << "_";
+    for (map<string,string>::iterator convIt = convergenceDataForMATLAB.begin(); convIt != convergenceDataForMATLAB.end(); convIt++) {
+      string fileName = convIt->first + ".m";
+      string data = convIt->second;
+      fileName = filePathPrefix.str() + fileName;
+      ofstream fout(fileName.c_str());
+      fout << data;
+      fout.close();
     }
-    
-    filePathPrefix.str("");
-    filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_numDofs";
-    cout << study.TeXNumGlobalDofsTable();
   }
 }

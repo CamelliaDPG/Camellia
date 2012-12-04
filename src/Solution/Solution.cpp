@@ -2478,7 +2478,6 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
   Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
   Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
   
-  int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   solnCoeffs.resize(basisCardinality);
   
@@ -2523,7 +2522,6 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
   Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
   
-  int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
   if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
     // allocate new storage
@@ -3300,12 +3298,12 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
       FieldContainer<double> cellCentroid(spaceDim);
       cellCentroid.initialize(0.0);
       for (int vertIndex=0;vertIndex<numVertices;vertIndex++){	
-	for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-	  cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
-	}
+        for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
+          cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
+        }
       }
       for (int dimIndex=0;dimIndex<spaceDim;dimIndex++){
-	cellCentroid(dimIndex) /= numVertices;
+        cellCentroid(dimIndex) /= numVertices;
       }
       cellCentroid.resize(1,spaceDim); // only one cell
       int cellID = _mesh->elementsForPoints(cellCentroid)[0]->cellID();      
@@ -3339,7 +3337,7 @@ void Solution::writeFluxesToFile(int trialID, const string &filePath){
 
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
-	FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
+        FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
         for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++){
           for (int dimInd=0;dimInd<spaceDim;dimInd++){
             fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
@@ -3541,7 +3539,6 @@ void Solution::projectOntoMesh(const map<int, Teuchos::RCP<Function> > &function
 }
 
 void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int cellID){
-  typedef Teuchos::RCP<AbstractFunction> AbstractFxnPtr;
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<int> cellIDs(1,cellID);
   
@@ -3552,7 +3549,8 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
     
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,_cubatureEnrichmentDegree) );
+    bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,testVsTest,_cubatureEnrichmentDegree) );
     basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,fluxOrTrace); // create side cache if it's a trace or flux
     
     if (fluxOrTrace) {
@@ -3615,7 +3613,7 @@ void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &
 void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
   // NOTE: this only projects field variables for now.
   DofOrderingPtr oldTrialOrdering = oldElemType->trialOrderPtr;
-  vector<int> trialIDs = oldTrialOrdering->getVarIDs();
+  set<int> trialIDs = oldTrialOrdering->getVarIDs();
   FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
@@ -3623,9 +3621,10 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
     return;
   }
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
+  // TODO: rewrite this method using Functions instead of AbstractFunctions
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
   
-  for (vector<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+  for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
     int trialID = *trialIDIt;
     if (oldTrialOrdering->getNumSidesForVarID(trialID) == 1) { // field variable, the only kind we honor right now
       BasisPtr basis = oldTrialOrdering->getBasis(trialID);

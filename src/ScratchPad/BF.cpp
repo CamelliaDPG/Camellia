@@ -59,7 +59,11 @@ EFunctionSpaceExtended BF::functionSpaceForTrial(int trialID) {
 }
 
 bool BF::isFluxOrTrace(int trialID) {
-  VarType varType = _varFactory.trial(trialID)->varType();
+  VarPtr trialVar = _varFactory.trial(trialID);
+  if (trialVar.get() == NULL) { // if unknown trial ID, then it's not a flux or a trace!
+    return false;
+  }
+  VarType varType = trialVar->varType();
   return (varType == FLUX) || (varType == TRACE);
 }
 

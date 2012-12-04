@@ -23,6 +23,7 @@ drivers/*/exec
 *.dat
 *~
 *.swp
+*.swo
 */.sconsign.bdlite
 drivers/*/.sconsign.dblite
 build/.sconsign.dblite

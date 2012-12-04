@@ -48,6 +48,9 @@
 using namespace Intrepid;
 using namespace std;
 
+class BasisCache; // BasisCache.h and DofOrdering.h #include each other...
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
+
 class DPGInnerProduct {
 protected:
   Teuchos::RCP< BilinearForm > _bilinearForm;

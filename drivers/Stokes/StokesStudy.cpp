@@ -119,81 +119,6 @@ public:
 //  }
 };
 
-class Cos_ay : public SimpleFunction {
-  double _a;
-public:
-  Cos_ay(double a);
-  double value(double x, double y);
-  FunctionPtr dx();
-  FunctionPtr dy();
-  
-  string displayString();
-};
-
-class Sin_ay : public SimpleFunction {
-  double _a;
-public:
-  Sin_ay(double a) {
-    _a = a;
-  }
-  double value(double x, double y) {
-    return sin( _a * y);
-  }
-  FunctionPtr dx() {
-    return Function::zero();
-  }
-  FunctionPtr dy() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ay(_a));
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\sin( " << _a << " y )";
-    return ss.str();
-  }
-};
-
-
-class Exp_ax : public SimpleFunction {
-  double _a;
-public:
-  Exp_ax(double a) {
-    _a = a;
-  }
-  double value(double x, double y) {
-    return exp( _a * x);
-  }
-  FunctionPtr dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Exp_ax(_a));
-  }
-  FunctionPtr dy() {
-    return Function::zero();
-  }
-  string displayString() {
-    ostringstream ss;
-    ss << "\\exp( " << _a << " x )";
-    return ss.str();
-  }
-};
-
-Cos_ay::Cos_ay(double a) {
-  _a = a;
-}
-double Cos_ay::value(double x, double y) {
-  return cos( _a * y );
-}
-FunctionPtr Cos_ay::dx() {
-  return Function::zero();
-}
-FunctionPtr Cos_ay::dy() {
-  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ay(_a));
-}
-
-string Cos_ay::displayString() {
-  ostringstream ss;
-  ss << "\\cos( " << _a << " y )";
-  return ss.str();
-}
-
 class Xp : public SimpleFunction { // x^p, for x >= 0
   double _p;
 public:
@@ -526,7 +451,7 @@ int main(int argc, char *argv[]) {
   
   string exactSolnChoiceStr;
   if (exactSolnChoice == KanschatSmooth)   exactSolnChoiceStr = "Kanschat Smooth";
-  else if (exactSolnChoice == HDGSmooth)   exactSolnChoiceStr = "HDG Smooth (Kovasnay)";
+  else if (exactSolnChoice == HDGSmooth)   exactSolnChoiceStr = "HDG Smooth (Kovasznay)";
   else if (exactSolnChoice == HDGSingular) exactSolnChoiceStr = "HDG Singular";
   else exactSolnChoiceStr = "test polynomial";
 
@@ -652,11 +577,12 @@ int main(int argc, char *argv[]) {
     } else if (exactSolnChoice == HDGSmooth) {
       // u1 = 1 - exp( lambda x ) cos (2 PI y)
       // u2 = lambda / (2 PI) exp( lambda x ) sin ( 2 PI y )
-      //  p = 0.5 exp ( 2 lamba x )
+      //  p = 0.5 exp ( 2 lambda x )
       //
       // where lambda = Re / 2 - sqrt( (Re/2)^2 + (2 PI)^2 )
       //   and     Re = 1 / mu = 10.0
-            
+      
+      
       const double PI  = 3.141592653589793238462;
       double Re = 1.0 / mu;
       double lambda = Re / 2 - sqrt ( (Re / 2) * (Re / 2) + (2 * PI) * (2 * PI) );

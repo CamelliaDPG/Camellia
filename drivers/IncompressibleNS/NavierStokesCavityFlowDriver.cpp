@@ -201,6 +201,7 @@ int main(int argc, char *argv[]) {
   bool useMumps = false;
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
+  bool startWithZeroSolutionAfterRefinement = true;
   
   bool artificialTimeStepping = false;
   
@@ -230,13 +231,16 @@ int main(int argc, char *argv[]) {
     numRefs = atoi(argv[2]);
     Re = atof(argv[3]);
     horizontalCells = atoi(argv[4]);
-    verticalCells = atoi(argv[4]);
+    verticalCells = horizontalCells;
   }
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
     cout << "Re = " << Re << endl;
     cout << "initial mesh: " << horizontalCells << " x " << verticalCells << endl;
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
+    if (!startWithZeroSolutionAfterRefinement) {
+      cout << "NOTE: experimentally, NOT starting with 0 solution after refinement...\n";
+    }
   }
   
   FieldContainer<double> quadPoints(4,2);
@@ -547,9 +551,11 @@ int main(int argc, char *argv[]) {
     + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
     for (int refIndex=0; refIndex<numRefs; refIndex++){
-      // start with a fresh (zero) initial guess for each adaptive mesh:
-      solution->clear();
-      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+      if (startWithZeroSolutionAfterRefinement) {
+        // start with a fresh (zero) initial guess for each adaptive mesh:
+        solution->clear();
+        problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+      }
       
       double incr_norm;
       do {
@@ -617,9 +623,11 @@ int main(int argc, char *argv[]) {
     }
     // one more solve on the final refined mesh:
     if (rank==0) cout << "Final solve:\n";
-    // start with a fresh (zero) initial guess for each adaptive mesh:
-    solution->clear();
-    problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+    if (startWithZeroSolutionAfterRefinement) {
+      // start with a fresh (zero) initial guess for each adaptive mesh:
+      solution->clear();
+      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
+    }
     double incr_norm;
     do {
       problem.iterate();

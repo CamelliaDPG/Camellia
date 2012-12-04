@@ -1,0 +1,384 @@
+\documentclass[letterpaper]{article}
+\usepackage[margin=1.0in]{geometry}
+\usepackage{authblk}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{graphicx}
+\usepackage{subfigure}
+
+\def\btau{\boldsymbol\tau}
+\def\bsigma{\boldsymbol\sigma}
+\def\bbeta{\boldsymbol\beta}
+\def\blambda{\boldsymbol\lambda}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator*{\argmin}{\arg\,\min}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\norm}[1]{\left\| #1 \right\|}
+\newcommand{\snorm}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\Delta}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\title{Locally Conservative Discontinuous Petrov-Galerkin Finite Elements for
+Fluid Problems}
+\author{Truman Ellis} 
+\author{Leszek Demkowicz}
+\author{Jesse Chan}
+\affil{Institute for Computational Engineering and Sciences,\\
+The University of Texas at Austin, \\
+Austin, TX 78712}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\end{abstract}
+
+\section{Intoduction}
+Verteeg and Malalasekera, in \emph{An Introduction to Computational Fluid
+Dynamics: The Finite Volume Method}\cite[p. 110-113]{IntroCFD} cite three
+characteristics that they consider essential to any numerical discretization
+of convection-diffusion type problems: conservativeness, boundedness, and
+transportiveness.
+
+Perot\cite{Perot2011} argues
+\begin{quote}
+Accuracy, stability, and consistency are the mathematical concepts that are
+typically used to analyze numerical methods for partial differential equations
+(PDEs). These important tools quantify how well the mathematics of a PDE is
+represented, but they fail to say anything about how well the physics of the
+system is represented by a particular numerical method. In practice, physical
+fidelity of a numerical solution can be just as important (perhaps even more
+important to a physicist) as these more traditional mathematical concepts. A
+numerical solution that violates the underlying physics (destroying mass or
+entropy, for example) is in many respects just as flawed as an unstable
+solution.
+\end{quote}
+
+The discontinuous Petrov-Galerkin finite element method has been described as
+least squares finite elements with a twist. The key difference is that least
+square methods seek to minimize the residual of the solution in some Hilbert
+space norm, while DPG seeks the minimization in a dual norm through the
+inverse Riesz map. Exact mass conservation has been an issue that has plagued
+least squares finite elements for a long time. Several approaches have been
+used to try to adress this. Chang and Nelson\cite{ChangNelson1997} developed
+the 'restricted LSFEM'\cite{ChangNelson1997} be augmenting the least squares
+equations with a Lagrange multiplier explicitly enforcing mass conservation
+element-wise. Our conservative formulation of DPG takes a similar approach and
+both methods share similar negative of transforming a minimization method to a
+saddle-point problem.
+
+The discontinuous Petrov-Galerkin finite element method has shown a lot of
+promise for convection-diffusion type problems including robustness in the
+face of singularly perturbed problems.
+
+\section{DPG is a Minimum Residual Method}
+We now proceed with a abstract derivation of the standard Discontinuous
+Petrov-Galerkin method. Suppose we have two Hilbert spaces, $U$ and $V$, the
+trial and test spaces, respectively. And suppose we are trying to solve a
+well-posed variational problem $b(u,v)=l(v)$. We can rewrite this in operator
+form $Bu=l$, where $B:U\rightarrow V'$, where $V'$ is the dual space to $V$.
+Then, for a discrete subspace $U_h\subset U$, we seek to find $u_h\in U_h$
+that minimizes the error residual:
+\begin{equation}
+u_h=\argmin_{u_h\in U_h}\frac{1}{2}\norm{Bu_h-l}^2_{V'}\,.
+\label{minresidual}
+\end{equation}
+Recalling that the Riesz operator $R_V:V\rightarrow V'$ is an isometry defined
+by
+\[
+\LRa{R_Vv,\delta v}=\LRp{v,\delta v}_V,\quad\forall\delta v\in V,
+\]
+we can use the Riesz inverse to minimize on $V$ rather than its dual:
+\begin{equation}
+\frac{1}{2}\norm{Bu_h-l}^2_{V'}=\frac{1}{2}\norm{R_V^{-1}(Bu_h-l)}^2_V
+=\frac{1}{2}\LRp{R_V^{-1}(Bu_h-l),R_V^{-1}(Bu_h-l)}_V\,.
+\label{eq:rieszapplied}
+\end{equation}
+The first order optimality condition for \eqnref{rieszapplied} requires
+the G\^ateaux derivative to be zero in all directions $\delta u \in
+U_h$, i.e.,
+\[
+\left(R_V^{-1}(Bu_h-l),R_V^{-1}B\delta u\right)_V = 0, \quad \forall \delta u \in U. 
+\]
+By definition of the Riesz operator, this is equivalent to
+\begin{equation}
+\LRa{Bu_h-l,R_V^{-1}B\delta u_h}=0\quad\forall\delta u_h\in U_h\,.
+\label{eq:DPGbilinearform}
+\end{equation}
+Now, we can identify $v_{\delta u_h}\coloneqq R_V^{-1}B\delta u_h$ as the
+optimal test function for trial function $u_h$ and we can rewrite
+\eqnref{DPGbilinearform} as
+\begin{equation}
+b(u_h,v_{\delta u_h})=l(v_{\delta u_h}).
+\label{eq:DPGmethod}
+\end{equation}
+The DPG method then is to solve \eqnref{DPGmethod} with optimal test functions
+$v_{\delta u_h}\in V$ that solve the auxiliary problem
+\begin{equation}
+\LRp{v_{\delta u_h},\delta v}_V=\LRa{R_Vv_{\delta u_h},\delta v}
+=\LRa{B\delta u_h,\delta v}=b(\delta u_h,\delta v)\,,\quad\forall\delta v\in V.
+\label{eq:optimaltestproblem}
+\end{equation}
+Using a continuous test basis would result in a global solve for every optimal
+test function. Therefore DPG uses a discontinuous test basis which makes each
+solve element-local and much more computationally tractable. Of course,
+\eqnref{optimaltestproblem} still requires the inversion of the
+infinite-dimensional Riesz map, but in approximating the $V$ by finite
+dimensional $V_h$ which is of a higher polynomial degree than $U_h$ (hence
+``enriched space'') works well in practice.
+
+No assumptions have been made so far on the definition of the inner product on
+$V$. In fact, proper choice of $\LRp{\cdot,\cdot}_V$ can make the difference
+between a solid DPG method and one that suffers from robustness issues.
+
+\section{DPG Applied to Convection-Diffusion}
+Now that we have briefly outline the abstract DPG method, let us put it into
+practice with the Convection-Diffusion equation. The strong form of the
+steady Convection-Diffusion equation reads
+\[
+\div(\bs\beta u)-\epsilon\del u=g\,,
+\]
+where $u$ is the property of interest, $\bs\beta$ is the convection vector,
+and $g$ is the source term. Let us write this as an equivalent system of first
+order equations:
+\begin{align*}
+\div(\bs\beta u-\bs\sigma)&=g\\
+\frac{1}{\epsilon}\bs\sigma-\grad u&=\bs0\,.
+\end{align*}
+If we then multiply the top equation by some scalar test function $v$ and the
+bottom equation by some vector-valued test function $\tau$, we can integrate by
+parts over each element $K$:
+\begin{equation}
+\label{eq:preultraweak}
+\begin{aligned}
+-(\bbeta u-\bsigma,\nabla v)_K+((\bbeta
+u-\bsigma)\cdot\mathbf{n},v)_{\partial K}&=(g,v)_K\\
+\frac{1}{\epsilon}(\bsigma,\btau)_K+(u,\nabla\cdot\btau)_K
+-(u,\tau_n)_{\partial K}&=0\,.
+\end{aligned}
+\end{equation}
+The discontinuous Petrov-Galerkin method refers to the fact that we are using
+discontinuous optimal test functions that come from a space differing from the
+trial space. It does not specify our choice of trial space. Nevertheless, many
+considerations of DPG in the literature \cite{} associate DPG with the
+so-called ``ultra-weak formulation.'' We will follow the same derivation for
+the convection-diffusion equation, but we emphasize that other formulations
+are available. Thus, we seek field variables $u\in L^2(K)$ and
+$\bsigma\in\mb{L^2}(K)$. Mathematically, this leaves their traces on element
+boundaries undefined, and in a manner similar to the hybridized discontinuous
+Galerkin method, we define new unknowns for trace $\hat u$ and flux $\hat f$.
+Applying these definitions to \eqnref{preultraweak} and adding the two
+equations together, we arrive at our desired bilinear form,
+\begin{equation}
+\label{eq:confusionBF}
+-(\bbeta u-\bsigma,\nabla v)_K+(\hat f,v)_{\partial K}
++ \frac{1}{\epsilon}(\bsigma,\btau)_K
++(u,\nabla\cdot\btau)_K
+-(\hat u,\tau_n)_{\partial K}=(g,v)_K\,.
+\end{equation}
+A cursory look at \eqnref{confusionBF} tells us which function spaces to look
+in for each variable:
+\[
+\begin{array}{lll}
+u\in L^2(K) \quad& \hat u\in H^1(K)|_{\partial K} \quad& v\in H^1(K)\\
+\bsigma\in \mathbf{L}^2(K) \quad& \hat f\in \bs{H}(\mb{div},K)|_{\partial K} \quad& \btau\in H(div,K)\,.\\
+\end{array}
+\]
+
+%TODO: Define broken Sobolev spaces
+All that is left to pin down this problem is a definition of our test norm so
+we can invert the Riesz operator and calculate our optimal test functions.
+Within each element, we perform a Bubnov-Galerkin solve for the optimal test
+functions. Define finite-dimensional subspaces
+$\mb{U}_h\subset\mb{U}:=L^2(\Omega_h)\times\mb{L}^2(\Omega_h)\times
+H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$ the trial space and 
+$\mb{V}_h\subset\mb{V}:=H^1(\Omega_h)\times H(div,\Omega_h)$ the ``enriched''
+test space.
+For each $\mathbf{u}=\{u,\bsigma,\hat u,\hat f\}\in\mathbf{U}_h$, find
+$\mathbf{v}_{\mathbf{u}}=\{v_\mathbf{u},\btau_\mathbf{u}\}\in\mathbf{V_h}$ such that
+\[
+(\mathbf{v_u},\mathbf{w})_\mathbf{V}=b(\mathbf{u},\mathbf{w})\quad\forall\mathbf{w}\in\mathbf{V}
+\]
+As mentioned earlier the choice of test norm on $V$ can have profound
+influence on the robustness of our method. Unfortunately, the structure of the
+optimal test norm makes it non-localizable. For many problems, it suffices to
+use the so-call quasi-optimal test norm which is based on the adjoint of the
+$B$ operator, but for convection-diffusion type equations, the adjoint
+develops boundary layers which make solving for the optimal test functions
+much more difficult for small diffusion. In an earlier consideration of DPG
+for convection-diffusion problems, Chan \etal developed the more robust
+test norm\cite{ChanHeuerThanhDemkowicz2012}, 
+\begin{equation}
+\label{eq:robustNorm}
+\norm{(v,\btau)}^2_{\mathbf{V},\Omega_h}=
+\norm{\nabla\cdot\btau}^2+\norm{\min\left\{\frac{1}{\sqrt{\epsilon}},\frac{1}{\sqrt{|K|}}\right\}\btau}^2
++\epsilon\norm{\nabla v}^2+\norm{\bbeta\cdot\nabla v}^2
++\norm{\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}v^2}\,.
+\end{equation}
+Unfortunately, this test norm also has a few issues. For one, some of the
+assumptions that went into its development break down as the flow field
+degenerates to zero. In such cases the final $L^2$ term on $v$ can register
+higher error levels and trigger unnecessary refinements in smooth regions, see
+ref{}.
+%TODO: have Jesse write about this
+
+\section{Locally Conservative Formulation}
+A simple control volume analysis will tell us that a locally conservative
+method must enforce that
+\begin{equation}
+\int_{\partial K}\hat f=\int_K g\,,\quad\forall K\in\Omega_h\,,
+\label{eq:localconservation}
+\end{equation}
+which is equivalent to having the set
+$\mathbf{v}_K:=\{v,\btau\}=\{1_K,\boldsymbol0\}$ for $K=1,\dots,N$ ($N$ is the
+number of mesh elements)
+in the test space, where each $1_K$ has value one on element $K$ and zero
+elsewhere.  In fact, if we insert this test function into
+\eqnref{confusionBF}, all of the $\tau$ and $\grad v$ terms vanish and we are
+left exactly with this condition.
+Numerical experiments imply that local conservation occurs in one dimension,
+but the standard DPG method is not exactly locally conservative for higher
+dimensional problems.
+
+Following Moro \etal\cite{MoroNguyenPeraire11}, we can explicitly augment our
+test space with constants through the use of Lagrange multipliers. Going back
+to \eqnref{rieszapplied}, we can define our Lagrange function,
+\begin{equation}
+\label{eq:lagrangian}
+L(u_h,\blambda) = \frac{1}{2}\norm{R_V^{-1}(Bu_h-l)}_V^2
+-\sum_K\lambda_K\underbrace{\langle Bu_h-l,\mathbf{v}_K\rangle}_
+{\langle\hat f, 1_K\rangle_{\partial K}-\langle g,1_K\rangle_K}\,,
+\end{equation}
+where $\blambda=\{\lambda_1,\cdots,\lambda_N\}$.
+We then proceed as before and find the critical points of \eqnref{lagrangian},
+\begin{equation}
+\label{eq:modifiedBF}
+\frac{\partial L(u_h,\blambda)}{\partial u_h}=b(u_h,R_V^{-1}B\delta u_h)
+-l(R_V^{-1}B\delta u_h)
+-\sum_K\lambda_K b(\delta
+u_h,\mathbf{v}_K)=0\,,\quad\forall\delta u_h\in U_h
+\end{equation}
+\begin{equation}
+\label{eq:constraint}
+\frac{\partial
+L(u_h,\blambda)}{\partial\lambda_K}=-b(u_h,\mathbf{v}_K)+l(\mathbf{v}_K)=0\,,\quad\forall
+K\,.
+\end{equation}
+Equation \eqnref{modifiedBF} is just \eqnref{DPGmethod} with the extra
+Lagrange terms. As usual, the second equation just enforces the constraint. As
+a consequence, we now explicitly have constants in our test space and should
+enforce local conservation to machine precision. The negative side is that we
+have added an additional unknown associated with every mesh element and turned
+our well-behaved minimization into a saddle point problem.
+
+This change has further consequences to how we compute our optimal test
+functions. Since constants are now explicitly represented in the test space,
+we only need to search for optimal test functions in the orthogonal complement
+of constants. The final term in \eqnref{robustNorm} is somewhat troublesome,
+but becomes unnecessary when solving in the orthogonal complement of
+constants. Instead, we can replace it with a much nicer zero mean term. Thus,
+\eqnref{robustNorm} becomes
+\begin{equation}
+\norm{(v,\btau)}^2_{\mathbf{V},\Omega_h}=
+\norm{\nabla\cdot\btau}^2+\norm{\min\left\{\frac{1}{\sqrt{\epsilon}},\frac{1}{\sqrt{|K|}}\right\}\btau}^2\\
++\epsilon\norm{\nabla v}^2+\norm{\bbeta\cdot\nabla
+v}^2+\left(\int_Kv\right)^2\,.
+\end{equation}
+
+\bibliographystyle{plain}
+\bibliography{../DPG}
+\end{document}

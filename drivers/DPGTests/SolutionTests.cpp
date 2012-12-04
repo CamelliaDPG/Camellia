@@ -18,6 +18,10 @@
 
 #include "InnerProductScratchPad.h"
 
+#include "NavierStokesFormulation.h"
+
+#include "ExactSolution.h"
+
 #include "BC.h"
 
 class NewQuadraticFunction : public SimpleFunction {
@@ -27,12 +31,18 @@ public:
   }
 };
 
+class SqrtFunction : public SimpleFunction {
+public:
+  double value(double x, double y) {
+    return sqrt(abs(x));
+  }
+};
+
 class QuadraticFunction : public AbstractFunction {
 public:    
   void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
-    int spaceDim = physicalPoints.dimension(2);
     functionValues.resize(numCells,numPoints);
     for (int i=0;i<numCells;i++){
       for (int j=0;j<numPoints;j++){
@@ -54,6 +64,56 @@ public:
     return xMatch || yMatch;
   }
 };
+
+bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln) {
+  Teuchos::RCP<BilinearForm> bf = soln->mesh()->bilinearForm();
+  
+  vector<int> trialIDs = bf->trialIDs();
+  
+  int numActiveElements = soln->mesh()->numActiveElements();
+  
+  map<int, double> globalBasisCoefficients; // maps from globalDofID --> coefficient
+  
+  bool success = true;
+  
+  double tol = 1e-14;
+  for (int i=0; i<trialIDs.size(); i++) {
+    int trialID = trialIDs[i];
+    if (bf->isFluxOrTrace(trialID) ) {
+      // then there's a chance at inconsistency
+      for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+        int cellID = soln->mesh()->getActiveElement(cellIndex)->cellID();
+        DofOrderingPtr trialSpace = soln->mesh()->getActiveElement(cellIndex)->elementType()->trialOrderPtr;
+        int numSides = trialSpace->getNumSidesForVarID(trialID);
+        for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+          
+          vector<int> localDofIndices = trialSpace->getDofIndices(trialID,sideIndex);
+          int basisCardinality = localDofIndices.size();
+          
+          FieldContainer<double> solnCoeffs(basisCardinality);
+          soln->solnCoeffsForCellID(solnCoeffs, cellID, trialID, sideIndex);
+          
+          for (int dofOrdinal = 0; dofOrdinal < basisCardinality; dofOrdinal++) {
+            int localDofIndex = localDofIndices[dofOrdinal];
+            int globalDofIndex = soln->mesh()->globalDofIndex(cellID,localDofIndex);
+            if ( globalBasisCoefficients.find(globalDofIndex) != globalBasisCoefficients.end() ) {
+              // compare previous entry
+              double diff = abs(globalBasisCoefficients[globalDofIndex] - solnCoeffs[dofOrdinal]);
+              if (diff > tol) {
+                cout << "coefficients inconsistent for cellID " << cellID << " and dofOrdinal " << dofOrdinal;
+                cout << " and trialID " << trialID << " (diff = " << diff << ")" << endl;
+                success = false;
+              }
+            }
+            // store
+            globalBasisCoefficients[globalDofIndex] = solnCoeffs[dofOrdinal];
+          }
+        }
+      }
+    }
+  }
+  return success;
+}
 
 typedef Teuchos::RCP<Element> ElementPtr;
 
@@ -77,9 +137,6 @@ void SolutionTests::setup() {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;  
-  
-  // h-convergence
-  int sqrtElements = 2;
   
   double epsilon = 1e-2;
   double beta_x = 1.0, beta_y = 1.0;
@@ -138,14 +195,21 @@ void SolutionTests::teardown() {
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
-  if (testProjectSolutionOntoOtherMesh()) {
+  if (testNewProjectFunction()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
   setup();
-  if (testNewProjectFunction()) {
+  if (testSolutionsAreConsistent()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testProjectSolutionOntoOtherMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -355,14 +419,19 @@ bool SolutionTests::testNewProjectFunction() {
   
   vector<int> trialIDs = bf->trialIDs();
   
-  FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
   map<int, FunctionPtr > functionMap;
+  FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
   for (int i=0; i<trialIDs.size(); i++) {
     int trialID = trialIDs[i];
     functionMap[trialID] = quadraticFunction;
   }
   
   _confusionUnsolved->projectOntoMesh(functionMap);
+  
+  if ( ! solutionCoefficientsAreConsistent(_confusionUnsolved) ) {
+    cout << "testNewProjectFunction: for quadraticFunction projection, solution coefficients are inconsistent.\n";
+    success = false;
+  }
   
   for (int i=0; i<_confusionUnsolved->mesh()->numElements(); i++) {
     int numCells = 1;
@@ -401,11 +470,141 @@ bool SolutionTests::testNewProjectFunction() {
       double maxDiff;
       if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
         cout << "testNewProjectFunction() failure: maxDiff is " << maxDiff << " for trialID " << trialID << endl;
+        cout << "expectedValues:\n" << valuesExpected << endl;
+        cout << "actualValues:\n" << valuesActual << endl;
         success = false;
       }
     }
   }
-  return success;  
+
+  // now, try something a little different: project various functions onto
+  // a constant mesh.
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+//  quadPoints(0,0) = 0.0; // x1
+//  quadPoints(0,1) = 0.0; // y1
+//  quadPoints(1,0) = 1.0;
+//  quadPoints(1,1) = 0.0;
+//  quadPoints(2,0) = 1.0;
+//  quadPoints(2,1) = 1.0;
+//  quadPoints(3,0) = 0.0;
+//  quadPoints(3,1) = 1.0;
+  
+  // Domain from Evans Hughes for Navier-Stokes Kovasznay flow:
+  quadPoints(0,0) =  0.0; // x1
+  quadPoints(0,1) = -0.5; // y1
+  quadPoints(1,0) =  1.0;
+  quadPoints(1,1) = -0.5;
+  quadPoints(2,0) =  1.0;
+  quadPoints(2,1) =  0.5;
+  quadPoints(3,0) =  0.0;
+  quadPoints(3,1) =  0.5;
+  
+  VarFactory varFactory;
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  BFPtr emptyBF = Teuchos::rcp(new BF(varFactory));
+  Teuchos::RCP< BCEasy > bc = Teuchos::rcp( new BCEasy );
+  
+  int H1Order = 1; // constant L^2 ==> the projection on each cell should be the L^2 norm on that cell
+  int horizontalCells = 2, verticalCells = 2;
+  int pTest = 1; // doesn't matter
+  
+  Teuchos::RCP<Mesh> fineMesh = Mesh::buildQuadMesh(quadPoints, 16, 16, emptyBF, H1Order, pTest);
+  
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, emptyBF, H1Order, pTest);
+  SolutionPtr soln = Teuchos::rcp( new Solution(mesh, bc) );
+  
+  // set up the functions
+  vector< FunctionPtr > functions;
+  double Re = 40;
+  FunctionPtr u1_exact, u2_exact, p_exact;
+  NavierStokesFormulation::setKovasznay( Re, mesh, u1_exact, u2_exact, p_exact );
+  functions.push_back(u1_exact);
+  functions.push_back(u2_exact);
+  functions.push_back(p_exact);
+  
+  FunctionPtr sqrtFunction = Teuchos::rcp( new SqrtFunction );
+  functions.push_back(sqrtFunction);
+  
+  for (int j=0; j<functions.size(); j++) {
+    FunctionPtr f = functions[j];
+    functionMap.clear();
+    functionMap[u->ID()] = f;
+    
+    FieldContainer<double> expectedValues( mesh->numActiveElements() );
+    FieldContainer<double> actualValues( mesh->numActiveElements() );
+    
+    ElementTypePtr elemType = mesh->elementTypes()[0];
+    bool testVsTest=false;
+    int cubatureDegreeEnrichment = 5;
+    
+    double fIntegral = f->integrate(mesh,cubatureDegreeEnrichment);
+//    cout << "testNewProjectFunction: integral of f on whole mesh = " << fIntegral << endl;
+    
+    double l2ErrorOfAverage = (Function::constant(fIntegral) - f)->l2norm(fineMesh,cubatureDegreeEnrichment);
+//    cout << "testNewProjectFunction: l2 error of fIntegral: " << l2ErrorOfAverage << endl;
+    
+    vector<int> cellIDs = mesh->cellIDsOfTypeGlobal(elemType);
+    
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, false); // false: no side cache
+    
+    f->integrate(expectedValues, basisCache);
+    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+    
+    for (int i=0; i<expectedValues.size(); i++) {
+      expectedValues(i) /= cellMeasures(i);
+    }
+    
+    soln->setCubatureEnrichmentDegree(cubatureDegreeEnrichment);
+    soln->projectOntoMesh(functionMap);
+    
+    if ( ! solutionCoefficientsAreConsistent(soln) ) {
+      cout << "testNewProjectFunction: in projection of Function " << j << " onto constants, solution coefficients are inconsistent.\n";
+      success = false;
+    }
+
+    FunctionPtr projectedFunction = Function::solution(u, soln);
+    projectedFunction->integrate(actualValues, basisCache); // these will be weighted by cellMeasures
+    for (int i=0; i<actualValues.size(); i++) {
+      actualValues(i) /= cellMeasures(i);
+    }
+    
+//    cout << "expectedValues for projection of f onto constants:\n" << expectedValues;
+    
+    double maxDiff;
+    if ( !fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+      cout << "testNewProjectFunction() failure in projection of Function " << j << " onto constants: maxDiff is " << maxDiff << endl;
+      cout << "expectedValues:\n" << expectedValues << endl;
+      cout << "actualValues:\n" << actualValues << endl;
+      
+      success = false;
+    }
+    
+    int trialID = u->ID();
+    VarPtr trialVar = u;
+    
+    // this maybe doesn't exactly belong here (better to have an ExactSolution test),
+    // but this is convenient for now:
+    Teuchos::RCP<ExactSolution> exactSoln = Teuchos::rcp( new ExactSolution );
+    exactSoln->setSolutionFunction(trialVar, f);
+    // test the L2 error measured in two ways
+    double l2errorActual = exactSoln->L2NormOfError(*soln, trialID, 15);
+    
+    FunctionPtr bestFxnError = Function::solution(trialVar, soln) - f;
+    int matchingCubatureEnrichment = 15 - (pTest + H1Order - 1); // chosen so that the effective cubature degree below will match that above
+    double l2errorExpected = bestFxnError->l2norm(soln->mesh(),matchingCubatureEnrichment); // here the cubature is actually an enrichment....
+    
+    if (abs(l2errorExpected - l2errorActual) > tol) {
+      success = false;
+      cout << "testNewProjectFunction: for function " << j << ", ExactSolution error doesn't match";
+      cout << " that measured by Function: " << l2errorActual << " vs " << l2errorExpected << endl;
+    }
+  }
+  
+  return success;
 }
 
 bool SolutionTests::testProjectSolutionOntoOtherMesh() {
@@ -851,5 +1050,21 @@ bool SolutionTests::testScratchPadSolution() {
   if (abs(L1L2Norm-1.0)>tol){
     success = false;
   }  
+  return success;
+}
+
+bool SolutionTests::testSolutionsAreConsistent() {
+  bool success = true;
+  
+  if (! solutionCoefficientsAreConsistent(_confusionSolution1_2x2) ) {
+    success = false;
+    cout << "_confusionSolution1_2x2 coefficients are inconsistent.\n";
+  }
+  
+  if (! solutionCoefficientsAreConsistent(_confusionSolution2_2x2) ) {
+    success = false;
+    cout << "_confusionSolution1_2x2 coefficients are inconsistent.\n";
+  }
+  
   return success;
 }

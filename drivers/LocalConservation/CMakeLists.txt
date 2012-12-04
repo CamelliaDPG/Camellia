@@ -1,5 +1,9 @@
 project(LocalConservation)
 
+add_executable(SimpleConvection SimpleConvection.cpp)
+
+add_executable(RotatingCylinder RotatingCylinder.cpp)
+
 add_executable(ConservativeConfusion ConfusionDriver.cpp)
 
 add_executable(SimpleConfusion SimpleConfusion.cpp)

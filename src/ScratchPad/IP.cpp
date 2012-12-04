@@ -60,7 +60,7 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
        ltIt != _linearTerms.end(); ltIt++) {
     LinearTermPtr lt = *ltIt;
     // integrate lt against itself
-    lt->integrate(innerProduct,dofOrdering,lt,dofOrdering,basisCache);
+    lt->integrate(innerProduct,dofOrdering,lt,dofOrdering,basisCache,basisCache->isSideCache());
   }
   
   // boundary terms:

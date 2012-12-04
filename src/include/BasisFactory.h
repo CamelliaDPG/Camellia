@@ -41,10 +41,11 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "BilinearForm.h"
 #include "MultiBasis.h"
 #include "PatchBasis.h"
 #include "Vectorized_Basis.hpp"
+
+#include "CamelliaIntrepidExtendedTypes.h"
 
 using namespace Intrepid;
 using namespace std;

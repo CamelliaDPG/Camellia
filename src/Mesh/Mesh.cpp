@@ -40,6 +40,7 @@
 #include "ElementType.h"
 #include "DofOrderingFactory.h"
 #include "BasisFactory.h"
+#include "BasisCache.h"
 
 #include "Solution.h"
 
@@ -2687,4 +2688,14 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
     }
   }
   myFile.close();
+}
+
+double Mesh::getCellMeasure(int cellID)
+{
+  FieldContainer<double> physicalCellNodes = physicalCellNodesForCell(cellID);
+  ElementPtr elem =  elements()[cellID];
+  Teuchos::RCP< ElementType > elemType = elem->elementType();
+  Teuchos::RCP< shards::CellTopology > cellTopo = elemType->cellTopoPtr;  
+  BasisCache basisCache(physicalCellNodes, *cellTopo, 1);
+  return basisCache.getCellMeasures()(0);
 }

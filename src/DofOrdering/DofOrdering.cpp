@@ -57,11 +57,8 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
     _nextIndex++;
   }
   
-  if (sideIndex == 0) {
-    // a convention: call with sideIndex=0 first, if there are multiple sides
-    // (or at least call with sideIndex=0 at some point!)
-    varIDs.push_back(varID);
-  }
+  varIDs.insert(varID);
+  
   numSidesForVarID[varID]++;
   //cout << "numSidesForVarID[" << varID << "]" << numSidesForVarID[varID] << endl;
   pair<int, int> basisKey = make_pair(varID,sideIndex);
@@ -105,7 +102,7 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   
   newValues.initialize(0.0);
   
-  for (vector<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
     int varID = *varIDIt;
     int numSides = getNumSidesForVarID(varID);
     if ( numSides == oldDofOrdering->getNumSidesForVarID(varID) ) {
@@ -128,7 +125,8 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
   if (entry == bases.end()) {
-    cout << *this;
+    //cout << *this;
+    cout << "basis not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis not found.");
   }
   return (*entry).second;
@@ -183,8 +181,25 @@ int DofOrdering::getNumSidesForVarID(int varID) {
   return numSidesForVarID[varID];
 }
 
-const vector<int> & DofOrdering::getVarIDs() { 
+const set<int> & DofOrdering::getVarIDs() {
   return varIDs;
+}
+
+bool DofOrdering::hasBasisEntry(int varID, int sideIndex) {
+  pair<int,int> key = make_pair(varID,sideIndex);
+  map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
+  return entry != bases.end();
+}
+
+bool DofOrdering::hasSideVarIDs() {
+  // returns true if there are any varIDs defined on more than one side
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    if (numSidesForVarID[varID] > 1) {
+      return true;
+    }
+  }
+  return false;
 }
 
 int DofOrdering::maxBasisDegree() {
@@ -202,12 +217,30 @@ int DofOrdering::maxBasisDegree() {
   return maxBasisDegree;
 }
 
+int DofOrdering::maxBasisDegreeForVolume() { // max degree among the varIDs with numSides == 1
+  
+  int maxBasisDegree = 0;
+  int volumeSideIndex = 0;
+  
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    if (numSidesForVarID[varID]==1) {
+      pair<int,int> key = make_pair(varID, volumeSideIndex);
+      int degree = bases[key]->getDegree();
+      if (maxBasisDegree < degree ) {
+        maxBasisDegree = degree;
+      }
+    }
+  }
+  return maxBasisDegree;
+}
+
 void DofOrdering::rebuildIndex() {
   if (dofIdentifications.size() == 0) {
     // nothing to do
     return;
   }
-  vector<int>::iterator varIDIterator;
+  set<int>::iterator varIDIterator;
   int numIdentificationsProcessed = 0;
   for (varIDIterator = varIDs.begin(); varIDIterator != varIDs.end(); varIDIterator++) {
     int varID = *varIDIterator;
@@ -251,15 +284,16 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
   os.setf(std::ios_base::scientific, std::ios_base::floatfield);
   os.setf(std::ios_base::right);
   
-  vector< int > varIDs = dofOrdering.getVarIDs();
+  set< int > varIDs = dofOrdering.getVarIDs();
   
   unsigned numVarIDs = varIDs.size();
   
   os<< "===============================================================================\n"\
   << "\t Number of varIDs = " << numVarIDs << "\n";
   os << "\t Number of dofs = " << dofOrdering.totalDofs() << endl;
-  for (int i=0; i<numVarIDs; i++) {
-    os << varIDs[i] << " (" << dofOrdering.getNumSidesForVarID(varIDs[i]) << " sides)" << endl;
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+    int varID = *varIt;
+    os << varID << " (" << dofOrdering.getNumSidesForVarID(varID) << " sides)" << endl;
   }
   
   if( numVarIDs == 0 ) {
@@ -267,8 +301,8 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
     << "|                        *** This is an empty DofOrdering ****                       |\n";
   }
   else {
-    for (int i=0; i<numVarIDs; i++) {
-      int varID = varIDs[i];
+    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+      int varID = *varIt;
       int numSides = dofOrdering.getNumSidesForVarID(varID);
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
         os << "basis cardinality for varID=" << varID << ", side " << sideIndex << ": ";

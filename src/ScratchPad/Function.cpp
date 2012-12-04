@@ -74,8 +74,8 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
 }
 
 FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended op) {
-  if (f.get() == NULL) {
-    return Teuchos::rcp( (Function*) NULL);
+  if ( isNull(f) ) {
+    return Function::null();
   }
   switch (op) {
     case IntrepidExtendedTypes::OP_VALUE:
@@ -118,47 +118,54 @@ double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; t
 }
 
 FunctionPtr Function::x() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::y() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::z() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 
 FunctionPtr Function::dx() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::dy() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::dz() {
-  return Teuchos::rcp((Function *)NULL);
+  return Function::null();
 }
 FunctionPtr Function::grad() {
   FunctionPtr dxFxn = dx();
   FunctionPtr dyFxn = dy();
   FunctionPtr dzFxn = dz();
   if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Teuchos::rcp((Function *)NULL);
+    return Function::null();
   } else if (dzFxn.get() == NULL) {
     return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
   } else {
     return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
   }
 }
+//FunctionPtr Function::inverse() {
+//  return Function::null();
+//}
+
+bool Function::isNull(FunctionPtr f) {
+  return f.get() == NULL;
+}
 
 FunctionPtr Function::div() {
-  if ( (x().get() == NULL) || (y().get() == NULL) ) {
+  if ( isNull(x()) || isNull(y()) ) {
     return null();
   }
   FunctionPtr dxFxn = x()->dx();
   FunctionPtr dyFxn = y()->dy();
   FunctionPtr zFxn = z();
-  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+  if ( isNull(dxFxn) || isNull(dyFxn) ) {
     return null();
-  } else if ((zFxn.get() == NULL) || (zFxn->dz().get() == NULL)) {
+  } else if ( isNull(zFxn) || isNull(zFxn->dz()) ) {
     return dxFxn + dyFxn;
   } else {
     return dxFxn + dyFxn + zFxn->dz();
@@ -234,6 +241,11 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     
   }
   return integral;
+}
+
+double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) { // the total cubature degree (i.e. exact for 10th-degree polynomials)
+  FunctionPtr thisPtr = Teuchos::rcp( this, false );
+  return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment) );
 }
 
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
@@ -1086,6 +1098,9 @@ void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   }
 }
 
+VectorizedFunction::VectorizedFunction(const vector< FunctionPtr > &fxns) : Function(fxns[0]->rank() + 1) {
+  _fxns = fxns;
+}
 VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2) : Function(f1->rank() + 1) {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   _fxns.push_back(f1);
@@ -1098,6 +1113,10 @@ VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionP
   _fxns.push_back(f2);
   _fxns.push_back(f3);
 }
+int VectorizedFunction::dim() {
+  return _fxns.size();
+}
+
 void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   // this is not going to be particularly efficient, because values from the components need to be interleaved...
@@ -1125,6 +1144,51 @@ FunctionPtr VectorizedFunction::x() {
 
 FunctionPtr VectorizedFunction::y() {
   return _fxns[1];
+}
+
+FunctionPtr VectorizedFunction::z() {
+  if (dim() >= 3) {
+    return _fxns[2];
+  } else {
+    return Function::null();
+  }
+}
+
+FunctionPtr VectorizedFunction::di(int i) {
+  // derivative in the ith coordinate direction
+  EOperatorExtended op;
+  switch (i) {
+    case 0:
+      op = IntrepidExtendedTypes::OP_DX;
+      break;
+    case 1:
+      op = IntrepidExtendedTypes::OP_DY;
+    case 2:
+      op = IntrepidExtendedTypes::OP_DZ;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
+      break;
+  }
+  vector< FunctionPtr > fxns;
+  for (int j = 0; j< dim(); j++) {
+    FunctionPtr fj_di = Function::op(_fxns[j], op);
+    if (isNull(fj_di)) {
+      return Function::null();
+    }
+    fxns.push_back(fj_di);
+  }
+  // if we made it this far, then all components aren't null:
+  return Teuchos::rcp( new VectorizedFunction(fxns) );
+}
+
+FunctionPtr VectorizedFunction::dx() {
+  return di(0);
+}
+FunctionPtr VectorizedFunction::dy() {
+  return di(1);
+}
+FunctionPtr VectorizedFunction::dz() {
+  return di(2);
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
@@ -1241,7 +1305,6 @@ FunctionPtr Cos_y::dy() {
   return - sin_y;
 }
 
-
 string Exp_x::displayString() {
   return "e^x";
 }
@@ -1255,7 +1318,6 @@ FunctionPtr Exp_x::dy() {
   return Function::zero();
 }
 
-
 string Exp_y::displayString() {
   return "e^y";
 }
@@ -1268,7 +1330,6 @@ FunctionPtr Exp_y::dx() {
 FunctionPtr Exp_y::dy() {
   return Teuchos::rcp( new Exp_y );
 }
-
 
 string Xn::displayString() {
   ostringstream ss;
@@ -1388,4 +1449,14 @@ string Cos_ay::displayString() {
   ostringstream ss;
   ss << "\\cos( " << _a << " y )";
   return ss.str();
+}
+
+DummyBasisCacheWithOnlyPhysicalCubaturePoints::DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
+  _physCubPoints = physCubPoints;
+}
+const FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::getPhysicalCubaturePoints() { // overrides super
+  return _physCubPoints;
+}
+FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::writablePhysicalCubaturePoints() { // allows overwriting the contents
+  return _physCubPoints;
 }
