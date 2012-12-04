@@ -7,6 +7,38 @@
 
 #include <Teuchos_Tuple.hpp>
 
+Teuchos::Tuple<double, 3> checkConservationTest(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh)
+{
+  double maxMassFluxIntegral = 0.0;
+  double totalMassFlux = 0.0;
+  double totalAbsMassFlux = 0.0;
+  vector<ElementPtr> elems = mesh->activeElements();
+  for (vector<ElementPtr>::iterator it = elems.begin(); it != elems.end(); ++it)
+  {
+    ElementPtr elem = *it;
+    int cellID = elem->cellID();
+    ElementTypePtr elemType = elem->elementType();
+    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes,*(elemType->cellTopoPtr), *(elemType->trialOrderPtr), 10, true) );
+    FieldContainer<double> surfaceIntegral(1);
+    FieldContainer<double> volumeIntegral(1);
+    source->integrate(volumeIntegral, basisCache, true);
+    int numSides = basisCache->cellTopology().getSideCount();
+    bool isSide = basisCache->getSideBasisCache(0)->isSideCache();
+    for (int sideIndex = 0; sideIndex < numSides; sideIndex++)
+      flux->integrate(surfaceIntegral, basisCache->getSideBasisCache(sideIndex), true);
+    double massFlux = surfaceIntegral(0) + volumeIntegral(0);
+
+    maxMassFluxIntegral = max(abs(massFlux), maxMassFluxIntegral);
+    totalMassFlux += massFlux;
+    totalAbsMassFlux += abs( massFlux );
+  }
+
+  Teuchos::Tuple<double, 3> fluxImbalances = Teuchos::tuple(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
+
+  return fluxImbalances;
+}
+
 Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int fakeTestOrder = 3)
 {
   // Check conservation by testing against one
@@ -50,10 +82,6 @@ Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source
       massFluxIntegral[cellID] = surfaceIntegrals(i,testOneIndex) + volumeIntegrals(i,testOneIndex);
     }
     // find the largest:
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-    }
     for (int i=0; i<elems.size(); i++) {
       int cellID = cellIDs[i];
       maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);

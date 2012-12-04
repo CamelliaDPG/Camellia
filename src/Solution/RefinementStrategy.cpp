@@ -17,7 +17,7 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _reportPerCellErrors = false;
 }
 
-void RefinementStrategy::setEnforceOneIrregurity(bool value) {
+void RefinementStrategy::setEnforceOneIrregularity(bool value) {
   _enforceOneIrregularity = value;
 }
 
@@ -87,10 +87,47 @@ void RefinementStrategy::refine(bool printToConsole) {
   }
 }
 
+void RefinementStrategy::getCellsAboveErrorThreshhold(vector<int> &cellsToRefine){
+  // greedy refinement algorithm - mark cells for refinement
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  const map<int, double>* energyError = &(_solution->energyError());
+  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+  
+  double maxError = 0.0;
+  double totalEnergyError = 0.0;
+  
+  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
+       activeElemIt != activeElements.end(); activeElemIt++) {
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    int cellID = current_element->cellID();
+    double cellEnergyError = energyError->find(cellID)->second;
+    maxError = max(cellEnergyError,maxError);
+    totalEnergyError += cellEnergyError * cellEnergyError; 
+  }
+  totalEnergyError = sqrt(totalEnergyError);
+
+  // do refinements on cells with error above threshold
+  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
+       activeElemIt != activeElements.end(); activeElemIt++){
+    Teuchos::RCP< Element > current_element = *(activeElemIt);
+    int cellID = current_element->cellID();
+    double cellEnergyError = energyError->find(cellID)->second;
+    if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
+      cellsToRefine.push_back(cellID);
+    }
+  }
+}
+
+// defaults to h-refinement
 void RefinementStrategy::refineCells(vector<int> &cellIDs) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
   hRefineCells(mesh, cellIDs);
 }
+
+void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
+  mesh->pRefine(cellIDs);  
+}
+
 
 void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
   vector<int> triangleCellsToRefine;

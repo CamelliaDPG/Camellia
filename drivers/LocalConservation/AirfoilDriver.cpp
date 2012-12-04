@@ -11,6 +11,7 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "CheckConservation.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -19,8 +20,8 @@
 
 bool enforceLocalConservation = false;
 bool highLiftAirfoil = true;
-double epsilon = 1e-3;
-int numRefs = 6;
+double epsilon = 1e-2;
+int numRefs = 10;
 int num1DPts = 5;
 
 class EpsilonScaling : public hFunction {
@@ -246,15 +247,15 @@ int main(int argc, char *argv[]) {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
   
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr uhat = varFactory.traceVar("uhat");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr sigma1 = varFactory.fieldVar("sigma_x");
+  VarPtr sigma2 = varFactory.fieldVar("sigma_y");
   
   FunctionPtr beta = Teuchos::rcp(new Beta());
   
@@ -350,83 +351,44 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
-    stringstream outfile;
-    if (highLiftAirfoil)
-      outfile << "highlift_" << refIndex;
-    else
-      outfile << "airfoil_" << refIndex;
-    solution->writeToVTK(outfile.str(), num1DPts);
-    refinementStrategy.refine(rank==0); // print to console on rank 0
-  }
-  // one more solve on the final refined mesh:
-  solution->solve(false);
 
-  // Check conservation by testing against one
-  VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-  // Create a fake bilinear form for the testing
-  BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-  // Define our mass flux
-  FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-  LinearTermPtr massFluxTerm = massFlux * testOne;
+    if (rank == 0)
+    {
+      stringstream outfile;
+      if (highLiftAirfoil)
+        outfile << "highlift_" << refIndex;
+      else
+        outfile << "naca0012_" << refIndex;
+      solution->writeToVTK(outfile.str(), 5);
 
-  Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  DofOrderingFactory dofOrderingFactory(fakeBF);
-  int fakeTestOrder = H1Order;
-  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-  
-  int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-  vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-  map<int, double> massFluxIntegral; // cellID -> integral
-  double maxMassFluxIntegral = 0.0;
-  double totalMassFlux = 0.0;
-  double totalAbsMassFlux = 0.0;
-  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemType = *elemTypeIt;
-    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
-    for (int i=0; i<elems.size(); i++) {
-      cellIDs.push_back(elems[i]->cellID());
+      // Check local conservation
+      FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-    FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-    massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      // pick out the ones for testOne:
-      massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-    }
-    // find the largest:
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-    }
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      totalMassFlux += massFluxIntegral[cellID];
-      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-    }
-  }
-  
-  
-  // Print results from processor with rank 0
-  if (rank==0){
-    cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-    cout << "total mass flux: " << totalMassFlux << endl;
-    cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
-    stringstream outfile;
-    if (highLiftAirfoil)
-      outfile << "highlift_" << numRefs;
-    else
-      outfile << "airfoil_" << numRefs;
-    solution->writeToVTK(outfile.str(), num1DPts);
+    if (refIndex < numRefs)
+    {
+      // refinementStrategy.refine(rank==0); // print to console on rank 0
+      // Try pseudo-hp adaptive
+      vector<int> cellsToRefine;
+      vector<int> cells_h;
+      vector<int> cells_p;
+      refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
+      for (int i=0; i < cellsToRefine.size(); i++)
+        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < epsilon)
+          cells_p.push_back(cellsToRefine[i]);
+        else
+          cells_h.push_back(cellsToRefine[i]);
+      refinementStrategy.pRefineCells(mesh, cells_p);
+      refinementStrategy.hRefineCells(mesh, cells_h);
+    }
   }
   
   return 0;
