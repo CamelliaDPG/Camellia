@@ -110,6 +110,8 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
   bool _reportConditionNumber, _reportTimingResults;
+  bool _writeMatrixToMatlabFile;
+  string _matrixFilePath;
   double _globalSystemConditionEstimate;
   
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
@@ -205,13 +207,13 @@ public:
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
   const map<int,double> & energyError();
-  /*
-  void rhsNorm(map<int, double> &energyNorm);
-  double totalRHSNorm();
-  */
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
+  void setWriteMatrixToFile(bool value,const string &filePath){
+    _writeMatrixToMatlabFile = value;
+    _matrixFilePath = filePath;
+  }
   
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;

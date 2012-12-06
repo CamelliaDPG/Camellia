@@ -133,6 +133,7 @@ Solution::Solution(const Solution &soln) {
   _lagrangeConstraints = soln.lagrangeConstraints();
   _reportConditionNumber = false;
   _reportTimingResults = false;
+  _writeMatrixToMatlabFile = false;
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
 }
 
@@ -154,6 +155,7 @@ void Solution::initialize() {
   // clear the data structure in case it already stores some stuff
   _solutionForCellIDGlobal.clear();
   
+  _writeMatrixToMatlabFile = false;
   _residualsComputed = false;
   _energyErrorComputed = false;
   _reportConditionNumber = false;
@@ -687,9 +689,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk
-  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-  //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-  //  EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  if (_writeMatrixToMatlabFile){
+    //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
+    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),globalStiffMatrix);
+    //    EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  }
   
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
@@ -2848,8 +2852,10 @@ void Solution::condensedSolve(bool saveMemory){
   }
 
   // ============= /END BCS ===================  
-
-  //  EpetraExt::RowMatrixToMatlabFile("K_cond.dat",K_cond);     
+  
+  if (_writeMatrixToMatlabFile){
+    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),K_cond);     
+  }
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_cond.dat",rhs_cond,0,0,false);
 
   timer.ResetStartTime();
