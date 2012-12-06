@@ -18,10 +18,10 @@
 #else
 #endif
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
 bool highLiftAirfoil = true;
-double epsilon = 1e-2;
-int numRefs = 10;
+double epsilon = 1e-4;
+int numRefs = 9;
 int num1DPts = 5;
 
 class EpsilonScaling : public hFunction {
