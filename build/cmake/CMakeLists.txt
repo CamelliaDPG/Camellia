@@ -273,3 +273,4 @@ target_link_libraries(NavierStokesStudy
   ${CAMELLIA_LIBRARY_NAME}
   )
 
+add_subdirectory(../../tests ${PROJECT_BINARY_DIR}/tests)
