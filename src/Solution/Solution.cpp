@@ -194,6 +194,8 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
     }
   }
+  // now that we've added, any computed residuals are invalid
+  clearComputedResiduals();
 }
 
 void Solution::clearSolution(int trialID){
@@ -240,6 +242,7 @@ void Solution::solve(bool useMumps) {
 
 void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   _solutionForCellIDGlobal = otherSoln->solutionForCellIDGlobal();
+  clearComputedResiduals();
 }
 
 void Solution::solve(Teuchos::RCP<Solver> solver) {
@@ -782,9 +785,14 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "dist. solution: " << _minTimeDistributeSolution << " sec." << endl;   
   }
   
+  clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
+}
+
+void Solution::clearComputedResiduals() {
   _residualsComputed = false; // now that we've solved, will need to recompute residuals...
   _energyErrorComputed = false;
   _energyErrorForCellIDGlobal.clear();
+  _residualForElementType.clear();
 }
 
 Teuchos::RCP<Mesh> Solution::mesh() const {
@@ -2498,6 +2506,8 @@ void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
 
 void Solution::setIP( Teuchos::RCP<DPGInnerProduct> ip) {
   _ip = ip;
+  // any computed residuals will need to be recomputed with the new IP
+  clearComputedResiduals();
 }
 
 void Solution::setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
@@ -2514,6 +2524,7 @@ void Solution::setReportTimingResults(bool value) {
 
 void Solution::setRHS( Teuchos::RCP<RHS> rhs) {
   _rhs = rhs;
+  clearComputedResiduals();
 }
 
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
@@ -2532,6 +2543,9 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
+  // could stand to be more granular, maybe, but if we're changing the solution, the present
+  // policy is to invalidate any computed residuals
+  clearComputedResiduals();
 }
 
 // protected method; used for solution comparison...
@@ -3004,10 +3018,7 @@ void Solution::condensedSolve(bool saveMemory){
     cout << ", and total time spent in solve = " << totalTime.ElapsedTime() << endl;
   }
 
-  _residualsComputed = false; // now that we've solved, will need to recompute residuals...
-  _energyErrorComputed = false;
-  _energyErrorForCellIDGlobal.clear();
-
+  clearComputedResiduals();
 }
 
 void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
@@ -3646,7 +3657,6 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
     projectOntoCell(functionMap,childID);
   }
   
-  _residualsComputed = false;
-  _energyErrorComputed = false; // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
+  clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
 

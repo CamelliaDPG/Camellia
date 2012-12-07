@@ -112,6 +112,7 @@ private:
   bool _reportConditionNumber, _reportTimingResults;
   double _globalSystemConditionEstimate;
   
+  void clearComputedResiduals();
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
 protected:
