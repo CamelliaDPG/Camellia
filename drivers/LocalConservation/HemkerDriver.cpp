@@ -11,6 +11,7 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "CheckConservation.h"
 
 #include "BuildHemkerMesh.h"
 
@@ -21,7 +22,7 @@
 
 bool enforceLocalConservation = false;
 double epsilon = 1e-4;
-int numRefs = 4;
+int numRefs = 10;
 int nseg = 8;
 bool ReadMesh = false;
 bool CircleMesh = false;
@@ -282,76 +283,44 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.25; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
+  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
-    stringstream outfile;
-    outfile << "hemker_" << refIndex;
-    solution->writeToVTK(outfile.str(), 5);
-    refinementStrategy.refine(rank==0); // print to console on rank 0
-  }
-  // one more solve on the final refined mesh:
-  solution->solve(false);
 
-  // Check conservation by testing against one
-  VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-  // Create a fake bilinear form for the testing
-  BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-  // Define our mass flux
-  FunctionPtr massFlux= Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-  LinearTermPtr massFluxTerm = massFlux * testOne;
+    if (rank==0){
+      stringstream outfile;
+      outfile << "hemker_" << refIndex;
+      solution->writeToVTK(outfile.str());
 
-  Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  DofOrderingFactory dofOrderingFactory(fakeBF);
-  int fakeTestOrder = H1Order;
-  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-  
-  int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-  vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-  map<int, double> massFluxIntegral; // cellID -> integral
-  double maxMassFluxIntegral = 0.0;
-  double totalMassFlux = 0.0;
-  double totalAbsMassFlux = 0.0;
-  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemType = *elemTypeIt;
-    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
-    for (int i=0; i<elems.size(); i++) {
-      cellIDs.push_back(elems[i]->cellID());
+      // Check local conservation
+      FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-    FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-    massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      // pick out the ones for testOne:
-      massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-    }
-    // find the largest:
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-    }
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      totalMassFlux += massFluxIntegral[cellID];
-      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-    }
-  }
-  
-  
-  // Print results from processor with rank 0
-  if (rank==0){
-    cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-    cout << "total mass flux: " << totalMassFlux << endl;
-    cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
 
-    stringstream outfile;
-    outfile << "hemker_" << numRefs;
-    solution->writeToVTK(outfile.str(), 5);
+    if (refIndex < numRefs)
+    {
+      // refinementStrategy.refine(rank==0); // print to console on rank 0
+      vector<int> cellsToRefine;
+      vector<int> cells_h;
+      vector<int> cells_p;
+      refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
+      for (int i=0; i < cellsToRefine.size(); i++)
+        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-5)
+        {
+          int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
+          if (pOrder < 8)
+            cells_p.push_back(cellsToRefine[i]);
+          else
+            cout << "Reached cell size and polynomial order limits" << endl;
+          //   cells_h.push_back(cellsToRefine[i]);
+        }
+        else
+          cells_h.push_back(cellsToRefine[i]);
+      refinementStrategy.pRefineCells(mesh, cells_p);
+      refinementStrategy.hRefineCells(mesh, cells_h);
+    }
   }
   
   return 0;

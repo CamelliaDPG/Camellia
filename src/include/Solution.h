@@ -110,6 +110,8 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
   
   bool _reportConditionNumber, _reportTimingResults;
+  bool _writeMatrixToMatlabFile;
+  string _matrixFilePath;
   double _globalSystemConditionEstimate;
   
   void clearComputedResiduals();
@@ -206,13 +208,13 @@ public:
   void discardInactiveCellCoefficients();
   double energyErrorTotal();
   const map<int,double> & energyError();
-  /*
-  void rhsNorm(map<int, double> &energyNorm);
-  double totalRHSNorm();
-  */
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
+  void setWriteMatrixToFile(bool value,const string &filePath){
+    _writeMatrixToMatlabFile = value;
+    _matrixFilePath = filePath;
+  }
   
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;
@@ -233,8 +235,9 @@ public:
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
 
-  void writeToVTK(const string& filePath, unsigned int num1DPts=3);
-  void writeFieldsToVTK(const string& filePath, unsigned int num1DPts=3);
+  // Default of 0 adapts the number of points based on poly order
+  void writeToVTK(const string& filePath, unsigned int num1DPts=0);
+  void writeFieldsToVTK(const string& filePath, unsigned int num1DPts=0);
   void writeTracesToVTK(const string& filePath);
   
   // statistics accessors:

@@ -20,6 +20,8 @@ add_executable(AirfoilDriver AirfoilDriver.cpp)
 
 add_executable(VortexDriver VortexDriver.cpp)
 
+add_executable(SingularWedge SingularWedge.cpp)
+
 add_executable(TransientConfusion TransientConfusion.cpp)
 
 add_executable(TransientHemker TransientHemker.cpp)

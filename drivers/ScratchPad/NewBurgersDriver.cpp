@@ -30,10 +30,35 @@
 #include "PenaltyConstraints.h"
 #include "RieszRep.h"
 #include "HessianFilter.h"
+#include <sstream>
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 using namespace std;
+
+class PositivePart : public Function {
+  FunctionPtr _f;
+public:
+  PositivePart(FunctionPtr f) {
+    _f = f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    FieldContainer<double> beta_pts(numCells,numPoints);
+    _f->values(values,basisCache);
+    
+    for (int i = 0;i<numCells;i++){
+      for (int j = 0;j<numPoints;j++){
+	if (values(i,j)<0){
+	  values(i,j) = 0.0;
+	}
+      }
+    }
+  }
+};
+
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -66,7 +91,6 @@ public:
   }
 };
 
-
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -77,25 +101,43 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  int pToAdd = 2; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-3;
   bool useTriangles = false;
   
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;  
-  
+  int pToAdd = 2;
+  int nCells = 2;
+  if ( argc > 1) {
+    nCells = atoi(argv[1]);
+    if (rank==0){
+      cout << "numCells = " << nCells << endl;
+    }
+  }
+ int numSteps = 20;
+  if ( argc > 2) {
+    numSteps = atoi(argv[2]);
+    if (rank==0){
+      cout << "num NR steps = " << numSteps << endl;
+    }
+  }
+ int useHessian = 0; // defaults to "not use"
+  if ( argc > 3) {
+    useHessian = atoi(argv[3]);
+    if (rank==0){
+      cout << "useHessian = " << useHessian << endl;
+    }
+  } 
+
+  int thresh = numSteps; // threshhold for when to apply linesearch/hessian
+  if ( argc > 4) {
+    thresh = atoi(argv[4]);
+    if (rank==0){
+      cout << "thresh = " << thresh << endl;
+    }
+  }
+
   int H1Order = polyOrder + 1;
-  int horizontalCells = 2, verticalCells = 2;
   
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
@@ -122,9 +164,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, 
-                                                verticalCells, bf, H1Order, 
-                                                H1Order+pToAdd, useTriangles);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   
   ////////////////////////////////////////////////////////////////////
@@ -183,6 +223,7 @@ int main(int argc, char *argv[]) {
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm( epsilonOverHScaling * (1.0/sqrt(epsilon))* tau);
   ip->addTerm( tau->div());
+  //  ip->addTerm( epsilonOverHScaling * v );
   ip->addTerm( v );
   ip->addTerm( sqrt(epsilon) * v->grad() );
   ip->addTerm( beta * v->grad() );
@@ -212,9 +253,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
   mesh->registerSolution(solution);
 
-  solution->solve(false); // do one solve to initialize things...
-  backgroundFlow->addSolution(solution,.5);
-
   ////////////////////////////////////////////////////////////////////
   // WARNING: UNFINISHED HESSIAN BIT
   ////////////////////////////////////////////////////////////////////
@@ -222,24 +260,100 @@ int main(int argc, char *argv[]) {
   VarPtr du = hessianVars.test(u->ID());
   BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form
   //  FunctionPtr e_v = Function::constant(1.0); // dummy error rep function for now - should do nothing
-  
+
+  FunctionPtr u_current  = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+
   FunctionPtr sig1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
   FunctionPtr sig2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
+  FunctionPtr sig_prev = (e1*sig1_prev + e2*sig2_prev);
   FunctionPtr fnhat = Teuchos::rcp(new PreviousSolutionFunction(solution,beta_n_u_minus_sigma_hat));
+  FunctionPtr uhat_prev = Teuchos::rcp(new PreviousSolutionFunction(solution,uhat));
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
-  residual->addTerm((e1 * (u_prev_squared_div2-sig1_prev) + e2 * (u_prev - sig2_prev)) * v->grad() - fnhat*v);
-  // don't need to add the stress eqn residual b/c of the decoupled IP
+  residual->addTerm(fnhat*v - (e1 * (u_prev_squared_div2 - sig1_prev) + e2 * (u_prev - sig2_prev)) * v->grad());
+  residual->addTerm((1/epsilon)*sig_prev * tau + u_prev * tau->div() - uhat_prev*tau->dot_normal());
+
+  LinearTermPtr Bdu = Teuchos::rcp(new LinearTerm);// residual
+  Bdu->addTerm( u_current*tau->div() - u_current*(beta*v->grad()));
 
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  Teuchos::RCP<RieszRep> duRiesz = Teuchos::rcp(new RieszRep(mesh, ip, Bdu));
   riesz->computeRieszRep();
-  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v->ID(),riesz));
-  //  e_v->writeValuesToMATLABFile(mesh, "e_v.m");
-  //  solution->writeToVTK("dU.vtu",min(H1Order+1,4));
-  //  FunctionPtr e_v = Function::constant(1.0);
-  hessianBF->addTerm(e_v->dx()*u,du); 
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,riesz));
+  e_v->writeValuesToMATLABFile(mesh, "e_v.m");
+  FunctionPtr posErrPart = Teuchos::rcp(new PositivePart(e_v->dx()));
+  hessianBF->addTerm(posErrPart*u,du); 
   Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
+  ofstream out;
+  out.open("Burgers.txt");
   
-  //  solution->setFilter(hessianFilter);
+  Teuchos::RCP< LineSearchStep > LS_Step = Teuchos::rcp(new LineSearchStep(riesz));
+  double NL_residual = 9e99;
+  for (int i = 0;i<numSteps;i++){
+    solution->solve(false); // do one solve to initialize things...   
+    double stepLength = 1.0;
+    stepLength = LS_Step->stepSize(backgroundFlow,solution, NL_residual);
+    if (useHessian){
+      solution->setFilter(hessianFilter);  
+    }
+    backgroundFlow->addSolution(solution,stepLength);
+    NL_residual = LS_Step->getNLResidual();
+    if (rank==0){
+      cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
+      out << NL_residual << endl; // saves initial NL error     
+    }
+  }
+  out.close();
+  /*
+  ofstream out;
+  out.open("Burgers.txt");
+  stringstream outFile;
+
+  solution->solve(false); // do one solve to initialize things
+  double prevNLErr = riesz->getNorm();
+  if (rank ==0){
+    out << prevNLErr << endl; // saves initial NL error
+  }
+
+  for (int i = 0;i<numSteps;i++){
+
+    if (i>thresh && useHessian){
+      solution->setFilter(hessianFilter);  
+    }
+    solution->solve(false); // do one solve to initialize things...   
+    
+    double newNLErr = 100.0;
+    bool NLErrorDecreased = false;
+    double stepSize = 1.0;
+    double c_decrease = .5; // decrease by this factor each time
+    int iter = 0;
+    double minStepSize = 1e-8;
+    while (!NLErrorDecreased && iter < maxIter && i>0){
+      backgroundFlow->addSolution(solution,stepSize); // add contribution to get 
+      riesz->computeRieszRep(); newNLErr = riesz->getNorm();
+      backgroundFlow->addSolution(solution,-stepSize); // remove contribution
+
+      if (newNLErr > prevNLErr){
+	stepSize *= c_decrease;
+	stepSize = max(stepSize,minStepSize);
+      }else{
+	NLErrorDecreased = true;
+      }
+      iter++;
+    }
+    backgroundFlow->addSolution(solution,stepSize);   
+    riesz->computeRieszRep(); newNLErr = riesz->getNorm();    
+
+    if (rank==0)
+      out << newNLErr << endl;
+        
+    duRiesz->computeRieszRep();double duENorm = duRiesz->getNorm();
+    if (rank==0){
+      cout << "du norm = " << duENorm << ", prev nl err = " << prevNLErr << ", NL err = " << newNLErr << ", step size = " << stepSize << endl;
+    }
+    prevNLErr = newNLErr;       
+  }
+  out.close;
+  */
   
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
@@ -247,7 +361,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   
-  int numRefs = 2;
+  int numRefs = 0;
   
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
@@ -261,69 +375,8 @@ int main(int argc, char *argv[]) {
   for (int refIndex=0;refIndex<numRefs;refIndex++){    
     solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
-
-    /*
-    // check conservation
-    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-    // Create a fake bilinear form for the testing
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    // Define our mass flux
-    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_hat) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
-
-    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-  
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemType = *elemTypeIt;
-      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
-	cellIDs.push_back(elems[i]->cellID());
-      }
-      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	// pick out the ones for testOne:
-	massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-      }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      }
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-	totalMassFlux += massFluxIntegral[cellID];
-	totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-      }
-    }
-    if (rank==0){
-      cout << endl;
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-      cout << "total mass flux: " << totalMassFlux << endl;
-      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-      cout << endl;
-    }
-    */
-
   }
-  
-  solveStrategy->solve(rank==0);
+  //  solveStrategy->solve(rank==0);
 
   if (rank==0){
     /*
@@ -336,7 +389,7 @@ int main(int argc, char *argv[]) {
     solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "burgers.dat");
     cout << "wrote solution files" << endl;
   }
-  
+
   return 0;
 }
 

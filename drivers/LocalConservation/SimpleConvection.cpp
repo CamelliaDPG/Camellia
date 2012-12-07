@@ -18,7 +18,7 @@
 #endif
 
 bool enforceLocalConservation = false;
-bool steady = false;
+bool steady = true;
 double dt = 0.25;
 int numTimeSteps = 20; // max time steps
 double halfWidth = 1;
@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
       {
         stringstream outfile;
         outfile << "Convection_" << refIndex;
-        solution->writeToVTK(outfile.str(), 5);
+        solution->writeToVTK(outfile.str());
 
         // Check local conservation
         FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
         {
           stringstream outfile;
           outfile << "TransientConvection_" << refIndex << "-" << timestepCount;
-          solution->writeToVTK(outfile.str(), 5);
+          solution->writeToVTK(outfile.str());
 
           // Check local conservation
           FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );

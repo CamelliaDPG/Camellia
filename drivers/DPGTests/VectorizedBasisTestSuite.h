@@ -47,6 +47,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   string testSuiteName();
   static bool testVectorizedBasis();
+  static bool testPoisson();
   static bool testHGRAD_2D();
 };
 
