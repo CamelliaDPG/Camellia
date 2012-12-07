@@ -1475,6 +1475,26 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
 }
 
 // added by Jesse - accumulates flux/field local dof indices into user-provided maps
+map< int, pair<int,int> > Mesh::getGlobalToLocalMap(){
+  map< pair<int,int> , int> localToGlobalMap = getLocalToGlobalMap();    
+  map< int, pair<int,int> > globalToLocalMap;
+  
+  vector<ElementPtr> elems = activeElements();
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    int numLocalDofs = (*elemIt)->elementType()->trialOrderPtr->totalDofs();
+    for (int i = 0;i<numLocalDofs;i++){
+      int globalDofInd = globalDofIndex(cellID,i);
+      pair<int,int> cellID_dofIndex;
+      cellID_dofIndex.first = cellID;
+      cellID_dofIndex.second = i;
+      globalToLocalMap[globalDofInd] = cellID_dofIndex;
+    }
+  }
+  
+  return globalToLocalMap;
+}
+
 void Mesh::getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds){
   
   // determine trialIDs

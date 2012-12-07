@@ -116,7 +116,7 @@ class Mesh {
   vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
   vector< Teuchos::RCP<Mesh> > _registeredMeshes; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
   
-  map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
+  map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
@@ -189,6 +189,11 @@ public:
   //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
   
   ElementPtr getElement(int cellID);
+  
+  map< pair<int,int> , int> getLocalToGlobalMap(){
+    return _localToGlobalMap;
+  }
+  map< int, pair<int,int> > getGlobalToLocalMap();
   
   int globalDofIndex(int cellID, int localDofIndex);
   
