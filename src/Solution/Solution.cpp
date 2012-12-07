@@ -198,6 +198,14 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   }
 }
 
+void Solution::clearSolution(){
+  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
+  for (vector<int>::iterator it = trialIDs.begin();it!=trialIDs.end();it++){
+    clearSolution(*it);
+  }
+}
+
+
 void Solution::clearSolution(int trialID){
   FieldContainer<double> dofs;
   vector<ElementPtr> elems = _mesh->activeElements();
@@ -687,7 +695,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
   }
   lhsVector.GlobalAssemble();
-  
+
   // Dump matrices to disk
   if (_writeMatrixToMatlabFile){
     //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
@@ -2536,6 +2544,26 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
+}
+
+void Solution::setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex){
+
+  map<int, pair<int,int> > globalToLocalMap = _mesh->getGlobalToLocalMap();
+
+  int cellID = globalToLocalMap[dofIndex].first;
+  int localDofIndex = globalToLocalMap[dofIndex].second;
+
+  _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeff;  
+}
+
+bool Solution::isFluxOrTraceDof(int globalDofIndex){
+  map<int,set<int> > fluxInds, fieldInds;
+  _mesh->getGlobalFieldFluxDofInds(fluxInds,fieldInds);
+  bool value = false;
+  if (fluxInds.find(globalDofIndex)!=fluxInds.end()){
+    value = true;
+  }
+  return value;
 }
 
 // protected method; used for solution comparison...
