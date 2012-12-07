@@ -177,6 +177,11 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
   }
 }
 
+bool ExactSolution::functionDefined(int trialID) {
+  // not supported by legacy subclasses
+  return _exactFunctions.find(trialID) != _exactFunctions.end();
+}
+
 void ExactSolution::squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2) {
   // two possibilities for values:
   // (C,P) or (C,P,D)
@@ -323,6 +328,10 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 
 int ExactSolution::H1Order() { // return -1 for non-polynomial solutions
   return _H1Order;
+}
+
+const map< int, FunctionPtr > ExactSolution::exactFunctions() {
+  return _exactFunctions;
 }
 
 void ExactSolution::setSolutionFunction( VarPtr var, FunctionPtr varFunction ) {

@@ -121,6 +121,8 @@ public:
   Teuchos::RCP<BilinearForm> bilinearForm();
   
   vector<int> meshSizes();
+  vector< Teuchos::RCP<Solution> >& bestApproximations();
+  
   map< int, vector<double> > bestApproximationErrors();
   map< int, vector<double> > solutionErrors();
   

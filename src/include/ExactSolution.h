@@ -72,6 +72,8 @@ public:
   Teuchos::RCP<BilinearForm> bilinearForm();
   Teuchos::RCP<BC> bc();
   Teuchos::RCP<RHS> rhs();
+  const map< int, FunctionPtr > exactFunctions(); // not supported by legacy subclasses
+  virtual bool functionDefined(int trialID); // not supported by legacy subclasses
   void setSolutionFunction( VarPtr var, FunctionPtr varFunction );
   void solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache);
   void solutionValues(FieldContainer<double> &values, 
