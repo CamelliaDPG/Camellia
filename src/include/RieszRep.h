@@ -56,13 +56,12 @@
 #include "Element.h"
 #include "Function.h"
 
-#include "IP.h" // includes LinearTerm.h and DPGInnerProduct.h
-//#include "LinearTerm.h"
+#include "DPGInnerProduct.h"
+#include "LinearTerm.h"
 #include "BasisCache.h"
 
 
 typedef Teuchos::RCP<Mesh> MeshPtr;
-typedef Teuchos::RCP<IP> IPPtr;
 typedef Teuchos::RCP<LinearTerm> LtPtr;
 
 typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
@@ -79,13 +78,13 @@ class RieszRep {
   map<int, double > _rieszRepNormSquaredGlobal; // from cellID to norm squared of riesz inversion
   
   MeshPtr _mesh;
-  IPPtr _ip;
+  Teuchos::RCP< DPGInnerProduct > _ip;
   LtPtr _rhs;
   bool _printAll;
   bool _repsNotComputed;
  
  public:
-  RieszRep(MeshPtr mesh, IPPtr ip, LtPtr &rhs){
+  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LtPtr &rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
