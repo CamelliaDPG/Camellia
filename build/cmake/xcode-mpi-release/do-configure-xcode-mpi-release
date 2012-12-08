@@ -23,4 +23,6 @@ cmake \
   -D TRILINOS_PATH:FILEPATH="/Users/nroberts/lib/trilinos/mpi-release-trimmed" \
   -D CAMELLIA_SOURCE_DIR:FILEPATH="/Users/nroberts/Documents/camellia/src" \
   -D CAMELLIA_BUILD_TYPE:STRING="mpi-release-trimmed" \
+  -D CMAKE_BUILD_TYPE="Release" \
+  -DVTK_DIR=/Users/nroberts/lib/vtk-5.10 \
   .
