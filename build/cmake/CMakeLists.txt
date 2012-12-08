@@ -13,6 +13,14 @@ cmake_minimum_required(VERSION 2.8)
 # You do _not_ need to edit this line.
 FIND_PACKAGE(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
 
+find_package(VTK REQUIRED)
+include(${VTK_USE_FILE})
+if(VTK_LIBRARIES)
+  link_libraries(${VTK_LIBRARIES})
+else()
+  link_libraries(vtkHybrid)
+endif()
+
 # If FIND_PACKAGE successfully found your Trilinos install, it will
 # set the Boolean flag Trilinos_FOUND.  The following IF statement
 # fails with a FATAL_ERROR if Trilinos was not found.  If it _was_

@@ -311,7 +311,8 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
   pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = make_pair(basis.get(),(EOperatorExtended) relatedOp);
   if (_knownValuesTransformed.find(relatedKey) == _knownValuesTransformed.end()) {
     constFCPtr transformedValues;
-    if ( (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) && (relatedOp ==  Intrepid::OPERATOR_VALUE)) {
+    bool vectorizedBasis = functionSpaceIsVectorized(fs);
+    if ( (vectorizedBasis) && (relatedOp ==  Intrepid::OPERATOR_VALUE)) {
       VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *) basis.get(), false );
       BasisPtr componentBasis = vectorBasis->getComponentBasis();
       constFCPtr componentReferenceValuesTransformed = getTransformedValues(componentBasis, IntrepidExtendedTypes::OP_VALUE,

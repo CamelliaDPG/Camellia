@@ -148,7 +148,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
   Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
-  bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
+  bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE)) {
     TEUCHOS_TEST_FOR_EXCEPTION( vectorizedBasis && (op ==  IntrepidExtendedTypes::OP_VALUE),
                        std::invalid_argument, "Vector HGRAD/HVOL with OP_VALUE not supported by getTransformedValuesWithBasisValues.  Please use getTransformedVectorValuesWithComponentBasisValues instead.");

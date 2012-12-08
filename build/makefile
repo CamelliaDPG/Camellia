@@ -15,9 +15,13 @@ TRILINOS_DIR = /Users/nroberts/Documents/Sandia/trilinos-10.10.2-Source/build/$(
 SRCS_DIR = ../../src
 DRIVERS_DIR = ../../Drivers
 MPI_LIBRARIES = -L/Users/nroberts/lib/openmpi-1.4.3-built-with-llvm/lib -lmpi -lmpi_f77 -lgfortran /Users/nroberts/lib/scalapack/libscalapack.a
+VTK_INCLUDE_DIR = /Users/nroberts/include/vtk-5.10
+VTK_LIBRARIES = -L/Users/nroberts/lib/vtk-5.10/
 
 # include makefile export files for Trilinos
 include $(TRILINOS_DIR)/Makefile.export.Trilinos_install
+
+LINKED_LIBRARIES = $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) $(VTK_LIBRARIES)
 
 # Set compiler to Trilinos compilers
 CXX = $(Trilinos_CXX_COMPILER)
@@ -50,6 +54,7 @@ OBJ_NAMES = DofOrdering \
        EricksonManufacturedSolution \
        EricksonConfectionSolution \
        ExperimentalInnerProduct \
+       CamelliaIntrepidExtendedTypes \
        LagrangeConstraints \
        Mesh \
        MeshPartitionPolicy \
@@ -139,7 +144,7 @@ BURGERS_OBJS = $(addsuffix .o, $(BURGERS_OBJ_NAMES))
 # put all the object files in OBJ_DIR:
 BURGERS_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(BURGERS_OBJS))
 
-INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS)
+INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS) -I$(VTK_INCLUDE_DIR)
 
 EXES = DPGTests StokesBackwardFacingStepDriver StokesCavityFlowDriver NavierStokesCavityFlowDriver StokesStudy NavierStokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver 
 EXE_OBJS = $(addsuffix .o, $(EXES))
@@ -156,25 +161,25 @@ MovedObjs:
   @echo BURGERS_OBJS_IN_PLACE: $(BURGERS_OBJS_IN_PLACE)
 
 DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 DPGTests.o: $(DRIVERS_DIR)/DPGTests/DPGTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 BurgersDriver: BurgersDriver.o $(OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 BurgersDriver.o: $(DRIVERS_DIR)/Burgers/BurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ScratchPadDriver: ScratchPadDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ScratchPadDriver.o -o ScratchPadDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ScratchPadDriver.o -o ScratchPadDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 ScratchPadDriver.o: $(DRIVERS_DIR)/ScratchPad/ScratchPadDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
   
 EricksonDriver: EricksonDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/EricksonDriver.o -o EricksonDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/EricksonDriver.o -o EricksonDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 EricksonDriver.o: $(DRIVERS_DIR)/Confusion/EricksonDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
@@ -183,13 +188,13 @@ ExperimentalInnerProduct.o: $(DRIVERS_DIR)/Confusion/ExperimentalInnerProduct.cp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 TimeMarchingBurgersDriver.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ConfectionDriver: ConfectionDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfectionDriver.o -o ConfectionDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfectionDriver.o -o ConfectionDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 ConfectionDriver.o: $(DRIVERS_DIR)/Confusion/ConfectionDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
@@ -204,49 +209,49 @@ EricksonConfectionSolution.o: $(DRIVERS_DIR)/Confusion/EricksonConfectionSolutio
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 StokesBackwardFacingStepDriver: StokesBackwardFacingStepDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesBackwardFacingStepDriver.o -o StokesBackwardFacingStepDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesBackwardFacingStepDriver.o -o StokesBackwardFacingStepDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesCavityFlowDriver: StokesCavityFlowDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesCavityFlowDriver.o -o StokesCavityFlowDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesCavityFlowDriver.o -o StokesCavityFlowDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 NavierStokesCavityFlowDriver: NavierStokesCavityFlowDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NavierStokesCavityFlowDriver.o -o NavierStokesCavityFlowDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NavierStokesCavityFlowDriver.o -o NavierStokesCavityFlowDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 NavierStokesStudy: NavierStokesStudy.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NavierStokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NavierStokesStudy.o -o StokesStudy $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesStudy: StokesStudy.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudy.o -o StokesStudy $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesMathStudy: StokesMathStudy.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesMathStudy.o -o StokesMathStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesMathStudy.o -o StokesMathStudy $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 StokesStudyHybridMesh: StokesStudyHybridMesh.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudyHybridMesh.o -o StokesStudyHybridMesh $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/StokesStudyHybridMesh.o -o StokesStudyHybridMesh $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 ConfusionStudy: ConfusionStudy.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfusionStudy.o -o ConfusionStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfusionStudy.o -o ConfusionStudy $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 ScalingExperiment: ScalingExperiment.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ScalingExperiment.o -o ScalingExperiment $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -lmpi_f77 -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ScalingExperiment.o -o ScalingExperiment $(LINKED_LIBRARIES) -lmpi_f77 -o $(OBJ_DIR)/$@
 
 NewConfusionDriver: NewConfusionDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewConfusionDriver.o -o NewConfusionDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewConfusionDriver.o -o NewConfusionDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 NewBurgersDriver: NewBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 exampleMesh: exampleMesh.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/exampleMesh.o -o exampleMesh $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/exampleMesh.o -o exampleMesh $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 PoissonSolver: PoissonSolver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonSolver.o -o PoissonSolver $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonSolver.o -o PoissonSolver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 PoissonStudy: PoissonStudy.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonStudy.o -o PoissonStudy $(Trilinos_LIBRARY_DIRS) $(Trilinos_LIBRARIES) $(MPI_LIBRARIES) $(Trilinos_TPL_LIBRARIES) -o $(OBJ_DIR)/$@
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/PoissonStudy.o -o PoissonStudy $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 MultiOrderStudy.o: $(DRIVERS_DIR)/MultiOrderStudy/MultiOrderStudy.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
@@ -447,6 +452,9 @@ RefinementPattern.o: $(SRCS_DIR)/Mesh/RefinementPattern.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
   
 BC.o: $(SRCS_DIR)/Problem/BC.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
+  
+CamelliaIntrepidExtendedTypes.o: $(SRCS_DIR)/Problem/CamelliaIntrepidExtendedTypes.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
   
 BCFunction.o: $(SRCS_DIR)/Problem/BCFunction.cpp
