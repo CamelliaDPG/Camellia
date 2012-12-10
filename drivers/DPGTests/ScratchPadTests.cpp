@@ -9,6 +9,8 @@
 #include "ScratchPadTests.h"
 #include "PenaltyConstraints.h"
 #include "IP.h"
+#include "PreviousSolutionFunction.h"
+#include "RieszRep.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -20,6 +22,63 @@ public:
     return xMatch || yMatch;
   }
 };
+
+
+class InflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol);
+    bool yMatch = (abs(y) < tol);
+    return xMatch || yMatch;
+  }
+};
+
+class Uinflow : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    double tol = 1e-11;
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+	double x = points(i,j,0);
+	double y = points(i,j,1);
+	values(i,j) = 0.0;
+	if (abs(y)<tol){
+	  values(i,j) = 1.0-x;
+	}
+	if (abs(x)<tol){
+	  values(i,j) = 1.0-y;
+	}
+
+      }
+    }
+  }
+};
+
+
+class EdgeFunction : public Function {
+public:
+  bool boundaryValueOnly() { 
+    return true; 
+  } 
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    double tol = 1e-11;
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+	double x = points(i,j,0);
+	double y = points(i,j,1);
+	values(i,j) = x*y+1.0;
+      }
+    }
+  }
+};
+
 
 class PositiveX : public SpatialFilter {
 public:
@@ -135,6 +194,19 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
+  setup();
+  if (testLinearTermEvaluationConsistency()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();   
+  
+  setup();
+  if (testErrorOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();   
 }
 
 bool ScratchPadTests::testConstantFunctionProduct() {
@@ -280,6 +352,170 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
   return success;
 }
 
+// tests whether a mixed type LT
+bool ScratchPadTests::testLinearTermEvaluationConsistency(){
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+
+  // define nodes for mesh
+  int order = 1;
+  int H1Order = order+1; int pToAdd = 1;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
+
+  
+  ////////////////////   get fake residual   ///////////////////////
+
+  LinearTermPtr lt = Teuchos::rcp(new LinearTerm);
+  FunctionPtr edgeFxn = Teuchos::rcp(new EdgeFunction);
+  FunctionPtr Xsq = Teuchos::rcp(new Xn(2));
+  FunctionPtr Ysq = Teuchos::rcp(new Yn(2));
+  FunctionPtr XYsq = Xsq*Ysq;
+  lt->addTerm(edgeFxn*v + (beta*XYsq)*v->grad());
+
+  Teuchos::RCP<RieszRep> ltRiesz = Teuchos::rcp(new RieszRep(mesh, ip, lt));
+  ltRiesz->computeRieszRep();
+  FunctionPtr repFxn = Teuchos::rcp(new RepFunction(v,ltRiesz));
+  map<int,FunctionPtr> rep_map;
+  rep_map[v->ID()] = repFxn;
+
+  FunctionPtr edgeLt = lt->evaluate(rep_map, true) ;
+  FunctionPtr elemLt = lt->evaluate(rep_map, false);
+
+  double edgeVal = edgeLt->integrate(mesh,10);
+  double elemVal = elemLt->integrate(mesh,10);
+  LinearTermPtr edgeOnlyLt = Teuchos::rcp(new LinearTerm);// residual 
+  edgeOnlyLt->addTerm(edgeFxn*v);
+  FunctionPtr edgeOnly = edgeOnlyLt->evaluate(rep_map,true);
+  double edgeOnlyVal = edgeOnly->integrate(mesh,10);
+
+  double diff = edgeOnlyVal-edgeVal;
+  if (abs(diff)>1e-11){
+    success = false;
+    cout << "Failed testLinearTermEvaluationConsistency() with diff = " << diff << endl;
+  }
+  
+  return success;
+}
+
+// tests whether a mixed type LT
+bool ScratchPadTests::testErrorOrthogonality(){
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+
+  // define nodes for mesh
+  int order = 1;
+  int H1Order = order+1; int pToAdd = 2;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
+  
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  
+  FunctionPtr uIn = Teuchos::rcp(new Uinflow);
+  FunctionPtr n = Teuchos::rcp(new UnitNormalFunction);
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);  
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution->solve(false);
+  FunctionPtr uCopy = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+  FunctionPtr fnhatCopy = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u));
+  
+  ////////////////////   get residual   ///////////////////////
+
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  residual->addTerm(-fnhatCopy*v + (beta*uCopy)*v->grad());
+
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  riesz->computeRieszRep();
+  double rieszErr = riesz->getNorm();
+  double energyErr = solution->energyErrorTotal();
+  if (abs(rieszErr-energyErr)>1e-11){
+    success = false;
+    cout << "Failed testErrorOrthogonality() because riesz and energy error are inconsistent with each other - the energy error using the RieszRep class = " << rieszErr << ", while the energy error computed in Solution.cpp is " << energyErr << endl;
+    return success;
+  }
+  FunctionPtr rieszRepFxn = Teuchos::rcp(new RepFunction(v,riesz));
+
+  map<int,FunctionPtr> err_rep_map;
+  err_rep_map[v->ID()] = rieszRepFxn;
+
+  FunctionPtr edgeResidual = residual->evaluate(err_rep_map, true) ;
+  FunctionPtr elemResidual = residual->evaluate(err_rep_map, false);
+
+  double edgeVal = edgeResidual->integrate(mesh,10);
+  double elemVal = elemResidual->integrate(mesh,10);
+  
+  double fieldDiff = elemVal;
+  double fluxDiff = edgeVal;
+  double diff = abs(fluxDiff)+abs(fieldDiff);
+  if (abs(diff)>1e-11){
+    success = false;
+    cout << "Failed testErrorOrthogonality() with field diff = " << fieldDiff << " and flux diff = " << fluxDiff << endl;
+  }
+  
+  return success;
+}
 
 std::string ScratchPadTests::testSuiteName() {
   return "ScratchPadTests";
