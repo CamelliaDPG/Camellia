@@ -31,6 +31,7 @@
 #include "RieszRep.h"
 #include "HessianFilter.h"
 #include <sstream>
+#include "SolutionTests.h"
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
@@ -59,22 +60,6 @@ public:
   }
 };
 
-
-class EpsilonScaling : public hFunction {
-  double _epsilon;
-public:
-  EpsilonScaling(double epsilon) {
-    _epsilon = epsilon;
-  }
-  double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/(h*h), 1.0);
-    // since this is used in inner product term a like (a,a), take square root
-    return sqrt(scaling);
-  }
-};
-
 class U0 : public SimpleFunction {
 public:
   double value(double x, double y) {
@@ -100,10 +85,9 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  int polyOrder = 2;
+  int polyOrder = 1;
   
   // define our manufactured solution or problem bilinear form:
-  double epsilon = 1e-3;
   bool useTriangles = false;
   
   int pToAdd = 2;
@@ -129,14 +113,6 @@ int main(int argc, char *argv[]) {
     }
   } 
 
-  int thresh = numSteps; // threshhold for when to apply linesearch/hessian
-  if ( argc > 4) {
-    thresh = atoi(argv[4]);
-    if (rank==0){
-      cout << "thresh = " << thresh << endl;
-    }
-  }
-
   int H1Order = polyOrder + 1;
   
   double energyThreshold = 0.2; // for mesh refinements
@@ -149,13 +125,9 @@ int main(int argc, char *argv[]) {
   
   // new-style bilinear form definition
   VarFactory varFactory;
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_hat = varFactory.fluxVar("\\widehat{\\beta_n u - \\sigma_n}");
+  VarPtr fn = varFactory.fluxVar("\\widehat{\\beta_n_u}");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
   
-  VarPtr tau = varFactory.testVar("\\tau",HDIV);
   VarPtr v = varFactory.testVar("v",HGRAD);
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
   
@@ -175,6 +147,10 @@ int main(int argc, char *argv[]) {
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
                                                          nullRHS, nullIP) );
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, 
+							   nullRHS, nullIP) );
+  backgroundFlow->setCubatureEnrichmentDegree(10);
+  solnPerturbation->setCubatureEnrichmentDegree(10);
   
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
@@ -188,93 +164,75 @@ int main(int argc, char *argv[]) {
   // DEFINE BILINEAR FORM
   ////////////////////////////////////////////////////////////////////
   
-  // tau parts:
-  // 1/eps (sigma, tau)_K + (u, div tau)_K - (u_hat, tau_n)_dK
-  bf->addTerm(sigma1 / epsilon, tau->x()); 
-  bf->addTerm(sigma2 / epsilon, tau->y()); 
-  bf->addTerm(u, tau->div());
-  bf->addTerm( - uhat, tau->dot_normal() );
-
   // v:
-  // (sigma, grad v)_K - (sigma_hat_n, v)_dK - (u, beta dot grad v) + (u_hat * n dot beta, v)_dK
-  bf->addTerm( sigma1, v->dx() );
-  bf->addTerm( sigma2, v->dy() );
   bf->addTerm( -u, beta * v->grad());
-  bf->addTerm( beta_n_u_minus_sigma_hat, v);
-
-  // ==================== SET INITIAL GUESS ==========================
-  mesh->registerSolution(backgroundFlow);
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  FunctionPtr u0 = Teuchos::rcp( new U0 );
-  
-  map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[u->ID()] = u0;
-  functionMap[sigma1->ID()] = zero;
-  functionMap[sigma2->ID()] = zero;
- 
-  backgroundFlow->projectOntoMesh(functionMap);
-  // ==================== END SET INITIAL GUESS ==========================
-
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE INNER PRODUCT
-  ////////////////////////////////////////////////////////////////////
-  // function to scale the squared guy by epsilon/h
-  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  IPPtr ip = Teuchos::rcp( new IP );
-  ip->addTerm( epsilonOverHScaling * (1.0/sqrt(epsilon))* tau);
-  ip->addTerm( tau->div());
-  //  ip->addTerm( epsilonOverHScaling * v );
-  ip->addTerm( v );
-  ip->addTerm( sqrt(epsilon) * v->grad() );
-  ip->addTerm(v->grad());
-  //  ip->addTerm( beta * v->grad() );
+  bf->addTerm( fn, v);
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE RHS
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
-  
-  rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
+  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;  
+  rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad());
+
+  // ==================== SET INITIAL GUESS ==========================
+  mesh->registerSolution(backgroundFlow);
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr u0 = Teuchos::rcp( new U0 );
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
+
+  FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
+
+  map<int, Teuchos::RCP<Function> > functionMap;
+  functionMap[u->ID()] = u0;
+  //  functionMap[fn->ID()] = -(e1 * u0_squared_div_2 + e2 * u0) * n * parity;
+  backgroundFlow->projectOntoMesh(functionMap);
+
+  // ==================== END SET INITIAL GUESS ==========================
+
+  ////////////////////////////////////////////////////////////////////
+  // DEFINE INNER PRODUCT
+  ////////////////////////////////////////////////////////////////////
+
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm( v );
+  ip->addTerm(v->grad());
+  //  ip->addTerm( beta * v->grad() );
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE DIRICHLET BC
   ////////////////////////////////////////////////////////////////////
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary);
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
-  FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
-  inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, 
+  inflowBC->addDirichlet(fn,inflowBoundary, 
                          ( e1 * u0_squared_div_2 + e2 * u0) * n );
+  //  inflowBC->addDirichlet(fn,inflowBoundary,zero); 
   
   ////////////////////////////////////////////////////////////////////
   // CREATE SOLUTION OBJECT
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
   mesh->registerSolution(solution);
+  solution->setCubatureEnrichmentDegree(10);
 
   ////////////////////////////////////////////////////////////////////
-  // WARNING: UNFINISHED HESSIAN BIT
+  // HESSIAN BIT + CHECKS ON GRADIENT + HESSIAN
   ////////////////////////////////////////////////////////////////////
+
   VarFactory hessianVars = varFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL);
   VarPtr du = hessianVars.test(u->ID());
   BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form
-  //  FunctionPtr e_v = Function::constant(1.0); // dummy error rep function for now - should do nothing
 
-  FunctionPtr u_current  = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+  FunctionPtr du_current  = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
 
-  FunctionPtr sig1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
-  FunctionPtr sig2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
-  FunctionPtr sig_prev = (e1*sig1_prev + e2*sig2_prev);
-  FunctionPtr fnhat = Teuchos::rcp(new PreviousSolutionFunction(solution,beta_n_u_minus_sigma_hat));
-  FunctionPtr uhat_prev = Teuchos::rcp(new PreviousSolutionFunction(solution,uhat));
+  FunctionPtr fnhat = Teuchos::rcp(new PreviousSolutionFunction(solution,fn));
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
-  residual->addTerm(fnhat*v - (e1 * (u_prev_squared_div2 - sig1_prev) + e2 * (u_prev - sig2_prev)) * v->grad());
-  residual->addTerm((1/epsilon)*sig_prev * tau + u_prev * tau->div() - uhat_prev*tau->dot_normal());
+  residual->addTerm(fnhat*v - (e1 * (u_prev_squared_div2) + e2 * (u_prev)) * v->grad());
 
   LinearTermPtr Bdu = Teuchos::rcp(new LinearTerm);// residual
-  Bdu->addTerm( u_current*tau->div() - u_current*(beta*v->grad()));
+  Bdu->addTerm( - du_current*(beta*v->grad()));
 
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   Teuchos::RCP<RieszRep> duRiesz = Teuchos::rcp(new RieszRep(mesh, ip, Bdu));
@@ -293,8 +251,8 @@ int main(int argc, char *argv[]) {
   }
 
   Teuchos::RCP< LineSearchStep > LS_Step = Teuchos::rcp(new LineSearchStep(riesz));
-  ofstream out;
-  out.open("Burgers.txt"); 
+  //  ofstream out;
+  //  out.open("Burgers.txt"); 
   double NL_residual = 9e99;
   for (int i = 0;i<numSteps;i++){
     solution->solve(false); // do one solve to initialize things...   
@@ -307,38 +265,79 @@ int main(int argc, char *argv[]) {
     NL_residual = LS_Step->getNLResidual();
     if (rank==0){
       cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
-      out << NL_residual << endl; // saves initial NL error     
+      //      out << NL_residual << endl; // saves initial NL error     
     }
-  }
-  out.close();
- 
-  
-  ////////////////////////////////////////////////////////////////////
-  // DEFINE REFINEMENT STRATEGY
-  ////////////////////////////////////////////////////////////////////
-  Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
-  
-  int numRefs = 0;
-  
-  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
-  solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
-                                                           nonlinearRelativeEnergyTolerance));
 
-  ////////////////////////////////////////////////////////////////////
-  // SOLVE 
-  ////////////////////////////////////////////////////////////////////
-  
-  for (int refIndex=0;refIndex<numRefs;refIndex++){    
-    solveStrategy->solve(rank==0);       // print to console on rank 0
-    refinementStrategy->refine(rank==0); // print to console on rank 0
-  }
-  //  solveStrategy->solve(rank==0);
 
+    int numGlobalDofs = mesh->numGlobalDofs();
+    double fd_gradient;
+    for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+      // CHECK HESSIAN
+      riesz->computeRieszRep();
+      double fx = riesz->getNorm();
+      
+      // create perturbation in direction du
+      solnPerturbation->clearSolution(); // clear all solns
+      solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+      double h = 1e-7;
+      backgroundFlow->addSolution(solnPerturbation,h);
+      
+      riesz->computeRieszRep();
+      double fxh = riesz->getNorm();
+      double f = fx*fx*.5;
+      double fh = fxh*fxh*.5;
+      fd_gradient = (fh-f)/h;      
+      
+      // remove contribution
+      backgroundFlow->addSolution(solnPerturbation,-h);
+      
+      // CHECK GRADIENT
+      LinearTermPtr b_u =  bf->testFunctional(solnPerturbation);
+      map<int,FunctionPtr> NL_err_rep_map;
+      NL_err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+      FunctionPtr gradient = b_u->evaluate(NL_err_rep_map, solnPerturbation->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux or trace
+      double grad = gradient->integrate(mesh,10);
+      double fdgrad = fd_gradient;
+      double diff = grad-fdgrad;
+      cout << "gradient = " << grad << " and FD gradient = " << fdgrad << endl;
+      if (abs(diff)>1e-6){
+	int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
+	int localDofIndex = mesh->getGlobalToLocalMap()[dofIndex].second;
+	vector<double> centroid = mesh->getCellCentroid(cellID);
+	cout << "Found difference of " << diff << " in dof " << dofIndex << ", isTraceDof = " << solnPerturbation->isFluxOrTraceDof(dofIndex) << " with support on cell " << cellID  << " at " << centroid[0] << "," << centroid[1] << ", with local dof index " << localDofIndex << endl;
+	if (solnPerturbation->isFluxOrTraceDof(dofIndex)){
+	  for (int sideIndex = 0;sideIndex<4;sideIndex++){
+	    vector<int> fluxDofInds = mesh->elements()[cellID]->elementType()->trialOrderPtr->getDofIndices(fn->ID(), sideIndex);
+	    for (int i = 0;i<fluxDofInds.size();i++){
+	      cout << "Side " << sideIndex << " has dof index " << fluxDofInds[i] << endl;
+	    }
+	  }
+	  map<int,FunctionPtr> testMap;
+	  testMap[v->ID()] = Function::constant(0.0);
+	  double testval = b_u->evaluate(testMap,true)->integrate(mesh,10); //evaluate for boundary flux
+	  cout << endl;
+	  cout << "integral of this dof = " << testval << endl;
+	  cout << endl;
+	  
+	  NL_err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"burgers_nl_err_rep.m");
+	  
+	}
+      }
+
+      cout << "consistency check for perturbation " << SolutionTests::solutionCoefficientsAreConsistent(solnPerturbation) << endl;
+      cout << "consistency check for background flow " << SolutionTests::solutionCoefficientsAreConsistent(backgroundFlow) << endl;
+      cout << "consistency check for solution " << SolutionTests::solutionCoefficientsAreConsistent(solution) << endl;
+
+
+    }
+    
+    
+  }
+
+  //  out.close();
+   
   if (rank==0){ 
-    backgroundFlow->writeToVTK("Burgers.vtu",min(H1Order+1,4));
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "burgers.dat");
+    backgroundFlow->writeToVTK("BurgersTest.vtu",min(H1Order+1,4));
     cout << "wrote solution files" << endl;
   }
 
