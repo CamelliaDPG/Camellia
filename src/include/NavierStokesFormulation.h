@@ -9,6 +9,8 @@
 #ifndef Camellia_NavierStokesFormulation_h
 #define Camellia_NavierStokesFormulation_h
 
+#include "RieszRep.h"
+
 #include "StokesFormulation.h"
 
 // implementation of some standard Navier-Stokes Formulations.
@@ -171,10 +173,26 @@ public:
     
     mySolution->setSolutionFunction(p, p_exact);
     
-    mySolution->setSolutionFunction(sigma11, u1_exact->dx());
-    mySolution->setSolutionFunction(sigma12, u1_exact->dy());
-    mySolution->setSolutionFunction(sigma21, u2_exact->dx());
-    mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+    FunctionPtr sigma11_exact = u1_exact->dx();
+    FunctionPtr sigma12_exact = u1_exact->dy();
+    FunctionPtr sigma21_exact = u2_exact->dx();
+    FunctionPtr sigma22_exact = u2_exact->dy();
+    
+    mySolution->setSolutionFunction(sigma11, sigma11_exact);
+    mySolution->setSolutionFunction(sigma12, sigma12_exact);
+    mySolution->setSolutionFunction(sigma21, sigma21_exact);
+    mySolution->setSolutionFunction(sigma22, sigma22_exact);
+    
+    // tn = (mu sigma - pI)n
+    FunctionPtr sideParity = Function::sideParity();
+    FunctionPtr n = Function::normal();
+    FunctionPtr t1n_exact = (mu * sigma11_exact - p_exact) * n->x() + mu * sigma12_exact * n->y();
+    FunctionPtr t2n_exact = mu * sigma21_exact * n->x() + (mu * sigma22_exact - p_exact) * n->y();
+    
+    mySolution->setSolutionFunction(u1hat, u1_exact);
+    mySolution->setSolutionFunction(u2hat, u2_exact);
+    mySolution->setSolutionFunction(t1n, t1n_exact * sideParity);
+    mySolution->setSolutionFunction(t2n, t2n_exact * sideParity);
     
     return mySolution;
   }
@@ -295,16 +313,45 @@ public:
   SolutionPtr solutionIncrement() {
     return _solnIncrement;
   }
-  void iterate() {
+  double lineSearchWeight() {
+    double alpha = 2.0;
+    double alphaMin = 1e-10;
+    LinearTermPtr rhsLT = ((RHSEasy*) _backgroundFlow->rhs().get())->linearTerm();
+    RieszRep rieszRep(_backgroundFlow->mesh(), _backgroundFlow->ip(), rhsLT);
+    rieszRep.computeRieszRep();
+    double costPrevious = rieszRep.getNorm();
+    double costNew;
+    do {
+      alpha /= 2;
+      _backgroundFlow->addSolution(_solnIncrement, alpha);
+      rieszRep.computeRieszRep();
+      costNew = rieszRep.getNorm();
+      _backgroundFlow->addSolution(_solnIncrement, -alpha);
+    } while ((costNew > costPrevious) && (alpha > alphaMin));
+    if (costNew > costPrevious) {
+      return 0;
+    } else {
+      return alpha;
+    }
+  }
+  double iterate(bool useLineSearch) { // returns the weight used...
+    double weight;
     if (_iterations==0) {
       _backgroundFlow->solve();
       // want _solnIncrement to store the initial solution as the first increment:
-      _solnIncrement->addSolution(_backgroundFlow, 1.0, true); // true: allow adds of empty cells
+      weight = 1.0;
+      _solnIncrement->addSolution(_backgroundFlow, weight, true); // true: allow adds of empty cells
     } else {
       _solnIncrement->solve();
-      _backgroundFlow->addSolution(_solnIncrement, _iterationWeight);
+      if (!useLineSearch) {
+        weight = _iterationWeight;
+      } else {
+        weight = lineSearchWeight();
+      }
+      _backgroundFlow->addSolution(_solnIncrement, weight);
     }
     _iterations++;
+    return weight;
   }
   int iterationCount() {
     return _iterations;

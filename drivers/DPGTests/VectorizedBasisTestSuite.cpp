@@ -142,8 +142,8 @@ bool VectorizedBasisTestSuite::testPoisson() {
   bf->addTerm(-uhat, tau->dot_normal());
 
   // v terms:
-  bf->addTerm( -sigma, v->grad() );
-  bf->addTerm( sigma_n, v);
+  bf->addTerm( sigma, v->grad() );
+  bf->addTerm( -sigma_n, v);
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = bf->graphNorm();

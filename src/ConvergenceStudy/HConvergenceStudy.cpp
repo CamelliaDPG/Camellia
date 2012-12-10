@@ -71,7 +71,17 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
     FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
     _exactSolutionFunctions[trialID] = exactSoln;
   }
-  
+  // in the past, we haven't done any projection of boundary Functions.
+  // here, we do so if it's a "modern" ExactSolution (defined in terms of FunctionPtrs, etc.)
+  // and that ExactSolution defines a given boundary variable's Function.
+  trialIDs = bilinearForm->trialBoundaryIDs();
+  for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    int trialID = *trialIt;
+    if (_exactSolution->functionDefined(trialID)) {
+      FunctionPtr exactSoln = Teuchos::rcp( new ExactSolutionFunction(_exactSolution,trialID) );
+      _exactSolutionFunctions[trialID] = exactSoln;
+    }
+  }
   if (_useTriangles)
     cout << "HConvergenceStudy: Using triangles\n" << endl;
 }
@@ -150,6 +160,10 @@ vector<int> HConvergenceStudy::meshSizes() {
     size *= 2;
   }
   return sizes;
+}
+
+vector< SolutionPtr > & HConvergenceStudy::bestApproximations() {
+  return _bestApproximations;
 }
 
 map< int, vector<double> > HConvergenceStudy::bestApproximationErrors() {

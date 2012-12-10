@@ -125,8 +125,8 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
   DofOrderingPtr testOrder = elemType->testOrderPtr;
   preStiff.resize(1,testOrder->totalDofs(),trialOrder->totalDofs());
-  int testID  =  testOrder->getVarIDs()[0]; // just one
-  int trialID = trialOrder->getVarIDs()[0]; // just one (the flux)
+  int testID  =  *(testOrder->getVarIDs().begin()); // just one
+  int trialID = *(trialOrder->getVarIDs().begin()); // just one (the flux)
   
   int numPoints = 4;
   FieldContainer<double> refPoints2D(numPoints,2); // quad nodes (for bilinear basis)
@@ -204,8 +204,8 @@ void MeshRefinementTests::preStiffnessExpectedPatch(FieldContainer<double> &preS
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
   DofOrderingPtr testOrder = elemType->testOrderPtr;
   preStiff.resize(1,testOrder->totalDofs(),trialOrder->totalDofs());
-  int testID  =  testOrder->getVarIDs()[0]; // just one
-  int trialID = trialOrder->getVarIDs()[0]; // just one (the flux)
+  int testID  =  *(testOrder->getVarIDs().begin()); // just one
+  int trialID = *(trialOrder->getVarIDs().begin()); // just one (the flux)
   
   int numPoints = 4;
   FieldContainer<double> refPoints2D(numPoints,2); // quad nodes (for bilinear basis)
@@ -309,8 +309,8 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
   DofOrderingPtr testOrder = elemType->testOrderPtr;
   preStiff.resize(1,testOrder->totalDofs(),trialOrder->totalDofs());
-  int testID  =  testOrder->getVarIDs()[0]; // just one
-  int trialID = trialOrder->getVarIDs()[0]; // just one (the flux)
+  int testID  =  *(testOrder->getVarIDs().begin()); // just one
+  int trialID = *(trialOrder->getVarIDs().begin()); // just one (the flux)
   
   int numPoints = 4;
   FieldContainer<double> refPoints2D(numPoints,2); // quad nodes (for bilinear basis)

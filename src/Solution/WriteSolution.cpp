@@ -1,6 +1,5 @@
 #include "Solution.h"
 #include "CamelliaConfig.h"
-//#define USE_VTK
 
 #ifdef USE_VTK
 #include "vtkPointData.h"
@@ -87,7 +86,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     bool isQuad = (numVertices == 4);
     int numPoints = 0;
     if (defaultPts)
-      num1DPts = pow(2, pOrder-1);
+      num1DPts = pow(2.0, pOrder-1);
     if (isQuad)
       numPoints = num1DPts*num1DPts;
     else

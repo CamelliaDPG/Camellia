@@ -44,6 +44,8 @@ namespace IntrepidExtendedTypes {
     FUNCTION_SPACE_ONE,
     CURL_HGRAD_FOR_CONSERVATION
   };
+  
+  bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);
 }
 
 #endif

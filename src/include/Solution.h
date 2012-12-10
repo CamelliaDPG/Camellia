@@ -113,6 +113,7 @@ private:
   string _matrixFilePath;
   double _globalSystemConditionEstimate;
   
+  void clearComputedResiduals();
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
 protected:
