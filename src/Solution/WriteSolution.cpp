@@ -1,6 +1,6 @@
 #include "Solution.h"
 #include "CamelliaConfig.h"
-#define USE_VTK
+//#define USE_VTK
 
 #ifdef USE_VTK
 #include "vtkPointData.h"
