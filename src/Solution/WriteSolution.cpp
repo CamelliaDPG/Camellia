@@ -1,6 +1,8 @@
 #include "Solution.h"
 #include "CamelliaConfig.h"
 
+#define USE_VTK
+
 #ifdef USE_VTK
 #include "vtkPointData.h"
 #include "vtkCellData.h"
@@ -30,24 +32,31 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
 
   // Get trialIDs
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
-  vector<int> fieldTrialIDs;
+  vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  int numFieldVars = fieldTrialIDs.size();
 
   int spaceDim = 2; // TODO: generalize to 3D...
   int totalCells = _mesh->activeElements().size();
-  int numFieldVars = 0;
-  for (unsigned int i=0; i < trialIDs.size(); i++)
-  {
-    if (!(_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i])))
-    {
-      numFieldVars++;
-      fieldTrialIDs.push_back(trialIDs[i]);
-      fieldData.push_back(vtkFloatArray::New());
-    }
-  }
+  for (int i=0; i < numFieldVars; i++)
+    fieldData.push_back(vtkFloatArray::New());
+  // int numFieldVars = 0;
+  // for (unsigned int i=0; i < trialIDs.size(); i++)
+  // {
+  //   if (!(_mesh->bilinearForm()->isFluxOrTrace(trialIDs[i])))
+  //   {
+  //     numFieldVars++;
+  //     fieldTrialIDs.push_back(trialIDs[i]);
+  //     fieldData.push_back(vtkFloatArray::New());
+  //   }
+  // }
 
   for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
   {
-    fieldData[varIdx]->SetNumberOfComponents(1);
+    bool vectorized = IntrepidExtendedTypes::functionSpaceIsVectorized(_mesh->bilinearForm()->functionSpaceForTrial(fieldTrialIDs[varIdx]));
+    if (vectorized)
+      fieldData[varIdx]->SetNumberOfComponents(spaceDim);
+    else
+      fieldData[varIdx]->SetNumberOfComponents(1);
     fieldData[varIdx]->SetName(_mesh->bilinearForm()->trialName(fieldTrialIDs[varIdx]).c_str());
   }
   polyOrderData->SetNumberOfComponents(1);
@@ -128,9 +137,16 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     computedValues.resize(numFieldVars);
     for (int i=0; i < numFieldVars; i++)
     {
-      computedValues[i].resize(numCells, numPoints);
+      int numberComponents = fieldData[i]->GetNumberOfComponents();
+      // cout << "field var " << i << " " << numFieldVars << endl;
+      if (numberComponents == 1)
+        computedValues[i].resize(numCells, numPoints);
+      else
+        computedValues[i].resize(numCells, numPoints, spaceDim);
+      // cout << "finished resizing" << endl;
       solutionValues(computedValues[i], fieldTrialIDs[i], basisCache);
     }
+    // cout << "After All" << endl;
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
     {
@@ -192,7 +208,21 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
                                 (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
         for (int varIdx=0; varIdx < numFieldVars; varIdx++)
         {
-          fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          // fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          switch(fieldData[varIdx]->GetNumberOfComponents())
+          {
+            case 1:
+              fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
+              break;
+            case 2:
+              if (cellIndex == 0 && pointIndex == 0)
+                // cout << computedValues[varIdx] << endl;
+              // fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
+              fieldData[varIdx]->InsertNextTuple2(computedValues[varIdx](cellIndex, pointIndex, 0), computedValues[varIdx](cellIndex, pointIndex, 1));
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+          }
         }
         total_vertices++;
       }
@@ -207,7 +237,7 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
     ug->GetPointData()->AddArray(fieldData[varIdx]);
     fieldData[varIdx]->Delete();
   }
-  ug->GetCellData()->AddArray(polyOrderData);
+  // ug->GetCellData()->AddArray(polyOrderData);
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
   wr->SetInput(ug);

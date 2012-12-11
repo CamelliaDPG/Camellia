@@ -22,6 +22,10 @@ add_executable(VortexDriver VortexDriver.cpp)
 
 add_executable(SingularWedge SingularWedge.cpp)
 
+add_executable(PoissonWedge PoissonWedge.cpp)
+
+add_executable(LShapedPoisson LShapedPoisson.cpp)
+
 add_executable(TransientConfusion TransientConfusion.cpp)
 
 add_executable(TransientHemker TransientHemker.cpp)

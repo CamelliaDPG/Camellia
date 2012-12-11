@@ -25,9 +25,6 @@ double halfWidth = 1;
 int numRefs = 0;
 int H1Order = 2, pToAdd = 2;
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class ScalarParamFunction : public Function {
   double _a;
   public:

@@ -16,10 +16,6 @@ PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints){
 void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
                                  BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){ 
   
-  typedef Teuchos::RCP< ElementType > ElementTypePtr;
-  typedef Teuchos::RCP< Element > ElementPtr;
-  typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-  
   // assumption: filter gets elements of all the same type  
   TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellIDs().size()==0,std::invalid_argument,"no cell IDs given to filter");
   

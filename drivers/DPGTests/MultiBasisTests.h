@@ -12,12 +12,6 @@
 #include "Solution.h"
 #include "ExactSolution.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
-typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
-typedef Teuchos::RCP<Element> ElementPtr;
-
 class MultiBasisTests : public TestSuite {
 private:
   FieldContainer<double> _testPoints1D;

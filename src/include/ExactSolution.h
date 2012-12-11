@@ -60,8 +60,6 @@ protected:
   Teuchos::RCP<BilinearForm> _bilinearForm;
   Teuchos::RCP<BC> _bc;
   Teuchos::RCP<RHS> _rhs;
-  typedef Teuchos::RCP< ElementType > ElementTypePtr;
-  typedef Teuchos::RCP< Element > ElementPtr;
   void squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<double> &values1, FieldContainer<double> &values2);
 
   int _H1Order;

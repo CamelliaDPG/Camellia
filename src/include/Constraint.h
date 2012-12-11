@@ -14,9 +14,7 @@
 #include "SpatiallyFilteredFunction.h"
 
 class Function;
-
 typedef Teuchos::RCP<Function> FunctionPtr;
-typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
 class Constraint {
   LinearTermPtr _linearTerm;

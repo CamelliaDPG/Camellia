@@ -38,7 +38,7 @@
 #include "RieszRep.h"
 #include "Epetra_Vector.h"
 #include "Epetra_Import.h"
-LtPtr RieszRep::getRHS(){
+LinearTermPtr RieszRep::getRHS(){
   return _rhs;
 }
 

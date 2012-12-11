@@ -25,9 +25,6 @@ bool enforceLocalConservation = false;
 double epsilon = 1e-4;
 double numRefs = 5;
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:

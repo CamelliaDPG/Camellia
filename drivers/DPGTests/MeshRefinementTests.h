@@ -29,9 +29,6 @@ typedef Teuchos::RCP< DoubleBasis > BasisPtr;
 typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
 typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
 
-typedef Teuchos::RCP<Element> ElementPtr;
-typedef Teuchos::RCP<ElementType> ElementTypePtr;
-
 class MeshRefinementTests : public TestSuite {
   // in what follows:
   /*

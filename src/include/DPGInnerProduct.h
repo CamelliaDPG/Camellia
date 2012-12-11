@@ -75,7 +75,7 @@ public:
   
   virtual void computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                          Teuchos::RCP<DofOrdering> dofOrdering,
-                                         Teuchos::RCP<BasisCache> basisCache);
+                                         BasisCachePtr basisCache);
   
   virtual void printInteractions();
   
@@ -93,7 +93,7 @@ public:
   virtual void applyInnerProductData(FieldContainer<double> &testValues1,
                                      FieldContainer<double> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
-                                     Teuchos::RCP<BasisCache> basisCache);
+                                     BasisCachePtr basisCache);
   
   virtual bool hasBoundaryTerms(); // used for deciding whether to create side caches or not.
                          

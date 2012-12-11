@@ -1,8 +1,0 @@
-Import('*')
-
-src_obj = env.Object(['BurgersBilinearForm.cpp','BurgersProblem.cpp','BurgersInnerProduct.cpp','TimeMarchingBurgersProblem.cpp'])
-
-env.Program('exec/Burgers',['BurgersDriver.cpp',src_obj])
-
-env.Program('exec/TimeBurgers',['TimeMarchingBurgersDriver.cpp',src_obj])
-

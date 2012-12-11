@@ -115,8 +115,6 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
   return success;
 }
 
-typedef Teuchos::RCP<Element> ElementPtr;
-
 // unclear on why these initializers are necessary but others (e.g. _confusionSolution1_2x2) are not
 // maybe a bug in Teuchos::RCP?
 SolutionTests::SolutionTests() :

@@ -48,6 +48,8 @@
 #include "BilinearForm.h"
 #include "Vectorized_Basis.hpp"
 
+#include "BasisFactory.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
@@ -56,8 +58,6 @@
 class BasisEvaluation { 
   typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
   typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
-  typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-  typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
   
 public:
   static FCPtr getValues(BasisPtr basis, EOperatorExtended op,

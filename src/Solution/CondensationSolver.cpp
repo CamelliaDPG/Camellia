@@ -25,9 +25,6 @@
 
 #include "CondensationSolver.h"
 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-
 // added by Jesse - static condensation solve. WARNING: will not take into account Lagrange multipliers or zero-mean constraints yet. Those must be condensed out separately
 int CondensationSolver::solve(){
 

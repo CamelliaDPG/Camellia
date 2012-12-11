@@ -65,16 +65,14 @@ typedef Teuchos::RCP<Function> FunctionPtr;
 class Solver;
 class LagrangeConstraints;
 class Epetra_LinearProblem;
+class Solution;
+
+typedef Teuchos::RCP<Solution> SolutionPtr;
 
 using namespace Intrepid;
 
 class Solution {
 private:
-  typedef Teuchos::RCP< ElementType > ElementTypePtr;
-  typedef Teuchos::RCP< Element > ElementPtr;
-  typedef Teuchos::RCP< BasisCache > BasisCachePtr;
-  typedef Teuchos::RCP<Solution> SolutionPtr;  
-
   int _cubatureEnrichmentDegree;
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
   map< int, double > _energyErrorForCellIDGlobal;
@@ -273,7 +271,5 @@ public:
   void writeStatsToFile(const string &filePath, int precision=4);
   
 };
-
-typedef Teuchos::RCP<Solution> SolutionPtr;
 
 #endif

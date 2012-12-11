@@ -24,10 +24,6 @@
 #include "Function.h"
 #include "VarFactory.h"
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
-
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 

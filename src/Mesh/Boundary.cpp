@@ -44,9 +44,6 @@
 #include "BC.h"
 #include "BCFunction.h"
 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-
 Boundary::Boundary() {
   
 }
@@ -195,7 +192,6 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
   ipH1->addTerm(trace);
   ipH1->addTerm(trace->grad());
   globalDofIndicesAndValues.clear();
-  typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   int spaceDim = elemTypePtr->cellTopoPtr->getDimension();

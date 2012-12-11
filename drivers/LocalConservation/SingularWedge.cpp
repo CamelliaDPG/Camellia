@@ -21,13 +21,10 @@
 #endif
 
 
-bool enforceLocalConservation = false;
+bool enforceLocalConservation = true;
 double epsilon = 1e-1;
-double numRefs = 20;
+double numRefs = 15;
 double halfwidth = 0.5;
-
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -131,17 +128,18 @@ int main(int argc, char *argv[]) {
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+  IPPtr ip = confusionBF->graphNorm();
   // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  if (!enforceLocalConservation)
-    robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( v );
+  // IPPtr ip = Teuchos::rcp(new IP);
+  // FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  // if (!enforceLocalConservation)
+  //   ip->addTerm( ip_scaling * v );
+  // ip->addTerm( sqrt(epsilon) * v->grad() );
+  // ip->addTerm( beta * v->grad() );
+  // ip->addTerm( tau->div() );
+  // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+  // if (enforceLocalConservation)
+  //   ip->addZeroMeanTerm( v );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -162,17 +160,18 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(uhat, leadingWedge, one);
 
   SpatialFilterPtr trailingWedge = Teuchos::rcp( new TrailingWedge );
-  // bc->addDirichlet(beta_n_u_minus_sigma_n, trailingWedge, beta*n*one);
-  bc->addDirichlet(uhat, trailingWedge, one);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, trailingWedge, beta*n*one);
+  // bc->addDirichlet(uhat, trailingWedge, one);
 
   SpatialFilterPtr top = Teuchos::rcp( new Top );
-  // bc->addDirichlet(uhat, top, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, top, zero);
+  bc->addDirichlet(uhat, top, zero);
+  // bc->addDirichlet(beta_n_u_minus_sigma_n, top, zero);
 
   SpatialFilterPtr outflow = Teuchos::rcp( new Outflow );
   pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == zero, outflow);
   
   ////////////////////   BUILD MESH   ///////////////////////
+  bool allQuads = true;
   int H1Order = 3, pToAdd = 2;
   // define nodes for mesh
   vector< FieldContainer<double> > vertices;
@@ -181,36 +180,59 @@ int main(int argc, char *argv[]) {
   vector<int> q(4);
   vector<int> t(3);
 
-  pt(0) = -halfwidth; pt(1) = -1;
-  vertices.push_back(pt);
-  pt(0) =  0;         pt(1) =  0;
-  vertices.push_back(pt);
-  pt(0) =  halfwidth; pt(1) = -1;
-  vertices.push_back(pt);
-  pt(0) =  halfwidth; pt(1) =  0;
-  vertices.push_back(pt);
-  pt(0) =  halfwidth; pt(1) =  halfwidth;
-  vertices.push_back(pt);
-  pt(0) =  0;         pt(1) =  halfwidth;
-  vertices.push_back(pt);
-  pt(0) = -halfwidth; pt(1) =  halfwidth;
-  vertices.push_back(pt);
-  pt(0) = -halfwidth; pt(1) =  0;
-  vertices.push_back(pt);
+  if (allQuads)
+  {
+    pt(0) = -halfwidth; pt(1) = -1;
+    vertices.push_back(pt);
+    pt(0) =  0;         pt(1) =  0;
+    vertices.push_back(pt);
+    pt(0) =  halfwidth; pt(1) = -1;
+    vertices.push_back(pt);
+    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    vertices.push_back(pt);
+    pt(0) =  0;         pt(1) =  halfwidth;
+    vertices.push_back(pt);
+    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    vertices.push_back(pt);
 
-  t[0] = 0; t[1] = 1; t[2] = 7;
-  elementIndices.push_back(t);
-  t[0] = 1; t[1] = 2; t[2] = 3;
-  elementIndices.push_back(t);
-  q[0] = 1; q[1] = 3; q[2] = 4; q[3] = 5;
-  elementIndices.push_back(q);
-  q[0] = 7; q[1] = 1; q[2] = 5; q[3] = 6;
-  elementIndices.push_back(q);
+    q[0] = 0; q[1] = 1; q[2] = 4; q[3] = 5;
+    elementIndices.push_back(q);
+    q[0] = 1; q[1] = 2; q[2] = 3; q[3] = 4;
+    elementIndices.push_back(q);
+  }
+  else
+  {
+    pt(0) = -halfwidth; pt(1) = -1;
+    vertices.push_back(pt);
+    pt(0) =  0;         pt(1) =  0;
+    vertices.push_back(pt);
+    pt(0) =  halfwidth; pt(1) = -1;
+    vertices.push_back(pt);
+    pt(0) =  halfwidth; pt(1) =  0;
+    vertices.push_back(pt);
+    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    vertices.push_back(pt);
+    pt(0) =  0;         pt(1) =  halfwidth;
+    vertices.push_back(pt);
+    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    vertices.push_back(pt);
+    pt(0) = -halfwidth; pt(1) =  0;
+    vertices.push_back(pt);
+
+    t[0] = 0; t[1] = 1; t[2] = 7;
+    elementIndices.push_back(t);
+    t[0] = 1; t[1] = 2; t[2] = 3;
+    elementIndices.push_back(t);
+    q[0] = 1; q[1] = 3; q[2] = 4; q[3] = 5;
+    elementIndices.push_back(q);
+    q[0] = 7; q[1] = 1; q[2] = 5; q[3] = 6;
+    elementIndices.push_back(q);
+  }
 
   Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, confusionBF, H1Order, pToAdd) );  
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->setFilter(pc);
 
   if (enforceLocalConservation) {
@@ -245,13 +267,16 @@ int main(int argc, char *argv[]) {
       vector<int> cells_p;
       refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
       for (int i=0; i < cellsToRefine.size(); i++)
-        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-5)
+        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 1e-4)
         {
           int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
-          if (pOrder < 8)
+          if (allQuads)
             cells_p.push_back(cellsToRefine[i]);
           else
-            cout << "Reached cell size and polynomial order limits" << endl;
+            if (pOrder < 8)
+              cells_p.push_back(cellsToRefine[i]);
+            else
+              cout << "Reached cell size and polynomial order limits" << endl;
           //   cells_h.push_back(cellsToRefine[i]);
         }
         else
