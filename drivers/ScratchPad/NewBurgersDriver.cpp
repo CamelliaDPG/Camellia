@@ -32,8 +32,6 @@
 #include "HessianFilter.h"
 #include <sstream>
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-
 using namespace std;
 
 class PositivePart : public Function {
