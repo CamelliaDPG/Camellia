@@ -599,6 +599,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
   
   double tol = 1e-11;
+  
+  bool useLineSearch = false;
+  
   vector<bool> useHessianList;
   useHessianList.push_back(false);
   useHessianList.push_back(true);
@@ -689,7 +692,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
             
             do {
-              problem.iterate();
+              problem.iterate(useLineSearch);
               if ( rieszRep.get() ) {
                 rieszRep->computeRieszRep();
               }
@@ -780,6 +783,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   
   int horizontalCells = 2, verticalCells = 2;
   
+  bool useLineSearch = false;
+  
   for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
        exactIt != polyExactFunctions.end(); exactIt++) {
     PolyExactFunctions exactFxns = *exactIt;
@@ -869,7 +874,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       rieszRepRHS_naiveNorm->computeRieszRep();
 //      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
-      problem.iterate(); // calls backgroundFlow.solve()
+      problem.iterate(useLineSearch); // calls backgroundFlow.solve()
       
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: after first solve (i.e. with non-zero background flow), LTs disagree\n";
@@ -1045,6 +1050,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
   int overIntegrationForKovasznay = 5; // since the RHS isn't a polynomial...
 //  double nonlinear_step_weight = 1.0;
   
+  bool useLineSearch = false;
+  
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
        useHessianIt != useHessianList.end(); useHessianIt++) {
     bool useHessian = *useHessianIt;
@@ -1145,7 +1152,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
           
           do {
-            kProblem.iterate();
+            kProblem.iterate(useLineSearch);
             
             if ( rieszRep.get() ) {
               rieszRep->computeRieszRep();

@@ -185,6 +185,8 @@ int main(int argc, char *argv[]) {
   rank=mpiSession.getRank();
 #else
 #endif
+  bool useLineSearch = false;
+  
   int pToAdd = 2; // for optimal test function approximation
   int pToAddForStreamFunction = 2;
   double nonlinearStepSize = 1.0;
@@ -496,7 +498,7 @@ int main(int argc, char *argv[]) {
 //    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
   }
   
-  refinementStrategy->setEnforceOneIrregurity(enforceOneIrregularity);
+  refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
 
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
@@ -559,7 +561,7 @@ int main(int argc, char *argv[]) {
       
       double incr_norm;
       do {
-        problem.iterate();
+        problem.iterate(useLineSearch);
         incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
         if (rank==0) {
           cout << "\x1B[2K"; // Erase the entire current line.
@@ -630,7 +632,7 @@ int main(int argc, char *argv[]) {
     }
     double incr_norm;
     do {
-      problem.iterate();
+      problem.iterate(useLineSearch);
       incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
       if (rank==0) {
         cout << "\x1B[2K"; // Erase the entire current line.
