@@ -11,10 +11,6 @@
 
 bool enforceLocalConservation = false;
 
-
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:

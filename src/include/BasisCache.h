@@ -61,12 +61,12 @@ using namespace IntrepidExtendedTypes;
 
 class Mesh;
 class Function; // Function.h and BasisCache.h refer to each other...
+class BasisCache;
+
 typedef Teuchos::RCP<Function> FunctionPtr;
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-typedef Teuchos::RCP<ElementType> ElementTypePtr;
+typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
-  typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 private:
   int _numCells, _spaceDim;
   int _numSides;
@@ -188,7 +188,5 @@ public:
   
   void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
 };
-
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 #endif

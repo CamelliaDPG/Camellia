@@ -9,11 +9,10 @@
 #include "Intrepid_FieldContainer.hpp"
 
 #include "AbstractFunction.h"
+#include "BasisFactory.h"
 
 using namespace Intrepid;
 using namespace std;
-
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 
 class BasisSumFunction : public AbstractFunction {
  private:  

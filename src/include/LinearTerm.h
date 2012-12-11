@@ -29,14 +29,11 @@
 class LinearTerm;
 class Mesh;
 class Solution;
-
 class Function;
-typedef Teuchos::RCP<Function> FunctionPtr;
 
-typedef Teuchos::RCP<Solution> SolutionPtr;
 typedef Teuchos::RCP<LinearTerm> LinearTermPtr;
-
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
+typedef Teuchos::RCP<Solution> SolutionPtr;
+typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 class LinearTerm {

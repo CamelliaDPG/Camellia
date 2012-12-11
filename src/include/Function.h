@@ -18,13 +18,12 @@ class Mesh;
 class ExactSolution;
 class Solution;
 class Var;
-
 class Function;
 class BasisCache; // BasisCache.h and Function.h #include each other...
+
 typedef Teuchos::RCP<Function> FunctionPtr;
 typedef Teuchos::RCP<Var> VarPtr;
 typedef Teuchos::RCP<Solution> SolutionPtr;
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class Function {
 private:

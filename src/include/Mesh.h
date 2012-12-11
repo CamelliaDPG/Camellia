@@ -59,11 +59,12 @@
 #include "MeshPartitionPolicy.h"
 
 class Solution;
+class Mesh;
+
+typedef Teuchos::RCP<Mesh> MeshPtr;
+typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 class Mesh {
-  typedef Teuchos::RCP< ElementType > ElementTypePtr;
-  typedef Teuchos::RCP< Element > ElementPtr;
-  
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.

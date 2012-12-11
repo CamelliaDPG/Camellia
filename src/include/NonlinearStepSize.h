@@ -13,8 +13,6 @@
 #include "RieszRep.h"
 
 class NonlinearStepSize {
-  typedef Teuchos::RCP<Solution> SolutionPtr;
-
   double _fixedStepSize;
 public:
   NonlinearStepSize(double fixedStepSize = 0.5) {
@@ -26,7 +24,6 @@ public:
 };
 
 class LineSearchStep {
-  typedef Teuchos::RCP<Solution> SolutionPtr;
   double _nlRes;
   Teuchos::RCP<RieszRep> _residual;    // _residual is a nonlinear residual WHICH MUST DEPEND ON THE BACKGROUND FLOW
  public:

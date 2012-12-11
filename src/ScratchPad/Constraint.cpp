@@ -9,6 +9,8 @@
 #include "Constraint.h"
 #include "Function.h"
 
+typedef pair< FunctionPtr, VarPtr > LinearSummand;
+
 Constraint::Constraint(LinearTermPtr linearTerm, FunctionPtr f) {
   _linearTerm = linearTerm;
   _f = f;

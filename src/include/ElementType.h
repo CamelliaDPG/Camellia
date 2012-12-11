@@ -60,4 +60,6 @@ ElementType(Teuchos::RCP< DofOrdering > trialOrderPtr,
   
 };
 
+typedef Teuchos::RCP< ElementType > ElementTypePtr;
+
 #endif

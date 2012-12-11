@@ -45,11 +45,6 @@
 #include "Basis_HGRAD_1D_Cn_FEM.hpp"
 #include "BasisFactory.h"
 
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
-typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
-typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
-
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
 map< Basis<double,FieldContainer<double> >*, int > BasisFactory::_polyOrders; // allows lookup of poly order used to create basis

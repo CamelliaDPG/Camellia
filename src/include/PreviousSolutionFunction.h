@@ -14,8 +14,6 @@
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
 
-typedef Teuchos::RCP<Element> ElementPtr;
-
 class PreviousSolutionFunction : public Function {
   SolutionPtr _soln;
   LinearTermPtr _solnExpression;

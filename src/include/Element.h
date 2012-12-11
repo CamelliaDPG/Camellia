@@ -41,10 +41,12 @@
 #include "ElementType.h"
 #include "RefinementPattern.h"
 
+class Element;
+typedef Teuchos::RCP< Element > ElementPtr;
+
 using namespace std;
 
 class Element {
-  typedef Teuchos::RCP< Element > ElementPtr;
 private:
   bool _deleted;
   int _cellID; // unique ID, also the index for the Mesh into the Elements vector

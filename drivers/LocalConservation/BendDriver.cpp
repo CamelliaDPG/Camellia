@@ -21,9 +21,6 @@ double epsilon = 1e-2;
 int numRefs = 6;
 double alpha = 10;
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:

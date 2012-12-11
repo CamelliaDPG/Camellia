@@ -33,8 +33,6 @@
 #include <sstream>
 #include "SolutionTests.h"
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-
 using namespace std;
 
 class PositivePart : public Function {

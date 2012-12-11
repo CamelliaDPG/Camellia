@@ -63,8 +63,6 @@
 
 using namespace Intrepid;
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "WARNING: skipping unrefinement test.\n";
 //  numTestsRun++;

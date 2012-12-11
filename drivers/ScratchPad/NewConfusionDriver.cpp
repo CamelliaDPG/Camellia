@@ -15,9 +15,6 @@
 #else
 #endif
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class EntireBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {

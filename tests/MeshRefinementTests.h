@@ -11,9 +11,6 @@
 #include "TestBilinearFormFlux.h"
 #include "BilinearFormUtility.h"
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-typedef Teuchos::RCP<Element> ElementPtr;
-
 class MeshRefinementTests : public ::testing::Test {
   protected:
     virtual void SetUp();

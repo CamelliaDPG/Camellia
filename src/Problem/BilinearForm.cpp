@@ -43,9 +43,6 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-typedef Teuchos::RCP<ElementType> ElementTypePtr;
-
 static const string & S_OP_VALUE = "";
 static const string & S_OP_GRAD = "\\nabla ";
 static const string & S_OP_CURL = "\\nabla \\times ";

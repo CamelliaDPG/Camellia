@@ -55,8 +55,6 @@ using namespace std;
 
 class BilinearForm;
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-
 class DofOrderingFactory {
 private:
   struct Comparator {

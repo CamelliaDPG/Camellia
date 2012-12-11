@@ -15,9 +15,6 @@
 #else
 #endif
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 double pi = 2.0*acos(0.0);
 
 class InflowSquareBoundary : public SpatialFilter {

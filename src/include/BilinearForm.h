@@ -39,6 +39,9 @@
 class BasisCache;
 class ElementType;
 class DofOrdering;
+typedef Teuchos::RCP< BasisCache > BasisCachePtr;
+typedef Teuchos::RCP< ElementType > ElementTypePtr;
+typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
 
 using namespace std;
 using namespace Intrepid;
@@ -46,7 +49,6 @@ using namespace Intrepid;
 using namespace IntrepidExtendedTypes;
 
 class BilinearForm {
-  typedef Teuchos::RCP<ElementType> ElementTypePtr;
 public:
   BilinearForm();
   virtual bool trialTestOperator(int trialID, int testID, 
@@ -72,20 +74,20 @@ public:
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      int trialID, int testID, int operatorIndex,
-                                     Teuchos::RCP<BasisCache> basisCache);
+                                     BasisCachePtr basisCache);
   // default implementation calls BasisCache-less version
   
   
   virtual int optimalTestWeights(FieldContainer<double> &optimalTestWeights, FieldContainer<double> &innerProductMatrix,
                                  ElementTypePtr elemType, FieldContainer<double> &cellSideParities,
-                                 Teuchos::RCP<BasisCache> stiffnessBasisCache);
+                                 BasisCachePtr stiffnessBasisCache);
   
-  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
-                               FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
+  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, ElementTypePtr elemType,
+                               FieldContainer<double> &cellSideParities, BasisCachePtr basisCache);
   
-  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering, 
-                               Teuchos::RCP<DofOrdering> testOrdering, FieldContainer<double> &cellSideParities,
-                               Teuchos::RCP<BasisCache> basisCache);
+  virtual void stiffnessMatrix(FieldContainer<double> &stiffness, DofOrderingPtr trialOrdering, 
+                               DofOrderingPtr testOrdering, FieldContainer<double> &cellSideParities,
+                               BasisCachePtr basisCache);
                            
   const vector< int > & trialIDs();
   const vector< int > & testIDs();
@@ -116,4 +118,6 @@ protected:
   static set<int> _normalOperators;
   bool _useSPDSolveForOptimalTestFunctions;
 };
+
+typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;
 #endif
