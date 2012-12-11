@@ -691,11 +691,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
             
             do {
-<<<<<<< HEAD
               problem.iterate(useLineSearch);
-=======
-              problem.iterate(false);
->>>>>>> 2caf0cc2f7a77a156e9dd34e63b9c46e4ffe6569
               if ( rieszRep.get() ) {
                 rieszRep->computeRieszRep();
               }
@@ -877,11 +873,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       rieszRepRHS_naiveNorm->computeRieszRep();
 //      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
-<<<<<<< HEAD
       problem.iterate(useLineSearch); // calls backgroundFlow.solve()
-=======
-      problem.iterate(false); // calls backgroundFlow.solve()
->>>>>>> 2caf0cc2f7a77a156e9dd34e63b9c46e4ffe6569
       
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: after first solve (i.e. with non-zero background flow), LTs disagree\n";
@@ -1159,11 +1151,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
           
           do {
-<<<<<<< HEAD
             kProblem.iterate(useLineSearch);
-=======
-            kProblem.iterate(false);
->>>>>>> 2caf0cc2f7a77a156e9dd34e63b9c46e4ffe6569
             
             if ( rieszRep.get() ) {
               rieszRep->computeRieszRep();
