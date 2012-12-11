@@ -23,7 +23,6 @@ public:
   }
 };
 
-
 class InflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -58,7 +57,22 @@ public:
   }
 };
 
+// just for a discontinuity
+class CellIDFunction : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+	values(i,j) = cellIDs[i];
+      }
+    }
+  }
+};
 
+// is zero except on the edge (.5, y) on a 2x1 unit quad mesh - an edge restriction function
 class EdgeFunction : public Function {
 public:
   bool boundaryValueOnly() { 
@@ -73,7 +87,11 @@ public:
       for (int j = 0;j<numPoints;j++){
 	double x = points(i,j,0);
 	double y = points(i,j,1);
-	values(i,j) = x*y+1.0;
+	if (abs(x-.5)<tol){
+	  values(i,j) = 1.0;
+	}else{
+	  values(i,j) = 0.0;
+	}
       }
     }
   }
@@ -203,6 +221,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testErrorOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();   
+  setup();
+
+  if (testIntegrateDiscontinuousFunction()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -427,6 +452,68 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 }
 
 // tests whether a mixed type LT
+bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+
+  // define nodes for mesh
+  int order = 1;
+  int H1Order = order+1; int pToAdd = 1;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
+  
+  ////////////////////   integrate discontinuous function - cellIDFunction   ///////////////////////
+
+  FunctionPtr cellIDFxn = Teuchos::rcp(new CellIDFunction); // should be 0 on cellID 0, 1 on cellID 1
+  double jumpWeight = 13.3; // some random number
+  FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
+  FunctionPtr X = Teuchos::rcp(new Xn(1));
+  LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
+  
+  map<int,FunctionPtr> vmap;
+  vmap[v->ID()] = cellIDFxn;
+
+  FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false);
+  FunctionPtr edgeIntegrand = integrandLT->evaluate(vmap,true);
+  double value = volumeIntegrand->integrate(mesh,10) + edgeIntegrand->integrate(mesh,10);
+  double expectedValue = .5*(jumpWeight+1.0);
+  double diff = abs(expectedValue-value);
+  if (abs(diff)>1e-11){
+    success = false;
+    cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << value << endl;
+  }  
+  return success;
+}
+
+// tests whether a mixed type LT
 bool ScratchPadTests::testErrorOrthogonality(){
   bool success = true;
 
@@ -460,7 +547,7 @@ bool ScratchPadTests::testErrorOrthogonality(){
 
   // define nodes for mesh
   int order = 1;
-  int H1Order = order+1; int pToAdd = 2;
+  int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
@@ -470,6 +557,7 @@ bool ScratchPadTests::testErrorOrthogonality(){
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
   FunctionPtr uIn = Teuchos::rcp(new Uinflow);
   FunctionPtr n = Teuchos::rcp(new UnitNormalFunction);
@@ -490,6 +578,8 @@ bool ScratchPadTests::testErrorOrthogonality(){
   riesz->computeRieszRep();
   double rieszErr = riesz->getNorm();
   double energyErr = solution->energyErrorTotal();
+
+  // do initial check on consistency
   if (abs(rieszErr-energyErr)>1e-11){
     success = false;
     cout << "Failed testErrorOrthogonality() because riesz and energy error are inconsistent with each other - the energy error using the RieszRep class = " << rieszErr << ", while the energy error computed in Solution.cpp is " << energyErr << endl;
@@ -499,9 +589,14 @@ bool ScratchPadTests::testErrorOrthogonality(){
 
   map<int,FunctionPtr> err_rep_map;
   err_rep_map[v->ID()] = rieszRepFxn;
+  LinearTermPtr edgeOrthogonalityCheckLT = Teuchos::rcp(new LinearTerm);// residual 
+  LinearTermPtr elemOrthogonalityCheckLT = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr fnhatOutflow = Teuchos::rcp(new SpatiallyFilteredFunction(fnhatCopy,outflowBoundary));
+  edgeOrthogonalityCheckLT->addTerm(-fnhatOutflow*v,true);
+  elemOrthogonalityCheckLT->addTerm((beta*uCopy)*v->grad(),true);
 
-  FunctionPtr edgeResidual = residual->evaluate(err_rep_map, true) ;
-  FunctionPtr elemResidual = residual->evaluate(err_rep_map, false);
+  FunctionPtr edgeResidual = edgeOrthogonalityCheckLT->evaluate(err_rep_map, true) ;
+  FunctionPtr elemResidual = elemOrthogonalityCheckLT->evaluate(err_rep_map, false);
 
   double edgeVal = edgeResidual->integrate(mesh,10);
   double elemVal = elemResidual->integrate(mesh,10);
@@ -511,6 +606,7 @@ bool ScratchPadTests::testErrorOrthogonality(){
   double diff = abs(fluxDiff)+abs(fieldDiff);
   if (abs(diff)>1e-11){
     success = false;
+    cout << "fnhatCopy boundary part only evaluates to = " << fnhatCopy->boundaryValueOnly() << endl;
     cout << "Failed testErrorOrthogonality() with field diff = " << fieldDiff << " and flux diff = " << fluxDiff << endl;
   }
   
