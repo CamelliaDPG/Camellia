@@ -8,6 +8,7 @@
 
 #include "RieszRep.h"
 #include "BasisFactory.h" // for test
+#include "HessianFilter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -305,11 +306,6 @@ int main(int argc, char *argv[]) {
   }
 
   double squareSize = 1.0;
-  if (argc > 3){
-    squareSize = atof(argv[3]);
-    if (rank==0)
-      cout << "eps = " << eps << endl;
-  }
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -326,7 +322,7 @@ int main(int argc, char *argv[]) {
 
   vector<double> beta;
   beta.push_back(1.0);
-  beta.push_back(0.0);
+  beta.push_back(1.0);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
@@ -381,7 +377,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 1; int pToAdd = 1;
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
   
   FieldContainer<double> quadPoints(4,2);
   
@@ -415,14 +412,13 @@ int main(int argc, char *argv[]) {
   
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
 
-
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   
   // PREREFINE TWICE
-  double energyThreshold = 0.2; // for mesh refinements
+  double energyThreshold = .2; // for mesh refinements - just to make mesh irregular
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   int numRefs = 0;
   if (rank==0){
@@ -438,7 +434,6 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma2Copy = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
   FunctionPtr fnhatCopy = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n));
   FunctionPtr uhatCopy = Teuchos::rcp( new PreviousSolutionFunction(solution, uhat));
-  FunctionPtr minusOne = Teuchos::rcp(new ConstantScalarFunction(-1.0));
   
   ////////////////////   get residual   ///////////////////////
 
@@ -447,72 +442,76 @@ int main(int argc, char *argv[]) {
   e1[0] = 1;
   e2[1] = 1;
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
-  LinearTermPtr residualIBP = Teuchos::rcp(new LinearTerm);// residual
-
-  FunctionPtr X = Teuchos::rcp(new Xn(1));
-  FunctionPtr Y = Teuchos::rcp(new Yn(1));
-  FunctionPtr testFxn1 = X;
-  FunctionPtr testFxn2 = Y;
-  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
-  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
-  residual->addTerm(divTestFxn*v);
-  residualIBP->addTerm(vectorTest*n*v - vectorTest*v->grad() ); // boundary term
+  FunctionPtr Sigma = e1*sigma1Copy + e2*sigma2Copy;
   
-  /*
-  residual->addTerm(minusOne*beta*uCopy*v->grad());
-  residual->addTerm((sigma1Copy*e1 + sigma2Copy*e2)*v->grad());
-  residual->addTerm(fnhatCopy*v);
-
-  residual->addTerm(minusOne*uhatCopy*tau->dot_normal());
-  residual->addTerm((sigma1Copy*e1 + sigma2Copy*e2)*tau);
-  residual->addTerm(uCopy*tau->div());
-  */
-
-  IPPtr sobolevIP = Teuchos::rcp(new IP);
-  sobolevIP->addTerm(v);
-  //  sobolevIP->addTerm(v->grad());
-  sobolevIP->addTerm(tau);
-  sobolevIP->addTerm(tau->div());
-
+  residual->addTerm(fnhatCopy*v - (beta*uCopy - Sigma)*v->grad());
+  residual->addTerm((1.0/eps)*Sigma*tau + uCopy*tau->div() - uhatCopy*tau->dot_normal());
   cout << "making riesz representations" << endl;
-  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, sobolevIP, residual));
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   cout << "computing riesz representations" << endl;
   riesz->computeRieszRep();
-  Teuchos::RCP<RieszRep> rieszIBP = Teuchos::rcp(new RieszRep(mesh, sobolevIP, residualIBP));
-  rieszIBP->computeRieszRep();
-
   cout << "making rep fxns" << endl;
-  FunctionPtr rieszRepFxn = Teuchos::rcp(new RepFunction(v->ID(),riesz));
-  FunctionPtr rieszRepIBPFxn = Teuchos::rcp(new RepFunction(v->ID(),rieszIBP));
+  cout << "riesz error = " << riesz->getNorm() << endl;
+  cout << "energy error = " << solution->energyErrorTotal() << endl;
+  FunctionPtr rieszRepFxn = Teuchos::rcp(new RepFunction(v,riesz));
 
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numPts = basisCache->getPhysicalCubaturePoints().dimension(1);
-  FieldContainer<double> valOriginal( numCells, numPts);
-  FieldContainer<double> valIBP( numCells, numPts);
-  cout << "getting rep fxn values" << endl;
-  rieszRepFxn->values(valOriginal,basisCache);
-  rieszRepIBPFxn->values(valIBP,basisCache);
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, 
+							   nullRHS, nullIP) );
 
-  cout << "getting max diff " << endl;
-  double maxDiff = 0.0;
-  double tol = 1e-15;
-  for (int i = 0;i<numCells;i++){
-    for (int j = 0;j<numPts;j++){
-      maxDiff = max(abs(valOriginal(i,j)-valIBP(i,j)),maxDiff);
+  int numGlobalDofs = mesh->numGlobalDofs();
+  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+    solnPerturbation->clearSolution(); // clear all solns
+    if (solnPerturbation->isFluxOrTraceDof(dofIndex)){
+      solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);     
+      LinearTermPtr b_u =  confusionBF->testFunctional(solnPerturbation);
+      map<int,FunctionPtr> NL_err_rep_map;
+      NL_err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+      NL_err_rep_map[tau->ID()] = Teuchos::rcp(new RepFunction(tau,riesz));
+      FunctionPtr b_e = b_u->evaluate(NL_err_rep_map, true); // use boundary part only if flux or trace
+      double be_int = b_e->integrate(mesh,10);      
+      cout << "bilinear form evaluated at flux dof/error test = " << be_int << endl;
     }
   }
-  cout << "max diff = " << maxDiff << endl;
 
-  if (rank==0){
-    rieszRepFxn->writeValuesToMATLABFile(mesh, "rieszRep.m");
-    rieszRepIBPFxn->writeValuesToMATLABFile(mesh, "rieszRepIBP.m");
+
+  if (rank==0){    
+    rieszRepFxn->writeValuesToMATLABFile(mesh,"err_rep.m");
     solution->writeFluxesToFile(uhat->ID(), "uhatCond.dat");
     solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhatCond.dat");
-    solution->writeToVTK("solnCond.vtu",min(H1Order+1,4));
+    solution->writeToVTK("U.vtu",min(H1Order+1,4));
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
   // =========================================
+  /* 
+  VarFactory hessianVars = varFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL);
+  VarPtr du = hessianVars.test(u->ID());
+  VarPtr dsigma1 = hessianVars.test(sigma1->ID());
+  VarPtr dsigma2 = hessianVars.test(sigma2->ID());
+  BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form 
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,riesz));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,riesz));
+  
+  hessianBF->addTerm(scalingFxn*u,du); // to scale u?
+  hessianBF->addTerm(10.0*u,du); // to increase sigma (stress)
+
+  Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
+  solution->setFilter(hessianFilter);
+  solution->solve(false);  
+
+  if (rank==0){    
+    (e_v->dx()+e_tau->x()/eps)->writeValuesToMATLABFile(mesh,"artdiff_x.m");    
+    (e_v->dy()+e_tau->y()/eps)->writeValuesToMATLABFile(mesh,"artdiff_y.m");    
+    (e_tau->x()/eps)->writeValuesToMATLABFile(mesh,"artdiff_tau_x.m");    
+    (e_tau->y()/eps)->writeValuesToMATLABFile(mesh,"artdiff_tau_y.m");    
+    solution->writeToVTK("UPost.vtu",min(H1Order+1,4));
+    
+    cout << "wrote 2nd set of files: rates.vtu, uhat.dat\n";
+  }
+  */
 
   return 0;
 }

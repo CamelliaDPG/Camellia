@@ -58,6 +58,29 @@ public:
   }
 };
 
+class Udisc : public Function {
+public:
+  Udisc() : Function(0) {
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+	if (y>.5){
+	  values(cellIndex,ptIndex) = (y-1.0)*(y-1.0);
+	}else{
+	  values(cellIndex,ptIndex) = -y*y;
+	}
+      }
+    }
+  }
+};
+
 // inflow values for u
 class Uex : public Function {
   double _eps;
@@ -85,7 +108,10 @@ public:
 	double u = C0;
 	double u_x = 0.0;
 	double u_y = 0.0;  	
-	int numTerms = 1;
+	bool useDiscontinuous = false; // use discontinuous soln
+	int numTerms = 20;
+	if (!useDiscontinuous)
+	  numTerms = 1;
 	for (int n = 1;n<numTerms+1;n++){
 
 	  double lambda = n*n*pi*pi*_eps;
@@ -94,15 +120,17 @@ public:
 	  double r2 = (1.0-d)/(2.0*_eps);
     
 	  double Cn = 0.0;            
-	  if (n==1){
-	    Cn = 1.0; // first term only
-	  } 
-	  /*
-	  // discontinuous hat 
-	  Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
-	  Cn /= (n*pi);
-	  Cn /= (n*pi);    
-	  */
+	  if (!useDiscontinuous){
+	    if (n==1){
+	      Cn = 1.0; // first term only
+	    } 	  
+	  }else{
+	    // discontinuous hat 
+	    Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
+	    Cn /= (n*pi);
+	    Cn /= (n*pi);    
+	  }
+	  
 
 	  // normal stress outflow
 	  double Xbottom;
@@ -208,6 +236,14 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  int nCells = 2;
+  if ( argc > 3) {
+    nCells = atof(argv[3]);    
+    if (rank==0){
+      cout << "nCells = " << nCells << endl;
+    }
+  }
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -253,10 +289,10 @@ int main(int argc, char *argv[]) {
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
   //  FunctionPtr ip_scaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
-  //  robIP->addTerm( ip_scaling * v);
+  robIP->addTerm( ip_scaling * v);
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
 
-  robIP->addTerm( v );
+  //  robIP->addTerm( v );
   //  robIP->addTerm( 1.0/sqrt(eps) * tau );
 
   robIP->addTerm( sqrt(eps) * v->grad() );
@@ -288,30 +324,20 @@ int main(int argc, char *argv[]) {
 
   bc->addDirichlet(uhat, outflowBoundary, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact-sigma*n);  
-  //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact/eps);  
+  //  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);   // ignoring sigma
+  FunctionPtr u_disc = Teuchos::rcp( new Udisc );
+  //  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_disc);  
+
   //  bc->addDirichlet(uhat, inflowBoundary, u_exact);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int H1Order = 3, pToAdd = 5;
   
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
-  
-  int nCells = 2;
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
     
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
@@ -324,7 +350,8 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  double energyThreshold = 0.2; // for mesh refinements
+  //  double energyThreshold = 0.2; // for mesh refinements
+  double energyThreshold = 0.0; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
    
   ofstream convOut;
@@ -348,6 +375,8 @@ int main(int argc, char *argv[]) {
     u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
     u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
     u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
+    sig1_exact->writeValuesToMATLABFile(mesh, "s1_exact.m");
+    sig2_exact->writeValuesToMATLABFile(mesh, "s2_exact.m");
 
     convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
     if (rank==0){
@@ -358,18 +387,22 @@ int main(int argc, char *argv[]) {
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   convOut.close();  
-  return 0; 
+
   // one more solve on the final refined mesh:
   solution->condensedSolve(false);
 
   if (rank==0){
+    solution->writeFieldsToFile(u->ID(), "u.m");
+    solution->writeFieldsToFile(sigma1->ID(), "s1.m");
+    solution->writeFieldsToFile(sigma2->ID(), "s2.m");
     solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
     solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhat.dat");
+
     solution->writeToVTK("rates.vtu",min(H1Order+1,4));
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
-
+  return 0; 
   /*
   // determine trialIDs
   vector< int > trialIDs = mesh->bilinearForm()->trialIDs();
