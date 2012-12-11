@@ -52,6 +52,8 @@ public:
   bool testPenaltyConstraints();
   bool testLinearTermEvaluationConsistency();
   bool testErrorOrthogonality();
+  bool testIntegrateDiscontinuousFunction();
+
   std::string testSuiteName();
 };
 

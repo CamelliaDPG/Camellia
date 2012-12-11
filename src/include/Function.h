@@ -61,6 +61,8 @@ public:
   
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
   
+  double integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment);
+  
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
   double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
@@ -101,6 +103,7 @@ public:
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero();
+//  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);

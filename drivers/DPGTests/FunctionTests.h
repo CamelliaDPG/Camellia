@@ -56,6 +56,8 @@ public:
   bool testQuotientRule();
 
   bool testIntegrate();
+  
+  bool testJumpIntegral();
 
   std::string testSuiteName();
 };
