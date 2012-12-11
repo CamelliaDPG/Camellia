@@ -27,6 +27,16 @@ public:
   bool boundaryValueOnly();
 };
 
+// private class JumpFunction:
+//class JumpFunction : public Function {
+//  FunctionPtr _fxn; // function defined cell-wise
+//public:
+//  JumpFunction(FunctionPtr fxn);
+//  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+//  string displayString();
+//  bool boundaryValueOnly();
+//};
+
 Function::Function() {
   _rank = 0;
 }
@@ -204,6 +214,42 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
   }
+}
+
+double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {  
+  // for boundaries, the jump is 0
+  if (mesh->boundary().boundaryElement(cellID,sideIndex)) {
+    return 0;
+  }
+  int neighborCellID = mesh->getElement(cellID)->getNeighborCellID(sideIndex);
+  int neighborSideIndex = mesh->getElement(cellID)->getSideIndexInNeighbor(sideIndex);
+  
+  ElementTypePtr myType = mesh->getElement(cellID)->elementType();
+  ElementTypePtr neighborType = mesh->getElement(neighborCellID)->elementType();
+  
+  // TODO: rewrite this to compute in distributed fashion
+  vector<int> myCellIDVector;
+  myCellIDVector.push_back(cellID);
+  vector<int> neighborCellIDVector;
+  neighborCellIDVector.push_back(neighborCellID);
+  
+  BasisCachePtr myCache = Teuchos::rcp(new BasisCache( myType, mesh, true, cubatureDegreeEnrichment));
+  myCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), myCellIDVector, true);
+  
+  BasisCachePtr neighborCache = Teuchos::rcp(new BasisCache( neighborType, mesh, true, cubatureDegreeEnrichment));
+  neighborCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(neighborCellID), neighborCellIDVector, true);
+  
+  double sideParity = mesh->cellSideParitiesForCell(cellID)[sideIndex];
+  // cellIntegral will store the difference between my value and neighbor's
+  FieldContainer<double> cellIntegral(1);
+  this->integrate(cellIntegral, neighborCache->getSideBasisCache(neighborSideIndex), true);
+//  cout << "Neighbor integral: " << cellIntegral[0] << endl;
+  cellIntegral[0] *= -1;
+  this->integrate(cellIntegral, myCache->getSideBasisCache(sideIndex), true);
+//  cout << "integral difference: " << cellIntegral[0] << endl;
+  
+  // multiply by sideParity to make jump uniquely valued.
+  return sideParity * cellIntegral(0);
 }
 
 double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
@@ -562,6 +608,12 @@ FunctionPtr Function::zero() {
   static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   return _zero;
 }
+
+//FunctionPtr Function::jump(FunctionPtr f) {
+//  FunctionPtr sgn = sideParity();
+//  return sgn * f;
+////  return Teuchos::rcp( new JumpFunction(f) );
+//}
 
 ConstantScalarFunction::ConstantScalarFunction(double value) { 
   _value = value;
@@ -1431,6 +1483,22 @@ FunctionPtr SimpleSolutionFunction::dz() {
     return Function::solution(_var->dz(), _soln);
   }
 }
+
+//JumpFunction::JumpFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+//  _fxn = fxn;
+//}
+//void JumpFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//  // TODO: implement this method
+//  cout << "WARNING: JumpFunction::values() unimplemented." << endl;
+//}
+//string JumpFunction::displayString() {
+//  ostringstream ss;
+//  ss << "[" << _fxn->displayString() << "]";
+//  return ss.str();
+//}
+//bool JumpFunction::boundaryValueOnly() {
+//  return true;
+//}
 
 Cos_ay::Cos_ay(double a) {
   _a = a;

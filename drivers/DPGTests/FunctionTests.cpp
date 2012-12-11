@@ -7,6 +7,7 @@
 //
 
 #include "FunctionTests.h"
+#include "SpatiallyFilteredFunction.h"
 
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
 class UPrev : public Function {
@@ -108,6 +109,13 @@ void FunctionTests::setup() {
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
+  setup();
+  if (testJumpIntegral()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testIntegrate()) {
     numTestsPassed++;
@@ -388,6 +396,101 @@ bool FunctionTests::testIntegrate(){
     success = false;
     cout << "failing testIntegrate()" << endl;
   }
+  return success;
+}
+
+class CellIDFilteredFunction : public Function {
+  FunctionPtr _fxn;
+  set<int> _cellIDs;
+public:
+  CellIDFilteredFunction(FunctionPtr fxn, set<int> cellIDs) : Function(fxn->rank()) {
+    _fxn = fxn;
+    _cellIDs = cellIDs;
+  }
+  CellIDFilteredFunction(FunctionPtr fxn, int cellID) : Function(fxn->rank()) {
+    _fxn = fxn;
+    _cellIDs.insert(cellID);
+  }
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    // not the most efficient implementation
+    _fxn->values(values,basisCache);
+    vector<int> contextCellIDs = basisCache->cellIDs();
+    int cellIndex=0; // keep track of index into values
+    
+    int entryCount = values.size();
+    int numCells = values.dimension(0);
+    int numEntriesPerCell = entryCount / numCells;
+    
+    for (vector<int>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
+      int cellID = *cellIt;
+      if (_cellIDs.find(cellID) == _cellIDs.end()) {
+        // clear out the associated entries
+        for (int j=0; j<numEntriesPerCell; j++) {
+          values[cellIndex*numEntriesPerCell + j] = 0;
+        }
+      }
+      cellIndex++;
+    }
+  }
+};
+
+bool FunctionTests::testJumpIntegral() {
+  bool success = true;
+  double tol = 1e-14;
+  
+  // define nodes for mesh
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+  
+  int H1Order = 1, pToAdd = 0;
+  int horizontalCells = 2, verticalCells = 2;
+  int numSides = 4;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                _confusionBF, H1Order, H1Order+pToAdd);
+  
+  FieldContainer<double> points(1,2);
+  // southwest center:
+  points(0,0) = 0.25; points(0,1) = 0.25;
+  vector< Teuchos::RCP<Element> > elements = mesh->elementsForPoints(points);
+  
+  int swCellID = elements[0]->cellID();
+  
+  double val = 1.0;
+  FunctionPtr valFxn = Function::constant(val);
+  FunctionPtr valOnSWCell = Teuchos::rcp( new CellIDFilteredFunction(valFxn,swCellID) );
+  
+  // the jump for this should be 1 along the two interior edges, each of length 0.5
+  double sideLength = 0.5;
+  
+  int cubEnrichment = 0;
+  
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    double actualValue = valOnSWCell->integralOfJump(mesh, swCellID, sideIndex, cubEnrichment);
+    double expectedValue;
+    if (mesh->boundary().boundaryElement(swCellID, sideIndex)) {
+      expectedValue = 0;
+    } else {
+      double sideParity = mesh->parityForSide(swCellID, sideIndex);
+      expectedValue = sideParity * val * sideLength;
+    }
+    
+    double diff = abs(actualValue-expectedValue);
+    if (diff > tol) {
+      cout << "testJumpFunction(): expected " << expectedValue << " but actualValue was " << actualValue << endl;
+      success = false;
+    }
+  }
+  
   return success;
 }
 
