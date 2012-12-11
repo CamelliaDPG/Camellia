@@ -73,10 +73,9 @@ private:
   typedef Teuchos::RCP< ElementType > ElementTypePtr;
   typedef Teuchos::RCP< Element > ElementPtr;
   typedef Teuchos::RCP< BasisCache > BasisCachePtr;
-  typedef Teuchos::RCP<Solution> SolutionPtr;
-  
+  typedef Teuchos::RCP<Solution> SolutionPtr;  
+
   int _cubatureEnrichmentDegree;
-  
   map< int, FieldContainer<double> > _solutionForCellIDGlobal; // eventually, replace this with a distributed _solutionForCellID
   map< int, double > _energyErrorForCellIDGlobal;
   
@@ -138,6 +137,7 @@ public:
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   
   void clear();
+  void clearSolution();
   void clearSolution(int trialID);
 
   int cubatureEnrichmentDegree() const;
@@ -162,7 +162,12 @@ public:
 
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
-  
+
+  // next 3 added by Jesse
+  void setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex);
+  void determineLocalGlobalMap();
+  bool isFluxOrTraceDof(int globalDofIndex);
+
   const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
   
   double integrateSolution(int trialID);

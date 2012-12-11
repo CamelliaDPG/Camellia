@@ -50,7 +50,8 @@ public:
   bool testConstantFunctionProduct();
   bool testSpatiallyFilteredFunction();
   bool testPenaltyConstraints();
-  
+  bool testLinearTermEvaluationConsistency();
+  bool testErrorOrthogonality();
   std::string testSuiteName();
 };
 
