@@ -10,9 +10,6 @@
 #include "InnerProductScratchPad.h"
 #include "BasisCache.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
 class BasisCacheTests : public TestSuite {  
   Teuchos::RCP<Mesh> _spectralConfusionMesh; // 1x1 mesh, H1 order = 1, pToAdd = 0
   Teuchos::RCP<BF> _confusionBF; // standard confusion bilinear form

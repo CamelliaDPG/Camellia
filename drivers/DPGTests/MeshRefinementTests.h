@@ -23,12 +23,6 @@
 #include "BilinearForm.h"
 #include "TestBilinearFormFlux.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
-typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
-typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
-
 class MeshRefinementTests : public TestSuite {
   // in what follows:
   /*

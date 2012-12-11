@@ -39,14 +39,9 @@ int numRefs = 12;
 int numNRSteps = 1;
 int numPreRefs = 0;
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 typedef map< int, sparseFxnMatrix > sparseFxnTensor; // dim = {spatial dim, testID, trialID}
-
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-typedef Teuchos::RCP< Mesh > MeshPtr;
 
 // ===================== Mesh functions ====================
 

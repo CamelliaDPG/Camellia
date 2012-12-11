@@ -18,9 +18,6 @@
 #include "InnerProductScratchPad.h"
 #include "BasisCache.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
 /*
  For now, this is sort of a grab bag for tests against all the "new-style"
  (a.k.a. "ScratchPad") items.  There are some tests against these elsewhere
