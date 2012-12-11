@@ -23,9 +23,6 @@ int numRefs = 4;
 double ramp = sqrt(epsilon);
 // double ramp = 1./64.;
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:

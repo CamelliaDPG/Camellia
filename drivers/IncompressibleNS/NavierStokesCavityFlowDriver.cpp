@@ -34,9 +34,6 @@
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
 
-typedef Teuchos::RCP<Element> ElementPtr;
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else

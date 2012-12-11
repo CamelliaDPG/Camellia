@@ -32,8 +32,6 @@
 #include "MultiBasis.h"
 #include "BasisFactory.h"
 
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-
 DofOrdering::DofOrdering() { // constructor
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;

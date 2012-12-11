@@ -36,8 +36,6 @@
 #include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-
 using namespace std;
 
 class EpsilonScaling : public hFunction {

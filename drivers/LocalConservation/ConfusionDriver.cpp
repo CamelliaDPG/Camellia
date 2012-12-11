@@ -21,12 +21,9 @@
 
 
 double epsilon = 1e-2;
-double numRefs = 6;
+double numRefs = 0;
 
 bool enforceLocalConservation = true;
-
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -252,14 +249,15 @@ int main(int argc, char *argv[]) {
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
+    if (rank==0){
+      cout << "Solved" << endl;
+      solution->writeToVTK("vector");
+      if (refIndex < numRefs)
+      {
+        refinementStrategy.refine(rank==0); // print to console on rank 0
+      }
+    }     
 
-    if (refIndex < numRefs)
-    {
-      if (rank==0){
-        cout << "Performing refinement number " << refIndex << endl;
-      }     
-      refinementStrategy.refine(rank==0); // print to console on rank 0
-    }
   }
 
   return 0;

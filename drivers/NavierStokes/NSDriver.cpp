@@ -35,14 +35,9 @@
 #include "MeshPolyOrderFunction.h"
 #include "CondensationSolver.h"
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 typedef map< int, sparseFxnMatrix > sparseFxnTensor; // dim = {spatial dim, testID, trialID}
-
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-typedef Teuchos::RCP< Mesh > MeshPtr;
 
 static const double GAMMA = 1.4;
 static const double PRANDTL = 0.72;

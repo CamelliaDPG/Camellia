@@ -38,7 +38,6 @@
 
 #include "Intrepid_CellTools.hpp"
 
-typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
 typedef Teuchos::RCP<FieldContainer<double> > FCPtr;
 
 MultiBasis::MultiBasis(vector< BasisPtr > bases, FieldContainer<double> &subRefNodes, shards::CellTopology &cellTopo) {

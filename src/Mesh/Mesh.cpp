@@ -52,11 +52,6 @@
 
 using namespace Intrepid;
 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
-
 Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest) : _dofOrderingFactory(bilinearForm) {
   _vertices = vertices;

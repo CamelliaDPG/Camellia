@@ -15,9 +15,6 @@
 #else
 #endif
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 double pi = 2.0*acos(0.0);
 
 class InflowSquareBoundary : public SpatialFilter {
@@ -43,13 +40,56 @@ public:
 	double x = points(i,j,0);
 	double y = points(i,j,1);
 	values(i,j) = 0.0;
-	if (x<.25 && abs(y)<tol){
-	  values(i,j) = 1.0-x/.25;
+	if (abs(y)<tol){
+	  values(i,j) = 1.0-x;
 	}
-	if (y<.25 && abs(x)<tol){
-	  values(i,j) = 1.0-y/.25;
+	if (abs(x)<tol){
+	  values(i,j) = 1.0-y;
 	}
 
+      }
+    }
+  }
+};
+
+class LinearOrthogPoly : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    double tol = 1e-11;
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+	double x = points(i,j,0);
+	double y = points(i,j,1);
+	if (abs(y)<tol || abs(y-1.0)<tol){ // if on top or bottom
+	  //	  values(i,j) = (6*x*x-6*x+1);
+	  values(i,j) = 20*x*x*x - 30*x*x + 12 * x - 1;
+	}else if (abs(x)<tol || abs(x-1.0)<tol){ // if on sides
+	  //	  values(i,j) = (6*y*y-6*y+1);
+	  values(i,j) = 20*y*y*y - 30*y*y + 12*y - 1;
+	}
+      }
+    }
+  }
+};
+
+class EdgeFunction : public Function {
+public:
+  bool boundaryValueOnly() { 
+    return true; 
+  } 
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    double tol = 1e-11;
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+	double x = points(i,j,0);
+	double y = points(i,j,1);
+	values(i,j) = x*y+1.0;
       }
     }
   }
@@ -95,7 +135,7 @@ int main(int argc, char *argv[]) {
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
-  convectionBF->addTerm( u, v);
+  //  convectionBF->addTerm( u, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
@@ -109,79 +149,29 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr zero = Function::constant(0.0);
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = zero;
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
+
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  //  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
 
-  //  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
   FunctionPtr uIn = Teuchos::rcp(new Uinflow);
   FunctionPtr n = Teuchos::rcp(new UnitNormalFunction);
   bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);  
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int order = 0;
+  int order = 8;
   int H1Order = order+1; int pToAdd = 2;
   
-  FieldContainer<double> quadPoints(4,2);
-  double squareSize = 1.0;
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = squareSize;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = squareSize;
-  quadPoints(2,1) = squareSize;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = squareSize;
- 
-  int horizontalCells = nCells, verticalCells = nCells;
-  
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                convectionBF, H1Order, H1Order+pToAdd);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  /*
-  LinearTermPtr conserved = Teuchos::rcp(new LinearTerm(1.0,u));
-  LinearTermPtr flux = Teuchos::rcp(new LinearTerm(1.0,beta_n_u));  
-  conserved->addTerm(flux,true);
-  solution->lagrangeConstraints()->addConstraint( conserved == Function::constant(0.0));
-  */
-      
-  ElementTypePtr elemType = mesh->getElement(0)->elementType();
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
-  vector<int> cellIDs;
-  vector< ElementPtr > allElems = mesh->activeElements();
-  vector< ElementPtr >::iterator elemIt;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    cellIDs.push_back((*elemIt)->cellID());
-  }
-  bool createSideCacheToo = true; 
-  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
-
-  int numTrialDofs = elemType->trialOrderPtr->totalDofs();
-  cout << "num Trial dofs " << numTrialDofs << endl;
-  int numCells = mesh->numElements();
-  FieldContainer<double> lhs(numCells,numTrialDofs);
-  LinearTermPtr linTerm = Teuchos::rcp(new LinearTerm(1.0,beta_n_u));
-  LinearTermPtr field = Teuchos::rcp(new LinearTerm(1.0,u));
-  linTerm->addTerm(field,true);
-  linTerm->integrate(lhs, elemType->trialOrderPtr, basisCache->getSideBasisCache(0));  
-  for (int c = 0;c<numCells;c++){
-    for (int i = 0;i<numTrialDofs;i++){
-      cout << "linTerm at cell " << c << " and dof " << i << "= " << lhs(c,i) << endl;
-    }
-  }
- 
-
+  
   double energyThreshold = .2; // for mesh refinements - just to make mesh irregular
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   int numRefs = 0;
@@ -199,12 +189,50 @@ int main(int argc, char *argv[]) {
   ////////////////////   get residual   ///////////////////////
 
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
-  residual->addTerm(-fnhatCopy*v + (beta*uCopy)*v->grad() - uCopy*v);
+  residual->addTerm(-fnhatCopy*v + (beta*uCopy)*v->grad());
+
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
   cout << "riesz error = " << riesz->getNorm() << endl;
   cout << "energy error = " << solution->energyErrorTotal() << endl;
   FunctionPtr rieszRepFxn = Teuchos::rcp(new RepFunction(v,riesz));
+
+  map<int,FunctionPtr> err_rep_map;
+  err_rep_map[v->ID()] = rieszRepFxn;
+
+  FunctionPtr edgeResidual = residual->evaluate(err_rep_map, true) ;
+  FunctionPtr elemResidual = residual->evaluate(err_rep_map, false);
+
+  LinearTermPtr edgeOnlyRes = Teuchos::rcp(new LinearTerm);// residual 
+  edgeOnlyRes->addTerm(-fnhatCopy*v);
+  FunctionPtr edgeOnlyFxn = edgeOnlyRes->evaluate(err_rep_map,true);
+
+  double edgeRes = edgeResidual->integrate(mesh,10);
+  double elemRes = elemResidual->integrate(mesh,10);
+  double edgeOnlyResVal = edgeOnlyFxn->integrate(mesh,10);
+  cout << "residual eval'd at edge = " << edgeRes << ", vs edge only residual " << edgeOnlyResVal << endl;
+  //  cout << "eleme residual = " << elemRes << " and total residual = " << elemRes + edgeRes << endl;
+  
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, 
+							   nullRHS, nullIP) );
+  int numGlobalDofs = mesh->numGlobalDofs();
+  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+    if (solution->isFluxOrTraceDof(dofIndex)){
+      solnPerturbation->clearSolution(); // clear all solns   
+      solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);     
+      LinearTermPtr b_u =  convectionBF->testFunctional(solnPerturbation);
+      map<int,FunctionPtr> NL_err_rep_map;
+      NL_err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+// NL_err_rep_map[v->ID()] = Teuchos::rcp(new LinearOrthogPoly);
+      FunctionPtr b_e = b_u->evaluate(NL_err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux or trace
+      double be_int = b_e->integrate(mesh,10);      
+      cout << "bilinear form evaluated at flux dof/error test = " << be_int << endl;
+    }
+  }
+
 
   if (rank==0){    
     rieszRepFxn->writeValuesToMATLABFile(mesh,"err_rep.m");

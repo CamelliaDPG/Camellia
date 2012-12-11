@@ -152,9 +152,10 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
@@ -163,7 +164,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   
   // slow tests: keep at the end, except when debugging these...

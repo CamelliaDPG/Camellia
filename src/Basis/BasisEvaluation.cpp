@@ -41,8 +41,6 @@
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
 
 FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                  const FieldContainer<double> &refPoints) {

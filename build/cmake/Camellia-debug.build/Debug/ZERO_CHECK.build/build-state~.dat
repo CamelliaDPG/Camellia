@@ -1,28 +1,0 @@
-TZERO_CHECK
-v4
-r1
-cCheck dependencies
-cPhaseScriptExecution "CMake Rules" /Users/nroberts/Documents/Camellia/build/cmake/Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh
-
-N/Users/nroberts/Documents/Camellia/build/cmake/Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh
-c000000004F973A9300000000000000B7
-t1335310995
-s183
-
-CCheck dependencies
-r0
-lSLF04#21%IDEActivityLogSection1@2#32"com.apple.dt.IDE.BuildLogSection18"Check dependenciesedbc7d137247b541^603e81137247b541^---0#1#0#--18"Check dependencies36"AA4828F2-F7D8-4CC7-9E0F-AF7034F957B2-
-
-CPhaseScriptExecution "CMake Rules" /Users/nroberts/Documents/Camellia/build/cmake/Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh
-s357003795.524366
-e357003795.720355
-r1
-xPhaseScriptExecution
-xCMake Rules
-x/Users/nroberts/Documents/Camellia/build/cmake/Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh
-oecho ""
-o
-omake -f /Users/nroberts/Documents/Camellia/build/cmake/CMakeScripts/ReRunCMake.make
-omake[1]: `CMakeFiles/cmake.check_cache' is up to date.
-lSLF04#21%IDEActivityLogSection1@2#32"com.apple.dt.IDE.BuildLogSection37"Run custom shell script 'CMake Rules'44a387137247b541^12dcb8137247b541^-148"echo ""make -f /Users/nroberts/Documents/Camellia/build/cmake/CMakeScripts/ReRunCMake.makemake[1]: `CMakeFiles/cmake.check_cache' is up to date.3(21%IDEActivityLogMessage2@8"echo ""-357003795#0#8#-0#-----2@84"make -f /Users/nroberts/Documents/Camellia/build/cmake/CMakeScripts/ReRunCMake.make-357003795#9#84#-0#-----2@55"make[1]: `CMakeFiles/cmake.check_cache' is up to date.-357003795#93#55#-0#-----0#0#0#--309"PhaseScriptExecution "CMake Rules" Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh    cd /Users/nroberts/Documents/Camellia/build/cmake    /bin/sh -c /Users/nroberts/Documents/Camellia/build/cmake/Camellia-debug.build/Debug/ZERO_CHECK.build/Script-13809C04B4B6402FAAE4D718.sh36"697DE559-69E3-4CC9-83CF-8C88777FE0A9-
-

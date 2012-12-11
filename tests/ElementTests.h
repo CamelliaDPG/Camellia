@@ -7,8 +7,6 @@
 #include "Mesh.h"
 #include "InnerProductScratchPad.h"
 
-typedef Teuchos::RCP<Element> ElementPtr;
-
 class ElementTests : public ::testing::Test {
   protected:
     virtual void SetUp();

@@ -10,8 +10,6 @@
 #include "MeshRefinementTests.h"
 #include "BilinearFormUtility.h"
 
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-
 bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh) {
   bool success = true;
   int numElements = mesh->numActiveElements();

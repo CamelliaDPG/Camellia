@@ -60,15 +60,6 @@
 #include "LinearTerm.h"
 #include "BasisCache.h"
 
-
-typedef Teuchos::RCP<Mesh> MeshPtr;
-typedef Teuchos::RCP<LinearTerm> LtPtr;
-
-typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
-typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr; 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
-
 class RieszRep {
  private:
 
@@ -79,12 +70,12 @@ class RieszRep {
   
   MeshPtr _mesh;
   Teuchos::RCP< DPGInnerProduct > _ip;
-  LtPtr _rhs;
+  LinearTermPtr _rhs;
   bool _printAll;
   bool _repsNotComputed;
  
  public:
-  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LtPtr &rhs){
+  RieszRep(MeshPtr mesh, Teuchos::RCP< DPGInnerProduct > ip, LinearTermPtr &rhs){
     _mesh = mesh;
     _ip = ip;
     _rhs = rhs;
@@ -96,11 +87,11 @@ class RieszRep {
     _printAll = printAll;
   }
 
-  void setFunctional(LtPtr rhs){
+  void setFunctional(LinearTermPtr rhs){
     _rhs = rhs;
   }
 
-  LtPtr getRHS();
+  LinearTermPtr getRHS();
 
   // for testing
   map<int,FieldContainer<double> > integrateRHS();

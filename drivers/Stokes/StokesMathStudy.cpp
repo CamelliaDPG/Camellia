@@ -25,13 +25,6 @@
 #else
 #endif
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<DPGInnerProduct> DPGInnerProductPtr;
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
-typedef Teuchos::RCP<ElementType> ElementTypePtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 class SquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {

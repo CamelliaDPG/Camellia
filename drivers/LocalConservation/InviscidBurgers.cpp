@@ -33,8 +33,6 @@ bool enforceLocalConservation = false;
 double newtonStepSize = 1.0;
 int maxNewtonIterations = 100;
 
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-
 class U0 : public SimpleFunction {
   public:
     double value(double x, double y) {

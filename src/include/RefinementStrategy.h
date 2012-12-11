@@ -9,17 +9,16 @@
 #ifndef Camellia_RefinementStrategy_h
 #define Camellia_RefinementStrategy_h
 
+#include "Teuchos_RCP.hpp"
+
 class Solution;
 class Mesh;
-
-#include "Teuchos_RCP.hpp"
+typedef Teuchos::RCP<Solution> SolutionPtr;
 
 using namespace std;
 
 class RefinementStrategy {
 protected:
-  typedef Teuchos::RCP<Solution> SolutionPtr;
-  
   struct RefinementResults {
     int numElements;
     int numDofs;

@@ -21,6 +21,20 @@ else()
   link_libraries(vtkHybrid)
 endif()
 
+if(MPI_DIR)
+  MESSAGE("MPI_DIR = ${MPI_DIR}")
+  include_directories(${MPI_DIR}/include)
+  link_libraries(-L/Users/nroberts/lib/openmpi-1.4.3/lib -lmpi -lopen-rte -lopen-pal -lutil)
+#  link_directories(${MPI_DIR})
+#  link_libraries(mpi)
+#  link_libraries(mpi_f77)
+#  link_libraries(${MPI_DIR}/lib/mpi)
+#  link_libraries(${MPI_DIR}/lib/mpi_f77)
+  if(SCALAPACK_LIB)
+    link_libraries(${SCALAPACK_LIB})
+  endif()
+endif()
+
 # If FIND_PACKAGE successfully found your Trilinos install, it will
 # set the Boolean flag Trilinos_FOUND.  The following IF statement
 # fails with a FATAL_ERROR if Trilinos was not found.  If it _was_
@@ -56,18 +70,18 @@ ENDIF()
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ need
 # to edit this line.
-IF(NOT CMAKE_CXX_COMPILER)
+#IF(NOT CMAKE_CXX_COMPILER)
   MESSAGE("Setting CXX compiler.")
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
-ENDIF()
+#ENDIF()
 
 # If you haven't already set the C compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ 
 # need to edit this line.
-IF(NOT CMAKE_C_COMPILER)
+#IF(NOT CMAKE_C_COMPILER)
   MESSAGE("Setting C compiler.")
   SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
-ENDIF()
+#ENDIF()
 
 # If you haven't already set the Fortran compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ 
@@ -100,7 +114,7 @@ ENDIF( ${CAMELLIA_BUILD_TYPE} MATCHES "debug" )
 MESSAGE("CAMELLIA_SOURCE_DIR = ${CAMELLIA_SOURCE_DIR} ")
 FILE(GLOB_RECURSE SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
 
-set(DRIVERS_DIR "../../drivers" )
+set(DRIVERS_DIR "${CAMELLIA_SOURCE_DIR}/../drivers" )
 
 set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
 
@@ -204,6 +218,9 @@ include_directories("${DRIVERS_DIR}/Confusion") # for certain tests in DPGTests
 include_directories("${DRIVERS_DIR}/Stokes") # for certain tests in DPGTests
 include_directories(${Trilinos_TPL_INCLUDE_DIRS})
 include_directories(${Trilinos_INCLUDE_DIRS})
+if (MUMPS_DIR)
+  include_directories(${MUMPS_DIR}/include)
+endif()
 
 # Add to the library path Trilinos' library path, and the library
 # paths of the third-party libraries (TPLs) with which Trilinos was
@@ -281,4 +298,4 @@ target_link_libraries(NavierStokesStudy
   ${CAMELLIA_LIBRARY_NAME}
   )
 
-add_subdirectory(../../tests ${PROJECT_BINARY_DIR}/tests)
+add_subdirectory(${CAMELLIA_SOURCE_DIR}/../tests ${PROJECT_BINARY_DIR}/tests)

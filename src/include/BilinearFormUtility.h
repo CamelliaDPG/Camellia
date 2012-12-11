@@ -50,9 +50,6 @@ using namespace IntrepidExtendedTypes;
 
 class DPGTests;
 
-typedef Teuchos::RCP<BasisCache> BasisCachePtr;
-typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;
-
 class BilinearFormUtility {
 private:
   static bool _warnAboutZeroRowsAndColumns;

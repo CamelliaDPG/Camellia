@@ -62,12 +62,13 @@ using namespace IntrepidExtendedTypes;
  
  */
 
+typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
+typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
+typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
+typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
+
 class BasisFactory {
 private:
-  typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
-  typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
-  typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
-  typedef Teuchos::RCP<Vectorized_Basis<double, FieldContainer<double> > > VectorBasisPtr;
   static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
               _existingBasis; // keys are ((polyOrder,cellTopoKey),fs))
   

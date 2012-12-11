@@ -117,8 +117,6 @@ void Solution::setCubatureEnrichmentDegree(int value) {
   _cubatureEnrichmentDegree = value;
 }
 
-typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< Element > ElementPtr;
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 2; // overrides the above, if it results in too-small batches
 
@@ -272,9 +270,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 #else
   Epetra_SerialComm Comm;
 #endif
-  
-  typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
-  typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr; 
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -3139,9 +3134,6 @@ void Solution::getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldC
 
 void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector){
 
-  typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
-  typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr; 
-  
   int cellID = elem->cellID();
 
   ElementTypePtr elemTypePtr = elem->elementType();   

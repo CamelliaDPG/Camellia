@@ -12,9 +12,6 @@
 
 bool enforceLocalConservation = false;
 
-typedef Teuchos::RCP<IP> IPPtr;
-typedef Teuchos::RCP<BF> BFPtr;
-
 double pi = 2.0*acos(0.0);
 
 class EpsilonScaling : public hFunction {
@@ -273,7 +270,8 @@ int main(int argc, char *argv[]) {
   //  FunctionPtr weight = Function::constant(eps) + X;
   double cut = pow(.5,numPreRefs);
   FunctionPtr weight = Function::constant(eps) + Teuchos::rcp(new WeightFunction(cut));
-  qoptIP->addTerm( weight*(tau / eps + v->grad()) );
+  qoptIP->addTerm( tau / eps + v->grad() );
+  //  qoptIP->addTerm( weight*(tau / eps + v->grad()) );
   qoptIP->addTerm( beta * v->grad() - tau->div() );
 
   // robust test norm
@@ -300,9 +298,9 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr u_exact = Teuchos::rcp( new Uex(eps,0) );
   FunctionPtr sig1_exact = Teuchos::rcp( new Uex(eps,1) );
-  FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );
+  FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );  
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  
+ 
   bc->addDirichlet(uhat, outflowBoundary, zero); // wall BC - constant throughout
 
   bool useRobustBC = false;
@@ -315,33 +313,64 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 2, pToAdd = 2;
-  
-  FieldContainer<double> quadPoints(4,2);
-  
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
-  
+  int H1Order = 3; int pToAdd = 3;
 
-  int nCells = 2;
+  Teuchos::RCP<Mesh> mesh;
+
   if (argc > 4){
+    int nCells = 2;
     nCells = atoi(argv[4]);
     if (rank==0){
       cout << "numCells = " << nCells << endl;
     }
-  }
-  int horizontalCells = nCells, verticalCells = nCells;
+    FieldContainer<double> quadPoints(4,2);
   
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
-    
+    quadPoints(0,0) = 0.0; // x1
+    quadPoints(0,1) = 0.0; // y1
+    quadPoints(1,0) = 1.0;
+    quadPoints(1,1) = 0.0;
+    quadPoints(2,0) = 1.0;
+    quadPoints(2,1) = 1.0;
+    quadPoints(3,0) = 0.0;
+    quadPoints(3,1) = 1.0; 
+    int horizontalCells = nCells, verticalCells = nCells;
+     
+    // create a pointer to a new mesh:
+    mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+						  confusionBF, H1Order, H1Order+pToAdd);
+  }else{ // do Schwab/Suri 2-element mesh
+
+    double width = 2.0*eps*(H1Order+pToAdd);
+
+    // L-shaped domain for double ramp problem
+    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2);
+    A(0) = 0.0; A(1) = 0.0;
+    B(0) = width; B(1) = 0.0;
+    C(0) = 1.0; C(1) = 0.0;
+    D(0) = 1.0; D(1) = 1.0;
+    E(0) = width; E(1) = 1.0;
+    F(0) = 0.0; F(1) = 1.0;
+    vector<FieldContainer<double> > vertices;
+    vertices.push_back(A); int A_index = 0;
+    vertices.push_back(B); int B_index = 1;
+    vertices.push_back(C); int C_index = 2;
+    vertices.push_back(D); int D_index = 3;
+    vertices.push_back(E); int E_index = 4;
+    vertices.push_back(F); int F_index = 5;
+    vector< vector<int> > elementVertices;
+    vector<int> el1, el2, el3, el4, el5;
+    // left thin element:
+    el1.push_back(A_index); el1.push_back(B_index); el1.push_back(E_index); el1.push_back(F_index);
+    // right element
+    el2.push_back(B_index); el2.push_back(C_index); el2.push_back(D_index); el2.push_back(E_index);
+
+    elementVertices.push_back(el1);
+    elementVertices.push_back(el2);
+  
+    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, confusionBF, H1Order, pToAdd) );      
+
+  }
+  
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
@@ -359,6 +388,10 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
+
+  FunctionPtr u_diff;
+  double L2_error;
+
   for (int i =0;i<=numPreRefs;i++){   
     vector<ElementPtr> elems = mesh->activeElements();
     vector<ElementPtr>::iterator elemIt;
@@ -378,14 +411,53 @@ int main(int argc, char *argv[]) {
       }
     }
     if (i<numPreRefs){
+      refinementStrategy.setEnforceOneIrregularity(false);
       refinementStrategy.refineCells(wallCells);
     }
-  }
+    ofstream convOut;
+    stringstream convOutFile;
+    convOutFile << "erickson_conv_" << eps <<".txt";
+    convOut.open(convOutFile.str().c_str());
+    solution->condensedSolve(false);
 
-  ofstream convOut;
-  stringstream convOutFile;
+    FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+    FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
+    FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
+
+    FunctionPtr uNorm = u_soln*u_soln;
+    FunctionPtr sigmaNorm = sigma1_soln*sigma1_soln + sigma2_soln*sigma2_soln;
+    double u_norm_sq = uNorm->integrate(mesh);
+    double sigma_norm_sq = sigmaNorm->integrate(mesh);
+
+    u_diff = (u_soln - u_exact)*(u_soln - u_exact);
+    FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
+    FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
+    double u_L2_error = u_diff->integrate(mesh);
+    double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
+    L2_error = sqrt(u_L2_error + sigma_L2_error);
+    double energy_error = solution->energyErrorTotal();
+    u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
+    u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
+    u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
+    FunctionPtr total_err = u_diff + sig1_diff + sig2_diff;
+    total_err->writeValuesToMATLABFile(mesh, "totalError.m");
+
+    convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
+    if (rank==0){
+      //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
+      cout << "Ratio of L2/energy = " << L2_error/energy_error << ", ratio of u/energy error = " << sqrt(u_L2_error)/energy_error << ", and ratio of sigma/energy error = " << sqrt(sigma_L2_error)/energy_error << endl;      
+      cout << "relative u L2 error = " << sqrt(u_L2_error)/sqrt(u_norm_sq) << ", relative sigma squared l2 error = " << sqrt(sigma_L2_error)/sqrt(sigma_norm_sq) << ", num dofs = " << mesh->numGlobalDofs() << endl;
+    }
+    convOut.close();
+
+  }
+  /*
+    ofstream convOut;
+    stringstream convOutFile;
   convOutFile << "erickson_conv_" << eps <<".txt";
   convOut.open(convOutFile.str().c_str());
+  FunctionPtr u_diff;
+  double L2_error;
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->condensedSolve(false);
 
@@ -398,12 +470,12 @@ int main(int argc, char *argv[]) {
     double u_norm_sq = uNorm->integrate(mesh);
     double sigma_norm_sq = sigmaNorm->integrate(mesh);
 
-    FunctionPtr u_diff = (u_soln - u_exact)*(u_soln - u_exact);
+    u_diff = (u_soln - u_exact)*(u_soln - u_exact);
     FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
     FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
     double u_L2_error = u_diff->integrate(mesh);
     double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
-    double L2_error = sqrt(u_L2_error + sigma_L2_error);
+    L2_error = sqrt(u_L2_error + sigma_L2_error);
     double energy_error = solution->energyErrorTotal();
     u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
     u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
@@ -413,7 +485,8 @@ int main(int argc, char *argv[]) {
 
     convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
     if (rank==0){
-      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio of L2/energy = " << L2_error/energy_error << endl;
+      //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
+      cout << "Ratio of L2/energy = " << L2_error/energy_error << ", ratio of u/energy error = " << sqrt(u_L2_error)/energy_error << ", and ratio of sigma/energy error = " << sqrt(sigma_L2_error)/energy_error << endl;      
       cout << "relative u L2 error = " << sqrt(u_L2_error)/sqrt(u_norm_sq) << ", relative sigma squared l2 error = " << sqrt(sigma_L2_error)/sqrt(sigma_norm_sq) << ", num dofs = " << mesh->numGlobalDofs() << endl;
     }
     if (refIndex<numRefs){
@@ -423,8 +496,42 @@ int main(int argc, char *argv[]) {
   //  // one more solve on the final refined mesh:
 
   convOut.close();  
+  */
+
+  ////////////////////   CREATE SOLUTION PROJECTION   ///////////////////////
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr projectedSolution = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  
+  map<int, Teuchos::RCP<Function> > functionMap;
+  functionMap[u->ID()] = u_exact;
+  functionMap[sigma1->ID()] = sig1_exact;
+  functionMap[sigma2->ID()] = sig2_exact;
+
+  // everything else = 0; previous stresses sigma_ij = 0 as well
+  projectedSolution->projectOntoMesh(functionMap);
+  FunctionPtr u_project = Teuchos::rcp( new PreviousSolutionFunction(projectedSolution, u) );
+  FunctionPtr sig1_project = Teuchos::rcp( new PreviousSolutionFunction(projectedSolution, sigma1) );
+  FunctionPtr sig2_project = Teuchos::rcp( new PreviousSolutionFunction(projectedSolution, sigma2) );
+  
+  FunctionPtr u_proj_err = (u_project-u_exact)*(u_project-u_exact);
+  FunctionPtr s1_proj_err = (sig1_project-sig1_exact)*(sig1_project-sig1_exact);
+  FunctionPtr s2_proj_err = (sig2_project-sig2_exact)*(sig2_project-sig2_exact);
+  double u_proj_error = u_proj_err->integrate(mesh); 
+  double s1_proj_error = s1_proj_err->integrate(mesh); 
+  double s2_proj_error = s2_proj_err->integrate(mesh); 
+  double proj_error = sqrt(u_proj_error + s1_proj_error + s2_proj_error);
+  if (rank==0){
+    cout << "DPG L2 error = " << L2_error << ", projection error = " << proj_error << ", ratio = " << L2_error/proj_error << endl;
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
 
   if (rank==0){
+    u_diff->writeValuesToMATLABFile(mesh,"u_error.m");   
+    u_proj_err->writeValuesToMATLABFile(mesh,"u_proj_error.m");   
+
     solution->writeFluxesToFile(uhat->ID(), "uhatQopt.dat");
     solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhatQopt.dat");
     solution->writeToVTK("qopt.vtu",min(H1Order+1,4));

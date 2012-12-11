@@ -41,10 +41,10 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
+#include "BasisFactory.h"
+
 using namespace Intrepid;
 using namespace std;
-
-typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 
 class DofOrdering {
   int _indexNeedsToBeRebuilt;
@@ -104,6 +104,8 @@ public:
   
   void rebuildIndex();
 };
+
+typedef Teuchos::RCP< DofOrdering> DofOrderingPtr;
 
 std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering);
 

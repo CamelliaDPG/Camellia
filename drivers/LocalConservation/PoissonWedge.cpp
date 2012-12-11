@@ -21,25 +21,9 @@
 #endif
 
 
-bool enforceLocalConservation = true;
-double epsilon = 1e-1;
+bool enforceLocalConservation = false;
 double numRefs = 15;
-double halfwidth = 0.5;
-
-class EpsilonScaling : public hFunction {
-  double _epsilon;
-public:
-  EpsilonScaling(double epsilon) {
-    _epsilon = epsilon;
-  }
-  double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
-    double scaling = min(_epsilon/(h*h), 1.0);
-    // since this is used in inner product term a like (a,a), take square root
-    return sqrt(scaling);
-  }
-};
+double halfwidth = 1.0;
 
 class Inflow: public SpatialFilter {
   public:
@@ -103,72 +87,55 @@ int main(int argc, char *argv[]) {
   
   // define trial variables
   VarPtr uhat = varFactory.traceVar("uhat");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
+  VarPtr sigma_n = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma1 = varFactory.fieldVar("sigma1");
   VarPtr sigma2 = varFactory.fieldVar("sigma2");
   
-
-  vector<double> beta;
-  beta.push_back(1.0);
-  beta.push_back(0.0);
-  
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  bf->addTerm(sigma1, tau->x());
+  bf->addTerm(sigma2, tau->y());
+  bf->addTerm(u, tau->div());
+  bf->addTerm(-uhat, tau->dot_normal());
   
   // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  bf->addTerm( sigma1, v->dx() );
+  bf->addTerm( sigma2, v->dy() );
+  bf->addTerm( -sigma_n, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  IPPtr ip = confusionBF->graphNorm();
-  // robust test norm
-  // IPPtr ip = Teuchos::rcp(new IP);
-  // FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  // if (!enforceLocalConservation)
-  //   ip->addTerm( ip_scaling * v );
-  // ip->addTerm( sqrt(epsilon) * v->grad() );
-  // ip->addTerm( beta * v->grad() );
-  // ip->addTerm( tau->div() );
-  // ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  // if (enforceLocalConservation)
-  //   ip->addZeroMeanTerm( v );
+  IPPtr ip = bf->graphNorm();
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  rhs->addTerm( f * v ); 
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
+
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   SpatialFilterPtr inflow = Teuchos::rcp( new Inflow );
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflow, zero);
+  bc->addDirichlet(uhat, inflow, zero);
 
   SpatialFilterPtr leadingWedge = Teuchos::rcp( new LeadingWedge );
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  bc->addDirichlet(uhat, leadingWedge, one);
+  bc->addDirichlet(uhat, leadingWedge, zero);
 
   SpatialFilterPtr trailingWedge = Teuchos::rcp( new TrailingWedge );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, trailingWedge, beta*n*one);
-  // bc->addDirichlet(uhat, trailingWedge, one);
+  bc->addDirichlet(sigma_n, trailingWedge, zero);
+  // bc->addDirichlet(uhat, trailingWedge, zero);
 
   SpatialFilterPtr top = Teuchos::rcp( new Top );
   bc->addDirichlet(uhat, top, zero);
-  // bc->addDirichlet(beta_n_u_minus_sigma_n, top, zero);
 
   SpatialFilterPtr outflow = Teuchos::rcp( new Outflow );
-  pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == zero, outflow);
+  bc->addDirichlet(uhat, outflow, zero);
   
   ////////////////////   BUILD MESH   ///////////////////////
   bool allQuads = true;
@@ -229,7 +196,7 @@ int main(int argc, char *argv[]) {
     elementIndices.push_back(q);
   }
 
-  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, confusionBF, H1Order, pToAdd) );  
+  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );  
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -237,7 +204,7 @@ int main(int argc, char *argv[]) {
 
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-    solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
+    solution->lagrangeConstraints()->addConstraint(sigma_n == zero);
   }
   
   double energyThreshold = 0.2; // for mesh refinements
@@ -248,11 +215,11 @@ int main(int argc, char *argv[]) {
 
     if (rank==0){
       stringstream outfile;
-      outfile << "singularwedge_" << refIndex;
+      outfile << "poissonwedge_" << refIndex;
       solution->writeToVTK(outfile.str());
 
       // Check local conservation
-      FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+      FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
@@ -267,7 +234,7 @@ int main(int argc, char *argv[]) {
       vector<int> cells_p;
       refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
       for (int i=0; i < cellsToRefine.size(); i++)
-        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 1e-4)
+        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 1e-3)
         {
           int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
           if (allQuads)

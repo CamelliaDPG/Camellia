@@ -16,11 +16,6 @@
 
 #include "Mesh.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
-typedef Teuchos::RCP<Element> ElementPtr;
-
 class ElementTests : public TestSuite {
   FieldContainer<double> _testPoints1D;
   
