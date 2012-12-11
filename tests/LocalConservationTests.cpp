@@ -3,8 +3,6 @@
 #include "InnerProductScratchPad.h"
 #include "Mesh.h"
 
-typedef Teuchos::RCP<Element> ElementPtr;
-
 // void SteadyConservationTests::SetUp()
 // {
 //   cp.epsilon = 1.0;
