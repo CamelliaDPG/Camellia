@@ -25,7 +25,7 @@
 
 #include "InnerProductScratchPad.h"
 #include "PreviousSolutionFunction.h"
-#include "TestSuite.h"
+#include "../DPGTests/TestSuite.h"
 #include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
 #include "RieszRep.h"
