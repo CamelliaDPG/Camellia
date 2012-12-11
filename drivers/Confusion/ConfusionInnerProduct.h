@@ -19,9 +19,6 @@ class ConfusionInnerProduct : public DPGInnerProduct {
   Teuchos::RCP<ConfusionBilinearForm> _confusionBilinearForm;
   Teuchos::RCP<Mesh> _mesh;
  public:
-  typedef Teuchos::RCP< ElementType > ElementTypePtr;
-  typedef Teuchos::RCP< Element > ElementPtr;
-  
  ConfusionInnerProduct(Teuchos::RCP< ConfusionBilinearForm > bfs, Teuchos::RCP<Mesh> mesh) : DPGInnerProduct((Teuchos::RCP< ConfusionBilinearForm>) bfs) {
     _confusionBilinearForm=bfs; // redundant, but no way around it.
     _mesh=mesh; // for h-scaling

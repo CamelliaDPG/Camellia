@@ -1988,7 +1988,6 @@ bool MeshTestSuite::testPointContainment() {
     points(pointIndex,1) = y[pointIndex];
   }
   
-  typedef Teuchos::RCP< Element > ElementPtr;
   vector<ElementPtr> elements = myMesh->elementsForPoints(points);
   int testIndex = 0;
   for (vector<ElementPtr>::iterator elemIt=elements.begin(); elemIt != elements.end(); elemIt++) {

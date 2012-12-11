@@ -23,9 +23,6 @@
 
 #include "BF.h"
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
 class LinearTermTests : public TestSuite {
   VarFactory varFactory;
   
