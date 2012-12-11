@@ -235,7 +235,7 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
   return mesh;
 }
 
-Teuchos::RCP<Mesh> Mesh::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+Teuchos::RCP<Mesh> Mesh::buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
   FieldContainer<double> quadPoints(4,2);
   double squareSize = 1.0;
   quadPoints(0,0) = 0.0; // x1
@@ -246,11 +246,13 @@ Teuchos::RCP<Mesh> Mesh::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearFor
   quadPoints(2,1) = squareSize;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = squareSize;
- 
-  int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
   return buildQuadMesh(quadPoints, horizontalCells, verticalCells, bilinearForm, H1Order, pTest);
+}
+
+Teuchos::RCP<Mesh> Mesh::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+  return buildUnitQuadMesh(nCells,nCells, bilinearForm, H1Order, pTest);
 }
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
@@ -1474,7 +1476,7 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
 
-// added by Jesse - accumulates flux/field local dof indices into user-provided maps
+// added by Jesse - accumulates flux/field local dof indices into user-provided maps.  WARNING: NOT VALID FOR FLUX DOFS
 map< int, pair<int,int> > Mesh::getGlobalToLocalMap(){
   map< pair<int,int> , int> localToGlobalMap = getLocalToGlobalMap();    
   map< int, pair<int,int> > globalToLocalMap;
