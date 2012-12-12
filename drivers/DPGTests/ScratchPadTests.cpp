@@ -449,7 +449,6 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
-
   
   ////////////////////   get fake residual   ///////////////////////
 
@@ -578,7 +577,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   double unrestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeIntegrand->integrate(mesh,10);
   if (abs(edgeRestrictedValue-unrestrictedValue)>1e-11){
     success = false;
-    cout << "Failed testIntegrateDiscontinuousFunction() because edge-restricted jump integral is inconsistent with the jump integral of the volume integrand" << endl;
+    cout << "Failed testIntegrateDiscontinuousFunction() because edge-restricted jump integral = " << edgeRestrictedValue << " is inconsistent with the jump integral of the volume integrand = " << unrestrictedValue << endl;
     return success;
   }
 
@@ -592,7 +591,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 }
 
 bool ScratchPadTests::testGalerkinOrthogonality(){
-
+  double tol = 1e-11;
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -670,28 +669,38 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
     FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
-    if (!solution->isFluxOrTraceDof(dofIndex) && abs(grad)>1e-8){ // if we're not single-precision zero FOR FIELDS
+    if (!solution->isFluxOrTraceDof(dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
       int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
-      cout << "Failed testGalerkinOrthogonality() with diff " << abs(grad) << " at dof " << dofIndex << endl;
+      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << endl;
       success = false;
     }
   }
-  /*
-  // just test fluxes here
+  // just test fluxes ON INTERNAL SKELETON here
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
     for (int sideIndex = 0;sideIndex < 4;sideIndex++){
-      // create perturbation in direction du
-      solnPerturbation->clearSolution(); // clear all solns
-      solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);  
-      LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-      FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
-    
-      double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-      cout << "flux term over side " << sideIndex << " of cell " << (*elemIt)->cellID() << " = " << jump << endl;
+      ElementPtr elem = *elemIt;
+      ElementTypePtr elemType = elem->elementType();
+      vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u->ID(), sideIndex);
+      for (int i = 0;i<localDofIndices.size();i++){
+	int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+      
+	// create perturbation in direction du
+	solnPerturbation->clearSolution(); // clear all solns
+	solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);  
+	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
+	
+	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+	if (abs(jump)>tol){
+	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
+	  success = false;
+	  return success;
+	}
+      }
     }
   }
-  */
+
 
   return success;
 }
