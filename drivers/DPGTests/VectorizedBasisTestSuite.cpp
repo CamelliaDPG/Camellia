@@ -4,7 +4,7 @@
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
 #ifdef USE_VTK
-#include "VTKExporter.h"
+#include "VTKExporterCamellia.h"
 #endif
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {

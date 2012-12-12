@@ -1,6 +1,7 @@
 #ifndef VTKEXPORTER_H
 #define VTKEXPORTER_H
 
+#warning "processing VTKEXPORTER_H"
 /*
  *  VTKExporter.h
  *
