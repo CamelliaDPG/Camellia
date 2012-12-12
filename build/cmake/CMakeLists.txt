@@ -21,6 +21,21 @@ else()
   link_libraries(vtkHybrid)
 endif()
 
+if(MPI_DIR)
+  MESSAGE("MPI_DIR = ${MPI_DIR}")
+  include_directories(${MPI_DIR}/include)
+#  link_libraries(-L/Users/nroberts/lib/openmpi-1.4.3/lib -lmpi -lopen-rte -lopen-pal -lutil)
+  link_directories(${MPI_DIR})
+  link_libraries(mpi)
+  link_libraries(gfortran)
+  link_libraries(mpi_f77)
+#  link_libraries(${MPI_DIR}/lib/mpi)
+#  link_libraries(${MPI_DIR}/lib/mpi_f77)
+  if(SCALAPACK_LIB)
+    link_libraries(${SCALAPACK_LIB})
+  endif()
+endif()
+
 # If FIND_PACKAGE successfully found your Trilinos install, it will
 # set the Boolean flag Trilinos_FOUND.  The following IF statement
 # fails with a FATAL_ERROR if Trilinos was not found.  If it _was_
@@ -56,18 +71,18 @@ ENDIF()
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ need
 # to edit this line.
-IF(NOT CMAKE_CXX_COMPILER)
+#IF(NOT CMAKE_CXX_COMPILER)
   MESSAGE("Setting CXX compiler.")
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
-ENDIF()
+#ENDIF()
 
 # If you haven't already set the C compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ 
 # need to edit this line.
-IF(NOT CMAKE_C_COMPILER)
+#IF(NOT CMAKE_C_COMPILER)
   MESSAGE("Setting C compiler.")
   SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
-ENDIF()
+#ENDIF()
 
 # If you haven't already set the Fortran compiler, use the same compiler
 # that was used to build Trilinos on your machine.  You do _not_ 
@@ -100,9 +115,7 @@ ENDIF( ${CAMELLIA_BUILD_TYPE} MATCHES "debug" )
 MESSAGE("CAMELLIA_SOURCE_DIR = ${CAMELLIA_SOURCE_DIR} ")
 FILE(GLOB_RECURSE SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
 
-set(DRIVERS_DIR "../../drivers" )
-
-set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
+set(DRIVERS_DIR "${CAMELLIA_SOURCE_DIR}/../drivers" )
 
 set(NAVIER_STOKES_DIR "${DRIVERS_DIR}/NavierStokes" )
 
@@ -114,17 +127,6 @@ set(STOKES_DIR "${DRIVERS_DIR}/Stokes" )
 
 set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
 FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
-
-set( BURGERS_SOURCES
-  "${BURGERS_DIR}/BurgersBilinearForm.cpp"
-  "${BURGERS_DIR}/BurgersInnerProduct.cpp"
-  "${BURGERS_DIR}/BurgersProblem.cpp"
-  "${BURGERS_DIR}/TimeMarchingBurgersProblem.cpp"
-)
-
-set( BURGERS_DRIVER
-  "${BURGERS_DIR}/BurgersDriver.cpp"
-  )
 
 set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
@@ -204,6 +206,9 @@ include_directories("${DRIVERS_DIR}/Confusion") # for certain tests in DPGTests
 include_directories("${DRIVERS_DIR}/Stokes") # for certain tests in DPGTests
 include_directories(${Trilinos_TPL_INCLUDE_DIRS})
 include_directories(${Trilinos_INCLUDE_DIRS})
+if (MUMPS_DIR)
+  include_directories(${MUMPS_DIR}/include)
+endif()
 
 # Add to the library path Trilinos' library path, and the library
 # paths of the third-party libraries (TPLs) with which Trilinos was
@@ -218,14 +223,13 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 #
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
-add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
-add_executable(NewBurgersDriver ${BURGERS_SOURCES} ${NEW_BURGERS_DRIVER})
+add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 
 #
@@ -235,11 +239,6 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 # (TPLs) with which Trilinos was built.
 #
 
-target_link_libraries(BurgersDriver
-  ${Trilinos_LIBRARIES} 
-  ${Trilinos_TPL_LIBRARIES}
-  ${CAMELLIA_LIBRARY_NAME}
-  )
 target_link_libraries(NewBurgersDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
@@ -281,4 +280,4 @@ target_link_libraries(NavierStokesStudy
   ${CAMELLIA_LIBRARY_NAME}
   )
 
-add_subdirectory(../../tests ${PROJECT_BINARY_DIR}/tests)
+add_subdirectory(${CAMELLIA_SOURCE_DIR}/../tests ${PROJECT_BINARY_DIR}/tests)

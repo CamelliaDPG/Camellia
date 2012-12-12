@@ -1,5 +1,3 @@
-#include "../Burgers/BurgersBilinearForm.h"
-
 #include "OptimalInnerProduct.h"
 #include "Mesh.h"
 #include "Solution.h"
@@ -336,7 +334,7 @@ int main(int argc, char *argv[]) {
 
   if (rank==0){ 
     backgroundFlow->writeToVTK("Burgers.vtu",min(H1Order+1,4));
-    solution->writeFluxesToFile(BurgersBilinearForm::U_HAT, "burgers.dat");
+    solution->writeFluxesToFile(uhat->ID(), "burgers.dat");
     cout << "wrote solution files" << endl;
   }
 

@@ -37,12 +37,13 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int minLogElements = 0;
-  int maxLogElements = 3;
+  int maxLogElements = 4;
+
+  int minPolyOrder = 0;
+  int maxPolyOrder = 1;
   
-  int minPolyOrder = 3;
-  int maxPolyOrder = 3;
-  
-  int pToAdd = 2; // for optimal test function approximation
+  int pToAdd = 5; // for optimal test function approximation
+  bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
@@ -143,6 +144,8 @@ int main(int argc, char *argv[]) {
       numCells1D *= 2;
     } while (pow(2.0,maxLogElements) >= numCells1D);
     
+    // note that rhs and bilinearForm aren't really going to be right here, since they
+    // involve a background flow which varies over the various problems...
     HConvergenceStudy study(problems[0].exactSolution(),
                             problems[0].mesh()->bilinearForm(),
                             problems[0].exactSolution()->rhs(),
@@ -169,17 +172,58 @@ int main(int argc, char *argv[]) {
       FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
                           + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
                           + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+      double weight = 1.0;
       do {
-        problem->iterate();
-      } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters));
+        weight = problem->iterate(useLineSearch);
+        
+        LinearTermPtr rhsLT = ((RHSEasy*) problem->backgroundFlow()->rhs().get())->linearTerm();
+        RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
+        rieszRep.computeRieszRep();
+        double costFunction = rieszRep.getNorm();
+        
+        if (rank==0) {
+          cout << setprecision(6) << scientific;
+          cout << "Took " << weight << "-weighted step for " << numCells1D;
+          cout << " x " << numCells1D << " mesh: " << problem->iterationCount();
+          cout << setprecision(6) << fixed;
+          cout << " iterations; cost function " << costFunction << endl;
+        }
+      } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters) && (weight != 0));
       solutions.push_back( problem->backgroundFlow() );
-      if (rank==0) {
-        cout << numCells1D << " x " << numCells1D << ": " << problem->iterationCount() << " iterations " << endl;
-      }
+      
+      // set the IP to the naive norm for clearer comparison with the best approximation energy error
+//      problem->backgroundFlow()->setIP(problem->bf()->naiveNorm());
+      
+//      double energyError = problem->backgroundFlow()->energyErrorTotal();
+//      if (rank==0) {
+//        cout << setprecision(6) << fixed;
+//        cout << numCells1D << " x " << numCells1D << ": " << problem->iterationCount();
+//        cout << " iterations; actual energy error " << energyError << endl;
+//      }
       numCells1D *= 2;
     }
     
     study.setSolutions(solutions);
+
+
+    for (int i=0; i<=maxLogElements-minLogElements; i++) {
+      SolutionPtr bestApproximation = study.bestApproximations()[i];
+      VGPNavierStokesFormulation nsFormBest = VGPNavierStokesFormulation(Re, bestApproximation);
+      SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+      Teuchos::RCP<ExactSolution> exact = nsFormBest.exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
+//      bestApproximation->setIP( nsFormBest.bf()->naiveNorm() );
+//      bestApproximation->setRHS( exact->rhs() );
+      
+      // use backgroundFlow's IP so that they're comparable
+      Teuchos::RCP<DPGInnerProduct> ip = problems[i].backgroundFlow()->ip();
+      LinearTermPtr rhsLT = ((RHSEasy*) exact->rhs().get())->linearTerm();
+      RieszRep rieszRep(bestApproximation->mesh(), ip, rhsLT);
+      rieszRep.computeRieszRep();
+            
+      double bestCostFunction = rieszRep.getNorm();
+      if (rank==0)
+        cout << "best energy error (measured according to the actual solution's test space IP): " << bestCostFunction << endl;
+    }
     
     if (rank == 0) {
       cout << study.TeXErrorRateTable();
@@ -198,14 +242,14 @@ int main(int argc, char *argv[]) {
       filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_all";
       study.TeXBestApproximationComparisonTable(fieldIDs); 
 
-      // for now, not interested in plots, etc. of individual variables.
       for (int i=0; i<fieldIDs.size(); i++) {
         int fieldID = fieldIDs[i];
         int traceID = traceIDs[i];
         string fieldName = fieldFileNames[i];
         ostringstream filePathPrefix;
         filePathPrefix << "navierStokes/" << fieldName << "_p" << polyOrder;
-        study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
+        bool writeMATLABplotData = true;
+        study.writeToFiles(filePathPrefix.str(),fieldID,traceID, writeMATLABplotData);
       }
       
       for (int i=0; i<primaryVariables.size(); i++) {

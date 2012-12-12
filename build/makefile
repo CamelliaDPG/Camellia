@@ -43,7 +43,6 @@ OBJ_NAMES = DofOrdering \
        BasisSumFunction \
        BC \
        BCFunction \
-       ConfectionManufacturedSolution \
        ConfusionBilinearForm \
        ConfusionManufacturedSolution \
        ConfusionProblemLegacy \
@@ -52,8 +51,6 @@ OBJ_NAMES = DofOrdering \
        Element \
        ElementTypeFactory \
        EricksonManufacturedSolution \
-       EricksonConfectionSolution \
-       ExperimentalInnerProduct \
        CamelliaIntrepidExtendedTypes \
        LagrangeConstraints \
        Mesh \
@@ -136,17 +133,9 @@ TEST_OBJS = $(addsuffix .o, $(TEST_OBJ_NAMES))
 # put all the object files in OBJ_DIR:
 TEST_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS))
 
-BURGERS_OBJ_NAMES = BurgersBilinearForm \
-       BurgersInnerProduct \
-       BurgersProblem \
-       TimeMarchingBurgersProblem
-BURGERS_OBJS = $(addsuffix .o, $(BURGERS_OBJ_NAMES))
-# put all the object files in OBJ_DIR:
-BURGERS_OBJS_IN_PLACE = $(addprefix $(OBJ_DIR)/, $(BURGERS_OBJS))
-
 INCLUDE_PATHS = -I$(SRCS_DIR)/include -I$(DRIVERS_DIR)/DPGTests -I$(DRIVERS_DIR)/DemoDrivers -I$(DRIVERS_DIR)/Stokes -I$(DRIVERS_DIR)/Confusion -I$(DRIVERS_DIR)/Poisson -I$(DRIVERS_DIR)/MultiOrderStudy -I/Users/nroberts/src/MUMPS_4.9.2/include $(Trilinos_INCLUDE_DIRS) -I$(VTK_INCLUDE_DIR)
 
-EXES = DPGTests StokesBackwardFacingStepDriver StokesCavityFlowDriver NavierStokesCavityFlowDriver StokesStudy NavierStokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion ScalingExperiment ConfectionDriver BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver 
+EXES = DPGTests StokesBackwardFacingStepDriver StokesCavityFlowDriver NavierStokesCavityFlowDriver StokesStudy NavierStokesStudy StokesMathStudy StokesStudyHybridMesh PoissonSolver ConfusionStudy AdaptiveConfusion ScalingExperiment BurgersDriver TimeMarchingBurgersDriver EricksonDriver ScratchPadDriver NewConfusionDriver NewBurgersDriver 
 EXE_OBJS = $(addsuffix .o, $(EXES))
 
 ECHOES = 
@@ -158,18 +147,11 @@ all: $(ECHOES) $(EXES)
 MovedObjs:
 	@echo OBJS_IN_PLACE: $(OBJS_IN_PLACE)
   @echo TEST_OBJS_IN_PLACE: $(TEST_OBJS_IN_PLACE)
-  @echo BURGERS_OBJS_IN_PLACE: $(BURGERS_OBJS_IN_PLACE)
 
-DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/DPGTests.o -o DPGTests $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
+DPGTests: DPGTests.o $(OBJS) $(TEST_OBJS)
+	$(CXX) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE)  $(OBJ_DIR)/DPGTests.o -o DPGTests $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 DPGTests.o: $(DRIVERS_DIR)/DPGTests/DPGTests.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-BurgersDriver: BurgersDriver.o $(OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/BurgersDriver.o -o BurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
-
-BurgersDriver.o: $(DRIVERS_DIR)/Burgers/BurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 ScratchPadDriver: ScratchPadDriver.o $(OBJS)
@@ -184,28 +166,13 @@ EricksonDriver: EricksonDriver.o $(OBJS)
 EricksonDriver.o: $(DRIVERS_DIR)/Confusion/EricksonDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
-ExperimentalInnerProduct.o: $(DRIVERS_DIR)/Confusion/ExperimentalInnerProduct.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
 TimeMarchingBurgersDriver: TimeMarchingBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/TimeMarchingBurgersDriver.o -o TimeMarchingBurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 TimeMarchingBurgersDriver.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersDriver.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
-ConfectionDriver: ConfectionDriver.o $(OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/ConfectionDriver.o -o ConfectionDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
-
-ConfectionDriver.o: $(DRIVERS_DIR)/Confusion/ConfectionDriver.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-ConfectionManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/ConfectionManufacturedSolution.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
 EricksonManufacturedSolution.o: $(DRIVERS_DIR)/Confusion/EricksonManufacturedSolution.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-EricksonConfectionSolution.o: $(DRIVERS_DIR)/Confusion/EricksonConfectionSolution.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 StokesBackwardFacingStepDriver: StokesBackwardFacingStepDriver.o $(OBJS)
@@ -238,8 +205,8 @@ ScalingExperiment: ScalingExperiment.o $(OBJS)
 NewConfusionDriver: NewConfusionDriver.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewConfusionDriver.o -o NewConfusionDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
-NewBurgersDriver: NewBurgersDriver.o $(OBJS) $(BURGERS_OBJS)
-	$(CXX) $(OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
+NewBurgersDriver: NewBurgersDriver.o $(OBJS) 
+	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/NewBurgersDriver.o -o NewBurgersDriver $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
 
 AdaptiveConfusion: AdaptiveConfusion.o $(OBJS)
 	$(CXX) $(OBJS_IN_PLACE) $(OBJ_DIR)/AdaptiveConfusion.o -o AdaptiveConfusion $(LINKED_LIBRARIES) -o $(OBJ_DIR)/$@
@@ -302,15 +269,6 @@ MultiBasisTests.o: $(DRIVERS_DIR)/DPGTests/MultiBasisTests.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 VectorizedBasisTestSuite.o: $(DRIVERS_DIR)/DPGTests/VectorizedBasisTestSuite.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-BurgersBilinearForm.o: $(DRIVERS_DIR)/Burgers/BurgersBilinearForm.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-BurgersInnerProduct.o: $(DRIVERS_DIR)/Burgers/BurgersInnerProduct.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
-
-BurgersProblem.o: $(DRIVERS_DIR)/Burgers/BurgersProblem.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $< -o $(OBJ_DIR)/$@ 
 
 TimeMarchingBurgersProblem.o: $(DRIVERS_DIR)/Burgers/TimeMarchingBurgersProblem.cpp
@@ -479,4 +437,4 @@ DofOrder%.o: $(SRCS_DIR)/DofOrdering/DofOrder%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(INCLUDE_PATHS) $<  -o $(OBJ_DIR)/$@
 
 clean:
-	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(BURGERS_OBJS_IN_PLACE) $(EXES) $(EXE_OBJS)
+	$(RM) $(OBJS_IN_PLACE) $(TEST_OBJS_IN_PLACE) $(EXES) $(EXE_OBJS)

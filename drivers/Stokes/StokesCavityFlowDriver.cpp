@@ -644,7 +644,7 @@ int main(int argc, char *argv[]) {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   
   // just an experiment:
-  refinementStrategy->setEnforceOneIrregurity(enforceOneIrregularity);
+  refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
   
   FieldContainer<double> bottomCornerPoints(2,2);
