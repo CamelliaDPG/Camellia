@@ -1,0 +1,271 @@
+/*
+ *  VTKExporter.cpp
+ *
+ *  Created by Truman Ellis on 12/12/2012.
+ *
+ */
+ 
+#include "VTKExporter.h"
+#include "CamelliaConfig.h"
+
+#ifdef USE_VTK
+#include "vtkPointData.h"
+#include "vtkFloatArray.h"
+#include "vtkIntArray.h"
+#include "vtkUnstructuredGrid.h"
+#include "vtkXMLUnstructuredGridWriter.h"
+#include "vtkCellType.h"
+#include "vtkIdList.h"
+
+void VTKExporter::exportSolution(const string& filePath, unsigned int num1DPts)
+{
+  exportFields(filePath, num1DPts);
+  exportTraces(filePath, num1DPts);
+}
+
+void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
+{
+  bool defaultPts = (num1DPts == 0);
+
+  vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
+  vector<vtkFloatArray*> fieldData;
+  vtkPoints* points = vtkPoints::New();
+  vtkIntArray* polyOrderData = vtkIntArray::New();
+
+  // Get trialIDs
+  vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  vector<VarPtr> vars;
+  int numFieldVars = fieldTrialIDs.size();
+
+  int spaceDim = 2; // TODO: generalize to 3D...
+
+  for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
+  {
+    fieldData.push_back(vtkFloatArray::New());
+
+    vars.push_back(_varFactory.trial(fieldTrialIDs[varIdx]));
+    bool vectorValued = vars.back()->rank() == 1;
+    cout << "vectorValue = " << vectorValued << endl;
+    if (vectorValued)
+      fieldData[varIdx]->SetNumberOfComponents(spaceDim);
+    else
+      fieldData[varIdx]->SetNumberOfComponents(1);
+    fieldData[varIdx]->SetName(vars.back()->name().c_str());
+  }
+  polyOrderData->SetNumberOfComponents(1);
+  polyOrderData->SetName("Polynomial Order");
+
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+
+  unsigned int total_vertices = 0;
+
+  // Loop through Quads, Triangles, etc
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    
+    FieldContainer<double> vertexPoints;    
+    _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
+    
+    int numCells = physicalCellNodes.dimension(0);
+    bool createSideCacheToo = false;
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
+    
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      cellIDs.push_back(cellID);
+    }
+
+    int pOrder = _mesh->cellPolyOrder(cellIDs[0]);
+
+    int numVertices = vertexPoints.dimension(1);
+    unsigned cellTopoKey = cellTopoPtr->getKey();
+    int numPoints = 0;
+    if (defaultPts)
+      num1DPts = pow(2.0, pOrder-1);
+
+    switch (cellTopoKey)
+    {
+      case shards::Quadrilateral<4>::key:
+        numPoints = num1DPts*num1DPts;
+        break;
+      case shards::Triangle<3>::key:
+        for (int i=1; i <= num1DPts; i++)
+          numPoints += i;
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+    }
+
+    FieldContainer<double> refPoints(numPoints,spaceDim);
+    switch (cellTopoKey)
+    {
+      case shards::Quadrilateral<4>::key:
+        {
+          for (int j = 0; j < num1DPts; j++)
+            for (int i=0; i < num1DPts; i++)
+            {
+              int pointIndex = j*num1DPts + i;
+              double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+              double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
+              refPoints(pointIndex,0) = x;
+              refPoints(pointIndex,1) = y;
+            }
+        }
+        break;
+      case shards::Triangle<3>::key:
+        {
+          int pointIndex = 0;
+          for (int j = 0; j < num1DPts; j++)
+            for (int i=0; i < num1DPts-j; i++)
+            {
+              double x = (double(i)/double(num1DPts-1));
+              double y = (double(j)/double(num1DPts-1));
+              refPoints(pointIndex,0) = x;
+              refPoints(pointIndex,1) = y;
+              pointIndex++;
+            }
+        }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+    }
+    
+    basisCache->setRefCellPoints(refPoints);
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
+    const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+
+    vector< FieldContainer<double> > computedValues;
+    // computedValues.resize(numFieldVars);
+    for (int i=0; i < numFieldVars; i++)
+    {
+      int numberComponents = fieldData[i]->GetNumberOfComponents();
+      FieldContainer<double> values;
+      if (numberComponents == 1)
+        values.resize(numCells, numPoints);
+      else
+        values.resize(numCells, numPoints, spaceDim);
+
+      // _solution->solutionValues(values, fieldTrialIDs[i], basisCache);
+      _solution->solutionValues(values, elemTypePtr, fieldTrialIDs[i], *physicalPoints);
+      computedValues.push_back(values);
+    }
+    // cout << "After All" << endl;
+
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++ )
+    {
+      int subcellStartIndex = total_vertices;
+      switch (cellTopoKey)
+      {
+        case shards::Quadrilateral<4>::key:
+          for (int j=0; j < num1DPts-1; j++)
+          {
+            for (int i=0; i < num1DPts-1; i++)
+            {
+              int ind1 = subcellStartIndex;
+              int ind2 = ind1 + 1;
+              int ind3 = ind2 + num1DPts;
+              int ind4 = ind1 + num1DPts;
+              vtkIdType subCell[4] = {
+                ind1, ind2, ind3, ind4};
+              ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
+              polyOrderData->InsertNextValue(pOrder-1);
+
+              subcellStartIndex++;
+            }
+            subcellStartIndex++;
+          }
+          break;
+        case shards::Triangle<3>::key:
+          for (int j=0; j < num1DPts-1; j++)
+          {
+            for (int i=0; i < num1DPts-1-j; i++)
+            {
+              int ind1 = subcellStartIndex;
+              int ind2 = ind1 + 1;
+              int ind3 = ind1 + num1DPts-j;
+              vtkIdType subCell[3] = {
+                ind1, ind2, ind3};
+              ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+              polyOrderData->InsertNextValue(pOrder-1);
+
+              if (i < num1DPts-2-j)
+              {
+                int ind1 = subcellStartIndex+1;
+                int ind2 = ind1 + num1DPts - j;
+                int ind3 = ind1 + num1DPts -j - 1;
+                vtkIdType subCell[3] = {
+                  ind1, ind2, ind3};
+                ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+                polyOrderData->InsertNextValue(pOrder-1);
+              }
+
+              subcellStartIndex++;
+            }
+            subcellStartIndex++;
+          }
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+      }
+
+      for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      {
+        points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
+                                (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
+        for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+        {
+          // fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          switch(fieldData[varIdx]->GetNumberOfComponents())
+          {
+            case 1:
+              fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
+              break;
+            case 2:
+              if (cellIndex == 0 && pointIndex == 0)
+                // cout << computedValues[varIdx] << endl;
+              // fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
+              fieldData[varIdx]->InsertNextTuple2(computedValues[varIdx](cellIndex, pointIndex, 0), computedValues[varIdx](cellIndex, pointIndex, 1));
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+          }
+        }
+        total_vertices++;
+      }
+    }
+  }
+
+  ug->SetPoints(points);
+  points->Delete();
+
+  for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+  {
+    ug->GetPointData()->AddArray(fieldData[varIdx]);
+    fieldData[varIdx]->Delete();
+  }
+  // ug->GetCellData()->AddArray(polyOrderData);
+
+  vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+  wr->SetInput(ug);
+  ug->Delete();
+  wr->SetFileName((filePath+".vtu").c_str());
+  wr->SetDataModeToBinary();
+  wr->Update();
+  wr->Write();
+  wr->Delete();
+
+  cout << "Wrote Field Variables to " << filePath << ".vtu" << endl;
+}
+
+void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
+{
+  cout << "Exported Traces" << endl;
+}
+
+#endif

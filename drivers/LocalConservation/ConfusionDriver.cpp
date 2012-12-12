@@ -13,6 +13,8 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "CheckConservation.h"
+#include "VTKExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -246,18 +248,27 @@ int main(int argc, char *argv[]) {
 
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
-    if (rank==0){
-      cout << "Solved" << endl;
-      solution->writeToVTK("vector");
-      if (refIndex < numRefs)
-      {
-        refinementStrategy.refine(rank==0); // print to console on rank 0
-      }
-    }     
 
+    if (rank==0){
+      stringstream outfile;
+      outfile << "confusion_" << refIndex;
+      exporter.exportSolution(outfile.str());
+      // solution->writeToVTK(outfile.str());
+
+      // Check local conservation
+      FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+    }
+
+    if (refIndex < numRefs)
+      refinementStrategy.refine(rank==0); // print to console on rank 0
   }
 
   return 0;

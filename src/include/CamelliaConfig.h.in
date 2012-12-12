@@ -4,4 +4,5 @@ using namespace std;
 #define Camellia_MeshDir string("@CMAKE_SOURCE_DIR@/meshes/")
 
 // #define USE_MUMPS
+#define USE_VTK
 
