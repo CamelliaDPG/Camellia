@@ -3,6 +3,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
+#include "VTKExporter.h"
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
@@ -182,6 +183,9 @@ bool VectorizedBasisTestSuite::testPoisson() {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
+
+  VTKExporter exporter(solution, mesh, varFactory);
+  exporter.exportSolution("test");
 
   return success;
 }
