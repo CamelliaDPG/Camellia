@@ -3,7 +3,6 @@
 
 #ifdef USE_VTK
 #include "vtkPointData.h"
-#include "vtkCellData.h"
 #include "vtkFloatArray.h"
 #include "vtkIntArray.h"
 #include "vtkUnstructuredGrid.h"

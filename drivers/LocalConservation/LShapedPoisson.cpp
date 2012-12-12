@@ -14,6 +14,7 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "VTKExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -22,7 +23,7 @@
 
 
 bool enforceLocalConservation = false;
-double numRefs = 15;
+double numRefs = 2;
 
 class Left: public SpatialFilter {
   public:
@@ -193,6 +194,7 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
@@ -200,7 +202,8 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       stringstream outfile;
       outfile << "lshaped_" << refIndex;
-      solution->writeToVTK(outfile.str());
+      exporter.exportSolution(outfile.str());
+      // solution->writeToVTK(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma_n) );
