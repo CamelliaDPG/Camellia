@@ -24,10 +24,11 @@ endif()
 if(MPI_DIR)
   MESSAGE("MPI_DIR = ${MPI_DIR}")
   include_directories(${MPI_DIR}/include)
-  link_libraries(-L/Users/nroberts/lib/openmpi-1.4.3/lib -lmpi -lopen-rte -lopen-pal -lutil)
-#  link_directories(${MPI_DIR})
-#  link_libraries(mpi)
-#  link_libraries(mpi_f77)
+#  link_libraries(-L/Users/nroberts/lib/openmpi-1.4.3/lib -lmpi -lopen-rte -lopen-pal -lutil)
+  link_directories(${MPI_DIR})
+  link_libraries(mpi)
+  link_libraries(gfortran)
+  link_libraries(mpi_f77)
 #  link_libraries(${MPI_DIR}/lib/mpi)
 #  link_libraries(${MPI_DIR}/lib/mpi_f77)
   if(SCALAPACK_LIB)
@@ -116,8 +117,6 @@ FILE(GLOB_RECURSE SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
 
 set(DRIVERS_DIR "${CAMELLIA_SOURCE_DIR}/../drivers" )
 
-set(BURGERS_DIR "${DRIVERS_DIR}/Burgers" )
-
 set(NAVIER_STOKES_DIR "${DRIVERS_DIR}/NavierStokes" )
 
 set(INCOMPRESSIBLE_NS_DIR "${DRIVERS_DIR}/IncompressibleNS" )
@@ -128,17 +127,6 @@ set(STOKES_DIR "${DRIVERS_DIR}/Stokes" )
 
 set(TEST_DIR "${DRIVERS_DIR}/DPGTests" )
 FILE(GLOB TEST_SOURCES "${TEST_DIR}/*.cpp")
-
-set( BURGERS_SOURCES
-  "${BURGERS_DIR}/BurgersBilinearForm.cpp"
-  "${BURGERS_DIR}/BurgersInnerProduct.cpp"
-  "${BURGERS_DIR}/BurgersProblem.cpp"
-  "${BURGERS_DIR}/TimeMarchingBurgersProblem.cpp"
-)
-
-set( BURGERS_DRIVER
-  "${BURGERS_DIR}/BurgersDriver.cpp"
-  )
 
 set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
@@ -235,14 +223,13 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 #
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
-add_executable(BurgersDriver ${BURGERS_SOURCES} ${BURGERS_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
-add_executable(NewBurgersDriver ${BURGERS_SOURCES} ${NEW_BURGERS_DRIVER})
+add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 
 #
@@ -252,11 +239,6 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 # (TPLs) with which Trilinos was built.
 #
 
-target_link_libraries(BurgersDriver
-  ${Trilinos_LIBRARIES} 
-  ${Trilinos_TPL_LIBRARIES}
-  ${CAMELLIA_LIBRARY_NAME}
-  )
 target_link_libraries(NewBurgersDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}

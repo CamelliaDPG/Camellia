@@ -136,6 +136,48 @@ public:
     }
   }
 };
+class LogFunction : public Function {
+  FunctionPtr _f;
+public:
+  LogFunction(FunctionPtr f) : Function(0) {
+    _f = f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    _f->values(values,basisCache);    
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double value = values(cellIndex,ptIndex);
+        values(cellIndex,ptIndex) = log(value);
+      }
+    }
+  }
+};
+
+class NormSqOverElement : public Function {
+  FunctionPtr _f;
+  Teuchos::RCP<Mesh> _mesh;
+public:
+  NormSqOverElement(FunctionPtr f, Teuchos::RCP<Mesh> mesh) : Function(0) {
+    _f = f;
+    _mesh = mesh;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    FunctionPtr fsq = _f*_f;
+    int numCells = basisCache->cellIDs().size();
+    int numPoints = values.dimension(1);   
+    FieldContainer<double> cellIntegs(numCells);
+    fsq->integrate(cellIntegs,basisCache);    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	values(cellIndex,ptIndex) = cellIntegs(cellIndex);
+      }
+    }
+  }
+};
 
 class PartitionFunction : public Function {
   Teuchos::RCP<Mesh> _mesh;
@@ -204,6 +246,7 @@ public:
     }
   }
 };
+
 
 // ===================== Spatial filter boundary functions ====================
 
@@ -782,11 +825,11 @@ int main(int argc, char *argv[]) {
 
   double CFL = .9; // not exactly CFL, just how we want our timestep to change w/min h
   double hmin = sqrt(meshInfo.getMinCellMeasure());
-  bool useCFL = true; // rescale dt with min mesh size
+  bool useCFL = false; // rescale dt with min mesh size
   double dtMin = .25;
 
-  double dt = max(dtMin,hmin*CFL);
-  //  double dt = .1;
+  //  double dt = max(dtMin,hmin*CFL);
+  double dt = .1;
 
   if (rank==0){
     cout << "CFL = " << CFL << endl;
@@ -827,7 +870,6 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
-  //  FunctionPtr ReScaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
 
   IPPtr ip = Teuchos::rcp( new IP );
 
@@ -1020,11 +1062,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, wallBoundary, zero);
   bc->addDirichlet(u1hat, wallBoundary, zero);
   bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
-
-  //  bc->addDirichlet(F2nhat, wallBoundary, zero); // sets zero y-stress in free stream bottom boundary
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets zero heat-flux in free stream bottom boundary
-
-  //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets heat flux = 0
 
   // =============================================================================================
 
@@ -1050,6 +1088,10 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
+  int enrichDegree = H1Order; // just for kicks. 
+  cout << "enriching cubature by " << enrichDegree << endl;
+  solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
+
   //  solution->setReportTimingResults(true); // print out timing 
 
   bool setOutflowBC = false;
@@ -1168,8 +1210,8 @@ int main(int argc, char *argv[]) {
     int i = 0;
     while(L2_time_residual > time_tol && (i<numTimeSteps)){
       for (int j = 0;j<numNRSteps;j++){
-	//	solution->solve(false); 
-	solution->condensedSolve(false);  
+	solution->solve(false); 
+	//	solution->condensedSolve(false);  
 	if (mesh->numActiveElements() > 2000){
 	  solution->condensedSolve(true);  // turn on save memory flag	  
 	}
@@ -1197,96 +1239,37 @@ int main(int argc, char *argv[]) {
 
        cout << "at timestep i = " << i << " with dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << ", and time residual = " << L2_time_residual << endl;    	
 
-       
-	std::ostringstream oss;
-	oss << k << "_" << i ;
-	std::ostringstream dat;
-	dat<<".dat";
-	std::ostringstream vtu;
-	vtu<<".vtu";
-	string Ustr("U_NS");      
-	solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-	solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-	solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
-	solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
-	solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
-	backgroundFlow->writeFluxesToFile(u1hat->ID(),"u1hat_prev" +oss.str()+dat.str());
-	backgroundFlow->writeFluxesToFile(u2hat->ID(),"u2hat_prev" +oss.str()+dat.str());
-	backgroundFlow->writeFluxesToFile(That->ID(), "That_prev" +oss.str()+dat.str());
-	backgroundFlow->writeFluxesToFile(F1nhat->ID(),"F1nhat_prev"+oss.str()+dat.str() );
-	backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
-	backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
-	backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
-	backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
-       
+       bool writeTimestepFiles = false;
+       if (writeTimestepFiles){
+	 std::ostringstream oss;
+	 oss << k << "_" << i ;
+	 std::ostringstream dat;
+	 dat<<".dat";
+	 std::ostringstream vtu;
+	 vtu<<".vtu";
+	 string Ustr("U_NS");      
+	 solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
+	 solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
+	 solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
+	 solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
+	 solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
+	 solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
+	 solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
+	 backgroundFlow->writeFluxesToFile(u1hat->ID(),"u1hat_prev" +oss.str()+dat.str());
+	 backgroundFlow->writeFluxesToFile(u2hat->ID(),"u2hat_prev" +oss.str()+dat.str());
+	 backgroundFlow->writeFluxesToFile(That->ID(), "That_prev" +oss.str()+dat.str());
+	 backgroundFlow->writeFluxesToFile(F1nhat->ID(),"F1nhat_prev"+oss.str()+dat.str() );
+	 backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
+	 backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
+	 backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
+	 backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));       
+       }
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
 
       i++;
     }
     
-    //////////////////////////////////////////////////////////////////////////
-    // Check conservation by testing against one
-    //////////////////////////////////////////////////////////////////////////
-    /*
-    VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-    // Create a fake bilinear form for the testing
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    // Define our mass flux
-    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, F1nhat) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
-
-    Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-  
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemType = *elemTypeIt;
-      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
-	cellIDs.push_back(elems[i]->cellID());
-      }
-      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	// pick out the ones for testOne:
-	massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-      }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      }
-      for (int i=0; i<elems.size(); i++) {
-	int cellID = cellIDs[i];
-	maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-	totalMassFlux += massFluxIntegral[cellID];
-	totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-      }
-    }
-    if (rank==0){
-      cout << endl;
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-      cout << "total mass flux: " << totalMassFlux << endl;
-      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-      cout << endl;
-    }
-    */
     // Print results from processor with rank 0
     if (rank==0){
       residualFile.close();
@@ -1307,6 +1290,14 @@ int main(int argc, char *argv[]) {
       backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
     }
 
+    // get entropy
+    FunctionPtr rhoToTheGamma = Teuchos::rcp(new PowerFunction(rho_prev,GAMMA));
+    FunctionPtr p_prev = (GAMMA-1.0)*rho_prev*cv*T_prev;
+    FunctionPtr s = Teuchos::rcp(new LogFunction(p_prev/rhoToTheGamma));
+    FunctionPtr H = rho_prev*s; // entropy functional
+    FunctionPtr Hsq = H*H; // entropy functional sq
+    //    FunctionPtr Hnorm = Teuchos::rcp(new NormSqOverElement(H,mesh));
+
     // compute energy error and plot
     map<int, double> energyErrorMap = solution->energyError();
     if (rank==0){
@@ -1316,6 +1307,8 @@ int main(int argc, char *argv[]) {
       mfile<<".m";
       FunctionPtr energyErrorFunction = Teuchos::rcp( new EnergyErrorFunction(energyErrorMap) );
       energyErrorFunction->writeValuesToMATLABFile(mesh,"energyError"+refNum.str()+mfile.str());
+      H->writeValuesToMATLABFile(mesh,"entropy"+refNum.str()+mfile.str());
+      Hsq->writeValuesToMATLABFile(mesh,"entropySq"+refNum.str()+mfile.str());
     }
 
     if (k<numRefs){
