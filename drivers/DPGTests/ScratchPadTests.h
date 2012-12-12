@@ -48,9 +48,8 @@ public:
   bool testSpatiallyFilteredFunction();
   bool testPenaltyConstraints();
   bool testLinearTermEvaluationConsistency();
-  bool testErrorOrthogonality();
   bool testIntegrateDiscontinuousFunction();
-
+  bool testGalerkinOrthogonality();
   std::string testSuiteName();
 };
 
