@@ -85,13 +85,13 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	double x = points(i,j,0);
-	double y = points(i,j,1);
-	if (abs(x-.5)<tol){
-	  values(i,j) = 1.0;
-	}else{
-	  values(i,j) = 0.0;
-	}
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        if (abs(x-.5)<tol){
+          values(i,j) = 1.0;
+        } else {
+          values(i,j) = 0.0;
+        }
       }
     }
   }
@@ -110,13 +110,13 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	double x = points(i,j,0);
-	double y = points(i,j,1);
-	values(i,j) = 1.0;
-	bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
-	if (isOnInflow){
-	  values(i,j) = 0.0;
-	}
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        values(i,j) = 1.0;
+        bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
+        if (isOnInflow){
+          values(i,j) = 0.0;
+        }
       }
     }
   }
