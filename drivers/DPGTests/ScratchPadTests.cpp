@@ -562,34 +562,21 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   double jumpWeight = 13.3; // some random number
   FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
   FunctionPtr X = Teuchos::rcp(new Xn(1));
-  LinearTermPtr edgeIntegrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
-  LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*v;
+  LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
   
   map<int,FunctionPtr> vmap;
   vmap[v->ID()] = cellIDFxn;
 
-  FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false);
-  FunctionPtr edgeIntegrand = integrandLT->evaluate(vmap,true);
-  
-  if (edgeIntegrand->isZero()) {
-    cout << "NOTE: edgeIntegrand is identically 0.\n";
-  }
-  
-  FunctionPtr edgeRestrictedIntegrand = edgeIntegrandLT->evaluate(vmap,true);
-
+  FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false); 
+  FunctionPtr edgeRestrictedIntegrand = integrandLT->evaluate(vmap,true);
+ 
   double edgeRestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeRestrictedIntegrand->integrate(mesh,10);
-  double unrestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeIntegrand->integrate(mesh,10);
-  if (abs(edgeRestrictedValue-unrestrictedValue)>1e-11){
-    success = false;
-    cout << "Failed testIntegrateDiscontinuousFunction() because edge-restricted jump integral = " << edgeRestrictedValue << " is inconsistent with the jump integral of the volume integrand = " << unrestrictedValue << endl;
-    return success;
-  }
 
-  double expectedValue = .5*(jumpWeight+1.0);
-  double diff = abs(expectedValue-unrestrictedValue);
+  double expectedValue = .5 + .5*jumpWeight;
+  double diff = abs(expectedValue-edgeRestrictedValue);
   if (abs(diff)>1e-11){
     success = false;
-    cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << unrestrictedValue << endl;
+    cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << edgeRestrictedValue << endl;
   }  
   return success;
 }
@@ -701,8 +688,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
 	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
 	
-	//	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-	double jump = gradient->integralOfJump(mesh,10);
+	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+	//	double jump = gradient->integralOfJump(mesh,10);
 	if (abs(jump)>tol){
 	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
 	  success = false;
