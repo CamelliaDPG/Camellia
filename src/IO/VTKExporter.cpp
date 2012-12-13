@@ -5,7 +5,7 @@
  *
  */
  
-#include "VTKExporter.h"
+#include "VTKExporterCamellia.h"
 #include "CamelliaConfig.h"
 
 #ifdef USE_VTK
@@ -150,8 +150,8 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
       else
         values.resize(numCells, numPoints, spaceDim);
 
-      // _solution->solutionValues(values, fieldTrialIDs[i], basisCache);
-      _solution->solutionValues(values, elemTypePtr, fieldTrialIDs[i], *physicalPoints);
+      _solution->solutionValues(values, fieldTrialIDs[i], basisCache);
+      //_solution->solutionValues(values, elemTypePtr, fieldTrialIDs[i], *physicalPoints);
       computedValues.push_back(values);
     }
     // cout << "After All" << endl;
