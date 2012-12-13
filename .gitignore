@@ -28,6 +28,8 @@ drivers/*/exec
 drivers/*/.sconsign.dblite
 build/.sconsign.dblite
 .sconsign.dblite
+*.bak
+bin/
 
 ############## ignore all compressed files
 *.gz
