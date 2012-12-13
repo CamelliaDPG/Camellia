@@ -46,10 +46,10 @@ public:
         double y = points(i,j,1);
         values(i,j) = 0.0;
         if (abs(y)<tol){
-          values(i,j) = 1.0-x;
+          values(i,j) = 1.0;
         }
         if (abs(x)<tol){
-          values(i,j) = 1.0-y;
+          values(i,j) = -1.0;
         }
       }
     }
@@ -628,13 +628,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
-  bool simpleInflow = false;
   FunctionPtr uIn;
-  if (simpleInflow) {
-    uIn = Function::constant(1.0);
-  } else {
-    uIn = Teuchos::rcp(new Uinflow);
-  }
+  uIn = Teuchos::rcp(new Uinflow); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
   bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
@@ -690,6 +685,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 	
 	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
 	//	double jump = gradient->integralOfJump(mesh,10);
+	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
 	if (abs(jump)>tol){
 	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
 	  success = false;
