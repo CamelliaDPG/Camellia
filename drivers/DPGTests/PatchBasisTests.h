@@ -12,6 +12,8 @@
 #include "Solution.h"
 #include "ExactSolution.h"
 
+#include "BF.h"
+
 class PatchBasisTests : public TestSuite {
 private:
   FieldContainer<double> _testPoints1D;
@@ -25,10 +27,10 @@ private:
   Teuchos::RCP<Mesh> _mesh; // a 2x2 mesh with usePatchBasis==true
   ElementPtr _sw, _se, _nw, _ne;
   
-  Teuchos::RCP<Solution> _confusionSolution;
+  Teuchos::RCP<Solution> _convectionSolution;
   //Teuchos::RCP<ExactSolution> _confusionExactSolution;
   //  map<int, double> _confusionL2ErrorForOriginalMesh; // a baseline to compare against
-  double _confusionEnergyErrorForOriginalMesh; // a baseline to compare against
+  double _convectionEnergyErrorForOriginalMesh; // a baseline to compare against
 
   vector<int> _fluxIDs;
   vector<int> _fieldIDs;
