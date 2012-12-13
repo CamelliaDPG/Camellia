@@ -3,9 +3,14 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
+#include "RefinementStrategy.h"
+#include "CamelliaConfig.h"
 #ifdef USE_VTK
-#include "VTKExporter.h"
+#include "VTKExporterCamellia.h"
 #endif
+
+#include <string>
+using namespace std;
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
@@ -184,10 +189,21 @@ bool VectorizedBasisTestSuite::testPoisson() {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  solution->solve(false);
-#ifdef USE_VTK
+  double energyThreshold = 0.2; // for mesh refinements
+  RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
-  exporter.exportSolution("test");
+
+  for (int refIndex=0; refIndex<=4; refIndex++)
+  {
+    solution->solve(false);
+#ifdef USE_VTK
+    stringstream outfile;
+    outfile << "test_" << refIndex;
+    exporter.exportSolution(outfile.str());
 #endif
+
+    if (refIndex < 4)
+      refinementStrategy.refine(true); // print to console on rank 0
+  }
   return success;
 }

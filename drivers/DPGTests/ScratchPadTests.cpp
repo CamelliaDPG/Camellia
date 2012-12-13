@@ -85,13 +85,13 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	double x = points(i,j,0);
-	double y = points(i,j,1);
-	if (abs(x-.5)<tol){
-	  values(i,j) = 1.0;
-	}else{
-	  values(i,j) = 0.0;
-	}
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        if (abs(x-.5)<tol){
+          values(i,j) = 1.0;
+        } else {
+          values(i,j) = 0.0;
+        }
       }
     }
   }
@@ -110,13 +110,13 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	double x = points(i,j,0);
-	double y = points(i,j,1);
-	values(i,j) = 1.0;
-	bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
-	if (isOnInflow){
-	  values(i,j) = 0.0;
-	}
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        values(i,j) = 1.0;
+        bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
+        if (isOnInflow){
+          values(i,j) = 0.0;
+        }
       }
     }
   }
@@ -571,6 +571,11 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false);
   FunctionPtr edgeIntegrand = integrandLT->evaluate(vmap,true);
+  
+  if (edgeIntegrand->isZero()) {
+    cout << "NOTE: edgeIntegrand is identically 0.\n";
+  }
+  
   FunctionPtr edgeRestrictedIntegrand = edgeIntegrandLT->evaluate(vmap,true);
 
   double edgeRestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeRestrictedIntegrand->integrate(mesh,10);
@@ -617,7 +622,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   ////////////////////   BUILD MESH   ///////////////////////
 
   BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
-  
+
+  FunctionPtr n = Function::normal();
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
@@ -637,14 +643,13 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
   FunctionPtr uIn = Teuchos::rcp(new Uinflow);
-  FunctionPtr n = Teuchos::rcp(new UnitNormalFunction);
-  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);  
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
   solution->solve(false);
-  FunctionPtr uFxn = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
-  FunctionPtr fnhatFxn = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u));
+  FunctionPtr uFxn = Function::solution(u, solution);
+  FunctionPtr fnhatFxn = Function::solution(beta_n_u,solution);
 
   // make residual for riesz representation function
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
@@ -656,7 +661,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
 
-  BCPtr nullBC = Teuchos::rcp((BC*)NULL);RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   // just test field dofs here
@@ -701,7 +706,6 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       }
     }
   }
-
 
   return success;
 }

@@ -621,12 +621,6 @@ FunctionPtr Function::zero() {
   return _zero;
 }
 
-//FunctionPtr Function::jump(FunctionPtr f) {
-//  FunctionPtr sgn = sideParity();
-//  return sgn * f;
-////  return Teuchos::rcp( new JumpFunction(f) );
-//}
-
 ConstantScalarFunction::ConstantScalarFunction(double value) { 
   _value = value;
   ostringstream valueStream;
@@ -1470,6 +1464,9 @@ string SimpleSolutionFunction::displayString() {
 void SimpleSolutionFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   bool dontWeightForCubature = false;
   _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
+  if (_var->varType()==FLUX) { // weight by sideParity
+    sideParity()->scalarMultiplyFunctionValues(values, basisCache);
+  }
 }
 
 FunctionPtr SimpleSolutionFunction::dx() {

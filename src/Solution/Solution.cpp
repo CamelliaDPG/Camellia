@@ -1944,7 +1944,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
   if (numCells != values.dimension(0)) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "first dimension of values should == numCells.");
   }
-  int spaceDim = values.dimension(1);
+  int spaceDim = values.dimension(values.rank()-1);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
     int cellID = cellIDs[cellIndex];
