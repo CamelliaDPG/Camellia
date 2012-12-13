@@ -688,20 +688,20 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       ElementTypePtr elemType = elem->elementType();
       vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u->ID(), sideIndex);
       for (int i = 0;i<localDofIndices.size();i++){
-	int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
-      
-	// create perturbation in direction du
-	solnPerturbation->clearSolution(); // clear all solns
-	solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);  
-	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
-	
-	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-	if (abs(jump)>tol){
-	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
-	  success = false;
-	  return success;
-	}
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+        
+        // create perturbation in direction du
+        solnPerturbation->clearSolution(); // clear all solns
+        solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);
+        LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
+        
+        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+        if (abs(jump)>tol){
+          cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
+          success = false;
+          return success;
+        }
       }
     }
   }
