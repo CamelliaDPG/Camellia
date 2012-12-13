@@ -622,7 +622,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   ////////////////////   BUILD MESH   ///////////////////////
 
   BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
-  
+
+  FunctionPtr n = Function::normal();
   // v terms:
   convectionBF->addTerm( -u, beta * v->grad() );
   convectionBF->addTerm( beta_n_u, v);
@@ -642,14 +643,13 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
   FunctionPtr uIn = Teuchos::rcp(new Uinflow);
-  FunctionPtr n = Teuchos::rcp(new UnitNormalFunction);
-  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);  
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
   solution->solve(false);
-  FunctionPtr uFxn = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
-  FunctionPtr fnhatFxn = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u));
+  FunctionPtr uFxn = Function::solution(u, solution);
+  FunctionPtr fnhatFxn = Function::solution(beta_n_u,solution);
 
   // make residual for riesz representation function
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
@@ -661,7 +661,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
 
-  BCPtr nullBC = Teuchos::rcp((BC*)NULL);RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   // just test field dofs here
@@ -698,14 +698,13 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
         
         double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
         if (abs(jump)>tol){
-          cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
+          cout << "Failed testGalerkinOrthogonality() for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
           success = false;
           return success;
         }
       }
     }
   }
-
 
   return success;
 }
