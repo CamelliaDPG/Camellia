@@ -571,6 +571,11 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false);
   FunctionPtr edgeIntegrand = integrandLT->evaluate(vmap,true);
+  
+  if (edgeIntegrand->isZero()) {
+    cout << "NOTE: edgeIntegrand is identically 0.\n";
+  }
+  
   FunctionPtr edgeRestrictedIntegrand = edgeIntegrandLT->evaluate(vmap,true);
 
   double edgeRestrictedValue = volumeIntegrand->integrate(mesh,10) + edgeRestrictedIntegrand->integrate(mesh,10);
