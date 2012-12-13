@@ -641,7 +641,13 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
-  FunctionPtr uIn = Teuchos::rcp(new Uinflow);
+  bool simpleInflow = true;
+  FunctionPtr uIn;
+  if (simpleInflow) {
+    uIn = Function::constant(1.0);
+  } else {
+    uIn = Teuchos::rcp(new Uinflow);
+  }
   bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
