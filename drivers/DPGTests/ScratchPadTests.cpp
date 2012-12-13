@@ -675,7 +675,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       success = false;
     }
   }
-  // just test fluxes ON INTERNAL SKELETON here
+  // just test fluxes ON INTERNAL SKELETON here (by merit of the integralOfJump routine returning 0 for boundaries)
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
     for (int sideIndex = 0;sideIndex < 4;sideIndex++){
@@ -691,7 +691,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
 	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
 	
-	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+	//	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+	double jump = gradient->integralOfJump(mesh,10);
 	if (abs(jump)>tol){
 	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
 	  success = false;
