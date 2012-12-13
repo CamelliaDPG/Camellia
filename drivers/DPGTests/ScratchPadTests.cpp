@@ -615,7 +615,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   convectionBF->addTerm( beta_n_u, v);
 
   // define nodes for mesh
-  int order = 0;
+  int order = 1;
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
@@ -628,7 +628,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
-  bool simpleInflow = true;
+  bool simpleInflow = false;
   FunctionPtr uIn;
   if (simpleInflow) {
     uIn = Function::constant(1.0);
