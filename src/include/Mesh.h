@@ -275,7 +275,7 @@ public:
   void registerSolution(Teuchos::RCP<Solution> solution);
   
   void pRefine(vector<int> cellIDsForPRefinements);
-//  void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
+  void pRefine(set<int> cellIDsForPRefinements);
     
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound

@@ -1,7 +1,7 @@
 
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original Version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -1915,8 +1915,8 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
     // now, apply coefficient weights:
     for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
       for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++) {
-	int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, 0); // 0 assumes field var
-	values(cellIndex,ptIndex) += (*basisValues)(dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
+        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, 0); // 0 assumes field var
+        values(cellIndex,ptIndex) += (*basisValues)(dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
       }
     }
   }
@@ -2507,6 +2507,10 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
   }
 }
 
+const FieldContainer<double>& Solution::allCoefficientsForCellID(int cellID) {
+  return _solutionForCellIDGlobal[cellID];
+}
+
 void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }
@@ -2558,19 +2562,19 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
 void Solution::setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex){
 
   map<int, pair<int,int> > globalToLocalMap = _mesh->getGlobalToLocalMap();
-  if (!isFluxOrTraceDof(dofIndex)){
+  if (!isFluxOrTraceDof(dofIndex)) {
     int cellID = globalToLocalMap[dofIndex].first;
     int localDofIndex = globalToLocalMap[dofIndex].second;
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeff;  
-  }else{
+  } else {
     // if not field, can have support over multiple elements. must set all supported elem dofs
     map< pair<int,int> , int> localToGlobalMap = _mesh->getLocalToGlobalMap();    
     map< pair<int,int> , int>::iterator it;
     for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
       pair<int,int> cellID_dofIndex = it->first;
       int currentGlobalDofIndex = it->second;
-      if (currentGlobalDofIndex==dofIndex){
-	_solutionForCellIDGlobal[cellID_dofIndex.first](cellID_dofIndex.second) = solnCoeff;  	
+      if (currentGlobalDofIndex==dofIndex) {
+        _solutionForCellIDGlobal[cellID_dofIndex.first](cellID_dofIndex.second) = solnCoeff;
       }
     }
   }
@@ -3553,15 +3557,22 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
 }
 
 void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades ) {
+  set<int> cellIDsToSkip; //empty
+  processSideUpgrades(cellSideUpgrades,cellIDsToSkip);
+}
+
+void Solution::processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<int> &cellIDsToSkip ) {
   for (map<int, pair< ElementTypePtr, ElementTypePtr > >::const_iterator upgradeIt = cellSideUpgrades.begin();
        upgradeIt != cellSideUpgrades.end(); upgradeIt++) {
     int cellID = upgradeIt->first;
+    if (cellIDsToSkip.find(cellID) != cellIDsToSkip.end() ) continue;
     if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end())
       continue; // no previous solution for this cell
     DofOrderingPtr oldTrialOrdering = (upgradeIt->second).first->trialOrderPtr;
     DofOrderingPtr newTrialOrdering = (upgradeIt->second).second->trialOrderPtr;
     FieldContainer<double> newCoefficients(newTrialOrdering->totalDofs());
     newTrialOrdering->copyLikeCoefficients( newCoefficients, oldTrialOrdering, _solutionForCellIDGlobal[cellID] );
+//    cout << "processSideUpgrades: setting solution for cell ID " << cellID << endl;
     _solutionForCellIDGlobal[cellID] = newCoefficients;
   }
 }

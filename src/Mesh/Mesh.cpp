@@ -2408,11 +2408,16 @@ void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
   cout << "Mesh::unregisterSolution: Solution not found.\n";
 }
 
-//void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
-//  pRefine(cellIDsForPRefinements, vector< Teuchos::RCP<Solution> >());
-//}
-
 void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+  set<int> cellSet;
+  for (vector<int>::iterator cellIt=cellIDsForPRefinements.begin();
+       cellIt != cellIDsForPRefinements.end(); cellIt++) {
+    cellSet.insert(*cellIt);
+  }
+  pRefine(cellSet);
+}
+
+void Mesh::pRefine(set<int> cellIDsForPRefinements) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
        meshIt != _registeredMeshes.end(); meshIt++) {
@@ -2426,7 +2431,7 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   //   c. Loop through sides, calling matchNeighbor for each
   
   // 1. Loop through cellIDsForPRefinements:
-  vector<int>::iterator cellIt;
+  set<int>::iterator cellIt;
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
@@ -2468,10 +2473,10 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
     
     for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
-      // do projection
+      // do projection: for p-refinements, the "child" is the same cell
       vector<int> childIDs;
       childIDs.push_back(cellID);
-      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDsForPRefinements);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
@@ -2542,6 +2547,7 @@ int Mesh::rowSizeUpperBound() {
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   ElementPtr elem = _elements[cellID];
+//  cout << "setting element type for cellID " << cellID << " (sideUpgradeOnly=" << sideUpgradeOnly << ")\n";
   if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
     ElementTypePtr oldType;
     map<int, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);

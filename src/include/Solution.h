@@ -124,6 +124,8 @@ public:
   Solution(const Solution &soln);
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
+  const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables
+  
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
   void solve(); // could add arguments to allow different solution algorithms to be selected...
@@ -186,7 +188,8 @@ public:
   
   Teuchos::RCP<LagrangeConstraints> lagrangeConstraints() const;
 
-  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades );
+  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
+  void processSideUpgrades( const map<int, pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const set<int> &cellIDsToSkip );
   
   // new projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap);
