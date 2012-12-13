@@ -3,6 +3,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "InnerProductScratchPad.h"
+#include "CamelliaConfig.h"
 #ifdef USE_VTK
 #include "VTKExporterCamellia.h"
 #endif
