@@ -61,6 +61,7 @@ public:
   
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
   
+  double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment);
   
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
@@ -112,6 +113,44 @@ private:
                                FunctionModificationType modType);
 
 
+};
+
+// restricts a given function to just the mesh skeleton
+class BoundaryFunction : public Function{
+ private: 
+  FunctionPtr _f;
+ public:  
+  BoundaryFunction(FunctionPtr f){
+    _f = f;
+  }
+  bool boundaryValueOnly(){
+    return true;
+  }  
+  FunctionPtr getFunction(){
+    return _f;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    _f->values(values,basisCache);
+  }
+};
+
+// restricts a given function to just the mesh skeleton
+class InternalBoundaryFunction : public BoundaryFunction{
+ public:
+ InternalBoundaryFunction(FunctionPtr f): BoundaryFunction(f){};
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    this->getFunction()->values(values,basisCache);
+
+    int sideIndex = basisCache->getSideIndex();
+    vector<int> cellIDs = basisCache->cellIDs();    
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      //      for (int sideIndex = 0
+      //      }
+    }
+
+  }
 };
 
 class SimpleFunction : public Function {
