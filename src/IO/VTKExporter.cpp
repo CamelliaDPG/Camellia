@@ -226,7 +226,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
               fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
               break;
             case 2:
-              if (cellIndex == 0 && pointIndex == 0)
+              // if (cellIndex == 0 && pointIndex == 0)
                 // cout << computedValues[varIdx] << endl;
               // fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
               fieldData[varIdx]->InsertNextTuple2(computedValues[varIdx](cellIndex, pointIndex, 0), computedValues[varIdx](cellIndex, pointIndex, 1));
