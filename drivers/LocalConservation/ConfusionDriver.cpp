@@ -14,7 +14,7 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
-#include "VTKExporter.h"
+#include "VTKExporterCamellia.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -23,7 +23,7 @@
 
 
 double epsilon = 1e-2;
-double numRefs = 0;
+double numRefs = 4;
 
 bool enforceLocalConservation = true;
 

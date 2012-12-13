@@ -10,6 +10,7 @@
 
 #ifdef USE_VTK
 #include "vtkPointData.h"
+#include "vtkCellData.h"
 #include "vtkFloatArray.h"
 #include "vtkIntArray.h"
 #include "vtkUnstructuredGrid.h"
@@ -46,7 +47,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
 
     bool vectorValued = vars.back()->rank() == 1;
     if (vectorValued)
-      fieldData[varIdx]->SetNumberOfComponents(spaceDim);
+      fieldData[varIdx]->SetNumberOfComponents(3);
     else
       fieldData[varIdx]->SetNumberOfComponents(1);
     fieldData[varIdx]->SetName(vars.back()->name().c_str());
@@ -226,10 +227,10 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
               fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
               break;
             case 2:
-              // if (cellIndex == 0 && pointIndex == 0)
-                // cout << computedValues[varIdx] << endl;
-              // fieldData[varIdx]->InsertNextTuple1(computedValues[varIdx](cellIndex, pointIndex));
               fieldData[varIdx]->InsertNextTuple2(computedValues[varIdx](cellIndex, pointIndex, 0), computedValues[varIdx](cellIndex, pointIndex, 1));
+              break;
+            case 3:
+              fieldData[varIdx]->InsertNextTuple3(computedValues[varIdx](cellIndex, pointIndex, 0), computedValues[varIdx](cellIndex, pointIndex, 1), 0);
               break;
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
@@ -248,7 +249,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     ug->GetPointData()->AddArray(fieldData[varIdx]);
     fieldData[varIdx]->Delete();
   }
-  // ug->GetCellData()->AddArray(polyOrderData);
+  ug->GetCellData()->AddArray(polyOrderData);
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
   wr->SetInput(ug);
@@ -309,18 +310,27 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
+
+    int pOrder = _mesh->cellPolyOrder(cellIDs[0]);
+    int numVertices = vertexPoints.dimension(1);
+    unsigned cellTopoKey = cellTopoPtr->getKey();
+    if (defaultPts)
+      num1DPts = pow(2.0, pOrder-1);
+
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
-    FieldContainer<double> refPoints(3,1);
-    refPoints(0,0) = -1.0;
-    refPoints(1,0) =  0.0;
-    refPoints(2,0) =  1.0;
+    FieldContainer<double> refPoints(num1DPts,1);
+    for (int i=0; i < num1DPts; i++)
+    {
+      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+      refPoints(i,0) = x;
+    }
+
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
       sideBasisCache->setRefCellPoints(refPoints);
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
-      cout << "numPoints = " << numPoints << endl;
       if (sideBasisCache.get() == NULL)
         cout << "NULL Side Basis" << endl;
 
