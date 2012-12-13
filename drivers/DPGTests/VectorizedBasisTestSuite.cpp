@@ -191,7 +191,9 @@ bool VectorizedBasisTestSuite::testPoisson() {
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+#ifdef USE_VTK
   VTKExporter exporter(solution, mesh, varFactory);
+#endif
 
   for (int refIndex=0; refIndex<=4; refIndex++)
   {
