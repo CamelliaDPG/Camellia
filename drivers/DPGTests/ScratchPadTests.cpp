@@ -534,6 +534,10 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   ip->addTerm(v);
   ip->addTerm(beta*v->grad());
 
+  // for projections
+  IPPtr ipL2 = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+
   // define trial variables
   VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
   VarPtr u = varFactory.fieldVar("u");
@@ -558,14 +562,19 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   //  FunctionPtr cellIDFxn = Teuchos::rcp(new CellIDFunction); // should be 0 on cellID 0, 1 on cellID 1
   set<int> cellIDs;
   cellIDs.insert(1); // 0 on cell 0, 1 on cell 1
-  FunctionPtr cellIDFxn = Teuchos::rcp(new IndicatorFunction(cellIDs)); // should be 0 on cellID 0, 1 on cellID 1
+  FunctionPtr indicator = Teuchos::rcp(new IndicatorFunction(cellIDs)); // should be 0 on cellID 0, 1 on cellID 1
   double jumpWeight = 13.3; // some random number
   FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
   FunctionPtr X = Teuchos::rcp(new Xn(1));
   LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
   
+  // make riesz representation function to more closely emulate the error rep
+  LinearTermPtr indicatorLT = Teuchos::rcp(new LinearTerm);// residual 
+  indicatorLT->addTerm(indicator*v);
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ipL2, indicatorLT));
+  riesz->computeRieszRep();
   map<int,FunctionPtr> vmap;
-  vmap[v->ID()] = cellIDFxn;
+  vmap[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz)); // SHOULD BE L2 projection = same thing!!!  
 
   FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false); 
   FunctionPtr edgeRestrictedIntegrand = integrandLT->evaluate(vmap,true);
@@ -640,6 +649,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   // make residual for riesz representation function
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
   residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
