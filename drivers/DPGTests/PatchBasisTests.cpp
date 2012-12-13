@@ -1,6 +1,8 @@
 
 #include "PatchBasisTests.h"
 
+#include "SolutionTests.h"
+
 #include "Intrepid_FieldContainer.hpp"
 #include "Intrepid_CellTools.hpp"
 
@@ -33,16 +35,16 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  try {
+//  try {
     setup();
-    if (testSolveUniformMesh()) {
+    if (testSimpleRefinement()) {
       numTestsPassed++;
     }
     numTestsRun++;
     teardown();
     
     setup();
-    if (testSimpleRefinement()) {
+    if (testSolveUniformMesh()) {
       numTestsPassed++;
     }
     numTestsRun++;
@@ -82,15 +84,13 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     }
     numTestsRun++;
     teardown();
-  } catch (...) {
-    cout << "PatchBasisTests: caught exception while running tests.\n";
-    teardown();
-  }
+//  } catch (...) {
+//    cout << "PatchBasisTests: caught exception while running tests.\n";
+//    teardown();
+//  }
 }
 
 bool PatchBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {
-  bool success = true;
-  
   // for every side (PatchBasis or no), compute values for that side, and values for its neighbor along
   // the same physical points.  (Imitate the comparison between parent and child, only remember that
   // the neighbor involves a flip: (-1,1) --> (1,-1).)
@@ -227,8 +227,26 @@ void PatchBasisTests::makeSimpleRefinement() {
   vector<int> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
   cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 0, as things are right now implemented
-  // the next line will throw an exception in Mesh right now, because Mesh doesn't yet support PatchBasis
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+/*_________________________________
+  |               |               |
+  |               |               |
+  |               |               |
+  |       1       |       3       |
+  |               |               |
+  |               |               |
+  |               |               |
+  ---------------------------------
+  |       |       |               |
+  |   7   |   6   |               |
+  |       |       |               |
+  |-------0-------|       2       |
+  |       |       |               |
+  |   4   |   5   |               |
+  |       |       |               |
+  ---------------------------------*/
+  
 }
 
 void PatchBasisTests::makeMultiLevelRefinement() {
@@ -242,6 +260,25 @@ void PatchBasisTests::makeMultiLevelRefinement() {
   ElementPtr elem = _mesh->elementsForPoints(point)[0];
   cellIDsToRefine.push_back(elem->cellID());
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+/* _________________________________
+   |               |               |
+   |               |               |
+   |               |               |
+   |       1       |       3       |
+   |               |               |
+   |               |               |
+   |               |               |
+   ---------------------------------
+   |       |       |               |
+   |   7   |   6   |               |
+   |       |       |               |
+   |-------0-------|       2       |
+   |       | 11| 10|               |
+   |   4   |---5---|               |
+   |       | 8 | 9 |               |
+   ---------------------------------*/
+  
 }
 
 bool PatchBasisTests::meshLooksGood() {
@@ -505,6 +542,8 @@ void PatchBasisTests::setup() {
   
   _confusionSolution = Teuchos::rcp( new Solution(_mesh, confusionProblem, confusionProblem, ip) );
   
+  _mesh->registerSolution(_confusionSolution);
+  
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
   // southwest center:
@@ -654,6 +693,10 @@ bool PatchBasisTests::testSimpleRefinement() {
   // refine in the sw, and then check that the right elements have PatchBases
   bool success = true;
   
+//  if ( ! SolutionTests::solutionCoefficientsAreConsistent(_confusionSolution) ) {
+//    cout << "BEFORE simple refinement, solution coefficients are inconsistent.\n";
+//  }
+  
 //  cout << "Before testSimpleRefinement, boundary: " << endl;
 //  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
 //    cout << "cellID " << cellID << ":";
@@ -665,7 +708,32 @@ bool PatchBasisTests::testSimpleRefinement() {
 //    cout << endl;
 //  }
   
+  // the _nw and _se element's dofs should not change: let's store them and check this
+  FieldContainer<double> nwDofsBefore = _confusionSolution->allCoefficientsForCellID(_nw->cellID());
+  FieldContainer<double> seDofsBefore = _confusionSolution->allCoefficientsForCellID(_se->cellID());
+  
+  
+//  cout << "cellID 1, trial ordering:\n";
+//  cout << *(_mesh->getElement(1)->elementType()->trialOrderPtr);
+  
   makeSimpleRefinement();
+  
+//  cout << "cellID 7, trial ordering:\n";
+//  cout << *(_mesh->getElement(7)->elementType()->trialOrderPtr);
+  
+  FieldContainer<double> nwDofsAfter = _confusionSolution->allCoefficientsForCellID(_nw->cellID());
+  FieldContainer<double> seDofsAfter = _confusionSolution->allCoefficientsForCellID(_se->cellID());
+  
+  double tol = 1e-15;
+  double maxDiff = 0;
+  if (! fcsAgree(nwDofsBefore, nwDofsAfter, tol, maxDiff)) {
+    success = false;
+    cout << "nw dofs before and after sw refinement don't match. Maxdiff " << maxDiff << endl;
+  }
+  if (! fcsAgree(seDofsBefore, seDofsAfter, tol, maxDiff)) {
+    success = false;
+    cout << "se dofs before and after sw refinement don't match. Maxdiff " << maxDiff << endl;
+  }
   
 //  cout << "After testSimpleRefinement, boundary: " << endl;
 //  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
@@ -677,6 +745,11 @@ bool PatchBasisTests::testSimpleRefinement() {
 //    }
 //    cout << endl;
 //  }
+  
+  if ( ! SolutionTests::solutionCoefficientsAreConsistent(_confusionSolution) ) {
+    cout << "After simple refinement, solution coefficients are inconsistent.\n";
+    success = false;
+  }
   
   if ( !meshLooksGood() || (! refinementsHaveNotIncreasedError()) ) {
     success = false;

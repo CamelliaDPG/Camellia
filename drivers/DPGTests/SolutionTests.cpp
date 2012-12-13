@@ -65,7 +65,7 @@ public:
   }
 };
 
-bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln) {
+bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole) {
   Teuchos::RCP<BilinearForm> bf = soln->mesh()->bilinearForm();
   
   vector<int> trialIDs = bf->trialIDs();
@@ -100,8 +100,13 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
               // compare previous entry
               double diff = abs(globalBasisCoefficients[globalDofIndex] - solnCoeffs[dofOrdinal]);
               if (diff > tol) {
-                cout << "coefficients inconsistent for cellID " << cellID << " and dofOrdinal " << dofOrdinal;
-                cout << " and trialID " << trialID << " (diff = " << diff << ")" << endl;
+                if (printDetailsToConsole) {
+                  cout << "coefficients inconsistent for cellID " << cellID << " and dofOrdinal " << dofOrdinal;
+                  cout << " (on side " << sideIndex << "; globalDofIndex = " << globalDofIndex << ")";
+                  cout << " and trialID " << trialID << " (diff = " << diff;
+                  cout << "; values are " << globalBasisCoefficients[globalDofIndex];
+                  cout << " and " << solnCoeffs[dofOrdinal] << ")" << endl;
+                }
                 success = false;
               }
             }

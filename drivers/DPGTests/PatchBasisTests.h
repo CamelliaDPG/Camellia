@@ -30,7 +30,6 @@ private:
   //  map<int, double> _confusionL2ErrorForOriginalMesh; // a baseline to compare against
   double _confusionEnergyErrorForOriginalMesh; // a baseline to compare against
 
-  
   vector<int> _fluxIDs;
   vector<int> _fieldIDs;
   
