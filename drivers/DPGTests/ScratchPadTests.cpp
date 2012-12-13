@@ -42,16 +42,15 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	double x = points(i,j,0);
-	double y = points(i,j,1);
-	values(i,j) = 0.0;
-	if (abs(y)<tol){
-	  values(i,j) = 1.0-x;
-	}
-	if (abs(x)<tol){
-	  values(i,j) = 1.0-y;
-	}
-
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        values(i,j) = 0.0;
+        if (abs(y)<tol){
+          values(i,j) = 1.0-x;
+        }
+        if (abs(x)<tol){
+          values(i,j) = 1.0-y;
+        }
       }
     }
   }
@@ -66,7 +65,7 @@ public:
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
       for (int j = 0;j<numPoints;j++){
-	values(i,j) = cellIDs[i];
+        values(i,j) = cellIDs[i];
       }
     }
   }
