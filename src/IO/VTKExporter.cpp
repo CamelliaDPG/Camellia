@@ -35,17 +35,16 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   // Get trialIDs
   vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<VarPtr> vars;
-  int numFieldVars = fieldTrialIDs.size();
+  int numVars = fieldTrialIDs.size();
 
   int spaceDim = 2; // TODO: generalize to 3D...
 
-  for (int varIdx = 0; varIdx < numFieldVars; varIdx++)
+  for (int varIdx = 0; varIdx < numVars; varIdx++)
   {
     fieldData.push_back(vtkFloatArray::New());
-
     vars.push_back(_varFactory.trial(fieldTrialIDs[varIdx]));
+
     bool vectorValued = vars.back()->rank() == 1;
-    cout << "vectorValue = " << vectorValued << endl;
     if (vectorValued)
       fieldData[varIdx]->SetNumberOfComponents(spaceDim);
     else
@@ -55,10 +54,10 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   polyOrderData->SetNumberOfComponents(1);
   polyOrderData->SetName("Polynomial Order");
 
+  unsigned int total_vertices = 0;
+
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
-
-  unsigned int total_vertices = 0;
 
   // Loop through Quads, Triangles, etc
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
@@ -141,8 +140,8 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
 
     vector< FieldContainer<double> > computedValues;
-    // computedValues.resize(numFieldVars);
-    for (int i=0; i < numFieldVars; i++)
+    // computedValues.resize(numVars);
+    for (int i=0; i < numVars; i++)
     {
       int numberComponents = fieldData[i]->GetNumberOfComponents();
       FieldContainer<double> values;
@@ -218,7 +217,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
       {
         points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
                                 (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
-        for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+        for (int varIdx=0; varIdx < numVars; varIdx++)
         {
           // fieldData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
           switch(fieldData[varIdx]->GetNumberOfComponents())
@@ -244,7 +243,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   ug->SetPoints(points);
   points->Delete();
 
-  for (int varIdx=0; varIdx < numFieldVars; varIdx++)
+  for (int varIdx=0; varIdx < numVars; varIdx++)
   {
     ug->GetPointData()->AddArray(fieldData[varIdx]);
     fieldData[varIdx]->Delete();
@@ -265,7 +264,122 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
 
 void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
 {
-  cout << "Exported Traces" << endl;
+  bool defaultPts = (num1DPts == 0);
+
+  vtkUnstructuredGrid* trace_ug = vtkUnstructuredGrid::New();
+  vector<vtkFloatArray*> traceData;
+  vtkPoints* points = vtkPoints::New();
+  vtkIntArray* polyOrderData = vtkIntArray::New();
+
+  // Get trialIDs
+  vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
+  vector<VarPtr> vars;
+  int numVars = traceTrialIDs.size();
+
+  for (int varIdx = 0; varIdx < numVars; varIdx++)
+  {
+    traceData.push_back(vtkFloatArray::New());
+    vars.push_back(_varFactory.trial(traceTrialIDs[varIdx]));
+
+    traceData[varIdx]->SetNumberOfComponents(1);
+    traceData[varIdx]->SetName(vars.back()->name().c_str());
+  }
+  unsigned int total_vertices = 0;
+
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
+  vector< ElementTypePtr >::iterator elemTypeIt;
+
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  {
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
+    int numSides = cellTopoPtr->getSideCount();
+    
+    FieldContainer<double> vertexPoints;    
+    _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
+    int numCells = physicalCellNodes.dimension(0);
+    
+    bool createSideCacheToo = true;
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
+    
+    vector<int> cellIDs;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    {
+      int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
+      cellIDs.push_back(cellID);
+    }
+    basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
+
+    FieldContainer<double> refPoints(3);
+    refPoints(0) = -1.0;
+    refPoints(1) =  0.0;
+    refPoints(2) =  1.0;
+    for (int sideIndex=0; sideIndex < numSides; sideIndex++)
+    {
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+      sideBasisCache->setRefCellPoints(refPoints);
+      int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+      cout << "numPoints = " << numPoints << endl;
+      if (sideBasisCache.get() == NULL)
+        cout << "NULL Side Basis" << endl;
+
+      vector< FieldContainer<double> > computedValues;
+      computedValues.resize(numVars);
+      for (int i=0; i < numVars; i++)
+      {
+        computedValues[i].resize(numCells, numPoints);
+        _solution->solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
+      }
+      const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
+      // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
+      // cout << " physPoints dim = " << physicalPoints->dimension(0) << " " << physicalPoints->dimension(1)<< endl;
+
+      for (int cellIndex=0;cellIndex < numCells;cellIndex++)
+      {
+        vtkIdList* edge = vtkIdList::New();
+        edge->Initialize();
+        for (int i=0; i < numPoints; i++)
+        {
+          edge->InsertNextId(total_vertices+i);
+        }
+        trace_ug->InsertNextCell((int)VTK_POLY_LINE, edge);
+        edge->Delete();
+
+        // cout << "Physical Points: " << endl;
+        for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+        {
+          points->InsertNextPoint((*physicalPoints)(cellIndex, pointIndex, 0),
+              (*physicalPoints)(cellIndex, pointIndex, 1), 0.0);
+          // cout << (*physicalPoints)(cellIndex, pointIndex, 0)<<" "<<(*physicalPoints)(cellIndex, pointIndex, 1) << endl;
+          // points->InsertNextPoint(physCubPoints(cellIndex, pointIndex, 0),
+          //     physCubPoints(cellIndex, pointIndex, 1), 0.0);
+          for (int varIdx=0; varIdx < numVars; varIdx++)
+          {
+            traceData[varIdx]->InsertNextValue(computedValues[varIdx](cellIndex, pointIndex));
+          }
+          total_vertices++;
+        }
+      }
+    }
+  }
+  trace_ug->SetPoints(points);
+  points->Delete();
+  for (int varIdx=0; varIdx < numVars; varIdx++)
+  {
+    trace_ug->GetPointData()->AddArray(traceData[varIdx]);
+    traceData[varIdx]->Delete();
+  }
+  vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
+  trace_wr->SetInput(trace_ug);
+  trace_ug->Delete();
+  trace_wr->SetFileName(("trace_"+filePath+".vtu").c_str());
+  trace_wr->SetDataModeToAscii();
+  trace_wr->Update();
+  trace_wr->Write();
+  trace_wr->Delete();
+
+  cout << "Wrote Trace Variables to " << "trace_"+filePath << ".vtu" << endl;
 }
 
 #endif
