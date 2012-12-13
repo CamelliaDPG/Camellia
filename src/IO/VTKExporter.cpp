@@ -311,10 +311,10 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     }
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
-    FieldContainer<double> refPoints(3);
-    refPoints(0) = -1.0;
-    refPoints(1) =  0.0;
-    refPoints(2) =  1.0;
+    FieldContainer<double> refPoints(3,1);
+    refPoints(0,0) = -1.0;
+    refPoints(1,0) =  0.0;
+    refPoints(2,0) =  1.0;
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
