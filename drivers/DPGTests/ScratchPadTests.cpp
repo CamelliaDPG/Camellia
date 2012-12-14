@@ -242,14 +242,7 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();   
-  /*  
-  setup();
-  if (testErrorOrthogonality()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();   
-  */
+
   setup();
   if (testIntegrateDiscontinuousFunction()) {
     numTestsPassed++;
@@ -259,6 +252,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testGalerkinOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();   
+
+  setup();
+  if (testErrorRepConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -624,7 +624,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   convectionBF->addTerm( beta_n_u, v);
 
   // define nodes for mesh
-  int order = 1;
+  int order = 0;
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
@@ -695,13 +695,128 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 	
 	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
 	//	double jump = gradient->integralOfJump(mesh,10);
-	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
+	//	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
 	if (abs(jump)>tol){
-	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
+	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << endl;
+	  /*
+	  FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
+	  FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
+	  double secondJump = fluxTerm->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);	  	  
+	  cout << "second jump check = " << jump << endl;
+
+	  err_rep_map[v->ID()]->writeBoundaryValuesToMATLABFile(mesh,"err_rep_test.dat");
+	  err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"err_rep_test.m");
+	  fluxTerm->writeBoundaryValuesToMATLABFile(mesh,"fn.dat");
+	  */
 	  success = false;
-	  return success;
 	}
       }
+    }
+  }
+
+  return success;
+}
+
+// Testing to make sure b(du,e) = (e,v_du)_V = b(u,v_du) - l(v_du)
+bool ScratchPadTests::testErrorRepConsistency(){
+  double tol = 1e-11;
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+
+  FunctionPtr n = Function::normal();
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+
+  // define nodes for mesh
+  int order = 0;
+  int H1Order = order+1; int pToAdd = 1;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  
+  ////////////////////   SOLVE   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
+  
+  FunctionPtr uIn;
+  uIn = Teuchos::rcp(new Uinflow); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution->solve(false);
+  FunctionPtr uFxn = Function::solution(u, solution);
+  FunctionPtr fnhatFxn = Function::solution(beta_n_u,solution);
+
+  // make residual for riesz representation function
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
+  residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  riesz->computeRieszRep();
+  map<int,FunctionPtr> err_rep_map;
+  err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+
+  ////////////////////   CHECK CONSISTENCY   ///////////////////////
+
+  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+
+
+  // just test field dofs here
+  int numGlobalDofs = mesh->numGlobalDofs();
+  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+    // create perturbation in direction du
+    solnPerturbation->clearSolution(); // clear all solns
+    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+
+    LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+    FunctionPtr b_du_e = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
+    double b_du_e_val = b_du_e->integrate(mesh,10); // b_du_e->integralOfJump(mesh,10);
+    
+    // create optimal test function 
+    Teuchos::RCP<RieszRep> v_du_riesz = Teuchos::rcp(new RieszRep(mesh, ip, b_du)); 
+    v_du_riesz->computeRieszRep();
+    map<int,FunctionPtr> v_du; 
+    v_du[v->ID()] = Teuchos::rcp(new RepFunction(v, v_du_riesz));
+
+    // evaluate residual at optimal test (should be zero)
+    FunctionPtr residual_edge = residual->evaluate(v_du,true); // get boundary portion
+    FunctionPtr residual_vol = residual->evaluate(v_du,false); // get volume portion
+    double res_at_v_du = residual_vol->integrate(mesh,10) + residual_edge->integrate(mesh,10);
+
+    //    cout << "Galerkin orthogonality measure for dof " << dofIndex << " is " << b_du_e_val << ", while residual at v_du = " << res_at_v_du <<  endl;
+    double diff = res_at_v_du - b_du_e_val;
+    if (abs(diff)>tol){
+      cout << "Failing err rep consistency test with diff = " << diff << " for dof " << dofIndex << endl;
+      success = false;
     }
   }
 
