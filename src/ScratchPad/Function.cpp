@@ -228,7 +228,6 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnric
   }
 }
 
-
 double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {  
   // for boundaries, the jump is 0
   if (mesh->boundary().boundaryElement(cellID,sideIndex)) {
@@ -471,7 +470,7 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
   BasisCachePtr basisCache;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
-    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
+    basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh, true) );
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     int numSides = cellTopo.getSideCount();
     
@@ -485,10 +484,21 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
     }
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
+    int num1DPts = 15;
+    FieldContainer<double> refPoints(num1DPts,1);
+    for (int i=0; i < num1DPts; i++){
+      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+      refPoints(i,0) = x;
+    }
+  
     for (int sideIndex=0; sideIndex < numSides; sideIndex++){
-      int numCubPoints = basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints().dimension(1);
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+      sideBasisCache->setRefCellPoints(refPoints);
+      int numCubPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+
+
       FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
-      this->values(computedValues,basisCache->getSideBasisCache(sideIndex));
+      this->values(computedValues,sideBasisCache);
       
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
@@ -517,7 +527,7 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   int spaceDim = 2; // TODO: generalize to 3D...
-  int num1DPts = 5;
+  int num1DPts = 15;
   
   int numPoints = num1DPts * num1DPts;
   FieldContainer<double> refPoints(numPoints,spaceDim);

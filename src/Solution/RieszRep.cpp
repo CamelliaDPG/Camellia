@@ -155,7 +155,6 @@ void RieszRep::computeRieszRep(){
       cout << " ================================================================" << endl;
     }
 
-
     FieldContainer<double> dofs(numTestDofs);
     for (int i = 0;i<numTestDofs;i++){
       dofs(i) = rieszRepDofs(i,0);
@@ -277,9 +276,7 @@ void RieszRep::distributeDofs(){
     _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];          
     cellIndex++;
   }
-
-  //  _rieszRepDofsGlobal = _rieszRepDofs; // to be replaced by an MPI call 
-  
+ 
 }
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)

@@ -118,13 +118,15 @@ public:
     _op = var->op();
     _rep = rep;
   }
-  
-  // WARNING: DOES NOT WORK FOR 
+    
+  /*
+// WARNING: DOES NOT WORK FOR HIGHER RANK FUNCTIONS
   RepFunction(int testID,Teuchos::RCP<RieszRep> rep): Function(0){
     _testID = testID;
     _rep = rep;   
     _op =  IntrepidExtendedTypes::OP_VALUE; // default to OPERATOR_VALUE
   }
+  */
 
   // optional specification of operator to apply 
  RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op): Function(0){
@@ -132,6 +134,7 @@ public:
     _rep = rep;   
     _op = op;
   }   
+  
 
   FunctionPtr x(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_X));
