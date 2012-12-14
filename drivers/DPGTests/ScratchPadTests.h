@@ -45,6 +45,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
   bool testConstantFunctionProduct();
+  bool testErrorRepConsistency();
   bool testSpatiallyFilteredFunction();
   bool testPenaltyConstraints();
   bool testLinearTermEvaluationConsistency();
