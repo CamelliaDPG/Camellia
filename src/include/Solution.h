@@ -136,6 +136,12 @@ public:
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false); // thisSoln += weight * soln
   
+  // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
+  // and returns a set of weights for the appropriate basis
+  static void basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
+                                       const FieldContainer<double> &allCoeffs, int trialID, int sideIndex);
+
+  
   void clear();
   void clearSolution();
   void clearSolution(int trialID);
@@ -193,7 +199,7 @@ public:
   
   // new projectOnto* methods:
   void projectOntoMesh(const map<int, Teuchos::RCP<Function> > &functionMap);
-  void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, int cellID);
+  void projectOntoCell(const map<int, Teuchos::RCP<Function> > &functionMap, int cellID, int sideIndex=-1);
   void projectFieldVariablesOntoOtherSolution(SolutionPtr otherSoln);
   
   // old projectOnto* methods:

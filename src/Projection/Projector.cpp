@@ -31,7 +31,6 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   shards::CellTopology cellTopo = basis->getBaseCellTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   
-  // have information, build inner product matrix
   int numDofs = basis->getCardinality();
   const FieldContainer<double> *cubPoints = &(basisCache->getPhysicalCubaturePoints());
   

@@ -616,3 +616,7 @@ void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTr
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
   //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
 }
+
+int BasisCache::getSpaceDim() {
+  return _spaceDim;
+}

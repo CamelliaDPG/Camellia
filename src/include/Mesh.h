@@ -228,9 +228,11 @@ public:
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+
+  void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
-  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void hUnrefine(vector<int> cellIDs);
+  void hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void hUnrefine(const set<int> &cellIDs);
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
   
@@ -274,8 +276,8 @@ public:
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
-  void pRefine(vector<int> cellIDsForPRefinements);
-  void pRefine(set<int> cellIDsForPRefinements);
+  void pRefine(const vector<int> &cellIDsForPRefinements);
+  void pRefine(const set<int> &cellIDsForPRefinements);
     
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
