@@ -590,6 +590,65 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   return success;
 }
 
+
+struct DofInfo {
+  int cellID;
+  int trialID;
+  int basisOrdinal;
+  int basisCardinality;
+  int sideIndex;
+  int numSides;
+  int localDofIndex; // index into trial ordering
+  int totalDofs;     // number of dofs in the trial ordering
+};
+
+string dofInfoString(const DofInfo &info) {
+  ostringstream dis;
+  dis << "cellID = " << info.cellID << "; trialID = " << info.trialID;
+  dis << "; sideIndex = " << info.sideIndex << " (" << info.numSides << " total sides)";
+  dis << "; basisOrdinal = " << info.basisOrdinal << "; cardinality = " << info.basisCardinality;
+  return dis.str();
+}
+
+string dofInfoString(const vector<DofInfo> infoVector) {
+  ostringstream dis;
+  for (vector<DofInfo>::const_iterator infoIt=infoVector.begin(); infoIt != infoVector.end(); infoIt++) {
+    dis << dofInfoString(*infoIt) << endl;
+  }
+  return dis.str();
+}
+
+map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
+  // go through the mesh as a whole, and collect info for each dof
+  map< int, vector<DofInfo> > infoMap;
+  int numCells = mesh->numActiveElements();
+  DofInfo info;
+  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+    ElementPtr cell = mesh->getActiveElement(cellIndex);
+    info.cellID = cell->cellID();
+    DofOrderingPtr trialOrder = cell->elementType()->trialOrderPtr;
+    set<int> trialIDs = trialOrder->getVarIDs();
+    info.totalDofs = trialOrder->totalDofs();
+    for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+      info.trialID = *trialIt;
+      info.numSides = trialOrder->getNumSidesForVarID(info.trialID);
+      for (int sideIndex=0; sideIndex < info.numSides; sideIndex++) {
+        info.sideIndex = sideIndex;
+        info.basisCardinality = trialOrder->getBasisCardinality(info.trialID, info.sideIndex);
+        for (int basisOrdinal=0; basisOrdinal < info.basisCardinality; basisOrdinal++) {
+          info.basisOrdinal = basisOrdinal;
+          info.localDofIndex = trialOrder->getDofIndex(info.trialID, info.basisOrdinal, info.sideIndex);
+          pair<int, int> localDofIndexKey = make_pair(info.cellID, info.localDofIndex);
+          int globalDofIndex = mesh->getLocalToGlobalMap().find(localDofIndexKey)->second;
+//          cout << "(" << info.cellID << "," << info.localDofIndex << ") --> " << globalDofIndex << endl;
+          infoMap[globalDofIndex].push_back(info);
+        }
+      }
+    }
+  }
+  return infoMap;
+}
+
 bool ScratchPadTests::testGalerkinOrthogonality(){
   double tol = 1e-11;
   bool success = true;
@@ -661,19 +720,31 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
-  // just test field dofs here
-  int numGlobalDofs = mesh->numGlobalDofs();
-  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  
+  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
+       mapIt != infoMap.end(); mapIt++) {
+    int dofIndex = mapIt->first;
+    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
     solnPerturbation->clearSolution(); // clear all solns
-    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+    // set each corresponding local dof to 1.0
+    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+      DofInfo info = *dofInfoIt;
+      FieldContainer<double> solnCoeffs(info.basisCardinality);
+      solnCoeffs(info.basisOrdinal) = 1.0;
+      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+    }
+    //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
       
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
     FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
     if (!solution->isFluxOrTraceDof(dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
       int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
-      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << endl;
+      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
+      cout << dofInfoString(infoMap[dofIndex]);
       success = false;
     }
   }
@@ -697,7 +768,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 	//	double jump = gradient->integralOfJump(mesh,10);
 	//	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
 	if (abs(jump)>tol){
-	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << endl;
+	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
+    cout << dofInfoString(infoMap[globalDofIndex]);
 	  /*
 	  FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
 	  FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
@@ -716,6 +788,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   return success;
 }
+
 
 // Testing to make sure b(du,e) = (e,v_du)_V = b(u,v_du) - l(v_du)
 bool ScratchPadTests::testErrorRepConsistency(){
@@ -752,7 +825,7 @@ bool ScratchPadTests::testErrorRepConsistency(){
   convectionBF->addTerm( beta_n_u, v);
 
   // define nodes for mesh
-  int order = 0;
+  int order = 2;
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
@@ -789,13 +862,23 @@ bool ScratchPadTests::testErrorRepConsistency(){
   BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
-
-  // just test field dofs here
-  int numGlobalDofs = mesh->numGlobalDofs();
-  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  
+  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
+       mapIt != infoMap.end(); mapIt++) {
+    int dofIndex = mapIt->first;
+    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
     solnPerturbation->clearSolution(); // clear all solns
-    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+    // set each corresponding local dof to 1.0
+    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+      DofInfo info = *dofInfoIt;
+      FieldContainer<double> solnCoeffs(info.basisCardinality);
+      solnCoeffs(info.basisOrdinal) = 1.0;
+      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+    }
+//    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
 
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
     FunctionPtr b_du_e = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
@@ -815,7 +898,8 @@ bool ScratchPadTests::testErrorRepConsistency(){
     //    cout << "Galerkin orthogonality measure for dof " << dofIndex << " is " << b_du_e_val << ", while residual at v_du = " << res_at_v_du <<  endl;
     double diff = res_at_v_du - b_du_e_val;
     if (abs(diff)>tol){
-      cout << "Failing err rep consistency test with diff = " << diff << " for dof " << dofIndex << endl;
+      cout << "Failed err rep consistency test with diff = " << diff << " for dof " << dofIndex << "; info:" << endl;
+      cout << dofInfoString(infoMap[dofIndex]);
       success = false;
     }
   }
