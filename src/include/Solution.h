@@ -143,9 +143,7 @@ public:
 
   
   void clear();
-  void clearSolution();
-  void clearSolution(int trialID);
-
+  
   int cubatureEnrichmentDegree() const;
   void setCubatureEnrichmentDegree(int value);
   

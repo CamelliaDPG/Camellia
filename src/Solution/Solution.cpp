@@ -200,33 +200,6 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
   clearComputedResiduals();
 }
 
-void Solution::clearSolution(){
-  vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
-  for (vector<int>::iterator it = trialIDs.begin();it!=trialIDs.end();it++){
-    clearSolution(*it);
-  }
-}
-
-void Solution::clearSolution(int trialID){
-  FieldContainer<double> dofs;
-  vector<ElementPtr> elems = _mesh->activeElements();
-  vector<ElementPtr>::iterator elemIt;  
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    int numSides;
-    if (_mesh->bilinearForm()->isFluxOrTrace(trialID)){
-      numSides = (*elemIt)->elementType()->cellTopoPtr->getSideCount();
-    } else {
-      numSides = 1;
-    }
-    for (int sideIndex = 0;sideIndex<numSides;sideIndex++){
-      solnCoeffsForCellID(dofs, cellID, trialID, sideIndex); // just sizes the field container really
-      dofs.initialize(0.0);
-      setSolnCoeffsForCellID(dofs, cellID, trialID, sideIndex); // zeros out solution for given IDs
-    }
-  }
-}
-
 void Solution::solve() {
 #ifdef HAVE_MPI
   solve(true);
