@@ -194,7 +194,7 @@ public:
   
   ElementPtr getElement(int cellID);
   
-  map< pair<int,int> , int> getLocalToGlobalMap(){
+  const map< pair<int,int> , int>& getLocalToGlobalMap(){
     return _localToGlobalMap;
   }
   map< int, pair<int,int> > getGlobalToLocalMap();
