@@ -2263,7 +2263,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   }
 }
 
-double determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numDivisionsPerEdge, bool xEdge) {
+void determineQuadEdgeWeights(double weights[], int edgeVertexNumber, int numDivisionsPerEdge, bool xEdge) {
   if (xEdge) {
     weights[0] = ((double)(numDivisionsPerEdge - edgeVertexNumber)) / (double)numDivisionsPerEdge;
     weights[1] = ((double)edgeVertexNumber) / (double)numDivisionsPerEdge;
