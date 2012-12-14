@@ -590,7 +590,6 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   return success;
 }
 
-
 struct DofInfo {
   int cellID;
   int trialID;
@@ -727,7 +726,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
     int dofIndex = mapIt->first;
     vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
-    solnPerturbation->clearSolution(); // clear all solns
+    solnPerturbation->clear(); // clear all solns
     // set each corresponding local dof to 1.0
     for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
          dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
@@ -756,32 +755,39 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       ElementTypePtr elemType = elem->elementType();
       vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u->ID(), sideIndex);
       for (int i = 0;i<localDofIndices.size();i++){
-	int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
-      
-	// create perturbation in direction du
-	solnPerturbation->clearSolution(); // clear all solns
-	solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);  
-	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
-	
-	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-	//	double jump = gradient->integralOfJump(mesh,10);
-	//	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
-	if (abs(jump)>tol){
-	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
-    cout << dofInfoString(infoMap[globalDofIndex]);
-	  /*
-	  FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
-	  FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
-	  double secondJump = fluxTerm->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);	  	  
-	  cout << "second jump check = " << jump << endl;
-
-	  err_rep_map[v->ID()]->writeBoundaryValuesToMATLABFile(mesh,"err_rep_test.dat");
-	  err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"err_rep_test.m");
-	  fluxTerm->writeBoundaryValuesToMATLABFile(mesh,"fn.dat");
-	  */
-	  success = false;
-	}
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+        // create perturbation in direction du
+        solnPerturbation->clear(); // clear all solns
+        // set each corresponding local dof to 1.0
+        for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+             dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+          DofInfo info = *dofInfoIt;
+          FieldContainer<double> solnCoeffs(info.basisCardinality);
+          solnCoeffs(info.basisOrdinal) = 1.0;
+          solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+        }
+        LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
+        
+        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+        //	double jump = gradient->integralOfJump(mesh,10);
+        //	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
+        if (abs(jump)>tol){
+          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
+          cout << dofInfoString(infoMap[globalDofIndex]);
+          /*
+           FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
+           FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
+           double secondJump = fluxTerm->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+           cout << "second jump check = " << jump << endl;
+           
+           err_rep_map[v->ID()]->writeBoundaryValuesToMATLABFile(mesh,"err_rep_test.dat");
+           err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"err_rep_test.m");
+           fluxTerm->writeBoundaryValuesToMATLABFile(mesh,"fn.dat");
+           */
+          success = false;
+        }
       }
     }
   }
@@ -869,7 +875,7 @@ bool ScratchPadTests::testErrorRepConsistency(){
     int dofIndex = mapIt->first;
     vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
-    solnPerturbation->clearSolution(); // clear all solns
+    solnPerturbation->clear(); // clear all solns
     // set each corresponding local dof to 1.0
     for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
          dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
