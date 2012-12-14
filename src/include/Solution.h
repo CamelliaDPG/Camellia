@@ -169,9 +169,8 @@ public:
   void solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellID, int trialID, int sideIndex=0);
   void setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex=0);
 
-  // next 3 added by Jesse
+  // next 2 added by Jesse
   void setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex);
-  void determineLocalGlobalMap();
   bool isFluxOrTraceDof(int globalDofIndex);
 
   const map< int, FieldContainer<double> > & solutionForCellIDGlobal() const;
