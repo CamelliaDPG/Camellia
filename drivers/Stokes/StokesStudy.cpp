@@ -2,38 +2,10 @@
  *  StokesStudy.cpp
  *
  *  Created by Nathan Roberts on 7/21/11.
+ *  Original version © 2011 Sandia Corporation.
+ *  Later revisions © 2011-2012 Nathan V. Roberts.
  *
  */
-
-// @HEADER
-//
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
-//
-// Redistribution and use in source and binary forms, with or without modification, are 
-// permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
-// conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
-// provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Nate Roberts (nate@nateroberts.com).
-//
-// @HEADER
 
 #include "StokesStudy.h"
 #include "StokesManufacturedSolution.h"
@@ -428,7 +400,9 @@ int main(int argc, char *argv[]) {
   int cgMaxIt = 400000;
   Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
 #ifdef HAVE_MPI
+#ifdef USE_MUMPS
   Teuchos::RCP<Solver> mumpsSolver = Teuchos::rcp( new MumpsSolver );
+#endif
 #endif
   
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
@@ -683,7 +657,9 @@ int main(int argc, char *argv[]) {
     if (useCG) study.setSolver(cgSolver);
     else if (useMumps){
 #ifdef HAVE_MPI
+#ifdef USE_MUMPS
       study.setSolver(mumpsSolver);
+#endif
 #endif
     } // otherwise, use default solver (KLU)
         
