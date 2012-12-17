@@ -14,17 +14,18 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
 
+using namespace choice;
 
-bool enforceLocalConservation = true;
-double epsilon = 1e-1;
-double numRefs = 15;
-double halfwidth = 0.5;
+double halfwidth;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -86,15 +87,33 @@ class Top: public SpatialFilter {
     }
 };
 
+// bool enforceLocalConservation = false;
+// double epsilon = 1e-1;
+// double numRefs = 20;
+// double halfwidth = 0.5;
+
 int main(int argc, char *argv[]) {
+  double epsilon;
+  int numRefs;
+  bool enforceLocalConservation;
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  int commRank = mpiSession.getRank();
+  int numProcs = mpiSession.getNProc();
+  MpiArgs args( argc, argv );
 #else
-  int rank = 0;
+  int commRank = 0;
   int numProcs = 1;
+  Args args( argc, argv );
 #endif
+  // Required arguments
+  epsilon = args.Input<double>("--epsilon", "diffusion parameter");
+  numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
+
+  // Optional arguments (have defaults)
+  halfwidth = args.Input("--halfwidth", "half the width of the wedge", 0.5);
+  args.Process();
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -105,9 +124,7 @@ int main(int argc, char *argv[]) {
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("sigma1");
-  VarPtr sigma2 = varFactory.fieldVar("sigma2");
-  
+  VarPtr sigma = varFactory.fieldVar("\\sigma", VECTOR_L2);
 
   vector<double> beta;
   beta.push_back(1.0);
@@ -116,14 +133,12 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
+  confusionBF->addTerm(sigma / epsilon, tau);
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(-uhat, tau->dot_normal());
   
   // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( sigma, v->grad() );
   confusionBF->addTerm( beta * u, - v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
   
@@ -171,7 +186,7 @@ int main(int argc, char *argv[]) {
   pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == zero, outflow);
   
   ////////////////////   BUILD MESH   ///////////////////////
-  bool allQuads = true;
+  bool allQuads = false;
   int H1Order = 3, pToAdd = 2;
   // define nodes for mesh
   vector< FieldContainer<double> > vertices;
@@ -242,14 +257,15 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
-    if (rank==0){
+    if (commRank==0){
       stringstream outfile;
       outfile << "singularwedge_" << refIndex;
-      solution->writeToVTK(outfile.str());
+      exporter.exportSolution(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -261,13 +277,13 @@ int main(int argc, char *argv[]) {
 
     if (refIndex < numRefs)
     {
-      // refinementStrategy.refine(rank==0); // print to console on rank 0
+      // refinementStrategy.refine(commRank==0); // print to console on commRank 0
       vector<int> cellsToRefine;
       vector<int> cells_h;
       vector<int> cells_p;
       refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
       for (int i=0; i < cellsToRefine.size(); i++)
-        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 1e-4)
+        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-4)
         {
           int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
           if (allQuads)

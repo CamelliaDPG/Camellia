@@ -88,7 +88,7 @@ include_directories(
   ${Trilinos_TPL_INCLUDE_DIRS}
   ${Trilinos_INCLUDE_DIRS}
   ${CAMELLIA_SOURCE_DIR}/include
-  #${MUMPS_PATH}/include
+  TPL/choice
 )
 
 #link_directories(
