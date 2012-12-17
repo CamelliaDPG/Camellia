@@ -59,6 +59,8 @@ public:
   VarPtr times_normal_x();
   VarPtr times_normal_y();
   VarPtr times_normal_z();
+  
+  static VarPtr varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf);
 };
 
 #endif

@@ -1303,7 +1303,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
 
-  vector<int> cellsToRefine;
+  set<int> cellsToRefine;
   cellsToRefine.clear();
   
   // start with a fresh 2x1 mesh:
@@ -1322,7 +1322,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
       int cellID = descendants[j].first;
-      cellsToRefine.push_back(cellID);
+      cellsToRefine.insert(cellID);
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     mesh->hUnrefine(cellsToRefine);
@@ -1347,7 +1347,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
     cellsToRefine.clear();
     for (int j=0; j<numDescendants; j++ ) {
       int cellID = descendants[j].first;
-      cellsToRefine.push_back(cellID);
+      cellsToRefine.insert(cellID);
     }
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
     mesh->hUnrefine(cellsToRefine);

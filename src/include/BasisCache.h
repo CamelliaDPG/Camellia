@@ -186,6 +186,8 @@ public:
   
   int getSideIndex(); // -1 if not sideCache
   
+  int getSpaceDim();
+  
   void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
 };
 

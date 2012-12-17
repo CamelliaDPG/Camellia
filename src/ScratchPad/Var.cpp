@@ -55,6 +55,80 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
 }
 
+/*Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+    return HGRAD;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
+    return HCURL;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
+    return HDIV;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+    return L2;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+    return CONSTANT_SCALAR;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
+    return VECTOR_HGRAD;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
+    return VECTOR_L2;
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+}*/
+
+VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
+  IntrepidExtendedTypes::EFunctionSpaceExtended efs = bf->functionSpaceForTrial(trialID);
+  Space space;
+  int rank;
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+    space = HGRAD;
+    rank = 0;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) {
+    space = HCURL;
+    rank = 1;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
+    space = HDIV;
+    rank = 1;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+    space = L2;
+    rank = 0;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+    space = CONSTANT_SCALAR;
+    rank = 0;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
+    space = VECTOR_HGRAD;
+    rank = 1;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
+    space = VECTOR_L2;
+    rank = 1;
+  }
+  
+  VarType varType;
+  if (bf->isFluxOrTrace(trialID)) {
+    if ((space==L2) || (space==VECTOR_L2)) {
+      varType = FLUX;
+    } else if ((space==HGRAD) || (space==VECTOR_HGRAD)) {
+      varType = TRACE;
+    } else {
+      TEST_FOR_EXCEPTION(true, std::invalid_argument, "unclassifiable variable");
+    }
+  } else {
+    varType = FIELD;
+  }
+  
+  return Teuchos::rcp(new Var(trialID, rank, "trial", OP_VALUE, space, varType));
+}
+
 Var::Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op, Space fs, VarType varType) {
   _id = ID;
   _rank = rank;

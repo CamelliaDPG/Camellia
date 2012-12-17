@@ -1756,14 +1756,23 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 //  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
 //}
 
-void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+void Mesh::hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+  set<int> cellSet;
+  for (vector<int>::const_iterator cellIt=cellIDs.begin();
+       cellIt != cellIDs.end(); cellIt++) {
+    cellSet.insert(*cellIt);
+  }
+  hRefine(cellSet,refPattern);
+}
+
+void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
        meshIt != _registeredMeshes.end(); meshIt++) {
     (*meshIt)->hRefine(cellIDs,refPattern);
   }
   
-  vector<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
@@ -1848,7 +1857,7 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
       for (int i=0; i<numChildren; i++) {
         childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
       }
-      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDs);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
@@ -1861,7 +1870,7 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
   }
 }
 
-void Mesh::hUnrefine(vector<int> cellIDs) {
+void Mesh::hUnrefine(const set<int> &cellIDs) {
   // TODO: implement this
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
@@ -1869,7 +1878,7 @@ void Mesh::hUnrefine(vector<int> cellIDs) {
     (*meshIt)->hUnrefine(cellIDs);
   }
   
-  vector<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   set< pair<int, int> > affectedNeighborSides; // (cellID, sideIndex)
   set< int > deletedCellIDs;
   
@@ -2408,16 +2417,16 @@ void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
   cout << "Mesh::unregisterSolution: Solution not found.\n";
 }
 
-void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+void Mesh::pRefine(const vector<int> &cellIDsForPRefinements) {
   set<int> cellSet;
-  for (vector<int>::iterator cellIt=cellIDsForPRefinements.begin();
+  for (vector<int>::const_iterator cellIt=cellIDsForPRefinements.begin();
        cellIt != cellIDsForPRefinements.end(); cellIt++) {
     cellSet.insert(*cellIt);
   }
   pRefine(cellSet);
 }
 
-void Mesh::pRefine(set<int> cellIDsForPRefinements) {
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
        meshIt != _registeredMeshes.end(); meshIt++) {
@@ -2431,7 +2440,7 @@ void Mesh::pRefine(set<int> cellIDsForPRefinements) {
   //   c. Loop through sides, calling matchNeighbor for each
   
   // 1. Loop through cellIDsForPRefinements:
-  set<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
@@ -2474,8 +2483,7 @@ void Mesh::pRefine(set<int> cellIDsForPRefinements) {
     for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection: for p-refinements, the "child" is the same cell
-      vector<int> childIDs;
-      childIDs.push_back(cellID);
+      vector<int> childIDs(1,cellID);
       (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDsForPRefinements);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
