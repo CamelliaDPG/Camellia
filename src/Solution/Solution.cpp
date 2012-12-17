@@ -93,7 +93,6 @@
 #include "LagrangeConstraints.h"
 
 #include "Solver.h"
-//#include "CondensationSolver.h"
 
 #include "Function.h"
 
@@ -2550,34 +2549,18 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
   clearComputedResiduals();
 }
 
+
 void Solution::setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex) {
-  map<int, pair<int,int> > globalToLocalMap = _mesh->getGlobalToLocalMap();
-  if (!isFluxOrTraceDof(dofIndex)) {
-    int cellID = globalToLocalMap[dofIndex].first;
-    int localDofIndex = globalToLocalMap[dofIndex].second;
-    _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeff;  
-  } else {
-    // if not field, can have support over multiple elements. must set all supported elem dofs
-    map< pair<int,int> , int> localToGlobalMap = _mesh->getLocalToGlobalMap();    
-    map< pair<int,int> , int>::iterator it;
-    for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
-      pair<int,int> cellID_dofIndex = it->first;
-      int currentGlobalDofIndex = it->second;
-      if (currentGlobalDofIndex==dofIndex) {
-        _solutionForCellIDGlobal[cellID_dofIndex.first](cellID_dofIndex.second) = solnCoeff;
-      }
+
+  map< pair<int,int> , int> localToGlobalMap = _mesh->getLocalToGlobalMap();    
+  map< pair<int,int> , int>::iterator it;
+  for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
+    pair<int,int> cellID_dofIndex = it->first;
+    int currentGlobalDofIndex = it->second;
+    if (currentGlobalDofIndex==dofIndex) {
+      _solutionForCellIDGlobal[cellID_dofIndex.first](cellID_dofIndex.second) = solnCoeff;
     }
   }
-}
-
-bool Solution::isFluxOrTraceDof(int globalDofIndex){
-  map<int,set<int> > fluxInds, fieldInds;
-  _mesh->getGlobalFieldFluxDofInds(fluxInds,fieldInds);
-  bool value = false;
-  if (fluxInds.find(globalDofIndex)!=fluxInds.end()){
-    value = true;
-  }
-  return value;
 }
 
 // protected method; used for solution comparison...

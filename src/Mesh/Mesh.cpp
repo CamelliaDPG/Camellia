@@ -1471,27 +1471,6 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
 
-// added by Jesse - accumulates flux/field local dof indices into user-provided maps.  WARNING: NOT VALID FOR FLUX DOFS
-map< int, pair<int,int> > Mesh::getGlobalToLocalMap(){
-  map< pair<int,int> , int> localToGlobalMap = getLocalToGlobalMap();    
-  map< int, pair<int,int> > globalToLocalMap;
-  
-  vector<ElementPtr> elems = activeElements();
-  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    int numLocalDofs = (*elemIt)->elementType()->trialOrderPtr->totalDofs();
-    for (int i = 0;i<numLocalDofs;i++){
-      int globalDofInd = globalDofIndex(cellID,i);
-      pair<int,int> cellID_dofIndex;
-      cellID_dofIndex.first = cellID;
-      cellID_dofIndex.second = i;
-      globalToLocalMap[globalDofInd] = cellID_dofIndex;
-    }
-  }
-  
-  return globalToLocalMap;
-}
-
 void Mesh::getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds){
   
   // determine trialIDs
@@ -1591,66 +1570,6 @@ void Mesh::getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<in
 	}	
       }
     }
-  }  
-}
-
-// Cruft code - remove soon.
-void Mesh::getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds){
-  
- 
-  // determine trialIDs
-  vector< int > trialIDs = bilinearForm()->trialIDs();
-  vector< int > fieldIDs;
-  vector< int > fluxIDs;
-  vector< int >::iterator idIt;
-
-  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
-    int trialID = *(idIt);
-    if (!bilinearForm()->isFluxOrTrace(trialID)){ // if field
-      fieldIDs.push_back(trialID);
-    } else {
-      fluxIDs.push_back(trialID);
-    }
-  } 
-
-  // get all elems in mesh (more than just local info)
-  vector< ElementPtr > activeElems = activeElements();
-  vector< ElementPtr >::iterator elemIt;
-
-  // gets dof indices
-  for (elemIt=activeElems.begin();elemIt!=activeElems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    int globalCellIndex = (*elemIt)->globalCellIndex();
-    int cellIndex = (*elemIt)->cellIndex();
-    int numSides = (*elemIt)->numSides();
-    ElementTypePtr elemType = (*elemIt)->elementType();
-    
-    // get local indices (for cell)
-    vector<int> inds;
-    for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
-      int trialID = (*idIt);
-      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
-      localFieldInds[cellID].insert(localFieldInds[cellID].end(), inds.begin(), inds.end()); 
-    }
-    inds.clear();
-    for (idIt = fluxIDs.begin(); idIt != fluxIDs.end(); idIt++){
-      int trialID = (*idIt);
-      for (int sideIndex = 0;sideIndex<numSides;sideIndex++){	
-	inds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
-	localFluxInds[cellID].insert(localFluxInds[cellID].end(), inds.begin(), inds.end()); 
-      }
-    }
-
-    // gets global indices (across all cells/all procs)
-    for (int i = 0;i<localFieldInds[cellID].size();i++){
-      int dofIndex = globalDofIndex(cellID,localFieldInds[cellID][i]);
-      globalFieldInds[cellID].push_back(dofIndex);
-    }
-    for (int i = 0;i<localFluxInds[cellID].size();i++){
-      int dofIndex = globalDofIndex(cellID,localFluxInds[cellID][i]);
-      globalFluxInds[cellID].push_back(dofIndex);
-      allFluxInds.insert(dofIndex); // all flux indices      
-    }    
   }  
 }
 

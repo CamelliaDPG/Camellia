@@ -11,6 +11,7 @@
 #include "IP.h"
 #include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
+#include "TestingUtilities.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -738,10 +739,10 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
     //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
       
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-    FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
+    FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
-    if (!solution->isFluxOrTraceDof(dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
-      int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
+    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
+      //      int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
       cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
       cout << dofInfoString(infoMap[dofIndex]);
       success = false;
@@ -768,7 +769,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
           solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
         }
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-        FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
         
         double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
         //	double jump = gradient->integralOfJump(mesh,10);
@@ -887,7 +888,7 @@ bool ScratchPadTests::testErrorRepConsistency(){
 //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
 
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-    FunctionPtr b_du_e = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
+    FunctionPtr b_du_e = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double b_du_e_val = b_du_e->integrate(mesh,10); // b_du_e->integralOfJump(mesh,10);
     
     // create optimal test function 

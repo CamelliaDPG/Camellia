@@ -197,7 +197,7 @@ public:
   const map< pair<int,int> , int>& getLocalToGlobalMap(){
     return _localToGlobalMap;
   }
-  map< int, pair<int,int> > getGlobalToLocalMap();
+  //  map< int, pair<int,int> > getGlobalToLocalMap();
   
   int globalDofIndex(int cellID, int localDofIndex);
   
@@ -215,8 +215,8 @@ public:
   ElementPtr getActiveElement(int index);
   DofOrderingFactory & getDofOrderingFactory();
 
-  // added by Jesse - REMOVE, cruft code
-  void getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
+  // added by Jesse - move to TestingUtilities/
+  //  void getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
   // added by Jesse - gets local and global dof indices for fluxes/fields
   void getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds);
   void getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds);
