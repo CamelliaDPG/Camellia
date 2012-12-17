@@ -50,6 +50,8 @@ public:
   bool testLinearTermEvaluationConsistency();
   bool testIntegrateDiscontinuousFunction();
   bool testGalerkinOrthogonality();
+  bool testErrorRepConsistency();
+
   std::string testSuiteName();
 };
 
