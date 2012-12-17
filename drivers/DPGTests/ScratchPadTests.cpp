@@ -11,6 +11,7 @@
 #include "IP.h"
 #include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
+#include "TestingUtilities.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -46,10 +47,10 @@ public:
         double y = points(i,j,1);
         values(i,j) = 0.0;
         if (abs(y)<tol){
-          values(i,j) = 1.0-x;
+          values(i,j) = 1.0;
         }
         if (abs(x)<tol){
-          values(i,j) = 1.0-y;
+          values(i,j) = -1.0;
         }
       }
     }
@@ -242,14 +243,7 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();   
-  /*  
-  setup();
-  if (testErrorOrthogonality()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();   
-  */
+
   setup();
   if (testIntegrateDiscontinuousFunction()) {
     numTestsPassed++;
@@ -259,6 +253,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testGalerkinOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();   
+
+  setup();
+  if (testErrorRepConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -534,6 +535,10 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   ip->addTerm(v);
   ip->addTerm(beta*v->grad());
 
+  // for projections
+  IPPtr ipL2 = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+
   // define trial variables
   VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
   VarPtr u = varFactory.fieldVar("u");
@@ -558,14 +563,19 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   //  FunctionPtr cellIDFxn = Teuchos::rcp(new CellIDFunction); // should be 0 on cellID 0, 1 on cellID 1
   set<int> cellIDs;
   cellIDs.insert(1); // 0 on cell 0, 1 on cell 1
-  FunctionPtr cellIDFxn = Teuchos::rcp(new IndicatorFunction(cellIDs)); // should be 0 on cellID 0, 1 on cellID 1
+  FunctionPtr indicator = Teuchos::rcp(new IndicatorFunction(cellIDs)); // should be 0 on cellID 0, 1 on cellID 1
   double jumpWeight = 13.3; // some random number
   FunctionPtr edgeRestrictionFxn = Teuchos::rcp(new EdgeFunction);
   FunctionPtr X = Teuchos::rcp(new Xn(1));
   LinearTermPtr integrandLT = Function::constant(1.0)*v + Function::constant(jumpWeight)*X*edgeRestrictionFxn*v;
   
+  // make riesz representation function to more closely emulate the error rep
+  LinearTermPtr indicatorLT = Teuchos::rcp(new LinearTerm);// residual 
+  indicatorLT->addTerm(indicator*v);
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ipL2, indicatorLT));
+  riesz->computeRieszRep();
   map<int,FunctionPtr> vmap;
-  vmap[v->ID()] = cellIDFxn;
+  vmap[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz)); // SHOULD BE L2 projection = same thing!!!  
 
   FunctionPtr volumeIntegrand = integrandLT->evaluate(vmap,false); 
   FunctionPtr edgeRestrictedIntegrand = integrandLT->evaluate(vmap,true);
@@ -579,6 +589,64 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
     cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << edgeRestrictedValue << endl;
   }  
   return success;
+}
+
+struct DofInfo {
+  int cellID;
+  int trialID;
+  int basisOrdinal;
+  int basisCardinality;
+  int sideIndex;
+  int numSides;
+  int localDofIndex; // index into trial ordering
+  int totalDofs;     // number of dofs in the trial ordering
+};
+
+string dofInfoString(const DofInfo &info) {
+  ostringstream dis;
+  dis << "cellID = " << info.cellID << "; trialID = " << info.trialID;
+  dis << "; sideIndex = " << info.sideIndex << " (" << info.numSides << " total sides)";
+  dis << "; basisOrdinal = " << info.basisOrdinal << "; cardinality = " << info.basisCardinality;
+  return dis.str();
+}
+
+string dofInfoString(const vector<DofInfo> infoVector) {
+  ostringstream dis;
+  for (vector<DofInfo>::const_iterator infoIt=infoVector.begin(); infoIt != infoVector.end(); infoIt++) {
+    dis << dofInfoString(*infoIt) << endl;
+  }
+  return dis.str();
+}
+
+map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
+  // go through the mesh as a whole, and collect info for each dof
+  map< int, vector<DofInfo> > infoMap;
+  int numCells = mesh->numActiveElements();
+  DofInfo info;
+  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+    ElementPtr cell = mesh->getActiveElement(cellIndex);
+    info.cellID = cell->cellID();
+    DofOrderingPtr trialOrder = cell->elementType()->trialOrderPtr;
+    set<int> trialIDs = trialOrder->getVarIDs();
+    info.totalDofs = trialOrder->totalDofs();
+    for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+      info.trialID = *trialIt;
+      info.numSides = trialOrder->getNumSidesForVarID(info.trialID);
+      for (int sideIndex=0; sideIndex < info.numSides; sideIndex++) {
+        info.sideIndex = sideIndex;
+        info.basisCardinality = trialOrder->getBasisCardinality(info.trialID, info.sideIndex);
+        for (int basisOrdinal=0; basisOrdinal < info.basisCardinality; basisOrdinal++) {
+          info.basisOrdinal = basisOrdinal;
+          info.localDofIndex = trialOrder->getDofIndex(info.trialID, info.basisOrdinal, info.sideIndex);
+          pair<int, int> localDofIndexKey = make_pair(info.cellID, info.localDofIndex);
+          int globalDofIndex = mesh->getLocalToGlobalMap().find(localDofIndexKey)->second;
+//          cout << "(" << info.cellID << "," << info.localDofIndex << ") --> " << globalDofIndex << endl;
+          infoMap[globalDofIndex].push_back(info);
+        }
+      }
+    }
+  }
+  return infoMap;
 }
 
 bool ScratchPadTests::testGalerkinOrthogonality(){
@@ -615,7 +683,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   convectionBF->addTerm( beta_n_u, v);
 
   // define nodes for mesh
-  int order = 1;
+  int order = 0;
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
@@ -628,13 +696,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
   
-  bool simpleInflow = false;
   FunctionPtr uIn;
-  if (simpleInflow) {
-    uIn = Function::constant(1.0);
-  } else {
-    uIn = Teuchos::rcp(new Uinflow);
-  }
+  uIn = Teuchos::rcp(new Uinflow); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
   bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
 
   Teuchos::RCP<Solution> solution;
@@ -645,6 +708,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   // make residual for riesz representation function
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
   residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
   Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   riesz->computeRieszRep();
@@ -656,19 +720,31 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
-  // just test field dofs here
-  int numGlobalDofs = mesh->numGlobalDofs();
-  for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
+  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  
+  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
+       mapIt != infoMap.end(); mapIt++) {
+    int dofIndex = mapIt->first;
+    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
-    solnPerturbation->clearSolution(); // clear all solns
-    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+    solnPerturbation->clear(); // clear all solns
+    // set each corresponding local dof to 1.0
+    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+      DofInfo info = *dofInfoIt;
+      FieldContainer<double> solnCoeffs(info.basisCardinality);
+      solnCoeffs(info.basisOrdinal) = 1.0;
+      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+    }
+    //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
       
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-    FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux
+    FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
-    if (!solution->isFluxOrTraceDof(dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
-      int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
-      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << endl;
+    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
+      //      int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
+      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
+      cout << dofInfoString(infoMap[dofIndex]);
       success = false;
     }
   }
@@ -680,22 +756,158 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       ElementTypePtr elemType = elem->elementType();
       vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u->ID(), sideIndex);
       for (int i = 0;i<localDofIndices.size();i++){
-	int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
-      
-	// create perturbation in direction du
-	solnPerturbation->clearSolution(); // clear all solns
-	solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,globalDofIndex);  
-	LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
-	FunctionPtr gradient = b_du->evaluate(err_rep_map, solution->isFluxOrTraceDof(globalDofIndex)); // use boundary part only if flux
-	
-	double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-	//	double jump = gradient->integralOfJump(mesh,10);
-	if (abs(jump)>tol){
-	  cout << "Failing Galerkin orthogonality test for fluxes with diff " << abs(jump) << " at dof " << globalDofIndex << endl;
-	  success = false;
-	  return success;
-	}
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+        // create perturbation in direction du
+        solnPerturbation->clear(); // clear all solns
+        // set each corresponding local dof to 1.0
+        for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+             dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+          DofInfo info = *dofInfoIt;
+          FieldContainer<double> solnCoeffs(info.basisCardinality);
+          solnCoeffs(info.basisOrdinal) = 1.0;
+          solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+        }
+        LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
+        
+        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+        //	double jump = gradient->integralOfJump(mesh,10);
+        //	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
+        if (abs(jump)>tol){
+          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
+          cout << dofInfoString(infoMap[globalDofIndex]);
+          /*
+           FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
+           FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
+           double secondJump = fluxTerm->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+           cout << "second jump check = " << jump << endl;
+           
+           err_rep_map[v->ID()]->writeBoundaryValuesToMATLABFile(mesh,"err_rep_test.dat");
+           err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"err_rep_test.m");
+           fluxTerm->writeBoundaryValuesToMATLABFile(mesh,"fn.dat");
+           */
+          success = false;
+        }
       }
+    }
+  }
+
+  return success;
+}
+
+
+// Testing to make sure b(du,e) = (e,v_du)_V = b(u,v_du) - l(v_du)
+bool ScratchPadTests::testErrorRepConsistency(){
+  double tol = 1e-11;
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+
+  FunctionPtr n = Function::normal();
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 1;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  
+  ////////////////////   SOLVE   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
+  
+  FunctionPtr uIn;
+  uIn = Teuchos::rcp(new Uinflow); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution->solve(false);
+  FunctionPtr uFxn = Function::solution(u, solution);
+  FunctionPtr fnhatFxn = Function::solution(beta_n_u,solution);
+
+  // make residual for riesz representation function
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
+  residual->addTerm(-fnhatFxn*v + (beta*uFxn)*v->grad());
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  riesz->computeRieszRep();
+  map<int,FunctionPtr> err_rep_map;
+  err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+
+  ////////////////////   CHECK CONSISTENCY   ///////////////////////
+
+  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+
+  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  
+  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
+       mapIt != infoMap.end(); mapIt++) {
+    int dofIndex = mapIt->first;
+    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
+    // create perturbation in direction du
+    solnPerturbation->clear(); // clear all solns
+    // set each corresponding local dof to 1.0
+    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+      DofInfo info = *dofInfoIt;
+      FieldContainer<double> solnCoeffs(info.basisCardinality);
+      solnCoeffs(info.basisOrdinal) = 1.0;
+      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+    }
+//    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+
+    LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+    FunctionPtr b_du_e = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
+    double b_du_e_val = b_du_e->integrate(mesh,10); // b_du_e->integralOfJump(mesh,10);
+    
+    // create optimal test function 
+    Teuchos::RCP<RieszRep> v_du_riesz = Teuchos::rcp(new RieszRep(mesh, ip, b_du)); 
+    v_du_riesz->computeRieszRep();
+    map<int,FunctionPtr> v_du; 
+    v_du[v->ID()] = Teuchos::rcp(new RepFunction(v, v_du_riesz));
+
+    // evaluate residual at optimal test (should be zero)
+    FunctionPtr residual_edge = residual->evaluate(v_du,true); // get boundary portion
+    FunctionPtr residual_vol = residual->evaluate(v_du,false); // get volume portion
+    double res_at_v_du = residual_vol->integrate(mesh,10) + residual_edge->integrate(mesh,10);
+
+    //    cout << "Galerkin orthogonality measure for dof " << dofIndex << " is " << b_du_e_val << ", while residual at v_du = " << res_at_v_du <<  endl;
+    double diff = res_at_v_du - b_du_e_val;
+    if (abs(diff)>tol){
+      cout << "Failed err rep consistency test with diff = " << diff << " for dof " << dofIndex << "; info:" << endl;
+      cout << dofInfoString(infoMap[dofIndex]);
+      success = false;
     }
   }
 

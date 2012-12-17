@@ -1471,27 +1471,6 @@ DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
 
-// added by Jesse - accumulates flux/field local dof indices into user-provided maps.  WARNING: NOT VALID FOR FLUX DOFS
-map< int, pair<int,int> > Mesh::getGlobalToLocalMap(){
-  map< pair<int,int> , int> localToGlobalMap = getLocalToGlobalMap();    
-  map< int, pair<int,int> > globalToLocalMap;
-  
-  vector<ElementPtr> elems = activeElements();
-  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    int numLocalDofs = (*elemIt)->elementType()->trialOrderPtr->totalDofs();
-    for (int i = 0;i<numLocalDofs;i++){
-      int globalDofInd = globalDofIndex(cellID,i);
-      pair<int,int> cellID_dofIndex;
-      cellID_dofIndex.first = cellID;
-      cellID_dofIndex.second = i;
-      globalToLocalMap[globalDofInd] = cellID_dofIndex;
-    }
-  }
-  
-  return globalToLocalMap;
-}
-
 void Mesh::getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds){
   
   // determine trialIDs
@@ -1591,66 +1570,6 @@ void Mesh::getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<in
 	}	
       }
     }
-  }  
-}
-
-// Cruft code - remove soon.
-void Mesh::getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds){
-  
- 
-  // determine trialIDs
-  vector< int > trialIDs = bilinearForm()->trialIDs();
-  vector< int > fieldIDs;
-  vector< int > fluxIDs;
-  vector< int >::iterator idIt;
-
-  for (idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
-    int trialID = *(idIt);
-    if (!bilinearForm()->isFluxOrTrace(trialID)){ // if field
-      fieldIDs.push_back(trialID);
-    } else {
-      fluxIDs.push_back(trialID);
-    }
-  } 
-
-  // get all elems in mesh (more than just local info)
-  vector< ElementPtr > activeElems = activeElements();
-  vector< ElementPtr >::iterator elemIt;
-
-  // gets dof indices
-  for (elemIt=activeElems.begin();elemIt!=activeElems.end();elemIt++){
-    int cellID = (*elemIt)->cellID();
-    int globalCellIndex = (*elemIt)->globalCellIndex();
-    int cellIndex = (*elemIt)->cellIndex();
-    int numSides = (*elemIt)->numSides();
-    ElementTypePtr elemType = (*elemIt)->elementType();
-    
-    // get local indices (for cell)
-    vector<int> inds;
-    for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
-      int trialID = (*idIt);
-      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
-      localFieldInds[cellID].insert(localFieldInds[cellID].end(), inds.begin(), inds.end()); 
-    }
-    inds.clear();
-    for (idIt = fluxIDs.begin(); idIt != fluxIDs.end(); idIt++){
-      int trialID = (*idIt);
-      for (int sideIndex = 0;sideIndex<numSides;sideIndex++){	
-	inds = elemType->trialOrderPtr->getDofIndices(trialID, sideIndex);
-	localFluxInds[cellID].insert(localFluxInds[cellID].end(), inds.begin(), inds.end()); 
-      }
-    }
-
-    // gets global indices (across all cells/all procs)
-    for (int i = 0;i<localFieldInds[cellID].size();i++){
-      int dofIndex = globalDofIndex(cellID,localFieldInds[cellID][i]);
-      globalFieldInds[cellID].push_back(dofIndex);
-    }
-    for (int i = 0;i<localFluxInds[cellID].size();i++){
-      int dofIndex = globalDofIndex(cellID,localFluxInds[cellID][i]);
-      globalFluxInds[cellID].push_back(dofIndex);
-      allFluxInds.insert(dofIndex); // all flux indices      
-    }    
   }  
 }
 
@@ -1756,14 +1675,23 @@ set<int> Mesh::globalDofIndicesForPartition(int partitionNumber) {
 //  hRefine(cellIDs,refPattern,vector< Teuchos::RCP<Solution> >()); 
 //}
 
-void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+void Mesh::hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
+  set<int> cellSet;
+  for (vector<int>::const_iterator cellIt=cellIDs.begin();
+       cellIt != cellIDs.end(); cellIt++) {
+    cellSet.insert(*cellIt);
+  }
+  hRefine(cellSet,refPattern);
+}
+
+void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
        meshIt != _registeredMeshes.end(); meshIt++) {
     (*meshIt)->hRefine(cellIDs,refPattern);
   }
   
-  vector<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
@@ -1848,7 +1776,7 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
       for (int i=0; i<numChildren; i++) {
         childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
       }
-      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDs);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
@@ -1861,7 +1789,7 @@ void Mesh::hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPatte
   }
 }
 
-void Mesh::hUnrefine(vector<int> cellIDs) {
+void Mesh::hUnrefine(const set<int> &cellIDs) {
   // TODO: implement this
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
@@ -1869,7 +1797,7 @@ void Mesh::hUnrefine(vector<int> cellIDs) {
     (*meshIt)->hUnrefine(cellIDs);
   }
   
-  vector<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   set< pair<int, int> > affectedNeighborSides; // (cellID, sideIndex)
   set< int > deletedCellIDs;
   
@@ -2408,11 +2336,16 @@ void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
   cout << "Mesh::unregisterSolution: Solution not found.\n";
 }
 
-//void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
-//  pRefine(cellIDsForPRefinements, vector< Teuchos::RCP<Solution> >());
-//}
+void Mesh::pRefine(const vector<int> &cellIDsForPRefinements) {
+  set<int> cellSet;
+  for (vector<int>::const_iterator cellIt=cellIDsForPRefinements.begin();
+       cellIt != cellIDsForPRefinements.end(); cellIt++) {
+    cellSet.insert(*cellIt);
+  }
+  pRefine(cellSet);
+}
 
-void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
        meshIt != _registeredMeshes.end(); meshIt++) {
@@ -2426,7 +2359,7 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
   //   c. Loop through sides, calling matchNeighbor for each
   
   // 1. Loop through cellIDsForPRefinements:
-  vector<int>::iterator cellIt;
+  set<int>::const_iterator cellIt;
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
@@ -2468,10 +2401,9 @@ void Mesh::pRefine(vector<int> cellIDsForPRefinements) {
     
     for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
-      // do projection
-      vector<int> childIDs;
-      childIDs.push_back(cellID);
-      (*solutionIt)->processSideUpgrades(_cellSideUpgrades);
+      // do projection: for p-refinements, the "child" is the same cell
+      vector<int> childIDs(1,cellID);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDsForPRefinements);
       (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
@@ -2542,6 +2474,7 @@ int Mesh::rowSizeUpperBound() {
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   ElementPtr elem = _elements[cellID];
+//  cout << "setting element type for cellID " << cellID << " (sideUpgradeOnly=" << sideUpgradeOnly << ")\n";
   if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
     ElementTypePtr oldType;
     map<int, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);

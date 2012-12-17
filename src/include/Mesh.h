@@ -194,10 +194,10 @@ public:
   
   ElementPtr getElement(int cellID);
   
-  map< pair<int,int> , int> getLocalToGlobalMap(){
+  const map< pair<int,int> , int>& getLocalToGlobalMap(){
     return _localToGlobalMap;
   }
-  map< int, pair<int,int> > getGlobalToLocalMap();
+  //  map< int, pair<int,int> > getGlobalToLocalMap();
   
   int globalDofIndex(int cellID, int localDofIndex);
   
@@ -215,8 +215,8 @@ public:
   ElementPtr getActiveElement(int index);
   DofOrderingFactory & getDofOrderingFactory();
 
-  // added by Jesse - REMOVE, cruft code
-  void getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
+  // added by Jesse - move to TestingUtilities/
+  //  void getDofIndices(set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
   // added by Jesse - gets local and global dof indices for fluxes/fields
   void getGlobalFieldFluxDofInds(map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds);
   void getFieldFluxDofInds(map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds);
@@ -228,9 +228,11 @@ public:
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+
+  void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
-  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void hUnrefine(vector<int> cellIDs);
+  void hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void hUnrefine(const set<int> &cellIDs);
   // for the case where we want to reproject the previous mesh solution onto the new one:
 //  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
   
@@ -274,8 +276,8 @@ public:
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
-  void pRefine(vector<int> cellIDsForPRefinements);
-//  void pRefine(vector<int> cellIDsForPRefinements, vector< Teuchos::RCP<Solution> > solutions);
+  void pRefine(const vector<int> &cellIDsForPRefinements);
+  void pRefine(const set<int> &cellIDsForPRefinements);
     
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound

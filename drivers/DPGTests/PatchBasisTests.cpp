@@ -1,6 +1,8 @@
 
 #include "PatchBasisTests.h"
 
+#include "SolutionTests.h"
+
 #include "Intrepid_FieldContainer.hpp"
 #include "Intrepid_CellTools.hpp"
 
@@ -19,6 +21,42 @@
 #include "MeshTestUtility.h" // used for checkMeshConsistency
 #include "MeshTestSuite.h"
 
+#include "BCEasy.h"
+#include "RHSEasy.h"
+
+class PatchBasisInflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol);
+    bool yMatch = (abs(y) < tol);
+    return xMatch || yMatch;
+  }
+};
+
+class PatchBasisInflowFunction : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    double tol = 1e-11;
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+        double x = points(i,j,0);
+        double y = points(i,j,1);
+        values(i,j) = 0.0;
+        if (abs(y)<tol){
+          values(i,j) = 1.0;
+        }
+        if (abs(x)<tol){
+          values(i,j) = -1.0;
+        }
+      }
+    }
+  }
+};
+
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 
 // for some reason, we throw an exception (at least in debug mode) if we don't
@@ -33,16 +71,16 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
-  try {
+//  try {
     setup();
-    if (testSolveUniformMesh()) {
+    if (testSimpleRefinement()) {
       numTestsPassed++;
     }
     numTestsRun++;
     teardown();
     
     setup();
-    if (testSimpleRefinement()) {
+    if (testSolveUniformMesh()) {
       numTestsPassed++;
     }
     numTestsRun++;
@@ -82,15 +120,13 @@ void PatchBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
     }
     numTestsRun++;
     teardown();
-  } catch (...) {
-    cout << "PatchBasisTests: caught exception while running tests.\n";
-    teardown();
-  }
+//  } catch (...) {
+//    cout << "PatchBasisTests: caught exception while running tests.\n";
+//    teardown();
+//  }
 }
 
 bool PatchBasisTests::basisValuesAgreeWithPermutedNeighbor(Teuchos::RCP<Mesh> mesh) {
-  bool success = true;
-  
   // for every side (PatchBasis or no), compute values for that side, and values for its neighbor along
   // the same physical points.  (Imitate the comparison between parent and child, only remember that
   // the neighbor involves a flip: (-1,1) --> (1,-1).)
@@ -227,8 +263,26 @@ void PatchBasisTests::makeSimpleRefinement() {
   vector<int> cellIDsToRefine;
   //cout << "refining SW element (cellID " << _sw->cellID() << ")\n";
   cellIDsToRefine.push_back(_sw->cellID()); // this is cellID 0, as things are right now implemented
-  // the next line will throw an exception in Mesh right now, because Mesh doesn't yet support PatchBasis
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+/*_________________________________
+  |               |               |
+  |               |               |
+  |               |               |
+  |       1       |       3       |
+  |               |               |
+  |               |               |
+  |               |               |
+  ---------------------------------
+  |       |       |               |
+  |   7   |   6   |               |
+  |       |       |               |
+  |-------0-------|       2       |
+  |       |       |               |
+  |   4   |   5   |               |
+  |       |       |               |
+  ---------------------------------*/
+  
 }
 
 void PatchBasisTests::makeMultiLevelRefinement() {
@@ -242,6 +296,25 @@ void PatchBasisTests::makeMultiLevelRefinement() {
   ElementPtr elem = _mesh->elementsForPoints(point)[0];
   cellIDsToRefine.push_back(elem->cellID());
   _mesh->hRefine(cellIDsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+/* _________________________________
+   |               |               |
+   |               |               |
+   |               |               |
+   |       1       |       3       |
+   |               |               |
+   |               |               |
+   |               |               |
+   ---------------------------------
+   |       |       |               |
+   |   7   |   6   |               |
+   |       |       |               |
+   |-------0-------|       2       |
+   |       | 11| 10|               |
+   |   4   |---5---|               |
+   |       | 8 | 9 |               |
+   ---------------------------------*/
+  
 }
 
 bool PatchBasisTests::meshLooksGood() {
@@ -491,19 +564,51 @@ void PatchBasisTests::setup() {
   double eps = 1.0; // not really testing for sharp gradients right now--just want to see if things basically work
   double beta_x = 1.0;
   double beta_y = 1.0;
-  // _confusionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
+  // _convectionExactSolution = Teuchos::rcp( new ConfusionManufacturedSolution(eps,beta_x,beta_y) );
 
-  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( new ConfusionBilinearForm(eps,beta_x,beta_y) );
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory;
+  VarPtr v = varFactory.testVar("v", HGRAD);
   
-  Teuchos::RCP<ConfusionProblemLegacy> confusionProblem = Teuchos::rcp( new ConfusionProblemLegacy(confusionBF) );
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
   
-  //  Teuchos::RCP<ConfusionBilinearForm> confusionBF = Teuchos::rcp( (ConfusionBilinearForm*) _confusionExactSolution->bilinearForm.get(), false); // false: doesn't own the memory, since the RCP _confusionExactSolution does that);
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   
-  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+delta_p);
+  // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
   
-  Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new ConfusionInnerProduct( confusionBF, _mesh ) );
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
   
-  _confusionSolution = Teuchos::rcp( new Solution(_mesh, confusionProblem, confusionProblem, ip) );
+  ////////////////////   BUILD MESH   ///////////////////////
+  
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );
+  
+  FunctionPtr n = Function::normal();
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+  
+  _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, convectionBF, H1Order, H1Order+delta_p);
+  
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new PatchBasisInflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(inflowBoundary) );
+  
+  FunctionPtr uIn;
+  uIn = Teuchos::rcp(new PatchBasisInflowFunction); // uses a discontinuous piecewise-constant basis function on left and bottom sides of square
+  bc->addDirichlet(beta_n_u, inflowBoundary, beta*n*uIn);
+  
+  _convectionSolution = Teuchos::rcp( new Solution(_mesh, bc, rhs, ip) );
+  
+  _mesh->registerSolution(_convectionSolution);
   
   // the right way to determine the southwest element, etc. is as follows:
   FieldContainer<double> points(4,2);
@@ -527,27 +632,27 @@ void PatchBasisTests::setup() {
 //  cout << "NW nodes:\n" << _mesh->physicalCellNodesForCell(_nw->cellID());
 //  cout << "NE nodes:\n" << _mesh->physicalCellNodesForCell(_ne->cellID());
   
-  _confusionSolution->solve(_useMumps);
+  _convectionSolution->solve(_useMumps);
   
   //  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
   //    int fieldID = *fieldIt;
-  //    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-  //    _confusionL2ErrorForOriginalMesh[fieldID] = err;
+  //    double err = _convectionExactSolution->L2NormOfError(*(_convectionSolution.get()),fieldID);
+  //    _convectionL2ErrorForOriginalMesh[fieldID] = err;
   //  }
   
-  _confusionEnergyErrorForOriginalMesh = _confusionSolution->energyErrorTotal();
+  _convectionEnergyErrorForOriginalMesh = _convectionSolution->energyErrorTotal();
   
-  _confusionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_before_refinement.m");
+//  _convectionSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_before_refinement.m");
   
   _mesh->setUsePatchBasis(true);
   
-  _fluxIDs = confusionBF->trialBoundaryIDs();
-  _fieldIDs = confusionBF->trialVolumeIDs();
+  _fluxIDs = convectionBF->trialBoundaryIDs();
+  _fieldIDs = convectionBF->trialVolumeIDs();
   
 }
 
 bool PatchBasisTests::refinementsHaveNotIncreasedError() {
-  return refinementsHaveNotIncreasedError(_confusionSolution);
+  return refinementsHaveNotIncreasedError(_convectionSolution);
 }
 
 bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> solution) {
@@ -557,8 +662,8 @@ bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   
   solution->solve(_useMumps);
 
-  double err = _confusionSolution->energyErrorTotal();
-  double diff = err - _confusionEnergyErrorForOriginalMesh;
+  double err = _convectionSolution->energyErrorTotal();
+  double diff = err - _convectionEnergyErrorForOriginalMesh;
   if (diff > tol) {
     cout << "PatchBasisTests: increase in error after refinement " << diff << " > tol " << tol << ".\n";
     
@@ -570,11 +675,11 @@ bool PatchBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
   
 //  for (vector<int>::iterator fieldIt=_fieldIDs.begin(); fieldIt != _fieldIDs.end(); fieldIt++) {
 //    int fieldID = *fieldIt;
-//    double err = _confusionExactSolution->L2NormOfError(*(_confusionSolution.get()),fieldID);
-//    double originalErr = _confusionL2ErrorForOriginalMesh[fieldID];
+//    double err = _convectionExactSolution->L2NormOfError(*(_convectionSolution.get()),fieldID);
+//    double originalErr = _convectionL2ErrorForOriginalMesh[fieldID];
 //    if (err - originalErr > tol) {
 //      cout << "PatchBasisTests: increase in error after refinement " << err - originalErr << " > tol " << tol << " for ";
-//      cout << _confusionExactSolution->bilinearForm()->trialName(fieldID) << endl;
+//      cout << _convectionExactSolution->bilinearForm()->trialName(fieldID) << endl;
 //      
 //      solution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
 //      solution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
@@ -654,6 +759,10 @@ bool PatchBasisTests::testSimpleRefinement() {
   // refine in the sw, and then check that the right elements have PatchBases
   bool success = true;
   
+//  if ( ! SolutionTests::solutionCoefficientsAreConsistent(_convectionSolution) ) {
+//    cout << "BEFORE simple refinement, solution coefficients are inconsistent.\n";
+//  }
+  
 //  cout << "Before testSimpleRefinement, boundary: " << endl;
 //  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
 //    cout << "cellID " << cellID << ":";
@@ -665,7 +774,37 @@ bool PatchBasisTests::testSimpleRefinement() {
 //    cout << endl;
 //  }
   
+  // the _nw and _se element's dofs should not change: let's store them and check this
+  FieldContainer<double> nwDofsBefore = _convectionSolution->allCoefficientsForCellID(_nw->cellID());
+  FieldContainer<double> seDofsBefore = _convectionSolution->allCoefficientsForCellID(_se->cellID());
+  
+//  cout << "cellID 1, trial ordering:\n";
+//  cout << *(_mesh->getElement(1)->elementType()->trialOrderPtr);
+
+//  cout << "cellID 0 dof coefficients before refinement:\n" << _convectionSolution->allCoefficientsForCellID(0);
+  
   makeSimpleRefinement();
+  
+//  cout << "cellID 7, trial ordering:\n";
+//  cout << *(_mesh->getElement(7)->elementType()->trialOrderPtr);
+  
+  FieldContainer<double> nwDofsAfter = _convectionSolution->allCoefficientsForCellID(_nw->cellID());
+  FieldContainer<double> seDofsAfter = _convectionSolution->allCoefficientsForCellID(_se->cellID());
+  
+//  cout << "cellID 5 dof coefficients:\n" << _convectionSolution->allCoefficientsForCellID(5);
+  
+//  cout << "cellID 2 dof coefficients:\n" << _convectionSolution->allCoefficientsForCellID(2);
+  
+  double tol = 1e-15;
+  double maxDiff = 0;
+  if (! fcsAgree(nwDofsBefore, nwDofsAfter, tol, maxDiff)) {
+    success = false;
+    cout << "nw dofs before and after sw refinement don't match. Maxdiff " << maxDiff << endl;
+  }
+  if (! fcsAgree(seDofsBefore, seDofsAfter, tol, maxDiff)) {
+    success = false;
+    cout << "se dofs before and after sw refinement don't match. Maxdiff " << maxDiff << endl;
+  }
   
 //  cout << "After testSimpleRefinement, boundary: " << endl;
 //  for (int cellID=0; cellID<_mesh->numElements(); cellID++) {
@@ -676,6 +815,13 @@ bool PatchBasisTests::testSimpleRefinement() {
 //      }
 //    }
 //    cout << endl;
+//  }
+
+  // the following test would be reasonable, except that we don't do the projection onto fluxes and traces yet...
+//  bool verbose = false;
+//  if ( ! SolutionTests::solutionCoefficientsAreConsistent(_convectionSolution, verbose) ) {
+//    cout << "After simple refinement, solution coefficients are inconsistent.\n";
+//    success = false;
 //  }
   
   if ( !meshLooksGood() || (! refinementsHaveNotIncreasedError()) ) {

@@ -25,7 +25,6 @@ private:
   void setup();
   void teardown();
   
-  static bool solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln);
 public:
   SolutionTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
@@ -43,6 +42,7 @@ public:
   bool testScratchPadSolution();
   bool testSolutionsAreConsistent();
   
+  static bool solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole = false);
 };
 
 #endif
