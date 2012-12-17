@@ -41,6 +41,7 @@ public:
   bool testSolutionEvaluationBasisCache();
   bool testScratchPadSolution();
   bool testSolutionsAreConsistent();
+  bool testCondensationSolve();
   
   static bool solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole = false);
 };

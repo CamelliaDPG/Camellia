@@ -65,6 +65,16 @@ public:
   }
 };
 
+class InflowBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch =  (abs(x)<tol);
+    bool yMatch =  (abs(y)<tol);
+    return xMatch || yMatch;
+  }
+};
+
 bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole) {
   Teuchos::RCP<BilinearForm> bf = soln->mesh()->bilinearForm();
   
@@ -269,6 +279,13 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
  setup();
   if (testScratchPadSolution()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  setup();
+  if (testCondensationSolve()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -1055,6 +1072,85 @@ bool SolutionTests::testScratchPadSolution() {
   }  
   return success;
 }
+
+
+
+bool SolutionTests::testCondensationSolve() {
+
+  bool success = true;
+  double tol = 1e-12;
+
+  int numProcs=1;
+  int rank=0;
+
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+//  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+//  Epetra_SerialComm Comm;
+#endif
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+ 
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u= varFactory.fluxVar("\\widehat{\\beta \\cdot n u");
+  VarPtr u = varFactory.fieldVar("u");
+  
+  ////////////////////   DEFINE BILINEAR FORM/IP   ///////////////////////
+
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  bf->addTerm( -u, beta * v->grad() );
+  bf->addTerm( beta_n_u, v);
+  
+  // robust test norm
+  IPPtr ip = bf->graphNorm();
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  rhs->addTerm( 1.0* v ); 
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflow = Teuchos::rcp( new InflowBoundary );
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+
+  bc->addDirichlet(beta_n_u, inflow, Function::constant(1.0)*beta*n);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  int H1Order = 3; int pToAdd = 3; int nCells = 4;  
+  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
+    
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  Teuchos::RCP<Solution> condensationSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  condensationSolution->solve(false);
+  FunctionPtr uF = Function::solution(u,solution);
+  FunctionPtr uCond = Function::solution(u,condensationSolution);
+  double diff = (uF-uCond)->l2norm(mesh,H1Order);
+  if (diff>tol){
+    cout << "Failing test: Condensation solve does not match regular solve" << endl;
+    success=false;
+  }
+
+  return success;
+}
+
+
 
 bool SolutionTests::testSolutionsAreConsistent() {
   bool success = true;

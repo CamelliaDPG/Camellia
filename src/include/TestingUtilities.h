@@ -52,13 +52,14 @@
 #include "ElementType.h"
 #include "Element.h"
 #include "Mesh.h"
-
+#include "Solution.h"
 class TestingUtilities {
  public:
-  void testRoutine();
   static bool isFluxOrTraceDof(MeshPtr mesh, int globalDofIndex);
-  void getDofIndices(MeshPtr mesh, set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
-  
+  static void getDofIndices(MeshPtr mesh, set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
+  static void setSolnCoeffForGlobalDofIndex(SolutionPtr solution, double solnCoeff, int dofIndex);
+  static void getFieldFluxDofInds(MeshPtr mesh, map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds);
+  static void getGlobalFieldFluxDofInds(MeshPtr mesh,map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds);
 };
 
 #endif

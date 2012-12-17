@@ -2524,6 +2524,10 @@ void Solution::setRHS( Teuchos::RCP<RHS> rhs) {
   clearComputedResiduals();
 }
 
+void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID){
+  _solutionForCellIDGlobal[cellID] = solnCoeffsToSet;
+}
+
 void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, int cellID, int trialID, int sideIndex) {
   ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
   
@@ -2547,20 +2551,6 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
   // could stand to be more granular, maybe, but if we're changing the solution, the present
   // policy is to invalidate any computed residuals
   clearComputedResiduals();
-}
-
-
-void Solution::setSolnCoeffForGlobalDofIndex(double solnCoeff, int dofIndex) {
-
-  map< pair<int,int> , int> localToGlobalMap = _mesh->getLocalToGlobalMap();    
-  map< pair<int,int> , int>::iterator it;
-  for (it = localToGlobalMap.begin();it!=localToGlobalMap.end();it++){
-    pair<int,int> cellID_dofIndex = it->first;
-    int currentGlobalDofIndex = it->second;
-    if (currentGlobalDofIndex==dofIndex) {
-      _solutionForCellIDGlobal[cellID_dofIndex.first](cellID_dofIndex.second) = solnCoeff;
-    }
-  }
 }
 
 // protected method; used for solution comparison...
@@ -2602,18 +2592,54 @@ void Solution::condensedSolve(bool saveMemory){
 
   // get local dof indices for reduced matrices
   map<int,set<int> > localFluxInds, localFieldInds;  
-  _mesh->getFieldFluxDofInds(localFluxInds, localFieldInds);
-
-  // get global info for flux/traces
   map<int,set<int> > globalFluxInds, globalFieldInds;  
-  _mesh->getGlobalFieldFluxDofInds(globalFluxInds, globalFieldInds);
+  vector<int> trialIDs = mesh()->bilinearForm()->trialIDs();
+  vector< ElementPtr > allElems = _mesh->activeElements();
+  vector< ElementPtr >::iterator elemIt;     
+  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int cellID = elem->cellID();
+    set<int> localFluxDofs,localFieldDofs,globalFluxDofs,globalFieldDofs;
+      
+    for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
+      int trialID = *idIt;
+      int numSides = elem->elementType()->trialOrderPtr->getNumSidesForVarID(trialID);
+      vector<int> dofInds;
+      if (numSides==1) { // volume element
+	vector<int> dofInds = elem->elementType()->trialOrderPtr->getDofIndices(trialID, 0);
+      } else {	
+	for (int sideIndex=0;sideIndex<numSides;sideIndex++){
+	  vector<int> inds =  elem->elementType()->trialOrderPtr->getDofIndices(trialID, sideIndex);
+	  dofInds.insert(dofInds.end(),inds.begin(),inds.end());
+	}
+      }
+      for (vector<int>::iterator dofIt = dofInds.begin();dofIt!=dofInds.end();dofIt++){
+	int localDofIndex = *dofIt;
+	int globalDofIndex = mesh()->globalDofIndex(cellID, localDofIndex);
+	if (mesh()->bilinearForm()->isFluxOrTrace(trialID)){
+	  // is flux ID
+	  localFluxDofs.insert(localDofIndex);
+	  globalFluxDofs.insert(globalDofIndex);
+	}else{
+	  // is field ID
+	  localFieldDofs.insert(localDofIndex);
+	  globalFieldDofs.insert(globalDofIndex);
+	}	      
+      }
+    }
+    localFluxInds[cellID]=localFluxDofs;
+    localFieldInds[cellID]=localFieldDofs;
+    globalFluxInds[cellID]=globalFluxDofs;
+    globalFieldInds[cellID]=globalFieldDofs;
+  }
+
+  //  _mesh->getFieldFluxDofInds(localFluxInds, localFieldInds);
+  //  _mesh->getGlobalFieldFluxDofInds(globalFluxInds, globalFieldInds);
 
   // build maps/list of all flux inds
   map<int,map<int,int> > localToCondensedMap;
   map<int,map<int,int> > globalToLocalMap;
   set<int> allFluxInds;  
-  vector< ElementPtr > allElems = _mesh->activeElements();
-  vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
@@ -2626,10 +2652,10 @@ void Solution::condensedSolve(bool saveMemory){
       allFluxInds.insert(globalInd);
       localToCondensedMap[cellID][localInd] = i;
       globalToLocalMap[cellID][globalInd] = localInd;
-
       i++;
     }
   }
+
   // build global-condensed map
   map<int,int> globalToCondensedMap;
   map<int,int> condensedToGlobalMap;
@@ -2664,21 +2690,7 @@ void Solution::condensedSolve(bool saveMemory){
 
   int numGlobalFluxDofs = _mesh->numFluxDofs();
   Epetra_Map fluxPartMap = getPartitionMap(rank, myGlobalFluxInds, numGlobalFluxDofs, 0, &Comm);
-  /*
-  int localDofsSize = myGlobalFluxInds.size();
-  int * myCondensedInds;
-  if (localDofsSize!=0){
-    myCondensedInds = new int[ localDofsSize ];      
-    int i =0;
-    for (setIt=myGlobalFluxInds.begin();setIt!=myGlobalFluxInds.end();setIt++){
-      myCondensedInds[i] = *setIt;
-      i++;
-    }    
-  } else {
-    myCondensedInds = NULL;
-  }
-  Epetra_Map fluxPartMap(numGlobalFluxDofs,localDofsSize,myCondensedInds, 0, Comm);  
-  */
+ 
   if (_reportTimingResults){
     cout << "on rank " << rank << ", time to form partition maps = " << timer.ElapsedTime() << endl;
   }  
