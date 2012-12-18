@@ -316,19 +316,19 @@ public:
     _bf->addTerm(-u1, q2->dx()); // (-u, grad q2)
     _bf->addTerm(-u2, q2->dy());
     
-    //    _graphNorm = _bf->graphNorm();
-    _graphNorm = Teuchos::rcp( new IP );
-    _graphNorm->addTerm( q1 + mu * v->curl() ); // omega
-    _graphNorm->addTerm( v->div() ); // p
-    _graphNorm->addTerm( q2->grad() + q1->curl() ); // (u1,u2)
-    
-    // L^2 terms:
-    //    _graphNorm->addTerm( v );
-    // experiment on suspicion of the above line:
-    _graphNorm->addTerm( v->x() );
-    _graphNorm->addTerm( v->y() );
-    _graphNorm->addTerm( q1 );
-    _graphNorm->addTerm( q2 );
+    _graphNorm = _bf->graphNorm();
+//    _graphNorm = Teuchos::rcp( new IP );
+//    _graphNorm->addTerm( q1 + mu * v->curl() ); // omega
+//    _graphNorm->addTerm( v->div() ); // p
+//    _graphNorm->addTerm( q2->grad() + q1->curl() ); // (u1,u2)
+//    
+//    // L^2 terms:
+//    //    _graphNorm->addTerm( v );
+//    // experiment on suspicion of the above line:
+//    _graphNorm->addTerm( v->x() );
+//    _graphNorm->addTerm( v->y() );
+//    _graphNorm->addTerm( q1 );
+//    _graphNorm->addTerm( q2 );
   }
   BFPtr bf() {
     return _bf;
@@ -530,22 +530,23 @@ public:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)
     _bf->addTerm(-u2,q->dy());
     _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-    
-    _graphNorm = Teuchos::rcp( new IP );
-    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-    _graphNorm->addTerm( v1->dx() + v2->dy() );     // pressure
-    _graphNorm->addTerm( tau1->div() - q->dx() );    // u1
-    _graphNorm->addTerm( tau2->div() - q->dy() );    // u2
-    
-    // L^2 terms:
-    _graphNorm->addTerm( v1 );
-    _graphNorm->addTerm( v2 );
-    _graphNorm->addTerm( q );
-    _graphNorm->addTerm( tau1 );
-    _graphNorm->addTerm( tau2 );
+
+    _graphNorm = _bf->graphNorm();
+//    _graphNorm = Teuchos::rcp( new IP );
+//    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+//    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+//    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+//    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+//    _graphNorm->addTerm( v1->dx() + v2->dy() );     // pressure
+//    _graphNorm->addTerm( tau1->div() - q->dx() );    // u1
+//    _graphNorm->addTerm( tau2->div() - q->dy() );    // u2
+//    
+//    // L^2 terms:
+//    _graphNorm->addTerm( v1 );
+//    _graphNorm->addTerm( v2 );
+//    _graphNorm->addTerm( q );
+//    _graphNorm->addTerm( tau1 );
+//    _graphNorm->addTerm( tau2 );
   }
   BFPtr bf() {
     return _bf;
