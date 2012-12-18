@@ -46,6 +46,9 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
   
   constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
   
+//  cout << "BasisSumFunction: transformedValues:\n" << *transformedValues;
+//  cout << "BasisSumFunction: coefficients:\n" << _coefficients;
+  
   // transformedValues has dimensions (C,F,P,[D,D])
   // therefore, the rank of the sum is transformedValues->rank() - 3
   int rank = transformedValues->rank() - 3;
@@ -111,3 +114,6 @@ FunctionPtr NewBasisSumFunction::dz() {
   return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
 }
 
+bool NewBasisSumFunction::boundaryValueOnly() {
+  return _boundaryValueOnly;
+}
