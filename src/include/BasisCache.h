@@ -189,6 +189,12 @@ public:
   int getSpaceDim();
   
   void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
+  
+  // static convenience constructors:
+  static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
+                                         int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1);
+  static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
+                                             int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // for cells on the local MPI node
 };
 
 #endif
