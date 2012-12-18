@@ -1879,7 +1879,6 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
     Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
     
     Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
-    int basisRank = trialOrder->getBasisRank(trialID);
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP< FieldContainer<double> > basisValues;
@@ -1893,7 +1892,6 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
       }
     }
   }
-  
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, 
@@ -1926,7 +1924,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
       // cellID not known -- default values for that cell to 0
       continue;
     }
-    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
+    FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
     
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
     
@@ -1962,15 +1960,15 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 //      cout << "localDofIndex " << localDofIndex << " solnCoeffs(localDofIndex): " << solnCoeffs(localDofIndex) << endl;
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
         if (rank == 0) {
-          values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
+          values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * (*solnCoeffs)(localDofIndex);
         } else if (rank == 1) {
           for (int i=0; i<spaceDim; i++) {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
+            values(cellIndex,ptIndex,i) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * (*solnCoeffs)(localDofIndex);
           }
         } else if (rank == 2) {
           for (int i=0; i<spaceDim; i++) {
             for (int j=0; j<spaceDim; j++) {
-              values(cellIndex,ptIndex,i,j) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i,j) * solnCoeffs(localDofIndex);
+              values(cellIndex,ptIndex,i,j) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i,j) * (*solnCoeffs)(localDofIndex);
             }
           }
         } else {
