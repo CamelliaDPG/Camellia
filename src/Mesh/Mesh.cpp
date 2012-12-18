@@ -951,6 +951,16 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
   }
 }
 
+const vector< int > & Mesh::cellIDsOfType(ElementTypePtr elemType) {
+  int rank = 0;
+  int numProcs = 1;
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+#else
+#endif
+  return cellIDsOfType(rank,elemType);
+}
+
 const vector< int > & Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the cell IDs for a given partition and element type
   return _cellIDsForElementType[partitionNumber][elemTypePtr.get()];
