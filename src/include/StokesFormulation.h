@@ -196,6 +196,22 @@ public:
   }
 };
 
+const static string VVP_V_S = "\\boldsymbol{v}";
+const static string VVP_Q1_S = "q_1";
+const static string VVP_Q2_S = "q_2";
+
+const static string VVP_U1HAT_S = "\\widehat{u}_1";
+const static string VVP_U2HAT_S = "\\widehat{u}_2";
+const static string VVP_U_CROSS_HAT_S = "\\widehat{u}_{\\times n}";
+const static string VVP_U_DOT_HAT_S = "\\widehat{u}_n";
+const static string VVP_OMEGA_HAT_S = "\\widehat{\\omega}";
+const static string VVP_P_HAT_S = "\\widehat{p}";
+
+const static string VVP_U1_S = "u_1";
+const static string VVP_U2_S = "u_2";
+const static string VVP_OMEGA_S = "\\omega";
+const static string VVP_P_S = "p";
+
 
 class VVPStokesFormulation : public StokesFormulation {
   VarFactory varFactory;
@@ -213,28 +229,65 @@ class VVPStokesFormulation : public StokesFormulation {
   bool _trueTraces;
   
 public:
+  static VarFactory vvpVarFactory(bool trueTraces = false) {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+
+    VarFactory varFactory;
+    VarPtr myVar;
+    myVar = varFactory.testVar(VVP_V_S, VECTOR_HGRAD);
+    myVar = varFactory.testVar(VVP_Q1_S, HGRAD);
+    myVar = varFactory.testVar(VVP_Q2_S, HGRAD);
+    
+    if (!trueTraces) {
+      myVar = varFactory.traceVar(VVP_U1HAT_S);
+      myVar = varFactory.traceVar(VVP_U2HAT_S);
+    } else {
+      myVar = varFactory.fluxVar(VVP_U_DOT_HAT_S);
+      myVar = varFactory.fluxVar(VVP_U_CROSS_HAT_S);
+    }
+    myVar = varFactory.traceVar(VVP_OMEGA_HAT_S);
+    myVar = varFactory.traceVar(VVP_P_HAT_S);
+    
+    myVar = varFactory.fieldVar(VVP_U1_S);
+    myVar = varFactory.fieldVar(VVP_U2_S);
+    myVar = varFactory.fieldVar(VVP_OMEGA_S);
+    myVar = varFactory.fieldVar(VVP_P_S);
+
+    return varFactory;
+  }
+  
+  void initVars(bool trueTraces) {
+    // create the VarPtrs:
+    varFactory = vvpVarFactory(trueTraces);
+    
+    // look up the created VarPtrs:
+    v = varFactory.testVar(VVP_V_S, VECTOR_HGRAD);
+    q1 = varFactory.testVar(VVP_Q1_S, HGRAD);
+    q2 = varFactory.testVar(VVP_Q2_S, HGRAD);
+    
+    if (!trueTraces) {
+      u1hat = varFactory.traceVar(VVP_U1HAT_S);
+      u2hat = varFactory.traceVar(VVP_U2HAT_S);
+    } else {
+      u_n = varFactory.fluxVar(VVP_U_DOT_HAT_S);
+      u_xn = varFactory.fluxVar(VVP_U_CROSS_HAT_S);
+    }
+    omega_hat = varFactory.traceVar(VVP_OMEGA_HAT_S);
+    p_hat = varFactory.traceVar(VVP_P_HAT_S);
+    
+    u1 = varFactory.fieldVar(VVP_U1_S);
+    u2 = varFactory.fieldVar(VVP_U2_S);
+    omega = varFactory.fieldVar(VVP_OMEGA_S);
+    p = varFactory.fieldVar(VVP_P_S);
+  }
+  
   VVPStokesFormulation(double mu, bool trueTraces = false) {
     _mu = mu;
     _trueTraces = trueTraces;
     
-    v = varFactory.testVar("\\boldsymbol{v}", VECTOR_HGRAD);
-    q1 = varFactory.testVar("q_1", HGRAD);
-    q2 = varFactory.testVar("q_2", HGRAD);
-    
-    if (!trueTraces) {
-      u1hat = varFactory.traceVar("\\widehat{u}_1");
-      u2hat = varFactory.traceVar("\\widehat{u}_2");
-    } else {
-      u_n = varFactory.fluxVar("\\widehat{u}_n");
-      u_xn = varFactory.fluxVar("\\widehat{u}_{\\times n}");
-    }
-    omega_hat = varFactory.traceVar("\\widehat{\\omega}");
-    p_hat = varFactory.traceVar("\\widehat{p}");
-    
-    u1 = varFactory.fieldVar("u_1");
-    u2 = varFactory.fieldVar("u_2");
-    omega = varFactory.fieldVar("\\omega");
-    p = varFactory.fieldVar("p");
+    initVars(trueTraces);
     
     // construct bilinear form:
     _bf = Teuchos::rcp( new BF(varFactory) );
@@ -442,6 +495,10 @@ public:
     _mu = mu;
     
     initVars();
+    
+    // tau1 is the first *row* of tau
+    // (i.e. it's the components of tau that interact with u1
+    //  in the tensor product (grad u, tau))
     
     // construct bilinear form:
     _bf = Teuchos::rcp( new BF(varFactory) );
