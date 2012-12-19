@@ -312,13 +312,26 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
     int SIDE1 = 0, SIDE2 = 1, SIDE3 = 2;
     for (int i=0; i<horizontalElements; i++) {
       for (int j=0; j<verticalElements; j++) {
-        vector<int> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
-        elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
-        elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
-        elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
-        elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
-        elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
-        elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
+        
+        vector<int> elemVertices1, elemVertices2;
+        if (diagonalUp) {
+          // elem1 is SE of quad, elem2 is NW
+          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
+          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
+          elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal
+          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is WEST
+          elemVertices2.push_back(vertexIndices[i][j]);     // SIDE2 is diagonal
+          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+        } else {
+          // elem1 is SW of quad, elem2 is NE
+          elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
+          elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is diagonal
+          elemVertices1.push_back(vertexIndices[i][j+1]);   // SIDE3 is WEST
+          elemVertices2.push_back(vertexIndices[i][j+1]);   // SIDE1 is diagonal
+          elemVertices2.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
+          elemVertices2.push_back(vertexIndices[i+1][j+1]); // SIDE3 is NORTH
+        }
         
         allElementVertices.push_back(elemVertices1);
         allElementVertices.push_back(elemVertices2);
@@ -949,6 +962,16 @@ int Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, int cellIndex, int par
            return _cellIDsForElementType[partitionNumber][elemTypePtr.get()][cellIndex];
     } else return -1;
   }
+}
+
+const vector< int > & Mesh::cellIDsOfType(ElementTypePtr elemType) {
+  int rank = 0;
+  int numProcs = 1;
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+#else
+#endif
+  return cellIDsOfType(rank,elemType);
 }
 
 const vector< int > & Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {

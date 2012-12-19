@@ -1879,7 +1879,6 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
     Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
     
     Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
-    int basisRank = trialOrder->getBasisRank(trialID);
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP< FieldContainer<double> > basisValues;
@@ -1893,7 +1892,6 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
       }
     }
   }
-  
 }
 
 void Solution::solutionValues(FieldContainer<double> &values, int trialID, BasisCachePtr basisCache, 
@@ -1926,7 +1924,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
       // cellID not known -- default values for that cell to 0
       continue;
     }
-    FieldContainer<double> solnCoeffs = _solutionForCellIDGlobal[cellID];
+    FieldContainer<double>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
     
     DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
     
@@ -1962,15 +1960,15 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, Basis
 //      cout << "localDofIndex " << localDofIndex << " solnCoeffs(localDofIndex): " << solnCoeffs(localDofIndex) << endl;
       for (int ptIndex=0; ptIndex < numPoints; ptIndex++) { 
         if (rank == 0) {
-          values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * solnCoeffs(localDofIndex);
+          values(cellIndex,ptIndex) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex) * (*solnCoeffs)(localDofIndex);
         } else if (rank == 1) {
           for (int i=0; i<spaceDim; i++) {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * solnCoeffs(localDofIndex);
+            values(cellIndex,ptIndex,i) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i) * (*solnCoeffs)(localDofIndex);
           }
         } else if (rank == 2) {
           for (int i=0; i<spaceDim; i++) {
             for (int j=0; j<spaceDim; j++) {
-              values(cellIndex,ptIndex,i,j) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i,j) * solnCoeffs(localDofIndex);
+              values(cellIndex,ptIndex,i,j) += (*transformedValues)(cellIndex,dofOrdinal,ptIndex,i,j) * (*solnCoeffs)(localDofIndex);
             }
           }
         } else {
@@ -3617,9 +3615,9 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
-//      cout << "setting solnCoeffs for cellID " << cellID << endl;
+      //      cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
+      //      cout << basisCoefficients;
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
-//      cout << basisCoefficients;
     }
   }
 }
@@ -3702,8 +3700,9 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
-	 
-/*void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
+
+/*
+void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
   vector<int> trialVolumeIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> fluxTraceIDs = _mesh->bilinearForm()->trialBoundaryIDs();
     
@@ -3731,7 +3730,8 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
       BasisPtr basis = oldElemType->trialOrderPtr->getBasis(trialID,sideIndex);
       FieldContainer<double> basisCoefficients(basis->getCardinality());
       basisCoeffsForTrialOrder(basisCoefficients, oldElemType->trialOrderPtr, _solutionForCellIDGlobal[cellID], trialID, sideIndex);
-      thisSideFunctions[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+      bool boundaryValued = true;
+      thisSideFunctions[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
       sideFunctionMap[sideIndex] = thisSideFunctions;
     }
   }

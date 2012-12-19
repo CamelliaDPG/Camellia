@@ -195,13 +195,13 @@ void HConvergenceStudy::computeErrors() {
     
     int numElements = minNumElements();
     
-    double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
+    double l2norm = _exactSolution->L2NormOfError(*_fineZeroSolution, trialID, _cubatureDegreeForExact);
     _exactSolutionNorm[trialID] = l2norm;
     
     double previousL2Error = -1.0;
     for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
       SolutionPtr solution = *solutionIt;
-      double l2error = _exactSolution->L2NormOfError(*solution, trialID, _cubatureDegreeForExact); // 15 == cubature degree to use...
+      double l2error = _exactSolution->L2NormOfError(*solution, trialID, _cubatureDegreeForExact);
       _solutionErrors[trialID].push_back(l2error);
       
       if (previousL2Error != -1.0) {
@@ -230,7 +230,7 @@ void HConvergenceStudy::computeErrors() {
       
       _bestApproximationErrors[trialID].push_back(l2error);
       
-      if (previousL2Error >= 0.0) {
+      if (previousL2Error != -1.0) {
         double rate = - log(l2error/previousL2Error) / log(2.0);
 //        cout << "HConvergenceStudy: best rate for trial ID " << trialID << ": " << rate << endl;
         _bestApproximationRates[trialID].push_back(rate);
@@ -261,6 +261,7 @@ Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<dou
 }
 
 Teuchos::RCP<Solution> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mesh) {
+  // this probably should be a feature of ExactSolution
   Teuchos::RCP<Solution> bestApproximation = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
   bestApproximation->setCubatureEnrichmentDegree(_cubatureDegreeForExact);
   bestApproximation->projectOntoMesh(_exactSolutionFunctions);

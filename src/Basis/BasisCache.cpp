@@ -620,3 +620,24 @@ void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTr
 int BasisCache::getSpaceDim() {
   return _spaceDim;
 }
+
+// static convenience constructors:
+BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testVsTest,
+                                            int cubatureDegreeEnrichment, int cubatureMultiplier) {
+  ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, cubatureMultiplier ) );
+  bool createSideCache = true;
+  vector<int> cellIDs(1,cellID);
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), cellIDs, createSideCache);
+  
+  return basisCache;
+}
+BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest,
+                                                int cubatureDegreeEnrichment, int cubatureMultiplier) { // for cells on the local MPI node
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, cubatureMultiplier ) );
+  bool createSideCache = true;
+  vector<int> cellIDs = mesh->cellIDsOfType(elemType);
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
+  
+  return basisCache;
+}

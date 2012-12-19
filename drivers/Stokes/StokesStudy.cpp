@@ -258,28 +258,28 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
   FieldContainer<double> p7(2);
   FieldContainer<double> p8(2);
   
-// this is what's claimed to be the domain in the Cockburn/Gopalakrishnan paper.
+// this is what's claimed to be the domain in the Cockburn/Nguyen paper.
 // below is the one that I think they actually used...
 // builds a domain for (-1,1)^2 \ (0,1) x (-1,0)  
-//  p1(0) = -1.0; p1(1) = -1.0;
-//  p2(0) = -1.0; p2(1) =  0.0;
-//  p3(0) = -1.0; p3(1) =  1.0;
-//  p4(0) =  0.0; p4(1) =  1.0;
-//  p5(0) =  1.0; p5(1) =  1.0;
-//  p6(0) =  1.0; p6(1) =  0.0;
-//  p7(0) =  0.0; p7(1) =  0.0;
-//  p8(0) =  0.0; p8(1) = -1.0;
+  p1(0) = -1.0; p1(1) = -1.0;
+  p2(0) = -1.0; p2(1) =  0.0;
+  p3(0) = -1.0; p3(1) =  1.0;
+  p4(0) =  0.0; p4(1) =  1.0;
+  p5(0) =  1.0; p5(1) =  1.0;
+  p6(0) =  1.0; p6(1) =  0.0;
+  p7(0) =  0.0; p7(1) =  0.0;
+  p8(0) =  0.0; p8(1) = -1.0;
   
 // build a domain for (-1,1)^2 \ (-1,0) x (-1,0)
 // (this is a rotation about the origin of the points above)
-  p1(0) = -1.0; p1(1) =  1.0;
-  p2(0) =  0.0; p2(1) =  1.0;
-  p3(0) =  1.0; p3(1) =  1.0;
-  p4(0) =  1.0; p4(1) =  0.0;
-  p5(0) =  1.0; p5(1) = -1.0;
-  p6(0) =  0.0; p6(1) = -1.0;
-  p7(0) =  0.0; p7(1) =  0.0;
-  p8(0) = -1.0; p8(1) =  0.0;
+//  p1(0) = -1.0; p1(1) =  1.0;
+//  p2(0) =  0.0; p2(1) =  1.0;
+//  p3(0) =  1.0; p3(1) =  1.0;
+//  p4(0) =  1.0; p4(1) =  0.0;
+//  p5(0) =  1.0; p5(1) = -1.0;
+//  p6(0) =  0.0; p6(1) = -1.0;
+//  p7(0) =  0.0; p7(1) =  0.0;
+//  p8(0) = -1.0; p8(1) =  0.0;
 
   vertices.push_back(p1);
   vertices.push_back(p2);
@@ -298,33 +298,33 @@ void LShapedDomain(vector<FieldContainer<double> > &vertices, vector< vector<int
     elementVertices.push_back(element);
     element.clear();
         
-    element.push_back(6);
-    element.push_back(1);
     element.push_back(0);
+    element.push_back(6);
+    element.push_back(1);
     elementVertices.push_back(element);
     element.clear();
     
     element.push_back(1);
-    element.push_back(6);
-    element.push_back(2);
-    elementVertices.push_back(element);
-    element.clear();
-    
-    element.push_back(2);
     element.push_back(6);
     element.push_back(3);
     elementVertices.push_back(element);
     element.clear();
     
+    element.push_back(1);
+    element.push_back(3);
+    element.push_back(2);
+    elementVertices.push_back(element);
+    element.clear();
+    
+    element.push_back(3);
     element.push_back(6);
     element.push_back(4);
-    element.push_back(3);
     elementVertices.push_back(element);
     element.clear();
     
+    element.push_back(4);
     element.push_back(6);
     element.push_back(5);
-    element.push_back(4);
     elementVertices.push_back(element);
   } else {
     vector<int> element;
@@ -383,7 +383,7 @@ int main(int argc, char *argv[]) {
   numProcs=mpiSession.getNProc();
 #else
 #endif
-  int pToAdd = 1; // for optimal test function approximation
+  int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
   ExactSolutionChoice exactSolnChoice = HDGSingular;
@@ -516,22 +516,37 @@ int main(int argc, char *argv[]) {
       FunctionPtr x_to_lambda = Teuchos::rcp( new Xp(lambda) );
       FunctionPtr x_to_lambda_minus = Teuchos::rcp( new Xp(lambda_minus) );
       FunctionPtr x_to_lambda_plus = Teuchos::rcp( new Xp(lambda_plus) );
-      FunctionPtr r_to_lambda = Teuchos::rcp( new PolarizedFunction( x_to_lambda ) );
-      FunctionPtr r_to_lambda_minus = Teuchos::rcp( new PolarizedFunction( x_to_lambda_minus ) );
-      FunctionPtr r_to_lambda_plus = Teuchos::rcp( new PolarizedFunction( x_to_lambda_plus ) );
+      FunctionPtr r_to_lambda = Function::polarize( x_to_lambda );
+      FunctionPtr r_to_lambda_minus = Function::polarize( x_to_lambda_minus );
+      FunctionPtr r_to_lambda_plus = Function::polarize( x_to_lambda_plus );
       
-      FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction(Teuchos::rcp( new Cos_y ) ) );
-      FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction(Teuchos::rcp( new Sin_y ) ) );
+      FunctionPtr cos_theta = Function::polarize(Teuchos::rcp( new Cos_y ) );
+      FunctionPtr sin_theta = Function::polarize(Teuchos::rcp( new Sin_y ) );
 
       // define stream function:
       FunctionPtr psi = r_to_lambda_plus * (FunctionPtr) phi_theta;
-      u1_exact = psi->dy();
-      u2_exact = - psi->dx();
-//      u1_exact = r_to_lambda * (  lambda_plus * sin_theta * (FunctionPtr) phi_theta + cos_theta * phi_theta_prime );
-//      u2_exact = r_to_lambda * ( -lambda_plus * cos_theta * (FunctionPtr) phi_theta + sin_theta * phi_theta_prime );
+      
+//      cout << "phi (3*pi/2) = " << Function::evaluate(phi_y, 1, 3*PI/2 ) << endl;
+//      cout << "phi'(3*pi/2) = " << Function::evaluate(phi_y->dy(), 1, 3*PI/2 ) << endl;
+//      u1_exact = psi->dy();
+//      u2_exact = - psi->dx();
+      u1_exact = r_to_lambda * (  lambda_plus * sin_theta * (FunctionPtr) phi_theta + cos_theta * phi_theta_prime );
+      u2_exact = r_to_lambda * ( -lambda_plus * cos_theta * (FunctionPtr) phi_theta + sin_theta * phi_theta_prime );
       p_exact = -r_to_lambda_minus * ( (lambda_plus * lambda_plus) * phi_theta_prime + phi_theta_triple_prime) / lambda_minus;
       
-      double p_avg = 9.00146834554765 / 3.0; // numerically determined: want a zero-mean pressure (3.0 being the domain measure)
+      /*if (rank==0) {
+        cout << "u1(-1,0) = " << Function::evaluate(u1_exact, -1, 0) << endl;
+        cout << "u2(-1,0) = " << Function::evaluate(u2_exact, -1, 0) << endl;
+        cout << "u1(0,-1) = " << Function::evaluate(u1_exact, 0, -1) << endl;
+        cout << "u2(0,-1) = " << Function::evaluate(u2_exact, 0, -1) << endl;
+        cout << "u1(1, 0) = " << Function::evaluate(u1_exact, 1,  0) << endl;
+        cout << "u2(1, 0) = " << Function::evaluate(u2_exact, 1,  0) << endl;
+        cout << "u1(0, 1) = " << Function::evaluate(u1_exact, 0,  1) << endl;
+        cout << "u2(0, 1) = " << Function::evaluate(u2_exact, 0,  1) << endl;
+      }*/
+      
+      double p_avg = 0.0;
+      // double p_avg = 9.00146834554765 / 3.0; // numerically determined: want a zero-mean pressure (3.0 being the domain measure)
       p_exact = p_exact - (FunctionPtr) Teuchos::rcp( new ConstantScalarFunction(p_avg) );
       
       // test code to check
@@ -605,7 +620,7 @@ int main(int argc, char *argv[]) {
   if (rank==0) 
     ip->printInteractions();
   
-  FieldContainer<double> quadPoints(4,2);
+  FieldContainer<double> quadPoints(4,2); // NOTE: quadPoints unused for HDGSingular (there, we set the mesh more manually)
   
   if ( exactSolnChoice != HDGSmooth ) {
     quadPoints(0,0) = -1.0; // x1
@@ -731,13 +746,14 @@ int main(int argc, char *argv[]) {
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
       }
       
-//      for (int i=minLogElements; i<=maxLogElements; i++) {
-//        ostringstream filePath;
-//        int numElements = pow(2.0,i);
-//        filePath << "stokes/soln" << numElements << "x";
-//        filePath << numElements << "_p" << polyOrder << ".vtk";
-//        study.getSolution(i)->writeToVTK(filePath.str());
-//      }
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        ostringstream filePath;
+        int numElements = pow(2.0,i);
+        filePath << "stokes/soln" << numElements << "x";
+        filePath << numElements << "_p" << polyOrder << ".vtk";
+        cout << "writing VTK for " << numElements << " x " << numElements << " mesh.\n";
+        study.getSolution(i)->writeToVTK(filePath.str());
+      }
       
       filePathPrefix.str("");
       filePathPrefix << "stokes/" << formulationTypeStr << "_p" << polyOrder << "_convDataMATLAB.dat";

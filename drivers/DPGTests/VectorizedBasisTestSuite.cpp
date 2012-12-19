@@ -6,7 +6,7 @@
 #include "RefinementStrategy.h"
 #include "CamelliaConfig.h"
 #ifdef USE_VTK
-#include "VTKExporterCamellia.h"
+#include "SolutionExporter.h"
 #endif
 
 #include <string>

@@ -39,9 +39,12 @@ class NewBasisSumFunction : public Function {
   BasisPtr _basis;
   FieldContainer<double> _coefficients;
   EOperatorExtended _op;
+  bool _boundaryValueOnly;
  public:
-  NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, EOperatorExtended op = OP_VALUE) : Function( BasisFactory::getBasisRank(basis) ) {
+  NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
+                      EOperatorExtended op = OP_VALUE, bool boundaryValueOnly = false) : Function( BasisFactory::getBasisRank(basis) ) {
     _coefficients = basisCoefficients;
+    _boundaryValueOnly = boundaryValueOnly;
     _basis = basis; // note - _basis->getBaseCellTopology
     _op = OP_VALUE;
     TEUCHOS_TEST_FOR_EXCEPTION(_coefficients.dimension(0)!=basis->getCardinality(),std::invalid_argument,"BasisSumFunction: coefficients passed in do not match cardinality of basis.");
@@ -55,6 +58,8 @@ class NewBasisSumFunction : public Function {
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  
+  bool boundaryValueOnly();
 };
 
 #endif

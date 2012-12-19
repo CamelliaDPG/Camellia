@@ -179,6 +179,7 @@ public:
   
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
 
+  const vector< int > & cellIDsOfType(ElementTypePtr elemType); // for current MPI node.
   const vector< int > & cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< int > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
   

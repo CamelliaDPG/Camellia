@@ -167,6 +167,20 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
   
   setup();
+  if (testVGPStokesFormulationGraphNorm()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testVVPStokesFormulationGraphNorm()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testVGPNavierStokesFormulationConsistency()) {
     numTestsPassed++;
   }
@@ -226,7 +240,7 @@ bool IncompressibleFormulationsTests::functionsAgree(FunctionPtr f1, FunctionPtr
     cout << "f1 != f2; L^2 norm of difference on mesh = " << l2NormOfDifference << endl;
     return false;
   }
-  
+
   // TODO: rewrite this to compute in distributed fashion
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   
@@ -316,8 +330,6 @@ bool IncompressibleFormulationsTests::ltsAgree(LinearTermPtr lt1, LinearTermPtr 
       VarPtr var = *varIt;
       cout << var->displayString() << ": " << diff->getPartMatchingVariable(var)->displayString() << endl;
     }
-
-    
     return false;
   } else {
     return true;
@@ -582,6 +594,147 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
         success = false;
       }
     }
+  }
+  
+  return success;
+}
+
+bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
+  bool success = true;
+  
+  double tol = 1e-15;
+  
+  for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
+    double mu = *muIt;
+    IPPtr ipExpected = Teuchos::rcp( new IP );
+    { // setup ipExpected:
+      // div tau - grad q
+      ipExpected->addTerm(tau1_vgp->div() - q_vgp->dx());
+      ipExpected->addTerm(tau2_vgp->div() - q_vgp->dy());
+      // - grad(mu v) + tau
+      ipExpected->addTerm(-mu * v1_vgp->dx() + tau1_vgp->x()); // mu v1,x + tau11
+      ipExpected->addTerm(-mu * v2_vgp->dx() + tau2_vgp->x()); // mu v2,x + tau21
+      ipExpected->addTerm(-mu * v1_vgp->dy() + tau1_vgp->y()); // mu v1,y + tau12
+      ipExpected->addTerm(-mu * v2_vgp->dy() + tau2_vgp->y()); // mu v2,y + tau22
+      // div v
+      ipExpected->addTerm(v1_vgp->dx() + v2_vgp->dy());
+      // v
+      ipExpected->addTerm(v1_vgp);
+      ipExpected->addTerm(v2_vgp);
+      // tau
+      ipExpected->addTerm(tau1_vgp);
+      ipExpected->addTerm(tau2_vgp);
+      // q
+      ipExpected->addTerm(q_vgp);
+    }
+  
+    VGPStokesFormulation vgpStokesFormulation(mu);
+    IPPtr ipActual = vgpStokesFormulation.graphNorm();
+    
+    int horizontalCells = 2, verticalCells = 2;
+    int H1Order = 1, pToAdd = 1;
+    // create a pointer to a new mesh:
+    Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                  vgpStokesFormulation.bf(), H1Order, H1Order+pToAdd);
+    ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
+    
+    int testDofs = elemType->testOrderPtr->totalDofs();
+    FieldContainer<double> ipMatrixExpected(basisCache->cellIDs().size(),testDofs,testDofs);
+    FieldContainer<double> ipMatrixActual(basisCache->cellIDs().size(),testDofs,testDofs);
+    
+    ipExpected->computeInnerProductMatrix(ipMatrixExpected, elemType->testOrderPtr, basisCache);
+    ipActual->computeInnerProductMatrix(ipMatrixActual, elemType->testOrderPtr, basisCache);
+    
+    double maxDiff = 0;
+    if (!fcsAgree(ipMatrixExpected, ipMatrixActual, tol, maxDiff)) {
+      success = false;
+      cout << "testVGPStokesFormulationGraphNorm: IPs disagree with maxDiff " << maxDiff << endl;
+      
+      cout << "ipExpected:\n";
+      ipExpected->printInteractions();
+      cout << "ipActual:\n";
+      ipActual->printInteractions();
+    }
+//    cout << "maxDiff = " << maxDiff << endl;
+//    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
+  }
+  
+  return success;
+}
+bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
+  bool success = true;
+  
+  double tol = 1e-15;
+
+  bool trueTraces = false; // shouldn't matter
+  
+  VarFactory vvpVarFactory = VVPStokesFormulation::vvpVarFactory(trueTraces);
+  
+  // look up the created VarPtrs:
+  VarPtr v = vvpVarFactory.testVar(VVP_V_S, VECTOR_HGRAD);
+  VarPtr q1 = vvpVarFactory.testVar(VVP_Q1_S, HGRAD);
+  VarPtr q2 = vvpVarFactory.testVar(VVP_Q2_S, HGRAD);
+  
+//  if (!trueTraces) {
+//    u1hat = varFactory.traceVar(VVP_U1HAT_S);
+//    u2hat = varFactory.traceVar(VVP_U2HAT_S);
+//  } else {
+//    u_n = varFactory.fluxVar(VVP_U_DOT_HAT_S);
+//    u_xn = varFactory.fluxVar(VVP_U_CROSS_HAT_S);
+//  }
+//  omega_hat = varFactory.traceVar(VVP_OMEGA_HAT_S);
+//  p_hat = varFactory.traceVar(VVP_P_HAT_S);
+//  
+//  u1 = varFactory.fieldVar(VVP_U1_S);
+//  u2 = varFactory.fieldVar(VVP_U2_S);
+//  omega = varFactory.fieldVar(VVP_OMEGA_S);
+//  p = varFactory.fieldVar(VVP_P_S);
+  
+  for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
+    double mu = *muIt;
+    VVPStokesFormulation vvpStokesFormulation(mu);
+    
+    IPPtr ipExpected = Teuchos::rcp( new IP );
+    { // setup ipExpected:
+      // curl (mu v) + q1
+      ipExpected->addTerm(mu * v->curl() + q1);
+      // div v
+      ipExpected->addTerm(v->div());
+      // grad q2 + curl q1
+      ipExpected->addTerm(q2->grad() + q1->curl());
+      // v
+      ipExpected->addTerm(v);
+      // q1
+      ipExpected->addTerm(q1);
+      // q2
+      ipExpected->addTerm(q2);
+    }
+    
+    IPPtr ipActual = vvpStokesFormulation.graphNorm();
+    
+    int horizontalCells = 2, verticalCells = 2;
+    int H1Order = 1, pToAdd = 1;
+    // create a pointer to a new mesh:
+    Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                  vvpStokesFormulation.bf(), H1Order, H1Order+pToAdd);
+    ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
+    
+    int testDofs = elemType->testOrderPtr->totalDofs();
+    FieldContainer<double> ipMatrixExpected(basisCache->cellIDs().size(),testDofs,testDofs);
+    FieldContainer<double> ipMatrixActual(basisCache->cellIDs().size(),testDofs,testDofs);
+    
+    ipExpected->computeInnerProductMatrix(ipMatrixExpected, elemType->testOrderPtr, basisCache);
+    ipActual->computeInnerProductMatrix(ipMatrixActual, elemType->testOrderPtr, basisCache);
+    
+    double maxDiff = 0;
+    if (!fcsAgree(ipMatrixExpected, ipMatrixActual, tol, maxDiff)) {
+      success = false;
+      cout << "testVVPStokesFormulationGraphNorm: IPs disagree with maxDiff " << maxDiff << endl;
+    }
+//    cout << "testVVPStokesFormulationGraphNorm: maxDiff = " << maxDiff << endl;
+    //    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
   }
   
   return success;
@@ -1049,7 +1202,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
   int overIntegrationForKovasznay = 5; // since the RHS isn't a polynomial...
 //  double nonlinear_step_weight = 1.0;
   
-  bool useLineSearch = false;
+  bool useLineSearch = false; // we don't converge nearly as quickly (if at all) when using line search (a problem!)
   
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
        useHessianIt != useHessianList.end(); useHessianIt++) {

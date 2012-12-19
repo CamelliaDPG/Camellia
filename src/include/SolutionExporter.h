@@ -54,4 +54,15 @@ public:
   virtual void exportSolution(const string& filePath, unsigned int num1DPts) = 0;
 };
 
+class VTKExporter : public SolutionExporter {
+private:
+public:
+  VTKExporter(SolutionPtr solution, MeshPtr mesh, VarFactory& varFactory) :
+    SolutionExporter(solution, mesh, varFactory) {};
+  void exportSolution(const string& filePath, unsigned int num1DPts=0);
+  void exportFields(const string& filePath, unsigned int num1DPts=0);
+  void exportTraces(const string& filePath, unsigned int num1DPts=0);
+  void setRefPoints(FieldContainer<double> refPoints, int num1DPts, int spaceDim);
+};
+
 #endif /* end of include guard: SOLUTIONEXPORTER_H */

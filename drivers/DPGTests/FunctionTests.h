@@ -44,6 +44,8 @@ class FunctionTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
+  bool testBasisSumFunction();
+  
   bool testThatLikeFunctionsAgree();
   
   bool testPolarizedFunctions();

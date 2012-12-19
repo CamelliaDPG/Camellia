@@ -64,6 +64,9 @@ class IncompressibleFormulationsTests : public TestSuite {
   public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
+  bool testVGPStokesFormulationGraphNorm();
+  bool testVVPStokesFormulationGraphNorm();
+  
   bool testVGPStokesFormulationConsistency();
   bool testVGPStokesFormulationCorrectness();
   

@@ -8,6 +8,8 @@
 
 #include "FunctionTests.h"
 #include "SpatiallyFilteredFunction.h"
+#include "Solution.h"
+#include "BasisSumFunction.h"
 
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
 class UPrev : public Function {
@@ -108,7 +110,14 @@ void FunctionTests::setup() {
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
-
+  
+  setup();
+  if (testBasisSumFunction()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testJumpIntegral()) {
     numTestsPassed++;
@@ -148,6 +157,94 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
   
+}
+
+bool FunctionTests::testBasisSumFunction() {
+  bool success = true;
+  // on a single-element mesh, the BasisSumFunction should be identical to
+  // the Solution with those coefficients
+
+  // define a new mesh: more interesting if we're not on the ref cell
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = -1.0; // x1
+  quadPoints(0,1) = -1.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = -1.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = -1.0;
+  quadPoints(3,1) = 1.0;
+  
+  int H1Order = 1, pToAdd = 0;
+  int horizontalCells = 1, verticalCells = 1;
+  
+  // create a pointer to a new mesh:
+  MeshPtr spectralConfusionMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                                      _confusionBF, H1Order, H1Order+pToAdd);
+  
+  BCPtr bc = Teuchos::rcp( new BCEasy );
+  SolutionPtr soln = Teuchos::rcp( new Solution(spectralConfusionMesh, bc) );
+  
+  int cellID = 0;
+  double tol = 1e-16; // overly restrictive, just for now.
+  
+  DofOrderingPtr trialSpace = spectralConfusionMesh->getElement(cellID)->elementType()->trialOrderPtr;
+  set<int> trialIDs = trialSpace->getVarIDs();
+  
+  BasisCachePtr volumeCache = BasisCache::basisCacheForCell(spectralConfusionMesh, cellID);
+  
+  for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    int trialID = *trialIt;
+    int numSides = trialSpace->getNumSidesForVarID(trialID);
+    bool boundaryValued = numSides!=1;
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
+      BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
+      int basisCardinality = basis->getCardinality();
+      for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+        FieldContainer<double> basisCoefficients(basisCardinality);
+        basisCoefficients(basisOrdinal) = 1.0;
+        soln->setSolnCoeffsForCellID(basisCoefficients, cellID, trialID, sideIndex);
+        
+        VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
+        FunctionPtr solnFxn = Function::solution(v, soln);
+        FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
+        if (!boundaryValued) { // only look at volume variables for now
+          double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
+//          cout << "l2diff = " << l2diff << endl;
+          if (l2diff > tol) {
+            success = false;
+            cout << "testBasisSumFunction: l2diff of " << l2diff << " exceeds tol of " << tol << endl;
+            cout << "l2norm of basisSumFxn: " << basisSumFxn->l2norm(spectralConfusionMesh) << endl;
+            cout << "l2norm of solnFxn: " << solnFxn->l2norm(spectralConfusionMesh) << endl;
+          }
+        } else {
+          FieldContainer<double> cellIntegral(1);
+          // compute l2 diff of integral along the one side where we can legitimately assert equality:
+          FunctionPtr diffFxn = solnFxn - basisSumFxn;
+          (diffFxn*diffFxn)->integrate(cellIntegral, sideCache);
+          double l2diff = sqrt(cellIntegral(0));
+          if (l2diff > tol) {
+            success = false;
+            cout << "testBasisSumFunction: on side " << sideIndex << ", l2diff of " << l2diff << " exceeds tol of " << tol << endl;
+            
+            int numCubPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+            FieldContainer<double> solnFxnValues(1,numCubPoints);
+            FieldContainer<double> basisFxnValues(1,numCubPoints);
+            solnFxn->values(solnFxnValues, sideCache);
+            basisSumFxn->values(basisFxnValues, sideCache);
+            cout << "solnFxnValues:\n" << solnFxnValues;
+            cout << "basisFxnValues:\n" << basisFxnValues;
+          } else {
+//            cout << "testBasisSumFunction: on side " << sideIndex << ", l2diff of " << l2diff << " is within tol of " << tol << endl;
+          }
+        }
+      }
+    }
+  }
+  
+  return success;
 }
 
 bool FunctionTests::testThatLikeFunctionsAgree() {

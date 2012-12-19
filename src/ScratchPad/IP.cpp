@@ -239,5 +239,19 @@ void IP::operators(int testID1, int testID2,
 }
 
 void IP::printInteractions() {
-  cout << "IP::printInteractions() not yet implemented.\n";
+  cout << "_linearTerms:\n";
+  for (vector< LinearTermPtr >::iterator ltIt = _linearTerms.begin();
+       ltIt != _linearTerms.end(); ltIt++) {
+    cout << (*ltIt)->displayString() << endl;
+  }
+  cout << "_boundaryTerms:\n";
+  for (vector< LinearTermPtr >::iterator ltIt = _boundaryTerms.begin();
+       ltIt != _boundaryTerms.end(); ltIt++) {
+    cout << (*ltIt)->displayString() << endl;
+  }
+  cout << "_zeroMeanTerms:\n";
+  for (vector< LinearTermPtr >::iterator ltIt = _zeroMeanTerms.begin();
+       ltIt != _zeroMeanTerms.end(); ltIt++) {
+    cout << (*ltIt)->displayString() << endl;
+  }
 }

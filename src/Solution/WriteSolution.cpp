@@ -389,6 +389,9 @@ void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
   // Get trialIDs
   vector<int> trialIDs = _mesh->bilinearForm()->trialIDs();
   vector<int> fieldTrialIDs;
+  
+  // NVR: for this version, if default of num1DPts=0 chosen, just use 4 points:
+  if (num1DPts==0) num1DPts = 4;
 
   int spaceDim = 2; // TODO: generalize to 3D...
   int numFieldVars = 0;

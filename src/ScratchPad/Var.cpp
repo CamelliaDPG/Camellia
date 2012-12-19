@@ -120,7 +120,7 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
     } else if ((space==HGRAD) || (space==VECTOR_HGRAD)) {
       varType = TRACE;
     } else {
-      TEST_FOR_EXCEPTION(true, std::invalid_argument, "unclassifiable variable");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unclassifiable variable");
     }
   } else {
     varType = FIELD;
