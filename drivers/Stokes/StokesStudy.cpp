@@ -429,6 +429,18 @@ int main(int argc, char *argv[]) {
   else if (exactSolnChoice == HDGSingular) exactSolnChoiceStr = "HDG Singular";
   else exactSolnChoiceStr = "test polynomial";
 
+  if (formulationType==VVP) {
+    // for at least the singular solution and VVP on quads, find that we get much better results 
+    // with 3 than 2...
+    pToAdd = 3;
+  }
+
+  if ((formulationType==VSP) && useTriangles) {
+    // for at least the singular solution and VSP on triangles, find that we avoid some bad results
+    // with 3 rather than 2...
+    pToAdd = 3;
+  }
+  
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
