@@ -12,6 +12,18 @@
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
 
+// added by Jesse - evaluate inner product at given varFunctions
+LinearTermPtr IP::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
+  LinearTermPtr ltEval = Teuchos::rcp(new LinearTerm);
+  for ( vector< LinearTermPtr >:: iterator ltIt = _linearTerms.begin();
+	ltIt != _linearTerms.end(); ltIt++) {
+    LinearTermPtr lt = *ltIt;
+    FunctionPtr weight = lt->evaluate(varFunctions,boundaryPart);
+    ltEval->addTerm(weight*lt);
+  }
+  return ltEval;
+}
+
 void IP::addTerm( LinearTermPtr a) {
   _linearTerms.push_back(a);
 }
