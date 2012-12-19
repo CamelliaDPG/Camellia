@@ -30,6 +30,7 @@
 #include "HessianFilter.h"
 #include <sstream>
 
+#include "MeshUtilities.h"
 using namespace std;
 
 class PositivePart : public Function {
@@ -160,7 +161,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   
   ////////////////////////////////////////////////////////////////////

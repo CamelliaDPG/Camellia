@@ -13,6 +13,9 @@
 
 bool enforceLocalConservation = false;
 
+typedef Teuchos::RCP<IP> IPPtr;
+typedef Teuchos::RCP<BF> BFPtr;
+
 double pi = 2.0*acos(0.0);
 
 class EpsilonScaling : public hFunction {
@@ -47,23 +50,6 @@ public:
   }
 };
 
-// restriction to inflow boundary
-class InflowRestriction : public SimpleFunction {
-public:
-  bool boundaryValueOnly(){
-    return true;
-  }
-  double value(double x, double y) {
-    double tol = 1e-14;
-    bool xMatch = (abs(x)<tol); // left inflow
-    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
-    double val = 0.0;
-    if (xMatch || yMatch){
-      val = 1.0;
-    }
-    return val;
-  }
-};
 class OutflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -214,6 +200,20 @@ public:
   }
 };
 
+
+// inflow values for u
+class InflowIndicator : public SimpleFunction {
+public:
+  double value(double x, double y){
+    double tol = 1e-12;
+    double val = 0.0;    
+    if ( abs(y)<tol){
+      val = 1.0;
+    }
+    return val;
+  }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -224,29 +224,13 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
 
-  int numRefs = 0;
-  if ( argc > 1) {
-    numRefs = atoi(argv[1]);
-    if (rank==0){
-      cout << "numRefs = " << numRefs << endl;
-    }
-  }
-  
   double eps = 1e-3;
-  if ( argc > 2) {
-    eps = atof(argv[2]);    
+  if ( argc > 1) {
+    eps = atof(argv[1]);    
     if (rank==0){
       cout << "eps = " << eps << endl;
     }
   }
- 
-  int numPreRefs = 0;
-  if (argc > 3){
-    numPreRefs = atoi(argv[3]);
-    if (rank==0){
-      cout << "numPreRefs = " << numPreRefs << endl;
-    }
-  }  
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -285,27 +269,11 @@ int main(int argc, char *argv[]) {
   // quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP);  
   qoptIP->addTerm( v );
-  //  qoptIP->addTerm( pow(eps,3/2)*tau ); // from Antti's paper
   qoptIP->addTerm( tau / eps + v->grad() );
   qoptIP->addTerm( beta * v->grad() - tau->div() );
-  FunctionPtr inflowRestriction = Teuchos::rcp(new InflowRestriction);
-  qoptIP->addBoundaryTerm( inflowRestriction*(1.0/eps)*tau->dot_normal());
-  /*
-  FunctionPtr X =  Teuchos::rcp(new Xn(1));
-  double cut = pow(.5,numPreRefs);
-  FunctionPtr weight = Function::constant(eps) + Teuchos::rcp(new WeightFunction(cut));
-  //  qoptIP->addTerm( weight*(tau / eps + v->grad()) );
-  */
-
-  // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-
-  robIP->addTerm( ip_scaling * v);
-  robIP->addTerm( sqrt(eps) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(eps) * tau );
+  FunctionPtr inflowIndicator = Teuchos::rcp(new InflowIndicator);
+  qoptIP->addBoundaryTerm(inflowIndicator*tau->dot_normal());
+  //  qoptIP->addBoundaryTerm(beta*tau);
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -314,7 +282,6 @@ int main(int argc, char *argv[]) {
   //  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
-
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   //  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
@@ -323,13 +290,17 @@ int main(int argc, char *argv[]) {
   FunctionPtr u_exact = Teuchos::rcp( new Uex(eps,0) );
   FunctionPtr sig1_exact = Teuchos::rcp( new Uex(eps,1) );
   FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );  
+  vector<double> e1,e2;
+  e1.push_back(1.0);  e1.push_back(0.0);
+  e2.push_back(0.0);  e2.push_back(1.0);
+  FunctionPtr sig_exact = e1*sig1_exact + e2*sig2_exact;
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
  
   bc->addDirichlet(uhat, outflowBoundary, zero); // wall BC - constant throughout
 
   bool useRobustBC = true;
   if (useRobustBC){
-    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
+    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact - sig_exact*n);  
   }else{
     bc->addDirichlet(uhat, inflowBoundary, u_exact);  
   }
@@ -337,66 +308,178 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3; int pToAdd = 4;
+  int order = 2; 
+  if (argc > 2){
+    order = atoi(argv[2]);
+    if (rank==0){
+      cout << "order = " << order << endl;
+    }
+  }
+  int H1Order = order+1;
+  int pToAdd = 3;
+  if (argc > 3){
+    pToAdd = atoi(argv[3]);
+    if (rank==0){
+      cout << "pToAdd = " << pToAdd << endl;
+    }
+  }
 
   Teuchos::RCP<Mesh> mesh;
-
-  int nCells = 2;
+  int numUniformRefs = 0;
+  int nCells = 4;
   if (argc > 4){
     nCells = atoi(argv[4]);
     if (rank==0){
       cout << "numCells = " << nCells << endl;
+    }       
+    mesh = MeshUtilities::buildUnitQuadMesh(nCells, confusionBF, H1Order, H1Order+pToAdd);
+
+  }else{ // do Schwab/Suri 2-element mesh
+
+    double c = 1.0;
+    double width = c*eps*(H1Order+pToAdd);
+
+    // schwab/suri mesh
+    bool expectCrossBoundaryLayers = true;
+    vector<FieldContainer<double> > vertices;
+    vector< vector<int> > elementVertices;
+
+    if (expectCrossBoundaryLayers){
+      FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2), I(2), J(2), K(2), L(2);
+      A(0) = 0.0; A(1) = 0.0;
+      B(0) = width; B(1) = 0.0;
+      C(0) = 1.0; C(1) = 0.0;
+
+      D(0) = 0.0; D(1) = width;
+      E(0) = width; E(1) = width;
+      F(0) = 1.0; F(1) = width;
+
+      G(0) = 0.0; G(1) = 1.0-width;
+      H(0) = width; H(1) = 1.0-width;
+      I(0) = 1.0; I(1) = 1.0-width;
+
+      J(0) = 0.0; J(1) = 1.0;
+      K(0) = width; K(1) = 1.0;
+      L(0) = 1.0; L(1) = 1.0;
+
+      vertices.push_back(A); int A_index = 0;
+      vertices.push_back(B); int B_index = 1;
+      vertices.push_back(C); int C_index = 2;
+      vertices.push_back(D); int D_index = 3;
+      vertices.push_back(E); int E_index = 4;
+      vertices.push_back(F); int F_index = 5;
+      vertices.push_back(G); int G_index = 6;
+      vertices.push_back(H); int H_index = 7;
+      vertices.push_back(I); int I_index = 8;
+      vertices.push_back(J); int J_index = 9;
+      vertices.push_back(K); int K_index = 10;
+      vertices.push_back(L); int L_index = 11;
+      vector<int> el1, el2, el3, el4, el5, el6;
+      el1.push_back(A_index); el1.push_back(B_index); el1.push_back(E_index); el1.push_back(D_index);
+      el2.push_back(B_index); el2.push_back(C_index); el2.push_back(F_index); el2.push_back(E_index);
+      el3.push_back(D_index); el3.push_back(E_index); el3.push_back(H_index); el3.push_back(G_index);
+      el4.push_back(E_index); el4.push_back(F_index); el4.push_back(I_index); el4.push_back(H_index);
+      el5.push_back(G_index); el5.push_back(H_index); el5.push_back(K_index); el5.push_back(J_index);
+      el6.push_back(H_index); el6.push_back(I_index); el6.push_back(L_index); el6.push_back(K_index);
+
+      elementVertices.push_back(el1);
+      elementVertices.push_back(el2);
+      elementVertices.push_back(el3);
+      elementVertices.push_back(el4);
+      elementVertices.push_back(el5);
+      elementVertices.push_back(el6);   
+    }else{    
+      FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2);
+      A(0) = 0.0; A(1) = 0.0;
+      B(0) = width; B(1) = 0.0;
+      C(0) = 1.0; C(1) = 0.0;
+
+      D(0) = 1.0; D(1) = 1.0;
+      E(0) = width; E(1) = 1.0;
+      F(0) = 0.0; F(1) = 1.0;
+
+      vertices.push_back(A); int A_index = 0;
+      vertices.push_back(B); int B_index = 1;
+      vertices.push_back(C); int C_index = 2;
+      vertices.push_back(D); int D_index = 3;
+      vertices.push_back(E); int E_index = 4;
+      vertices.push_back(F); int F_index = 5;
+      vector<int> el1, el2, el3, el4, el5;
+      // left thin element:
+      el1.push_back(A_index); el1.push_back(B_index); el1.push_back(E_index); el1.push_back(F_index);
+      // right element
+      el2.push_back(B_index); el2.push_back(C_index); el2.push_back(D_index); el2.push_back(E_index);
+
+      elementVertices.push_back(el1);
+      elementVertices.push_back(el2);
     }
+    
+    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, confusionBF, H1Order, pToAdd) );          
   }
-  // create a pointer to a new mesh:
-  mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
-  //  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
   //  solution->setReportTimingResults(true);
   if (enforceLocalConservation) {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
-  
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-   
-  if (rank==0){
-    cout << "Number of pre-refinements = " << numPreRefs << endl;
-  }
 
+  for (int i = 0;i<numUniformRefs;i++){
+    refinementStrategy.hRefineUniformly(mesh); 
+  }  
+   
   FunctionPtr u_diff;
   double L2_error;
-  for (int i =0;i<=numPreRefs;i++){   
-    vector<ElementPtr> elems = mesh->activeElements();
-    vector<ElementPtr>::iterator elemIt;
-    vector<int> wallCells;    
-    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
-      int cellID = (*elemIt)->cellID();
-      int numSides = mesh->getElement(cellID)->numSides();
-      FieldContainer<double> vertices(numSides,2); //for quads
 
-      mesh->verticesForCell(vertices, cellID);
-      bool cellIDset = false;	
-      for (int j = 0;j<numSides;j++){ 	
-	if (abs(vertices(j,0))<1e-7 && !cellIDset){ // if at the inflow x =0
-	  wallCells.push_back(cellID);
-	  cellIDset = true;
-	}
-      }
-    }
-    if (i<numPreRefs){
-      refinementStrategy.setEnforceOneIrregularity(false);
-      refinementStrategy.refineCells(wallCells);
-    }
+  ofstream convOut;
+  stringstream convOutFile;
+  convOutFile << "erickson_qopt_" << -floor(log(eps)/log(10)) << "_" << order << "_" << pToAdd <<".txt";
+  convOut.open(convOutFile.str().c_str());
+  solution->condensedSolve(false);
+
+  FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
+  FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
+  FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
+
+  FunctionPtr uNorm = u_soln*u_soln;
+  FunctionPtr sigmaNorm = sigma1_soln*sigma1_soln + sigma2_soln*sigma2_soln;
+  double u_norm_sq = uNorm->integrate(mesh);
+  double sigma_norm_sq = sigmaNorm->integrate(mesh);
+
+  u_diff = (u_soln - u_exact)*(u_soln - u_exact);
+  FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
+  FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
+  double u_L2_error = u_diff->integrate(mesh);
+  double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
+  L2_error = sqrt(u_L2_error + sigma_L2_error);
+  double energy_error = solution->energyErrorTotal();
+  u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
+  u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
+  u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
+  FunctionPtr total_err = u_diff + sig1_diff + sig2_diff;
+  total_err->writeValuesToMATLABFile(mesh, "totalError.m");
+
+  convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << " ";
+  if (rank==0){
+    //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
+    cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio of L2/energy = " << L2_error/energy_error << endl;      
+
+    //    cout << "relative u L2 error = " << sqrt(u_L2_error)/sqrt(u_norm_sq) << ", relative sigma squared l2 error = " << sqrt(sigma_L2_error)/sqrt(sigma_norm_sq) << ", num dofs = " << mesh->numGlobalDofs() << endl;
+  }
+
+  /*
     ofstream convOut;
     stringstream convOutFile;
-    convOutFile << "erickson_conv_" << eps <<".txt";
-    convOut.open(convOutFile.str().c_str());
+  convOutFile << "erickson_conv_" << eps <<".txt";
+  convOut.open(convOutFile.str().c_str());
+  FunctionPtr u_diff;
+  double L2_error;
+  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->condensedSolve(false);
 
     FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
@@ -425,46 +508,16 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
       cout << "Ratio of L2/energy = " << L2_error/energy_error << ", ratio of u/energy error = " << sqrt(u_L2_error)/energy_error << ", and ratio of sigma/energy error = " << sqrt(sigma_L2_error)/energy_error << endl;      
-      cout << "u L2 error = " << sqrt(u_L2_error) << ", sigma l2 error = " << sqrt(sigma_L2_error) << ", num dofs = " << mesh->numGlobalDofs() << endl;
+      cout << "relative u L2 error = " << sqrt(u_L2_error)/sqrt(u_norm_sq) << ", relative sigma squared l2 error = " << sqrt(sigma_L2_error)/sqrt(sigma_norm_sq) << ", num dofs = " << mesh->numGlobalDofs() << endl;
     }
-    convOut.close();
-  }
-  if (rank==0){
-    cout << endl << "DOING REFINEMENTS " << endl << endl;
-  }
-  for (int i =0;i<numRefs;i++){       
-    solution->condensedSolve(false);
-    
-    FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
-    FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
-    FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
-
-    FunctionPtr uNorm = u_soln*u_soln;
-    FunctionPtr sigmaNorm = sigma1_soln*sigma1_soln + sigma2_soln*sigma2_soln;
-    double u_norm_sq = uNorm->integrate(mesh);
-    double sigma_norm_sq = sigmaNorm->integrate(mesh);
-
-    u_diff = (u_soln - u_exact)*(u_soln - u_exact);
-    FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
-    FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-    double u_L2_error = u_diff->integrate(mesh);
-    double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
-    L2_error = sqrt(u_L2_error + sigma_L2_error);
-    double energy_error = solution->energyErrorTotal();
-    u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
-    u_diff->writeValuesToMATLABFile(mesh, "u_diff.m");
-    u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
-    FunctionPtr total_err = u_diff + sig1_diff + sig2_diff;
-    total_err->writeValuesToMATLABFile(mesh, "totalError.m");
-    if (rank==0){
-      //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
-      cout << "Ratio of L2/energy = " << L2_error/energy_error << ", ratio of u/energy error = " << sqrt(u_L2_error)/energy_error << ", and ratio of sigma/energy error = " << sqrt(sigma_L2_error)/energy_error << endl;      
-      cout << "u L2 error = " << sqrt(u_L2_error) << ", sigma l2 error = " << sqrt(sigma_L2_error) << ", num dofs = " << mesh->numGlobalDofs() << endl;
+    if (refIndex<numRefs){
+      refinementStrategy.refine(); // print to console on rank 0
     }
-
-    refinementStrategy.refine(rank==0); // print to console on rank 0
   }
-  solution->condensedSolve(false);
+  //  // one more solve on the final refined mesh:
+
+  convOut.close();  
+  */
 
   ////////////////////   CREATE SOLUTION PROJECTION   ///////////////////////
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
@@ -491,11 +544,10 @@ int main(int argc, char *argv[]) {
   double s2_proj_error = s2_proj_err->integrate(mesh); 
   double proj_error = sqrt(u_proj_error + s1_proj_error + s2_proj_error);
   if (rank==0){
-    cout << endl << "getting projection info " << endl << endl;
-    cout << "u proj error = " << sqrt(u_proj_error) << ", sigma proj error = " << sqrt(s1_proj_error+s2_proj_error) << endl;
     cout << "DPG L2 error = " << L2_error << ", projection error = " << proj_error << ", ratio = " << L2_error/proj_error << endl;
+    convOut << proj_error << endl;
   }
-
+  convOut.close();
   /////////////////////////////////////////////////////////////////////////////
 
   if (rank==0){
@@ -508,6 +560,7 @@ int main(int argc, char *argv[]) {
     
     cout << "wrote files: rates.vtu, uhat.dat\n";
   }
+
 
   return 0;
 

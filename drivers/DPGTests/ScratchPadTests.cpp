@@ -12,6 +12,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
 #include "TestingUtilities.h"
+#include "MeshUtilities.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -447,7 +448,7 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   get fake residual   ///////////////////////
 
@@ -555,7 +556,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   integrate discontinuous function - cellIDFunction   ///////////////////////
 
@@ -686,7 +687,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE   ///////////////////////
 
@@ -830,7 +831,7 @@ bool ScratchPadTests::testErrorRepConsistency(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE   ///////////////////////
 

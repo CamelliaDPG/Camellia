@@ -24,6 +24,8 @@
 
 #include "BC.h"
 
+#include "MeshUtilities.h"
+
 class NewQuadraticFunction : public SimpleFunction {
 public:
   double value(double x, double y) {
@@ -1131,7 +1133,7 @@ bool SolutionTests::testCondensationSolve() {
   ////////////////////   BUILD MESH   ///////////////////////
 
   int H1Order = 3; int pToAdd = 3; int nCells = 4;  
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
     
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
