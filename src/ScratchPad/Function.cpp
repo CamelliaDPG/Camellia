@@ -1037,9 +1037,9 @@ void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr bas
       double x = (*points)(cellIndex,ptIndex,0);
       double y = (*points)(cellIndex,ptIndex,1);
       double r = sqrt(x * x + y * y);
-      double theta = acos(x/r);
+      double theta = (r != 0) ? acos(x/r) : 0;
       // now x = r cos theta, but need to guarantee that y = r sin theta (might differ in sign)
-      // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) --> theta := 2 pi - theta;
+      // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) ==> theta := 2 pi - theta;
       if (y < 0) theta = 2*PI-theta;
       
       polarPoints(cellIndex, ptIndex, 0) = r;
@@ -1054,8 +1054,8 @@ void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr bas
   if (_f->isZero()) {
     cout << "Warning: in PolarizedFunction, we are being asked for values when _f is zero.  This shouldn't happen.\n";
   }
-  //cout << "polarPoints: \n" << polarPoints;
-  //cout << "PolarizedFunction, values: \n" << values;
+//  cout << "polarPoints: \n" << polarPoints;
+//  cout << "PolarizedFunction, values: \n" << values;
 }
 
 bool ScalarFunctionOfNormal::boundaryValueOnly() {
