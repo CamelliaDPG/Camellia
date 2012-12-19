@@ -9,7 +9,7 @@
 #include "RieszRep.h"
 #include "BasisFactory.h" // for test
 #include "HessianFilter.h"
-
+#include "MeshUtilities.h"
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
   int H1Order = order+1; int pToAdd = 2;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
 

@@ -20,7 +20,7 @@ class IP : public DPGInnerProduct {
 public:
   IP();
   
-  // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
+  // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ...  
   void addTerm( LinearTermPtr a);
   void addTerm( VarPtr v );
   void addZeroMeanTerm( LinearTermPtr a);
@@ -37,7 +37,11 @@ public:
                                  VarPtr var, FunctionPtr fxn,
                                  Teuchos::RCP<DofOrdering> dofOrdering, 
                                  Teuchos::RCP<BasisCache> basisCache);
-  
+
+  // added by Jesse
+  LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
+  //  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions1, map< int, FunctionPtr> &varFunctions2, bool boundaryPart);
+
   bool hasBoundaryTerms();
   
   void operators(int testID1, int testID2, 

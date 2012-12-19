@@ -20,6 +20,9 @@
 #include "RieszRep.h"
 #include "HessianFilter.h"
 
+#include "TestingUtilities.h"
+#include "FiniteDifferenceUtilities.h" 
+
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 
 class PositivePart : public Function {
@@ -252,63 +255,28 @@ int main(int argc, char *argv[]) {
     int numGlobalDofs = mesh->numGlobalDofs();
     double fd_gradient;
     for (int dofIndex = 0;dofIndex<numGlobalDofs;dofIndex++){
-      // CHECK HESSIAN
-      riesz->computeRieszRep();
-      double fx =  riesz->getNorm();
-      
-      // create perturbation in direction du
-      solnPerturbation->clearSolution(); // clear all solns
-      solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
-      double h = 1e-7;
-      backgroundFlow->addSolution(solnPerturbation,h);
-      
-      riesz->computeRieszRep();
-      double fxh = riesz->getNorm();
-      // get 1/2 squared norm (cost function) for each quantity
-      double f = fx*fx*.5; 
-      double fh = fxh*fxh*.5;
-      fd_gradient = (fh-f)/h;
-      
-      // remove contribution
-      backgroundFlow->addSolution(solnPerturbation,-h);
+
+      TestingUtilities::initializeSolnCoeffs(solnPerturbation);
+      TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,dofIndex);
+
+      fd_gradient = FiniteDifferenceUtilities::finiteDifferenceGradient(mesh, riesz, backgroundFlow, dofIndex);
       
       // CHECK GRADIENT
       LinearTermPtr b_u =  bf->testFunctional(solnPerturbation);
       map<int,FunctionPtr> NL_err_rep_map;
+
       NL_err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
-      FunctionPtr gradient = b_u->evaluate(NL_err_rep_map, solution->isFluxOrTraceDof(dofIndex)); // use boundary part only if flux or trace
-      double grad = gradient->integrate(mesh,10);
+      FunctionPtr gradient = b_u->evaluate(NL_err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux or trace
+      double grad;
+      if (TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)){
+	grad = gradient->integralOfJump(mesh,10);
+      }else{
+	grad = gradient->integrate(mesh,10);
+      }
       double fdgrad = fd_gradient;
       double diff = grad-fdgrad;
       if (abs(diff)>1e-6 && i>0){
-	int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
-	int localDofIndex = mesh->getGlobalToLocalMap()[dofIndex].second;
-	vector<double> centroid = mesh->getCellCentroid(cellID);
-	cout << "Found difference of " << diff << ", " << " with fd val = " << fdgrad << " and gradient = " << grad << " in dof " << dofIndex << ", isTraceDof = " << solnPerturbation->isFluxOrTraceDof(dofIndex) << " with support on cell " << cellID  << " at " << centroid[0] << "," << centroid[1] << ", with local dof index " << localDofIndex << endl;
-	if (solnPerturbation->isFluxOrTraceDof(dofIndex)){
-	  for (int sideIndex = 0;sideIndex<4;sideIndex++){
-	    vector<int> fluxDofInds = mesh->elements()[cellID]->elementType()->trialOrderPtr->getDofIndices(fn->ID(), sideIndex);
-	    for (int i = 0;i<fluxDofInds.size();i++){
-	      cout << "Side " << sideIndex << " has dof index " << fluxDofInds[i] << endl;
-	    }
-	  }
-	  
-	  NL_err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"burgers_nl_err_rep.m");	  
-	}
-	// loop thru sides and 	
-      }
-    }
-    vector<ElementPtr> elems = mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-      ElementPtr elem = (*elemIt);
-      int cellID = elem->cellID();   
-      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(mesh->physicalCellNodesForCell(cellID), *(elem->elementType()->cellTopoPtr), *(elem->elementType()->trialOrderPtr), elem->elementType()->testOrderPtr->maxBasisDegree(), true));
-      for (int sideIndex = 0;sideIndex<4;sideIndex++){
-	BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
-	FunctionPtr edgeInt = Teuchos::rcp(new RepFunction(v,riesz));
-	FieldContainer<double> sideIntegrals(1);
-	edgeInt->integrate(sideIntegrals, sideCache, false);
-	//	cout << "Edge flux integrated over side " << sideIntegrals(0) << endl;
+	cout << "Found difference of " << diff << ", " << " with fd val = " << fdgrad << " and gradient = " << grad << " in dof " << dofIndex << ", isTraceDof = " << TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) << endl;
       }
     }
   }

@@ -1,5 +1,5 @@
-#ifndef TEST_UTIL
-#define TEST_UTIL
+#ifndef FD_UTIL
+#define FD_UTIL
 
 // @HEADER
 //
@@ -32,8 +32,9 @@
 // @HEADER 
 
 /*
- *  TestingUtilities.h
+ *  FiniteDifferenceUtilities.h
  *
+ *  Created by Nathan Roberts on 6/27/11.
  *
  */
 
@@ -45,26 +46,13 @@
 #include "Epetra_SerialComm.h"
 #endif
 
-#include "Mesh.h"
+#include "RieszRep.h"
 #include "Solution.h"
-class TestingUtilities {
- public:
-  static bool isFluxOrTraceDof(MeshPtr mesh, int globalDofIndex);
-  static void getDofIndices(MeshPtr mesh, set<int> &allFluxInds, map<int,vector<int> > &globalFluxInds, map<int, vector<int> > &globalFieldInds, map<int,vector<int> > &localFluxInds, map<int,vector<int> > &localFieldInds);
-  static void initializeSolnCoeffs(SolutionPtr solution);
-  static void setSolnCoeffForGlobalDofIndex(SolutionPtr solution, double solnCoeff, int dofIndex);
-  static void getFieldFluxDofInds(MeshPtr mesh, map<int,set<int> > &localFluxInds, map<int,set<int> > &localFieldInds);
-  static void getGlobalFieldFluxDofInds(MeshPtr mesh,map<int,set<int> > &fluxInds, map<int,set<int> > &fieldInds);
+#include "Mesh.h"
 
-  static SolutionPtr makeNullSolution(MeshPtr mesh){
-    BCPtr nullBC = Teuchos::rcp((BC*)NULL);
-    RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
-    IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-    return Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
-  }
-  static double zero(){
-    return 0.0;
-  }
+class FiniteDifferenceUtilities {
+ public:
+ static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex);
 };
 
 #endif

@@ -17,6 +17,7 @@
 #include "RHSEasy.h"
 #include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
+#include "MeshUtilities.h"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
@@ -990,7 +991,7 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   int nCells = 2; // along a side
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
   vector<int> cellIDs;

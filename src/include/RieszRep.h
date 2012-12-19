@@ -60,6 +60,9 @@
 #include "LinearTerm.h"
 #include "BasisCache.h"
 
+class RieszRep;
+typedef Teuchos::RCP<RieszRep> RieszRepPtr;
+
 class RieszRep {
  private:
 

@@ -4,6 +4,7 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "MeshUtilities.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -334,7 +335,7 @@ int main(int argc, char *argv[]) {
   int horizontalCells = nCells, verticalCells = nCells;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
     
   ////////////////////   SOLVE & REFINE   ///////////////////////
 

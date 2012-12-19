@@ -12,6 +12,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
 #include "TestingUtilities.h"
+#include "MeshUtilities.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -252,20 +253,19 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();   
 
   setup();
-  if (testGalerkinOrthogonality()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();   
-
-  setup();
   if (testErrorRepConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();   
-
-
+     
+  setup();
+  if (testGalerkinOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+  
 }
 
 bool ScratchPadTests::testConstantFunctionProduct() {
@@ -448,7 +448,7 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   get fake residual   ///////////////////////
 
@@ -556,7 +556,7 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   integrate discontinuous function - cellIDFunction   ///////////////////////
 
@@ -687,7 +687,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE   ///////////////////////
 
@@ -758,23 +758,18 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       for (int i = 0;i<localDofIndices.size();i++){
         int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
         vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
-        // create perturbation in direction du
-        solnPerturbation->clear(); // clear all solns
-        // set each corresponding local dof to 1.0
-        for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
-             dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
-          DofInfo info = *dofInfoIt;
-          FieldContainer<double> solnCoeffs(info.basisCardinality);
-          solnCoeffs(info.basisOrdinal) = 1.0;
-          solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-        }
+
+	solnPerturbation->clear();
+	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);
+	
+
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
         FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
-        
-        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
+        double jump = gradient->integrate(mesh,10);
+	//        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
         //	double jump = gradient->integralOfJump(mesh,10);
         //	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
-        if (abs(jump)>tol){
+        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
           cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
           cout << dofInfoString(infoMap[globalDofIndex]);
           /*
@@ -836,7 +831,7 @@ bool ScratchPadTests::testErrorRepConsistency(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE   ///////////////////////
 
@@ -871,23 +866,12 @@ bool ScratchPadTests::testErrorRepConsistency(){
 
   map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
   
-  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
-       mapIt != infoMap.end(); mapIt++) {
-    int dofIndex = mapIt->first;
-    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
-    // create perturbation in direction du
-    solnPerturbation->clear(); // clear all solns
-    // set each corresponding local dof to 1.0
-    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
-         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
-      DofInfo info = *dofInfoIt;
-      FieldContainer<double> solnCoeffs(info.basisCardinality);
-      solnCoeffs(info.basisOrdinal) = 1.0;
-      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-    }
-//    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
+  for (int dofIndex=0;dofIndex<mesh->numGlobalDofs();dofIndex++){
+    solnPerturbation->clear();
+    TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,dofIndex);
 
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
+
     FunctionPtr b_du_e = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double b_du_e_val = b_du_e->integrate(mesh,10); // b_du_e->integralOfJump(mesh,10);
     
@@ -902,13 +886,32 @@ bool ScratchPadTests::testErrorRepConsistency(){
     FunctionPtr residual_vol = residual->evaluate(v_du,false); // get volume portion
     double res_at_v_du = residual_vol->integrate(mesh,10) + residual_edge->integrate(mesh,10);
 
-    //    cout << "Galerkin orthogonality measure for dof " << dofIndex << " is " << b_du_e_val << ", while residual at v_du = " << res_at_v_du <<  endl;
-    double diff = res_at_v_du - b_du_e_val;
-    if (abs(diff)>tol){
-      cout << "Failed err rep consistency test with diff = " << diff << " for dof " << dofIndex << "; info:" << endl;
-      cout << dofInfoString(infoMap[dofIndex]);
+    FunctionPtr e_v_du_ip = err_rep_map[v->ID()]*v_du[v->ID()] + (beta*err_rep_map[v->ID()]->grad())*(beta*v_du[v->ID()]->grad());
+    double ip_val = e_v_du_ip->integrate(mesh,10);
+
+    double diff1 = res_at_v_du - ip_val;
+    double diff2 = ip_val - b_du_e_val;
+    if (abs(diff1)>tol){
+      cout << "Failed err rep consistency test: (e,v_du) and b(u,v_du)-l(v_du) differ with diff = " << diff1 << " for dof " << dofIndex << "; info:" << endl;
       success = false;
     }
+
+    if (abs(diff2)>tol){
+      cout << "Failed err rep consistency test: (v_du,e)_V and b(du,e) differ with diff  = " << diff2 << " for dof " << dofIndex << "; info:" << endl;      
+      success = false;
+    }
+    /*
+    if (abs(diff1)>tol || abs(diff2)>tol){
+      //      cout << dofInfoString(infoMap[dofIndex]);
+    }
+    int cellID = infoMap[dofIndex][0].cellID;
+    int sideIndex = infoMap[dofIndex][0].sideIndex;
+    //    if (abs(res_at_v_du)>tol && abs(ip_val)>tol && abs(b_du_e_val)>tol && !mesh->boundary().boundaryElement(cellID,sideIndex)){
+    if ( abs(b_du_e_val)>tol && !mesh->boundary().boundaryElement(cellID,sideIndex)){
+      cout << "Not Galerkin-orthogonal: for dof " << dofIndex << ", ip val = " << ip_val << ", residual val = " << res_at_v_du << ", b(du,e) = " << b_du_e_val << ", " << dofInfoString(infoMap[dofIndex]) << endl;
+    }
+    */
+
   }
 
   return success;
