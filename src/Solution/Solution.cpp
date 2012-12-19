@@ -3615,9 +3615,9 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
-//      cout << "setting solnCoeffs for cellID " << cellID << endl;
+      //      cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
+      //      cout << basisCoefficients;
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
-//      cout << basisCoefficients;
     }
   }
 }
@@ -3700,8 +3700,9 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
-	 
-/*void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
+
+/*
+void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
   vector<int> trialVolumeIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> fluxTraceIDs = _mesh->bilinearForm()->trialBoundaryIDs();
     
@@ -3729,7 +3730,8 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
       BasisPtr basis = oldElemType->trialOrderPtr->getBasis(trialID,sideIndex);
       FieldContainer<double> basisCoefficients(basis->getCardinality());
       basisCoeffsForTrialOrder(basisCoefficients, oldElemType->trialOrderPtr, _solutionForCellIDGlobal[cellID], trialID, sideIndex);
-      thisSideFunctions[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+      bool boundaryValued = true;
+      thisSideFunctions[trialID] = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
       sideFunctionMap[sideIndex] = thisSideFunctions;
     }
   }
