@@ -602,7 +602,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationCorrectness() {
 bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
   bool success = true;
   
-  double tol = 1e-16;
+  double tol = 1e-15;
   
   for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
     double mu = *muIt;
@@ -611,11 +611,11 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
       // div tau - grad q
       ipExpected->addTerm(tau1_vgp->div() - q_vgp->dx());
       ipExpected->addTerm(tau2_vgp->div() - q_vgp->dy());
-      // grad(mu v) + tau
-      ipExpected->addTerm(mu * v1_vgp->dx() + tau1_vgp->x()); // mu v1,x + tau11
-      ipExpected->addTerm(mu * v2_vgp->dx() + tau2_vgp->x()); // mu v2,x + tau21
-      ipExpected->addTerm(mu * v1_vgp->dy() + tau1_vgp->y()); // mu v1,y + tau12
-      ipExpected->addTerm(mu * v2_vgp->dy() + tau2_vgp->y()); // mu v2,y + tau22
+      // - grad(mu v) + tau
+      ipExpected->addTerm(-mu * v1_vgp->dx() + tau1_vgp->x()); // mu v1,x + tau11
+      ipExpected->addTerm(-mu * v2_vgp->dx() + tau2_vgp->x()); // mu v2,x + tau21
+      ipExpected->addTerm(-mu * v1_vgp->dy() + tau1_vgp->y()); // mu v1,y + tau12
+      ipExpected->addTerm(-mu * v2_vgp->dy() + tau2_vgp->y()); // mu v2,y + tau22
       // div v
       ipExpected->addTerm(v1_vgp->dx() + v2_vgp->dy());
       // v
@@ -650,6 +650,11 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
     if (!fcsAgree(ipMatrixExpected, ipMatrixActual, tol, maxDiff)) {
       success = false;
       cout << "testVGPStokesFormulationGraphNorm: IPs disagree with maxDiff " << maxDiff << endl;
+      
+      cout << "ipExpected:\n";
+      ipExpected->printInteractions();
+      cout << "ipActual:\n";
+      ipActual->printInteractions();
     }
 //    cout << "maxDiff = " << maxDiff << endl;
 //    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
@@ -660,7 +665,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
 bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
   bool success = true;
   
-  double tol = 1e-16;
+  double tol = 1e-15;
 
   bool trueTraces = false; // shouldn't matter
   
@@ -728,7 +733,7 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
       success = false;
       cout << "testVVPStokesFormulationGraphNorm: IPs disagree with maxDiff " << maxDiff << endl;
     }
-    cout << "testVVPStokesFormulationGraphNorm: maxDiff = " << maxDiff << endl;
+//    cout << "testVVPStokesFormulationGraphNorm: maxDiff = " << maxDiff << endl;
     //    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
   }
   
