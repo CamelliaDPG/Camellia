@@ -53,8 +53,9 @@
 using namespace Intrepid;
 
 Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest) : _dofOrderingFactory(bilinearForm) {
+           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces) : _dofOrderingFactory(bilinearForm) {
   _vertices = vertices;
+  _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
   _enforceMBFluxContinuity = false;  
   _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
@@ -86,7 +87,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   triTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
   
   Teuchos::RCP<DofOrdering> quadTestOrderPtr = _dofOrderingFactory.testOrdering(pTest, *(quadTopoPtr.get()));
-  Teuchos::RCP<DofOrdering> quadTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(quadTopoPtr.get()), true);
+  Teuchos::RCP<DofOrdering> quadTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(quadTopoPtr.get()), _useConformingTraces);
   ElementTypePtr quadElemTypePtr = _elementTypeFactory.getElementType(quadTrialOrderPtr, quadTestOrderPtr, quadTopoPtr );
   _nullPtr = Teuchos::rcp( new Element(-1,quadElemTypePtr,-1) );
   
@@ -95,7 +96,7 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
     vector<int> thisElementVertices = *elemIt;
     if (thisElementVertices.size() == 3) {
       Teuchos::RCP<DofOrdering> triTestOrderPtr = _dofOrderingFactory.testOrdering(pTest, *(triTopoPtr.get()));
-      Teuchos::RCP<DofOrdering> triTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(triTopoPtr.get()), true);
+      Teuchos::RCP<DofOrdering> triTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(triTopoPtr.get()), _useConformingTraces);
       ElementTypePtr triElemTypePtr = _elementTypeFactory.getElementType(triTrialOrderPtr, triTestOrderPtr, triTopoPtr );
       addElement(thisElementVertices,triElemTypePtr);
     } else if (thisElementVertices.size() == 4) {
@@ -233,7 +234,7 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
-                                       int H1Order, int pTest, bool triangulate) {
+                                       int H1Order, int pTest, bool triangulate, bool useConformingTraces) {
 //  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -318,13 +319,13 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
       }
     }
   }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest));
+  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
 }
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
-                                       int H1Order, int pTest) {
+                                       int H1Order, int pTest, bool useConformingTraces) {
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
@@ -391,7 +392,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadB
       }
     }
   }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest));
+  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
 }
 
 void Mesh::quadMeshCellIDs(FieldContainer<int> &cellIDs, 
@@ -556,7 +557,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"child with unhandled # of vertices (not 3 or 4)");
     }
-    Teuchos::RCP<DofOrdering> basicTrialOrdering = _dofOrderingFactory.trialOrdering(pTrial, *(childTopos[childIndex]), true);
+    Teuchos::RCP<DofOrdering> basicTrialOrdering = _dofOrderingFactory.trialOrdering(pTrial, *(childTopos[childIndex]), _useConformingTraces);
     childTrialOrders[childIndex] = basicTrialOrdering; // we'll upgrade as needed below
   }
   

@@ -66,6 +66,7 @@ class HConvergenceStudy {
   
   int _H1Order, _minLogElements, _maxLogElements, _pToAdd;
   int _cubatureDegreeForExact;
+  int _cubatureEnrichmentForSolutions;
   vector< SolutionPtr > _solutions;
   vector< SolutionPtr > _bestApproximations;
   
@@ -99,7 +100,9 @@ class HConvergenceStudy {
   
   Teuchos::RCP<Solution> bestApproximation(Teuchos::RCP<Mesh> mesh);
   
-  Teuchos::RCP<Mesh> buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements );
+  Teuchos::RCP<Mesh> buildMesh( const vector<FieldContainer<double> > &vertices,
+                               vector< vector<int> > &elementVertices, int numRefinements,
+                               bool useConformingTraces );
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                     Teuchos::RCP<BilinearForm> bilinearForm,
@@ -111,8 +114,9 @@ public:
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
-  void solve(const FieldContainer<double> &quadPoints);
-  void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices);
+  void solve(const FieldContainer<double> &quadPoints, bool useConformingTraces = true);
+  void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
+             bool useConformingTraces=true);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
   
@@ -139,6 +143,8 @@ public:
   string TeXNumGlobalDofsTable(const string &filePathPrefix="");
   
   void setCubatureDegreeForExact(int value);
+  
+  void setCubatureEnrichmentForSolutions(int value);
     
   void setSolutions( vector< SolutionPtr > &solutions); // must be in the right order, from minLogElements to maxLogElements
   
