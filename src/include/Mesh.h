@@ -68,6 +68,7 @@ class Mesh {
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.
+  bool _useConformingTraces; // if true, enforces vertex trace continuity
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
   
@@ -139,7 +140,7 @@ class Mesh {
   static double distance(double x0, double y0, double x1, double y1);
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest);
+       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
@@ -149,11 +150,11 @@ public:
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm, 
-                                          int H1Order, int pTest, bool triangulate=false);
+                                          int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true);
   static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
                                                 int horizontalElements, int verticalElements,
                                                 Teuchos::RCP< BilinearForm > bilinearForm, 
-                                                int H1Order, int pTest);
+                                                int H1Order, int pTest, bool useConformingTraces=true);
   static void quadMeshCellIDs(FieldContainer<int> &cellIDs, 
                               int horizontalElements, int verticalElements,
                               bool useTriangles);

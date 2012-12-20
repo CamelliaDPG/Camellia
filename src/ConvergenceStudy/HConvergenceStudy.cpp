@@ -62,7 +62,8 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _useTriangles = useTriangles;
   _useHybrid = useHybrid;
   _reportRelativeErrors = true;
-  _cubatureDegreeForExact = 10;
+  _cubatureDegreeForExact = 10; // an enrichment degree
+  _cubatureEnrichmentForSolutions = 0;
   _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
 //  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
@@ -246,13 +247,17 @@ void HConvergenceStudy::setCubatureDegreeForExact(int value) {
   _cubatureDegreeForExact = value;
 }
 
+void HConvergenceStudy::setCubatureEnrichmentForSolutions(int value) {
+  _cubatureEnrichmentForSolutions = value;
+}
+
 void HConvergenceStudy::setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints) {
   _lagrangeConstraints = lagrangeConstraints;
 }
 
-Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements ) {
+Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements, bool useConformingTraces ) {
   Teuchos::RCP<Mesh> mesh;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, _bilinearForm, _H1Order, _pToAdd) );
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, _bilinearForm, _H1Order, _pToAdd, useConformingTraces) );
   
   for (int i=0; i<numRefinements; i++) {
     RefinementStrategy::hRefineUniformly(mesh);
@@ -290,7 +295,8 @@ void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   computeErrors();
 }
 
-void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices) {
+void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices,
+                              vector< vector<int> > &elementVertices, bool useConformingTraces) {
   // TODO: refactor to make this and the straight quad mesh version share code...
   _solutions.clear();
   int minNumElements = 1;
@@ -300,7 +306,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, v
   
   int numElements = minNumElements;
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
-    Teuchos::RCP<Mesh> mesh = buildMesh(vertices, elementVertices, i);
+    Teuchos::RCP<Mesh> mesh = buildMesh(vertices, elementVertices, i, useConformingTraces);
     if (_randomRefinements) {
       randomlyRefine(mesh);
     }
@@ -308,6 +314,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, v
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
     solution->setReportConditionNumber(_reportConditionNumber);
+    solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
     _solutions.push_back(solution);
     
     _bestApproximations.push_back(bestApproximation(mesh));
@@ -329,7 +336,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices, v
   computeErrors();
 }
 
-void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
+void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool useConformingTraces) {
   _solutions.clear();
   int minNumElements = 1;
   for (int i=0; i<_minLogElements; i++) {
@@ -341,10 +348,10 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
     Teuchos::RCP<Mesh> mesh;
     if (! _useHybrid ) {
       mesh = Mesh::buildQuadMesh(quadPoints, numElements, numElements, 
-                                 _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles);
+                                 _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces);
     } else {
       mesh = Mesh::buildQuadMeshHybrid(quadPoints, numElements, numElements, 
-                                       _bilinearForm, _H1Order, _H1Order + _pToAdd);
+                                       _bilinearForm, _H1Order, _H1Order + _pToAdd, useConformingTraces);
     }
     if (_randomRefinements) {
       randomlyRefine(mesh);
@@ -352,6 +359,7 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints) {
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
+    solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
     solution->setReportConditionNumber(_reportConditionNumber);
     _solutions.push_back(solution);
     

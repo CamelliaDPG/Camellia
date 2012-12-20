@@ -429,6 +429,27 @@ int main(int argc, char *argv[]) {
   else if (exactSolnChoice == HDGSingular) exactSolnChoiceStr = "HDG Singular";
   else exactSolnChoiceStr = "test polynomial";
 
+  // commenting this stuff out on the idea that relaxing conforming traces will do the trick...
+  if ((exactSolnChoice==HDGSingular) && (polyOrder == 2) && useTriangles) { // just testing something...
+    pToAdd = 3;
+  }
+//  if (formulationType==VVP) {
+//    // for at least the singular solution and VVP on quads, find that we get much better results 
+//    // with 3 than 2...
+//    pToAdd = 3;
+//  }
+//
+//  if ((formulationType==VSP) && useTriangles) {
+//    // for at least the singular solution and VSP on triangles, find that we avoid some bad results
+//    // with 3 rather than 2...
+//    pToAdd = 3;
+//  }
+  
+  bool useConformingTraces = true;
+  if (exactSolnChoice == HDGSingular) {
+    useConformingTraces = false;
+  }
+  
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
@@ -438,6 +459,7 @@ int main(int argc, char *argv[]) {
     cout << "reportConditionNumber = " << (reportConditionNumber ? "true" : "false") << "\n";
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
     cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
+    cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
   }
   
   double mu = 1.0;
@@ -552,6 +574,10 @@ int main(int argc, char *argv[]) {
       // test code to check
       if (! checkDivergenceFree(u1_exact, u2_exact) ) {
         cout << "WARNING: exact solution does not appear to be divergence-free.\n";
+      }
+      
+      if (rank==0) {
+        cout << "exact pressure at origin: " << Function::evaluate(p_exact, 0, 0) << endl;
       }
       
 //      printSamplePoints(u1_exact, "u1_exact");
@@ -669,6 +695,15 @@ int main(int argc, char *argv[]) {
                             polyOrder+1, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setReportConditionNumber(reportConditionNumber);
+    int maxTestDegree = polyOrder + 1 + pToAdd;
+    int cubatureDegreeInMesh = polyOrder + maxTestDegree;
+    
+    if (useTriangles) {
+      int INTREPID_CUBATURE_TRI_DEFAULT_MAX_ENUM = 20;
+      int cubEnrichment = INTREPID_CUBATURE_TRI_DEFAULT_MAX_ENUM - cubatureDegreeInMesh;
+      study.setCubatureDegreeForExact(cubEnrichment);
+    }
+    
     if (useCG) study.setSolver(cgSolver);
     else if (useMumps){
 #ifdef HAVE_MPI
@@ -679,7 +714,7 @@ int main(int argc, char *argv[]) {
     } // otherwise, use default solver (KLU)
         
     if ( exactSolnChoice != HDGSingular ) {
-      study.solve(quadPoints);
+      study.solve(quadPoints,useConformingTraces);
     } else {
       // L-shaped domain
       vector<FieldContainer<double> > vertices;
@@ -709,7 +744,7 @@ int main(int argc, char *argv[]) {
 //      
 //      study.solve(quadPoints);
       
-      study.solve(vertices,elementVertices);
+      study.solve(vertices,elementVertices,useConformingTraces);
       
       // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
       // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)

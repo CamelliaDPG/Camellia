@@ -934,8 +934,8 @@ bool PatchBasisTests::testSolveUniformMesh() {
 //  cout << "solving MultiBasis...\n";
   mbSolution->solve(_useMumps);
   
-  mbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
-  mbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
+//  mbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_multiBasis.m");
+//  mbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_multiBasis.m");
   
 //  cout << "MultiBasis localToGlobalMap:\n";
 //  multiBasisMesh->printLocalToGlobalMap();
@@ -952,8 +952,8 @@ bool PatchBasisTests::testSolveUniformMesh() {
 //  cout << "solving PatchBasis...\n";
   pbSolution->solve(_useMumps);
   
-  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
-  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
+//  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis.m");
+//  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis.m");
   
 //  cout << "PatchBasis localToGlobalMap:\n";
 //  patchBasisMesh->printLocalToGlobalMap();
@@ -970,8 +970,8 @@ bool PatchBasisTests::testSolveUniformMesh() {
   
   pbSolution->solve(_useMumps);
   
-  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_refined.m");
-  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis_refined.m");
+//  pbSolution->writeFieldsToFile(ConfusionBilinearForm::U, "confusion_u_patchBasis_refined.m");
+//  pbSolution->writeFluxesToFile(ConfusionBilinearForm::U_HAT, "confusion_u_hat_patchBasis_refined.m");
   
   return success;
 }
