@@ -18,6 +18,7 @@
 #include "RieszRep.h"
 #include "PreviousSolutionFunction.h"
 #include "MeshUtilities.h"
+#include "Teuchos_GlobalMPISession.hpp"
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
@@ -129,15 +130,15 @@ void LinearTermTests::setup() {
   cellIDs.push_back(3);
   bool createSideCacheToo = true;
   
-  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 }
 
 void LinearTermTests::teardown() {
   
 }
 
-void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) { 
-
+void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  
   setup();
   if (testIntegrateMixedBasis()) {
     numTestsPassed++;
@@ -145,22 +146,26 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   numTestsRun++;
   teardown();
 
-  //  setup();
+  setup();
   if (testMixedTermConsistency()) {
     numTestsPassed++;
   }
   numTestsRun++;
+  teardown();
 
+  setup();
   if (testRieszInversionAsProjection()) {
     numTestsPassed++;
   }
   numTestsRun++;
+  teardown();
 
+  setup();
   if (testRieszInversion()) {
     numTestsPassed++;
   }
   numTestsRun++;
-  //  teardown();
+  teardown();
  
   setup();
   if (testBoundaryPlusVolumeTerms()) {
@@ -671,7 +676,7 @@ bool LinearTermTests::testRieszInversionAsProjection() {
   }
   bool createSideCacheToo = true;
   
-  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 
   LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
   LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
@@ -907,7 +912,7 @@ bool LinearTermTests::testRieszInversion() {
   }
   bool createSideCacheToo = true;
   
-  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+  basisCache->setPhysicalCellNodes(myMesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 
   LinearTermPtr integrand = Teuchos::rcp(new LinearTerm);// residual
   LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
@@ -1001,7 +1006,7 @@ bool LinearTermTests::testIntegrateMixedBasis() {
     cellIDs.push_back((*elemIt)->cellID());
   }
   bool createSideCacheToo = true; 
-  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
+  basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 
   int numTrialDofs = elemType->trialOrderPtr->totalDofs();
   int numCells = mesh->numElements();
