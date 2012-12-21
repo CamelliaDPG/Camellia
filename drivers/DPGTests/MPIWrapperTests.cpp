@@ -25,6 +25,38 @@ void MPIWrapperTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testElementWiseSum()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+}
+
+bool MPIWrapperTests::testElementWiseSum() {
+  bool success = true;
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  FieldContainer<double> expectedValues(2);
+  for (int i=0; i<numProcs; i++) {
+    expectedValues[0] += i*i;
+    expectedValues[1] += 1;
+  }
+  FieldContainer<double> values(2);
+  values[0] = rank*rank;
+  values[1] = 1;
+  
+  MPIWrapper::elementWiseSum(values);
+  double tol = 1e-16;
+  
+  double maxDiff = 0;
+  if (! fcsAgree(values, expectedValues, tol, maxDiff) ) {
+    success = false;
+    cout << "MPIWrapperTests::testElementWiseSum() failed with maxDiff " << maxDiff << endl;
+  }
+  return success;
 }
 
 bool MPIWrapperTests::testSimpleSum() {

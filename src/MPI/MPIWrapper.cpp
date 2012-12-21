@@ -15,6 +15,8 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Teuchos_GlobalMPISession.hpp"
+
 // sum the contents of inValues across all processors, and stores the result in outValues
 // the rank of outValues determines the nature of the sum:
 // if outValues has dimensions (D1,D2,D3), say, then inValues must agree in the first three dimensions,
@@ -36,7 +38,8 @@
 void MPIWrapper::elementWiseSum(FieldContainer<double> &values) { // sums values element-wise across all processors
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.SumAll(&values[0], &values[0], values.size());
+  FieldContainer<double> valuesCopy = values; // it appears this copy is necessary
+  Comm.SumAll(&valuesCopy[0], &values[0], values.size());
 #else
 #endif
 }
@@ -51,8 +54,12 @@ double MPIWrapper::sum(const FieldContainer<double> &valuesToSum) {
   }
   
 #ifdef HAVE_MPI
+  double mySumCopy = mySum;
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.SumAll(&mySum, &mySum, 1);
+//  cout << "MPIWrapper::sum: about to throw exception" << endl;
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "debug exception");
+  Comm.SumAll(&mySumCopy, &mySum, 1);
+
 #else
 #endif
   return mySum;

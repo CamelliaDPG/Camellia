@@ -10,6 +10,8 @@
 #include "BasisCache.h"
 #include "ExactSolution.h"
 #include "Mesh.h"
+#include "Teuchos_GlobalMPISession.hpp"
+#include "MPIWrapper.h"
 
 // private class SimpleSolutionFunction:
 class SimpleSolutionFunction : public Function {
@@ -256,20 +258,20 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   double integral = 0;
   
   // TODO: rewrite this to compute in distributed fashion
-  vector< ElementTypePtr > elementTypes = mesh->elementTypes();
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false, cubatureDegreeEnrichment) ); // all elements of same type
-    vector< ElementPtr > cells = mesh->elementsOfTypeGlobal(elemType); // TODO: replace with local variant
+    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType); // TODO: replace with local variant
 
     int numCells = cells.size();
     vector<int> cellIDs;
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
-    // TODO: replace with non-global variant...
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, this->boundaryValueOnly());
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly());
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
       // sum the integral over the sides...
@@ -283,8 +285,11 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     for (int cellID = 0; cellID < numCells; cellID++) {
       integral += cellIntegrals(cellID);
     }
-    
   }
+  FieldContainer<double> integralFC(1);
+  integralFC[0] = integral;
+  integral = MPIWrapper::sum(integralFC);
+  
   return integral;
 }
 
