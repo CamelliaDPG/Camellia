@@ -56,10 +56,7 @@
 #include "Mesh.h"
 #include "VectorizedBasisTestSuite.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 #include "DPGTests.h"
 #include "BasisCacheTests.h"
