@@ -739,7 +739,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         bool useVolumeCoords = (sideIndex != -1) && ((ls.second->varType() == TEST) || (ls.second->varType() == FIELD));
         basisValues = basisCache->getTransformedValues(basis, ls.second->op(), useVolumeCoords);
       }
-
+      
       if ( ls.first->rank() == 0 ) { // scalar function -- we can speed things along in this case...
         // E.g. ConstantFunction::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
         FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
