@@ -20,12 +20,25 @@
 // if outValues has dimensions (D1,D2,D3), say, then inValues must agree in the first three dimensions,
 // but may be of arbitrary shape beyond that.  All values on all processors with matching address
 // (d1,d2,d3) will be summed and stored in outValues(d1,d2,d3).
-void MPIWrapper::elementWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues) {
-  
-}
+//void MPIWrapper::elementWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues) {
+//  outValues.initialize();
+//  int outRank = outValues.rank();
+//  for (int i=0; i<outRank; i++) {
+//    TEUCHOS_TEST_FOR_EXCEPTION(outValues.dimension(i) != inValues.dimension(i), std::invalid_argument, "inValues must match outValues in all outValues's dimensions");
+//  }
+//  double inEntriesPerOutEntry = 1;
+//  for (int i=outRank; i<inValues.rank(); i++) {
+//    inEntriesPerOutEntry *= inValues.dimension(i);
+//  }
+//  
+//}
 
 void MPIWrapper::elementWiseSum(FieldContainer<double> &values) { // sums values element-wise across all processors
-  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  Comm.SumAll(&values[0], &values[0], values.size());
+#else
+#endif
 }
 // sum the contents of valuesToSum across all processors, and returns the result:
 // (valuesToSum may vary in length across processors)
