@@ -114,8 +114,6 @@ public:
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  //rank=mpiSession.getRank();
-  //numProcs=mpiSession.getNProc();
 #else
 #endif
   DPGTests::runTests();
@@ -142,6 +140,9 @@ void DPGTests::createBases() {
 }
 
 void DPGTests::runTests() {
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
@@ -153,18 +154,18 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   
   // slow tests: keep at the end, except when debugging these...
   testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
@@ -175,19 +176,19 @@ void DPGTests::runTests() {
     int numSuiteTests = 0, numSuiteTestsPassed = 0;
     testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
     string name = testSuite->testSuiteName();
-    cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
+    if (rank==0) cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
   }
-    
+  
   success = testOptimalStiffnessByIntegrating();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testOptimalStiffnessByIntegrating." << endl;
-    //return; // just for now, exit on success    
+    if (rank==0) cout << "Passed test testOptimalStiffnessByIntegrating." << endl;
+    //return; // just for now, exit on success
   } else {
-    cout << "Failed test testOptimalStiffnessByIntegrating." << endl;
+    if (rank==0) cout << "Failed test testOptimalStiffnessByIntegrating." << endl;
     //return; // just for now, exit on fail
   }
   
@@ -195,36 +196,36 @@ void DPGTests::runTests() {
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testComputeOptimalTest." << endl;
+    if (rank==0) cout << "Passed test testComputeOptimalTest." << endl;
   } else {
-    cout << "Failed test testComputeOptimalTest." << endl;
+    if (rank==0) cout << "Failed test testComputeOptimalTest." << endl;
   }
   
   success = testMathInnerProductDx();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testMathInnerProductDx." << endl;
+    if (rank==0) cout << "Passed test testMathInnerProductDx." << endl;
   } else {
-    cout << "Failed test testMathInnerProductDx." << endl;
+    if (rank==0) cout << "Failed test testMathInnerProductDx." << endl;
   }
   
   success = testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
+    if (rank==0) cout << "Passed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
   } else {
-    cout << "Failed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
+    if (rank==0) cout << "Failed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
   }
   
   success = testComputeStiffnessConformingVertices();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testComputeStiffnessConformingVertices." << endl;
+    if (rank==0) cout << "Passed test testComputeStiffnessConformingVertices." << endl;
   } else {
-    cout << "Failed test testComputeStiffnessConformingVertices." << endl;
+    if (rank==0) cout << "Failed test testComputeStiffnessConformingVertices." << endl;
   }
   
   
@@ -232,102 +233,102 @@ void DPGTests::runTests() {
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
+    if (rank==0) cout << "Passed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
   } else {
-    cout << "Failed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
+    if (rank==0) cout << "Failed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
   }
   
   success = testAnalyticBoundaryIntegral(true);
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testAnalyticBoundaryIntegral (conforming)." << endl;
+    if (rank==0) cout << "Passed test testAnalyticBoundaryIntegral (conforming)." << endl;
   } else {
-    cout << "Failed test testAnalyticBoundaryIntegral (conforming)." << endl;
+    if (rank==0) cout << "Failed test testAnalyticBoundaryIntegral (conforming)." << endl;
   }
   
   success = testOptimalStiffnessByMultiplying();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testOptimalStiffnessByMultiplying." << endl;
+    if (rank==0) cout << "Passed test testOptimalStiffnessByMultiplying." << endl;
   } else {
-    cout << "Failed test testOptimalStiffnessByMultiplying." << endl;
+    if (rank==0) cout << "Failed test testOptimalStiffnessByMultiplying." << endl;
   }
   
   success = testLowOrderTrialCubicTest();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testLowOrderTrialCubicTest." << endl;
+    if (rank==0) cout << "Passed test testLowOrderTrialCubicTest." << endl;
   } else {
-    cout << "Failed test testLowOrderTrialCubicTest." << endl;
+    if (rank==0) cout << "Failed test testLowOrderTrialCubicTest." << endl;
   }
   
   success = testComputeStiffnessDx();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test ComputeStiffnessDx." << endl;
+    if (rank==0) cout << "Passed test ComputeStiffnessDx." << endl;
   } else {
-    cout << "Failed test ComputeStiffnessDx." << endl;
+    if (rank==0) cout << "Failed test ComputeStiffnessDx." << endl;
   }
   
   success = testWeightBasis();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testWeightBasis." << endl;
+    if (rank==0) cout << "Passed test testWeightBasis." << endl;
   } else {
-    cout << "Failed test testWeightBasis." << endl;
+    if (rank==0) cout << "Failed test testWeightBasis." << endl;
   }
   
   success = testDofOrdering();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testDofOrdering." << endl;
+    if (rank==0) cout << "Passed test testDofOrdering." << endl;
   } else {
-    cout << "Failed test testDofOrdering." << endl;
+    if (rank==0) cout << "Failed test testDofOrdering." << endl;
   }
   
   success = testComputeStiffnessTrace();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test ComputeStiffnessTrace." << endl;
+    if (rank==0) cout << "Passed test ComputeStiffnessTrace." << endl;
   } else {
-    cout << "Failed test ComputeStiffnessTrace." << endl;
+    if (rank==0) cout << "Failed test ComputeStiffnessTrace." << endl;
   }
-
+  
   success = testComputeStiffnessFlux();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test ComputeStiffnessFlux." << endl;
+    if (rank==0) cout << "Passed test ComputeStiffnessFlux." << endl;
   } else {
-    cout << "Failed test ComputeStiffnessFlux." << endl;
+    if (rank==0) cout << "Failed test ComputeStiffnessFlux." << endl;
   }
   
   success = testComputeOptimalTestPoisson();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testComputeOptimalTestPoisson." << endl;
+    if (rank==0) cout << "Passed test testComputeOptimalTestPoisson." << endl;
   } else {
-    cout << "Failed test testComputeOptimalTestPoisson." << endl;
+    if (rank==0) cout << "Failed test testComputeOptimalTestPoisson." << endl;
   }
-
+  
   success = testProjection();
   ++numTestsTotal;
   if (success) {
     numTestsPassed++;
-    cout << "Passed test testProjection." << endl;
+    if (rank==0) cout << "Passed test testProjection." << endl;
   } else {
-    cout << "Failed test testProjection." << endl;
+    if (rank==0) cout << "Failed test testProjection." << endl;
   }
   
-  cout << "Passed " << numTestsPassed << " out of " << numTestsTotal << "." << endl;
+  if (rank==0) cout << "Passed " << numTestsPassed << " out of " << numTestsTotal << "." << endl;
 }
 
 bool DPGTests::testComputeStiffnessConformingVertices() {
