@@ -78,9 +78,9 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
 
 void BasisCache::createSideCaches() {
   _numSides = _cellTopo.getSideCount();
+//  cout << "BasisCache::createSideCaches, numSides: " << _numSides << endl;
   vector<int> sideTrialIDs;
   set<int> trialIDs = _trialOrdering.getVarIDs();
-  int numTrialIDs = trialIDs.size();
   for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     if (_trialOrdering.getNumSidesForVarID(trialID) == _numSides) {
@@ -145,6 +145,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
 BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDegreeBasis) {
   _isSideCache = true;
   _sideIndex = sideIndex;
+  _numSides = -1;
   _basisCacheVolume = volumeCache;
   _cubatureMultiplier = volumeCache->cubatureMultiplier();
   _maxTestDegree = volumeCache->maxTestDegree(); // maxTestDegree includes any cubature enrichment
@@ -438,8 +439,9 @@ const FieldContainer<double> BasisCache::getRefCellPoints() {
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _cubPoints = pointsRefCell;
+  int numPoints = pointsRefCell.dimension(0);
+  
   if ( isSideCache() ) { // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
-    int numPoints = pointsRefCell.dimension(0);
     // for side cache, _spaceDim is the spatial dimension of the volume cache
     _cubPointsSideRefCell.resize(numPoints, _spaceDim); 
     // _cellTopo is the volume cell topology for side basis caches.
@@ -454,11 +456,22 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
   _knownValuesTransformedWeighted.clear();
   
   _cubWeights.resize(0); // will force an exception if you try to compute weighted values.
-
+  
   // allow reuse of physicalNode info; just map the new points...
   if (_physCubPoints.size() > 0) {
     determinePhysicalPoints();
     determineJacobian();
+    
+    if (isSideCache()) {
+      // recompute sideNormals
+      _sideNormals.resize(_numCells, numPoints, _spaceDim);
+      FieldContainer<double> normalLengths(_numCells, numPoints);
+      CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo);
+      
+      // make unit length
+      RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
+      FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
+    }
   }
 }
 
