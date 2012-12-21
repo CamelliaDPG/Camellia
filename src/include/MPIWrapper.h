@@ -23,9 +23,9 @@ public:
   // if outValues has dimensions (D1,D2,D3), say, then inValues must agree in the first three dimensions,
   // but may be of arbitrary shape beyond that.  All values on all processors with matching address
   // (d1,d2,d3) will be summed and stored in outValues(d1,d2,d3).
-//  static void elementWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues);
+//  static void entryWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues);
 
-  static void elementWiseSum(FieldContainer<double> &values); // sums values element-wise across all processors
+  static void entryWiseSum(FieldContainer<double> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
   static double sum(const FieldContainer<double> &valuesToSum);

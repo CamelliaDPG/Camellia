@@ -21,7 +21,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
   bool testSimpleSum();
-  bool testElementWiseSum();
+  bool testentryWiseSum();
   
   std::string testSuiteName();
 };

@@ -27,14 +27,14 @@ void MPIWrapperTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
 
   setup();
-  if (testElementWiseSum()) {
+  if (testentryWiseSum()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool MPIWrapperTests::testElementWiseSum() {
+bool MPIWrapperTests::testentryWiseSum() {
   bool success = true;
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -48,13 +48,13 @@ bool MPIWrapperTests::testElementWiseSum() {
   values[0] = rank*rank;
   values[1] = 1;
   
-  MPIWrapper::elementWiseSum(values);
+  MPIWrapper::entryWiseSum(values);
   double tol = 1e-16;
   
   double maxDiff = 0;
   if (! fcsAgree(values, expectedValues, tol, maxDiff) ) {
     success = false;
-    cout << "MPIWrapperTests::testElementWiseSum() failed with maxDiff " << maxDiff << endl;
+    cout << "MPIWrapperTests::testentryWiseSum() failed with maxDiff " << maxDiff << endl;
   }
   return success;
 }
