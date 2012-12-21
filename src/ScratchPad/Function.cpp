@@ -218,6 +218,20 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   }
 }
 
+// takes integral of jump over entire INTERIOR skeleton
+double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+  double integral = 0.0;
+  vector<ElementPtr> elems = mesh->activeElements();
+  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    int numSides = elem->numSides();
+    for (int sideIndex = 0; sideIndex < numSides; sideIndex++){
+      integral+= this->integralOfJump(mesh,elem->cellID(),sideIndex,cubatureDegreeEnrichment);
+    }
+  }
+  return integral;
+}
+
 double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {  
   // for boundaries, the jump is 0
   if (mesh->boundary().boundaryElement(cellID,sideIndex)) {

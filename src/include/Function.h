@@ -63,6 +63,8 @@ public:
   
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment);
   
+  double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
+
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
   double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
