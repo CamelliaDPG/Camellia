@@ -22,7 +22,7 @@
 // if outValues has dimensions (D1,D2,D3), say, then inValues must agree in the first three dimensions,
 // but may be of arbitrary shape beyond that.  All values on all processors with matching address
 // (d1,d2,d3) will be summed and stored in outValues(d1,d2,d3).
-//void MPIWrapper::elementWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues) {
+//void MPIWrapper::entryWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues) {
 //  outValues.initialize();
 //  int outRank = outValues.rank();
 //  for (int i=0; i<outRank; i++) {
@@ -35,7 +35,7 @@
 //  
 //}
 
-void MPIWrapper::elementWiseSum(FieldContainer<double> &values) { // sums values element-wise across all processors
+void MPIWrapper::entryWiseSum(FieldContainer<double> &values) { // sums values entry-wise across all processors
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   FieldContainer<double> valuesCopy = values; // it appears this copy is necessary
@@ -47,7 +47,7 @@ void MPIWrapper::elementWiseSum(FieldContainer<double> &values) { // sums values
 // (valuesToSum may vary in length across processors)
 double MPIWrapper::sum(const FieldContainer<double> &valuesToSum) {
   // this is fairly inefficient in the sense that the MPI overhead will dominate the cost here.
-  // insofar as it's possible to group such calls into elementWiseSum() calls, this is preferred.
+  // insofar as it's possible to group such calls into entryWiseSum() calls, this is preferred.
   double mySum = 0;
   for (int i=0; i<valuesToSum.size(); i++) {
     mySum += valuesToSum[i];
