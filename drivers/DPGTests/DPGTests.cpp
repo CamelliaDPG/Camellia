@@ -74,6 +74,7 @@
 #include "ScratchPadTests.h"
 #include "IncompressibleFormulationsTests.h"
 #include "HConvergenceStudyTests.h"
+#include "MPIWrapperTests.h"
 
 #include "Projector.h"
 #include "BasisCache.h"
@@ -153,6 +154,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
