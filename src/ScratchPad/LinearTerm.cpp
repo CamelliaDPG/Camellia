@@ -10,9 +10,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#endif
 
 #include "Function.h"
 
