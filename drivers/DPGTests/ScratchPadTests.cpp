@@ -680,7 +680,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2,1, convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(4, convectionBF, H1Order, H1Order+pToAdd);
   
   ////////////////////   SOLVE   ///////////////////////
 
