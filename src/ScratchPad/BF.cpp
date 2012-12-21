@@ -93,7 +93,7 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
 // can override check for zero cols (i.e. in hessian matrix)
 void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
                          FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
-			 bool checkForZeroCols) {
+                         bool checkForZeroCols) {
   // stiffness is sized as (C, FTest, FTrial)
   stiffness.initialize(0.0);
   basisCache->setCellSideParities(cellSideParities);
