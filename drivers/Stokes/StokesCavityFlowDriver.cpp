@@ -16,6 +16,7 @@
 #include "MeshTestUtility.h"
 #include "PenaltyConstraints.h"
 #include "CGSolver.h"
+#include "MPIWrapper.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -246,25 +247,19 @@ void writeStreamlines(double xMin, double xMax, double yMin, double yMax,
 }
 
 int main(int argc, char *argv[]) {
-  int rank = 0;
-#ifdef HAVE_MPI
-  // TODO: figure out the right thing to do here...
-  // may want to modify argc and argv before we make the following call:
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  rank=mpiSession.getRank();
-#else
-#endif
-  int pToAdd = 1; // for optimal test function approximation
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv);
+  int rank = Teuchos::GlobalMPISession::getRank();
+  int pToAdd = 2; // for optimal test function approximation
   int pToAddForStreamFunction = pToAdd;
-  double eps = 1.0/2.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
-  //  double eps = 0.0; // John Evans's problem: not in H^1
+//  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool useMumps = false;
+  bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = false;
   bool weightTestNormDerivativesByH = false;
@@ -372,6 +367,7 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   int horizontalCells = 2, verticalCells = 2;
   bool useTriangles = false;
+  bool nonConformingTraces = false;
   bool meshHasTriangles = useTriangles | singularityAvoidingInitialMesh;
   Teuchos::RCP<Mesh> mesh, streamMesh, overkillMesh;
   FieldContainer<double> quadPoints(4,2);
@@ -388,7 +384,7 @@ int main(int argc, char *argv[]) {
   if ( ! singularityAvoidingInitialMesh ) {
     // create a pointer to a new mesh:
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                               stokesBFMath, H1Order, H1Order+pToAdd, useTriangles);
+                               stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                      streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
   } else {
@@ -621,7 +617,7 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  solution->setReportConditionNumber(true);
+//  solution->setReportConditionNumber(true);
   if (usePenaltyConstraintsForDiscontinuousBC) {
     Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
     pc->addConstraint(u1hat==u1_0,entireBoundary);
