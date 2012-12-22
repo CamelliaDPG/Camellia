@@ -300,11 +300,8 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
       integral += cellIntegrals(cellID);
     }
   }
-  FieldContainer<double> integralFC(1);
-  integralFC[0] = integral;
-  integral = MPIWrapper::sum(integralFC);
   
-  return integral;
+  return MPIWrapper::sum(integral);
 }
 
 double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) { // the total cubature degree (i.e. exact for 10th-degree polynomials)
