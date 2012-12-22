@@ -957,7 +957,11 @@ const vector< int > & Mesh::cellIDsOfType(ElementTypePtr elemType) {
 
 const vector< int > & Mesh::cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr) {
   // returns the cell IDs for a given partition and element type
-  return _cellIDsForElementType[partitionNumber][elemTypePtr.get()];
+  static vector<int> emptyVector;
+  if (_cellIDsForElementType[partitionNumber].find(elemTypePtr.get()) != _cellIDsForElementType[partitionNumber].end())
+    return _cellIDsForElementType[partitionNumber][elemTypePtr.get()];
+  else
+    return emptyVector;
 }
 
 vector< int > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
