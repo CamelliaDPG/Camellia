@@ -25,10 +25,20 @@ public:
   // (d1,d2,d3) will be summed and stored in outValues(d1,d2,d3).
 //  static void entryWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues);
 
+  static void allGather(FieldContainer<int> &allValues, int myValue);
+  static void allGather(FieldContainer<int> &values, FieldContainer<int> &myValues);
+  
   static void entryWiseSum(FieldContainer<double> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
   static double sum(const FieldContainer<double> &valuesToSum);
+  static double sum(double myValue);
+  
+  static void entryWiseSum(FieldContainer<int> &values); // sums values entry-wise across all processors
+  // sum the contents of valuesToSum across all processors, and returns the result:
+  // (valuesToSum may vary in length across processors)
+  static int sum(const FieldContainer<int> &valuesToSum);
+  static int sum(int myValue);
 };
 
 #endif /* defined(__Camellia_debug__MPIWrapper__) */
