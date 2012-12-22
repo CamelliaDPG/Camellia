@@ -6,6 +6,8 @@ using namespace std;
 
 #include "Intrepid_FieldContainer.hpp"
 
+#include "MPIWrapper.h"
+
 using namespace Intrepid;
 
 // abstract class for tests
@@ -26,6 +28,11 @@ public:
     return (maxDiff <= tol);
   }
 
+  static bool allSuccess(bool mySuccess) {
+    int mySuccessInt = mySuccess ? 0 : -1;
+    int successSum = MPIWrapper::sum(mySuccessInt);
+    return successSum == 0;
+  }
 };
 
 #endif
