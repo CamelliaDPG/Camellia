@@ -639,6 +639,8 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
     ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
     
+    if (basisCache->cellIDs().size() == 0) continue;
+    
     int testDofs = elemType->testOrderPtr->totalDofs();
     FieldContainer<double> ipMatrixExpected(basisCache->cellIDs().size(),testDofs,testDofs);
     FieldContainer<double> ipMatrixActual(basisCache->cellIDs().size(),testDofs,testDofs);
@@ -660,7 +662,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
 //    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
   }
   
-  return success;
+  return allSuccess(success);
 }
 bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
   bool success = true;
@@ -721,6 +723,8 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
     ElementTypePtr elemType = mesh->getElement(0)->elementType(); // all elements have same type here
     BasisCachePtr basisCache = BasisCache::basisCacheForCellType(mesh, elemType);
     
+    if (basisCache->cellIDs().size() == 0) continue;
+    
     int testDofs = elemType->testOrderPtr->totalDofs();
     FieldContainer<double> ipMatrixExpected(basisCache->cellIDs().size(),testDofs,testDofs);
     FieldContainer<double> ipMatrixActual(basisCache->cellIDs().size(),testDofs,testDofs);
@@ -737,7 +741,7 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm() {
     //    cout << "ipMatrixExpected:\n" << ipMatrixExpected;
   }
   
-  return success;
+  return allSuccess(success);
 }
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency() {

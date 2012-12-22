@@ -278,17 +278,8 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
   bool success = true;
   double tol = 1e-14;
 
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-//  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-//  Epetra_SerialComm Comm;
-#endif
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
   Teuchos::RCP<ElementType> elemType = _mesh->getElement(0)->elementType();
   
@@ -316,13 +307,14 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
     cellIDs.push_back(cellID);
   }
   
-  // prepare basisCache and cellIDs
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
-  bool createSideCacheToo = true;
-  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-  
-  _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
-  _rhs->integrateAgainstOptimalTests(rhsExpected, testWeights, elemType->testOrderPtr, basisCache);
+  if (numCells > 0) {
+    // prepare basisCache and cellIDs
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
+    bool createSideCacheToo = true;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+    _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
+    _rhs->integrateAgainstOptimalTests(rhsExpected, testWeights, elemType->testOrderPtr, basisCache);
+  }
   
   double maxDiff = 0.0;
   
@@ -331,24 +323,16 @@ bool RHSTests::testIntegrateAgainstStandardBasis() {
     cout << "Failed testIntegrateAgainstStandardBasis: maxDiff = " << maxDiff << endl;
   }
   
-  return success;
+  // check success across MPI nodes
+  return allSuccess(success);
 }
 
 bool RHSTests::testRHSEasy() {
   bool success = true;
   double tol = 1e-14;
   
-  int numProcs=1;
-  int rank=0;
-  
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  //  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  //  Epetra_SerialComm Comm;
-#endif
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
   Teuchos::RCP<ElementType> elemType = _mesh->getElement(0)->elementType();
   
@@ -369,12 +353,14 @@ bool RHSTests::testRHSEasy() {
   }
   
   // prepare basisCache and cellIDs
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
-  bool createSideCacheToo = true;
-  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-  
-  _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
-  _rhsEasy->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
+  if (numCells > 0) {
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
+    bool createSideCacheToo = true;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+    
+    _rhs->integrateAgainstStandardBasis(rhsActual, elemType->testOrderPtr, basisCache);
+    _rhsEasy->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
+  }
   
   double maxDiff = 0.0;
   
@@ -386,7 +372,7 @@ bool RHSTests::testRHSEasy() {
     cout << "Test dof ordering:\n" << *(elemType->testOrderPtr);
   }
   
-  return success;
+  return allSuccess(success);
 }
 
 bool RHSTests::testTrivialRHS(){
@@ -394,17 +380,9 @@ bool RHSTests::testTrivialRHS(){
   bool success = true;
   double tol = 1e-14;
   
-  int numProcs=1;
-  int rank=0;
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  //  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  //  Epetra_SerialComm Comm;
-#endif
   Teuchos::RCP<ElementType> elemType = _mesh->getElement(0)->elementType();
   
   vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemType);
@@ -420,33 +398,34 @@ bool RHSTests::testTrivialRHS(){
     cellIDs.push_back(cellID);
   }
   
-  // prepare basisCache and cellIDs
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
-  bool createSideCacheToo = true;
-  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-  
-  FieldContainer<double> rhsExpected(numCells,numTestDofs);
-  
-  VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
-  //  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
-  VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
+  if (numCells > 0) {
+    // prepare basisCache and cellIDs
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,_mesh));
+    bool createSideCacheToo = true;
+    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+    
+    FieldContainer<double> rhsExpected(numCells,numTestDofs);
+    
+    VarFactory varFactory; // Create test IDs that match the enum in ConfusionBilinearForm
+    //  VarPtr tau = varFactory.testVar("\\tau",HDIV,ConfusionBilinearForm::TAU);
+    VarPtr v = varFactory.testVar("v",HGRAD,ConfusionBilinearForm::V);
 
-  FunctionPtr zero = Function::constant(0.0);
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = zero;
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
-  rhs->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
-  for (int i = 0;i<numCells;i++) {
-    for (int j = 0;j<numTestDofs;j++) {
-      if (abs(rhsExpected(i,j))>tol) {
-        success = false;
+    FunctionPtr zero = Function::constant(0.0);
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    FunctionPtr f = zero;
+    rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+    rhs->integrateAgainstStandardBasis(rhsExpected, elemType->testOrderPtr, basisCache);
+    
+    for (int i = 0;i<numCells;i++) {
+      for (int j = 0;j<numTestDofs;j++) {
+        if (abs(rhsExpected(i,j))>tol) {
+          success = false;
+        }
       }
     }
   }
-
-  return success;
-
-
+  
+  return allSuccess(success);
 }
 
 std::string RHSTests::testSuiteName() {
