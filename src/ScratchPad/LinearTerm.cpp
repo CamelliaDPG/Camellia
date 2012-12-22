@@ -10,6 +10,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 
+#include "MPIWrapper.h"
 #include <Teuchos_GlobalMPISession.hpp>
 
 #include "Function.h"
@@ -1121,33 +1122,34 @@ void LinearTerm::computeRieszRHS(Teuchos::RCP<Mesh> mesh){
 }
 
 const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip) { 
-  int numProcs=1;
-  int rank=0;
+  int numProcs = Teuchos::GlobalMPISession::getNProc();;
+  int rank = Teuchos::GlobalMPISession::getRank();
   
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif  
   
   int numActiveElements = mesh->activeElements().size();
+  int numMyCells = mesh->elementsInPartition(rank).size();
 
   computeRieszRep(mesh,ip);  
   
-  // initialize error array to -1 (cannot have negative index...) 
-  int localCellIDArray[numActiveElements];
-  double localNormArray[numActiveElements];  
-  for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-    localCellIDArray[globalCellIndex] = -1;    
-    localNormArray[globalCellIndex] = -1.0;        
-  }  
+  FieldContainer<int> activeCellIDs(numActiveElements); // initialized to 0
+  FieldContainer<double> norms(numActiveElements);
+  FieldContainer<int> numCellsForMPINode(numProcs);
+  
+  MPIWrapper::allGather(numCellsForMPINode, numMyCells);
+  
+  int myCellIndexOffset = 0;
+  for (int i=0; i<rank; i++) {
+    myCellIndexOffset += numCellsForMPINode[i];
+  }
   
   vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);   
   vector<ElementTypePtr>::iterator elemTypeIt;  
-  int globalCellIndex = 0;
+  int myCellIndex = 0;
   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);    
     
@@ -1165,39 +1167,23 @@ const map<int,double> & LinearTerm::energyNorm(Teuchos::RCP<Mesh> mesh, Teuchos:
       for (int i=0; i<numTestDofs; i++) {      
         normSquared += rhs(cellIndex,i) * rieszReps(cellIndex,i);
       }
-      localNormArray[globalCellIndex] = sqrt(normSquared);
+      norms[myCellIndexOffset + myCellIndex] = sqrt(normSquared);
       int cellID = mesh->cellID(elemTypePtr,cellIndex,rank);
-      localCellIDArray[globalCellIndex] = cellID; 
-      globalCellIndex++;
+      activeCellIDs[myCellIndexOffset + myCellIndex] = cellID;
+      myCellIndex++;
     }   
   } // end of loop thru element types
   
-  // mpi communicate all energy errors
-  double normArray[numProcs][numActiveElements];  
-  int cellIDArray[numProcs][numActiveElements];    
-#ifdef HAVE_MPI
-  if (numProcs>1){
-    MPI::COMM_WORLD.Allgather(localNormArray,numActiveElements, MPI::DOUBLE, normArray, numActiveElements , MPI::DOUBLE);      
-    MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);        
-  }else{
-#else
-#endif
-    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){    
-      cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
-      normArray[0][globalCellIndex] = localNormArray[globalCellIndex];
-    }
-#ifdef HAVE_MPI
+  MPIWrapper::entryWiseSum(activeCellIDs);
+  MPIWrapper::entryWiseSum(norms);
+  
+  // copy to energyError container
+  for (int i=0; i<numActiveElements; i++){
+    int cellID = activeCellIDs[i];
+    _energyNormForCellIDGlobal[cellID] = norms[i];
   }
-#endif
-  // copy back to energyError container 
-  for (int procIndex=0;procIndex<numProcs;procIndex++){
-    for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
-      if (cellIDArray[procIndex][globalCellIndex]!=-1){
-        _energyNormForCellIDGlobal[cellIDArray[procIndex][globalCellIndex]] = normArray[procIndex][globalCellIndex];
-      }
-    }
-  }
- 
+  
+  // TODO: figure out whether we actually need to keep this around...
   return _energyNormForCellIDGlobal;
 }
 
