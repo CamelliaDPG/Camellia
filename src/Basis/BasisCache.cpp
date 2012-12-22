@@ -650,7 +650,9 @@ BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr ele
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, cubatureMultiplier ) );
   bool createSideCache = true;
   vector<int> cellIDs = mesh->cellIDsOfType(elemType);
-  basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
+  if (cellIDs.size() > 0) {
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, createSideCache);
+  }
   
   return basisCache;
 }
