@@ -1,0 +1,3 @@
+[submodule "TPL/choice"]
+	path = TPL/choice
+	url = https://github.com/poulson/choice.git
