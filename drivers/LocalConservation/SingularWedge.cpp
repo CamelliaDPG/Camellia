@@ -32,8 +32,6 @@ public:
     _epsilon = epsilon;
   }
   double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);

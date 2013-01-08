@@ -14,18 +14,14 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
-#include "VTKExporterCamellia.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
-
-
-double epsilon = 1e-2;
-double numRefs = 4;
-
-bool enforceLocalConservation = true;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -34,8 +30,6 @@ class EpsilonScaling : public hFunction {
     _epsilon = epsilon;
   }
   double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
@@ -133,12 +127,22 @@ class Beta : public Function {
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;
+  choice::Args args( argc, argv );
 #endif
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  // Required arguments
+  double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
+  bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+
+  // Optional arguments (have defaults)
+  args.Process();
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -151,51 +155,46 @@ int main(int argc, char *argv[]) {
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma = varFactory.fieldVar("\\sigma", VECTOR_L2);
 
-  vector<double> beta_const;
-  beta_const.push_back(2.0);
-  beta_const.push_back(1.0);
+  vector<double> beta;
+  beta.push_back(2.0);
+  beta.push_back(1.0);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  // confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  // confusionBF->addTerm(sigma2 / epsilon, tau->y());
-  confusionBF->addTerm(sigma / epsilon, tau);
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  // bf->addTerm(sigma1 / epsilon, tau->x());
+  // bf->addTerm(sigma2 / epsilon, tau->y());
+  bf->addTerm(sigma / epsilon, tau);
+  bf->addTerm(u, tau->div());
+  bf->addTerm(-uhat, tau->dot_normal());
 
   // v terms:
-  // confusionBF->addTerm( sigma1, v->dx() );
-  // confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( sigma, v->grad() );
-  confusionBF->addTerm( beta_const * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  // bf->addTerm( sigma1, v->dx() );
+  // bf->addTerm( sigma2, v->dy() );
+  bf->addTerm( sigma, v->grad() );
+  bf->addTerm( beta * u, - v->grad() );
+  bf->addTerm( beta_n_u_minus_sigma_n, v);
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // mathematician's norm
-  IPPtr mathIP = Teuchos::rcp(new IP());
-  mathIP->addTerm(tau);
-  mathIP->addTerm(tau->div());
-
-  mathIP->addTerm(v);
-  mathIP->addTerm(v->grad());
-
-  // quasi-optimal norm
-  IPPtr qoptIP = Teuchos::rcp(new IP);
-  qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / epsilon+ v->grad() );
-  qoptIP->addTerm( beta_const * v->grad() - tau->div() );
-
-  // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  // robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon) * v->grad() );
-  robIP->addTerm( beta_const * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( v );
+  IPPtr ip = Teuchos::rcp(new IP);
+  if (graphNorm)
+  {
+    ip = bf->graphNorm();
+  }
+  else
+  {
+    // robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    if (!enforceLocalConservation)
+      ip->addTerm( ip_scaling * v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    // Weight these two terms for inflow
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->div() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    if (enforceLocalConservation)
+      ip->addZeroMeanTerm( v );
+  }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -210,15 +209,15 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(uhat, outflowBoundary, u0);
 
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta_const*n*u0);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u0);
 
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   // pc->addConstraint(uhat==u0,inflowBoundary);
 
   ////////////////////   BUILD MESH   ///////////////////////
   int H1Order = 3, pToAdd = 2;
-  // Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", confusionBF, H1Order, pToAdd);
-  // Teuchos::RCP<Mesh> mesh = Mesh::readTriangle(Camellia_MeshDir + "Quad/quad.1", confusionBF, H1Order, pToAdd);
+  // Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", bf, H1Order, pToAdd);
+  // Teuchos::RCP<Mesh> mesh = Mesh::readTriangle(Camellia_MeshDir + "Quad/quad.1", bf, H1Order, pToAdd);
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
 
@@ -235,10 +234,10 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      confusionBF, H1Order, H1Order+pToAdd, false);
+      bf, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
   if (enforceLocalConservation) {
@@ -253,7 +252,7 @@ int main(int argc, char *argv[]) {
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
-    if (rank==0){
+    if (commRank==0){
       stringstream outfile;
       outfile << "confusion_" << refIndex;
       exporter.exportSolution(outfile.str());
@@ -268,7 +267,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (refIndex < numRefs)
-      refinementStrategy.refine(rank==0); // print to console on rank 0
+      refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
 
   return 0;
