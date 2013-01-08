@@ -12,17 +12,14 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
-
-bool enforceLocalConservation = true;
-bool highLiftAirfoil = true;
-double epsilon = 1e-4;
-int numRefs = 9;
-int num1DPts = 5;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -31,8 +28,6 @@ public:
     _epsilon = epsilon;
   }
   double value(double x, double y, double h) {
-    // should probably by sqrt(_epsilon/h) instead (note parentheses)
-    // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
@@ -74,18 +69,15 @@ public:
 
 class AirfoilInflowBoundary : public SpatialFilter {
 private:
-  FunctionPtr _beta;
+  vector<double> _beta;
 public:
-  AirfoilInflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
+  AirfoilInflowBoundary(vector<double> b) : SpatialFilter(), _beta(b) {}
   bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
   {
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
     const FieldContainer<double> *normals = &(basisCache->getSideNormals());
     int numCells = (*points).dimension(0);
     int numPoints = (*points).dimension(1);
-
-    FieldContainer<double> beta_pts(numCells,numPoints,2);
-    _beta->values(beta_pts,basisCache);
 
     double tol = 1e-3;
     bool somePointMatches = false;
@@ -95,7 +87,7 @@ public:
         double y = (*points)(cellIndex,ptIndex,1);
         double n1 = (*normals)(cellIndex,ptIndex,0);
         double n2 = (*normals)(cellIndex,ptIndex,1);
-        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
+        double beta_n = _beta[0]*n1 + _beta[1]*n2 ;
         pointsMatch(cellIndex,ptIndex) = false;
         if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol && beta_n < 0)
         {
@@ -110,18 +102,15 @@ public:
 
 class AirfoilOutflowBoundary : public SpatialFilter {
 private:
-  FunctionPtr _beta;
+  vector<double> _beta;
 public:
-  AirfoilOutflowBoundary(FunctionPtr b) : SpatialFilter(), _beta(b) {}
+  AirfoilOutflowBoundary(vector<double> b) : SpatialFilter(), _beta(b) {}
   bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
   {
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
     const FieldContainer<double> *normals = &(basisCache->getSideNormals());
     int numCells = (*points).dimension(0);
     int numPoints = (*points).dimension(1);
-
-    FieldContainer<double> beta_pts(numCells,numPoints,2);
-    _beta->values(beta_pts,basisCache);
 
     double tol = 1e-3;
     bool somePointMatches = false;
@@ -131,10 +120,9 @@ public:
         double y = (*points)(cellIndex,ptIndex,1);
         double n1 = (*normals)(cellIndex,ptIndex,0);
         double n2 = (*normals)(cellIndex,ptIndex,1);
-        double beta_n = beta_pts(cellIndex,ptIndex,0)*n1 + beta_pts(cellIndex,ptIndex,1)*n2 ;
+        double beta_n = _beta[0]*n1 + _beta[1]*n2 ;
         pointsMatch(cellIndex,ptIndex) = false;
         if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol && beta_n >= 0)
-        // if (abs((x-.5)*(x-.5)+y*y) < 0.75+tol)
         {
           pointsMatch(cellIndex,ptIndex) = true;
           somePointMatches = true;
@@ -163,7 +151,6 @@ class ZeroBC : public Function {
     }
 };
 
-// boundary value for sigma_n
 class OneBC : public Function {
   public:
     OneBC() : Function(0) {}
@@ -180,70 +167,25 @@ class OneBC : public Function {
     }
 };
 
-class Beta : public Function {
-public:
-  Beta() : Function(1) {}
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-    int spaceDim = values.dimension(2);
-    
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        for (int d = 0; d < spaceDim; d++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex,ptIndex,0) = 1;
-          values(cellIndex,ptIndex,1) = .25;
-        }
-      }
-    }
-  }
-};
-
-class IPWeight : public Function {
-  public:
-    IPWeight() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      double a = 2;
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          // if (x > 0 && abs(y) < 1+1e-3 && x < a)
-          //   values(cellIndex, ptIndex) = epsilon + (x-sqrt(1-y*y))/(a-sqrt(1-y*y));
-          // if (x > 0 && sqrt(x*x+y*y) < a)
-          // {
-          //   double dr = sqrt(x*x+y*y) - 1;
-          //   values(cellIndex, ptIndex) = epsilon + dr/(a-1);
-          // }
-          // else
-            values(cellIndex, ptIndex) = 1;
-        }
-      }
-    }
-};
-
 int main(int argc, char *argv[]) {
-  // Process command line arguments
-  if (argc > 1)
-    numRefs = atof(argv[1]);
-  if (argc > 2)
-    epsilon = atof(argv[2]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;
+  choice::Args args( argc, argv );
 #endif
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  // Required arguments
+  double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
+  bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+
+  // Optional arguments (have defaults)
+  bool highLiftAirfoil = args.Input("--highLift", "use high lift airfoil rather than NACA0012", false);
+  args.Process();
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -254,53 +196,44 @@ int main(int argc, char *argv[]) {
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("sigma_x");
-  VarPtr sigma2 = varFactory.fieldVar("sigma_y");
-  
-  FunctionPtr beta = Teuchos::rcp(new Beta());
+  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.25);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  bf->addTerm(sigma / epsilon, tau);
+  bf->addTerm(u, tau->div());
+  bf->addTerm(-uhat, tau->dot_normal());
   
   // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  bf->addTerm( sigma, v->grad() );
+  bf->addTerm( beta * u, - v->grad() );
+  bf->addTerm( beta_n_u_minus_sigma_n, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // mathematician's norm
-  IPPtr mathIP = Teuchos::rcp(new IP());
-  mathIP->addTerm(tau);
-  mathIP->addTerm(tau->div());
-
-  mathIP->addTerm(v);
-  mathIP->addTerm(v->grad());
-
-  // quasi-optimal norm
-  IPPtr qoptIP = Teuchos::rcp(new IP);
-  qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / epsilon + v->grad() );
-  qoptIP->addTerm( beta * v->grad() - tau->div() );
-
-  // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  if (!enforceLocalConservation)
-    robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon) * v->grad() );
-  // Weight these two terms for inflow
-  FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
-  robIP->addTerm( ip_weight * beta * v->grad() );
-  robIP->addTerm( ip_weight * tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( v );
+  IPPtr ip = Teuchos::rcp(new IP);
+  if (graphNorm)
+  {
+    ip = bf->graphNorm();
+  }
+  else
+  {
+    // robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    if (!enforceLocalConservation)
+      ip->addTerm( ip_scaling * v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    // Weight these two terms for inflow
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->div() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    if (enforceLocalConservation)
+      ip->addZeroMeanTerm( v );
+  }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -335,13 +268,12 @@ int main(int argc, char *argv[]) {
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
   if (highLiftAirfoil)
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", confusionBF, H1Order, pToAdd);
+    mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", bf, H1Order, pToAdd);
   else
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"NACA0012/NACA0012.1", confusionBF, H1Order, pToAdd);
+    mesh = Mesh::readTriangle(Camellia_MeshDir+"NACA0012/NACA0012.1", bf, H1Order, pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, mathIP) );
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
   if (enforceLocalConservation) {
@@ -351,19 +283,20 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
     solution->solve(false);
 
-    if (rank == 0)
+    if (commRank == 0)
     {
       stringstream outfile;
       if (highLiftAirfoil)
         outfile << "highlift_" << refIndex;
       else
         outfile << "naca0012_" << refIndex;
-      solution->writeToVTK(outfile.str());
+      exporter.exportSolution(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -375,7 +308,7 @@ int main(int argc, char *argv[]) {
 
     if (refIndex < numRefs)
     {
-      // refinementStrategy.refine(rank==0); // print to console on rank 0
+      // refinementStrategy.refine(commRank==0); // print to console on commRank 0
       // Try pseudo-hp adaptive
       vector<int> cellsToRefine;
       vector<int> cells_h;
