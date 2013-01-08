@@ -12,8 +12,6 @@ add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)
 
 add_executable(EricksonDriver EricksonDriver.cpp)
 
-add_executable(BendDriver BendDriver.cpp)
-
 add_executable(HemkerDriver HemkerDriver.cpp)
 
 add_executable(AirfoilDriver AirfoilDriver.cpp)
