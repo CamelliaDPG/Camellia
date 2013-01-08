@@ -186,6 +186,7 @@ int main(int argc, char *argv[]) {
   // Optional arguments (have defaults)
   bool highLiftAirfoil = args.Input("--highLift", "use high lift airfoil rather than NACA0012", false);
   args.Process();
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
