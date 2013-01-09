@@ -1,5 +1,10 @@
 project(Confusion_Jesse)
 
+add_executable(Time TransientTest.cpp)
+target_link_libraries(Time
+  Camellia
+)
+
 add_executable(Hughes Confusion_Hughes.cpp)
 target_link_libraries(Hughes 
   Camellia
@@ -20,11 +25,21 @@ target_link_libraries(Vortex
 )
 
 add_executable(Qopt QoptInflowTest.cpp)
-target_link_libraries(Vortex
+target_link_libraries(Qopt
+  Camellia
+)
+
+add_executable(QoptMesh QoptInflowSchwabSuri.cpp)
+target_link_libraries(QoptMesh
   Camellia
 )
 
 add_executable(SimpleTest SimpleTest.cpp)
 target_link_libraries(SimpleTest
+  Camellia
+)
+
+add_executable(Convection ConvectionTest.cpp)
+target_link_libraries(Convection
   Camellia
 )
