@@ -2599,12 +2599,12 @@ void Solution::condensedSolve(bool saveMemory){
     int cellID = elem->cellID();
     set<int> localFluxDofs,localFieldDofs,globalFluxDofs,globalFieldDofs;
       
-    for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){
+    for (vector<int>::iterator idIt = trialIDs.begin();idIt!=trialIDs.end();idIt++){     
       int trialID = *idIt;
       int numSides = elem->elementType()->trialOrderPtr->getNumSidesForVarID(trialID);
       vector<int> dofInds;
       if (numSides==1) { // volume element
-	vector<int> dofInds = elem->elementType()->trialOrderPtr->getDofIndices(trialID, 0);
+	dofInds = elem->elementType()->trialOrderPtr->getDofIndices(trialID, 0);
       } else {	
 	for (int sideIndex=0;sideIndex<numSides;sideIndex++){
 	  vector<int> inds =  elem->elementType()->trialOrderPtr->getDofIndices(trialID, sideIndex);
@@ -2736,6 +2736,7 @@ void Solution::condensedSolve(bool saveMemory){
     // reduce matrix
     Epetra_SerialDenseMatrix Bcopy = B;
     Epetra_SerialDenseSolver solver;
+    //    cout << "num elem field dofs, flux dofs = " << numElemFieldDofs << ", " << numElemFluxDofs << endl;
     Epetra_SerialDenseMatrix DinvB(numElemFieldDofs,numElemFluxDofs);
     solver.SetMatrix(D);
     solver.SetVectors(DinvB, Bcopy);        
