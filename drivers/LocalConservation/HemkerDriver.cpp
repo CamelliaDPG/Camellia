@@ -12,6 +12,7 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "SolutionExporter.h"
 
 #include "BuildHemkerMesh.h"
 

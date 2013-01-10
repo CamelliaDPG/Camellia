@@ -12,6 +12,8 @@ include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
 ################################
 # Add test cpp file
 add_executable( RunTests 
+  main.cpp
+  MPIUnitTestResultPrinter.cpp
   LinearTermTests.cpp 
   BasisCacheTests.cpp 
   ElementTests.cpp 
@@ -20,6 +22,7 @@ add_executable( RunTests
   TestBilinearFormFlux.cpp 
   MeshTests.cpp 
   LocalConservationTests.cpp 
+  MPIWrapperTests.cpp 
   #MultiBasisTests.cpp 
 )
 # Link test executable against gtest & gtest_main
@@ -30,8 +33,8 @@ IF( NOT DEFINED CAMELLIA_LIBRARY_NAME )
 ENDIF( NOT DEFINED CAMELLIA_LIBRARY_NAME )
 
 IF( DEFINED Trilinos_LIBRARIES ) # Nate's approach: separate libraries for Trilinos and Camellia
-    target_link_libraries(RunTests gtest gtest_main ${CAMELLIA_LIBRARY_NAME} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
+    target_link_libraries(RunTests gtest ${CAMELLIA_LIBRARY_NAME} ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES})
 ELSE()
-    target_link_libraries(RunTests gtest gtest_main ${CAMELLIA_LIBRARY_NAME})
+    target_link_libraries(RunTests gtest ${CAMELLIA_LIBRARY_NAME})
 ENDIF( DEFINED Trilinos_LIBRARIES ) 
 add_test( RunTests RunTests )

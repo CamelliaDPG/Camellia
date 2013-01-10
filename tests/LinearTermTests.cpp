@@ -1,4 +1,5 @@
 #include "LinearTermTests.h"
+#include "MeshUtilities.h"
 
 void LinearTermTests::SetUp()
 {
@@ -734,7 +735,7 @@ TEST_F(ConvectionTests, TestIntegrateMixedBasisConstants)
   int nCells = 2; // along a side
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
   vector<int> cellIDs;
@@ -789,7 +790,7 @@ TEST_F(ConvectionTests, TestIntegrateMixedBasisLinears)
   int nCells = 2; // along a side
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,convectionBF, H1Order, H1Order+pToAdd);
   ElementTypePtr elemType = mesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, mesh)); 
   vector<int> cellIDs;

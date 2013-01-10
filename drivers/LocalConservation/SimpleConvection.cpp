@@ -11,19 +11,17 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
 
-bool enforceLocalConservation = false;
-bool steady = true;
-double dt = 0.25;
-int numTimeSteps = 20; // max time steps
-double halfWidth = 1;
-int numRefs = 0;
-int H1Order = 2, pToAdd = 2;
+double halfWidth;
+int H1Order = 3, pToAdd = 2;
 
 class ScalarParamFunction : public Function {
   double _a;
@@ -75,17 +73,25 @@ class InletBC : public Function {
 };
 
 int main(int argc, char *argv[]) {
-  // Process command line arguments
-  if (argc > 1)
-    numRefs = atof(argv[1]);
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;
+  choice::Args args( argc, argv );
 #endif
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  // Required arguments
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
+  bool steady = args.Input<bool>("--steady", "run steady rather than transient");
+
+  // Optional arguments (have defaults)
+  double dt = args.Input("--dt", "time step", 0.25);
+  int numTimeSteps = args.Input("--nt", "number of time steps", 20);
+  halfWidth = args.Input("--halfWidth", "half width of inlet profile", 1.0);
+  args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -101,7 +107,7 @@ int main(int argc, char *argv[]) {
   beta.push_back(0.0);
   
   ////////////////////   BUILD MESH   ///////////////////////
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
   
@@ -118,7 +124,7 @@ int main(int argc, char *argv[]) {
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+                                                bf, H1Order, H1Order+pToAdd);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE FLOW FUNCTIONS
@@ -137,12 +143,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
   
   // v terms:
-  confusionBF->addTerm( beta * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_hat, v);
+  bf->addTerm( beta * u, - v->grad() );
+  bf->addTerm( beta_n_u_hat, v);
 
   if (!steady)
   {
-    confusionBF->addTerm( u, invDt*v );
+    bf->addTerm( u, invDt*v );
     rhs->addTerm( u_prev_time * invDt * v );
   }
   
@@ -151,10 +157,9 @@ int main(int argc, char *argv[]) {
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // robust test norm
-  IPPtr ip = Teuchos::rcp(new IP);
-  ip->addTerm(v);
-  ip->addTerm(beta*v->grad());
+  IPPtr ip = bf->graphNorm();
+  // ip->addTerm(v);
+  // ip->addTerm(beta*v->grad());
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -196,17 +201,18 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     if (steady)
     {
       solution->solve(false);
 
-      if (rank == 0)
+      if (commRank == 0)
       {
         stringstream outfile;
         outfile << "Convection_" << refIndex;
-        solution->writeToVTK(outfile.str());
+        exporter.exportSolution(outfile.str());
 
         // Check local conservation
         FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
@@ -221,6 +227,7 @@ int main(int argc, char *argv[]) {
       int timestepCount = 0;
       double time_tol = 1e-8;
       double L2_time_residual = 1e9;
+      // cout << L2_time_residual <<" "<< time_tol << timestepCount << numTimeSteps << endl;
       while((L2_time_residual > time_tol) && (timestepCount < numTimeSteps))
       {
         solution->solve(false);
@@ -228,21 +235,22 @@ int main(int argc, char *argv[]) {
         flowResidual->setSolution(solution);
         flowResidual->addSolution(prevTimeFlow, -1.0);       
         L2_time_residual = flowResidual->L2NormOfSolutionGlobal(u->ID());
-        cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
 
-        if (rank == 0)
+        if (commRank == 0)
         {
+          cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
+
           stringstream outfile;
           outfile << "TransientConvection_" << refIndex << "-" << timestepCount;
-          solution->writeToVTK(outfile.str());
+          exporter.exportSolution(outfile.str());
 
           // Check local conservation
-          FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
-          FunctionPtr source = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
-          source = invDt * source;
-          Teuchos::Tuple<double, 3> fluxImbalances = checkConservationTest(flux, source, varFactory, mesh);
-          cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-            << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+          // FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
+          // FunctionPtr source = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
+          // source = invDt * source;
+          // Teuchos::Tuple<double, 3> fluxImbalances = checkConservationTest(flux, source, varFactory, mesh);
+          // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+          //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
         }
 
         prevTimeFlow->setSolution(solution); // reset previous time solution to current time sol
@@ -251,8 +259,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (refIndex < numRefs)
-      refinementStrategy.refine(rank==0); // print to console on rank 0
-    cout << endl;
+      refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
   
   return 0;
