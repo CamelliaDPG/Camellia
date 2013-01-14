@@ -13,6 +13,13 @@
 #include "Teuchos_GlobalMPISession.hpp"
 #include "MPIWrapper.h"
 
+// for adaptive quadrature
+struct CacheInfo {
+  ElementTypePtr elemType;
+  int cellID;
+  FieldContainer<double> subCellNodes;
+};
+
 // private class SimpleSolutionFunction:
 class SimpleSolutionFunction : public Function {
   SolutionPtr _soln;
@@ -200,6 +207,134 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   }
 }
 
+// added by Jesse - adaptive quadrature rules
+double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
+  double integral = 0.0;
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+
+  vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
+
+  // build list of subcells
+  vector<CacheInfo> subCellCacheInfo;
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    ElementTypePtr elemType = (*elemIt)->elementType();
+    CacheInfo cacheInfo = {elemType,cellID,mesh->physicalCellNodesForCell(cellID)};
+    subCellCacheInfo.push_back(cacheInfo);
+  }
+
+  // adaptively refine
+  bool allConverged = false;
+  vector<CacheInfo> subCellsToCheck = subCellCacheInfo;
+  while (!allConverged){
+    allConverged = true;
+    // check relative error, tag subcells to refine
+    set<int> subCellsToRefine;    
+    for (int i = 0;i<subCellsToCheck.size();i++){
+      ElementTypePtr elemType = subCellsToCheck[i].elemType;
+      int cellID = subCellsToCheck[i].cellID;
+      FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
+      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
+      int cubEnrich = 2; // arbitrary
+      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,false,cubEnrich));
+      vector<int> cellIDs;
+      cellIDs.push_back(cellID);
+      basisCache->setPhysicalCellNodes(nodes,cellIDs,true);
+      enrichedCache->setPhysicalCellNodes(nodes,cellIDs,true);
+
+      // calculate relative error for this subcell
+      FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
+      this->integrate(cellIntegral,basisCache);
+      this->integrate(enrichedCellIntegral,enrichedCache);
+      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(cellIntegral(0)); // relative error
+      if (error > tol){
+	allConverged = false;
+	subCellsToRefine.insert(i);
+      }else{
+	integral += enrichedCellIntegral(0);
+      }
+    }
+
+    // reconstruct subcell list
+    vector<CacheInfo> newSubCells;
+    for (set<int>::iterator setIt = subCellsToRefine.begin();setIt!=subCellsToRefine.end();setIt++){
+      CacheInfo newCacheInfo = subCellsToCheck[*setIt];
+      unsigned cellTopoKey = newCacheInfo.elemType->cellTopoPtr->getKey();
+      switch (cellTopoKey){
+      case shards::Quadrilateral<4>::key:{
+	// break into 4 subcells 
+	int spaceDim = 2; int numCells = 1; // cell-by-cell 
+	
+	FieldContainer<double> oldNodes = newCacheInfo.subCellNodes;
+	oldNodes.resize(4,spaceDim);
+	FieldContainer<double> newCellNodes(numCells,4,spaceDim);
+	double ax,ay,bx,by,cx,cy,dx,dy,ex,ey;
+	ax = .5*(oldNodes(1,0)+oldNodes(0,0)); ay = .5*(oldNodes(1,1)+oldNodes(0,1));
+	bx = .5*(oldNodes(2,0)+oldNodes(1,0)); by = .5*(oldNodes(2,1)+oldNodes(1,1));
+	cx = .5*(oldNodes(3,0)+oldNodes(2,0)); cy = .5*(oldNodes(3,1)+oldNodes(2,1));
+	dx = .5*(oldNodes(3,0)+oldNodes(0,0)); dy = .5*(oldNodes(3,1)+oldNodes(0,1));
+	ex = .5*(dx+bx); ey = .5*(cy+ay);
+
+	// first cell
+	newCellNodes(0,0,0) = oldNodes(0,0);
+	newCellNodes(0,0,1) = oldNodes(0,1);
+	newCellNodes(0,1,0) = ax;
+	newCellNodes(0,1,1) = ay;
+	newCellNodes(0,2,0) = ex;
+	newCellNodes(0,2,1) = ey;
+	newCellNodes(0,3,0) = dx;
+	newCellNodes(0,3,1) = dy;
+	newCacheInfo.subCellNodes = newCellNodes;
+	newSubCells.push_back(newCacheInfo);
+
+	// second cell
+	newCellNodes(0,0,0) = ax;
+	newCellNodes(0,0,1) = ay;
+	newCellNodes(0,1,0) = oldNodes(1,0);
+	newCellNodes(0,1,1) = oldNodes(1,1);
+	newCellNodes(0,2,0) = bx;
+	newCellNodes(0,2,1) = by;
+	newCellNodes(0,3,0) = ex;
+	newCellNodes(0,3,1) = ey;
+	newCacheInfo.subCellNodes = newCellNodes;
+	newSubCells.push_back(newCacheInfo);
+
+	// third cell
+	newCellNodes(0,0,0) = ex;
+	newCellNodes(0,0,1) = ey;
+	newCellNodes(0,1,0) = bx;
+	newCellNodes(0,1,1) = by;
+	newCellNodes(0,2,0) = oldNodes(2,0);
+	newCellNodes(0,2,1) = oldNodes(2,1);
+	newCellNodes(0,3,0) = cx;
+	newCellNodes(0,3,1) = cy;
+	newCacheInfo.subCellNodes = newCellNodes;
+	newSubCells.push_back(newCacheInfo);
+	// fourth cell
+	newCellNodes(0,0,0) = dx;
+	newCellNodes(0,0,1) = dy;
+	newCellNodes(0,1,0) = ex;
+	newCellNodes(0,1,1) = ey;
+	newCellNodes(0,2,0) = cx;
+	newCellNodes(0,2,1) = cy;
+	newCellNodes(0,3,0) = oldNodes(3,0);
+	newCellNodes(0,3,1) = oldNodes(3,1);
+	newCacheInfo.subCellNodes = newCellNodes;
+	newSubCells.push_back(newCacheInfo);
+	break;	
+      }
+      default: // case shards::Triangle<3>::key:{} // covers triangles for now
+	TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized in adaptive quadrature routine; topology not implemented");
+      }
+    }
+    // reset subCell list
+    subCellsToCheck.clear();
+    subCellsToCheck = newSubCells; // new list    
+  }
+
+  return MPIWrapper::sum(integral);
+}
+
 void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache,
                          bool sumInto) {
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
@@ -296,8 +431,8 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     } else {
       this->integrate(cellIntegrals, basisCache);
     }
-    for (int cellID = 0; cellID < numCells; cellID++) {
-      integral += cellIntegrals(cellID);
+    for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+      integral += cellIntegrals(cellIndex);
     }
   }
   
