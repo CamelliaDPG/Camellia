@@ -3,6 +3,13 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+bool allSuccess(bool mySuccess)
+{
+  int mySuccessInt = mySuccess ? 0 : -1;
+  int successSum = MPIWrapper::sum(mySuccessInt);
+  return successSum == 0;
+}
+
 void MPIWrapperTests::SetUp()
 {
 }
@@ -27,6 +34,7 @@ TEST_F(MPIWrapperTests, TestEntryWiseSum)
   double maxDiff = 0;
   EXPECT_TRUE(fcsAgree(values, expectedValues, tol, maxDiff))
     << "MPIWrapperTests::testentryWiseSum() failed with maxDiff " << maxDiff << endl;
+  // EXPECT_EQ(rank, 2) << "rank " << rank << endl;
 }
 
 TEST_F(MPIWrapperTests, TestSimpleSum)
@@ -46,3 +54,13 @@ TEST_F(MPIWrapperTests, TestSimpleSum)
   EXPECT_LT(abs(sum-expectedValue), tol)
     << "MPIWrapperTests::testSimpleSum() failed: expected " << expectedValue << " but got " << sum << endl;
 }
+// 
+// TEST_F(MPIWrapperTests, TestAllSuccess)
+// {
+//   int numProcs = Teuchos::GlobalMPISession::getNProc();
+//   int rank = Teuchos::GlobalMPISession::getRank();
+//   int val = 5;
+//   if (rank == 3)
+//     val = 0;
+//   EXPECT_LT(val, 1) << "Wrong rank" << endl;
+// }

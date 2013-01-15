@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "MPIUnitTestResultPrinter.h"
+#include "ParallelUnitTestPrinter.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
 
@@ -14,9 +14,10 @@ int main(int argc, char **argv) {
   ::testing::UnitTest& unit_test = *::testing::UnitTest::GetInstance();
   ::testing::TestEventListeners& listeners = unit_test.listeners();
   ::testing::TestEventListener* default_printer = listeners.Release(listeners.default_result_printer());
-  // listeners.SetDefaultResultPrinter(new MPIUnitTestResultPrinter);
+  // listeners.SetDefaultResultPrinter(new ParallelUnitTestPrinter);
   int commRank = Teuchos::GlobalMPISession::getRank();
-  listeners.Append(new MPIUnitTestResultPrinter(commRank, default_printer) );
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  listeners.Append(new ParallelUnitTestPrinter(commRank, numProcs, default_printer) );
 
   return RUN_ALL_TESTS();
 }

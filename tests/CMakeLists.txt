@@ -13,7 +13,7 @@ include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
 # Add test cpp file
 add_executable( RunTests 
   main.cpp
-  MPIUnitTestResultPrinter.cpp
+  ParallelUnitTestPrinter.cpp
   LinearTermTests.cpp 
   BasisCacheTests.cpp 
   ElementTests.cpp 

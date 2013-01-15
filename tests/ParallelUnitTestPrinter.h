@@ -1,11 +1,18 @@
 #include "gtest/gtest.h"
 
+#include "Epetra_MpiComm.h"
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 using namespace ::testing;
 
-class MPIUnitTestResultPrinter : public TestEventListener {
+class ParallelUnitTestPrinter : public TestEventListener {
  public:
-  MPIUnitTestResultPrinter(int _commRank, TestEventListener* _default_printer) :
-    commRank(_commRank), default_printer(_default_printer) {}
+  ParallelUnitTestPrinter(int _commRank, int _numProcs, TestEventListener* _default_printer) :
+    commRank(_commRank), numProcs(_numProcs), default_printer(_default_printer) {}
 
   // The following methods override what's in the TestEventListener class.
   virtual void OnTestProgramStart(const UnitTest& /*unit_test*/) {}
@@ -23,9 +30,14 @@ class MPIUnitTestResultPrinter : public TestEventListener {
   virtual void OnTestProgramEnd(const UnitTest& /*unit_test*/) {}
 
  private:
+  // Epetra_MpiComm Comm;
   int commRank;
+  int numProcs;
   TestEventListener* default_printer;
+
   static void PrintFailedTests(const UnitTest& unit_test);
+
+  static bool allSuccess(bool mySuccess);
 
   internal::String test_case_name_;
 };

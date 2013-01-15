@@ -2626,7 +2626,9 @@ void ColoredPrintf(GTestColor color, const char* fmt, ...) {
 #else
   static const bool in_color_mode =
       ShouldUseColor(posix::IsATTY(posix::FileNo(stdout)) != 0);
-  const bool use_color = in_color_mode && (color != COLOR_DEFAULT);
+
+  // const bool use_color = in_color_mode && (color != COLOR_DEFAULT);
+  const bool use_color = true;
 #endif  // GTEST_OS_WINDOWS_MOBILE || GTEST_OS_SYMBIAN || GTEST_OS_ZOS
   // The '!= 0' comparison is necessary to satisfy MSVC 7.1.
 
