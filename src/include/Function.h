@@ -68,6 +68,9 @@ public:
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
   
   double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+
+  // adaptive quadrature
+  double integrate(Teuchos::RCP<Mesh> mesh, double tol);
   
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
