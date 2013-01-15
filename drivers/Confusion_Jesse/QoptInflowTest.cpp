@@ -266,10 +266,15 @@ int main(int argc, char *argv[]) {
   int nCells = args.Input<int>("--nCells","num cells in initial mesh",2);
 
   bool useRobustBC = args.Input<bool>("--useRobustBC", "bool flag for BC", false);
+
+  bool useAdaptiveQuadrature = args.Input<bool>("--useAdaptQuad", "bool flag for adaptive quadrature", false);
   
   int cubEnrich = args.Input<int>("--cubEnrich", "cubature enrichment degree", 0);
 
   int order = args.Input<int>("--order", "L^2 polynomial order of basis",3);
+
+  int inflowIPFlag = args.Input<int>("--inflowIPFlag", "Adds boundary part to test norm",0);
+
   int H1Order = order+1;
 
   int pToAdd = 3;
@@ -325,10 +330,21 @@ int main(int argc, char *argv[]) {
   qoptIP->addTerm( tau / eps + v->grad() );
   qoptIP->addTerm( beta * v->grad() - tau->div() );
   
-  FunctionPtr inflowRestriction = Function::constant(0.0);
-  //  inflowRestriction = Teuchos::rcp(new ElemInflowRestriction(beta));
-  inflowRestriction = Teuchos::rcp(new InflowRestriction);
-  //  qoptIP->addBoundaryTerm( inflowRestriction*(1.0/eps)*tau->dot_normal());
+  switch (inflowIPFlag){
+  case 1:{
+    FunctionPtr inflowRestriction = Teuchos::rcp(new ElemInflowRestriction(beta));
+    qoptIP->addBoundaryTerm( inflowRestriction*(1.0/eps)*tau->dot_normal());
+    break;
+  }
+  case 2:{
+    FunctionPtr inflowRestriction = Teuchos::rcp(new InflowRestriction);
+    qoptIP->addBoundaryTerm( inflowRestriction*(1.0/eps)*tau->dot_normal());
+    break;
+  }
+  default:{}
+    // do nothing
+  };
+
     
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -359,12 +375,13 @@ int main(int argc, char *argv[]) {
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+  /*
   FunctionPtr usq = u_exact*u_exact;
   double u_int = usq->integrate(mesh,cubEnrich); 
   double u_int_adapt = usq->integrate(mesh,1e-7);
   cout << "integral of u = " << u_int << ", and adaptively " << u_int_adapt << endl;
   return 0;
-
+  */
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
@@ -417,8 +434,15 @@ int main(int argc, char *argv[]) {
   u_diff = (u_soln - u_exact)*(u_soln - u_exact);
   FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
   FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-  double u_L2_error = u_diff->integrate(mesh,cubEnrich);
-  double sigma_L2_error = sig1_diff->integrate(mesh,cubEnrich) + sig2_diff->integrate(mesh,cubEnrich);
+  double quad_tol = 1e-6;
+  double u_L2_error,sigma_L2_error;
+  if (useAdaptiveQuadrature){
+    u_L2_error = u_diff->integrate(mesh,quad_tol);
+    sigma_L2_error = sig1_diff->integrate(mesh,quad_tol) + sig2_diff->integrate(mesh,quad_tol);
+  }else{
+    u_L2_error = u_diff->integrate(mesh,cubEnrich);
+    sigma_L2_error = sig1_diff->integrate(mesh,cubEnrich) + sig2_diff->integrate(mesh,cubEnrich);
+  }
   L2_error = sqrt(u_L2_error + sigma_L2_error);
   double energy_error = solution->energyErrorTotal();
   FunctionPtr total_err = u_diff + sig1_diff + sig2_diff;
@@ -475,12 +499,19 @@ int main(int argc, char *argv[]) {
     u_diff = (u_soln - u_exact)*(u_soln - u_exact);
     FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
     FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-    double u_L2_error = u_diff->integrate(mesh,cubEnrich);
-    double sigma_L2_error = sig1_diff->integrate(mesh,cubEnrich) + sig2_diff->integrate(mesh,cubEnrich);
+
+    double u_L2_error,sigma_L2_error;
+    if (useAdaptiveQuadrature){
+      u_L2_error = u_diff->integrate(mesh,quad_tol);
+      sigma_L2_error = sig1_diff->integrate(mesh,quad_tol) + sig2_diff->integrate(mesh,quad_tol);
+    }else{
+      u_L2_error = u_diff->integrate(mesh,cubEnrich);
+      sigma_L2_error = sig1_diff->integrate(mesh,cubEnrich) + sig2_diff->integrate(mesh,cubEnrich);
+    }
+
     L2_error = sqrt(u_L2_error + sigma_L2_error);
     double energy_error = solution->energyErrorTotal();
     FunctionPtr total_err = u_diff + sig1_diff + sig2_diff;
-    //    total_err->writeValuesToMATLABFile(mesh, "totalError.m");
     if (rank==0){
       //      cout << "L2 error = " << L2_error << ", energy error = " << energy_error << endl;
       cout << "Ratio of L2/energy = " << L2_error/energy_error << endl;
@@ -520,7 +551,6 @@ int main(int argc, char *argv[]) {
     }
     */
     /////////////////////////////////////////////////////////////////////////////
-
   }
 
   //  solution->condensedSolve(false);  
