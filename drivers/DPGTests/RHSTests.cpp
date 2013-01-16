@@ -7,11 +7,7 @@
 //
 
 #include "RHSTests.h"
-
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
