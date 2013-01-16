@@ -5,6 +5,9 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "CamelliaConfig.h"
+
+#include <Teuchos_GlobalMPISession.hpp>
+
 #ifdef USE_VTK
 #include "SolutionExporter.h"
 #endif
@@ -205,7 +208,7 @@ bool VectorizedBasisTestSuite::testPoisson() {
 #endif
 
     if (refIndex < 4)
-      refinementStrategy.refine(true); // print to console on rank 0
+      refinementStrategy.refine(Teuchos::GlobalMPISession::getRank()==0); // print to console on rank 0
   }
   return success;
 }
