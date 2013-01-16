@@ -70,6 +70,7 @@
 #include "LinearTermTests.h"
 #include "ScratchPadTests.h"
 #include "IncompressibleFormulationsTests.h"
+#include "ParametricFunctionTests.h"
 #include "HConvergenceStudyTests.h"
 #include "MPIWrapperTests.h"
 
@@ -150,7 +151,8 @@ void DPGTests::runTests() {
   
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-  
+
+  testSuites.push_back( Teuchos::rcp( new ParametricFunctionTests) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );

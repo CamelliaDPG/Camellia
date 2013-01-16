@@ -46,7 +46,9 @@ public:
   virtual void value(double t, double &x, double &y);
   virtual void value(double t, double &x, double &y, double &z);
   
-  static ParametricFunctionPtr remappedParametricFunction(ParametricFunctionPtr fxn, double t0, double t1);
+  static ParametricFunctionPtr line(double x0, double y0, double x1, double y1);
+  
+  static ParametricFunctionPtr remapParameter(ParametricFunctionPtr fxn, double t0, double t1);
 };
 
 #endif
