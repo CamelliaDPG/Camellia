@@ -59,6 +59,36 @@ bool ParametricFunctionTests::testParametricFunctionRefinement() {
     cout << "expected " << expected_y << " but actual y is " << actual_y << endl;
   }
   
+  // again, but with 1/3 line
+  ParametricFunctionPtr thirdLine = ParametricFunction::remapParameter(unitLine, 1.0/3.0, 2.0/3.0);
+  // t = 0
+  t = 0;
+  expected_x = 1.0/3.0; expected_y = 0;
+  thirdLine->value(t, actual_x, actual_y);
+  
+  if (actual_x != expected_x) {
+    success = false;
+    cout << "expected " << expected_x << " but actual x is " << actual_x << endl;
+  }
+  if (actual_y != expected_y) {
+    success = false;
+    cout << "expected " << expected_y << " but actual y is " << actual_y << endl;
+  }
+  
+  // t = 1
+  t = 1;
+  expected_x = 2.0/3.0; expected_y = 0;
+  thirdLine->value(t, actual_x, actual_y);
+  
+  if (actual_x != expected_x) {
+    success = false;
+    cout << "expected " << expected_x << " but actual x is " << actual_x << endl;
+  }
+  if (actual_y != expected_y) {
+    success = false;
+    cout << "expected " << expected_y << " but actual y is " << actual_y << endl;
+  }
+  
   return allSuccess(success);
 }
 
