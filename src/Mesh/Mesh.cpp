@@ -2378,6 +2378,12 @@ int Mesh::rowSizeUpperBound() {
   return maxRowSize;
 }
 
+void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap) {
+  _edgeToCurveMap = edgeToCurveMap;
+  // TODO: construct the transformation function accordingly
+  // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function
+}
+
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   ElementPtr elem = _elements[cellID];
 //  cout << "setting element type for cellID " << cellID << " (sideUpgradeOnly=" << sideUpgradeOnly << ")\n";

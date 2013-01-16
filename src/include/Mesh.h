@@ -58,6 +58,8 @@
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
 
+#include "ParametricFunction.h"
+
 class Solution;
 class Mesh;
 
@@ -119,6 +121,9 @@ class Mesh {
   vector< Teuchos::RCP<Mesh> > _registeredMeshes; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
+  
+  map< pair<int, int>, ParametricFunctionPtr > _edgeToCurveMap;
+  
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
@@ -141,6 +146,8 @@ class Mesh {
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
+  //,
+  //     map< pair<int, int>, ParametricFunctionPtr > edgeToCurveMap = map< pair<int, int>, ParametricFunctionPtr >());
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
@@ -274,6 +281,7 @@ public:
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
+  void setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
