@@ -23,6 +23,7 @@ add_executable( RunTests
   MeshTests.cpp 
   LocalConservationTests.cpp 
   MPIWrapperTests.cpp 
+  TransientTests.cpp
   #MultiBasisTests.cpp 
 )
 # Link test executable against gtest & gtest_main
