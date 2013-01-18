@@ -1,4 +1,9 @@
 #include "TransientTests.h"
+#include "CamelliaConfig.h"
+
+#ifdef USE_VTK
+#include "SolutionExporter.h"
+#endif
 
 double dt = 0.5;
 int numTimeSteps = 40;
@@ -209,10 +214,12 @@ TEST_F(TransientTests, TestProjection)
   FunctionPtr u_sqr = (u_prev - u_exact)*(u_prev - u_exact);
   double L2_error_before_ref = sqrt(u_sqr->integrate(mesh));
 
+#ifdef USE_VTK
   bool savePlots = false;
   VTKExporter exporter(solution, mesh, varFactory);
   if (savePlots)
     exporter.exportFunction(u_prev, "u_prev");
+#endif
 
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -221,8 +228,10 @@ TEST_F(TransientTests, TestProjection)
   cellsToRefine.push_back(2);
   refinementStrategy.hRefineCells(mesh, cellsToRefine);
 
+#ifdef USE_VTK
   if (savePlots)
     exporter.exportFunction(u_prev, "u_ref");
+#endif
 
   u_sqr = (u_prev - u_exact)*(u_prev - u_exact);
   double L2_error_after_ref = sqrt(u_sqr->integrate(mesh));
