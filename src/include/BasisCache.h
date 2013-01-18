@@ -131,7 +131,7 @@ private:
   int maxTestDegree();
   void createSideCaches();
 protected:
-  BasisCache() {} // for the sake of some hackish subclassing
+  BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // use testVsTest=true for test space inner product
