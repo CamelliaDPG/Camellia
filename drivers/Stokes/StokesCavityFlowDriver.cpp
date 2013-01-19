@@ -15,7 +15,7 @@
 #include "MeshPolyOrderFunction.h"
 #include "MeshTestUtility.h"
 #include "PenaltyConstraints.h"
-#include "CGSolver.h"
+//#include "CGSolver.h"
 #include "MPIWrapper.h"
 
 #ifdef HAVE_MPI
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
   int overkillPolyOrder = 7; // H1 order
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
-  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
+//  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
   
   if (usePenaltyConstraintsForDiscontinuousBC) {
     // then eps should be 0 (NO RAMP)
@@ -664,7 +664,8 @@ int main(int argc, char *argv[]) {
   if (!useCG) {
     solution->solve(useMumps);
   } else {
-    solution->solve(cgSolver);
+      cout << "WARNING: cgSolver unset.\n";
+//    solution->solve(cgSolver);
   }
   polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders_0.m");
   FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
@@ -744,7 +745,8 @@ int main(int argc, char *argv[]) {
     if (!useCG) {
       solution->solve(useMumps);
     } else {
-      solution->solve(cgSolver);
+      cout << "WARNING: cgSolver unset.\n";
+//      solution->solve(cgSolver);
     }
     // report vorticity value that's often reported in the literature
     double vort_x = 0.0, vort_y = 0.95;
