@@ -617,6 +617,8 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
 //  solution->setReportConditionNumber(true);
   if (usePenaltyConstraintsForDiscontinuousBC) {
     Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
@@ -667,6 +669,14 @@ int main(int argc, char *argv[]) {
   polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders_0.m");
   FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
   ten->writeBoundaryValuesToMATLABFile(mesh, "skeleton_0.dat");
+  
+  // report vorticity value that's often reported in the literature
+  double vort_x = 0.0, vort_y = 0.95;
+  double vorticityValue = Function::evaluate(vorticity, vort_x, vort_y);
+  if (rank==0) {
+    cout << setprecision(15) << endl;
+    cout << "vorticity at (0,0.95) = " << vorticityValue << endl;
+  }
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (compareWithOverkillMesh) {
@@ -735,6 +745,13 @@ int main(int argc, char *argv[]) {
       solution->solve(useMumps);
     } else {
       solution->solve(cgSolver);
+    }
+    // report vorticity value that's often reported in the literature
+    double vort_x = 0.0, vort_y = 0.95;
+    double vorticityValue = Function::evaluate(vorticity, vort_x, vort_y);
+    if (rank==0) {
+      cout << setprecision(15) << endl;
+      cout << "vorticity at (0,0.95) = " << vorticityValue << endl;
     }
     
     ostringstream meshOutputFileName, skeletonOutputFileName;
@@ -862,7 +879,6 @@ int main(int argc, char *argv[]) {
   }
     
   ///////// SET UP & SOLVE STREAM SOLUTION /////////
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
