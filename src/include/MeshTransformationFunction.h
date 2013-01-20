@@ -6,11 +6,11 @@
 //  Copyright (c) 2013 __MyCompanyName__. All rights reserved.
 //
 
-#ifndef Camellia_debug_MeshTransformationFunction_h
-#define Camellia_debug_MeshTransformationFunction_h
-
 #include "Function.h"
 #include "Mesh.h"
+
+#ifndef Camellia_debug_MeshTransformationFunction_h
+#define Camellia_debug_MeshTransformationFunction_h
 
 class CellTransformationFunction;
 
