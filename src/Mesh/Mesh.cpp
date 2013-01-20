@@ -1539,7 +1539,7 @@ Epetra_Map Mesh::getPartitionMap() {
   Epetra_Map partMap(numGlobalDofs, localDofsSize, myGlobalIndices, indexBase, Comm);
   
   if (localDofsSize!=0){
-    delete myGlobalIndices;
+    delete[] myGlobalIndices;
   }
   return partMap;
 }
