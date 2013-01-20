@@ -44,7 +44,7 @@
 
 #include "Solution.h"
 
-#include "MeshTransformationFunction.cpp"
+#include "MeshTransformationFunction.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
