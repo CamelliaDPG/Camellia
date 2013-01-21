@@ -44,6 +44,8 @@
 
 #include "Solution.h"
 
+#include "MeshTransformationFunction.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 #ifdef HAVE_MPI
@@ -1537,7 +1539,7 @@ Epetra_Map Mesh::getPartitionMap() {
   Epetra_Map partMap(numGlobalDofs, localDofsSize, myGlobalIndices, indexBase, Comm);
   
   if (localDofsSize!=0){
-    delete myGlobalIndices;
+    delete[] myGlobalIndices;
   }
   return partMap;
 }
@@ -2378,10 +2380,52 @@ int Mesh::rowSizeUpperBound() {
   return maxRowSize;
 }
 
+vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID) {
+  vector< ParametricFunctionPtr > edges;
+  ElementPtr cell = getElement(cellID);
+  int numSides = cell->elementType()->cellTopoPtr->getSideCount();
+  int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
+  vector<int> vertices = _verticesForCellID[cellID];
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    int v0 = vertices[sideIndex];
+    int v1 = vertices[(sideIndex+1)%numSides];
+    pair<int, int> edge = make_pair(v0, v1);
+    pair<int, int> reverse_edge = make_pair(v1, v0);
+    if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() ) {
+      edges.push_back(_edgeToCurveMap[edge]);
+    } else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
+      // TODO: make ParametricFunctions reversible (swap t=0 and t=1)
+    } else {
+      double x0 = _vertices[v0](0), y0 = _vertices[v0](1);
+      double x1 = _vertices[v1](0), y1 = _vertices[v1](1);
+      edges.push_back(ParametricFunction::line(x0, y0, x1, y1));
+    }
+  }
+  return edges;
+}
+
 void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap) {
   _edgeToCurveMap = edgeToCurveMap;
-  // TODO: construct the transformation function accordingly
-  // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function
+  map< pair<int, int>, ParametricFunctionPtr >::iterator edgeIt;
+  set< int > cellIDsWithCurves;
+  for (edgeIt = _edgeToCurveMap.begin(); edgeIt != _edgeToCurveMap.end(); edgeIt++) {
+    pair<int, int> edge = edgeIt->first;
+    ParametricFunctionPtr curve = edgeIt->second;
+    if (_edgeToCellIDs.find(edge) == _edgeToCellIDs.end() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
+    }
+    if (_edgeToCellIDs[edge].size() != 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setting curves along broken edges not supported.  Should set for each piece separately.");
+    }
+    // if we get here, exactly one cellID
+    int cellID = _edgeToCellIDs[edge][0].first; // cellID, sideIndex
+    cellIDsWithCurves.insert(cellID);
+  }
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, cellIDsWithCurves));
+  // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function accordingly
 }
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {

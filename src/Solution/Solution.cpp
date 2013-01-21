@@ -3535,7 +3535,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
 
   if (localDofsSize!=0){
-    delete myGlobalIndices;
+    delete[] myGlobalIndices;
   }
   return partMap;
 }

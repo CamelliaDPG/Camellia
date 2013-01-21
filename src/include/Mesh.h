@@ -58,6 +58,7 @@
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
 
+#include "Function.h"
 #include "ParametricFunction.h"
 
 class Solution;
@@ -123,6 +124,7 @@ class Mesh {
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
   map< pair<int, int>, ParametricFunctionPtr > _edgeToCurveMap;
+  FunctionPtr _transformationFunction; // for dealing with those curves
   
   void buildTypeLookups();
   void buildLocalToGlobalMap();
@@ -283,6 +285,8 @@ public:
   
   void setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
+  
+  vector< ParametricFunctionPtr > parametricEdgesForCell(int cellID);
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
   
