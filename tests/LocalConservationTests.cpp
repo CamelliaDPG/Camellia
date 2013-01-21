@@ -141,3 +141,18 @@ TEST_F(LocalConservationTests, TestStandardDPG)
   //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
   EXPECT_LT(fluxImbalances[0], 1e-14) << "Maximum flux imbalance is too large";
 }
+
+TEST_F(LocalConservationTests, TestConservativeDPG)
+{
+  solution->lagrangeConstraints()->addConstraint(beta_n_u_hat == f);
+  solution->solve(false);
+// #ifdef USE_VTK
+//   VTKExporter exporter(solution, mesh, varFactory);
+//   exporter.exportSolution("Conservation");
+// #endif
+  FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
+  Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh);
+  // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+  //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+  EXPECT_LT(fluxImbalances[0], 1e-14) << "Maximum flux imbalance is too large";
+}
