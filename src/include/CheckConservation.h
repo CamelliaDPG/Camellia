@@ -7,7 +7,7 @@
 
 #include <Teuchos_Tuple.hpp>
 
-Teuchos::Tuple<double, 3> checkConservationTest(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh)
+Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 5)
 {
   double maxMassFluxIntegral = 0.0;
   double totalMassFlux = 0.0;
@@ -19,75 +19,22 @@ Teuchos::Tuple<double, 3> checkConservationTest(FunctionPtr flux, FunctionPtr so
     int cellID = elem->cellID();
     ElementTypePtr elemType = elem->elementType();
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes,*(elemType->cellTopoPtr), *(elemType->trialOrderPtr), 10, true) );
-    FieldContainer<double> surfaceIntegral(1);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
     FieldContainer<double> volumeIntegral(1);
     source->integrate(volumeIntegral, basisCache, true);
     int numSides = basisCache->cellTopology().getSideCount();
-    bool isSide = basisCache->getSideBasisCache(0)->isSideCache();
+    double surfaceIntegral = 0;
     for (int sideIndex = 0; sideIndex < numSides; sideIndex++)
-      flux->integrate(surfaceIntegral, basisCache->getSideBasisCache(sideIndex), true);
-    double massFlux = surfaceIntegral(0) + volumeIntegral(0);
+    {
+      FieldContainer<double> sideIntegral(1);
+      flux->integrate(sideIntegral, basisCache->getSideBasisCache(sideIndex), true);
+      surfaceIntegral += sideIntegral(0);
+    }
+    double massFlux = surfaceIntegral - volumeIntegral(0);
 
     maxMassFluxIntegral = max(abs(massFlux), maxMassFluxIntegral);
     totalMassFlux += massFlux;
     totalAbsMassFlux += abs( massFlux );
-  }
-
-  Teuchos::Tuple<double, 3> fluxImbalances = Teuchos::tuple(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
-
-  return fluxImbalances;
-}
-
-Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int fakeTestOrder = 3)
-{
-  // Check conservation by testing against one
-  VarPtr testOne = varFactory.testVar("1", CONSTANT_SCALAR);
-  // Create a fake bilinear form for the testing
-  BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-  // Define our mass flux
-  LinearTermPtr fluxTerm = flux * testOne;
-  LinearTermPtr sourceTerm = source * testOne;
-
-  Teuchos::RCP<shards::CellTopology> quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-  DofOrderingFactory dofOrderingFactory(fakeBF);
-  DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-
-  int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-  vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-  map<int, double> massFluxIntegral; // cellID -> integral
-  double maxMassFluxIntegral = 0.0;
-  double totalMassFlux = 0.0;
-  double totalAbsMassFlux = 0.0;
-  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemType = *elemTypeIt;
-    vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
-    for (int i=0; i<elems.size(); i++) {
-      cellIDs.push_back(elems[i]->cellID());
-    }
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-    // FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-    FieldContainer<double> surfaceIntegrals(elems.size(),testOrdering->totalDofs());
-    FieldContainer<double> volumeIntegrals(elems.size(),testOrdering->totalDofs());
-    // massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    fluxTerm->integrate(surfaceIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    sourceTerm->integrate(volumeIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      // pick out the ones for testOne:
-      massFluxIntegral[cellID] = surfaceIntegrals(i,testOneIndex) + volumeIntegrals(i,testOneIndex);
-    }
-    // find the largest:
-    for (int i=0; i<elems.size(); i++) {
-      int cellID = cellIDs[i];
-      maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      totalMassFlux += massFluxIntegral[cellID];
-      totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-    }
   }
 
   Teuchos::Tuple<double, 3> fluxImbalances = Teuchos::tuple(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
