@@ -258,6 +258,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();     
+
+  setup();
+  if (testGalerkinOrthogonalityVectorValued()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
   
 }
 
@@ -676,7 +683,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   convectionBF->addTerm( beta_n_u, v);
 
   // define nodes for mesh
-  int order = 0;
+  int order = 2;
   int H1Order = order+1; int pToAdd = 1;
   
   // create a pointer to a new mesh:
@@ -741,7 +748,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       success = false;
     }
   }
-  // just test fluxes ON INTERNAL SKELETON here (by merit of the integralOfJump routine returning 0 for boundaries)
+  // just test fluxes ON INTERNAL SKELETON here
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
     for (int sideIndex = 0;sideIndex < 4;sideIndex++){
@@ -753,28 +760,175 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
         vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
 
 	solnPerturbation->clear();
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);
-	
+	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
 
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
         FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
         double jump = gradient->integrate(mesh,10);
-	//        double jump = gradient->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-        //	double jump = gradient->integralOfJump(mesh,10);
-        //	cout << "Jump for dof " << globalDofIndex << " is " << jump << endl;
         if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
           cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
           cout << dofInfoString(infoMap[globalDofIndex]);
-          /*
-           FunctionPtr dfn = Function::solution(beta_n_u,solnPerturbation);
-           FunctionPtr fluxTerm = dfn*err_rep_map[v->ID()];
-           double secondJump = fluxTerm->integralOfJump(mesh,(*elemIt)->cellID(),sideIndex,10);
-           cout << "second jump check = " << jump << endl;
-           
-           err_rep_map[v->ID()]->writeBoundaryValuesToMATLABFile(mesh,"err_rep_test.dat");
-           err_rep_map[v->ID()]->writeValuesToMATLABFile(mesh,"err_rep_test.m");
-           fluxTerm->writeBoundaryValuesToMATLABFile(mesh,"fn.dat");
-           */
+          success = false;
+        }
+      }
+    }
+  }
+
+  return success;
+}
+
+
+bool ScratchPadTests::testGalerkinOrthogonalityVectorValued(){
+  double tol = 1e-11;
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  VarPtr tau = varFactory.testVar("tau", HDIV);
+  
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  double eps = 1e-1; // should avoid robustness issues
+  FunctionPtr n = Function::normal();
+  // v terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(-uhat, tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( beta * u, - v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+
+  // robust test norm
+  IPPtr ip = confusionBF->graphNorm();
+
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 1;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(4, confusionBF, H1Order, H1Order+pToAdd);
+  
+  ////////////////////   SOLVE   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = Function::constant(1.0);
+  rhs->addTerm(f*v); 
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp(new UnitSquareBoundary);
+  bc->addDirichlet(uhat, squareBoundary, Function::constant(0.0));
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution->solve(false);
+
+  FunctionPtr uFxn = Function::solution(u, solution);
+  FunctionPtr fnhatFxn = Function::solution(beta_n_u_minus_sigma_n,solution);
+  FunctionPtr s1Fxn = Function::solution(sigma1, solution);
+  FunctionPtr s2Fxn = Function::solution(sigma2, solution);
+  FunctionPtr uhatFxn = Function::solution(uhat,solution);
+  vector<double> e1(2),e2(2);
+  e1[0] = 1; e2[1] = 1;
+  FunctionPtr sigma = s1Fxn*e1+s2Fxn*e2;
+
+  // make residual for riesz representation function
+  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
+  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
+  residual->addTerm(fnhatFxn*v - uFxn*(beta*v->grad()) + sigma*v->grad() - f*v);
+  residual->addTerm(uhatFxn*tau->dot_normal() + (1/eps)*sigma*tau + uFxn*tau->div());
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  riesz->computeRieszRep();
+  map<int,FunctionPtr> err_rep_map;
+  err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
+  err_rep_map[tau->ID()] = Teuchos::rcp(new RepFunction(tau,riesz));
+
+  ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
+
+  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
+  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+
+  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  
+  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
+       mapIt != infoMap.end(); mapIt++) {
+    int dofIndex = mapIt->first;
+    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
+    // create perturbation in direction du
+    solnPerturbation->clear(); // clear all solns
+    // set each corresponding local dof to 1.0
+    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+      DofInfo info = *dofInfoIt;
+      FieldContainer<double> solnCoeffs(info.basisCardinality);
+      solnCoeffs(info.basisOrdinal) = 1.0;
+      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
+    }
+      
+    LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
+    FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
+    double grad = gradient->integrate(mesh,10);
+    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
+      cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
+      cout << dofInfoString(infoMap[dofIndex]);
+      success = false;
+    }
+  }
+  // just test fluxes ON INTERNAL SKELETON here
+  vector<ElementPtr> elems = mesh->activeElements();
+  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
+    for (int sideIndex = 0;sideIndex < 4;sideIndex++){
+      ElementPtr elem = *elemIt;
+      ElementTypePtr elemType = elem->elementType();
+      vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u_minus_sigma_n->ID(), sideIndex);
+      for (int i = 0;i<localDofIndices.size();i++){
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+
+	solnPerturbation->clear();
+	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+
+        LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // boundary part only if flux
+        double jump = gradient->integrate(mesh,10);
+        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
+          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
+          cout << dofInfoString(infoMap[globalDofIndex]);
+          success = false;
+        }
+      }
+      localDofIndices = elemType->trialOrderPtr->getDofIndices(uhat->ID(), sideIndex);
+      for (int i = 0;i<localDofIndices.size();i++){
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
+        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+
+	solnPerturbation->clear();
+	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+
+        LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
+        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // boundary part only if flux
+        double jump = gradient->integrate(mesh,10);
+        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
+          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
+          cout << dofInfoString(infoMap[globalDofIndex]);
           success = false;
         }
       }
