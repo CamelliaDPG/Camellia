@@ -1,72 +1,158 @@
 #include "LocalConservationTests.h"
+#include "CamelliaConfig.h"
+#include "CheckConservation.h"
 
-#include "InnerProductScratchPad.h"
-#include "Mesh.h"
+#ifdef USE_VTK
+#include "SolutionExporter.h"
+#endif
 
-// void SteadyConservationTests::SetUp()
-// {
-//   cp.epsilon = 1.0;
-//   cp.checkLocalConservation = true;
-//   cp.printLocalConservation = false;
-//   cp.enforceLocalConservation = true;
-//   vector<double> beta;
-//   beta.push_back(2.0);
-//   beta.push_back(1.0);
-//   cp.defineVariables();
-//   cp.beta = beta;
-//   cp.defineBilinearForm(cp.beta);
-//   cp.setRobustZeroMeanIP(cp.beta);
-//   cp.defineRightHandSide();
-//   cp.defineBoundaryConditions();
-//   cp.defineMesh();
-// }
+// double dt = 0.5;
+// double halfWidth = 1.0;
+
+class ScalarParamFunction : public Function {
+  double _a;
+  public:
+  ScalarParamFunction(double a) : Function(0){
+    _a = a;
+  }
+  void set_param(double a){
+    _a = a;
+  }
+  double get_param(){
+    return _a;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    values.initialize(_a);
+  }
+};
+
+class LeftBoundary : public SpatialFilter {
+  public:
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      return (abs(x) < tol);
+    }
+};
+
+// // boundary value for sigma_n
+// class InletBC : public Function {
+//   public:
+//     InletBC() : Function(0) {}
+//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//       int numCells = values.dimension(0);
+//       int numPoints = values.dimension(1);
 // 
-// TEST_F(SteadyConservationTests, TestZeroMeanTerm)
-// {
-//   cp.H1Order = 1;
-//   cp.pToAdd = 0;
-//   cp.ip = Teuchos::rcp(new IP());
-//   cp.ip->addZeroMeanTerm( cp.v );
-//   cp.defineMesh();
-//   ElementTypePtr elemType = cp.mesh->elementTypes()[0];
-//   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, cp.mesh, true) );
-//   FieldContainer<double> ipMat(1, elemType->testOrderPtr->totalDofs(), elemType->testOrderPtr->totalDofs());
-//   vector<int> vIndices = elemType->testOrderPtr->getDofIndices(cp.v->ID());
-//   vector<int> cellIDs;
-//   cellIDs.push_back(0); 
-//   bool createSideCacheToo = false;
-// 
-//   basisCache->setPhysicalCellNodes(cp.mesh->physicalCellNodes(elemType), cellIDs, createSideCacheToo);
-//   cp.ip->computeInnerProductMatrix(ipMat, elemType->testOrderPtr, basisCache);
-//   for (int i=0; i < vIndices.size(); i++)
-//     for (int j=0; j < vIndices.size(); j++)
-//       EXPECT_NEAR(1./16., ipMat(0, vIndices[i], vIndices[j]), 1e-15);
-// }
-// 
-// TEST_F(SteadyConservationTests, TestLocalConservation)
-// {
-//   char *argv[11] = {"./RunTests"};
-//   cp.solveSteady(1, argv);
-//   double tol = 1e-14;
-//   EXPECT_LE(cp.fluxImbalances[0], tol);
-//   EXPECT_LE(cp.fluxImbalances[1], tol);
-//   EXPECT_LE(cp.fluxImbalances[2], tol);
-// }
-// 
-// void TransientConservationTests::SetUp()
-// {
-//   cp.epsilon = 1.0;
-//   cp.checkLocalConservation = true;
-//   cp.printLocalConservation = false;
-//   cp.enforceLocalConservation = true;
-//   vector<double> beta;
-//   beta.push_back(2.0);
-//   beta.push_back(1.0);
-//   cp.defineVariables();
-//   cp.beta = beta;
-//   cp.defineBilinearForm(cp.beta);
-//   cp.setRobustZeroMeanIP(cp.beta);
-//   cp.defineRightHandSide();
-//   cp.defineBoundaryConditions();
-//   cp.defineMesh();
-// }
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         double xCenter = 0;
+//         double yCenter = 0;
+//         int nPts = 0;
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           xCenter += x;
+//           yCenter += y;
+//           nPts++;
+//         }
+//         xCenter /= nPts;
+//         yCenter /= nPts;
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           if (abs(y) <= halfWidth && abs(yCenter) < halfWidth)
+//             values(cellIndex, ptIndex) = 1.0;
+//           else
+//             values(cellIndex, ptIndex) = 0.0;
+//         }
+//       }
+//     }
+// };
+
+void LocalConservationTests::SetUp()
+{
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  beta_n_u_hat = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   BUILD MESH   ///////////////////////
+  bf = Teuchos::rcp( new BF(varFactory) );
+  int H1Order = 3, pToAdd = 2;
+  // define nodes for mesh
+  FieldContainer<double> meshBoundary(4,2);
+  
+  meshBoundary(0,0) =  0.0; // x1
+  meshBoundary(0,1) = -2.0; // y1
+  meshBoundary(1,0) =  4.0;
+  meshBoundary(1,1) = -2.0;
+  meshBoundary(2,0) =  4.0;
+  meshBoundary(2,1) =  2.0;
+  meshBoundary(3,0) =  0.0;
+  meshBoundary(3,1) =  2.0;
+
+  int horizontalCells = 4, verticalCells = 4;
+  
+  // create a pointer to a new mesh:
+  mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+                                                bf, H1Order, H1Order+pToAdd);
+
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  
+  // v terms:
+  bf->addTerm( beta * u, - v->grad() );
+  bf->addTerm( beta_n_u_hat, v);
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+  f = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+  rhs->addTerm( f * v );
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+  IPPtr ip = bf->graphNorm();
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
+  // FunctionPtr u1 = Teuchos::rcp( new InletBC );
+  FunctionPtr u1 = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  bc->addDirichlet(beta_n_u_hat, lBoundary, -u1);
+
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+}
+
+TEST_F(LocalConservationTests, TestStandardDPG)
+{
+  solution->solve(false);
+// #ifdef USE_VTK
+//   VTKExporter exporter(solution, mesh, varFactory);
+//   exporter.exportSolution("Conservation");
+// #endif
+  FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
+  Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh);
+  // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+  //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+  EXPECT_LT(fluxImbalances[0], 1e-14) << "Maximum flux imbalance is too large";
+}
+
+TEST_F(LocalConservationTests, TestConservativeDPG)
+{
+  solution->lagrangeConstraints()->addConstraint(beta_n_u_hat == f);
+  solution->solve(false);
+// #ifdef USE_VTK
+//   VTKExporter exporter(solution, mesh, varFactory);
+//   exporter.exportSolution("Conservation");
+// #endif
+  FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
+  Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh);
+  // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+  //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+  EXPECT_LT(fluxImbalances[0], 1e-14) << "Maximum flux imbalance is too large";
+}

@@ -6,6 +6,10 @@ add_executable(RotatingCylinder RotatingCylinder.cpp)
 
 add_executable(ConfusionDriver ConfusionDriver.cpp)
 
+add_executable(SkewedInnerLayer SkewedInnerLayer.cpp)
+
+add_executable(DiscontinuousSource DiscontinuousSource.cpp)
+
 add_executable(SimpleConfusion SimpleConfusion.cpp)
 
 add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)
