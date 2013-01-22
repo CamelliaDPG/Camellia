@@ -19,7 +19,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
   bool testSimpleSolve();
-  
+  bool testSolveMultipleRHS();
   std::string testSuiteName();
 };
 
