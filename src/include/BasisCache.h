@@ -68,6 +68,7 @@ typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
 private:
+  int _maxCubatureDegree;
   int _numCells, _spaceDim;
   int _numSides;
   bool _isSideCache;
@@ -184,11 +185,15 @@ public:
   void setSideNormals(FieldContainer<double> &sideNormals);
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
   
+  int getMaxCubatureDegree();
+  
   int getSideIndex(); // -1 if not sideCache
   
   int getSpaceDim();
   
-  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
+  void setMaxCubatureDegree(int value);
+  
+  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation, int degree);
   
   // static convenience constructors:
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,

@@ -22,31 +22,26 @@ class ParametricFunction {
   
   double _t0, _t1;
   
-  double remap(double t) {
-    // want to map (0,1) to (_t0,_t1)
-    return _t0 + t * (_t1 - _t0);
-  }
+  double remap(double t);
 protected:
-  ParametricFunction(ParametricFunctionPtr fxn, double t0, double t1) {
-    _underlyingFxn = fxn;
-    _t0 = t0;
-    _t1 = t1;
-  }
+  ParametricFunction(ParametricFunctionPtr fxn, double t0, double t1);
   
-  ParametricFunctionPtr underlyingFunction() {
-    return _underlyingFxn;
-  }
+  ParametricFunctionPtr underlyingFunction();
 public:
-  ParametricFunction() {
-    _t0 = 0;
-    _t1 = 1;
-  }
+  ParametricFunction();
   // override one of these, according to the space dimension
   virtual void value(double t, double &x);
   virtual void value(double t, double &x, double &y);
   virtual void value(double t, double &x, double &y, double &z);
   
   static ParametricFunctionPtr line(double x0, double y0, double x1, double y1);
+  
+  static ParametricFunctionPtr circle(double r, double x0, double y0);
+  static ParametricFunctionPtr circularArc(double r, double x0, double y0, double theta0, double theta1);
+  
+  static std::vector< ParametricFunctionPtr > referenceCellEdges(unsigned cellTopoKey);
+  static std::vector< ParametricFunctionPtr > referenceQuadEdges();
+  static std::vector< ParametricFunctionPtr > referenceTriangleEdges();
   
   static ParametricFunctionPtr remapParameter(ParametricFunctionPtr fxn, double t0, double t1);
 };

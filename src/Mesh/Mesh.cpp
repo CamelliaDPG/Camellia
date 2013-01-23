@@ -1,6 +1,6 @@
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original Version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -512,6 +512,8 @@ void Mesh::addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2)
 }
 
 void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vector< vector< pair< int, int> > > &childrenForSides) {
+  // childrenForSides: key is parent's side index, value is (child index in parent, child's side index for the same side)
+  
   // probably the first step is to remove the parent's edges.  We will add them back in through the children...
   // second step is to iterate through the children, calling addElement for each once we figure out the right type
   // third step: for neighbors adjacent to more than one child, either assign a multi-basis, or make those neighbor's children our neighbors...
@@ -602,6 +604,37 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
     ElementPtr child = addElement(children[childIndex], childType);
     childCellIDs.push_back( child->cellID() );
     parent->addChild(child);
+  }
+  
+  // handle any broken curved edges
+  set<int> childrenWithCurvedEdges;
+  for (int sideIndex=0; sideIndex < numSides; sideIndex++) {
+    int numChildrenForSide = childrenForSides[sideIndex].size();
+    if (numChildrenForSide==1) continue; // unbroken edge: no treatment necessary
+    int v0 = parentVertices[sideIndex];
+    int v1 = parentVertices[ (sideIndex+1) % numVertices];
+    pair<int,int> edge = make_pair(v0, v1);
+    if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end()) {
+      // then define the new curves
+      double child_t0 = 0.0;
+      double increment = 1.0 / numChildrenForSide;
+      for (int i=0; i<numChildrenForSide; i++) {
+        int childIndex = childrenForSides[sideIndex][i].first;
+        int childSideIndex = childrenForSides[sideIndex][i].second;
+        ElementPtr child = parent->getChild(childIndex);
+        // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
+        ParametricFunctionPtr parentCurve = _edgeToCurveMap[edge];
+        ParametricFunctionPtr childCurve = ParametricFunction::remapParameter(parentCurve, child_t0, child_t0 + increment);
+        vector<int> childVertices = _verticesForCellID[child->cellID()];
+        pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)%child->numSides()] );
+        _edgeToCurveMap[childEdge] = childCurve;
+        childrenWithCurvedEdges.insert(child->cellID());
+      }
+    }
+  }
+  
+  if (_transformationFunction.get()) {
+    _transformationFunction->updateCells(childrenWithCurvedEdges);
   }
   
   // check parent's neighbors along each side: if they are unbroken, then we need to assign an appropriate MultiBasis
@@ -1477,6 +1510,10 @@ ElementPtr Mesh::getActiveElement(int index) {
   return _activeElements[index];
 }
 
+int Mesh::getDimension() {
+  return 2; // all that's supported for now
+}
+
 DofOrderingFactory & Mesh::getDofOrderingFactory() {
   return _dofOrderingFactory;
 }
@@ -1498,12 +1535,11 @@ void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                                                               varIDsToUpgrade,parentSideIndexInNeighbor);
 }
 
+// this is likely cruft: there's a version of this in Solution...
 Epetra_Map Mesh::getPartitionMap() {
   int rank = 0;
-  int numProcs = 1;
 #ifdef HAVE_MPI
   rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
 #else
   Epetra_SerialComm Comm;
@@ -1564,6 +1600,15 @@ void Mesh::getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementP
                                                           varIDsToUpgrade,parentSideIndex);
   
 //  cout << "childTrialOrdering after upgrading side:\n" << *originalChildOrdering;
+}
+
+FunctionPtr Mesh::getTransformationFunction() {
+  // will be NULL for meshes without edge curves defined
+  
+  // for now, we recompute the transformation function each time the edge curves get updated
+  // we might later want to do something lazier, updating/creating it here if it's out of date
+  
+  return _transformationFunction;
 }
 
 int Mesh::globalDofIndex(int cellID, int localDofIndex) {
@@ -2267,6 +2312,7 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
   //   c. Loop through sides, calling matchNeighbor for each
   
   // 1. Loop through cellIDsForPRefinements:
+  set<int> upgradedCellsWithCurves;
   set<int>::const_iterator cellIt;
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
@@ -2315,8 +2361,16 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
       (*solutionIt)->projectOldCellOntoNewCells(cellID,oldElemType,childIDs);
     }
     _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
+    if (_cellIDsWithCurves.find(cellID) != _cellIDsWithCurves.end()) {
+      upgradedCellsWithCurves.insert((cellID));
+    }
   }
   rebuildLookups();
+  
+  // recompute the transformation function for the affected curvilinear cells
+  if (_transformationFunction.get()) {
+    _transformationFunction->updateCells(upgradedCellsWithCurves);
+  }
   
   // now discard any old coefficients
   for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
@@ -2380,7 +2434,7 @@ int Mesh::rowSizeUpperBound() {
   return maxRowSize;
 }
 
-vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID) {
+vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool neglectCurves) {
   vector< ParametricFunctionPtr > edges;
   ElementPtr cell = getElement(cellID);
   int numSides = cell->elementType()->cellTopoPtr->getSideCount();
@@ -2392,16 +2446,24 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID) {
     int v1 = vertices[(sideIndex+1)%numSides];
     pair<int, int> edge = make_pair(v0, v1);
     pair<int, int> reverse_edge = make_pair(v1, v0);
-    if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() ) {
-      edges.push_back(_edgeToCurveMap[edge]);
+    ParametricFunctionPtr edgeFxn;
+    
+    double x0 = _vertices[v0](0), y0 = _vertices[v0](1);
+    double x1 = _vertices[v1](0), y1 = _vertices[v1](1);
+    
+    ParametricFunctionPtr straightEdgeFxn = ParametricFunction::line(x0, y0, x1, y1);
+    
+    if (neglectCurves) {
+      edgeFxn = straightEdgeFxn;
+    } if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() ) {
+      edgeFxn = _edgeToCurveMap[edge];
     } else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
       // TODO: make ParametricFunctions reversible (swap t=0 and t=1)
     } else {
-      double x0 = _vertices[v0](0), y0 = _vertices[v0](1);
-      double x1 = _vertices[v1](0), y1 = _vertices[v1](1);
-      edges.push_back(ParametricFunction::line(x0, y0, x1, y1));
+      edgeFxn = straightEdgeFxn;
     }
+    edges.push_back(edgeFxn);
   }
   return edges;
 }
@@ -2409,7 +2471,8 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID) {
 void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap) {
   _edgeToCurveMap = edgeToCurveMap;
   map< pair<int, int>, ParametricFunctionPtr >::iterator edgeIt;
-  set< int > cellIDsWithCurves;
+  _cellIDsWithCurves.clear();
+  
   for (edgeIt = _edgeToCurveMap.begin(); edgeIt != _edgeToCurveMap.end(); edgeIt++) {
     pair<int, int> edge = edgeIt->first;
     ParametricFunctionPtr curve = edgeIt->second;
@@ -2421,10 +2484,38 @@ void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > 
     }
     // if we get here, exactly one cellID
     int cellID = _edgeToCellIDs[edge][0].first; // cellID, sideIndex
-    cellIDsWithCurves.insert(cellID);
+    if (! _elements[cellID]->isActive()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edgeToCurveMap must involve only active elements (no h-refined parent elements allowed)");
+    }
+    
+    // check that the curve agrees with the vertices in the mesh:
+    FieldContainer<double> v0 = _vertices[edge.first];
+    FieldContainer<double> v1 = _vertices[edge.second];
+
+    int spaceDim = v0.size();
+    FieldContainer<double> curve0(spaceDim);
+    FieldContainer<double> curve1(spaceDim);
+    curve->value(0, curve0(0), curve0(1));
+    curve->value(1, curve1(0), curve1(1));
+    double maxDiff = 0;
+    double tol = 1e-14;
+    for (int d=0; d<spaceDim; d++) {
+      maxDiff = max(maxDiff, abs(curve0(d)-v0(d)));
+      maxDiff = max(maxDiff, abs(curve1(d)-v1(d)));
+    }
+    if (maxDiff > tol) {
+      cout << "Error: curve's endpoints do not match edge vertices (maxDiff in coordinates " << maxDiff << ")" << endl;
+      cout << "v0:\n" << v0;
+      cout << "curve0:\n" << curve0;
+      cout << "v1:\n" << v1;
+      cout << "curve1:\n" << curve1;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Curve does not match vertices");
+    }
+    
+    _cellIDsWithCurves.insert(cellID);
   }
   MeshPtr thisPtr = Teuchos::rcp(this, false);
-  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, cellIDsWithCurves));
+  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, _cellIDsWithCurves));
   // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function accordingly
 }
 
@@ -2579,16 +2670,16 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
   for (int i=0;i<_numPartitions;i++){
     vector< ElementPtr > elemsInPartition = _partitions[i];
     for (int l=0;l<spaceDim;l++){
-
+      
       for (int j=0;j<elemsInPartition.size();j++){
-	FieldContainer<double> vertices; // gets resized inside verticesForCell
-	verticesForCell(vertices, elemsInPartition[j]->cellID());  //vertices(numVertsForCell,dim)
-	int numVertices = vertices.dimension(0);
-	
-	// write vertex coordinates to file	
-	for (int k=0;k<numVertices;k++){	  
-	  myFile << "verts{"<< i+1 <<","<< l+1 <<"}("<< k+1 <<","<< j+1 <<") = "<< vertices(k,l) << ";"<<endl; // verts{numPartitions,spaceDim}
-	}
+        FieldContainer<double> vertices; // gets resized inside verticesForCell
+        verticesForCell(vertices, elemsInPartition[j]->cellID());  //vertices(numVertsForCell,dim)
+        int numVertices = vertices.dimension(0);
+        
+        // write vertex coordinates to file
+        for (int k=0;k<numVertices;k++){
+          myFile << "verts{"<< i+1 <<","<< l+1 <<"}("<< k+1 <<","<< j+1 <<") = "<< vertices(k,l) << ";"<<endl; // verts{numPartitions,spaceDim}
+        }
       }
       
     }

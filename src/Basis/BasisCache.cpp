@@ -1,3 +1,4 @@
+
 /*
  *  BasisCache.cpp
  *
@@ -38,6 +39,7 @@
 #include "BasisEvaluation.h"
 #include "Mesh.h"
 #include "Function.h"
+#include "MeshTransformationFunction.h"
 
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
@@ -45,6 +47,18 @@ typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
+
+int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
+  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
+  if (cellTopoKey == shards::Line<2>::key)
+    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+  if (cellTopoKey == shards::Quadrilateral<4>::key)
+    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+  else if (cellTopoKey == shards::Triangle<3>::key)
+    return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
+  else
+    return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
+}
 
 // init is for volume caches.
 void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering,
@@ -57,6 +71,8 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   // changed the following line from maxBasisDegree: we were generally overintegrating...
   _cubDegree = trialOrdering.maxBasisDegreeForVolume() + maxTestDegree;
   _cubDegree *= _cubatureMultiplier;
+  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo.getKey());
   _maxTestDegree = maxTestDegree;
   DefaultCubatureFactory<double> cubFactory;
   Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree); 
@@ -111,6 +127,16 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   _cubatureMultiplier = cubatureMultiplier;
   
   _mesh = mesh;
+  if (_mesh.get()) {
+    _transformationFxn = _mesh->getTransformationFunction();
+    _composeTransformationFxnWithMeshTransformation = true;
+    if (_transformationFxn.get()) {
+      int maxDegree = ((MeshTransformationFunction*)_transformationFxn.get())->maxDegree();
+      _cubatureMultiplier = max(_cubatureMultiplier, maxDegree);
+    }
+    // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
+    // one with potentially curved edges...
+  }
 
   DofOrdering trialOrdering;
   if (testVsTest)
@@ -158,6 +184,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
     _cubDegree = _maxTestDegree * 2;
   }
   _cubDegree *= _cubatureMultiplier;
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, shards::Line<2>::key); // assumes volume is 2D
 
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _spaceDim = _cellTopo.getDimension();
@@ -246,7 +273,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
                                  bool useCubPointsSideRefCell) {
   FieldContainer<double> cubPoints;
   if (useCubPointsSideRefCell) {
-    cubPoints = _cubPointsSideRefCell;
+    cubPoints = _cubPointsSideRefCell; // unnecessary copy
   } else {
     cubPoints = _cubPoints;
   }
@@ -321,10 +348,13 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
                                                                                               componentReferenceValuesTransformed);
     } else {
       constFCPtr referenceValues = getValues(basis,(EOperatorExtended) relatedOp, useCubPointsSideRefCell);
-      transformedValues = 
+//      cout << "_cellJacobInv:\n" << _cellJacobInv;
+//      cout << "referenceValues:\n"  << *referenceValues;
+      transformedValues =
       BasisEvaluation::getTransformedValuesWithBasisValues(basis, (EOperatorExtended) relatedOp,
                                                            referenceValues, _cellJacobian, 
                                                            _cellJacobInv,_cellJacobDet);
+//      cout << "transformedValues:\n" << *transformedValues;
     }
     _knownValuesTransformed[relatedKey] = transformedValues;
   }
@@ -539,6 +569,9 @@ void BasisCache::determineJacobian() {
     }
   }
   
+  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+  
   if (! Function::isNull(_transformationFxn) ) {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation) {
@@ -546,8 +579,12 @@ void BasisCache::determineJacobian() {
       FieldContainer<double> fxnJacobian(_numCells,numCubPoints,_spaceDim,_spaceDim);
       _transformationFxn->grad()->values( fxnJacobian, thisPtr );
       
+//      cout << "fxnJacobian:\n" << fxnJacobian;
+//      cout << "_cellJacobian before multiplication:\n" << _cellJacobian;
       // TODO: check that the order of multiplication is correct!
-      fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, _cellJacobian );
+      FieldContainer<double> cellJacobianToMultiply(_cellJacobian); // tensorMultiplyDataData doesn't support multiplying in place
+      fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, cellJacobianToMultiply );
+//      cout << "_cellJacobian after multiplication:\n" << _cellJacobian;
     } else {
       _transformationFxn->grad()->values( _cellJacobian, thisPtr );
     }
@@ -621,7 +658,7 @@ int BasisCache::maxTestDegree() {
   return _maxTestDegree;
 }
 
-void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation) {
+void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation, int degree) {
   // TODO: add argument here for cubature degree to use for transformation function.
   // (This will need to multiply the cubature degree for untransformed BasisCache.)
   _transformationFxn = f;

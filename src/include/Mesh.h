@@ -63,6 +63,7 @@
 
 class Solution;
 class Mesh;
+class MeshTransformationFunction;
 
 typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
@@ -76,6 +77,8 @@ class Mesh {
   Boundary _boundary;
   
   int _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
+  
+  set< int > _cellIDsWithCurves;
   
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
@@ -124,7 +127,7 @@ class Mesh {
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
   map< pair<int, int>, ParametricFunctionPtr > _edgeToCurveMap;
-  FunctionPtr _transformationFunction; // for dealing with those curves
+  Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
   void buildTypeLookups();
   void buildLocalToGlobalMap();
@@ -220,15 +223,19 @@ public:
   vector< ElementPtr > elementsInPartition(int partitionNumber);
   
   ElementPtr getActiveElement(int index);
+  int getDimension(); // spatial dimension of the mesh
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                              ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
                              ElementPtr nonParent);
+  
+  // getPartitionMap is likely cruft: there's another copy of this in Solution, and this one appears never to be called…
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+  FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
   void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
@@ -269,6 +276,8 @@ public:
   FieldContainer<double> physicalCellNodesForCell(int cellID);
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
+  void pRefine(const vector<int> &cellIDsForPRefinements);
+  void pRefine(const set<int> &cellIDsForPRefinements);
   void printLocalToGlobalMap(); // for debugging
   
   void rebuildLookups();
@@ -277,16 +286,13 @@ public:
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
-  void pRefine(const vector<int> &cellIDsForPRefinements);
-  void pRefine(const set<int> &cellIDsForPRefinements);
-    
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
   void setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
   
-  vector< ParametricFunctionPtr > parametricEdgesForCell(int cellID);
+  vector< ParametricFunctionPtr > parametricEdgesForCell(int cellID, bool neglectCurves=false);
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
   

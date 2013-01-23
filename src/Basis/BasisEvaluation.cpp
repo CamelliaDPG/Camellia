@@ -315,7 +315,10 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
     }
     return result;
   } else if (componentOfInterest < 0) { // then just return values
-    return result;
+    // the copy is a bit unfortunate, but can't be avoided unless we change a bunch of constFCPtrs to FCPtrs (or vice versa)
+    // in the API...
+//    cout << "values:\n" << *values;
+    return Teuchos::rcp( new FieldContainer<double>(*values));
   }
   Teuchos::Array<int> dimensions;
   values->dimensions(dimensions);
@@ -330,7 +333,10 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, IntrepidExtende
     enumeratedLocation = values->getEnumeration(0,0,componentOfInterest);
   } else if (values->rank() == 4) {
     enumeratedLocation = values->getEnumeration(0,0,0,componentOfInterest);
+  } else if (values->rank() == 5) {
+    enumeratedLocation = values->getEnumeration(0,0,0,0,componentOfInterest);
   } else {
+    // TODO: consider computing the enumerated location in a rank-independent way.
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported values container rank.");
   }
   for (int i=0; i<size; i++) {

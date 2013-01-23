@@ -59,21 +59,24 @@
 #include <Teuchos_GlobalMPISession.hpp>
 
 #include "DPGTests.h"
+
+// test suite includes
 #include "BasisCacheTests.h"
-#include "SolutionTests.h"
+#include "CurvilinearMeshTests.h"
+#include "ElementTests.h"
+#include "FunctionTests.h"
+#include "HConvergenceStudyTests.h"
+#include "IncompressibleFormulationsTests.h"
+#include "LinearTermTests.h"
+#include "MeshRefinementTests.h"
+#include "MPIWrapperTests.h"
 #include "MultiBasisTests.h"
 #include "PatchBasisTests.h"
-#include "ElementTests.h"
-#include "MeshRefinementTests.h"
-#include "RHSTests.h"
-#include "FunctionTests.h"
-#include "LinearTermTests.h"
-#include "ScratchPadTests.h"
-#include "IncompressibleFormulationsTests.h"
 #include "ParametricFunctionTests.h"
+#include "RHSTests.h"
+#include "ScratchPadTests.h"
 #include "SerialDenseSolveWrapperTests.h"
-#include "HConvergenceStudyTests.h"
-#include "MPIWrapperTests.h"
+#include "SolutionTests.h"
 
 #include "Projector.h"
 #include "BasisCache.h"
@@ -153,6 +156,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
 
+  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricFunctionTests) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
