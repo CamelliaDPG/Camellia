@@ -40,21 +40,29 @@ class SerialDenseWrapper {
   }
   
 public:
-  // gives X = A*B
+  // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
   static void multiply(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){
-    int N = B.dimension(0);
-    int nRHS = B.dimension(1);
+    int N = A.dimension(0);
+    int M = B.dimension(1);
+    if (TransposeA == 'T'){
+      N = A.dimension(1);
+    }
+    if (TransposeB == 'T'){
+      M = B.dimension(0);
+    }
+
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
-    Epetra_SerialDenseMatrix XMatrix(N,nRHS);    
+    Epetra_SerialDenseMatrix XMatrix(N,M);
+    cout << "N,M = " << N << ", " << M << endl;
 
     XMatrix.Multiply(TransposeA,TransposeB,1.0,AMatrix,BMatrix,0.0);
     
     for (int i=0;i<N;i++){
-      for (int j=0;j<nRHS;j++){
+      for (int j=0;j<M;j++){
 	X(i,j) = XMatrix(i,j);
       }
-    }
+    }    
   }
 
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
@@ -62,6 +70,7 @@ public:
     // A = (N,N)
     // b = N
     // x = N
+    /*
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);
@@ -114,7 +123,13 @@ public:
     if (! useATranspose) {
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
-
+    */
+    if (b.rank()==1){
+      b.resize(b.dimension(0),1);
+      x.resize(x.dimension(0),1);
+      solveSystemMultipleRHS(x, A, b, useATranspose);
+      x.resize(x.dimension(0));
+    }
   }
 
   static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
@@ -126,7 +141,7 @@ public:
     
     int N = A.dimension(0);
     int nRHS = b.dimension(1);
-
+    /*
     if (! useATranspose) {
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
@@ -136,9 +151,9 @@ public:
                                      A.dimension(0),
                                      A.dimension(1),
                                      A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)    
-
+    */
+    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
-
     Epetra_SerialDenseMatrix xVectors(N,nRHS);
    
     solver.SetMatrix(AMatrix);
