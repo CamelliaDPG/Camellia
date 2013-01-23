@@ -110,6 +110,11 @@ public:
     for (int i=0;i<N;i++){
       x(i) = xVector(i);
     }
+
+    if (! useATranspose) {
+      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
+    }
+
   }
 
   static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
