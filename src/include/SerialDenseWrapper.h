@@ -54,7 +54,6 @@ public:
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
     Epetra_SerialDenseMatrix XMatrix(N,M);
-    cout << "N,M = " << N << ", " << M << endl;
 
     XMatrix.Multiply(TransposeA,TransposeB,1.0,AMatrix,BMatrix,0.0);
     
