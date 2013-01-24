@@ -20,8 +20,36 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
-Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
-//Epetra_LinearProblem StandardAssembler::assembleProblem(){
+
+Epetra_Map StandardAssembler::getPartMap(){
+  int numProcs=1;
+  int rank=0;
+  
+#ifdef HAVE_MPI
+  rank     = Teuchos::GlobalMPISession::getRank();
+  numProcs = Teuchos::GlobalMPISession::getNProc();
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  MeshPtr mesh = _solution->mesh();
+  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
+  return _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
+}
+
+Epetra_FECrsMatrix StandardAssembler::initializeMatrix(){
+  Epetra_FECrsMatrix matrix(Copy, getPartMap(),_solution->mesh()->rowSizeUpperBound());
+  return matrix;
+}
+Epetra_FEVector StandardAssembler::initializeVector(){
+  Epetra_FEVector vector(getPartMap());
+  return vector;
+}
+
+//Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
+//Epetra_FECrsMatrix StandardAssembler::assembleProblem(){
+void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector){
   //void StandardAssembler::assembleProblem(Teuchos::RCP<Epetra_LinearProblem> problem){
   int numProcs=1;
   int rank=0;
@@ -37,10 +65,10 @@ Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
 
   MeshPtr mesh = _solution->mesh();  
 
-  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
-  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap,mesh->rowSizeUpperBound());
-  Epetra_FEVector rhsVector(partMap),lhsVector(partMap);
+  //  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
+  //  Epetra_Map partMap = _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
+  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap,mesh->rowSizeUpperBound());
+  //  Epetra_FEVector rhsVector(partMap),lhsVector(partMap);
 
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
@@ -75,11 +103,12 @@ Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
   rhsVector.GlobalAssemble();   
 
   //  EpetraExt::RowMatrixToMatlabFile("K.mat",globalStiffMatrix);
-  cout << "NNz = " << globalStiffMatrix.NumGlobalNonzeros() << endl;
+  //  cout << "NNz = " << globalStiffMatrix.NumGlobalNonzeros() << endl;
 
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
+  //  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
   //  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
-  return problem;
+  //  return problem;
+  //  return globalStiffMatrix;
   //  problem->SetOperator(&globalStiffMatrix);
   //  problem->SetLHS(&lhsVector);
   //  problem->SetRHS(&rhsVector);

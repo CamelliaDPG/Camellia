@@ -41,9 +41,14 @@ public:
   StandardAssembler(SolutionPtr solution){
     _solution = solution;
   };
-  Teuchos::RCP<Epetra_LinearProblem> assembleProblem();
-  //  Epetra_LinearProblem assembleProblem();
-  //  void assembleProblem(Teuchos::RCP<Epetra_LinearProblem>);
+  Epetra_Map getPartMap();
+  Epetra_FECrsMatrix initializeMatrix();
+  Epetra_FEVector initializeVector();
+
+  //  Teuchos::RCP<Epetra_LinearProblem> assembleProblem();
+  //  Epetra_FECrsMatrix assembleProblem();
+  void assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
+
   void distributeDofs(Epetra_FEVector dofs);
 
   FieldContainer<double> getRHS(ElementPtr elem);
