@@ -87,12 +87,12 @@ bool SerialDenseSolveWrapperTests::testMultiplyMatrices() {
 
   // test transposing each matrix X' = b'*A'
   FieldContainer<double> xT(3,2),expected_xT(3,2);
-  expected_x(0,0) = 11.0;
-  expected_x(0,1) = 4.0;
-  expected_x(1,0) = 11.0;
-  expected_x(1,1) = 4.0;
-  expected_x(2,0) = 11.0;
-  expected_x(2,1) = 4.0;
+  expected_xT(0,0) = 11.0;
+  expected_xT(0,1) = 4.0;
+  expected_xT(1,0) = 11.0;
+  expected_xT(1,1) = 4.0;
+  expected_xT(2,0) = 11.0;
+  expected_xT(2,1) = 4.0;
 
   SerialDenseWrapper::multiply(xT, b, A, 'T','T');
 
