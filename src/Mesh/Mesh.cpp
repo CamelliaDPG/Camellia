@@ -1805,7 +1805,10 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
     // (there's probably a more sophisticated way to delete these from the map, b
     map< int, pair< ElementTypePtr, ElementTypePtr > > remainingCellSideUpgrades;
     for (set<int>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-      remainingCellSideUpgrades[*cellIt] = _cellSideUpgrades[*cellIt];
+      int cellID = *cellIt;
+      if (_cellSideUpgrades.find(cellID) != _cellSideUpgrades.end()) {
+        remainingCellSideUpgrades[cellID] = _cellSideUpgrades[cellID];
+      }
     }
     _cellSideUpgrades = remainingCellSideUpgrades;
   }
