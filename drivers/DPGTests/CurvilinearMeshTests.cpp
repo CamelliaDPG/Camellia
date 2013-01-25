@@ -60,35 +60,79 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   
   MeshPtr mesh = MeshFactory::flowPastCylinderMesh(width, height, r, bf, H1Order, pToAdd);
   
-  double approximateArea = one->integrate(mesh);
+//  GnuPlotUtil::writeExactMeshSkeleton("/tmp/cylinderFlowExactMesh.dat", mesh, 10);
+  
+//  double approximateArea = one->integrate(mesh);
   
 //  cout << setprecision(15);
 //  cout << "Exact area:" << trueArea << endl;
 //  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
-//  
+//
+  
+  int numCells = mesh->numElements();
+  set<int> allCells;
+  for (int i=0; i<numCells; i++) {
+    allCells.insert(i);
+  }
+  
   double tol = 1e-10;
+  cout << setprecision(15);
   // test p-convergence of mesh area
-  double previousError = abs(trueArea - approximateArea);
-  for (int i=0; i<3; i++) {
-    H1Order++;
-    mesh = MeshFactory::flowPastCylinderMesh(width, height, r, bf, H1Order, pToAdd);
-    approximateArea = one->integrate(mesh);
+  double previousError = 1000;
+  int numPRefinements = 5;
+  for (int i=1; i<=numPRefinements; i++) {
+    double approximateArea = one->integrate(mesh);
+    double impliedPi = (width * height - approximateArea) / (r*r);
+//    cout << "For k=" << i << ", implied value of pi: " << impliedPi;
+//    cout << " (error " << abs(PI-impliedPi) << ")\n";
 //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence
       success = false;
-      cout << "Error with H1Order = " << H1Order << " is greater than with H1Order = " << H1Order - 1 << endl;
+      cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
 //    ostringstream filePath;
 //    filePath << "/tmp/cylinderFlowMesh" << H1Order << ".dat";
 //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
+    // p-refine
+    if (i < numPRefinements) {
+      mesh->pRefine(allCells);
+    }
   }
   
-//  GnuPlotUtil::writeExactMeshSkeleton("/tmp/cylinderFlowExactMesh.dat", mesh, 10);
+  // now, do much the same thing, except with h-refinements:
+  H1Order = 2;
+  mesh = MeshFactory::flowPastCylinderMesh(width, height, r, bf, H1Order, pToAdd);
+  previousError = 1000;
+  int numHRefinements = 5;
+  for (int i=0; i<=numHRefinements; i++) {
+    double approximateArea = one->integrate(mesh);
+    double impliedPi = (width * height - approximateArea) / (r*r);
+//    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
+//    cout << " (error " << abs(PI-impliedPi) << ")\n";
+    //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
+    double error = abs(trueArea - approximateArea);
+    if ((error > previousError) && (error > tol)) { // non-convergence
+      success = false;
+      cout << "Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
+      cout << "Current error = " << error << "; previous = " << previousError << endl;
+    }
+//    ostringstream filePath;
+//    filePath << "/tmp/cylinderFlowMesh_h" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    filePath.str("");
+//    filePath << "/tmp/cylinderFlowMesh_h" << i << "_straight_lines.dat";
+//    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
+    previousError = error;
+    
+    // h-refine
+    if (i<numHRefinements) {
+      mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+    }
+  }
   
-  // TODO: add tests against h-refinements and p-refinements (instead of simply using finer initial mesh)
   return success;
 }
 

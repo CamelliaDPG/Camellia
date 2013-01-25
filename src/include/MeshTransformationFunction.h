@@ -28,6 +28,8 @@ public:
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
+  bool mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, int cellID);
+  
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();

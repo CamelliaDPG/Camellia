@@ -137,6 +137,8 @@ class Mesh {
   void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
   int _numGlobalDofs;
   ElementPtr _nullPtr;
+  
+  void addEdgeCurve(pair<int,int> edge, ParametricFunctionPtr curve);
   ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<int> > &children, 
                    vector< vector< pair< int, int> > > &childrenForSide);
@@ -213,6 +215,7 @@ public:
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
   
+  set<int> getActiveCellIDs();
   vector< ElementPtr > & activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
@@ -279,6 +282,7 @@ public:
   void pRefine(const vector<int> &cellIDsForPRefinements);
   void pRefine(const set<int> &cellIDsForPRefinements);
   void printLocalToGlobalMap(); // for debugging
+  void printVertices(); // for debugging
   
   void rebuildLookups();
   

@@ -627,8 +627,9 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
         ParametricFunctionPtr childCurve = ParametricFunction::remapParameter(parentCurve, child_t0, child_t0 + increment);
         vector<int> childVertices = _verticesForCellID[child->cellID()];
         pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)%child->numSides()] );
-        _edgeToCurveMap[childEdge] = childCurve;
+        addEdgeCurve(childEdge, childCurve);
         childrenWithCurvedEdges.insert(child->cellID());
+        child_t0 += increment;
       }
     }
   }
@@ -666,6 +667,50 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   delete[] childTrialOrders;
   delete[] childTopos;
   delete[] childTestOrders;
+}
+
+void Mesh::addEdgeCurve(pair<int,int> edge, ParametricFunctionPtr curve) {
+  // note: does NOT update the MeshTransformationFunction.  That's caller's responsibility,
+  // because we don't know whether there are more curves coming for the affected elements.
+  if (_edgeToCellIDs.find(edge) == _edgeToCellIDs.end() ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
+  }
+  if (_edgeToCellIDs[edge].size() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setting curves along broken edges not supported.  Should set for each piece separately.");
+  }
+  // if we get here, exactly one cellID
+  int cellID = _edgeToCellIDs[edge][0].first; // cellID, sideIndex
+  if (! _elements[cellID]->isActive()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edgeToCurveMap must involve only active elements (no h-refined parent elements allowed)");
+  }
+  
+  // check that the curve agrees with the vertices in the mesh:
+  FieldContainer<double> v0 = _vertices[edge.first];
+  FieldContainer<double> v1 = _vertices[edge.second];
+  
+  int spaceDim = v0.size();
+  FieldContainer<double> curve0(spaceDim);
+  FieldContainer<double> curve1(spaceDim);
+  curve->value(0, curve0(0), curve0(1));
+  curve->value(1, curve1(0), curve1(1));
+  double maxDiff = 0;
+  double tol = 1e-14;
+  for (int d=0; d<spaceDim; d++) {
+    maxDiff = max(maxDiff, abs(curve0(d)-v0(d)));
+    maxDiff = max(maxDiff, abs(curve1(d)-v1(d)));
+  }
+  if (maxDiff > tol) {
+    cout << "Error: curve's endpoints do not match edge vertices (maxDiff in coordinates " << maxDiff << ")" << endl;
+    cout << "v0:\n" << v0;
+    cout << "curve0:\n" << curve0;
+    cout << "v1:\n" << v1;
+    cout << "curve1:\n" << curve1;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Curve does not match vertices");
+  }
+  
+  _edgeToCurveMap[edge] = curve;
+  
+  _cellIDsWithCurves.insert(cellID);
 }
 
 ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr elemType) {
@@ -1506,6 +1551,14 @@ vector< Teuchos::RCP< ElementType > > Mesh::elementTypes(int partitionNumber) {
   }
 }
 
+set<int> Mesh::getActiveCellIDs() {
+  set<int> cellIDs;
+  for (int i=0; i<_activeElements.size(); i++) {
+    cellIDs.insert(_activeElements[i]->cellID());
+  }
+  return cellIDs;
+}
+
 ElementPtr Mesh::getActiveElement(int index) {
   return _activeElements[index];
 }
@@ -1662,6 +1715,12 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
     }
     
     FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
+    if (_transformationFunction.get()) {
+      bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellID);
+//      if (changedVertices) {
+//        cout << "On refinement of cellID " << cellID << ", MeshTransformationFunction changed vertices.\n";
+//      }
+    }
     
     map<int, int> localToGlobalVertexIndex; // key: index in vertices; value: index in _vertices
     double tol = 1e-14; // tolerance for vertex equality
@@ -1706,7 +1765,8 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
           vertexFC[j] = vertices(i,j);
         }
         globalVertexIndex = _vertices.size();
-//        cout << "Adding vertex: (" << vertexFC(0) << ", " << vertexFC(1) << ")\n";
+//        cout << "Adding vertex " << globalVertexIndex << " (local index " << i << ")";
+//        cout << ": (" << vertexFC(0) << ", " << vertexFC(1) << ")\n";
         _vertices.push_back(vertexFC);
         _verticesMap[vertexFloat].push_back(globalVertexIndex);
       }
@@ -2249,6 +2309,16 @@ void Mesh::printLocalToGlobalMap() {
   }
 }
 
+void Mesh::printVertices() {
+  int vertexIndex = 0;
+  cout << "Vertices:\n";
+  for (vector< FieldContainer<double> >::iterator vertexFCIt = _vertices.begin();
+       vertexFCIt != _vertices.end(); vertexFCIt++) {
+    cout << vertexIndex << ": (" << (*vertexFCIt)[0] << ", " << (*vertexFCIt)[1] << ")\n";
+    vertexIndex++;
+  }
+}
+
 void Mesh::rebuildLookups() {
   _cellSideUpgrades.clear();
   determineActiveElements();
@@ -2469,50 +2539,12 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool ne
 }
 
 void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap) {
-  _edgeToCurveMap = edgeToCurveMap;
-  map< pair<int, int>, ParametricFunctionPtr >::iterator edgeIt;
+  _edgeToCurveMap.clear();
+  map< pair<int, int>, ParametricFunctionPtr >::const_iterator edgeIt;
   _cellIDsWithCurves.clear();
   
-  for (edgeIt = _edgeToCurveMap.begin(); edgeIt != _edgeToCurveMap.end(); edgeIt++) {
-    pair<int, int> edge = edgeIt->first;
-    ParametricFunctionPtr curve = edgeIt->second;
-    if (_edgeToCellIDs.find(edge) == _edgeToCellIDs.end() ) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
-    }
-    if (_edgeToCellIDs[edge].size() != 1) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setting curves along broken edges not supported.  Should set for each piece separately.");
-    }
-    // if we get here, exactly one cellID
-    int cellID = _edgeToCellIDs[edge][0].first; // cellID, sideIndex
-    if (! _elements[cellID]->isActive()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edgeToCurveMap must involve only active elements (no h-refined parent elements allowed)");
-    }
-    
-    // check that the curve agrees with the vertices in the mesh:
-    FieldContainer<double> v0 = _vertices[edge.first];
-    FieldContainer<double> v1 = _vertices[edge.second];
-
-    int spaceDim = v0.size();
-    FieldContainer<double> curve0(spaceDim);
-    FieldContainer<double> curve1(spaceDim);
-    curve->value(0, curve0(0), curve0(1));
-    curve->value(1, curve1(0), curve1(1));
-    double maxDiff = 0;
-    double tol = 1e-14;
-    for (int d=0; d<spaceDim; d++) {
-      maxDiff = max(maxDiff, abs(curve0(d)-v0(d)));
-      maxDiff = max(maxDiff, abs(curve1(d)-v1(d)));
-    }
-    if (maxDiff > tol) {
-      cout << "Error: curve's endpoints do not match edge vertices (maxDiff in coordinates " << maxDiff << ")" << endl;
-      cout << "v0:\n" << v0;
-      cout << "curve0:\n" << curve0;
-      cout << "v1:\n" << v1;
-      cout << "curve1:\n" << curve1;
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Curve does not match vertices");
-    }
-    
-    _cellIDsWithCurves.insert(cellID);
+  for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++) {
+    addEdgeCurve(edgeIt->first, edgeIt->second);
   }
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, _cellIDsWithCurves));
