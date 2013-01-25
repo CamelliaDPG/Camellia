@@ -1701,8 +1701,16 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
   
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
+//    cout << "refining cellID " << cellID << endl;
     ElementPtr elem = _elements[cellID];
-    ElementTypePtr elemType = elem->elementType();
+    ElementTypePtr elemType;
+    
+    if (_cellSideUpgrades.find(cellID) != _cellSideUpgrades.end()) {
+      // this cell has had its sides upgraded, so the elemType Solution knows about is stored in _cellSideUpgrades
+      elemType = _cellSideUpgrades[cellID].first;
+    } else {
+      elemType = elem->elementType();
+    }
     
     int spaceDim = elemType->cellTopoPtr->getDimension();
     int numSides = elemType->cellTopoPtr->getSideCount();
@@ -1789,10 +1797,17 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
       for (int i=0; i<numChildren; i++) {
         childIDs.push_back(_elements[cellID]->getChild(i)->cellID());
       }
-      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDs);
+      (*solutionIt)->processSideUpgrades(_cellSideUpgrades,cellIDs); // cellIDs argument: skip these...
       (*solutionIt)->projectOldCellOntoNewCells(cellID,elemType,childIDs);
     }
-    _cellSideUpgrades.clear(); // these have been processed by all solutions that will ever have a chance to process them.
+    // with the exception of the cellIDs upgrades, _cellSideUpgrades have been processed,
+    // so we delete everything except those
+    // (there's probably a more sophisticated way to delete these from the map, b
+    map< int, pair< ElementTypePtr, ElementTypePtr > > remainingCellSideUpgrades;
+    for (set<int>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+      remainingCellSideUpgrades[*cellIt] = _cellSideUpgrades[*cellIt];
+    }
+    _cellSideUpgrades = remainingCellSideUpgrades;
   }
   rebuildLookups();
   // now discard any old coefficients
@@ -2553,7 +2568,6 @@ void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > 
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
   ElementPtr elem = _elements[cellID];
-//  cout << "setting element type for cellID " << cellID << " (sideUpgradeOnly=" << sideUpgradeOnly << ")\n";
   if (sideUpgradeOnly) { // need to track in _cellSideUpgrades
     ElementTypePtr oldType;
     map<int, pair<ElementTypePtr, ElementTypePtr> >::iterator existingEntryIt = _cellSideUpgrades.find(cellID);
@@ -2566,6 +2580,9 @@ void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOn
         return;
       }
     }
+//    cout << "setting element type for cellID " << cellID << " (sideUpgradeOnly=" << sideUpgradeOnly << ")\n";
+//    cout << "trialOrder old size: " << oldType->trialOrderPtr->totalDofs() << endl;
+//    cout << "trialOrder new size: " << newType->trialOrderPtr->totalDofs() << endl;
     _cellSideUpgrades[cellID] = make_pair(oldType,newType);
   }
   elem->setElementType(newType);

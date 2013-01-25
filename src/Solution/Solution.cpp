@@ -3677,7 +3677,10 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
     // they're implicit 0s, then: projection will also be implicit 0s...
     return;
   }
+
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
+  TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
+                             "oldElemType trial space does not match stored solution size");
   // TODO: rewrite this method using Functions instead of AbstractFunctions
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
   
