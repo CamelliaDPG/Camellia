@@ -58,7 +58,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   int H1Order = 1;
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
-  MeshPtr mesh = MeshFactory::flowPastCylinderMesh(width, height, r, bf, H1Order, pToAdd);
+  MeshPtr mesh = MeshFactory::hemkerMesh(width, height, r, bf, H1Order, pToAdd);
   
 //  GnuPlotUtil::writeExactMeshSkeleton("/tmp/cylinderFlowExactMesh.dat", mesh, 10);
   
@@ -82,7 +82,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
     double approximateArea = one->integrate(mesh);
-    double impliedPi = (width * height - approximateArea) / (r*r);
+//    double impliedPi = (width * height - approximateArea) / (r*r);
 //    cout << "For k=" << i << ", implied value of pi: " << impliedPi;
 //    cout << " (error " << abs(PI-impliedPi) << ")\n";
 //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
@@ -104,7 +104,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   
   // now, do much the same thing, except with h-refinements:
   H1Order = 2;
-  mesh = MeshFactory::flowPastCylinderMesh(width, height, r, bf, H1Order, pToAdd);
+  mesh = MeshFactory::hemkerMesh(width, height, r, bf, H1Order, pToAdd);
   previousError = 1000;
   int numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {

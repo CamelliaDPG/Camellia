@@ -63,8 +63,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
   return Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder);
 }
 
-MeshPtr MeshFactory::flowPastCylinderMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                                          BilinearFormPtr bilinearForm, int H1Order, int pToAddTest) {
+MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight, double cylinderRadius) {
   // later, we might want to do something more sophisticated, but for now, just an 8-element mesh, centered at origin
   ParametricFunctionPtr circle = ParametricFunction::circle(cylinderRadius, 0, 0);
   ParametricFunctionPtr rect = Teuchos::rcp( new ParametricRect(meshWidth, meshHeight, 0, 0) );
@@ -81,18 +80,18 @@ MeshPtr MeshFactory::flowPastCylinderMesh(double meshWidth, double meshHeight, d
     circle->value(t, innerVertex(0), innerVertex(1));
     rect  ->value(t, outerVertex(0), outerVertex(1));
     vertices.push_back(innerVertex);
-//    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
+    //    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
     vertices.push_back(outerVertex);
-//    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
+    //    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
     t += 1.0 / numPoints;
   }
   
-//  cout << "innerVertices:\n" << innerVertices;
-//  cout << "outerVertices:\n" << outerVertices;
+  //  cout << "innerVertices:\n" << innerVertices;
+  //  cout << "outerVertices:\n" << outerVertices;
   
   GnuPlotUtil::writeXYPoints("/tmp/innerVertices.dat", innerVertices);
   GnuPlotUtil::writeXYPoints("/tmp/outerVertices.dat", outerVertices);
-
+  
   vector< vector<int> > elementVertices;
   
   int totalVertices = vertices.size();
@@ -110,19 +109,25 @@ MeshPtr MeshFactory::flowPastCylinderMesh(double meshWidth, double meshHeight, d
     vertexIndices.push_back(outerIndex1);
     vertexIndices.push_back(innerIndex1);
     elementVertices.push_back(vertexIndices);
-
-//    cout << "innerIndex0: " << innerIndex0 << endl;
-//    cout << "innerIndex1: " << innerIndex1 << endl;
-//    cout << "outerIndex0: " << outerIndex0 << endl;
-//    cout << "outerIndex1: " << outerIndex1 << endl;
+    
+    //    cout << "innerIndex0: " << innerIndex0 << endl;
+    //    cout << "innerIndex1: " << innerIndex1 << endl;
+    //    cout << "outerIndex0: " << outerIndex0 << endl;
+    //    cout << "outerIndex1: " << outerIndex1 << endl;
     
     pair<int, int> innerEdge = make_pair(innerIndex1, innerIndex0); // order matters
     edgeToCurveMap[innerEdge] = ParametricFunction::remapParameter(circle, t+1.0/numPoints, t);
     t += 1.0/numPoints;
-    
   }
   
-  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAddTest) );
-  mesh->setEdgeToCurveMap(edgeToCurveMap);
+  return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
+}
+
+MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+                                BilinearFormPtr bilinearForm, int H1Order, int pToAddTest) {
+  MeshGeometryPtr geometry = MeshFactory::hemkerGeometry(meshWidth, meshHeight, cylinderRadius);
+  MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
+                                        bilinearForm, H1Order, pToAddTest) );
+  mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
   return mesh;
 }

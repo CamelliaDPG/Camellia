@@ -2495,6 +2495,10 @@ const FieldContainer<double>& Solution::allCoefficientsForCellID(int cellID) {
   return _solutionForCellIDGlobal[cellID];
 }
 
+void Solution::setBC( Teuchos::RCP<BC> bc) {
+  _bc = bc;
+}
+
 void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }

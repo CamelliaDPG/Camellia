@@ -10,6 +10,8 @@
 #include "Var.h"
 #include "Function.h"
 
+typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
+
 class BCLogicalOrFunction : public Function {
   FunctionPtr _f1, _f2;
   SpatialFilterPtr _sf1, _sf2;
@@ -117,6 +119,10 @@ bool BCEasy::bcsImposed(int varID) { // returns true if there are any BCs anywhe
   return _dirichletBCs.find(varID) != _dirichletBCs.end();
 }
 
+map< int, DirichletBC > & BCEasy::dirichletBCs() {
+  return _dirichletBCs;
+}
+
 void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
               int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
   FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
@@ -161,4 +167,16 @@ bool BCEasy::singlePointBC(int varID) {
 
 bool BCEasy::imposeZeroMeanConstraint(int varID) {
   return _zeroMeanConstraints.find(varID) != _zeroMeanConstraints.end();
+}
+
+Teuchos::RCP<BCEasy> BCEasy::copyImposingZero() {
+  //returns a copy of this BC object, except with all zero Functions
+  Teuchos::RCP<BCEasy> zeroBC = Teuchos::rcp( new BCEasy(*this) );
+  map< int, DirichletBC >* dirichletBCs = &(zeroBC->dirichletBCs());
+  for (map< int, DirichletBC >::iterator bcIt = dirichletBCs->begin();
+       bcIt != dirichletBCs->end(); bcIt++) {
+    bcIt->second.second = Function::zero();
+  }
+  
+  return zeroBC;
 }

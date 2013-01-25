@@ -3,7 +3,7 @@
 
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -67,6 +67,35 @@ class MeshTransformationFunction;
 
 typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+typedef pair<int,int> Edge;
+
+class MeshGeometry {
+  vector<FieldContainer<double> > _vertices;
+  vector< vector<int> > _elementVertices;
+  map< Edge, ParametricFunctionPtr > _edgeToCurveMap;
+public:
+  MeshGeometry(const vector<FieldContainer<double> > &vertices,
+               const vector< vector<int> > &elementVertices,
+               const map< Edge, ParametricFunctionPtr > &edgeToCurveMap) {
+    _vertices = vertices;
+    _elementVertices = elementVertices;
+    _edgeToCurveMap = edgeToCurveMap;
+  }
+  
+  map< Edge, ParametricFunctionPtr > &edgeToCurveMap() {
+    return _edgeToCurveMap;
+  }
+  
+  vector< vector<int> > &elementVertices() {
+    return _elementVertices;
+  }
+  
+  vector<FieldContainer<double> > &vertices() {
+    return _vertices;
+  }
+};
+
+typedef Teuchos::RCP<MeshGeometry> MeshGeometryPtr;
 
 class Mesh {
   int _pToAddToTest;
