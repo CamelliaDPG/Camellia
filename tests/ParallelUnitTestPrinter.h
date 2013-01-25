@@ -1,6 +1,5 @@
 #include "gtest/gtest.h"
 
-#include "Epetra_MpiComm.h"
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
 #else
