@@ -262,7 +262,8 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(t1n,right,zero);
   bc->addDirichlet(t2n,right,zero);
   
-  bc->addZeroMeanConstraint(p);
+//  bc->addZeroMeanConstraint(p);
+  cout << "NOT imposing constraint on the pressure\n";
   problem.setBC(bc);
   
   Teuchos::RCP<Mesh> mesh = problem.mesh();
@@ -336,7 +337,8 @@ int main(int argc, char *argv[]) {
       if (startWithZeroSolutionAfterRefinement) {
         // start with a fresh initial guess for each adaptive mesh:
         solution->clear();
-        solution->projectOntoMesh(initialGuess);
+        cout << "using zero initial guess for now...\n";
+//        solution->projectOntoMesh(initialGuess);
         problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
       }
       

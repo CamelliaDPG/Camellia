@@ -236,7 +236,7 @@ public:
     _mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
     
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
-    
+
     _backgroundFlow = Teuchos::rcp( new Solution(_mesh) );
     
     _solnIncrement = Teuchos::rcp( new Solution(_mesh) );

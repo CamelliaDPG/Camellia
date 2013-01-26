@@ -1,5 +1,5 @@
 //
-//  ParametricFunction.cpp
+//  ParametricCurve.cpp
 //  Camellia-debug
 //
 //  Created by Nathan Roberts on 1/15/13.
@@ -7,13 +7,13 @@
 //
 
 #include <iostream>
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 #include "Shards_CellTopology.hpp"
 
 static const double PI  = 3.141592653589793238462;
 
-class ParametricLine : public ParametricFunction {
+class ParametricLine : public ParametricCurve {
   double _x0, _y0, _x1, _y1;
 public:
   ParametricLine(double x0, double y0, double x1, double y1) {
@@ -28,7 +28,7 @@ public:
   }
 };
 
-class ParametricCircle : public ParametricFunction {
+class ParametricCircle : public ParametricCurve {
   double _x0, _y0; // center coords
   double _r; // radius
   
@@ -47,27 +47,27 @@ public:
   }
 };
 
-ParametricFunction::ParametricFunction(ParametricFunctionPtr fxn, double t0, double t1) {
+ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) {
   _underlyingFxn = fxn;
   _t0 = t0;
   _t1 = t1;
 }
 
-ParametricFunction::ParametricFunction() {
+ParametricCurve::ParametricCurve() {
   _t0 = 0;
   _t1 = 1;
 }
 
-double ParametricFunction::remap(double t) {
+double ParametricCurve::remap(double t) {
   // want to map (0,1) to (_t0,_t1)
   return _t0 + t * (_t1 - _t0);
 }
 
-ParametricFunctionPtr ParametricFunction::underlyingFunction() {
+ParametricCurvePtr ParametricCurve::underlyingFunction() {
   return _underlyingFxn;
 }
 
-void ParametricFunction::value(double t, double &x) {
+void ParametricCurve::value(double t, double &x) {
   if (_underlyingFxn.get()) {
     _underlyingFxn->value(remap(t), x);
   } else {
@@ -75,7 +75,7 @@ void ParametricFunction::value(double t, double &x) {
   }
 }
 
-void ParametricFunction::value(double t, double &x, double &y) {
+void ParametricCurve::value(double t, double &x, double &y) {
   if (_underlyingFxn.get()) {
     _underlyingFxn->value(remap(t), x, y);
   } else {
@@ -83,7 +83,7 @@ void ParametricFunction::value(double t, double &x, double &y) {
   }
 }
 
-void ParametricFunction::value(double t, double &x, double &y, double &z) {
+void ParametricCurve::value(double t, double &x, double &y, double &z) {
   if (_underlyingFxn.get()) {
     _underlyingFxn->value(remap(t), x, y, z);
   } else {
@@ -91,22 +91,22 @@ void ParametricFunction::value(double t, double &x, double &y, double &z) {
   }
 }
 
-ParametricFunctionPtr ParametricFunction::circle(double r, double x0, double y0) {
+ParametricCurvePtr ParametricCurve::circle(double r, double x0, double y0) {
   return Teuchos::rcp( new ParametricCircle(r, x0, y0));
 }
 
-ParametricFunctionPtr ParametricFunction::circularArc(double r, double x0, double y0, double theta0, double theta1) {
-  ParametricFunctionPtr circleFxn = circle(r, x0, y0);
+ParametricCurvePtr ParametricCurve::circularArc(double r, double x0, double y0, double theta0, double theta1) {
+  ParametricCurvePtr circleFxn = circle(r, x0, y0);
   double t0 = theta0 / 2.0 * PI;
   double t1 = theta1 / 2.0 * PI;
-  return remapParameter(circleFxn, t0, t1);
+  return subCurve(circleFxn, t0, t1);
 }
 
-ParametricFunctionPtr ParametricFunction::line(double x0, double y0, double x1, double y1) {
+ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double y1) {
   return Teuchos::rcp(new ParametricLine(x0,y0,x1,y1));
 }
 
-std::vector< ParametricFunctionPtr > ParametricFunction::referenceCellEdges(unsigned cellTopoKey) {
+std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(unsigned cellTopoKey) {
   if (cellTopoKey == shards::Quadrilateral<4>::key) {
     return referenceQuadEdges();
   } else if (cellTopoKey == shards::Triangle<3>::key) {
@@ -116,8 +116,8 @@ std::vector< ParametricFunctionPtr > ParametricFunction::referenceCellEdges(unsi
   }
 }
 
-std::vector< ParametricFunctionPtr > ParametricFunction::referenceQuadEdges() {
-  std::vector< ParametricFunctionPtr > edges;
+std::vector< ParametricCurvePtr > ParametricCurve::referenceQuadEdges() {
+  std::vector< ParametricCurvePtr > edges;
   edges.push_back(line(-1,-1,1,-1));
   edges.push_back(line(1,-1,1,1));
   edges.push_back(line(1,1,-1,1));
@@ -125,17 +125,17 @@ std::vector< ParametricFunctionPtr > ParametricFunction::referenceQuadEdges() {
   return edges;
 }
 
-std::vector< ParametricFunctionPtr > ParametricFunction::referenceTriangleEdges() {
-  std::vector< ParametricFunctionPtr > edges;
+std::vector< ParametricCurvePtr > ParametricCurve::referenceTriangleEdges() {
+  std::vector< ParametricCurvePtr > edges;
   edges.push_back(line(0,0,1,0));
   edges.push_back(line(1,0,0,1));
   edges.push_back(line(0,1,0,0));
   return edges;
 }
 
-ParametricFunctionPtr ParametricFunction::remapParameter(ParametricFunctionPtr fxn, double t0, double t1) {
+ParametricCurvePtr ParametricCurve::subCurve(ParametricCurvePtr fxn, double t0, double t1) {
   double t0_underlying = fxn->remap(t0);
   double t1_underlying = fxn->remap(t1);
-  ParametricFunctionPtr underlyingFxn = (fxn->underlyingFunction().get()==NULL) ? fxn : fxn->underlyingFunction();
-  return Teuchos::rcp( new ParametricFunction(underlyingFxn, t0_underlying, t1_underlying) );
+  ParametricCurvePtr underlyingFxn = (fxn->underlyingFunction().get()==NULL) ? fxn : fxn->underlyingFunction();
+  return Teuchos::rcp( new ParametricCurve(underlyingFxn, t0_underlying, t1_underlying) );
 }

@@ -59,7 +59,7 @@
 #include "MeshPartitionPolicy.h"
 
 #include "Function.h"
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 class Solution;
 class Mesh;
@@ -72,17 +72,17 @@ typedef pair<int,int> Edge;
 class MeshGeometry {
   vector<FieldContainer<double> > _vertices;
   vector< vector<int> > _elementVertices;
-  map< Edge, ParametricFunctionPtr > _edgeToCurveMap;
+  map< Edge, ParametricCurvePtr > _edgeToCurveMap;
 public:
   MeshGeometry(const vector<FieldContainer<double> > &vertices,
                const vector< vector<int> > &elementVertices,
-               const map< Edge, ParametricFunctionPtr > &edgeToCurveMap) {
+               const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
     _vertices = vertices;
     _elementVertices = elementVertices;
     _edgeToCurveMap = edgeToCurveMap;
   }
   
-  map< Edge, ParametricFunctionPtr > &edgeToCurveMap() {
+  map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
     return _edgeToCurveMap;
   }
   
@@ -155,7 +155,7 @@ class Mesh {
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
-  map< pair<int, int>, ParametricFunctionPtr > _edgeToCurveMap;
+  map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
   void buildTypeLookups();
@@ -167,7 +167,7 @@ class Mesh {
   int _numGlobalDofs;
   ElementPtr _nullPtr;
   
-  void addEdgeCurve(pair<int,int> edge, ParametricFunctionPtr curve);
+  void addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve);
   ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<int> > &children, 
                    vector< vector< pair< int, int> > > &childrenForSide);
@@ -183,7 +183,7 @@ public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
   //,
-  //     map< pair<int, int>, ParametricFunctionPtr > edgeToCurveMap = map< pair<int, int>, ParametricFunctionPtr >());
+  //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
@@ -322,10 +322,10 @@ public:
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
-  void setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap);
+  void setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
   
-  vector< ParametricFunctionPtr > parametricEdgesForCell(int cellID, bool neglectCurves=false);
+  vector< ParametricCurvePtr > parametricEdgesForCell(int cellID, bool neglectCurves=false);
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
   

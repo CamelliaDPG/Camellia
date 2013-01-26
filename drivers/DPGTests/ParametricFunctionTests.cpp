@@ -1,33 +1,33 @@
 //
-//  ParametricFunctionTests.cpp
+//  ParametricCurveTests.cpp
 //  Camellia-debug
 //
 //  Created by Nathan Roberts on 1/16/13.
 //
 //
 
-#include "ParametricFunctionTests.h"
+#include "ParametricCurveTests.h"
 
-void ParametricFunctionTests::setup() {
+void ParametricCurveTests::setup() {
   
 }
 
-void ParametricFunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
-  if (testParametricFunctionRefinement()) {
+  if (testParametricCurveRefinement()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool ParametricFunctionTests::testParametricFunctionRefinement() {
+bool ParametricCurveTests::testParametricCurveRefinement() {
  // tests the kind of thing that will happen to parametric functions during mesh refinement
   bool success = true;
   
-  ParametricFunctionPtr unitLine = ParametricFunction::line(0, 0, 1, 0);
+  ParametricCurvePtr unitLine = ParametricCurve::line(0, 0, 1, 0);
   
-  ParametricFunctionPtr halfLine = ParametricFunction::remapParameter(unitLine, 0, 0.5);
+  ParametricCurvePtr halfLine = ParametricCurve::subCurve(unitLine, 0, 0.5);
   
   double expected_x, expected_y, t, actual_x, actual_y;
   
@@ -60,7 +60,7 @@ bool ParametricFunctionTests::testParametricFunctionRefinement() {
   }
   
   // again, but with 1/3 line
-  ParametricFunctionPtr thirdLine = ParametricFunction::remapParameter(unitLine, 1.0/3.0, 2.0/3.0);
+  ParametricCurvePtr thirdLine = ParametricCurve::subCurve(unitLine, 1.0/3.0, 2.0/3.0);
   // t = 0
   t = 0;
   expected_x = 1.0/3.0; expected_y = 0;
@@ -92,6 +92,6 @@ bool ParametricFunctionTests::testParametricFunctionRefinement() {
   return allSuccess(success);
 }
 
-std::string ParametricFunctionTests::testSuiteName() {
-  return "ParametricFunctionTests";
+std::string ParametricCurveTests::testSuiteName() {
+  return "ParametricCurveTests";
 }

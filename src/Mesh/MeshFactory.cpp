@@ -8,24 +8,24 @@
 
 #include "MeshFactory.h"
 
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 #include "GnuPlotUtil.h"
 
-class ParametricRect : public ParametricFunction {
+class ParametricRect : public ParametricCurve {
   double _width, _height, _x0, _y0;
-  vector< ParametricFunctionPtr > _edgeLines;
+  vector< ParametricCurvePtr > _edgeLines;
   vector< double > _switchValues;
 public:
   ParametricRect(double width, double height, double x0, double y0) {
     // starts at the positive x axis and proceeds counter-clockwise, just like our parametric circle
     
     _width = width; _height = height; _x0 = x0; _y0 = y0;
-    _edgeLines.push_back(ParametricFunction::line(x0 + width/2.0, y0 + 0, x0 + width/2.0, y0 + height/2.0));
-    _edgeLines.push_back(ParametricFunction::line(x0 + width/2.0, y0 + height/2.0, x0 - width/2.0, y0 + height/2.0));
-    _edgeLines.push_back(ParametricFunction::line(x0 - width/2.0, y0 + height/2.0, x0 - width/2.0, y0 - height/2.0));
-    _edgeLines.push_back(ParametricFunction::line(x0 - width/2.0, y0 - height/2.0, x0 + width/2.0, y0 - height/2.0));
-    _edgeLines.push_back(ParametricFunction::line(x0 + width/2.0, y0 - height/2.0, x0 + width/2.0, y0 + 0));
+    _edgeLines.push_back(ParametricCurve::line(x0 + width/2.0, y0 + 0, x0 + width/2.0, y0 + height/2.0));
+    _edgeLines.push_back(ParametricCurve::line(x0 + width/2.0, y0 + height/2.0, x0 - width/2.0, y0 + height/2.0));
+    _edgeLines.push_back(ParametricCurve::line(x0 - width/2.0, y0 + height/2.0, x0 - width/2.0, y0 - height/2.0));
+    _edgeLines.push_back(ParametricCurve::line(x0 - width/2.0, y0 - height/2.0, x0 + width/2.0, y0 - height/2.0));
+    _edgeLines.push_back(ParametricCurve::line(x0 + width/2.0, y0 - height/2.0, x0 + width/2.0, y0 + 0));
     
     // switchValues are the points in (0,1) where we switch from one edge line to the next
     _switchValues.push_back(0.0);
@@ -65,8 +65,8 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
 
 MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight, double cylinderRadius) {
   // later, we might want to do something more sophisticated, but for now, just an 8-element mesh, centered at origin
-  ParametricFunctionPtr circle = ParametricFunction::circle(cylinderRadius, 0, 0);
-  ParametricFunctionPtr rect = Teuchos::rcp( new ParametricRect(meshWidth, meshHeight, 0, 0) );
+  ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
+  ParametricCurvePtr rect = Teuchos::rcp( new ParametricRect(meshWidth, meshHeight, 0, 0) );
   
   int numPoints = 8; // 8 points on rect, 8 on circle
   int spaceDim = 2;
@@ -97,7 +97,7 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   int totalVertices = vertices.size();
   
   t = 0;
-  map< pair<int, int>, ParametricFunctionPtr > edgeToCurveMap;
+  map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
   for (int i=0; i<numPoints; i++) { // numPoints = numElements
     vector<int> vertexIndices;
     int innerIndex0 = (i * 2) % totalVertices;
@@ -116,7 +116,7 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
     //    cout << "outerIndex1: " << outerIndex1 << endl;
     
     pair<int, int> innerEdge = make_pair(innerIndex1, innerIndex0); // order matters
-    edgeToCurveMap[innerEdge] = ParametricFunction::remapParameter(circle, t+1.0/numPoints, t);
+    edgeToCurveMap[innerEdge] = ParametricCurve::subCurve(circle, t+1.0/numPoints, t);
     t += 1.0/numPoints;
   }
   

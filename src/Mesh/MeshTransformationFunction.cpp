@@ -9,7 +9,7 @@
 #include <iostream>
 
 #include "MeshTransformationFunction.h"
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 #include "Mesh.h"
 #include "Element.h"
@@ -64,8 +64,8 @@ static void convexCombinationQuadWithExactEdges(double &x, double &y, double t1,
   }
 }
 
-vector< ParametricFunctionPtr > edgeLines(MeshPtr mesh, int cellID) {
-  vector< ParametricFunctionPtr > lines;
+vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
+  vector< ParametricCurvePtr > lines;
   ElementPtr cell = mesh->getElement(cellID);
   vector<int> vertexIndices = mesh->vertexIndicesForCell(cellID);
   for (int i=0; i<vertexIndices.size(); i++) {
@@ -73,7 +73,7 @@ vector< ParametricFunctionPtr > edgeLines(MeshPtr mesh, int cellID) {
     FieldContainer<double> v1 = mesh->vertexCoordinates(vertexIndices[(i+1)%vertexIndices.size()]);
     // 2D only for now
     TEUCHOS_TEST_FOR_EXCEPTION(v0.dimension(0) != 2, std::invalid_argument, "only 2D supported right now");
-    lines.push_back(ParametricFunction::line(v0(0), v0(1), v1(0), v1(1)));
+    lines.push_back(ParametricCurve::line(v0(0), v0(1), v1(0), v1(1)));
   }
   return lines;
 }
@@ -112,7 +112,7 @@ class CellTransformationFunction : public Function {
   EOperatorExtended _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
   
-  FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricFunctionPtr > &edgeFunctions) {
+  FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions) {
     int spaceDim = 2;
     FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
     
@@ -142,9 +142,9 @@ class CellTransformationFunction : public Function {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of edgeFunctions");
     }
     // adjust edgeFunctions so that opposite edges run parallel (in the mesh, they run counterclockwise)
-    vector< ParametricFunctionPtr > parallelEdgeFunctions = edgeFunctions;
-    parallelEdgeFunctions[2] = ParametricFunction::remapParameter(parallelEdgeFunctions[2], 1, 0);
-    parallelEdgeFunctions[3] = ParametricFunction::remapParameter(parallelEdgeFunctions[3], 1, 0);
+    vector< ParametricCurvePtr > parallelEdgeFunctions = edgeFunctions;
+    parallelEdgeFunctions[2] = ParametricCurve::subCurve(parallelEdgeFunctions[2], 1, 0);
+    parallelEdgeFunctions[3] = ParametricCurve::subCurve(parallelEdgeFunctions[3], 1, 0);
     
     int numPoints_t1 = numPoints.size();
     
@@ -185,7 +185,7 @@ protected:
     _cellIndex = -1;
   }
 public:
-  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricFunctionPtr > &edgeFunctions) : Function(1) {
+  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : Function(1) {
     _cellIndex = -1;
     _op = OP_VALUE;
     ElementPtr cell = mesh->getElement(cellID);
@@ -196,7 +196,7 @@ public:
     int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
     int numPoints = cardinality / spaceDim;
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "only 2D supported right now");
-    vector< ParametricFunctionPtr > straightEdges = edgeLines(mesh, cellID);
+    vector< ParametricCurvePtr > straightEdges = edgeLines(mesh, cellID);
 
     FieldContainer<double> points(numPoints,spaceDim);
     FieldContainer<double> transformedPoints(numPoints,spaceDim);
@@ -361,7 +361,7 @@ public:
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
   }
   
-  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, int cellID, const vector< ParametricFunctionPtr > edgeFunctions) {
+  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > edgeFunctions) {
     return Teuchos::rcp( new CellTransformationFunction(mesh,cellID,edgeFunctions));
   }
 };
@@ -408,9 +408,9 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
     
     // adjust edgeFunctions so that opposite edges run parallel (in the mesh, they run counterclockwise)
-    vector< ParametricFunctionPtr > parallelEdgeFunctions = _mesh->parametricEdgesForCell(cellID);
-    parallelEdgeFunctions[2] = ParametricFunction::remapParameter(parallelEdgeFunctions[2], 1, 0);
-    parallelEdgeFunctions[3] = ParametricFunction::remapParameter(parallelEdgeFunctions[3], 1, 0);
+    vector< ParametricCurvePtr > parallelEdgeFunctions = _mesh->parametricEdgesForCell(cellID);
+    parallelEdgeFunctions[2] = ParametricCurve::subCurve(parallelEdgeFunctions[2], 1, 0);
+    parallelEdgeFunctions[3] = ParametricCurve::subCurve(parallelEdgeFunctions[3], 1, 0);
     
     double x0, x1, x2, x3, y0, y1, y2, y3; // values for the various functions
 

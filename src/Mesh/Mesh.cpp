@@ -623,8 +623,8 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
         int childSideIndex = childrenForSides[sideIndex][i].second;
         ElementPtr child = parent->getChild(childIndex);
         // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
-        ParametricFunctionPtr parentCurve = _edgeToCurveMap[edge];
-        ParametricFunctionPtr childCurve = ParametricFunction::remapParameter(parentCurve, child_t0, child_t0 + increment);
+        ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
+        ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
         vector<int> childVertices = _verticesForCellID[child->cellID()];
         pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)%child->numSides()] );
         addEdgeCurve(childEdge, childCurve);
@@ -669,7 +669,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   delete[] childTestOrders;
 }
 
-void Mesh::addEdgeCurve(pair<int,int> edge, ParametricFunctionPtr curve) {
+void Mesh::addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve) {
   // note: does NOT update the MeshTransformationFunction.  That's caller's responsibility,
   // because we don't know whether there are more curves coming for the affected elements.
   if (_edgeToCellIDs.find(edge) == _edgeToCellIDs.end() ) {
@@ -2522,8 +2522,8 @@ int Mesh::rowSizeUpperBound() {
   return maxRowSize;
 }
 
-vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool neglectCurves) {
-  vector< ParametricFunctionPtr > edges;
+vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(int cellID, bool neglectCurves) {
+  vector< ParametricCurvePtr > edges;
   ElementPtr cell = getElement(cellID);
   int numSides = cell->elementType()->cellTopoPtr->getSideCount();
   int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
@@ -2534,12 +2534,12 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool ne
     int v1 = vertices[(sideIndex+1)%numSides];
     pair<int, int> edge = make_pair(v0, v1);
     pair<int, int> reverse_edge = make_pair(v1, v0);
-    ParametricFunctionPtr edgeFxn;
+    ParametricCurvePtr edgeFxn;
     
     double x0 = _vertices[v0](0), y0 = _vertices[v0](1);
     double x1 = _vertices[v1](0), y1 = _vertices[v1](1);
     
-    ParametricFunctionPtr straightEdgeFxn = ParametricFunction::line(x0, y0, x1, y1);
+    ParametricCurvePtr straightEdgeFxn = ParametricCurve::line(x0, y0, x1, y1);
     
     if (neglectCurves) {
       edgeFxn = straightEdgeFxn;
@@ -2547,7 +2547,7 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool ne
       edgeFxn = _edgeToCurveMap[edge];
     } else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
-      // TODO: make ParametricFunctions reversible (swap t=0 and t=1)
+      // TODO: make ParametricCurves reversible (swap t=0 and t=1)
     } else {
       edgeFxn = straightEdgeFxn;
     }
@@ -2556,9 +2556,9 @@ vector< ParametricFunctionPtr > Mesh::parametricEdgesForCell(int cellID, bool ne
   return edges;
 }
 
-void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap) {
+void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap) {
   _edgeToCurveMap.clear();
-  map< pair<int, int>, ParametricFunctionPtr >::const_iterator edgeIt;
+  map< pair<int, int>, ParametricCurvePtr >::const_iterator edgeIt;
   _cellIDsWithCurves.clear();
   
   for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++) {

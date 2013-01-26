@@ -72,7 +72,7 @@
 #include "MPIWrapperTests.h"
 #include "MultiBasisTests.h"
 #include "PatchBasisTests.h"
-#include "ParametricFunctionTests.h"
+#include "ParametricCurveTests.h"
 #include "RHSTests.h"
 #include "ScratchPadTests.h"
 #include "SerialDenseSolveWrapperTests.h"
@@ -158,7 +158,7 @@ void DPGTests::runTests() {
 
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
-  testSuites.push_back( Teuchos::rcp( new ParametricFunctionTests) );
+  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );

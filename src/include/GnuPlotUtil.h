@@ -11,7 +11,7 @@
 
 #include <fstream>
 #include "Mesh.h"
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 class GnuPlotUtil {
 public:
@@ -37,7 +37,7 @@ public:
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
       bool neglectCurves = true;
-      vector< ParametricFunctionPtr > edgeLines = ParametricFunction::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
+      vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
       int numPointsPerEdge = cell->elementType()->testOrderPtr->maxBasisDegree() * 2; // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
@@ -46,7 +46,7 @@ public:
       
       int ptIndex = 0;
       for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
-        ParametricFunctionPtr edge = edgeLines[edgeIndex];
+        ParametricCurvePtr edge = edgeLines[edgeIndex];
         double t = 0;
         double increment = 1.0 / (numPointsPerEdge - 1);
         // last edge gets one extra point (to connect to first edge):
@@ -133,9 +133,9 @@ public:
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
-      vector< ParametricFunctionPtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
+      vector< ParametricCurvePtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
       for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
-        ParametricFunctionPtr edge = edgeCurves[edgeIndex];
+        ParametricCurvePtr edge = edgeCurves[edgeIndex];
         double t = 0;
         double increment = 1.0 / (numPointsPerEdge - 1);
         // last edge gets one extra point (to connect to first edge):

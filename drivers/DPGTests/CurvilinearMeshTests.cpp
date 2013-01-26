@@ -208,7 +208,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
 //  }
   
   // now for the real test: swap out the edges for circular arcs.
-  ParametricFunctionPtr circle = ParametricFunction::circle(radius, meshWidth / 2.0, meshWidth / 2.0);
+  ParametricCurvePtr circle = ParametricCurve::circle(radius, meshWidth / 2.0, meshWidth / 2.0);
   
   // to make a more robust test, we would not use knowledge of the way edges and vertices are ordered here...
   typedef pair<int,int> Edge;
@@ -217,13 +217,13 @@ bool CurvilinearMeshTests::testEdgeLength() {
   Edge edge2 = make_pair(3,1); // top
   Edge edge3 = make_pair(1,0); // left
   
-  map< Edge, ParametricFunctionPtr > edgeToCurveMap;
+  map< Edge, ParametricCurvePtr > edgeToCurveMap;
 
   // for now, instead of going for a full circle, just replace one edge
-  edgeToCurveMap[edge0] = ParametricFunction::remapParameter(circle,  5.0/8.0, 7.0/8.0);
-//  edgeToCurveMap[edge1] = ParametricFunction::remapParameter(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
-//  edgeToCurveMap[edge2] = ParametricFunction::remapParameter(circle,  1.0/8.0, 3.0/8.0);
-//  edgeToCurveMap[edge3] = ParametricFunction::remapParameter(circle,  3.0/8.0, 5.0/8.0);
+  edgeToCurveMap[edge0] = ParametricCurve::subCurve(circle,  5.0/8.0, 7.0/8.0);
+//  edgeToCurveMap[edge1] = ParametricCurve::subCurve(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
+//  edgeToCurveMap[edge2] = ParametricCurve::subCurve(circle,  1.0/8.0, 3.0/8.0);
+//  edgeToCurveMap[edge3] = ParametricCurve::subCurve(circle,  3.0/8.0, 5.0/8.0);
   
   H1Order = 1;
   mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
@@ -237,7 +237,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   perimeter = oneOnBoundary->integrate(mesh);
   double previousError = 1000;
   
-  numPRefinements = 5;
+  numPRefinements = 19;
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
     cout << "perimeter: " << perimeter << endl;
@@ -327,10 +327,10 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
   
     // now, set curves for each edge:
-    map< pair<int, int>, ParametricFunctionPtr > edgeToCurveMap;
+    map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
     
     int cellID = 0; // the only cell
-    vector< ParametricFunctionPtr > lines = mesh->parametricEdgesForCell(cellID);
+    vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
     vector< int > vertices = mesh->vertexIndicesForCell(cellID);
     
     for (int i=0; i<vertices.size(); i++) {

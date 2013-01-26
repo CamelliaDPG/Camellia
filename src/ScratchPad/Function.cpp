@@ -356,6 +356,7 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
   int numCells = cellIntegrals.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+//  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
   FieldContainer<double> values(numCells,numPoints);
   this->values(values,basisCache);
   if ( !sumInto ) {
