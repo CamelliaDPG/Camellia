@@ -108,6 +108,7 @@ public:
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero();
+  static FunctionPtr restrictToCellBoundary(FunctionPtr f);
 //  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,

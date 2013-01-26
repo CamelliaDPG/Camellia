@@ -20,6 +20,20 @@ struct CacheInfo {
   FieldContainer<double> subCellNodes;
 };
 
+// private class CellBoundaryRestrictedFunction
+class CellBoundaryRestrictedFunction : public Function {
+  FunctionPtr _fxn;
+public:
+  CellBoundaryRestrictedFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+    _fxn = fxn;
+  }
+  
+  bool boundaryValueOnly() { return true; }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    _fxn->values(values, basisCache);
+  }
+};
+
 // private class SimpleSolutionFunction:
 class SimpleSolutionFunction : public Function {
   SolutionPtr _soln;
@@ -752,6 +766,10 @@ FunctionPtr Function::sideParity() { // canonical direction on boundary (used fo
 
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
+}
+
+FunctionPtr Function::restrictToCellBoundary(FunctionPtr f) {
+  return Teuchos::rcp( new CellBoundaryRestrictedFunction(f) );
 }
 
 FunctionPtr Function::solution(VarPtr var, SolutionPtr soln) {

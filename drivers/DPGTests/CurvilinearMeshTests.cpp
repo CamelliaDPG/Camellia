@@ -28,6 +28,13 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testEdgeLength()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testStraightEdgeMesh()) {
     numTestsPassed++;
   }
@@ -125,6 +132,110 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 //    filePath.str("");
 //    filePath << "/tmp/cylinderFlowMesh_h" << i << "_straight_lines.dat";
 //    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
+    previousError = error;
+    
+    // h-refine
+    if (i<numHRefinements) {
+      mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+    }
+  }
+  
+  return success;
+}
+
+bool CurvilinearMeshTests::testEdgeLength() {
+  bool success = true;
+  
+  // to begin, a very simple test: do we compute the correct area for a square?
+  FunctionPtr one = Function::constant(1.0);
+  FunctionPtr oneOnBoundary = Function::restrictToCellBoundary(one);
+  
+  double radius = 1.0;
+  
+  double meshWidth = radius * sqrt(2.0);
+  
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  
+  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
+  
+  // make a single-element mesh:
+  int H1Order = 1;
+  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+  double perimeter = oneOnBoundary->integrate(mesh);
+  
+  double tol = 1e-14;
+  double expectedPerimeter = 4*(meshWidth);
+  double err = abs(perimeter - expectedPerimeter);
+  if (err > tol) {
+    cout << "Problem with test: on square mesh, perimeter should be " << expectedPerimeter;
+    cout << " but is " << perimeter << endl;
+    success = false;
+  }
+  
+  // now for the real test: swap out the edges for circular arcs.
+  ParametricFunctionPtr circle = ParametricFunction::circle(radius, meshWidth / 2.0, meshWidth / 2.0);
+  
+  // to make a more robust test, we would not use knowledge of the way edges and vertices are ordered here...
+  typedef pair<int,int> Edge;
+  Edge edge0 = make_pair(0,2); // bottom
+  Edge edge1 = make_pair(2,3); // right
+  Edge edge2 = make_pair(3,1); // top
+  Edge edge3 = make_pair(1,0); // left
+  
+  map< Edge, ParametricFunctionPtr > edgeToCurveMap;
+  
+  edgeToCurveMap[edge0] = ParametricFunction::remapParameter(circle,  5.0/8.0, 7.0/8.0);
+  edgeToCurveMap[edge1] = ParametricFunction::remapParameter(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
+  edgeToCurveMap[edge2] = ParametricFunction::remapParameter(circle,  1.0/8.0, 3.0/8.0);
+  edgeToCurveMap[edge3] = ParametricFunction::remapParameter(circle,  3.0/8.0, 5.0/8.0);
+  
+  mesh->setEdgeToCurveMap(edgeToCurveMap);
+  
+  double truePerimeter = PI * 2.0 * radius;
+  perimeter = oneOnBoundary->integrate(mesh);
+  double previousError = abs(perimeter-truePerimeter);
+  
+  int numPRefinements = 5;
+  for (int i=1; i<=numPRefinements; i++) {
+    perimeter = oneOnBoundary->integrate(mesh);
+    cout << "perimeter: " << perimeter << endl;
+    double error = abs(truePerimeter - perimeter);
+    if ((error >= previousError) && (error > tol)) { // non-convergence
+      success = false;
+      cout << "testEdgeLength: Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
+      cout << "Current error = " << error << "; previous = " << previousError << endl;
+    }
+    ostringstream filePath;
+    filePath << "/tmp/circularMesh" << H1Order << ".dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    previousError = error;
+    // p-refine
+    if (i < numPRefinements) {
+      mesh->pRefine(mesh->getActiveCellIDs());
+    }
+  }
+  
+  // now, do much the same thing, except with h-refinements:
+  H1Order = 2;
+  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+  mesh->setEdgeToCurveMap(edgeToCurveMap);
+  previousError = 1000;
+  int numHRefinements = 5;
+  for (int i=0; i<=numHRefinements; i++) {
+    perimeter = oneOnBoundary->integrate(mesh);
+    cout << "perimeter: " << perimeter << endl;
+    double error = abs(truePerimeter - perimeter);
+    if ((error >= previousError) && (error > tol)) { // non-convergence
+      success = false;
+      cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
+      cout << "Current error = " << error << "; previous = " << previousError << endl;
+    }
+    ostringstream filePath;
+    filePath << "/tmp/circularMesh_h" << i << ".dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    filePath.str("");
+    filePath << "/tmp/circularMesh_h" << i << "_straight_lines.dat";
+    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
     previousError = error;
     
     // h-refine
