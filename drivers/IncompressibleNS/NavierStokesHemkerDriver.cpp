@@ -63,7 +63,15 @@ public:
     _left = - width / 2.0 + tol;
   }
   bool matchesPoint(double x, double y) {
-    return x < _left;
+    bool matches = x < _left;
+//    cout << "Left boundary ";
+//    if (matches) {
+//      cout << "matches";
+//    } else {
+//      cout << "does not match";
+//    }
+//    cout << " point (" << x << ", " << y << ")\n";
+    return matches;
   }
 };
 
@@ -114,6 +122,8 @@ public:
   bool matchesPoint(double x, double y) {
     if (x*x + y*y < _enlarged_radius * _enlarged_radius) {
       return true;
+    } else {
+      return false;
     }
   }
 };
