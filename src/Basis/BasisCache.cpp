@@ -137,8 +137,8 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
       // turning this off for now -- not convinced we need it
       // (the key question is whether for quadrature we need to think of this as function composition,
       //  or maybe whether the quadrature happens on the straight-line mesh "prior" to the transformation...)
-      int maxDegree = ((MeshTransformationFunction*)_transformationFxn.get())->maxDegree();
-      _cubatureMultiplier = max(_cubatureMultiplier, maxDegree);
+//      int maxDegree = ((MeshTransformationFunction*)_transformationFxn.get())->maxDegree();
+//      _cubatureMultiplier = max(_cubatureMultiplier, maxDegree);
     }
     // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
     // one with potentially curved edges...
