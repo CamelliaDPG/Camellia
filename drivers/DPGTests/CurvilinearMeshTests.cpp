@@ -116,7 +116,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   int numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {
     double approximateArea = one->integrate(mesh);
-    double impliedPi = (width * height - approximateArea) / (r*r);
+//    double impliedPi = (width * height - approximateArea) / (r*r);
 //    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
 //    cout << " (error " << abs(PI-impliedPi) << ")\n";
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
@@ -172,6 +172,41 @@ bool CurvilinearMeshTests::testEdgeLength() {
     success = false;
   }
   
+  int numPRefinements = 5;
+  for (int i=1; i<=numPRefinements; i++) {
+    perimeter = oneOnBoundary->integrate(mesh);
+    cout << "perimeter: " << perimeter << endl;
+    double error = abs(expectedPerimeter - perimeter);
+    if (error > tol) {
+      success = false;
+      cout << "testEdgeLength: On square mesh, error with H1Order = " << i << " exceeds tol " << tol << endl;
+      cout << "Error = " << error << endl;
+    }
+    // p-refine
+    if (i < numPRefinements) {
+      mesh->pRefine(mesh->getActiveCellIDs());
+    }
+  }
+  
+//  // now, do much the same thing, except with h-refinements:
+//  H1Order = 2;
+//  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+//  int numHRefinements = 5;
+//  for (int i=0; i<=numHRefinements; i++) {
+//    perimeter = oneOnBoundary->integrate(mesh);
+//    cout << "perimeter: " << perimeter << endl;
+//    double error = abs(expectedPerimeter - perimeter);
+//    if (error > tol) {
+//      success = false;
+//      cout << "testEdgeLength: On square mesh, error for h-refinement " << i << " exceeds tol " << tol << endl;
+//      cout << "Error = " << error << endl;
+//    }
+//    // h-refine
+//    if (i<numHRefinements) {
+//      mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+//    }
+//  }
+  
   // now for the real test: swap out the edges for circular arcs.
   ParametricFunctionPtr circle = ParametricFunction::circle(radius, meshWidth / 2.0, meshWidth / 2.0);
   
@@ -183,22 +218,31 @@ bool CurvilinearMeshTests::testEdgeLength() {
   Edge edge3 = make_pair(1,0); // left
   
   map< Edge, ParametricFunctionPtr > edgeToCurveMap;
-  
+
+  // for now, instead of going for a full circle, just replace one edge
   edgeToCurveMap[edge0] = ParametricFunction::remapParameter(circle,  5.0/8.0, 7.0/8.0);
-  edgeToCurveMap[edge1] = ParametricFunction::remapParameter(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
-  edgeToCurveMap[edge2] = ParametricFunction::remapParameter(circle,  1.0/8.0, 3.0/8.0);
-  edgeToCurveMap[edge3] = ParametricFunction::remapParameter(circle,  3.0/8.0, 5.0/8.0);
+//  edgeToCurveMap[edge1] = ParametricFunction::remapParameter(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
+//  edgeToCurveMap[edge2] = ParametricFunction::remapParameter(circle,  1.0/8.0, 3.0/8.0);
+//  edgeToCurveMap[edge3] = ParametricFunction::remapParameter(circle,  3.0/8.0, 5.0/8.0);
   
+  H1Order = 1;
+  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   
-  double truePerimeter = PI * 2.0 * radius;
-  perimeter = oneOnBoundary->integrate(mesh);
-  double previousError = abs(perimeter-truePerimeter);
+  double straightEdgePerimeter = meshWidth * 3.0;
+  double arcLength = (PI * 2.0 * radius) / 4.0;
   
-  int numPRefinements = 5;
+  double truePerimeter = arcLength + straightEdgePerimeter;
+  
+  perimeter = oneOnBoundary->integrate(mesh);
+  double previousError = 1000;
+  
+  numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
     cout << "perimeter: " << perimeter << endl;
+    double impliedPi = (perimeter - straightEdgePerimeter) * 2.0 / radius;
+    cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
     double error = abs(truePerimeter - perimeter);
     if ((error >= previousError) && (error > tol)) { // non-convergence
       success = false;
@@ -206,7 +250,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
     ostringstream filePath;
-    filePath << "/tmp/circularMesh" << H1Order << ".dat";
+    filePath << "/tmp/circularMesh_p" << i << ".dat";
     GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     // p-refine
@@ -215,35 +259,35 @@ bool CurvilinearMeshTests::testEdgeLength() {
     }
   }
   
-  // now, do much the same thing, except with h-refinements:
-  H1Order = 2;
-  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
-  mesh->setEdgeToCurveMap(edgeToCurveMap);
-  previousError = 1000;
-  int numHRefinements = 5;
-  for (int i=0; i<=numHRefinements; i++) {
-    perimeter = oneOnBoundary->integrate(mesh);
-    cout << "perimeter: " << perimeter << endl;
-    double error = abs(truePerimeter - perimeter);
-    if ((error >= previousError) && (error > tol)) { // non-convergence
-      success = false;
-      cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
-      cout << "Current error = " << error << "; previous = " << previousError << endl;
-    }
-    ostringstream filePath;
-    filePath << "/tmp/circularMesh_h" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
-    filePath.str("");
-    filePath << "/tmp/circularMesh_h" << i << "_straight_lines.dat";
-    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
-    previousError = error;
-    
-    // h-refine
-    if (i<numHRefinements) {
-      mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
-    }
-  }
-  
+//  // now, do much the same thing, except with h-refinements:
+//  H1Order = 2;
+//  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+//  mesh->setEdgeToCurveMap(edgeToCurveMap);
+//  previousError = 1000;
+//  numHRefinements = 5;
+//  for (int i=0; i<=numHRefinements; i++) {
+//    perimeter = oneOnBoundary->integrate(mesh);
+//    cout << "perimeter: " << perimeter << endl;
+//    double error = abs(truePerimeter - perimeter);
+//    if ((error >= previousError) && (error > tol)) { // non-convergence
+//      success = false;
+//      cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
+//      cout << "Current error = " << error << "; previous = " << previousError << endl;
+//    }
+//    ostringstream filePath;
+//    filePath << "/tmp/circularMesh_h" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    filePath.str("");
+//    filePath << "/tmp/circularMesh_h" << i << "_straight_lines.dat";
+//    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
+//    previousError = error;
+//    
+//    // h-refine
+//    if (i<numHRefinements) {
+//      mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+//    }
+//  }
+//  
   return success;
 }
 

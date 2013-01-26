@@ -236,6 +236,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr inflowSpeed = Function::constant(1.0);
   
   MeshGeometryPtr geometry = MeshFactory::hemkerGeometry(width,height,radius);
+//  MeshGeometryPtr geometry = MeshFactory::quadGeometry(width,height); // hemker domain, but without the cylinder, and without curvilinear geometry!
   
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,geometry,
                                                           H1Order, pToAdd); // zero forcing function
@@ -261,7 +262,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(t1n,right,zero);
   bc->addDirichlet(t2n,right,zero);
   
-  bc->imposeZeroMeanConstraint(p->ID());
+  bc->addZeroMeanConstraint(p);
   problem.setBC(bc);
   
   Teuchos::RCP<Mesh> mesh = problem.mesh();
@@ -280,6 +281,11 @@ int main(int argc, char *argv[]) {
       cout << "NOT enforcing 1-irregularity.\n";
     }
   }
+  
+  map< int, FunctionPtr > initialGuess;
+  initialGuess[u1->ID()] = Function::constant(1.0);
+  initialGuess[u1hat->ID()] = Function::constant(1.0);
+  // all other variables: use zero initial guess (the implicit one)
   
   ////////////////////   CREATE BCs   ///////////////////////
   FunctionPtr u1_prev = Function::solution(u1,solution);
@@ -328,8 +334,9 @@ int main(int argc, char *argv[]) {
 
     for (int refIndex=0; refIndex<numRefs; refIndex++){
       if (startWithZeroSolutionAfterRefinement) {
-        // start with a fresh (zero) initial guess for each adaptive mesh:
+        // start with a fresh initial guess for each adaptive mesh:
         solution->clear();
+        solution->projectOntoMesh(initialGuess);
         problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
       }
       
@@ -456,7 +463,8 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     GnuPlotUtil::writeComputationalMeshSkeleton("finalHemkerMesh", mesh);
     
-    solution->writeToVTK("nsHemkerSoln.vtk");
+    solution->writeToVTK("nsHemkerSoln.vtk.vtu");
+    solution->writeTracesToVTK("nsHemkerSoln.vtk.vtu");
     massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
     u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
     solution->writeFieldsToFile(u1->ID(), "u1.m");

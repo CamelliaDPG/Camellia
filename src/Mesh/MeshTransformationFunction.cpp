@@ -297,34 +297,25 @@ public:
     if (_op == OP_VALUE) {
       // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
       int cardinality = _basis->getCardinality();
-      int numPoints = basisCache->getRefCellPoints().dimension(0);
-      int spaceDim = basisCache->getRefCellPoints().dimension(1);
+      const FieldContainer<double>* refCellPoints;
+      if (basisCache->isSideCache()) {
+        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
+      } else {
+        refCellPoints = &basisCache->getRefCellPoints();
+      }
+      int numPoints = refCellPoints->dimension(0);
+      int spaceDim = basisCache->getSpaceDim();
       FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
-      _basis->getValues(basisValues, basisCache->getRefCellPoints(), Intrepid::OPERATOR_VALUE);
-      
-//      if (_basis->getDegree()>1) {
-//        cout << "---------- values() DATA -----------\n";
-//        cout << "basisValues:\n" << basisValues;
-//        cout << "refCellPoints:\n" << basisCache->getRefCellPoints();
-//      }
-      
-//      Teuchos::RCP<const FieldContainer<double> > refValues = basisCache->getValues(_basis, OP_VALUE);
-//      int numCells = basisCache->cellIDs().size();
-//      Teuchos::Array<int> dimensions;
-//      refValues->dimensions(dimensions);
-//      dimensions.insert(dimensions.begin(), numCells);
-//      Teuchos::RCP<FieldContainer<double> > transformedValuesMutable = Teuchos::rcp(new FieldContainer<double>(dimensions));
-//      FunctionSpaceTools::HGRADtransformVALUE<double>(*transformedValuesMutable,*refValues);
-//      transformedValues = transformedValuesMutable;
+      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
       basisValues.resize(1,cardinality,numPoints,spaceDim);
       transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
       transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
     } else {
-      transformedValues = basisCache->getTransformedValues(_basis, _op);
+      bool useSideRefCellPoints = basisCache->isSideCache();
+      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
 //      cout << "transformedValues:\n" << *transformedValues;
     }
     // (C,F,P,D)
-    
     
     // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
     // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
