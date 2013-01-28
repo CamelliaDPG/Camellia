@@ -365,7 +365,7 @@ public:
       return alpha;
     }
   }
-  double iterate(bool useLineSearch) { // returns the weight used...
+  double iterate(bool useLineSearch) { // returns the weight used...    
     double weight;
     if (_iterations==0) {
       _backgroundFlow->solve();

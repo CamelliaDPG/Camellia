@@ -19,6 +19,8 @@ public:
   bool testMultiplyMatrices();  
   bool testSimpleSolve();
   bool testSolveMultipleRHS();
+  bool testAddMatrices();
+
   std::string testSuiteName();
 };
 
