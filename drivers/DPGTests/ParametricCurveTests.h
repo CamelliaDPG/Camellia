@@ -1,23 +1,24 @@
 //
-//  ParametricFunctionTests.h
+//  ParametricCurveTests.h
 //  Camellia-debug
 //
 //  Created by Nathan Roberts on 1/16/13.
 //
 //
 
-#ifndef Camellia_debug_ParametricFunctionTests_h
-#define Camellia_debug_ParametricFunctionTests_h
+#ifndef Camellia_debug_ParametricCurveTests_h
+#define Camellia_debug_ParametricCurveTests_h
 
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 #include "TestSuite.h"
 
-class ParametricFunctionTests : public TestSuite {
+class ParametricCurveTests : public TestSuite {
   void setup();
   void teardown() {}
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  bool testParametricFunctionRefinement(); // tests the kind of thing that will happen to parametric functions during mesh refinement
+  bool testParametricCurveRefinement(); // tests the kind of thing that will happen to parametric curves during mesh refinement
+  bool testPolygon();
   
   std::string testSuiteName();
 };

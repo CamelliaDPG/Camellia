@@ -12,6 +12,8 @@
 #include "Teuchos_RCP.hpp"
 #include "Teuchos_TestForException.hpp"
 
+using namespace std;
+
 class ParametricCurve;
 typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
 
@@ -22,7 +24,7 @@ class ParametricCurve {
   
   double _t0, _t1;
   
-  double remap(double t);
+  double remapForSubCurve(double t);
 protected:
   ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
   
@@ -38,15 +40,15 @@ public:
   
   static ParametricCurvePtr circle(double r, double x0, double y0);
   static ParametricCurvePtr circularArc(double r, double x0, double y0, double theta0, double theta1);
+  static ParametricCurvePtr curveUnion(vector< ParametricCurvePtr > curves, vector<double> weights = vector<double>());
   
-  static ParametricCurvePtr polygon(vector< pair<double,double> > vertices);
-  static ParametricCurvePtr polygon(vector< pair<double,double> > vertices, vector<double> weights);
+  static ParametricCurvePtr polygon(vector< pair<double,double> > vertices, vector<double> weights = vector<double>());
   
   static std::vector< ParametricCurvePtr > referenceCellEdges(unsigned cellTopoKey);
   static std::vector< ParametricCurvePtr > referenceQuadEdges();
   static std::vector< ParametricCurvePtr > referenceTriangleEdges();
   
-  static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1);
+  static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
 };
 
 #endif

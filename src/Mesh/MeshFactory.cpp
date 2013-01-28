@@ -12,7 +12,18 @@
 
 #include "GnuPlotUtil.h"
 
-class ParametricRect : public ParametricCurve {
+static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0) {
+  // starts at the positive x axis and proceeds counter-clockwise, just like our parametric circle
+  vector< pair<double, double> > vertices;
+  vertices.push_back(make_pair(x0 + width/2.0, y0 + 0));
+  vertices.push_back(make_pair(x0 + width/2.0, y0 + height/2.0));
+  vertices.push_back(make_pair(x0 - width/2.0, y0 + height/2.0));
+  vertices.push_back(make_pair(x0 - width/2.0, y0 - height/2.0));
+  vertices.push_back(make_pair(x0 + width/2.0, y0 - height/2.0));
+  return ParametricCurve::polygon(vertices);
+}
+
+/*class ParametricRect : public ParametricCurve {
   double _width, _height, _x0, _y0;
   vector< ParametricCurvePtr > _edgeLines;
   vector< double > _switchValues;
@@ -44,7 +55,7 @@ public:
       }
     }
   }
-};
+};*/
 
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements) {
@@ -64,25 +75,30 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
 }
 
 MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight, double cylinderRadius) {
-  // later, we might want to do something more sophisticated, but for now, just an 8-element mesh, centered at origin
+  // first, set up an 8-element mesh, centered at the origin
   ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
-  ParametricCurvePtr rect = Teuchos::rcp( new ParametricRect(meshWidth, meshHeight, 0, 0) );
+  double embeddedSquareSideLength = cylinderRadius*3;
+  ParametricCurvePtr rect = parametricRect(embeddedSquareSideLength, embeddedSquareSideLength, 0, 0);
   
   int numPoints = 8; // 8 points on rect, 8 on circle
   int spaceDim = 2;
   vector< FieldContainer<double> > vertices;
   FieldContainer<double> innerVertex(spaceDim), outerVertex(spaceDim);
   FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
+  
+  vector<int> innerVertexIndices;
+  vector<int> outerVertexIndices;
+  
   double t = 0;
   for (int i=0; i<numPoints; i++) {
     circle->value(t, innerVertices(i,0), innerVertices(i,1));
     rect  ->value(t, outerVertices(i,0), outerVertices(i,1));
     circle->value(t, innerVertex(0), innerVertex(1));
     rect  ->value(t, outerVertex(0), outerVertex(1));
+    innerVertexIndices.push_back(vertices.size());
     vertices.push_back(innerVertex);
-    //    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
+    outerVertexIndices.push_back(vertices.size());
     vertices.push_back(outerVertex);
-    //    cout << "vertex " << vertices.size() - 1 << ":\n" << vertices[vertices.size()-1];
     t += 1.0 / numPoints;
   }
   
@@ -119,6 +135,136 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
     edgeToCurveMap[innerEdge] = ParametricCurve::subCurve(circle, t+1.0/numPoints, t);
     t += 1.0/numPoints;
   }
+  
+  int boundaryVertexOffset = vertices.size();
+  // make some new vertices, going counter-clockwise:
+  ParametricCurvePtr meshRect = parametricRect(meshWidth, meshHeight, 0, 0);
+  FieldContainer<double> boundaryVertex(spaceDim);
+  boundaryVertex(0) = meshWidth / 2.0;
+  boundaryVertex(1) = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = meshHeight / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = -meshWidth / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = -meshHeight / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(0) = meshWidth / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex(1) = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  vector<int> vertexIndices(4);
+  vertexIndices[0] = outerVertexIndices[0];
+  vertexIndices[1] = boundaryVertexOffset;
+  vertexIndices[2] = boundaryVertexOffset + 1;
+  vertexIndices[3] = outerVertexIndices[1];
+  elementVertices.push_back(vertexIndices);
+  
+  // mesh NE corner
+  vertexIndices[0] = outerVertexIndices[1];
+  vertexIndices[1] = boundaryVertexOffset + 1;
+  vertexIndices[2] = boundaryVertexOffset + 2;
+  vertexIndices[3] = boundaryVertexOffset + 3;
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = outerVertexIndices[2];
+  vertexIndices[1] = outerVertexIndices[1];
+  vertexIndices[2] = boundaryVertexOffset + 3;
+  vertexIndices[3] = boundaryVertexOffset + 4;
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = outerVertexIndices[3];
+  vertexIndices[1] = outerVertexIndices[2];
+  vertexIndices[2] = boundaryVertexOffset + 4;
+  vertexIndices[3] = boundaryVertexOffset + 5;
+  elementVertices.push_back(vertexIndices);
+  
+  // NW corner
+  vertexIndices[0] = boundaryVertexOffset + 7;
+  vertexIndices[1] = outerVertexIndices[3];
+  vertexIndices[2] = boundaryVertexOffset + 5;
+  vertexIndices[3] = boundaryVertexOffset + 6;
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = boundaryVertexOffset + 8;
+  vertexIndices[1] = outerVertexIndices[4];
+  vertexIndices[2] = outerVertexIndices[3];
+  vertexIndices[3] = boundaryVertexOffset + 7;
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = boundaryVertexOffset + 9;
+  vertexIndices[1] = outerVertexIndices[5];
+  vertexIndices[2] = outerVertexIndices[4];
+  vertexIndices[3] = boundaryVertexOffset + 8;
+  elementVertices.push_back(vertexIndices);
+  
+  // SW corner
+  vertexIndices[0] = boundaryVertexOffset + 10;
+  vertexIndices[1] = boundaryVertexOffset + 11;
+  vertexIndices[2] = outerVertexIndices[5];
+  vertexIndices[3] = boundaryVertexOffset + 9;
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = boundaryVertexOffset + 11;
+  vertexIndices[1] = boundaryVertexOffset + 12;
+  vertexIndices[2] = outerVertexIndices[6];
+  vertexIndices[3] = outerVertexIndices[5];
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = boundaryVertexOffset + 12;
+  vertexIndices[1] = boundaryVertexOffset + 13;
+  vertexIndices[2] = outerVertexIndices[7];
+  vertexIndices[3] = outerVertexIndices[6];
+  elementVertices.push_back(vertexIndices);
+  
+  // SE corner
+  vertexIndices[0] = boundaryVertexOffset + 13;
+  vertexIndices[1] = boundaryVertexOffset + 14;
+  vertexIndices[2] = boundaryVertexOffset + 15;
+  vertexIndices[3] = outerVertexIndices[7];
+  elementVertices.push_back(vertexIndices);
+  
+  vertexIndices[0] = outerVertexIndices[7];
+  vertexIndices[1] = boundaryVertexOffset + 15;
+  vertexIndices[2] = boundaryVertexOffset;
+  vertexIndices[3] = outerVertexIndices[0];
+  elementVertices.push_back(vertexIndices);
   
   return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
 }

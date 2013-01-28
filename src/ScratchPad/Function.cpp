@@ -34,6 +34,33 @@ public:
   }
 };
 
+class MeshBoundaryCharacteristicFunction : public Function {
+  
+public:
+  MeshBoundaryCharacteristicFunction() : Function(0) {
+    
+  }
+  bool boundaryValueOnly() { return true; }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    // scalar: values shape is (C,P)
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    int sideIndex = basisCache->getSideIndex();
+    MeshPtr mesh = basisCache->mesh();
+    TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshBoundaryCharacteristicFunction requires a mesh!");
+    TEUCHOS_TEST_FOR_EXCEPTION(sideIndex == -1, std::invalid_argument, "MeshBoundaryCharacteristicFunction is only defined on cell boundaries");
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = basisCache->cellIDs()[cellIndex];
+      bool onBoundary = mesh->boundary().boundaryElement(cellID, sideIndex);
+      double value = onBoundary ? 1 : 0;
+      for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+        values(cellIndex,pointIndex) = value;
+      }
+    }
+  }
+};
+
 // private class SimpleSolutionFunction:
 class SimpleSolutionFunction : public Function {
   SolutionPtr _soln;
@@ -752,6 +779,11 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
 
 FunctionPtr Function::constant(double value) {
   return Teuchos::rcp( new ConstantScalarFunction(value) );
+}
+
+FunctionPtr Function::meshBoundaryCharacteristic() {
+  // 1 on mesh boundary, 0 elsewhere
+  return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
 }
 
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary

@@ -624,6 +624,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
+//  cout << "physicalCellNodes:\n" << physicalCellNodes;
   determineJacobian();
   
   // compute weighted measure

@@ -14,6 +14,13 @@ void ParametricCurveTests::setup() {
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testPolygon()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testParametricCurveRefinement()) {
     numTestsPassed++;
   }
@@ -90,6 +97,65 @@ bool ParametricCurveTests::testParametricCurveRefinement() {
   }
   
   return allSuccess(success);
+}
+
+bool ParametricCurveTests::testPolygon() {
+  bool success = true;
+  double width = 2.0; double height = 1.0;
+  vector< pair<double, double> > rectVertices;
+  rectVertices.push_back(make_pair(0,0));
+  rectVertices.push_back(make_pair(width, 0));
+  rectVertices.push_back(make_pair(width, height));
+  rectVertices.push_back(make_pair(0, height));
+  ParametricCurvePtr rect = ParametricCurve::polygon(rectVertices);
+  
+  double perimeter = 2 * (width + height);
+  vector<double> t_values;
+  vector<double> x_values_expected;
+  vector<double> y_values_expected;
+  
+  // first vertex:
+  t_values.push_back(0);
+  x_values_expected.push_back(rectVertices[0].first);
+  y_values_expected.push_back(rectVertices[0].second);
+  
+  // second vertex:
+  t_values.push_back(width/perimeter);
+  x_values_expected.push_back(rectVertices[1].first);
+  y_values_expected.push_back(rectVertices[1].second);
+  
+  // third vertex:
+  t_values.push_back((width+height)/perimeter);
+  x_values_expected.push_back(rectVertices[2].first);
+  y_values_expected.push_back(rectVertices[2].second);
+  
+  // fourth vertex:
+  t_values.push_back((2*width+height)/perimeter);
+  x_values_expected.push_back(rectVertices[3].first);
+  y_values_expected.push_back(rectVertices[3].second);
+  
+  // and now a handful of in-between values:
+  t_values.push_back((width/perimeter)/2);
+  x_values_expected.push_back((rectVertices[1].first -rectVertices[0].first)  / 2);
+  y_values_expected.push_back((rectVertices[1].second-rectVertices[0].second) / 2);
+  
+  double tol = 1e-14;
+  for (int i=0; i<t_values.size(); i++) {
+    double t = t_values[i];
+    double x,y;
+    rect->value(t, x, y);
+    double x_err = abs(x-x_values_expected[i]);
+    double y_err = abs(y-y_values_expected[i]);
+    if (x_err > tol) {
+      cout << "rect(" << t << "): expected x = " << x_values_expected[i] << " but was " << x << endl;
+      success = false;
+    }
+    if (y_err > tol) {
+      cout << "rect(" << t << "): expected y = " << y_values_expected[i] << " but was " << y << endl;
+      success = false;
+    }
+  }
+  return success;
 }
 
 std::string ParametricCurveTests::testSuiteName() {

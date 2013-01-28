@@ -7,21 +7,12 @@
 //
 
 #include "HConvergenceStudy.h"
-
 #include "InnerProductScratchPad.h"
-
 #include "PreviousSolutionFunction.h"
-
 #include "LagrangeConstraints.h"
-
 #include "BasisFactory.h"
-
 #include "GnuPlotUtil.h"
-
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 #include "NavierStokesFormulation.h"
 
@@ -37,11 +28,6 @@
 #include "PenaltyConstraints.h"
 
 #include "MeshFactory.h"
-
-#ifdef HAVE_MPI
-#include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 using namespace std;
 
@@ -230,7 +216,7 @@ int main(int argc, char *argv[]) {
   tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
   q = varFactory.testVar(VGP_Q_S, HGRAD);
   
-  double width = 10, height = 10;
+  double width = 100, height = 50;
   double radius = 1;
   FunctionPtr zero = Function::zero();
   FunctionPtr inflowSpeed = Function::constant(1.0);

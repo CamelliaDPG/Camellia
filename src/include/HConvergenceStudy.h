@@ -100,8 +100,7 @@ class HConvergenceStudy {
   
   Teuchos::RCP<Solution> bestApproximation(Teuchos::RCP<Mesh> mesh);
   
-  Teuchos::RCP<Mesh> buildMesh( const vector<FieldContainer<double> > &vertices,
-                               vector< vector<int> > &elementVertices, int numRefinements,
+  Teuchos::RCP<Mesh> buildMesh(Teuchos::RCP<MeshGeometry> geometry, int numRefinements,
                                bool useConformingTraces );
 public:
   HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
@@ -115,8 +114,7 @@ public:
   void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
   void solve(const FieldContainer<double> &quadPoints, bool useConformingTraces = true);
-  void solve(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-             bool useConformingTraces=true);
+  void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);
   

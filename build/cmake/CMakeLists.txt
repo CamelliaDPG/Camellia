@@ -116,6 +116,7 @@ MESSAGE("CAMELLIA_SOURCE_DIR = ${CAMELLIA_SOURCE_DIR} ")
 FILE(GLOB_RECURSE SOURCES "${CAMELLIA_SOURCE_DIR}/*.cpp")
 
 set(DRIVERS_DIR "${CAMELLIA_SOURCE_DIR}/../drivers" )
+set(DEMO_DRIVERS_DIR "${DRIVERS_DIR}/DemoDrivers" )
 
 set(NAVIER_STOKES_DIR "${DRIVERS_DIR}/NavierStokes" )
 
@@ -142,6 +143,10 @@ set( STOKES_BACKWARD_FACING_STEP_DRIVER
   
 set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowDriver.cpp"
+  )
+
+set( LAPLACE_CURVILINEAR_DRIVER
+  "${DEMO_DRIVERS_DIR}/LaplaceCurvilinear.cpp"
   )
 
 set( NAVIER_STOKES_HEMKER_DRIVER
@@ -227,6 +232,7 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 #
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
+add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
@@ -260,6 +266,11 @@ target_link_libraries(DPGTests
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NavierStokesCavityFlowDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(LaplaceCurvilinear
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
