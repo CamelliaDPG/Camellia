@@ -38,91 +38,56 @@ class SerialDenseWrapper {
     }
     return Amatrix;
   }
+  static FieldContainer<double> convertSDMToFC(Epetra_SerialDenseMatrix &A){
+    int n = A.M();    
+    int m = A.N();
+    FieldContainer<double> Amatrix(n,m);
+    for (int i = 0;i<n;i++){
+      for (int j = 0;j<m;j++){
+	Amatrix(i,j) = A(i,j);
+      }
+    }
+    return Amatrix;
+  }
   
 public:
-  // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
-  static void multiply(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){
+  // gives A = A+B (overwrites A)
+  static void add(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B){
     int N = A.dimension(0);
-    int M = B.dimension(1);
-    if (TransposeA == 'T'){
-      N = A.dimension(1);
-    }
-    if (TransposeB == 'T'){
-      M = B.dimension(0);
-    }
-
+    int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
-    Epetra_SerialDenseMatrix XMatrix(N,M);
+    AMatrix += BMatrix;
+    X = convertSDMToFC(AMatrix);
+  }
 
-    XMatrix.Multiply(TransposeA,TransposeB,1.0,AMatrix,BMatrix,0.0);
+  // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
+  static void multiply(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N'){  
+    multiplyAndAdd(X,A,B,TransposeA,TransposeB,1.0,0.0);
+  }
+
+  // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors! 
+  // X = ScalarThis*X + ScalarAB*A*B
+  static void multiplyAndAdd(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, char TransposeA, char TransposeB, double ScalarAB, double ScalarThis){
+    int N = X.dimension(0);
+    int M = X.dimension(1);
     
-    for (int i=0;i<N;i++){
-      for (int j=0;j<M;j++){
-	X(i,j) = XMatrix(i,j);
-      }
-    }    
+    Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
+    Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
+    Epetra_SerialDenseMatrix XMatrix = convertFCToSDM(X);
+    
+    int success = XMatrix.Multiply(TransposeA,TransposeB,ScalarAB,AMatrix,BMatrix,ScalarThis);
+    if (success != 0){
+      cout << "Error in SerialDenseWrapper::multiplyAndAdd with error code " << success << endl;
+    }
+
+    X = convertSDMToFC(XMatrix);
   }
 
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
     // solves Ax = b, where
     // A = (N,N)
-    // b = N
-    // x = N
-    /*
-    Epetra_SerialDenseSolver solver;
-    
-    int N = A.dimension(0);
-    
-    if (! useATranspose) {
-      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
-    }
-    
-    Epetra_SerialDenseMatrix AMatrix(Copy,
-                                     &A(0,0),
-                                     A.dimension(1),
-                                     A.dimension(1),
-                                     A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)
-        
-    Epetra_SerialDenseVector bVector(Copy,
-                                     &b(0),
-                                     b.dimension(0));
-    
-    Epetra_SerialDenseVector xVector(x.dimension(0));
-   
-    solver.SetMatrix(AMatrix);
-    int info = solver.SetVectors(xVector,bVector);
-    if (info!=0){
-      cout << "solveSystem: failed to SetVectors with error " << info << endl;
-    }
-    
-    bool equilibrated = false;
-    if (solver.ShouldEquilibrate()){
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-    
-    info = solver.Solve();
-    if (info!=0){
-      cout << "solveSystem: failed to solve with error " << info << endl;
-    }
-    
-    if (equilibrated) {
-      int successLocal = solver.UnequilibrateLHS();
-      if (successLocal != 0) {
-        cout << "solveSystem: unequilibration FAILED with error: " << successLocal << endl;
-      }
-    }
-    
-    for (int i=0;i<N;i++){
-      x(i) = xVector(i);
-    }
-
-    if (! useATranspose) {
-      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
-    }
-    */
+    // x, b = (N)
     if (b.rank()==1){
       b.resize(b.dimension(0),1);
       x.resize(x.dimension(0),1);
@@ -134,23 +99,12 @@ public:
   static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
     // solves Ax = b, where
     // A = (N,N)
-    // b = N
-    // x = N
+    // x, b = (N)
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);
     int nRHS = b.dimension(1);
-    /*
-    if (! useATranspose) {
-      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
-    }
-    
-    Epetra_SerialDenseMatrix AMatrix(Copy,
-                                     &A(0,0),
-                                     A.dimension(0),
-                                     A.dimension(1),
-                                     A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)    
-    */
+ 
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
     Epetra_SerialDenseMatrix xVectors(N,nRHS);
@@ -179,12 +133,9 @@ public:
         cout << "solveSystem: unequilibration FAILED with error: " << successLocal << endl;
       }
     }
-
-    for (int i=0;i<N;i++){
-      for (int j=0;j<nRHS;j++){
-	x(i,j) = xVectors(i,j);
-      }
-    }
+    
+    x = convertSDMToFC(xVectors);
+  
   }
 
 

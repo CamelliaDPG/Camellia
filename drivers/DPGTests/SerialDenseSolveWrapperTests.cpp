@@ -38,8 +38,64 @@ void SerialDenseSolveWrapperTests::runTests(int &numTestsRun, int &numTestsPasse
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testAddMatrices()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
 }
 
+bool SerialDenseSolveWrapperTests::testAddMatrices() {
+  bool success = true;
+  
+  double tol = 1e-16;
+  FieldContainer<double> a(2,3);
+  FieldContainer<double> b(2,3);
+  FieldContainer<double> x(2,3); 
+  FieldContainer<double> expected_x(2,3);
+  
+  // A = [ 1 1 ]
+  //     [ 0 1 ]
+  // x = [ 3 ]
+  //     [ 4 ]
+  // b = [ 7 ]
+  //     [ 4 ]
+  expected_x(0,0) = 8.0;
+  expected_x(1,0) = 10.0;
+  expected_x(0,1) = 12.0;
+  expected_x(1,1) = 14.0;
+  expected_x(0,2) = 16.0;
+  expected_x(1,2) = 18.0;
+
+  a(0,0) = 1.0;
+  a(1,0) = 2.0;
+  a(0,1) = 3.0;
+  a(1,1) = 4.0;
+  a(0,2) = 5.0;
+  a(1,2) = 6.0;
+
+  b(0,0) = 7.0;
+  b(1,0) = 8.0;
+  b(0,1) = 9.0;
+  b(1,1) = 10.0;
+  b(0,2) = 11.0;
+  b(1,2) = 12.0;
+
+  SerialDenseWrapper::add(x, a, b);
+
+  double maxDiff = 0;
+  if (! fcsAgree(x, expected_x, tol, maxDiff)) {
+    cout << "testSolveMultipleRHS() failed: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
+    cout << "x: " << endl << x;
+    cout << "expected_x: " << endl << expected_x;
+    success = false;
+    return success;
+  }
+  
+  return success;
+}
 bool SerialDenseSolveWrapperTests::testMultiplyMatrices() {
   bool success = true;
   
@@ -74,7 +130,7 @@ bool SerialDenseSolveWrapperTests::testMultiplyMatrices() {
   b(0,2) = 7.0;
   b(1,2) = 4.0;
 
-  SerialDenseWrapper::multiply(x, A, b);
+  SerialDenseWrapper::multiplyAndAdd(x, A, b, 'N', 'N', 1.0, 0.0);
 
   double maxDiff = 0;
   if (! fcsAgree(x, expected_x, tol, maxDiff)) {
