@@ -20,7 +20,6 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
-
 Epetra_Map StandardAssembler::getPartMap(){
   int numProcs=1;
   int rank=0;
@@ -47,6 +46,35 @@ Epetra_FEVector StandardAssembler::initializeVector(){
   return vector;
 }
 
+FieldContainer<double> StandardAssembler::getSubVector(Epetra_FEVector u, ElementPtr elem){
+  int numTrialDofs = numTrialDofsForElem(elem);
+  DofOrderingPtr trialOrdering = elem->elementType()->trialOrderPtr;
+  MeshPtr mesh = _solution->mesh();
+  FieldContainer<double> u_K(numTrialDofs,1);
+  for (int localDofIndex=0; localDofIndex<numTrialDofs; localDofIndex++){
+    int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndex);    
+    u_K(localDofIndex,0) = (*u(0))[globalDofIndex];
+  }
+  return u_K;
+}
+
+void StandardAssembler::getElemData(ElementPtr elem, FieldContainer<double> &K, FieldContainer<double> &f){
+  int numTrialDofs = numTrialDofsForElem(elem);
+  int numTestDofs = numTestDofsForElem(elem);
+
+  FieldContainer<double> B = getOverdeterminedStiffness(elem);
+  FieldContainer<double> Rv = getIPMatrix(elem);
+  FieldContainer<double> l = getRHS(elem);
+  FieldContainer<double> RvB(B.dimension(0),B.dimension(1));  
+
+  SerialDenseWrapper::solveSystemMultipleRHS(RvB,Rv,B); // solve for optimal test functions
+  //  FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1); 
+  K.resize(numTrialDofs,numTrialDofs);
+  f.resize(numTrialDofs);
+  SerialDenseWrapper::multiply(K,RvB,B,'T','N');
+  SerialDenseWrapper::multiply(f,RvB,l,'T','N'); 
+}
+
 //Teuchos::RCP<Epetra_LinearProblem> StandardAssembler::assembleProblem(){
 //Epetra_FECrsMatrix StandardAssembler::assembleProblem(){
 void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector){
@@ -58,31 +86,29 @@ void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, E
   rank     = Teuchos::GlobalMPISession::getRank();
   numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
 
   MeshPtr mesh = _solution->mesh();  
 
-  //  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
-  //  Epetra_Map partMap = _solution->getPartitionMap(rank,myGlobalIndicesSet, mesh->numGlobalDofs(),0,&Comm);
-  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap,mesh->rowSizeUpperBound());
-  //  Epetra_FEVector rhsVector(partMap),lhsVector(partMap);
-
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     ElementPtr elem = *elemIt;
+    int numTrialDofs = numTrialDofsForElem(elem);
+    int numTestDofs = numTestDofsForElem(elem);
+    FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1);     
+    getElemData(elem,BtRvB,BtRvl);
+    /*
     FieldContainer<double> B = getOverdeterminedStiffness(elem);
     FieldContainer<double> Rv = getIPMatrix(elem);
     FieldContainer<double> l = getRHS(elem);
     FieldContainer<double> RvB(B.dimension(0),B.dimension(1));  
     SerialDenseWrapper::solveSystemMultipleRHS(RvB,Rv,B); // solve for optimal test functions
-    int numTrialDofs = numTrialDofsForElem(elem);
-    int numTestDofs = numTestDofsForElem(elem);
     FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1); 
     SerialDenseWrapper::multiply(BtRvB,RvB,B,'T','N');
     SerialDenseWrapper::multiply(BtRvl,RvB,l,'T','N'); 
+    */
 
     FieldContainer<int> globalDofIndices(numTrialDofs);
     // we have the same local-to-global map for both rows and columns
@@ -101,25 +127,9 @@ void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, E
 
   globalStiffMatrix.GlobalAssemble(); 
   rhsVector.GlobalAssemble();   
-
-  //  EpetraExt::RowMatrixToMatlabFile("K.mat",globalStiffMatrix);
-  //  cout << "NNz = " << globalStiffMatrix.NumGlobalNonzeros() << endl;
-
-  //  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
-  //  Epetra_LinearProblem problem(&globalStiffMatrix, &lhsVector, &rhsVector);
-  //  return problem;
-  //  return globalStiffMatrix;
-  //  problem->SetOperator(&globalStiffMatrix);
-  //  problem->SetLHS(&lhsVector);
-  //  problem->SetRHS(&rhsVector);
-  //  cout << "consistency check for problem = " << problem->CheckInput() << endl;
-  //  Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver());
-  //  solver->setProblem(problem);
-  //  solver->solve();
-  //  return problem;
 }
 
-void StandardAssembler::applyBCs(Epetra_FECrsMatrix globalStiffMatrix, Epetra_FEVector rhsVector){
+void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector){
   int numProcs=1;
   int rank=0;
   
@@ -153,16 +163,13 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix globalStiffMatrix, Epetra_FE
   // Update right-hand side
   rhsVector.Update(-1.0,rhsDirichlet,1.0);
   
-  if (numBCs == 0) {
-    //cout << "Solution: Warning: Imposing no BCs." << endl;
-  } else {
+  if (numBCs != 0) {
     int err = rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
     if (err != 0) {
       cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
   }
-  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges
-  //  and add one to diagonal.
+  // Zero out rows and columns of stiffness matrix corresponding to Dirichlet edges and add one to diagonal.
   FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
     bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
@@ -172,7 +179,6 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix globalStiffMatrix, Epetra_FE
   } else {
     ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
   }
-
 }
 
 void StandardAssembler::distributeDofs(Epetra_FEVector lhsVector){
