@@ -11,7 +11,7 @@
 
 #include <fstream>
 #include "Mesh.h"
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 class GnuPlotUtil {
 public:
@@ -37,15 +37,16 @@ public:
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
       bool neglectCurves = true;
-      vector< ParametricFunctionPtr > edgeLines = ParametricFunction::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
+      vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
-      int numPointsPerEdge = cell->elementType()->testOrderPtr->maxBasisDegree() + 1;
+      int numPointsPerEdge = cell->elementType()->testOrderPtr->maxBasisDegree() * 2; // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
-      FieldContainer<double> edgePoints(numEdges*numPointsPerEdge,spaceDim);
+      int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
+      FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
       
       int ptIndex = 0;
       for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
-        ParametricFunctionPtr edge = edgeLines[edgeIndex];
+        ParametricCurvePtr edge = edgeLines[edgeIndex];
         double t = 0;
         double increment = 1.0 / (numPointsPerEdge - 1);
         // last edge gets one extra point (to connect to first edge):
@@ -63,9 +64,14 @@ public:
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cell->cellID());
       basisCache->setRefCellPoints(edgePoints);
       
-      FieldContainer<double> transformedPoints(1,numPointsPerEdge*numEdges,spaceDim);
+//      cout << "--- cellID " << cell->cellID() << " ---\n";
+//      cout << "edgePoints:\n" << edgePoints;
+      
+      FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
       // compute the transformed points:
       transformationFunction->values(transformedPoints,basisCache);
+      
+//      cout << "transformedPoints:\n" << transformedPoints;
 
       ptIndex = 0;
       for (int i=0; i<numEdges; i++) {
@@ -90,15 +96,25 @@ public:
     
     fout << "# Plot with:\n";
     fout << setprecision(2);
+    fout << "# set size square\n";
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    fout << "# set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    fout << "# set out '" << filePath << ".eps'\n";
+    fout << "# replot\n";
+    fout << "# set term pop\n";
     fout.close();
     
     ofstream scriptOut((filePath + ".p").c_str());
+    scriptOut << "set size square\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set out '" << filePath << ".eps'\n";
+    scriptOut << "replot\n";
+    scriptOut << "set term pop\n";
     scriptOut.close();
   }
   
@@ -117,9 +133,9 @@ public:
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
-      vector< ParametricFunctionPtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
+      vector< ParametricCurvePtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
       for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
-        ParametricFunctionPtr edge = edgeCurves[edgeIndex];
+        ParametricCurvePtr edge = edgeCurves[edgeIndex];
         double t = 0;
         double increment = 1.0 / (numPointsPerEdge - 1);
         // last edge gets one extra point (to connect to first edge):
@@ -149,9 +165,14 @@ public:
     fout.close();
     
     ofstream scriptOut((filePath + ".p").c_str());
+    scriptOut << "set size square\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set out '" << filePath << ".eps'\n";
+    scriptOut << "replot\n";
+    scriptOut << "set term pop\n";
     scriptOut.close();
   }
   

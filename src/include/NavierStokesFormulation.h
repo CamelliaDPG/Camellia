@@ -222,6 +222,37 @@ class VGPNavierStokesProblem {
   double _iterationWeight;
   
 public:
+  VGPNavierStokesProblem(double Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
+                         FunctionPtr f1 = Function::zero(), FunctionPtr f2=Function::zero()) {
+    double mu = 1/Re;
+    _iterations = 0;
+    _iterationWeight = 1.0;
+    
+    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
+    
+    // create a new mesh:
+    _mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
+                                    vgpStokesFormulation->bf(), H1Order, pToAdd) );
+    _mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
+    
+    SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
+
+    _backgroundFlow = Teuchos::rcp( new Solution(_mesh) );
+    
+    _solnIncrement = Teuchos::rcp( new Solution(_mesh) );
+    _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
+    
+    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
+    
+    _backgroundFlow->setRHS( _vgpNavierStokesFormulation->rhs(f1, f2) );
+    _backgroundFlow->setIP( _vgpNavierStokesFormulation->graphNorm() );
+    
+    _mesh->setBilinearForm(_vgpNavierStokesFormulation->bf());
+    
+    _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2) );
+    _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
+  }
+  
   VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2) {
@@ -361,6 +392,10 @@ public:
   }
   Teuchos::RCP<Mesh> mesh() {
     return _mesh;
+  }
+  void setBC( Teuchos::RCP<BCEasy> bc ) {
+    _backgroundFlow->setBC(bc);
+    _solnIncrement->setBC(bc->copyImposingZero());
   }
   void setIP( IPPtr ip ) {
     _backgroundFlow->setIP( ip );

@@ -179,7 +179,8 @@ public:
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
-  const FieldContainer<double> getRefCellPoints(); 
+  const FieldContainer<double> &getRefCellPoints();
+  const FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
 
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
@@ -193,7 +194,7 @@ public:
   
   void setMaxCubatureDegree(int value);
   
-  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation, int degree);
+  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
   
   // static convenience constructors:
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,

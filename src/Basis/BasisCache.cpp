@@ -115,6 +115,9 @@ void BasisCache::createSideCaches() {
     }
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
     BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxDegreeBasisOnSide));
+    if (_transformationFxn.get()) {
+      sideCache->setTransformationFunction(_transformationFxn, true);
+    }
     _basisCacheSides.push_back(sideCache);
   }
 }
@@ -131,8 +134,11 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
     _transformationFxn = _mesh->getTransformationFunction();
     _composeTransformationFxnWithMeshTransformation = true;
     if (_transformationFxn.get()) {
-      int maxDegree = ((MeshTransformationFunction*)_transformationFxn.get())->maxDegree();
-      _cubatureMultiplier = max(_cubatureMultiplier, maxDegree);
+      // turning this off for now -- not convinced we need it
+      // (the key question is whether for quadrature we need to think of this as function composition,
+      //  or maybe whether the quadrature happens on the straight-line mesh "prior" to the transformation...)
+//      int maxDegree = ((MeshTransformationFunction*)_transformationFxn.get())->maxDegree();
+//      _cubatureMultiplier = max(_cubatureMultiplier, maxDegree);
     }
     // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
     // one with potentially curved edges...
@@ -463,8 +469,16 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
 
-const FieldContainer<double> BasisCache::getRefCellPoints() {
+const FieldContainer<double>& BasisCache::getRefCellPoints() {
   return _cubPoints;
+}
+
+const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates() {
+  if (! isSideCache()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                               "getSideRefCellPointsInVolumeCoordinates() only supported for side caches.");
+  }
+  return _cubPointsSideRefCell;
 }
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
@@ -610,6 +624,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
+//  cout << "physicalCellNodes:\n" << physicalCellNodes;
   determineJacobian();
   
   // compute weighted measure
@@ -626,6 +641,9 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
                                                      _cubWeights,
                                                      _sideIndex,
                                                      _cellTopo);
+//      cout << "_cellJacobian:\n" << _cellJacobian;
+//      cout << "_cubWeights:\n" << _cubWeights;
+//      cout << "_weightedMeasure:\n" << _weightedMeasure;
       
       // get normals
       _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
@@ -658,7 +676,7 @@ int BasisCache::maxTestDegree() {
   return _maxTestDegree;
 }
 
-void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation, int degree) {
+void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation) {
   // TODO: add argument here for cubature degree to use for transformation function.
   // (This will need to multiply the cubature degree for untransformed BasisCache.)
   _transformationFxn = f;

@@ -264,6 +264,10 @@ FieldContainer<double> RefinementPattern::verticesForRefinement(FieldContainer<d
   return verticesFC;
 }
 
+const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell() {
+  return _vertices;
+}
+
 vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVertexIndex) { 
   // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
@@ -273,6 +277,7 @@ vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVe
   vector< vector<int> >::iterator subCellIt;
   vector< vector<int> >::iterator childIt = children.begin();
   for (subCellIt=_subCells.begin(); subCellIt != _subCells.end(); subCellIt++) {
+//    cout << "child global vertex indices: ";
     int numVertices = (*subCellIt).size();
     *childIt = vector<int>(numVertices);
     vector<int>::iterator vertexIt;
@@ -282,9 +287,10 @@ vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVe
       int globalIndex = localToGlobalVertexIndex[localIndex];
       
       *childVertexIt = globalIndex;
-      
+//      cout << globalIndex << " ";
       childVertexIt++;
     }
+//    cout << endl;
     childIt++;
   }
   return children;

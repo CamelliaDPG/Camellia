@@ -255,9 +255,12 @@ void HConvergenceStudy::setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints>
   _lagrangeConstraints = lagrangeConstraints;
 }
 
-Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices, int numRefinements, bool useConformingTraces ) {
+Teuchos::RCP<Mesh> HConvergenceStudy::buildMesh( Teuchos::RCP<MeshGeometry> geometry, int numRefinements, bool useConformingTraces ) {
   Teuchos::RCP<Mesh> mesh;
-  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, _bilinearForm, _H1Order, _pToAdd, useConformingTraces) );
+  mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(), _bilinearForm,
+                                _H1Order, _pToAdd, useConformingTraces) );
+  
+  mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
   
   for (int i=0; i<numRefinements; i++) {
     RefinementStrategy::hRefineUniformly(mesh);
@@ -295,8 +298,7 @@ void HConvergenceStudy::setSolutions( vector< SolutionPtr > &solutions) {
   computeErrors();
 }
 
-void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices,
-                              vector< vector<int> > &elementVertices, bool useConformingTraces) {
+void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConformingTraces) {
   // TODO: refactor to make this and the straight quad mesh version share code...
   _solutions.clear();
   int minNumElements = 1;
@@ -306,7 +308,7 @@ void HConvergenceStudy::solve(const vector<FieldContainer<double> > &vertices,
   
   int numElements = minNumElements;
   for (int i=_minLogElements; i<=_maxLogElements; i++) {
-    Teuchos::RCP<Mesh> mesh = buildMesh(vertices, elementVertices, i, useConformingTraces);
+    Teuchos::RCP<Mesh> mesh = buildMesh(geometry, i, useConformingTraces);
     if (_randomRefinements) {
       randomlyRefine(mesh);
     }

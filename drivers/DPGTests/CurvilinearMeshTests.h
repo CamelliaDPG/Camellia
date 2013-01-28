@@ -17,6 +17,7 @@ class CurvilinearMeshTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
+  bool testEdgeLength();
   bool testCylinderMesh();
   bool testStraightEdgeMesh();
   

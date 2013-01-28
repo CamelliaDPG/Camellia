@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
   
   bool artificialTimeStepping = false;
   
-  int horizontalCells = 16, verticalCells = 16;
+  int horizontalCells = 2, verticalCells = 2;
   
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order

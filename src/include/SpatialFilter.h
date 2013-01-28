@@ -52,6 +52,9 @@ public:
   //  bool matchesPoint(double x, double y, double z) {
   //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z) unimplemented.");
   //  }
+  
+  static SpatialFilterPtr allSpace();
+  static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
 };
 
 class SpatialFilterUnfiltered : public SpatialFilter {
@@ -125,5 +128,6 @@ public:
 //SpatialFilterPtr operator!(SpatialFilterPtr sf) {
 //  return Teuchos::rcp( new NegatedSpatialFilter(sf) );
 //}
+
 
 #endif

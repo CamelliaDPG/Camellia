@@ -33,6 +33,7 @@ public:
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
   
+  const FieldContainer<double> & verticesOnReferenceCell();
   FieldContainer<double> verticesForRefinement(FieldContainer<double> &cellNodes);
   
   vector< vector<int> > children(map<int, int> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
