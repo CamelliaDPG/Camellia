@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
   int polyOrder = 3;
   int pToAdd = 2;
   int minLogElements = 0;
-  int maxLogElements = 3;
+  int maxLogElements = 2;
   bool useTriangles = false;
   double width = 10;
   double height = 10;
@@ -45,16 +45,17 @@ int main(int argc, char *argv[]) {
   VarPtr psi1 = vf.fieldVar("\\psi_{1}");
   VarPtr psi2 = vf.fieldVar("\\psi_{2}");
   VarPtr phi_hat = vf.traceVar("\\widehat{\\phi}");
-  VarPtr psi_hat_n = vf.traceVar("\\widehat{\\psi}_n");
+  VarPtr psi_hat_n = vf.fluxVar("\\widehat{\\psi}_n");
   // test variables
   VarPtr q = vf.testVar("q", HDIV);
   VarPtr v = vf.testVar("v", HGRAD);
   // bilinear form
   BFPtr bf = Teuchos::rcp( new BF(vf) );
   bf->addTerm(-phi, q->div());
-  bf->addTerm(-psi1,q->x());
+  bf->addTerm(-psi1, q->x());
   bf->addTerm(-psi2, q->y());
   bf->addTerm(phi_hat, q->dot_normal());
+  
   bf->addTerm(-psi1, v->dx());
   bf->addTerm(-psi2, v->dy());
   bf->addTerm(psi_hat_n, v);
@@ -62,7 +63,7 @@ int main(int argc, char *argv[]) {
   // define exact solution functions
   FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
-  FunctionPtr phi_exact = sin_y; // exp_x * sin_y;
+  FunctionPtr phi_exact = exp_x * sin_y;
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   
@@ -94,7 +95,7 @@ int main(int argc, char *argv[]) {
                           minLogElements, maxLogElements,
                           polyOrder+1, pToAdd, false, useTriangles, false);
   
-  bool useHemkerMesh = false;
+  bool useHemkerMesh = true;
   if (useHemkerMesh) {
     study.solve(MeshFactory::hemkerGeometry(width, height, radius));
   } else {
@@ -124,5 +125,7 @@ int main(int argc, char *argv[]) {
     primaryVariables.push_back(psi1->ID());
     primaryVariables.push_back(psi2->ID());
     cout << study.TeXBestApproximationComparisonTable(primaryVariables);
+    study.getSolution(minLogElements)->writeToVTK("laplaceFirst");
+    study.getSolution(maxLogElements)->writeToVTK("laplaceFinal");
   }
 }
