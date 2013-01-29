@@ -39,6 +39,11 @@ target_link_libraries(SimpleTest
   Camellia
 )
 
+add_executable(GalerkinOrthogonality GalerkinOrthogonality.cpp)
+target_link_libraries(GalerkinOrthogonality
+  Camellia
+)
+
 add_executable(Convection ConvectionTest.cpp)
 target_link_libraries(Convection
   Camellia
