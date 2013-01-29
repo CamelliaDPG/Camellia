@@ -24,7 +24,8 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int polyOrder = 3;
+  int minPolyOrder = 0;
+  int maxPolyOrder = 5;
   int pToAdd = 2;
   int minLogElements = 0;
   int maxLogElements = 2;
@@ -34,7 +35,8 @@ int main(int argc, char *argv[]) {
   double radius = 1;
   
   if (rank==0) {
-    cout << "polyOrder: " << polyOrder << "\n";
+    cout << "minPolyOrder: " << minPolyOrder << "\n";
+    cout << "maxPolyOrder: " << maxPolyOrder << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
     
   }
@@ -61,9 +63,9 @@ int main(int argc, char *argv[]) {
   bf->addTerm(psi_hat_n, v);
   
   // define exact solution functions
-  FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
-  FunctionPtr phi_exact = exp_x * sin_y;
+  FunctionPtr phi_exact = sin_x * sin_y;
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   
@@ -90,42 +92,42 @@ int main(int argc, char *argv[]) {
     bf->printTrialTestInteractions();
   }
   
-  HConvergenceStudy study(exactSolution,
-                          bf, rhs, bc, ip,
-                          minLogElements, maxLogElements,
-                          polyOrder+1, pToAdd, false, useTriangles, false);
-  
-  bool useHemkerMesh = true;
-  if (useHemkerMesh) {
-    study.solve(MeshFactory::hemkerGeometry(width, height, radius));
-  } else {
-    if (rank==0)
-      cout << "TEST: just using a quad mesh\n;";
-    // just a quad
-    FieldContainer<double> quadPoints(4,2);
-    quadPoints(0,0) = -width / 2;
-    quadPoints(0,1) = -height / 2;
-    quadPoints(1,0) =  width / 2;
-    quadPoints(1,1) = -height / 2;
-    quadPoints(2,0) =  width / 2;
-    quadPoints(2,1) =  height / 2;
-    quadPoints(3,0) = -width / 2;
-    quadPoints(3,1
-               ) =  height / 2;
+  for (int polyOrder=minPolyOrder; polyOrder<maxPolyOrder; polyOrder++) {
+    HConvergenceStudy study(exactSolution,
+                            bf, rhs, bc, ip,
+                            minLogElements, maxLogElements,
+                            polyOrder+1, pToAdd, false, useTriangles, false);
     
-    study.solve(quadPoints);
-  }
-  
-  
-  if (rank==0) {
-    cout << study.TeXErrorRateTable();
-    cout << "******** Best Approximation comparison: ********\n";
-    vector<int> primaryVariables;
-    primaryVariables.push_back(phi->ID());
-    primaryVariables.push_back(psi1->ID());
-    primaryVariables.push_back(psi2->ID());
-    cout << study.TeXBestApproximationComparisonTable(primaryVariables);
-    study.getSolution(minLogElements)->writeToVTK("laplaceFirst");
-    study.getSolution(maxLogElements)->writeToVTK("laplaceFinal");
+    bool useHemkerMesh = true;
+    if (useHemkerMesh) {
+      study.solve(MeshFactory::hemkerGeometry(width, height, radius));
+    } else {
+      if (rank==0)
+        cout << "TEST: just using a quad mesh\n;";
+      // just a quad
+      FieldContainer<double> quadPoints(4,2);
+      quadPoints(0,0) = -width / 2;
+      quadPoints(0,1) = -height / 2;
+      quadPoints(1,0) =  width / 2;
+      quadPoints(1,1) = -height / 2;
+      quadPoints(2,0) =  width / 2;
+      quadPoints(2,1) =  height / 2;
+      quadPoints(3,0) = -width / 2;
+      quadPoints(3,1
+                 ) =  height / 2;
+      
+      study.solve(quadPoints);
+    }
+    
+    
+    if (rank==0) {
+      cout << study.TeXErrorRateTable();
+      cout << "******** Best Approximation comparison: ********\n";
+      vector<int> primaryVariables;
+      primaryVariables.push_back(phi->ID());
+      primaryVariables.push_back(psi1->ID());
+      primaryVariables.push_back(psi2->ID());
+      cout << study.TeXBestApproximationComparisonTable(primaryVariables);
+    }
   }
 }

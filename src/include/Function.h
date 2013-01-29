@@ -371,6 +371,20 @@ class Sin_y : public SimpleFunction {
   string displayString();
 };
 
+class Cos_x : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Sin_x : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
 class Exp_x : public SimpleFunction {
 public:
   double value(double x, double y);

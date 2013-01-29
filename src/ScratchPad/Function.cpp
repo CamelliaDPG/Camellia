@@ -1567,6 +1567,34 @@ FunctionPtr Cos_y::dy() {
   return - sin_y;
 }
 
+string Sin_x::displayString() {
+  return "\\sin x";
+}
+
+double Sin_x::value(double x, double y) {
+  return sin(x);
+}
+FunctionPtr Sin_x::dx() {
+  return Teuchos::rcp( new Cos_x );
+}
+FunctionPtr Sin_x::dy() {
+  return Function::zero();
+}
+
+string Cos_x::displayString() {
+  return "\\cos x";
+}
+double Cos_x::value(double x, double y) {
+  return cos(x);
+}
+FunctionPtr Cos_x::dx() {
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  return - sin_x;
+}
+FunctionPtr Cos_x::dy() {
+  return Function::zero();
+}
+
 string Exp_x::displayString() {
   return "e^x";
 }

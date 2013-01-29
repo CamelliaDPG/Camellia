@@ -213,6 +213,10 @@ std::vector< ParametricCurvePtr > ParametricCurve::referenceTriangleEdges() {
   return edges;
 }
 
+ParametricCurvePtr ParametricCurve::reverse(ParametricCurvePtr fxn) {
+  return subCurve(fxn, 1, 0);
+}
+
 ParametricCurvePtr ParametricCurve::subCurve(ParametricCurvePtr fxn, double t0, double t1) {
   double t0_underlying = fxn->remapForSubCurve(t0);
   double t1_underlying = fxn->remapForSubCurve(t1);

@@ -48,6 +48,7 @@ public:
   static std::vector< ParametricCurvePtr > referenceQuadEdges();
   static std::vector< ParametricCurvePtr > referenceTriangleEdges();
   
+  static ParametricCurvePtr reverse(ParametricCurvePtr fxn);
   static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
 };
 

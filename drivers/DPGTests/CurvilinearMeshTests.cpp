@@ -233,16 +233,16 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   // for now, instead of going for a full circle, just replace one edge
   edgeToCurveMap[edge0] = ParametricCurve::subCurve(circle,  5.0/8.0, 7.0/8.0);
-//  edgeToCurveMap[edge1] = ParametricCurve::subCurve(circle, -1.0/8.0, 1.0/8.0); // pretty sure this will work!
-//  edgeToCurveMap[edge2] = ParametricCurve::subCurve(circle,  1.0/8.0, 3.0/8.0);
-//  edgeToCurveMap[edge3] = ParametricCurve::subCurve(circle,  3.0/8.0, 5.0/8.0);
+  edgeToCurveMap[edge1] = ParametricCurve::subCurve(circle, -1.0/8.0, 1.0/8.0);
+  edgeToCurveMap[edge2] = ParametricCurve::subCurve(circle,  1.0/8.0, 3.0/8.0);
+  edgeToCurveMap[edge3] = ParametricCurve::subCurve(circle,  3.0/8.0, 5.0/8.0);
   
   H1Order = 1;
   mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   
-  double straightEdgePerimeter = meshWidth * 3.0;
-  double arcLength = (PI * 2.0 * radius) / 4.0;
+  double straightEdgePerimeter = 0; // = meshWidth * 3.0;
+  double arcLength = (PI * 2.0 * radius); // (PI * 2.0 * radius) / 4.0;
   
   double truePerimeter = arcLength + straightEdgePerimeter;
   
@@ -253,7 +253,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
 //    cout << "perimeter: " << perimeter << endl;
-    double impliedPi = (perimeter - straightEdgePerimeter) * 2.0 / radius;
+    double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
     cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
     double error = abs(truePerimeter - perimeter);
     if ((error >= previousError) && (error > tol)) { // non-convergence
@@ -280,7 +280,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
 //    cout << "perimeter: " << perimeter << endl;
-    double impliedPi = (perimeter - straightEdgePerimeter) * 2.0 / radius;
+    double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
     cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
     
     double error = abs(truePerimeter - perimeter);

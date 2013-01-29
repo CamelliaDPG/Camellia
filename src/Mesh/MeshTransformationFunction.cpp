@@ -21,47 +21,16 @@
 
 #include "GnuPlotUtil.h"
 
+#include "ParametricSurface.h"
+
+// TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
+
 BasisPtr basisForTransformation(ElementTypePtr cellType) {
   unsigned int cellTopoKey = cellType->cellTopoPtr->getKey();
   
   int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
   
   return BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
-}
-
-static void convexCombinationQuad(double &x, double &y, double t1, double t2,
-                                  double x0, double y0, double x1, double y1,
-                                  double x2, double y2, double x3, double y3) {
-  // takes points on the edges and produces a convex combination according to t1 and t2
-  // the idea is that we have edges 0, 1, 2, 3, with 0 and 2 opposite each other (likewise 1 and 3)
-  // and points are along "lattice lines" in the reference quad.  We can then weight the opposite
-  // points according to the orthogonal value of ti to determine a point in the interior.  We get two
-  // points this way, one for each pair of opposite edges.  This method returns the average of those two
-  // points.
-  x = 0.5 * ( (1-t2) * x0 + t2 * x2 + (1-t1) * x3 + t1 * x1 );
-  y = 0.5 * ( (1-t2) * y0 + t2 * y2 + (1-t1) * y3 + t1 * y1 );
-}
-
-static void convexCombinationQuadWithExactEdges(double &x, double &y, double t1, double t2,
-                                                double x0, double y0, double x1, double y1,
-                                                double x2, double y2, double x3, double y3) {
-  // same as above, except that if either t1 or t2 are 0 or 1, then the
-  // corresponding edge value is taken without averaging
-  if (t1 == 0) { // side 3 wins
-    x = x3;
-    y = y3;
-  } else if (t1 == 1) { // side 1 wins
-    x = x1;
-    y = y1;
-  } else if (t2==0) { // side 0
-    x = x0;
-    y = y0;
-  } else if (t2==1) { // side 2
-    x = x2;
-    y = y2;
-  } else { // take a convex combination (and hope it's in the interior!
-    convexCombinationQuad(x,y,t1,t2,x0,y0,x1,y1,x2,y2,x3,y3);
-  }
 }
 
 vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
@@ -116,6 +85,8 @@ class CellTransformationFunction : public Function {
     int spaceDim = 2;
     FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
     
+    ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
+    
     // arg to numPoints corresponds to "t1" ("x" direction t), the value to t2 ("y" direction t)
     vector< int > numPoints;
     int approxPoints1D = (int) sqrt( numPointsTotal );
@@ -124,51 +95,25 @@ class CellTransformationFunction : public Function {
       int extraPoint = (i < remainder) ? 1 : 0;
       numPoints.push_back(approxPoints1D + extraPoint);
     }
-    
-    {
-      // quick and dirty sanity check
-      int actualPointCount = 0;
-      for (int i=0; i<approxPoints1D; i++) {
-        actualPointCount += numPoints[i];
-      }
-      if (actualPointCount == numPointsTotal) {
-//        cout << "Actual point count matches.\n";
-      } else {
-        cout << "pointLatticeQuad: Actual point count does not match!\n";
-      }
-    }
-    
+
     if (edgeFunctions.size() != 4) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of edgeFunctions");
     }
-    // adjust edgeFunctions so that opposite edges run parallel (in the mesh, they run counterclockwise)
-    vector< ParametricCurvePtr > parallelEdgeFunctions = edgeFunctions;
-    parallelEdgeFunctions[2] = ParametricCurve::subCurve(parallelEdgeFunctions[2], 1, 0);
-    parallelEdgeFunctions[3] = ParametricCurve::subCurve(parallelEdgeFunctions[3], 1, 0);
     
     int numPoints_t1 = numPoints.size();
-    
-    double x0, x1, x2, x3, y0, y1, y2, y3; // values for the various functions
     
     int pointIndex = 0;
     for (int t1_index = 0; t1_index < numPoints_t1; t1_index++) {
       int numPoints_t2 = numPoints[t1_index];
       double t1 = ((double)t1_index) / (double) (numPoints_t1 - 1);
-      parallelEdgeFunctions[0]->value(t1, x0, y0);
-      parallelEdgeFunctions[2]->value(t1, x2, y2);
       
       for (int t2_index=0; t2_index < numPoints_t2; t2_index++) {
         double t2 = ((double)t2_index) / (double) (numPoints_t2 - 1);
         
 //        cout << "(t1,t2) = (" << t1 << ", " << t2 << ")" << endl;
         
-        parallelEdgeFunctions[1]->value(t2, x1, y1);
-        parallelEdgeFunctions[3]->value(t2, x3, y3);
-        
         double x, y;
-
-        convexCombinationQuadWithExactEdges(x,y,t1,t2,x0,y0,x1,y1,x2,y2,x3,y3);
-        
+        interpolant->value(t1, t2, x, y);
         pointLattice(pointIndex,0) = x;
         pointLattice(pointIndex,1) = y;
         pointIndex++;
@@ -200,6 +145,7 @@ public:
 
     FieldContainer<double> points(numPoints,spaceDim);
     FieldContainer<double> transformedPoints(numPoints,spaceDim);
+    FieldContainer<double> refCellPoints;
     
     if ( numEdges != 4) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only quads supported right now");
@@ -208,6 +154,7 @@ public:
     } else {
       points = pointLatticeQuad(numPoints, straightEdges);
       transformedPoints = pointLatticeQuad(numPoints, edgeFunctions);
+      refCellPoints = pointLatticeQuad(numPoints, ParametricCurve::referenceQuadEdges());
       
 //      cout << "points:\n" << points;
 //      cout << "transformedPoints:\n" << transformedPoints;
@@ -215,9 +162,9 @@ public:
     
     // now, since _basis is defined on refCell, compute preimage of points
     // (would be cleaner to do the parametric function thing on the ref cell)
-    FieldContainer<double> refCellPoints(numPoints,spaceDim);
-    CellTools<double>::mapToReferenceFrame(refCellPoints,points,mesh->physicalCellNodesForCell(cellID),
-                                           *(cell->elementType()->cellTopoPtr),0);
+//    FieldContainer<double> refCellPoints(numPoints,spaceDim);
+//    CellTools<double>::mapToReferenceFrame(refCellPoints,points,mesh->physicalCellNodesForCell(cellID),
+//                                           *(cell->elementType()->cellTopoPtr),0);
     FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
     _basis->getValues(basisValues, refCellPoints, Intrepid::OPERATOR_VALUE);
     
@@ -406,29 +353,18 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
     CellTools<double>::mapToPhysicalFrame(parametricPoints,refCellPoints,parametricQuadNodes(),*cellTopo,whichCell);
     
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
-    
-    // adjust edgeFunctions so that opposite edges run parallel (in the mesh, they run counterclockwise)
-    vector< ParametricCurvePtr > parallelEdgeFunctions = _mesh->parametricEdgesForCell(cellID);
-    parallelEdgeFunctions[2] = ParametricCurve::subCurve(parallelEdgeFunctions[2], 1, 0);
-    parallelEdgeFunctions[3] = ParametricCurve::subCurve(parallelEdgeFunctions[3], 1, 0);
-    
-    double x0, x1, x2, x3, y0, y1, y2, y3; // values for the various functions
 
-    double tol = 1e-14; // how close to 0 or 1 t1 or t2 needs to be to count as on the edge
+    vector< ParametricCurvePtr > edgeFunctions = _mesh->parametricEdgesForCell(cellID);
+    
+    ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
+    
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       double t1 = parametricPoints(ptIndex,0);
       double t2 = parametricPoints(ptIndex,1);
-      // if t1 or t2 is within tol of 1 or 0, replace value by 1 or 0
-      roundToOneOrZero(t1, tol);
-      roundToOneOrZero(t2, tol);
-      
-      parallelEdgeFunctions[0]->value(t1, x0, y0);
-      parallelEdgeFunctions[2]->value(t1, x2, y2);
-      parallelEdgeFunctions[1]->value(t2, x1, y1);
-      parallelEdgeFunctions[3]->value(t2, x3, y3);
-      
+
       double x,y;
-      convexCombinationQuadWithExactEdges(x,y,t1,t2,x0,y0,x1,y1,x2,y2,x3,y3);
+      // transfinite interpolation:
+      interpolant->value(t1, t2, x, y);
       
       cellPoints(ptIndex,0) = x;
       cellPoints(ptIndex,1) = y;
