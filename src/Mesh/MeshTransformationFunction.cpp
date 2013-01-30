@@ -47,25 +47,6 @@ vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
   return lines;
 }
 
-static FieldContainer<double> &parametricQuadNodes() { // for CellTools cellWorkset argument
-  static FieldContainer<double> quadNodes(1,4,2);
-  static bool quadNodesSet = false;
-  // there's probably a cleaner way to statically initialize this container,
-  // but this setup should still do so exactly once
-  if (!quadNodesSet) {
-    quadNodes(0,0,0) = 0.0;
-    quadNodes(0,0,1) = 0.0;
-    quadNodes(0,1,0) = 1.0;
-    quadNodes(0,0,1) = 0.0;
-    quadNodes(0,2,0) = 1.0;
-    quadNodes(0,2,1) = 1.0;
-    quadNodes(0,3,0) = 0.0;
-    quadNodes(0,3,1) = 1.0;
-    quadNodesSet = true;
-  }
-  return quadNodes;
-}
-
 void roundToOneOrZero(double &value, double tol) {
   // if value is within tol of 1 or 0, replace value by 1 or 0
   if (abs(value-1)<tol) {
@@ -350,7 +331,9 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "points must be in 2D for the quad!");
     FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
     int whichCell = 0;
-    CellTools<double>::mapToPhysicalFrame(parametricPoints,refCellPoints,parametricQuadNodes(),*cellTopo,whichCell);
+    CellTools<double>::mapToPhysicalFrame(parametricPoints,refCellPoints,
+                                          ParametricSurface::parametricQuadNodes(),
+                                          *cellTopo,whichCell);
     
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
 

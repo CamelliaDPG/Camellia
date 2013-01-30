@@ -44,9 +44,9 @@ public:
   
   static ParametricCurvePtr polygon(vector< pair<double,double> > vertices, vector<double> weights = vector<double>());
   
-  static std::vector< ParametricCurvePtr > referenceCellEdges(unsigned cellTopoKey);
-  static std::vector< ParametricCurvePtr > referenceQuadEdges();
-  static std::vector< ParametricCurvePtr > referenceTriangleEdges();
+  static vector< ParametricCurvePtr > referenceCellEdges(unsigned cellTopoKey);
+  static vector< ParametricCurvePtr > referenceQuadEdges();
+  static vector< ParametricCurvePtr > referenceTriangleEdges();
   
   static ParametricCurvePtr reverse(ParametricCurvePtr fxn);
   static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
