@@ -16,6 +16,11 @@
 using namespace std;
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
+//  numTestsRun++;
+//  if ( testVectorizedBasisTags() ) {
+//    numTestsPassed++;
+//  }
+  
   numTestsRun++;
   if ( testVectorizedBasis() ) {
     numTestsPassed++;
@@ -29,6 +34,82 @@ void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
 
 string VectorizedBasisTestSuite::testSuiteName() {
   return "VectorizedBasisTestSuite";
+}
+
+
+bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
+  // check that the given indices are exactly the vertex basis functions:
+  // a) these are (1,0) or (0,1) at the corresponding vertices
+  // b) others are (0,0) at the vertices
+  
+  int numVertices = 4;
+  
+  FieldContainer<double> refCellPoints(numVertices,2); // vertices, in order
+  refCellPoints(0,0) = -1;
+  refCellPoints(0,1) = -1;
+  refCellPoints(1,0) =  1;
+  refCellPoints(1,1) = -1;
+  refCellPoints(2,0) =  1;
+  refCellPoints(2,1) =  1;
+  refCellPoints(3,0) = -1;
+  refCellPoints(3,1) =  1;
+
+  // assume 2D vector basis for now -- we'll throw an exception if not...
+  FieldContainer<double> values(basis->getCardinality(), numVertices,2); // F, P, D
+  basis->getValues(values, refCellPoints, OPERATOR_VALUE); 
+  
+  double tol = 1e-14;
+  for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
+    int xNodeIndex = vertexIndices[2*ptIndex];
+    int yNodeIndex = vertexIndices[2*ptIndex+1];
+    for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
+      double xValue = values(fieldIndex,ptIndex,0);
+      double yValue = values(fieldIndex,ptIndex,1);
+      double xExpected = 0, yExpected = 0;
+      if (fieldIndex==xNodeIndex) {
+        xExpected = 1;
+      } else if (fieldIndex==yNodeIndex) {
+        yExpected = 1;
+      }
+      if ((abs(xExpected-xValue) > tol) || (abs(yExpected-yValue)>tol)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
+  bool success = true;
+  
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  int numVertices = quad_4.getVertexCount();
+  int numComponents = quad_4.getDimension();
+  int vertexDim = 0;
+  
+  for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
+    int basisRank;
+    BasisPtr hgradBasis =  BasisFactory::getBasis(basisRank,polyOrder,
+                                                  quad_4.getKey(), 
+                                                  IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr vectorHGradBasis = BasisFactory::getBasis( polyOrder,
+                                                       quad_4.getKey(), 
+                                                       IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    vector<int> vertexNodeFieldIndices;
+    for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
+      for (int comp=0; comp<numComponents; comp++) {
+        int vertexNodeFieldIndex = vectorHGradBasis->getDofOrdinal(vertexDim, vertexIndex, comp);
+        vertexNodeFieldIndices.push_back(vertexNodeFieldIndex);
+      }
+    }
+    if (!checkVertexNodalIndicesQuad(vectorHGradBasis, vertexNodeFieldIndices) ) {
+      success = false;
+      cout << "testVectorizedBasisTags: Vertex tags for vectorized HGRAD basis";
+      cout << "of order " << polyOrder << " are incorrect.\n";
+    }
+  }
+  
+  return success;
 }
 
 bool VectorizedBasisTestSuite::testVectorizedBasis() {
@@ -123,13 +204,6 @@ bool VectorizedBasisTestSuite::testHGRAD_2D() {
   return success;
 }
 
-class EntireBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      return true;
-    }
-};
-
 bool VectorizedBasisTestSuite::testPoisson() {
   bool success = true;
 
@@ -166,7 +240,7 @@ bool VectorizedBasisTestSuite::testPoisson() {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr boundary = Teuchos::rcp( new EntireBoundary );
+  SpatialFilterPtr boundary = SpatialFilter::allSpace();
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   bc->addDirichlet(uhat, boundary, zero);
 
