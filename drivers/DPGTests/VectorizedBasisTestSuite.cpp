@@ -16,10 +16,10 @@
 using namespace std;
 
 void VectorizedBasisTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
-//  numTestsRun++;
-//  if ( testVectorizedBasisTags() ) {
-//    numTestsPassed++;
-//  }
+  numTestsRun++;
+  if ( testVectorizedBasisTags() ) {
+    numTestsPassed++;
+  }
   
   numTestsRun++;
   if ( testVectorizedBasis() ) {
