@@ -33,21 +33,20 @@ class SerialDenseWrapper {
     Epetra_SerialDenseMatrix Amatrix(n,m);
     for (int i = 0;i<n;i++){
       for (int j = 0;j<m;j++){
-	Amatrix(i,j) = A(i,j);
+        Amatrix(i,j) = A(i,j);
       }
     }
     return Amatrix;
   }
-  static FieldContainer<double> convertSDMToFC(Epetra_SerialDenseMatrix &A){
+  static void convertSDMToFC(FieldContainer<double>& A_fc, Epetra_SerialDenseMatrix &A){
     int n = A.M();    
     int m = A.N();
-    FieldContainer<double> Amatrix(n,m);
+    A_fc.resize(n,m);
     for (int i = 0;i<n;i++){
       for (int j = 0;j<m;j++){
-	Amatrix(i,j) = A(i,j);
+        A_fc(i,j) = A(i,j);
       }
     }
-    return Amatrix;
   }
   
 public:
@@ -58,7 +57,7 @@ public:
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
     AMatrix += BMatrix;
-    X = convertSDMToFC(AMatrix);
+    convertSDMToFC(X,AMatrix);
   }
 
   // gives X = A*B.  Must pass in 2D arrays, even for vectors! 
@@ -81,7 +80,7 @@ public:
       cout << "Error in SerialDenseWrapper::multiplyAndAdd with error code " << success << endl;
     }
 
-    X = convertSDMToFC(XMatrix);
+    convertSDMToFC(X,XMatrix);
   }
 
   static void solveSystem(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false) {
@@ -134,8 +133,7 @@ public:
       }
     }
     
-    x = convertSDMToFC(xVectors);
-  
+    convertSDMToFC(x,xVectors);
   }
 
 
