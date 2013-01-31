@@ -23,7 +23,7 @@ void LagrangeConstraints::getCoefficients(FieldContainer<double> &lhs, FieldCont
   LinearTermPtr lt = _constraints[elemConstraintIndex].linearTerm();
   FunctionPtr f = _constraints[elemConstraintIndex].f();
   lt->integrate(lhs, trialOrdering, basisCache);
-  bool onBoundary = (lt->termType() == FLUX) || (lt->termType() == TRACE);
+  bool onBoundary = f->boundaryValueOnly();
   if ( !onBoundary ) {
     f->integrate(rhs, basisCache);
   } else {

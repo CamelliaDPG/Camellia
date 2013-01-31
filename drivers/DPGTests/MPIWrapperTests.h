@@ -10,8 +10,6 @@
 #define __Camellia_MPIWrapperTests__
 
 #include "TestSuite.h"
-
-// Teuchos includes
 #include "MPIWrapper.h"
 
 class MPIWrapperTests : public TestSuite {

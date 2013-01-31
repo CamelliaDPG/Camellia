@@ -385,7 +385,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   trace_wr->SetInput(trace_ug);
   trace_ug->Delete();
   trace_wr->SetFileName(("trace_"+filePath+".vtu").c_str());
-  trace_wr->SetDataModeToAscii();
+  trace_wr->SetDataModeToBinary();
   trace_wr->Update();
   trace_wr->Write();
   trace_wr->Delete();
@@ -592,7 +592,7 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
   ug->Delete();
   wr->SetFileName((functionName+".vtu").c_str());
   // wr->SetDataModeToBinary();
-  wr->SetDataModeToAscii();
+  wr->SetDataModeToBinary();
   wr->Update();
   wr->Write();
   wr->Delete();

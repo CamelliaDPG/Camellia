@@ -100,14 +100,16 @@ public:
   static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
+  static FunctionPtr constant(double value);
+  static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
-  static FunctionPtr constant(double value);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
   static FunctionPtr null();
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero();
+  static FunctionPtr restrictToCellBoundary(FunctionPtr f);
 //  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
@@ -363,6 +365,20 @@ class Cos_y : public SimpleFunction {
 };
 
 class Sin_y : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Cos_x : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Sin_x : public SimpleFunction {
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();

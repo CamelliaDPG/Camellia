@@ -9,8 +9,6 @@
 #include "PenaltyConstraints.h"
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
-#include "CheckConservation.h"
-#include "SolutionExporter.h"
 
 class TransientTests : public ::testing::Test {
   protected:

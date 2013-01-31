@@ -507,7 +507,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
       int trialID = *trialIt;
       int zmcIndex = partMap.GID(localRowIndex);
-      //cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+//      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
       FieldContainer<double> basisIntegrals;
       FieldContainer<int> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
@@ -2495,6 +2495,10 @@ const FieldContainer<double>& Solution::allCoefficientsForCellID(int cellID) {
   return _solutionForCellIDGlobal[cellID];
 }
 
+void Solution::setBC( Teuchos::RCP<BC> bc) {
+  _bc = bc;
+}
+
 void Solution::setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter) {
   _filter = newFilter;
 }
@@ -3535,7 +3539,7 @@ Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, in
   Epetra_Map partMap(totalRows, localDofsSize, myGlobalIndices, indexBase, *Comm);
 
   if (localDofsSize!=0){
-    delete myGlobalIndices;
+    delete[] myGlobalIndices;
   }
   return partMap;
 }
@@ -3673,7 +3677,10 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
     // they're implicit 0s, then: projection will also be implicit 0s...
     return;
   }
+
   FieldContainer<double>* solutionCoeffs = &(_solutionForCellIDGlobal[cellID]);
+  TEUCHOS_TEST_FOR_EXCEPTION(oldTrialOrdering->totalDofs() != solutionCoeffs->size(), std::invalid_argument,
+                             "oldElemType trial space does not match stored solution size");
   // TODO: rewrite this method using Functions instead of AbstractFunctions
   map<int, Teuchos::RCP<AbstractFunction> > functionMap;
   

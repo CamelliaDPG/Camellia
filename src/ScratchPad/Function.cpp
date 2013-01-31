@@ -20,6 +20,47 @@ struct CacheInfo {
   FieldContainer<double> subCellNodes;
 };
 
+// private class CellBoundaryRestrictedFunction
+class CellBoundaryRestrictedFunction : public Function {
+  FunctionPtr _fxn;
+public:
+  CellBoundaryRestrictedFunction(FunctionPtr fxn) : Function(fxn->rank()) {
+    _fxn = fxn;
+  }
+  
+  bool boundaryValueOnly() { return true; }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    _fxn->values(values, basisCache);
+  }
+};
+
+class MeshBoundaryCharacteristicFunction : public Function {
+  
+public:
+  MeshBoundaryCharacteristicFunction() : Function(0) {
+    
+  }
+  bool boundaryValueOnly() { return true; }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    // scalar: values shape is (C,P)
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    int sideIndex = basisCache->getSideIndex();
+    MeshPtr mesh = basisCache->mesh();
+    TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshBoundaryCharacteristicFunction requires a mesh!");
+    TEUCHOS_TEST_FOR_EXCEPTION(sideIndex == -1, std::invalid_argument, "MeshBoundaryCharacteristicFunction is only defined on cell boundaries");
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      int cellID = basisCache->cellIDs()[cellIndex];
+      bool onBoundary = mesh->boundary().boundaryElement(cellID, sideIndex);
+      double value = onBoundary ? 1 : 0;
+      for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+        values(cellIndex,pointIndex) = value;
+      }
+    }
+  }
+};
+
 // private class SimpleSolutionFunction:
 class SimpleSolutionFunction : public Function {
   SolutionPtr _soln;
@@ -342,6 +383,7 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
   int numCells = cellIntegrals.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+//  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
   FieldContainer<double> values(numCells,numPoints);
   this->values(values,basisCache);
   if ( !sumInto ) {
@@ -739,6 +781,11 @@ FunctionPtr Function::constant(double value) {
   return Teuchos::rcp( new ConstantScalarFunction(value) );
 }
 
+FunctionPtr Function::meshBoundaryCharacteristic() {
+  // 1 on mesh boundary, 0 elsewhere
+  return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
+}
+
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
   static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
   return _normal;
@@ -752,6 +799,10 @@ FunctionPtr Function::sideParity() { // canonical direction on boundary (used fo
 
 FunctionPtr Function::polarize(FunctionPtr f) {
   return Teuchos::rcp( new PolarizedFunction(f) );
+}
+
+FunctionPtr Function::restrictToCellBoundary(FunctionPtr f) {
+  return Teuchos::rcp( new CellBoundaryRestrictedFunction(f) );
 }
 
 FunctionPtr Function::solution(VarPtr var, SolutionPtr soln) {
@@ -1514,6 +1565,34 @@ FunctionPtr Cos_y::dx() {
 FunctionPtr Cos_y::dy() {
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
   return - sin_y;
+}
+
+string Sin_x::displayString() {
+  return "\\sin x";
+}
+
+double Sin_x::value(double x, double y) {
+  return sin(x);
+}
+FunctionPtr Sin_x::dx() {
+  return Teuchos::rcp( new Cos_x );
+}
+FunctionPtr Sin_x::dy() {
+  return Function::zero();
+}
+
+string Cos_x::displayString() {
+  return "\\cos x";
+}
+double Cos_x::value(double x, double y) {
+  return cos(x);
+}
+FunctionPtr Cos_x::dx() {
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  return - sin_x;
+}
+FunctionPtr Cos_x::dy() {
+  return Function::zero();
 }
 
 string Exp_x::displayString() {

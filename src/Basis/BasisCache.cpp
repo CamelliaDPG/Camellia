@@ -1,3 +1,4 @@
+
 /*
  *  BasisCache.cpp
  *
@@ -38,6 +39,7 @@
 #include "BasisEvaluation.h"
 #include "Mesh.h"
 #include "Function.h"
+#include "MeshTransformationFunction.h"
 
 typedef FunctionSpaceTools fst;
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
@@ -45,6 +47,18 @@ typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 // TODO: add exceptions for side cache arguments to methods that don't make sense 
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
+
+int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
+  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
+  if (cellTopoKey == shards::Line<2>::key)
+    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+  if (cellTopoKey == shards::Quadrilateral<4>::key)
+    return min(INTREPID_CUBATURE_LINE_GAUSS_MAX, degree);
+  else if (cellTopoKey == shards::Triangle<3>::key)
+    return min(INTREPID_CUBATURE_TRI_DEFAULT_MAX, degree);
+  else
+    return degree; // unhandled cell topo--we'll get an exception if we go beyond the max...
+}
 
 // init is for volume caches.
 void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering,
@@ -56,7 +70,8 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   
   // changed the following line from maxBasisDegree: we were generally overintegrating...
   _cubDegree = trialOrdering.maxBasisDegreeForVolume() + maxTestDegree;
-  _cubDegree *= _cubatureMultiplier;
+  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo.getKey());
   _maxTestDegree = maxTestDegree;
   DefaultCubatureFactory<double> cubFactory;
   Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree); 
@@ -103,14 +118,23 @@ void BasisCache::createSideCaches() {
   }
 }
 
-BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest,
-                       int cubatureDegreeEnrichment, int cubatureMultiplier) {
+BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
-  
-  _cubatureMultiplier = cubatureMultiplier;
+    
+  int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
   _mesh = mesh;
+  if (_mesh.get()) {
+    _transformationFxn = _mesh->getTransformationFunction();
+    if (_transformationFxn.get()) {
+      // assuming isoparametric:
+      cubatureDegreeEnrichment += maxTestDegree;
+    }
+    // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
+    // one with potentially curved edges...
+    _composeTransformationFxnWithMeshTransformation = true;
+  }
 
   DofOrdering trialOrdering;
   if (testVsTest)
@@ -120,22 +144,18 @@ BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool te
   
   bool createSideCacheToo = !testVsTest && trialOrdering.hasSideVarIDs();
   
-  int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
-
   init(cellTopo,trialOrdering,maxTestDegree + cubatureDegreeEnrichment,createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  _cubatureMultiplier = 1;
   init(cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree) {
   DofOrdering trialOrdering; // dummy trialOrdering
-  _cubatureMultiplier = 1;
   bool createSideCacheToo = false;
   init(cellTopo, trialOrdering, cubDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
@@ -147,8 +167,13 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
   _sideIndex = sideIndex;
   _numSides = -1;
   _basisCacheVolume = volumeCache;
-  _cubatureMultiplier = volumeCache->cubatureMultiplier();
   _maxTestDegree = volumeCache->maxTestDegree(); // maxTestDegree includes any cubature enrichment
+  if (volumeCache->mesh().get()) {
+    _transformationFxn = volumeCache->mesh()->getTransformationFunction();
+    // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
+    // one with potentially curved edges...
+    _composeTransformationFxnWithMeshTransformation = true;
+  }
   if ( maxDegreeBasis.get() != NULL ) {
     _cubDegree = maxDegreeBasis->getDegree() + _maxTestDegree;
   } else {
@@ -157,7 +182,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
     // this is not quite right, in that we'll over-integrate if there's non-zero cubatureEnrichment
     _cubDegree = _maxTestDegree * 2;
   }
-  _cubDegree *= _cubatureMultiplier;
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, shards::Line<2>::key); // assumes volume is 2D
 
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _spaceDim = _cellTopo.getDimension();
@@ -192,10 +217,6 @@ shards::CellTopology BasisCache::cellTopology() {
 
 int BasisCache::cubatureDegree() {
   return _cubDegree;
-}
-
-int BasisCache::cubatureMultiplier() {
-  return _cubatureMultiplier;
 }
 
 Teuchos::RCP<Mesh> BasisCache::mesh() {
@@ -246,7 +267,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
                                  bool useCubPointsSideRefCell) {
   FieldContainer<double> cubPoints;
   if (useCubPointsSideRefCell) {
-    cubPoints = _cubPointsSideRefCell;
+    cubPoints = _cubPointsSideRefCell; // unnecessary copy
   } else {
     cubPoints = _cubPoints;
   }
@@ -321,10 +342,13 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
                                                                                               componentReferenceValuesTransformed);
     } else {
       constFCPtr referenceValues = getValues(basis,(EOperatorExtended) relatedOp, useCubPointsSideRefCell);
-      transformedValues = 
+//      cout << "_cellJacobInv:\n" << _cellJacobInv;
+//      cout << "referenceValues:\n"  << *referenceValues;
+      transformedValues =
       BasisEvaluation::getTransformedValuesWithBasisValues(basis, (EOperatorExtended) relatedOp,
                                                            referenceValues, _cellJacobian, 
                                                            _cellJacobInv,_cellJacobDet);
+//      cout << "transformedValues:\n" << *transformedValues;
     }
     _knownValuesTransformed[relatedKey] = transformedValues;
   }
@@ -433,8 +457,16 @@ const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal){
   return _basisCacheSides[sideOrdinal]->_sideNormals;
 }
 
-const FieldContainer<double> BasisCache::getRefCellPoints() {
+const FieldContainer<double>& BasisCache::getRefCellPoints() {
   return _cubPoints;
+}
+
+const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates() {
+  if (! isSideCache()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                               "getSideRefCellPointsInVolumeCoordinates() only supported for side caches.");
+  }
+  return _cubPointsSideRefCell;
 }
 
 void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell) {
@@ -539,6 +571,9 @@ void BasisCache::determineJacobian() {
     }
   }
   
+  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
+  
   if (! Function::isNull(_transformationFxn) ) {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation) {
@@ -546,8 +581,12 @@ void BasisCache::determineJacobian() {
       FieldContainer<double> fxnJacobian(_numCells,numCubPoints,_spaceDim,_spaceDim);
       _transformationFxn->grad()->values( fxnJacobian, thisPtr );
       
+//      cout << "fxnJacobian:\n" << fxnJacobian;
+//      cout << "_cellJacobian before multiplication:\n" << _cellJacobian;
       // TODO: check that the order of multiplication is correct!
-      fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, _cellJacobian );
+      FieldContainer<double> cellJacobianToMultiply(_cellJacobian); // tensorMultiplyDataData doesn't support multiplying in place
+      fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, cellJacobianToMultiply );
+//      cout << "_cellJacobian after multiplication:\n" << _cellJacobian;
     } else {
       _transformationFxn->grad()->values( _cellJacobian, thisPtr );
     }
@@ -573,6 +612,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   
   // compute physicalCubaturePoints, the transformed cubature points on each cell:
   determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
+//  cout << "physicalCellNodes:\n" << physicalCellNodes;
   determineJacobian();
   
   // compute weighted measure
@@ -589,6 +629,9 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
                                                      _cubWeights,
                                                      _sideIndex,
                                                      _cellTopo);
+//      cout << "_cellJacobian:\n" << _cellJacobian;
+//      cout << "_cubWeights:\n" << _cubWeights;
+//      cout << "_weightedMeasure:\n" << _weightedMeasure;
       
       // get normals
       _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
@@ -621,24 +664,14 @@ int BasisCache::maxTestDegree() {
   return _maxTestDegree;
 }
 
-void BasisCache::setTransformationFunction(FunctionPtr f, bool composeWithMeshTransformation) {
-  // TODO: add argument here for cubature degree to use for transformation function.
-  // (This will need to multiply the cubature degree for untransformed BasisCache.)
-  _transformationFxn = f;
-  _composeTransformationFxnWithMeshTransformation = composeWithMeshTransformation;
-  // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
-  //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
-}
-
 int BasisCache::getSpaceDim() {
   return _spaceDim;
 }
 
 // static convenience constructors:
-BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testVsTest,
-                                            int cubatureDegreeEnrichment, int cubatureMultiplier) {
+BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testVsTest, int cubatureDegreeEnrichment) {
   ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, cubatureMultiplier ) );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
   vector<int> cellIDs(1,cellID);
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), cellIDs, createSideCache);
@@ -646,8 +679,8 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testV
   return basisCache;
 }
 BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest,
-                                                int cubatureDegreeEnrichment, int cubatureMultiplier) { // for cells on the local MPI node
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, cubatureMultiplier ) );
+                                                int cubatureDegreeEnrichment) { // for cells on the local MPI node
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
   vector<int> cellIDs = mesh->cellIDsOfType(elemType);
   if (cellIDs.size() > 0) {
