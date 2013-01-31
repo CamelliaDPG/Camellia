@@ -27,6 +27,7 @@
 #include "StandardAssembler.h"
 #include "Epetra_Vector.h"
 #include "Solver.h"
+#include "SerialDenseWrapper.h"
 
 #include <sstream>
 
@@ -192,22 +193,17 @@ int main(int argc, char *argv[]) {
   FunctionPtr fnhat = Function::solution(fn,solution);
 
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
-  residual->addTerm(fnhat*v,true);
-  residual->addTerm(-(e1 * (u_prev_squared_div2) + e2 * (u_prev)) * v->grad(),true);
+  residual->addTerm(- fnhat*v,true);
+  residual->addTerm((e1 * (u_prev_squared_div2) + e2 * (u_prev)) * v->grad(),true);
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep();
 
   Teuchos::RCP< LineSearchStep > LS_Step = Teuchos::rcp(new LineSearchStep(rieszResidual));
 
-  set<int> myGlobalIndicesSet = mesh->globalDofIndicesForPartition(rank);
-  FieldContainer<int> bcGlobalIndices;
-  FieldContainer<double> bcGlobalValues;
-  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()), myGlobalIndicesSet);
-  set<int> bcInds;
-  for (int i=0;i<bcGlobalIndices.dimension(0);i++){
-    bcInds.insert(bcGlobalIndices(i));
-  }
+  map<int,set<int> > fluxInds, fieldInds;
+  TestingUtilities::getGlobalFieldFluxDofInds(mesh, fluxInds, fieldInds);
+  vector<ElementPtr> elems = mesh->activeElements();
 
   double NL_residual = 9e99;
   for (int i = 0;i<numSteps;i++){
@@ -223,6 +219,18 @@ int main(int argc, char *argv[]) {
     solver->solve();
     assembler->distributeDofs(x);
 
+    // only linearized dofs are field dofs, zero them
+    Epetra_FEVector xNonlin = assembler->initializeVector(); // automatically starts as 0.0
+    for (int dofIndex = 0; dofIndex < mesh->numGlobalDofs();dofIndex++){
+      if (TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)){
+	(*xNonlin(0))[dofIndex] = (*x(0))[dofIndex];
+      }else{
+	(*xNonlin(0))[dofIndex] = 0.0;	  
+      }
+    }
+    Epetra_FEVector KxNonlin = assembler->initializeVector();
+    K.Multiply('N',xNonlin,KxNonlin); // to compute < u, v_opt>, then to move it to the other side
+
     double stepLength = 1.0;
     stepLength = LS_Step->stepSize(backgroundFlow,solution, NL_residual);
 
@@ -231,26 +239,69 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
     }
- 
-   // test FIELD DOFS
-    double fd_gradient;
-    for (int dofIndex = 0;dofIndex<mesh->numGlobalDofs();dofIndex++){
-      bool isBCIndex = bcInds.find(dofIndex) != bcInds.end();      
+    assembler->assembleProblem(K,b);  // update RHS after accumulating for new 
 
-      // preset BCs in all solution perturbations
-      TestingUtilities::initializeSolnCoeffs(solnPerturbation);
-      for (int i = 0;i<bcGlobalIndices.dimension(0);i++){
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,bcGlobalValues(i),bcGlobalIndices(i));
+    FieldContainer<double> residualVector(mesh->numGlobalDofs()),rhsVec(mesh->numGlobalDofs());
+    double nlResidual = 0.0;
+    vector<ElementPtr> elems = mesh->activeElements();
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
+      ElementPtr elem = *elemIt;
+      FieldContainer<double> Rv = assembler->getIPMatrix(elem);
+      int numTrialDofs = assembler->numTrialDofsForElem(elem);
+      int numTestDofs = assembler->numTestDofsForElem(elem);
+      
+      FieldContainer<double> B = assembler->getOverdeterminedStiffness(elem);
+
+      FieldContainer<double> K(numTrialDofs,numTrialDofs), elemGrad(numTrialDofs,1);
+      assembler->getElemData(elem, K, elemGrad);
+      FieldContainer<double> x_K = assembler->getSubVector(xNonlin, elem);
+      SerialDenseWrapper::multiplyAndAdd(elemGrad,K,x_K,'N','N',-1.0,1.0);
+          
+      FieldContainer<double> residualIntegrals(numTestDofs);
+      residual->integrate(residualIntegrals, elem->elementType()->testOrderPtr, BasisCache::basisCacheForCell(mesh,elem->cellID()));
+      residualIntegrals.resize(Rv.dimension(0),1);
+      FieldContainer<double> e_r(Rv.dimension(0),1);
+      SerialDenseWrapper::solveSystemMultipleRHS(e_r,Rv,residualIntegrals);
+      FieldContainer<double> resNorm(1,1);
+      SerialDenseWrapper::multiply(resNorm,e_r,residualIntegrals,'T','N');
+      nlResidual += resNorm(0,0);
+
+      cout << "B dimensions = " << B.dimension(0) << "," << B.dimension(1) << endl;
+      cout << "e_r dimensions = " << e_r.dimension(0) << "," << e_r.dimension(1) << endl;
+
+      // for galerkin orthog / gradient
+      FieldContainer<double> etB(numTrialDofs,1);
+      SerialDenseWrapper::multiply(etB,B,e_r,'T','N');
+      for (int i = 0;i<numTrialDofs;i++){
+	int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
+	residualVector(globalDofIndex) += etB(i);
+	rhsVec(globalDofIndex) += elemGrad(i);
       }
-      if (!isBCIndex){	
+    }
+    cout << "nonlinear residual = " << sqrt(nlResidual) << endl;
+    
+    // test FIELD DOFS
+    for (int dofIndex = 0;dofIndex<mesh->numGlobalDofs();dofIndex++){
+      // preset ALL fluxes in all solution perturbations - boundary conditions and otherwise
+      TestingUtilities::initializeSolnCoeffs(solnPerturbation);
+      for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+	set<int> elemFluxDofs = fluxInds[(*elemIt)->cellID()];
+	for (set<int>::iterator dofIt = elemFluxDofs.begin();dofIt != elemFluxDofs.end();dofIt++){
+	  TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,(*x(0))[*dofIt],*dofIt);
+	}
+      }
+      bool isFluxIndex = TestingUtilities::isFluxOrTraceDof(mesh,dofIndex);
+      if (!isFluxIndex){
 	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,dofIndex);
       }
-      
-      fd_gradient = FiniteDifferenceUtilities::finiteDifferenceGradient(mesh, rieszResidual, backgroundFlow, dofIndex);
-      
+
+      double fd_gradient = FiniteDifferenceUtilities::finiteDifferenceGradient(mesh, rieszResidual, backgroundFlow, dofIndex);
       // CHECK RHS
-      if (!isBCIndex){
-	cout << "fd gradient = " << fd_gradient << ", while b[i] = " << (*b(0))[dofIndex] << endl;
+      if (!isFluxIndex){
+	//	double b = (*b(0))[dofIndex] - (*KxNonlin(0))[dofIndex];
+	double b = rhsVec(dofIndex);
+	cout << "fd gradient = " << fd_gradient << ", while b[" << dofIndex << "] = " << b;
+	cout << " and residual vector = " << residualVector(dofIndex) << endl;
       }
     }    
     cout << endl;
