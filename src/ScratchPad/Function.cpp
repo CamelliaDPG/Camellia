@@ -248,6 +248,14 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   }
 }
 
+// added by Jesse - integrate over only one cell
+double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh){
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID);
+  FieldContainer<double> cellIntegral(1);
+  this->integrate(cellIntegral,basisCache);
+  return cellIntegral(0);
+}
+
 // added by Jesse - adaptive quadrature rules
 double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
   double integral = 0.0;
