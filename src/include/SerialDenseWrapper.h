@@ -50,12 +50,14 @@ class SerialDenseWrapper {
   }
   
 public:
-  // gives A = A+B (overwrites A)
-  static void add(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B){
+  // gives X = scalarA*A+scalarB*B (overwrites A)
+  static void add(FieldContainer<double> &X, FieldContainer<double> &A, FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0){
     int N = A.dimension(0);
     int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseMatrix BMatrix = convertFCToSDM(B);
+    AMatrix.Scale(scalarA);
+    BMatrix.Scale(scalarB);
     AMatrix += BMatrix;
     convertSDMToFC(X,AMatrix);
   }
