@@ -254,10 +254,6 @@ void RieszRep::distributeDofs(){
     }
     cellIndex++;
   }
-  for (int i = 0;i<numMyElems;i++){
-    cout << "on rank " << rank << ", my elems = " << myElems[i] << endl;
-  }
-  cout << "num elems = " << numElems << ", numMyElems = " << numMyElems << endl;
   Epetra_Map normMap(numElems,numMyElems,myElems,0,Comm);
 
   Epetra_Vector distributedRieszNorms(normMap);
