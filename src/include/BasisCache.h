@@ -68,7 +68,6 @@ typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
 private:
-  int _maxCubatureDegree;
   int _numCells, _spaceDim;
   int _numSides;
   bool _isSideCache;

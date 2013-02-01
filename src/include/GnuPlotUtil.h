@@ -176,7 +176,8 @@ public:
     scriptOut.close();
   }
   
-  static void writeXYPoints(const string &filePath, FieldContainer<double> &dataPoints) {
+  // badly named, maybe: we support arbitrary space dimension...
+  static void writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints) {
     int numPoints = dataPoints.dimension(0);
     int spaceDim = dataPoints.dimension(1);
     
@@ -184,15 +185,31 @@ public:
     fout << setprecision(15);
     
     fout << "# Camellia GnuPlotUtil output\n";
-    fout << "# x                  y\n";
+    if (spaceDim==2) {
+      fout << "# x                  y\n";
+    } else if (spaceDim==3) {
+      fout << "# x                  y                  z\n";
+    }
     
     for (int i=0; i<numPoints; i++) {
+      if ((spaceDim==3) && (i>0)) {
+        // for 3D point sets, separate new x values with a new line.
+        if (dataPoints(i,0) != dataPoints(i-1,0)) {
+          fout << "\n";
+        }
+      }
       for (int d=0; d<spaceDim; d++) {
         fout << dataPoints(i,d) << "   ";
       }
       fout << "\n";
     }
     
+    fout.close();
+  }
+  
+  static void writeContourPlotScript(const string &filePathOfData) {
+    ofstream fout((filePathOfData + ".p").c_str());
+    // TODO: finish this method!
     fout.close();
   }
 };

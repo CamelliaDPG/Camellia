@@ -318,9 +318,8 @@ void LinearTerm::integrate(FieldContainer<double> &values,
     bool applyCubatureWeights = true, dontApplyCubatureWeights = false;
     u->values(uValues,uID,uBasis,basisCache,applyCubatureWeights);
     
-//    cout << "uValues for u = " << u->displayString() << ":" << endl;
-//    cout << uValues;
-//    double debugSum = 0.0;
+
+    //    double debugSum = 0.0;
 //    for (int i=0; i<uValues.size(); i++) {
 //      debugSum += uValues[i];
 //    }
@@ -358,7 +357,7 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       FieldContainer<double> vValues(ltValueDim);
       v->values(vValues, vID, vBasis, basisCache, dontApplyCubatureWeights);
       
-//      cout << "vValues for v = " << v->displayString() << ":" << endl;
+//      cout << "vValues (without cubature weights applied) for v = " << v->displayString() << ":" << endl;
 //      cout << vValues;
       
       // same flux consideration, for the vValues
@@ -660,8 +659,8 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
       fxn = f * varEvaluation;
     }
   }
-  if (!fxn.get() && (this->rank()==0)) {
-    fxn = Function::zero();
+  if (!fxn.get()) {
+    fxn = Function::zero(this->rank());
   }
   return fxn;
 }
