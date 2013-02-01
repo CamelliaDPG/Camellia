@@ -16,7 +16,8 @@ class Projector{
   // newest version:
   static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<Function> fxn, 
                                        Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, 
-                                       BasisCachePtr basisCache, IPPtr ip, VarPtr v);
+                                       BasisCachePtr basisCache, IPPtr ip, VarPtr v,
+                                       set<int>fieldIndicesToSkip = set<int>());
   
   // new version:
   static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<Function> fxn, 

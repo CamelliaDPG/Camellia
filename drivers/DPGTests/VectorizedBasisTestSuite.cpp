@@ -276,9 +276,10 @@ bool VectorizedBasisTestSuite::testPoisson() {
   {
     solution->solve(false);
 #ifdef USE_VTK
-    stringstream outfile;
-    outfile << "test_" << refIndex;
-    exporter.exportSolution(outfile.str());
+    // output commented out because it's not properly part of the test.
+//    stringstream outfile;
+//    outfile << "test_" << refIndex;
+//    exporter.exportSolution(outfile.str());
 #endif
 
     if (refIndex < 4)

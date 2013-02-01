@@ -108,7 +108,7 @@ public:
   static FunctionPtr null();
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
-  static FunctionPtr zero();
+  static FunctionPtr zero(int rank=0);
   static FunctionPtr restrictToCellBoundary(FunctionPtr f);
 //  static FunctionPtr jump(FunctionPtr f);
 private:

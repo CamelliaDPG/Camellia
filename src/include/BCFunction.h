@@ -16,11 +16,13 @@ class BCFunction : public Function {
   FieldContainer<bool> _imposeHere;
   int _varID;
   BCPtr _bc;
+  bool _isTrace; // if false, it's a flux...
 public:
-  BCFunction(BCPtr bc, int varID);
+  BCFunction(BCPtr bc, int varID, bool isTrace);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   bool imposeOnCell(int cellIndex);
   int varID();
+  bool isTrace();
 };
 
 #endif

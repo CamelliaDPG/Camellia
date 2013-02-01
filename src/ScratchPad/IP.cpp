@@ -135,6 +135,7 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
     lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
   }
   
+  
   // boundary terms:
   for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();
        btIt != _boundaryTerms.end(); btIt++) {

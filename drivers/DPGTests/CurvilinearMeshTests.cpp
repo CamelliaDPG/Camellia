@@ -89,9 +89,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
     double approximateArea = one->integrate(mesh);
-//    double impliedPi = (width * height - approximateArea) / (r*r);
-//    cout << "For k=" << i << ", implied value of pi: " << impliedPi;
-//    cout << " (error " << abs(PI-impliedPi) << ")\n";
+    double impliedPi = (width * height - approximateArea) / (r*r);
+    cout << "For k=" << i << ", implied value of pi: " << impliedPi;
+    cout << " (error " << abs(PI-impliedPi) << ")\n";
 //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence
@@ -116,9 +116,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   int numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {
     double approximateArea = one->integrate(mesh);
-//    double impliedPi = (width * height - approximateArea) / (r*r);
-//    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
-//    cout << " (error " << abs(PI-impliedPi) << ")\n";
+    double impliedPi = (width * height - approximateArea) / (r*r);
+    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
+    cout << " (error " << abs(PI-impliedPi) << ")\n";
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence

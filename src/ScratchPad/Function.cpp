@@ -818,9 +818,18 @@ FunctionPtr Function::null() {
   return _null;
 }
 
-FunctionPtr Function::zero() {
+FunctionPtr Function::zero(int rank) {
   static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  return _zero;
+  if (rank==0) {
+    return _zero;
+  } else {
+    FunctionPtr zeroTensor = _zero;
+    for (int i=0; i<rank; i++) {
+      // THIS ASSUMES 2D--3D would be Function::vectorize(zeroTensor, zeroTensor, zeroTensor)...
+      zeroTensor = Function::vectorize(zeroTensor, zeroTensor);
+    }
+    return zeroTensor;
+  }
 }
 
 ConstantScalarFunction::ConstantScalarFunction(double value) { 
