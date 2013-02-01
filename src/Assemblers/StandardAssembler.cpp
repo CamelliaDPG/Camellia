@@ -99,16 +99,12 @@ void StandardAssembler::assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, E
     int numTestDofs = numTestDofsForElem(elem);
     FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1);     
     getElemData(elem,BtRvB,BtRvl);
-    /*
-    FieldContainer<double> B = getOverdeterminedStiffness(elem);
-    FieldContainer<double> Rv = getIPMatrix(elem);
-    FieldContainer<double> l = getRHS(elem);
-    FieldContainer<double> RvB(B.dimension(0),B.dimension(1));  
-    SerialDenseWrapper::solveSystemMultipleRHS(RvB,Rv,B); // solve for optimal test functions
-    FieldContainer<double> BtRvB(numTrialDofs,numTrialDofs),BtRvl(numTrialDofs,1); 
-    SerialDenseWrapper::multiply(BtRvB,RvB,B,'T','N');
-    SerialDenseWrapper::multiply(BtRvl,RvB,l,'T','N'); 
-    */
+    // apply filter(s) (e.g. penalty method, preconditioners, etc.)
+    if (_solution->filter().get()) {
+      BtRvB.resize(1,numTrialDofs,numTrialDofs);
+      _solution->filter()->filter(BtRvB,BtRvl,BasisCache::basisCacheForCell(mesh,elem->cellID()),mesh,_solution->bc());
+      BtRvB.resize(numTrialDofs,numTrialDofs);
+    }
 
     FieldContainer<int> globalDofIndices(numTrialDofs);
     // we have the same local-to-global map for both rows and columns
@@ -147,7 +143,6 @@ void StandardAssembler::applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_F
 
   FieldContainer<int> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
-
   mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_solution->bc()), myGlobalIndicesSet);
   int numBCs = bcGlobalIndices.size();
 
