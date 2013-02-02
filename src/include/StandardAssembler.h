@@ -59,7 +59,9 @@ public:
   void applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
   FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
   void getElemData(ElementPtr elem, FieldContainer<double> &K, FieldContainer<double> &f);
-
+  SolutionPtr solution(){
+    return _solution;
+  }
 };
 
 #endif

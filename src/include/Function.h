@@ -66,8 +66,11 @@ public:
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
+
+  // integrate over only one cell
+  double integrate(int cellID, Teuchos::RCP<Mesh> mesh);
   
-  double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol);

@@ -393,3 +393,51 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
   
   return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
 }
+
+Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
+  // order of the sub-elements is CCW starting at bottom left
+  FieldContainer<double> quadPoints(2,4,2);
+  quadPoints(0,0,0) = -1.0; // x1
+  quadPoints(0,0,1) = -1.0; // y1
+  quadPoints(0,1,0) = 0.0;
+  quadPoints(0,1,1) = -1.0;
+  quadPoints(0,2,0) = 0.0;
+  quadPoints(0,2,1) = 1.0;
+  quadPoints(0,3,0) = -1.0;
+  quadPoints(0,3,1) = 1.0;  
+  quadPoints(1,0,0) = 0.0; // x1
+  quadPoints(1,0,1) = -1.0; // y1
+  quadPoints(1,1,0) = 1.0;
+  quadPoints(1,1,1) = -1.0;
+  quadPoints(1,2,0) = 1.0;
+  quadPoints(1,2,1) = 1.0;
+  quadPoints(1,3,0) = 0.0;
+  quadPoints(1,3,1) = 1.0;   
+  Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  
+  return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
+}
+
+Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPatternQuad() {
+  // order of the sub-elements is CCW starting at bottom left
+  FieldContainer<double> quadPoints(2,4,2);
+  quadPoints(0,0,0) = -1.0; // x1
+  quadPoints(0,0,1) = -1.0; // y1
+  quadPoints(0,1,0) = 1.0;
+  quadPoints(0,1,1) = -1.0;
+  quadPoints(0,2,0) = 1.0;
+  quadPoints(0,2,1) = 0.0;
+  quadPoints(0,3,0) = -1.0;
+  quadPoints(0,3,1) = 0.0;  
+  quadPoints(1,0,0) = -1.0; // x1
+  quadPoints(1,0,1) = 0.0; // y1
+  quadPoints(1,1,0) = 1.0;
+  quadPoints(1,1,1) = 0.0;
+  quadPoints(1,2,0) = 1.0;
+  quadPoints(1,2,1) = 1.0;
+  quadPoints(1,3,0) = -1.0;
+  quadPoints(1,3,1) = 1.0;   
+  Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  
+  return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
+}

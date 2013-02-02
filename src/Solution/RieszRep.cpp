@@ -238,12 +238,14 @@ void RieszRep::distributeDofs(){
   }
   
   // distribute norms as well
-  int numElems = _mesh->numElements();
+  int numElems = _mesh->activeElements().size();    
   int numMyElems = _mesh->elementsInPartition(rank).size();
   int myElems[numMyElems];
   // build cell index
   int cellIndex = 0;
   int myCellIndex = 0;
+
+  vector<ElementPtr> elemsInPartition = _mesh->elementsInPartition(rank);
   for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
     if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
