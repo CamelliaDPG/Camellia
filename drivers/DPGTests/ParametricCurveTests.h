@@ -19,6 +19,7 @@ public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   bool testParametricCurveRefinement(); // tests the kind of thing that will happen to parametric curves during mesh refinement
   bool testPolygon();
+  bool testProjectionBasedInterpolation();
   
   std::string testSuiteName();
 };

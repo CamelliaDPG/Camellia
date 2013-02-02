@@ -161,7 +161,9 @@ class InternalBoundaryFunction : public BoundaryFunction{
 
 class SimpleFunction : public Function {
 public:
-  virtual double value(double x, double y) = 0;
+  virtual double value(double x);
+  virtual double value(double x, double y);
+  virtual double value(double x, double y, double z);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
@@ -405,7 +407,7 @@ class Xn : public SimpleFunction {
   int _n;
 public:
   Xn(int n);
-  double value(double x, double y);
+  double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
   string displayString();
@@ -419,6 +421,39 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   string displayString();
+};
+
+class Cos_ax : public SimpleFunction {
+  double _a;
+public:
+  Cos_ax(double a);
+  double value(double x);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  
+  string displayString();
+};
+
+class Sin_ax : public SimpleFunction {
+  double _a;
+public:
+  Sin_ax(double a) {
+    _a = a;
+  }
+  double value(double x) {
+    return sin( _a * x);
+  }
+  FunctionPtr dx() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a));
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\sin( " << _a << " x )";
+    return ss.str();
+  }
 };
 
 class Cos_ay : public SimpleFunction {
@@ -478,10 +513,10 @@ public:
 };
 
 
-class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
+class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:
-  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints);
+  PhysicalPointCache(const FieldContainer<double> &physCubPoints);
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
 };

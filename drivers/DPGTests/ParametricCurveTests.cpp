@@ -14,6 +14,13 @@ void ParametricCurveTests::setup() {
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testProjectionBasedInterpolation()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testPolygon()) {
     numTestsPassed++;
   }
@@ -155,6 +162,63 @@ bool ParametricCurveTests::testPolygon() {
       success = false;
     }
   }
+  return success;
+}
+
+double basisSumAtRefPoint(FieldContainer<double> &basisCoefficients, BasisPtr basis, double xValue, BasisCachePtr basisCache) {
+  int numPoints = 1;
+  int spaceDim = 1;
+  FieldContainer<double> refCellPoints(numPoints,spaceDim);
+  refCellPoints[0] = xValue;
+  basisCache->setRefCellPoints(refCellPoints);
+  Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(basis, OP_VALUE);
+  double sum;
+  int ptIndex = 0; // one point
+  for (int fieldIndex=0; fieldIndex<basisCoefficients.size(); fieldIndex++) {
+    sum += (*basisValues)(fieldIndex,ptIndex);
+  }
+  return sum;
+}
+
+bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficients_x, FieldContainer<double> &basisCoefficients_y, BasisPtr basis, ParametricCurvePtr curve) {
+  double curve_x0, curve_y0, curve_x1, curve_y1;
+  curve->value(0, curve_x0, curve_y0);
+  curve->value(1, curve_x1, curve_y1);
+  BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, basis->getDegree()*2);
+  double sum_x0 = basisSumAtRefPoint(basisCoefficients_x, basis, 0, basisCache);
+  double sum_x1 = basisSumAtRefPoint(basisCoefficients_x, basis, 1, basisCache);
+  double sum_y0 = basisSumAtRefPoint(basisCoefficients_y, basis, 0, basisCache);
+  double sum_y1 = basisSumAtRefPoint(basisCoefficients_y, basis, 1, basisCache);
+  double tol = 1e-14;
+  double x0_err = abs(sum_x0-curve_x0);
+  double y0_err = abs(sum_y0-curve_y0);
+  double x1_err = abs(sum_x1-curve_x1);
+  double y1_err = abs(sum_y1-curve_y1);
+  double sum_err = x0_err + y0_err + x1_err + y1_err;
+  return sum_err < tol;
+}
+
+bool ParametricCurveTests::testProjectionBasedInterpolation() {
+  bool success = true;
+  // to start with, project a line onto a linear basis
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  BasisPtr linearBasis = BasisFactory::getBasis(1, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  
+  double x0=3, y0=-3, x1=5, y1=4;
+//  double dist = sqrt((x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
+  double dist = 1; // the length of the parametric space
+  BasisCachePtr basisCache = BasisCache::basisCache1D(0, dist, linearBasis->getDegree()*2);
+  ParametricCurvePtr myLine = ParametricCurve::line(x0, y0, x1, y1);
+  
+  FieldContainer<double> basisCoefficients_x, basisCoefficients_y;
+  myLine->projectionBasedInterpolant(basisCoefficients_x, linearBasis, 0);
+  myLine->projectionBasedInterpolant(basisCoefficients_y, linearBasis, 1);
+  
+  if ( ! basisSumInterpolatesCurveEndPoints(basisCoefficients_x,basisCoefficients_y, linearBasis, myLine)) {
+    cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't interpolate line endpoints.\n";
+    success = false;
+  }
+  
   return success;
 }
 

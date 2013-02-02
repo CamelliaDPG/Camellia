@@ -11,25 +11,6 @@
 #include "VarFactory.h"
 #include "Projector.h"
 
-class ParametricBubble : public ParametricCurve {
-  ParametricCurvePtr _edgeCurve;
-  double _x0, _y0, _x1, _y1;
-public:
-  ParametricBubble(ParametricCurvePtr edgeCurve) {
-    _edgeCurve = edgeCurve;
-    _edgeCurve->value(0, _x0,_y0);
-    _edgeCurve->value(1, _x1,_y1);
-  }
-  void value(double t, double &x, double &y) {
-    _edgeCurve->value(t, x,y);
-    x -= _x0*(1.0-t) + _x1*t;
-    y -= _y0*(1.0-t) + _y1*t;
-  }
-  static ParametricCurvePtr bubble(ParametricCurvePtr edgeCurve) {
-    return Teuchos::rcp( new ParametricBubble(edgeCurve) );
-  }
-};
-
 class LinearInterpolatingSurface : public ParametricSurface {
   vector< pair<double, double> > _vertices;
 public:
@@ -77,10 +58,10 @@ public:
     _curves[3] = ParametricCurve::reverse(_curves[3]);
     
     // since we keep _vertices separately, can just store bubble functions in _curves
-    _curves[0] = ParametricBubble::bubble(_curves[0]);
-    _curves[1] = ParametricBubble::bubble(_curves[1]);
-    _curves[2] = ParametricBubble::bubble(_curves[2]);
-    _curves[3] = ParametricBubble::bubble(_curves[3]);
+    _curves[0] = ParametricCurve::bubble(_curves[0]);
+    _curves[1] = ParametricCurve::bubble(_curves[1]);
+    _curves[2] = ParametricCurve::bubble(_curves[2]);
+    _curves[3] = ParametricCurve::bubble(_curves[3]);
   }
   void setNeglectVertices(bool value) {
     _neglectVertices = value;

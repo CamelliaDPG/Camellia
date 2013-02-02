@@ -193,6 +193,7 @@ public:
   void setMaxCubatureDegree(int value);
     
   // static convenience constructors:
+  static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
                                          int cubatureDegreeEnrichment = 0);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
