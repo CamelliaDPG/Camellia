@@ -68,7 +68,8 @@ public:
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell
-  double integrate(int cellID, Teuchos::RCP<Mesh> mesh);
+  //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   
   double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
 
