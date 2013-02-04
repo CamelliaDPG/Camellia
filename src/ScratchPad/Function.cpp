@@ -280,8 +280,8 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
 }
 
 // added by Jesse - integrate over only one cell
-double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh){
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID);
+double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
   FieldContainer<double> cellIntegral(1);
   this->integrate(cellIntegral,basisCache);
   return cellIntegral(0);
