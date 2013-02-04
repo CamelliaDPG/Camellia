@@ -68,7 +68,6 @@ typedef Teuchos::RCP<BasisCache> BasisCachePtr;
 
 class BasisCache {
 private:
-  int _maxCubatureDegree;
   int _numCells, _spaceDim;
   int _numSides;
   bool _isSideCache;
@@ -180,6 +179,9 @@ public:
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
   const FieldContainer<double> &getRefCellPoints();
   const FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
+  
+  // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
+  FieldContainer<double> getRefCellPointsForPhysicalPoints(const FieldContainer<double> &physicalPoints, int cellIndex=0);
 
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
@@ -194,6 +196,7 @@ public:
   void setMaxCubatureDegree(int value);
     
   // static convenience constructors:
+  static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
                                          int cubatureDegreeEnrichment = 0);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,

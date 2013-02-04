@@ -263,7 +263,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           // project bc function onto side basis:
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
-          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
+          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID, isTrace));
           // TODO: test the below.  (New as of 9/15/12, basically.)
           // (NOT YET WORKING.  NEED TO ADD SUPPORT FOR grad() to BCFunction, but it's unclear how best to do so...)
 //          if (isTrace && (bcFunction->grad().get() != NULL)) { // TODO: in case grad() is NULL, better to interpolate than do the L^2 projection, probably

@@ -32,7 +32,9 @@ public:
   static Teuchos::RCP<RefinementPattern> noRefinementPatternQuad();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
-  
+  static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad();
+  static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad();
+
   const FieldContainer<double> & verticesOnReferenceCell();
   FieldContainer<double> verticesForRefinement(FieldContainer<double> &cellNodes);
   

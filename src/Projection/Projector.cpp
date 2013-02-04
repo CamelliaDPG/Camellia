@@ -27,20 +27,27 @@
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
-                                         BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v) {
+                                         BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
+                                         set<int> fieldIndicesToSkip) {
   shards::CellTopology cellTopo = basis->getBaseCellTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   
-  int numDofs = basis->getCardinality();
-  const FieldContainer<double> *cubPoints = &(basisCache->getPhysicalCubaturePoints());
+  if (! fxn.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
+  }
   
-  int numCells = cubPoints->dimension(0);
-  int numPts = cubPoints->dimension(1);
-  FieldContainer<double> functionValues(numCells,numPts);
-  fxn->values(functionValues, basisCache);  
+  int cardinality = basis->getCardinality();
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numDofs = cardinality - fieldIndicesToSkip.size();
+  if (numDofs==0) {
+    // we're skipping all the fields, so just initialize basisCoefficients to 0 and return
+    basisCoefficients.resize(numCells,cardinality);
+    basisCoefficients.initialize(0);
+    return;
+  }
   
-  FieldContainer<double> gramMatrix(numCells,numDofs,numDofs);
-  FieldContainer<double> ipVector(numCells,numDofs);
+  FieldContainer<double> gramMatrix(numCells,cardinality,cardinality);
+  FieldContainer<double> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
@@ -52,10 +59,60 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, basisCache);
   ip->computeInnerProductVector(ipVector, v, fxn, dofOrdering, basisCache);
+//  cout << "gramMatrix:\n" << gramMatrix;
+//  cout << "ipVector:\n" << ipVector;
   
-  basisCoefficients.resize(numCells,numDofs);
+  map<int,int> oldToNewIndices;
+  map<int,int> newToOldIndices;
+  if (fieldIndicesToSkip.size() > 0) {
+    // the code to do with fieldIndicesToSkip might not be terribly efficient...
+    // (but it's not likely to be called too frequently)
+    int i_indices_skipped = 0;
+    for (int i=0; i<cardinality; i++) {
+      int new_value;
+      if (fieldIndicesToSkip.find(i) != fieldIndicesToSkip.end()) {
+        i_indices_skipped++;
+        new_value = -1;
+      } else {
+        new_value = i - i_indices_skipped;
+      }
+      oldToNewIndices[i] = new_value;
+      if (new_value != -1) {
+        newToOldIndices[new_value] = i;
+      }
+    }
+    
+    FieldContainer<double> gramMatrixFiltered(numCells,numDofs,numDofs);
+    FieldContainer<double> ipVectorFiltered(numCells,numDofs);
+    // now filter out the values that we're to skip
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int i=0; i<cardinality; i++) {
+        int i_filtered = oldToNewIndices[i];
+        if (i_filtered == -1) {
+          continue;
+        }
+        ipVectorFiltered(cellIndex,i_filtered) = ipVector(cellIndex,i);
+        
+        for (int j=0; j<cardinality; j++) {
+          int j_filtered = oldToNewIndices[j];
+          if (j_filtered == -1) {
+            continue;
+          }
+          gramMatrixFiltered(cellIndex,i_filtered,j_filtered) = gramMatrix(cellIndex,i,j);
+        }
+      }
+    }
+//    cout << "gramMatrixFiltered:\n" << gramMatrixFiltered;
+//    cout << "ipVectorFiltered:\n" << ipVectorFiltered;
+    gramMatrix = gramMatrixFiltered;
+    ipVector = ipVectorFiltered;
+  }
+  
+  basisCoefficients.resize(numCells,cardinality);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++){
     
+    // TODO: rewrite to take advantage of SerialDenseWrapper...
     Epetra_SerialDenseSolver solver;
     
     Epetra_SerialDenseMatrix A(Copy,
@@ -111,8 +168,17 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
       }
     }
     
-    for (int i=0;i<numDofs;i++){
-      basisCoefficients(cellIndex,i) = x(i);
+    for (int i=0;i<cardinality;i++) {
+      if (fieldIndicesToSkip.size()==0) {
+        basisCoefficients(cellIndex,i) = x(i);
+      } else {
+        int i_filtered = oldToNewIndices[i];
+        if (i_filtered==-1) {
+          basisCoefficients(cellIndex,i) = 0.0;
+        } else {
+          basisCoefficients(cellIndex,i) = x(i_filtered);
+        }
+      }
     }
     
   }

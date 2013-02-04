@@ -10,17 +10,12 @@
 
 #include "MeshTransformationFunction.h"
 #include "ParametricCurve.h"
-
 #include "Mesh.h"
 #include "Element.h"
 #include "BasisFactory.h"
-
 #include "Intrepid_FunctionSpaceTools.hpp"
-
 #include "SerialDenseSolveWrapper.h"
-
 #include "GnuPlotUtil.h"
-
 #include "ParametricSurface.h"
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
@@ -115,8 +110,10 @@ public:
     _cellIndex = -1;
     _op = OP_VALUE;
     ElementPtr cell = mesh->getElement(cellID);
-    int numEdges = edgeFunctions.size();
     _basis = basisForTransformation(cell->elementType());
+    ParametricSurface::basisWeightsForL2ProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
+    /*
+    int numEdges = edgeFunctions.size();
     int cardinality = _basis->getCardinality();
     _basisCoefficients.resize(cardinality);
     int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
@@ -210,7 +207,7 @@ public:
 //          cout << "Point " << ptIndex << ": Success\n";
         }
       }
-    }
+    }*/
   }
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {

@@ -128,7 +128,7 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
       testPoints(0,i*NUM_POINTS_1D + j, 1) = y[i];
     }
   }
-  BasisCachePtr basisCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints(testPoints) );
+  BasisCachePtr basisCache = Teuchos::rcp( new PhysicalPointCache(testPoints) );
   
   FunctionPtr zeroExpected = u1_exact->dx() + u2_exact->dy();
   

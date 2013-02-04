@@ -11,6 +11,7 @@
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
+#include "GnuPlotUtil.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -137,6 +138,38 @@ public:
   }
 };
 
+FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints) {
+  vector<double> points1D_x, points1D_y;
+  for (int i=0; i<numPoints; i++) {
+    points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
+    points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
+  }
+  int spaceDim = 2;
+  FieldContainer<double> points(numPoints*numPoints,spaceDim);
+  for (int i=0; i<numPoints; i++) {
+    for (int j=0; j<numPoints; j++) {
+      int pointIndex = i*numPoints + j;
+      points(pointIndex,0) = points1D_x[i];
+      points(pointIndex,1) = points1D_y[j];
+    }
+  }
+  return points;
+}
+
+FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1) {
+  int numPoints = points.dimension(0);
+  FieldContainer<double> values(numPoints);
+  solution->solutionValues(values, u1->ID(), points);
+  
+  FieldContainer<double> xyzData(numPoints, 3);
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    xyzData(ptIndex,0) = points(ptIndex,0);
+    xyzData(ptIndex,1) = points(ptIndex,1);
+    xyzData(ptIndex,2) = values(ptIndex);
+  }
+  return xyzData;
+}
+
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
                       SolutionPtr solution, VarPtr u1, string filename) {
   vector<double> points1D_x, points1D_y;
@@ -189,7 +222,7 @@ int main(int argc, char *argv[]) {
   numProcs=mpiSession.getNProc();
 #else
 #endif
-  int pToAdd = 1; // for optimal test function approximation
+  int pToAdd = 2; // for optimal test function approximation
   int pToAddForStreamFunction = pToAdd;
   bool enforceLocalConservation = true;
   bool useSGP = false; // stream-gradient-pressure formulation (velocity-gradient-pressure is the alternative)
@@ -462,10 +495,11 @@ int main(int argc, char *argv[]) {
   // TODO: replace with zero-traction condition
   // THIS IS A GUESS AT THE ZERO-TRACTION CONDITION
   cout << "SHOULD CONFIRM THAT THE ZERO-TRACTION CONDITION IS RIGHT!!\n";
-  FunctionPtr zero = Teuchos::rcp(new ConstantScalarFunction(0.0));
-  //  bc->addDirichlet(sigma1n, outflowBoundary, zero);
-  //  bc->addDirichlet(sigma2n, outflowBoundary, zero);
-  bc->addZeroMeanConstraint(p);
+  FunctionPtr zero = Function::zero();
+  bc->addDirichlet(t1n, outflowBoundary, zero);
+  bc->addDirichlet(t2n, outflowBoundary, zero);
+  // hypothesis: when we impose the no-traction condition, not allowed to impose zero-mean pressure
+//  bc->addZeroMeanConstraint(p);
   FunctionPtr phi0 = Teuchos::rcp( new PHI_0 );
   
   if (useSGP) {
@@ -622,10 +656,13 @@ int main(int argc, char *argv[]) {
     solution->writeFieldsToFile(p->ID(), "p.m");
     if (useSGP) {
       writePatchValues(0, 8, 0, 2, solution, phi, "phi_patch.m");
-      writePatchValues(4, 8, 0, 2, solution, phi, "phi_patch_east.m");
+      writePatchValues(4, 5, 0, 1, solution, phi, "phi_patch_east.m");
     } else {
       writePatchValues(0, 8, 0, 2, streamSolution, phi, "phi_patch.m");
-      writePatchValues(4, 8, 0, 2, streamSolution, phi, "phi_patch_east.m");
+      writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
+      
+      FieldContainer<double> eastPatchPoints = pointGrid(4, 5, 0, 1, 100);
+      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", solutionData(eastPatchPoints, streamSolution, phi));
     }
     //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
     //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");

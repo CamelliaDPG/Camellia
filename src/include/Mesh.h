@@ -62,10 +62,8 @@
 #include "ParametricCurve.h"
 
 class Solution;
-class Mesh;
 class MeshTransformationFunction;
 
-typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef pair<int,int> Edge;
 
@@ -346,5 +344,7 @@ public:
   
   double getCellMeasure(int cellID);
 };
+
+typedef Teuchos::RCP<Mesh> MeshPtr;
 
 #endif

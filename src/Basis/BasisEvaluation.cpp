@@ -47,6 +47,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int numPoints = refPoints.dimension(0);
   int spaceDim = refPoints.dimension(1);  // points dimensions are (numPoints, spaceDim)
   int basisCardinality = basis->getCardinality();
+  int spaceDimOut = spaceDim; // for now, we assume basis values are in the same spaceDim as points (e.g. vector 1D has just 1 component)
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   if (! BasisFactory::basisKnown(basis) ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
@@ -58,8 +59,8 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
   
   if ((EOperatorExtended)relatedOp != op) {
-      // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDim)
-    FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,spaceDim));
+      // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDimOut)
+    FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,spaceDimOut));
     basis->getValues(*(relatedResults.get()), refPoints, (EOperator)relatedOp);
     FCPtr result = getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 ) {
@@ -75,13 +76,14 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
   
-  // result dimensions should be either (numPoints,basisCardinality) or (numPoints,basisCardinality,spaceDim);
+  // result dimensions should be either (numPoints,basisCardinality) or (numPoints,basisCardinality,spaceDimOut);
   Teuchos::Array<int> dimensions;
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
   int basisRank = BasisFactory::getBasisRank(basis);
-  if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) )
-      ||
+  if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) ) ){
+    dimensions.push_back(spaceDimOut);
+  } else if (
       ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_GRAD) )
       ||
       ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_CURL) ) )
@@ -90,7 +92,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
     // grad of vector: a tensor
     dimensions.push_back(spaceDim);
-    dimensions.push_back(spaceDim);
+    dimensions.push_back(spaceDimOut);
   }
   FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
   basis->getValues(*(result.get()), refPoints, (EOperator)op);

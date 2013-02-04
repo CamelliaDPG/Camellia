@@ -131,8 +131,15 @@ public:
   }
   */
 
-  // optional specification of operator to apply 
+  // optional specification of operator to apply - default to rank 0
  RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op): Function(0){
+    _testID = testID;
+    _rep = rep;   
+    _op = op;
+  }   
+ 
+  // specification of function rank
+ RepFunction(int testID,Teuchos::RCP<RieszRep> rep, IntrepidExtendedTypes::EOperatorExtended op, int fxnRank): Function(fxnRank){
     _testID = testID;
     _rep = rep;   
     _op = op;
@@ -145,12 +152,17 @@ public:
   FunctionPtr y(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_Y));
   }
-
   FunctionPtr dx(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DX));
   }
   FunctionPtr dy(){
     return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DY));
+  }  
+  //  FunctionPtr grad(){
+  //    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_GRAD,2)); // default to 2 space dimensions
+  //  }
+  FunctionPtr div(){
+    return Teuchos::rcp(new RepFunction(_testID,_rep,IntrepidExtendedTypes::OP_DIV));
   }
 
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {

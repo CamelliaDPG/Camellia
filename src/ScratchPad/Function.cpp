@@ -164,10 +164,41 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
   }
 }
 
+bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
+  if (f->rank() != this->rank()) {
+    return false;
+  }
+  FunctionPtr thisPtr = Teuchos::rcp(this,false);
+  FunctionPtr diff = thisPtr-f;
+  
+  int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
+  // compute L^2 norm of difference on the cells
+  FieldContainer<double> diffs_squared(numCells);
+  (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
+  double sum = 0;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    sum += diffs_squared[cellIndex];
+  }
+  return sqrt(sum) < tol;
+}
+
+double Function::evaluate(FunctionPtr f, double x) {
+  static FieldContainer<double> value(1,1); // (C,P)
+  static FieldContainer<double> physPoint(1,1,1);
+  
+  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
+  if (f->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  f->values(value,dummyCache);
+  return value[0];
+}
+
 double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; this isn't super-efficient
   static FieldContainer<double> value(1,1);
   static FieldContainer<double> physPoint(1,1,2);
-  static Teuchos::RCP<DummyBasisCacheWithOnlyPhysicalCubaturePoints> dummyCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints(physPoint) );
+  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
   if (f->rank() != 0) {
@@ -246,6 +277,14 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   for (int i=0; i<myValues.size(); i++) {
     valuesToAddTo[i] += myValues[i];
   }
+}
+
+// added by Jesse - integrate over only one cell
+double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
+  FieldContainer<double> cellIntegral(1);
+  this->integrate(cellIntegral,basisCache);
+  return cellIntegral(0);
 }
 
 // added by Jesse - adaptive quadrature rules
@@ -818,9 +857,18 @@ FunctionPtr Function::null() {
   return _null;
 }
 
-FunctionPtr Function::zero() {
+FunctionPtr Function::zero(int rank) {
   static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  return _zero;
+  if (rank==0) {
+    return _zero;
+  } else {
+    FunctionPtr zeroTensor = _zero;
+    for (int i=0; i<rank; i++) {
+      // THIS ASSUMES 2D--3D would be Function::vectorize(zeroTensor, zeroTensor, zeroTensor)...
+      zeroTensor = Function::vectorize(zeroTensor, zeroTensor);
+    }
+    return zeroTensor;
+  }
 }
 
 ConstantScalarFunction::ConstantScalarFunction(double value) { 
@@ -1133,17 +1181,40 @@ void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
   }
 }
 
+double SimpleFunction::value(double x) {
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
+}
+
+double SimpleFunction::value(double x, double y) {
+  return value(x);
+}
+
+double SimpleFunction::value(double x, double y, double z) {
+  return value(x,y);
+}
+
 void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   
   const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  int spaceDim = points->dimension(2);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      double x = (*points)(cellIndex,ptIndex,0);
-      double y = (*points)(cellIndex,ptIndex,1);
-      values(cellIndex,ptIndex) = value(x,y);
+      if (spaceDim == 1) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        values(cellIndex,ptIndex) = value(x);
+      } else if (spaceDim == 2) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex,ptIndex) = value(x,y);
+      } else if (spaceDim == 3) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        double z = (*points)(cellIndex,ptIndex,2);
+        values(cellIndex,ptIndex) = value(x,y,z);
+      }
     }
   }
 }
@@ -1241,7 +1312,7 @@ void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr bas
 //      }
     }
   }
-  BasisCachePtr dummyBasisCache = Teuchos::rcp( new DummyBasisCacheWithOnlyPhysicalCubaturePoints( polarPoints ) );
+  BasisCachePtr dummyBasisCache = Teuchos::rcp( new PhysicalPointCache( polarPoints ) );
   _f->values(values,dummyBasisCache);
   if (_f->isZero()) {
     cout << "Warning: in PolarizedFunction, we are being asked for values when _f is zero.  This shouldn't happen.\n";
@@ -1385,17 +1456,25 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   Teuchos::Array<int> dims;
   values.dimensions(dims);
   int numComponents = dims[dims.size()-1];
-  TEUCHOS_TEST_FOR_EXCEPTION( numComponents != _fxns.size(), std::invalid_argument, "number of components incorrect" );
+  TEUCHOS_TEST_FOR_EXCEPTION( numComponents > _fxns.size(), std::invalid_argument, "too many components requested" );
+  if (numComponents != _fxns.size()) {
+    // we're asking for fewer components than we have functions.  We're going to say that's OK so long as the
+    // unused functions are 0.
+    for (int i=numComponents; i<_fxns.size(); i++) {
+      if (!_fxns[i]->isZero()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_fxns outnumber components and some of those extra Functions aren't zero!");
+      }
+    }
+  }
   dims.pop_back(); // remove the last, dimensions argument
   FieldContainer<double> compValues(dims);
   int valuesPerComponent = compValues.size();
   
-  int numComps = _fxns.size();
-  for (int comp=0; comp < numComps; comp++) {
+  for (int comp=0; comp < numComponents; comp++) {
     FunctionPtr fxn = _fxns[comp];
     fxn->values(compValues, basisCache);
     for (int i=0; i < valuesPerComponent; i++) {
-      values[ numComps * i + comp ] = compValues[ i ];
+      values[ numComponents * i + comp ] = compValues[ i ];
     }
   }
 }
@@ -1635,7 +1714,7 @@ string Xn::displayString() {
 Xn::Xn(int n) {
   _n = n;
 }
-double Xn::value(double x, double y) {
+double Xn::value(double x) {
   return pow(x,_n);
 }
 FunctionPtr Xn::dx() {
@@ -1741,6 +1820,26 @@ FunctionPtr SimpleSolutionFunction::dz() {
 //  return true;
 //}
 
+Cos_ax::Cos_ax(double a) {
+  _a = a;
+}
+double Cos_ax::value(double x) {
+  return cos( _a * x );
+}
+FunctionPtr Cos_ax::dx() {
+  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a));
+}
+FunctionPtr Cos_ax::dy() {
+  return Function::zero();
+}
+
+string Cos_ax::displayString() {
+  ostringstream ss;
+  ss << "\\cos( " << _a << " x )";
+  return ss.str();
+}
+
+
 Cos_ay::Cos_ay(double a) {
   _a = a;
 }
@@ -1760,12 +1859,12 @@ string Cos_ay::displayString() {
   return ss.str();
 }
 
-DummyBasisCacheWithOnlyPhysicalCubaturePoints::DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints) : BasisCache() {
+PhysicalPointCache::PhysicalPointCache(const FieldContainer<double> &physCubPoints) : BasisCache() {
   _physCubPoints = physCubPoints;
 }
-const FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::getPhysicalCubaturePoints() { // overrides super
+const FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints() { // overrides super
   return _physCubPoints;
 }
-FieldContainer<double> & DummyBasisCacheWithOnlyPhysicalCubaturePoints::writablePhysicalCubaturePoints() { // allows overwriting the contents
+FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints() { // allows overwriting the contents
   return _physCubPoints;
 }

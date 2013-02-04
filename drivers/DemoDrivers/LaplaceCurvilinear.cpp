@@ -24,11 +24,11 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 0;
+  int minPolyOrder = 2;
   int maxPolyOrder = 5;
   int pToAdd = 2;
-  int minLogElements = 0;
-  int maxLogElements = 2;
+  int minLogElements = 1;
+  int maxLogElements = 3;
   bool useTriangles = false;
   double width = 10;
   double height = 10;
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     bf->printTrialTestInteractions();
   }
   
-  for (int polyOrder=minPolyOrder; polyOrder<maxPolyOrder; polyOrder++) {
+  for (int polyOrder=minPolyOrder; polyOrder<=maxPolyOrder; polyOrder++) {
     HConvergenceStudy study(exactSolution,
                             bf, rhs, bc, ip,
                             minLogElements, maxLogElements,

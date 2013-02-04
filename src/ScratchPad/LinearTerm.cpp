@@ -318,9 +318,8 @@ void LinearTerm::integrate(FieldContainer<double> &values,
     bool applyCubatureWeights = true, dontApplyCubatureWeights = false;
     u->values(uValues,uID,uBasis,basisCache,applyCubatureWeights);
     
-//    cout << "uValues for u = " << u->displayString() << ":" << endl;
-//    cout << uValues;
-//    double debugSum = 0.0;
+
+    //    double debugSum = 0.0;
 //    for (int i=0; i<uValues.size(); i++) {
 //      debugSum += uValues[i];
 //    }
@@ -358,7 +357,7 @@ void LinearTerm::integrate(FieldContainer<double> &values,
       FieldContainer<double> vValues(ltValueDim);
       v->values(vValues, vID, vBasis, basisCache, dontApplyCubatureWeights);
       
-//      cout << "vValues for v = " << v->displayString() << ":" << endl;
+//      cout << "vValues (without cubature weights applied) for v = " << v->displayString() << ":" << endl;
 //      cout << vValues;
       
       // same flux consideration, for the vValues
@@ -453,6 +452,10 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
                            LinearTermPtr otherTerm, VarPtr otherVar, FunctionPtr fxn, 
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
+  
+  if (!fxn.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
+  }
   
   map<int, FunctionPtr> otherVarMap;
   otherVarMap[otherVar->ID()] = fxn;
@@ -653,15 +656,21 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     // if there isn't an entry for var, we take it to be zero:
     if (varFunctions.find(var->ID()) == varFunctions.end()) continue;
     
-    FunctionPtr varEvaluation = Function::op(varFunctions[var->ID()],var->op());
+    FunctionPtr varFunction = varFunctions[var->ID()];
+    
+    if (!varFunction.get()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "varFunctions entries cannot be null!");
+    }
+    
+    FunctionPtr varEvaluation = Function::op(varFunction,var->op());
     if (fxn.get()) {
       fxn = fxn + f * varEvaluation;
     } else {
       fxn = f * varEvaluation;
     }
   }
-  if (!fxn.get() && (this->rank()==0)) {
-    fxn = Function::zero();
+  if (!fxn.get()) {
+    fxn = Function::zero(this->rank());
   }
   return fxn;
 }

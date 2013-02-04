@@ -32,5 +32,13 @@ void BC::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::R
   int numFields = basis->getCardinality();
   TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFields, std::invalid_argument, "inconsistent basisCoefficients dimensions");
   
-  Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
+  if (!bcFxn->isTrace()) {
+    // L^2 projection
+    Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
+  } else {
+    // TODO: projection-based interpolation
+    // (start with L^2-projection-based interpolation; proceed to H^1 once we have a clear story on
+    //  how to take derivatives of BCFunction)
+    Projector::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
+  }
 }
