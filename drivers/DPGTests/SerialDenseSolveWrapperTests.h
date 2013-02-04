@@ -10,16 +10,17 @@
 #define __Camellia_debug__SerialDenseSolveWrapperTests__
 
 #include "TestSuite.h"
-#include "SerialDenseSolveWrapper.h"
 
 class SerialDenseSolveWrapperTests : public TestSuite {
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  
+  bool testMultiplyMatrices();  
   bool testSimpleSolve();
-  
+  bool testSolveMultipleRHS();
+  bool testAddMatrices();
+
   std::string testSuiteName();
 };
 

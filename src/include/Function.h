@@ -35,6 +35,8 @@ public:
   Function();
   Function(int rank);
   
+  bool equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol = 1e-14);
+  
   virtual bool isZero() { return false; } // if true, the function is identically zero
   
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
@@ -66,8 +68,12 @@ public:
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
+
+  // integrate over only one cell
+  //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   
-  double integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol);
@@ -94,20 +100,23 @@ public:
   
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
-  
+
+  static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
   static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
+  static FunctionPtr constant(double value);
+  static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
-  static FunctionPtr constant(double value);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
   static FunctionPtr null();
   static FunctionPtr sideParity();
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
-  static FunctionPtr zero();
+  static FunctionPtr zero(int rank=0);
+  static FunctionPtr restrictToCellBoundary(FunctionPtr f);
 //  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
@@ -159,7 +168,9 @@ class InternalBoundaryFunction : public BoundaryFunction{
 
 class SimpleFunction : public Function {
 public:
-  virtual double value(double x, double y) = 0;
+  virtual double value(double x);
+  virtual double value(double x, double y);
+  virtual double value(double x, double y, double z);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 typedef Teuchos::RCP<SimpleFunction> SimpleFunctionPtr;
@@ -369,6 +380,20 @@ class Sin_y : public SimpleFunction {
   string displayString();
 };
 
+class Cos_x : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
+class Sin_x : public SimpleFunction {
+  double value(double x, double y);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  string displayString();
+};
+
 class Exp_x : public SimpleFunction {
 public:
   double value(double x, double y);
@@ -389,7 +414,7 @@ class Xn : public SimpleFunction {
   int _n;
 public:
   Xn(int n);
-  double value(double x, double y);
+  double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
   string displayString();
@@ -403,6 +428,39 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   string displayString();
+};
+
+class Cos_ax : public SimpleFunction {
+  double _a;
+public:
+  Cos_ax(double a);
+  double value(double x);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  
+  string displayString();
+};
+
+class Sin_ax : public SimpleFunction {
+  double _a;
+public:
+  Sin_ax(double a) {
+    _a = a;
+  }
+  double value(double x) {
+    return sin( _a * x);
+  }
+  FunctionPtr dx() {
+    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a));
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+  string displayString() {
+    ostringstream ss;
+    ss << "\\sin( " << _a << " x )";
+    return ss.str();
+  }
 };
 
 class Cos_ay : public SimpleFunction {
@@ -462,10 +520,10 @@ public:
 };
 
 
-class DummyBasisCacheWithOnlyPhysicalCubaturePoints : public BasisCache {
+class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:
-  DummyBasisCacheWithOnlyPhysicalCubaturePoints(const FieldContainer<double> &physCubPoints);
+  PhysicalPointCache(const FieldContainer<double> &physCubPoints);
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
 };

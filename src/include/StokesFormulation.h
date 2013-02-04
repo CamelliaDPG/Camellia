@@ -14,6 +14,7 @@
 #include "RHSEasy.h"
 #include "VarFactory.h"
 #include "Var.h"
+#include "ExactSolution.h"
 
 // implementation of some standard Stokes Formulations.
 

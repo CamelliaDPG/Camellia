@@ -20,7 +20,9 @@ class BCEasy : public BC {
   typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
   set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
   //  set< int > _singlePointBCs; // variables on which single-point conditions imposed
-  map< int, DirichletBC > _dirichletBCs; // key: trialID 
+  map< int, DirichletBC > _dirichletBCs; // key: trialID
+protected:
+  map< int, DirichletBC > &dirichletBCs();
 public:
   void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, FunctionPtr valueFunction );
   void addZeroMeanConstraint( VarPtr field );
@@ -31,6 +33,8 @@ public:
   bool singlePointBC(int varID);
   
   bool imposeZeroMeanConstraint(int varID);
+  
+  Teuchos::RCP<BCEasy> copyImposingZero();//returns a copy of this BC object, except with all zero Functions
 };
 
 #endif

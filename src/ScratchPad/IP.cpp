@@ -114,6 +114,10 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
   // ipVector FC is sized as (C,F)
   FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
   
+  if (!fxn.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
+  }
+  
   unsigned numCells = physicalCubaturePoints.dimension(0);
   unsigned numPoints = physicalCubaturePoints.dimension(1);
   unsigned spaceDim = physicalCubaturePoints.dimension(2);
@@ -134,6 +138,7 @@ void IP::computeInnerProductVector(FieldContainer<double> &ipVector,
     // integrate lt against itself
     lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
   }
+  
   
   // boundary terms:
   for ( vector< LinearTermPtr >:: iterator btIt = _boundaryTerms.begin();

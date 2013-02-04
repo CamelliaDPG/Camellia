@@ -264,6 +264,10 @@ FieldContainer<double> RefinementPattern::verticesForRefinement(FieldContainer<d
   return verticesFC;
 }
 
+const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell() {
+  return _vertices;
+}
+
 vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVertexIndex) { 
   // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
@@ -273,6 +277,7 @@ vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVe
   vector< vector<int> >::iterator subCellIt;
   vector< vector<int> >::iterator childIt = children.begin();
   for (subCellIt=_subCells.begin(); subCellIt != _subCells.end(); subCellIt++) {
+//    cout << "child global vertex indices: ";
     int numVertices = (*subCellIt).size();
     *childIt = vector<int>(numVertices);
     vector<int>::iterator vertexIt;
@@ -282,9 +287,10 @@ vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVe
       int globalIndex = localToGlobalVertexIndex[localIndex];
       
       *childVertexIt = globalIndex;
-      
+//      cout << globalIndex << " ";
       childVertexIt++;
     }
+//    cout << endl;
     childIt++;
   }
   return children;
@@ -383,6 +389,54 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
   quadPoints(3,2,1) = 1.0;
   quadPoints(3,3,0) = -1.0;
   quadPoints(3,3,1) = 1.0; 
+  Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  
+  return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
+}
+
+Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
+  // order of the sub-elements is CCW starting at bottom left
+  FieldContainer<double> quadPoints(2,4,2);
+  quadPoints(0,0,0) = -1.0; // x1
+  quadPoints(0,0,1) = -1.0; // y1
+  quadPoints(0,1,0) = 0.0;
+  quadPoints(0,1,1) = -1.0;
+  quadPoints(0,2,0) = 0.0;
+  quadPoints(0,2,1) = 1.0;
+  quadPoints(0,3,0) = -1.0;
+  quadPoints(0,3,1) = 1.0;  
+  quadPoints(1,0,0) = 0.0; // x1
+  quadPoints(1,0,1) = -1.0; // y1
+  quadPoints(1,1,0) = 1.0;
+  quadPoints(1,1,1) = -1.0;
+  quadPoints(1,2,0) = 1.0;
+  quadPoints(1,2,1) = 1.0;
+  quadPoints(1,3,0) = 0.0;
+  quadPoints(1,3,1) = 1.0;   
+  Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+  
+  return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
+}
+
+Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPatternQuad() {
+  // order of the sub-elements is CCW starting at bottom left
+  FieldContainer<double> quadPoints(2,4,2);
+  quadPoints(0,0,0) = -1.0; // x1
+  quadPoints(0,0,1) = -1.0; // y1
+  quadPoints(0,1,0) = 1.0;
+  quadPoints(0,1,1) = -1.0;
+  quadPoints(0,2,0) = 1.0;
+  quadPoints(0,2,1) = 0.0;
+  quadPoints(0,3,0) = -1.0;
+  quadPoints(0,3,1) = 0.0;  
+  quadPoints(1,0,0) = -1.0; // x1
+  quadPoints(1,0,1) = 0.0; // y1
+  quadPoints(1,1,0) = 1.0;
+  quadPoints(1,1,1) = 0.0;
+  quadPoints(1,2,0) = 1.0;
+  quadPoints(1,2,1) = 1.0;
+  quadPoints(1,3,0) = -1.0;
+  quadPoints(1,3,1) = 1.0;   
   Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
   
   return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );

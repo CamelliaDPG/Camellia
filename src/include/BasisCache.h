@@ -94,7 +94,7 @@ private:
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  int _cubDegree, _maxTestDegree, _cubatureMultiplier; // cub. degree = cub. multiplier * whatever it would otherwise be...
+  int _cubDegree, _maxTestDegree;
   
   // containers specifically for sides:
   FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -134,7 +134,7 @@ protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
-             int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // use testVsTest=true for test space inner product
+             int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
@@ -160,7 +160,6 @@ public:
   shards::CellTopology cellTopology();
   
   int cubatureDegree();
-  int cubatureMultiplier();
   
   Teuchos::RCP<Mesh> mesh();
   
@@ -178,23 +177,30 @@ public:
   // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
-  const FieldContainer<double> getRefCellPoints(); 
+  const FieldContainer<double> &getRefCellPoints();
+  const FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
+  
+  // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
+  FieldContainer<double> getRefCellPointsForPhysicalPoints(const FieldContainer<double> &physicalPoints, int cellIndex=0);
 
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);
   void setCellSideParities(const FieldContainer<double> &cellSideParities);
   
+  int getMaxCubatureDegree();
+  
   int getSideIndex(); // -1 if not sideCache
   
   int getSpaceDim();
   
-  void setTransformationFunction(FunctionPtr fxn, bool composeWithMeshTransformation);
-  
+  void setMaxCubatureDegree(int value);
+    
   // static convenience constructors:
+  static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
-                                         int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1);
+                                         int cubatureDegreeEnrichment = 0);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
-                                             int cubatureDegreeEnrichment = 0, int cubatureMultiplier = 1); // for cells on the local MPI node
+                                             int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
 };
 
 #endif

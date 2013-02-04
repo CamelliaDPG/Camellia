@@ -5,9 +5,10 @@
 #include "BCFunction.h"
 #include "BC.h"
 
-BCFunction::BCFunction(BCPtr bc, int varID) : Function(0) {
+BCFunction::BCFunction(BCPtr bc, int varID, bool isTrace) : Function(0) {
   _bc = bc;
   _varID = varID;
+  _isTrace = isTrace;
 }
 
 void BCFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -26,6 +27,10 @@ bool BCFunction::imposeOnCell(int cellIndex) {
     if (_imposeHere(cellIndex,ptIndex)) return true;
   }
   return false;
+}
+
+bool BCFunction::isTrace() {
+  return _isTrace;
 }
 
 int BCFunction::varID() {

@@ -263,7 +263,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           // project bc function onto side basis:
           basisCache->setPhysicalCellNodes(physicalCellNodesPerSide[sideIndex],cellIDs,true);
           BCPtr bcPtr = Teuchos::rcp(&bc, false);
-          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID));
+          Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bcPtr, trialID, isTrace));
           // TODO: test the below.  (New as of 9/15/12, basically.)
           // (NOT YET WORKING.  NEED TO ADD SUPPORT FOR grad() to BCFunction, but it's unclear how best to do so...)
 //          if (isTrace && (bcFunction->grad().get() != NULL)) { // TODO: in case grad() is NULL, better to interpolate than do the L^2 projection, probably
@@ -278,7 +278,9 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
           
           // new idea: (trouble with this is that the basisCache already assumes a particular cubature setup, specifically violated when doing straight interpolation.  But this can probably be fixed by the interpolating BC subclass...)
           bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
-          //cout << "dirichletValues:" << endl << dirichletValues;
+//          cout << "imposing values for " << meshPtr->bilinearForm()->trialName(trialID);
+//          cout << " at points: \n" << basisCache->getSideBasisCache(sideIndex)->getPhysicalCubaturePoints();
+//          cout << "dirichletValues:" << endl << dirichletValues;
           
           for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++) {
             if (bcFunction->imposeOnCell(localCellIndex)) {

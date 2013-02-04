@@ -131,10 +131,8 @@ public:
   }
 };
 
-void writePatchValues(double xMin, double xMax, double yMin, double yMax,
-                      SolutionPtr solution, VarPtr u1, string filename) {
+FieldContainer<double> pointGrid(double xMin, double xMax, doubly yMin, double yMax, int numPoints) {
   vector<double> points1D_x, points1D_y;
-  int numPoints = 100;
   for (int i=0; i<numPoints; i++) {
     points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
     points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
@@ -148,9 +146,29 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
       points(pointIndex,1) = points1D_y[j];
     }
   }
-  FieldContainer<double> values1(numPoints*numPoints);
-  FieldContainer<double> values2(numPoints*numPoints);
-  solution->solutionValues(values1, u1->ID(), points);
+  return points;
+}
+
+FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1) {
+  int numPoints = points.dimension(0);
+  FieldContainer<double> values(numPoints);
+  solution->solutionValues(values, u1->ID(), points);
+  
+  FieldContainer<double> xyzData(numPoints, 3);
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    xyzData(ptIndex,0) = points(ptIndex,0);
+    xyzData(ptIndex,1) = points(ptIndex,1);
+    xyzData(ptIndex,2) = values(ptIndex);
+  }
+  return values;
+}
+
+void writePatchValues(double xMin, double xMax, double yMin, double yMax,
+                      SolutionPtr solution, VarPtr u1, string filename,
+                      int numPoints=100) {
+  FieldContainer<double> points = pointGrid(xMin,xMax,yMin,yMax,numPoints);
+  FieldContainer<double> values(numPoints*numPoints);
+  solution->solutionValues(values, u1->ID(), points);
   ofstream fout(filename.c_str());
   fout << setprecision(15);
   
@@ -167,7 +185,7 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   for (int i=0; i<numPoints; i++) {
     for (int j=0; j<numPoints; j++) {
       int pointIndex = i*numPoints + j;
-      fout << "U("<<i+1<<","<<j+1<<")=" << values1(pointIndex) << ";" << endl;
+      fout << "U("<<i+1<<","<<j+1<<")=" << values(pointIndex) << ";" << endl;
     }
   }
   fout.close();
@@ -204,7 +222,7 @@ int main(int argc, char *argv[]) {
   
   bool artificialTimeStepping = false;
   
-  int horizontalCells = 16, verticalCells = 16;
+  int horizontalCells = 2, verticalCells = 2;
   
   int overkillMeshSize = 8;
   int overkillPolyOrder = 7; // H1 order

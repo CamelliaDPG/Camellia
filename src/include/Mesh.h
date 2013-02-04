@@ -3,7 +3,7 @@
 
 // @HEADER
 //
-// Copyright © 2011 Sandia Corporation. All Rights Reserved.
+// Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -59,13 +59,41 @@
 #include "MeshPartitionPolicy.h"
 
 #include "Function.h"
-#include "ParametricFunction.h"
+#include "ParametricCurve.h"
 
 class Solution;
-class Mesh;
+class MeshTransformationFunction;
 
-typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+typedef pair<int,int> Edge;
+
+class MeshGeometry {
+  vector<FieldContainer<double> > _vertices;
+  vector< vector<int> > _elementVertices;
+  map< Edge, ParametricCurvePtr > _edgeToCurveMap;
+public:
+  MeshGeometry(const vector<FieldContainer<double> > &vertices,
+               const vector< vector<int> > &elementVertices,
+               const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
+    _vertices = vertices;
+    _elementVertices = elementVertices;
+    _edgeToCurveMap = edgeToCurveMap;
+  }
+  
+  map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
+    return _edgeToCurveMap;
+  }
+  
+  vector< vector<int> > &elementVertices() {
+    return _elementVertices;
+  }
+  
+  vector<FieldContainer<double> > &vertices() {
+    return _vertices;
+  }
+};
+
+typedef Teuchos::RCP<MeshGeometry> MeshGeometryPtr;
 
 class Mesh {
   int _pToAddToTest;
@@ -76,6 +104,8 @@ class Mesh {
   Boundary _boundary;
   
   int _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
+  
+  set< int > _cellIDsWithCurves;
   
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
@@ -123,8 +153,8 @@ class Mesh {
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
-  map< pair<int, int>, ParametricFunctionPtr > _edgeToCurveMap;
-  FunctionPtr _transformationFunction; // for dealing with those curves
+  map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
+  Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
   void buildTypeLookups();
   void buildLocalToGlobalMap();
@@ -134,6 +164,8 @@ class Mesh {
   void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
   int _numGlobalDofs;
   ElementPtr _nullPtr;
+  
+  void addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve);
   ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<int> > &children, 
                    vector< vector< pair< int, int> > > &childrenForSide);
@@ -149,7 +181,7 @@ public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
   //,
-  //     map< pair<int, int>, ParametricFunctionPtr > edgeToCurveMap = map< pair<int, int>, ParametricFunctionPtr >());
+  //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
   
@@ -210,6 +242,7 @@ public:
   
   set<int> globalDofIndicesForPartition(int partitionNumber);
   
+  set<int> getActiveCellIDs();
   vector< ElementPtr > & activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
@@ -220,15 +253,19 @@ public:
   vector< ElementPtr > elementsInPartition(int partitionNumber);
   
   ElementPtr getActiveElement(int index);
+  int getDimension(); // spatial dimension of the mesh
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                              ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
                              ElementPtr nonParent);
+  
+  // getPartitionMap is likely cruft: there's another copy of this in Solution, and this one appears never to be called…
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
   
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
+  FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
   void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   
@@ -269,7 +306,10 @@ public:
   FieldContainer<double> physicalCellNodesForCell(int cellID);
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
+  void pRefine(const vector<int> &cellIDsForPRefinements);
+  void pRefine(const set<int> &cellIDsForPRefinements);
   void printLocalToGlobalMap(); // for debugging
+  void printVertices(); // for debugging
   
   void rebuildLookups();
   
@@ -277,16 +317,13 @@ public:
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
-  void pRefine(const vector<int> &cellIDsForPRefinements);
-  void pRefine(const set<int> &cellIDsForPRefinements);
-    
   int condensedRowSizeUpperBound(); 
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
   
-  void setEdgeToCurveMap(const map< pair<int, int>, ParametricFunctionPtr > &edgeToCurveMap);
+  void setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
   
-  vector< ParametricFunctionPtr > parametricEdgesForCell(int cellID);
+  vector< ParametricCurvePtr > parametricEdgesForCell(int cellID, bool neglectCurves=false);
   
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
   
@@ -307,5 +344,7 @@ public:
   
   double getCellMeasure(int cellID);
 };
+
+typedef Teuchos::RCP<Mesh> MeshPtr;
 
 #endif

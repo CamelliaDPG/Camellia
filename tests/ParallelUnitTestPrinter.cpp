@@ -41,7 +41,12 @@ void ParallelUnitTestPrinter::OnTestPartResult(const TestPartResult& result)
 
 void ParallelUnitTestPrinter::OnTestEnd(const TestInfo& test_info)
 {
+#ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+
   if (allSuccess(test_info.result()->Passed()))
   {
     if (commRank == 0)

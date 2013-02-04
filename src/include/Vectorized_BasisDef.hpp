@@ -47,12 +47,45 @@ namespace Intrepid {
     this -> basisCellTopology_ = basis->getBaseCellTopology();
     this -> basisType_         = basis->getBasisType();
     this -> basisCoordinates_  = basis->getCoordinateSystem();
+    this -> basisTagsAreSet_   = false;
   }
   
   template<class Scalar, class ArrayScalar>
   void Vectorized_Basis<Scalar, ArrayScalar>::initializeTags() {
-    //_componentBasis->initializeTags();
-    // TODO: find out whether we actually should do anything here!!
+    
+    // get the component basis's tag data:
+    const std::vector<std::vector<std::vector<int> > > compTagToOrdinal = _componentBasis->getDofOrdinalData();
+    const std::vector<std::vector<int> > compOrdinalToTag = _componentBasis->getAllDofTags();
+    
+    int tagSize = 4;
+    int posScDim = 0;        // position in the tag, counting from 0, of the subcell dim
+    int posScOrd = 1;        // position in the tag, counting from 0, of the subcell ordinal
+    int posDfOrd = 2;        // position in the tag, counting from 0, of DoF ordinal relative to the subcell
+    
+    std::vector<int> tags( tagSize * this->getCardinality() ); // flat array
+    
+    int componentCardinality = _componentBasis->getCardinality();
+    // ordinalToTag_:
+    for (int comp=0; comp<_numComponents; comp++) {
+      for (int compFieldIndex=0; compFieldIndex<componentCardinality; compFieldIndex++) {
+        int i=comp*componentCardinality + compFieldIndex; // i is the ordinal in the vector basis
+        vector<int> tagData = compOrdinalToTag[compFieldIndex];
+        tags[tagSize*i]   = tagData[0]; // spaceDim
+        tags[tagSize*i+1] = tagData[1]; // subcell ordinal
+        tags[tagSize*i+2] = tagData[2] + comp * tagData[3];  // ordinal of the specified DoF relative to the subcell (shifted)
+        tags[tagSize*i+3] = tagData[3] * _numComponents;     // total number of DoFs associated with the subcell
+      }
+    }
+
+    // call basis-independent method (declared in IntrepidUtil.hpp) to set up the data structures
+    setOrdinalTagData(this -> tagToOrdinal_,
+                      this -> ordinalToTag_,
+                      &(tags[0]),
+                      this -> basisCardinality_,
+                      tagSize,
+                      posScDim,
+                      posScOrd,
+                      posDfOrd);
   }
   
   template<class Scalar, class ArrayScalar>
