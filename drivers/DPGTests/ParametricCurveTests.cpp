@@ -8,6 +8,8 @@
 
 #include "ParametricCurveTests.h"
 
+#include "BasisSumFunction.h"
+
 void ParametricCurveTests::setup() {
   
 }
@@ -284,10 +286,23 @@ bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficient
   return sum_err < tol;
 }
 
+bool basisSumEqualsFunction(FieldContainer<double> &basisCoefficients, BasisPtr basis, FunctionPtr f) {
+  // tests on [0,1]
+  FunctionPtr sumFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+  
+  int cubatureDegree = basis->getDegree() * 2;
+  BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, cubatureDegree);
+
+  return sumFunction->equals(f, basisCache);
+}
+
 bool ParametricCurveTests::testProjectionBasedInterpolation() {
   bool success = true;
   // to start with, project a line onto a linear basis
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  
+  /////////////////// TEST LINEAR CURVES RECOVERED //////////////////////
+  
   BasisPtr linearBasis = BasisFactory::getBasis(1, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   double x0=3, y0=-3, x1=5, y1=4;
@@ -304,6 +319,39 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
     cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't interpolate line endpoints.\n";
     cout << "basisCoefficients_x:\n" << basisCoefficients_x;
     cout << "basisCoefficients_y:\n" << basisCoefficients_y;
+    success = false;
+  }
+  
+  // in fact, we should recover the line in x and y:
+  if ( !basisSumEqualsFunction(basisCoefficients_x, linearBasis, myLine->x()) ) {
+    cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't recover the line in the x component.\n";
+    success = false;
+  }
+  if ( !basisSumEqualsFunction(basisCoefficients_y, linearBasis, myLine->y()) ) {
+    cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't recover the line in the y component.\n";
+    success = false;
+  }
+  
+  /////////////////// TEST CUBIC CURVES RECOVERED //////////////////////
+  FunctionPtr t = Teuchos::rcp( new Xn(1) );
+  // define x and y as functions of t:
+  FunctionPtr x_t = t*t*t-2*t;
+  FunctionPtr y_t = t*t*t+8*t*t;
+  
+  ParametricCurvePtr myCurve = ParametricCurve::curve(x_t,y_t);
+  
+  BasisPtr cubicBasis = BasisFactory::getBasis(3, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  
+  myCurve->projectionBasedInterpolant(basisCoefficients_x, cubicBasis, 0);
+  myCurve->projectionBasedInterpolant(basisCoefficients_y, cubicBasis, 1);
+  
+  // we should again recover the curve exactly:
+  if ( !basisSumEqualsFunction(basisCoefficients_x, cubicBasis, myCurve->x()) ) {
+    cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't recover the cubic curve in the x component.\n";
+    success = false;
+  }
+  if ( !basisSumEqualsFunction(basisCoefficients_y, cubicBasis, myCurve->y()) ) {
+    cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't recover the cubic curve in the y component.\n";
     success = false;
   }
   

@@ -395,6 +395,10 @@ ParametricCurvePtr ParametricCurve::circularArc(double r, double x0, double y0, 
   return subCurve(circleFxn, t0, t1);
 }
 
+ParametricCurvePtr ParametricCurve::curve(FunctionPtr xFxn_x_as_t, FunctionPtr yFxn_x_as_t, FunctionPtr zFxn_x_as_t) {
+  return Teuchos::rcp( new ParametricCurve(xFxn_x_as_t,yFxn_x_as_t,zFxn_x_as_t) );
+}
+
 ParametricCurvePtr ParametricCurve::curveUnion(vector< ParametricCurvePtr > curves, vector<double> weights) {
   int numCurves = curves.size();
   if (weights.size()==0) {

@@ -65,6 +65,7 @@ public:
   static ParametricCurvePtr circle(double r, double x0, double y0);
   static ParametricCurvePtr circularArc(double r, double x0, double y0, double theta0, double theta1);
   
+  static ParametricCurvePtr curve(FunctionPtr xFxn_x_as_t, FunctionPtr yFxn_x_as_t = Function::null(), FunctionPtr zFxn_x_as_t = Function::null());
   static ParametricCurvePtr curveUnion(vector< ParametricCurvePtr > curves, vector<double> weights = vector<double>());
   
   static ParametricCurvePtr polygon(vector< pair<double,double> > vertices, vector<double> weights = vector<double>());

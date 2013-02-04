@@ -164,6 +164,24 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
   }
 }
 
+bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
+  if (f->rank() != this->rank()) {
+    return false;
+  }
+  FunctionPtr thisPtr = Teuchos::rcp(this,false);
+  FunctionPtr diff = thisPtr-f;
+  
+  int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
+  // compute L^2 norm of difference on the cells
+  FieldContainer<double> diffs_squared(numCells);
+  (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
+  double sum = 0;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    sum += diffs_squared[cellIndex];
+  }
+  return sqrt(sum) < tol;
+}
+
 double Function::evaluate(FunctionPtr f, double x) {
   static FieldContainer<double> value(1,1); // (C,P)
   static FieldContainer<double> physPoint(1,1,1);

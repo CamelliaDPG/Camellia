@@ -35,6 +35,8 @@ public:
   Function();
   Function(int rank);
   
+  bool equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol = 1e-14);
+  
   virtual bool isZero() { return false; } // if true, the function is identically zero
   
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
