@@ -453,6 +453,10 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
                            BasisCachePtr basisCache, bool forceBoundaryTerm) {
   // values has dimensions (numCells, thisFields)
   
+  if (!fxn.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
+  }
+  
   map<int, FunctionPtr> otherVarMap;
   otherVarMap[otherVar->ID()] = fxn;
   FunctionPtr otherFxnBoundaryPart = otherTerm->evaluate(otherVarMap, true);
@@ -652,7 +656,13 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     // if there isn't an entry for var, we take it to be zero:
     if (varFunctions.find(var->ID()) == varFunctions.end()) continue;
     
-    FunctionPtr varEvaluation = Function::op(varFunctions[var->ID()],var->op());
+    FunctionPtr varFunction = varFunctions[var->ID()];
+    
+    if (!varFunction.get()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "varFunctions entries cannot be null!");
+    }
+    
+    FunctionPtr varEvaluation = Function::op(varFunction,var->op());
     if (fxn.get()) {
       fxn = fxn + f * varEvaluation;
     } else {

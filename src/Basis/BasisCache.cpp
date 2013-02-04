@@ -461,6 +461,15 @@ const FieldContainer<double>& BasisCache::getRefCellPoints() {
   return _cubPoints;
 }
 
+FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const FieldContainer<double> &physicalPoints, int cellIndex) {
+  int numPoints = physicalPoints.dimension(0);
+  int spaceDim = physicalPoints.dimension(1);
+  
+  FieldContainer<double> refCellPoints(numPoints,spaceDim);
+  CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo,cellIndex);
+  return refCellPoints;
+}
+
 const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates() {
   if (! isSideCache()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
@@ -669,6 +678,17 @@ int BasisCache::getSpaceDim() {
 }
 
 // static convenience constructors:
+BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree) { // x0 and x1: physical space endpoints
+  int numCells = 1;
+  int numVertices = 2;
+  int spaceDim = 1;
+  FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+  physicalCellNodes(0,0,0) = x0;
+  physicalCellNodes(0,1,0) = x1;
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  return Teuchos::rcp( new BasisCache(physicalCellNodes, line_2, cubatureDegree));
+}
+
 BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, int cellID, bool testVsTest, int cubatureDegreeEnrichment) {
   ElementTypePtr elemType = mesh->getElement(cellID)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );

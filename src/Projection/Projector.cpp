@@ -32,6 +32,10 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   shards::CellTopology cellTopo = basis->getBaseCellTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   
+  if (! fxn.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
+  }
+  
   int cardinality = basis->getCardinality();
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numDofs = cardinality - fieldIndicesToSkip.size();
