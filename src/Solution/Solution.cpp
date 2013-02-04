@@ -133,6 +133,7 @@ Solution::Solution(const Solution &soln) {
   _reportConditionNumber = false;
   _reportTimingResults = false;
   _writeMatrixToMatlabFile = false;
+  _writeMatrixToMatrixMarketFile = false;
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
 }
 
@@ -155,6 +156,7 @@ void Solution::initialize() {
   _solutionForCellIDGlobal.clear();
   
   _writeMatrixToMatlabFile = false;
+  _writeMatrixToMatrixMarketFile = false;
   _residualsComputed = false;
   _energyErrorComputed = false;
   _reportConditionNumber = false;
@@ -672,6 +674,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
     EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),globalStiffMatrix);
     //    EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
+  }
+  if (_writeMatrixToMatrixMarketFile){
+    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),globalStiffMatrix);
   }
   
   // Import solution onto current processor
@@ -2891,6 +2896,9 @@ void Solution::condensedSolve(bool saveMemory){
   
   if (_writeMatrixToMatlabFile){
     EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),K_cond);     
+  }
+  if (_writeMatrixToMatrixMarketFile){
+    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),K_cond);     
   }
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_cond.dat",rhs_cond,0,0,false);
 

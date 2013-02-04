@@ -10,7 +10,7 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 
-class LocalConservationTests : public ::testing::Test {
+class OneTermConservationTests : public ::testing::Test {
   protected:
     virtual void SetUp();
 
@@ -20,9 +20,21 @@ class LocalConservationTests : public ::testing::Test {
     BFPtr bf;
     FunctionPtr f;
     MeshPtr mesh;
-    SolutionPtr prevTimeFlow;  
-    SolutionPtr flowResidual;  
     SolutionPtr solution;  
+};
+
+class MixedTermConservationTests : public ::testing::Test {
+  protected:
+    virtual void SetUp();
+
+    VarFactory varFactory; 
+    VarPtr beta_n_u_hat;
+    VarPtr u;
+    BFPtr bf;
+    FunctionPtr f;
+    MeshPtr mesh;
+    SolutionPtr solution;  
+    FunctionPtr invDt;    
 };
 
 

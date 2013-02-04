@@ -67,18 +67,6 @@ class SourceTerm : public Function {
       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
       double tol=1e-14;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        double xCenter = 0;
-        double yCenter = 0;
-        int nPts = 0;
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          xCenter += x;
-          yCenter += y;
-          nPts++;
-        }
-        xCenter /= nPts;
-        yCenter /= nPts;
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
@@ -223,7 +211,7 @@ int main(int argc, char *argv[]) {
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
-      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh);
+      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh, 0);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
