@@ -277,7 +277,7 @@ bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficient
   double sum_x1 = basisSumAtParametricPoint(basisCoefficients_x, basis, 1, basisCache);
   double sum_y0 = basisSumAtParametricPoint(basisCoefficients_y, basis, 0, basisCache);
   double sum_y1 = basisSumAtParametricPoint(basisCoefficients_y, basis, 1, basisCache);
-  double tol = 1e-14;
+  double tol = 1e-13;
   double x0_err = abs(sum_x0-curve_x0);
   double y0_err = abs(sum_y0-curve_y0);
   double x1_err = abs(sum_x1-curve_x1);
@@ -352,6 +352,21 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   }
   if ( !basisSumEqualsFunction(basisCoefficients_y, cubicBasis, myCurve->y()) ) {
     cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't recover the cubic curve in the y component.\n";
+    success = false;
+  }
+  
+  /////////////////// TEST UNRECOVERABLE CURVE INTERPOLATED //////////////////////
+  
+  // finally, project the cubic curve onto a quadratic basis, and check that it interpolates the endpoints
+  BasisPtr quadraticBasis = BasisFactory::getBasis(2, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  
+  myCurve->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0);
+  myCurve->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1);
+  
+  if ( ! basisSumInterpolatesCurveEndPoints(basisCoefficients_x,basisCoefficients_y, quadraticBasis, myCurve)) {
+    cout << "testProjectionBasedInterpolation() failed: quadratic projection-based interpolant doesn't interpolate cubic curve endpoints.\n";
+    cout << "basisCoefficients_x:\n" << basisCoefficients_x;
+    cout << "basisCoefficients_y:\n" << basisCoefficients_y;
     success = false;
   }
   
