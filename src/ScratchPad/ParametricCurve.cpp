@@ -182,7 +182,7 @@ ParametricCurvePtr ParametricCurve::interpolatingLine() {
 void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component) {
   ParametricCurvePtr thisPtr = Teuchos::rcp(this,false);
   ParametricCurvePtr bubble = ParametricCurve::bubble(thisPtr);
-  ParametricCurvePtr line = bubble->interpolatingLine();
+  ParametricCurvePtr line = this->interpolatingLine();
   IPPtr ip_H1 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
   VarFactory vf;
@@ -190,9 +190,9 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   ip_H1->addTerm(v);
   ip_H1->addTerm(v->grad());
   
-  double x0,y0,x1,y1;
-  this->value(0, x0,y0);
-  this->value(1, x1,y1);
+//  double x0,y0,x1,y1;
+//  line->value(0, x0,y0);
+//  line->value(1, x1,y1);
   
   double basisDegree = basis1D->getDegree();
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, basisDegree*2); // basisCache on parametric element
@@ -228,11 +228,17 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   FieldContainer<double> linearBasisCoefficients;
   Projector::projectFunctionOntoBasis(linearBasisCoefficients, lineComponent, basis1D, basisCache, ip_H1, v);
 
+//  cout << "linearBasisCoefficients:\n" << linearBasisCoefficients;
+//  cout << "basisCoefficients, before sum:\n" << basisCoefficients;
+  
   // add the two sets of basis coefficients together
   for (int i=0; i<linearBasisCoefficients.size(); i++) {
     basisCoefficients[i] += linearBasisCoefficients[i];
   }
+//  cout << "basisCoefficients, after sum:\n" << basisCoefficients;
   basisCoefficients.resize(basis1D->getCardinality()); // get rid of dummy numCells dimension
+//  cout << "basisCoefficients, after resize:\n" << basisCoefficients;
+  
 }
 
 

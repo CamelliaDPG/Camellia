@@ -14,6 +14,20 @@ void ParametricCurveTests::setup() {
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testLine()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testBubble()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testProjectionBasedInterpolation()) {
     numTestsPassed++;
   }
@@ -35,8 +49,78 @@ void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
 }
 
+
+bool ParametricCurveTests::testBubble() {
+  // tests the kind of thing that will happen to parametric functions during mesh refinement
+  bool success = true;
+  
+  double x0=3, y0=-3, x1=5, y1=4;
+  ParametricCurvePtr myLine = ParametricCurve::line(x0, y0, x1, y1);
+
+  ParametricCurvePtr myBubble = ParametricCurve::bubble(myLine); // should be just 0.
+  
+  myBubble->value(0, x0,y0);
+  myBubble->value(1, x1,y1);
+  
+  double tol = 1e-14;
+  if ((abs(x0)>tol) || (abs(y0)>tol)) {
+    cout << "Bubble is not 0 at t=0.\n";
+    success = false;
+  }
+  if ((abs(x1)>tol) || (abs(y1)>tol)) {
+    cout << "Bubble is not 0 at t=1.\n";
+    success = false;
+  }
+  
+  double x,y; // for points in the middle of parameter space
+  double t=0.5;
+  myBubble->value(t,x,y);
+  
+  if ((abs(x)>tol) || (abs(y)>tol)) {
+    cout << "Bubble for line is not 0 at t=0.5.\n";
+    success = false;
+  }
+  
+  return success;
+}
+
+bool ParametricCurveTests::testLine() {
+  bool success = true;
+  
+  ParametricCurvePtr unitLine = ParametricCurve::line(0, 0, 1, 0);
+  ParametricCurvePtr unitLine_dt = unitLine->dt();
+  FunctionPtr unitLine_x = unitLine->x(); // x=t
+  FunctionPtr unitLine_y = unitLine->y(); // 0
+  
+  vector<double> t_values;
+  t_values.push_back(0);
+  t_values.push_back(0.5);
+  t_values.push_back(0.75);
+  t_values.push_back(1.0);
+  
+  double tol=1e-14;
+  for (int i=0; i<t_values.size(); i++) {
+    double t = t_values[i];
+    double x = Function::evaluate(unitLine_x, t);
+    double expected = t;
+    if (abs(x-expected)>tol) {
+      cout << "testLine(): unitLine_x differs from expected value.\n";
+    }
+  }
+  for (int i=0; i<t_values.size(); i++) {
+    double t = t_values[i];
+    double x = Function::evaluate(unitLine_y, t);
+    double expected = 0;
+    if (abs(x-expected)>tol) {
+      cout << "testLine(): unitLine_y differs from expected value.\n";
+    }
+  }
+
+  return success;
+}
+
 bool ParametricCurveTests::testParametricCurveRefinement() {
- // tests the kind of thing that will happen to parametric functions during mesh refinement
+  // tests the kind of thing that will happen to parametric functions during mesh refinement
   bool success = true;
   
   ParametricCurvePtr unitLine = ParametricCurve::line(0, 0, 1, 0);
@@ -165,30 +249,32 @@ bool ParametricCurveTests::testPolygon() {
   return success;
 }
 
-double basisSumAtRefPoint(FieldContainer<double> &basisCoefficients, BasisPtr basis, double xValue, BasisCachePtr basisCache) {
+double basisSumAtParametricPoint(FieldContainer<double> &basisCoefficients, BasisPtr basis, double tValue, BasisCachePtr parametricBasisCache) {
   int numPoints = 1;
   int spaceDim = 1;
-  FieldContainer<double> refCellPoints(numPoints,spaceDim);
-  refCellPoints[0] = xValue;
-  basisCache->setRefCellPoints(refCellPoints);
-  Teuchos::RCP< const FieldContainer<double> > basisValues = basisCache->getValues(basis, OP_VALUE);
-  double sum;
+  FieldContainer<double> parametricPoints(numPoints,spaceDim);
+  parametricPoints[0] = tValue;
+  FieldContainer<double> refCellPoints = parametricBasisCache->getRefCellPointsForPhysicalPoints(parametricPoints);
+  parametricBasisCache->setRefCellPoints(refCellPoints);
+  Teuchos::RCP< const FieldContainer<double> > basisValues = parametricBasisCache->getValues(basis, OP_VALUE);
+  double sum = 0;
   int ptIndex = 0; // one point
   for (int fieldIndex=0; fieldIndex<basisCoefficients.size(); fieldIndex++) {
-    sum += (*basisValues)(fieldIndex,ptIndex);
+    sum += (*basisValues)(fieldIndex,ptIndex) * basisCoefficients(fieldIndex);
   }
   return sum;
 }
 
-bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficients_x, FieldContainer<double> &basisCoefficients_y, BasisPtr basis, ParametricCurvePtr curve) {
+bool basisSumInterpolatesCurveEndPoints(FieldContainer<double> &basisCoefficients_x, FieldContainer<double> &basisCoefficients_y,
+                                        BasisPtr basis, ParametricCurvePtr curve) {
   double curve_x0, curve_y0, curve_x1, curve_y1;
   curve->value(0, curve_x0, curve_y0);
   curve->value(1, curve_x1, curve_y1);
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, basis->getDegree()*2);
-  double sum_x0 = basisSumAtRefPoint(basisCoefficients_x, basis, 0, basisCache);
-  double sum_x1 = basisSumAtRefPoint(basisCoefficients_x, basis, 1, basisCache);
-  double sum_y0 = basisSumAtRefPoint(basisCoefficients_y, basis, 0, basisCache);
-  double sum_y1 = basisSumAtRefPoint(basisCoefficients_y, basis, 1, basisCache);
+  double sum_x0 = basisSumAtParametricPoint(basisCoefficients_x, basis, 0, basisCache);
+  double sum_x1 = basisSumAtParametricPoint(basisCoefficients_x, basis, 1, basisCache);
+  double sum_y0 = basisSumAtParametricPoint(basisCoefficients_y, basis, 0, basisCache);
+  double sum_y1 = basisSumAtParametricPoint(basisCoefficients_y, basis, 1, basisCache);
   double tol = 1e-14;
   double x0_err = abs(sum_x0-curve_x0);
   double y0_err = abs(sum_y0-curve_y0);
@@ -216,6 +302,8 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   
   if ( ! basisSumInterpolatesCurveEndPoints(basisCoefficients_x,basisCoefficients_y, linearBasis, myLine)) {
     cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't interpolate line endpoints.\n";
+    cout << "basisCoefficients_x:\n" << basisCoefficients_x;
+    cout << "basisCoefficients_y:\n" << basisCoefficients_y;
     success = false;
   }
   

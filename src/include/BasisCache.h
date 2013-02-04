@@ -179,6 +179,9 @@ public:
   void setRefCellPoints(const FieldContainer<double> &pointsRefCell);
   const FieldContainer<double> &getRefCellPoints();
   const FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
+  
+  // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
+  FieldContainer<double> getRefCellPointsForPhysicalPoints(const FieldContainer<double> &physicalPoints, int cellIndex=0);
 
   const FieldContainer<double> & getSideNormals();
   void setSideNormals(FieldContainer<double> &sideNormals);

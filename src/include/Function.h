@@ -97,7 +97,8 @@ public:
   
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
-  
+
+  static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
   
   static bool isNull(FunctionPtr f);

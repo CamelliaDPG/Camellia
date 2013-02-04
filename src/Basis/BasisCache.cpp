@@ -461,6 +461,15 @@ const FieldContainer<double>& BasisCache::getRefCellPoints() {
   return _cubPoints;
 }
 
+FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const FieldContainer<double> &physicalPoints, int cellIndex) {
+  int numPoints = physicalPoints.dimension(0);
+  int spaceDim = physicalPoints.dimension(1);
+  
+  FieldContainer<double> refCellPoints(numPoints,spaceDim);
+  CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo,cellIndex);
+  return refCellPoints;
+}
+
 const FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates() {
   if (! isSideCache()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
