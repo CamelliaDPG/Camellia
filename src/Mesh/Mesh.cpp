@@ -1872,13 +1872,43 @@ void Mesh::hUnrefine(const set<int> &cellIDs) {
       }
     }
   }
-    
+
+  // added by Jesse to try to fix bug
+  for (set<int>::iterator cellIt = deletedCellIDs.begin(); cellIt != deletedCellIDs.end(); cellIt++) {
+    // erase from _elements list
+    for (int i = 0; i<_elements.size();i++){
+      if (_elements[i]->cellID()==(*cellIt)){
+	_elements.erase(_elements.begin()+i);
+	break;
+      }
+    }
+    // erase any pairs from _edgeToCellIDs having to do with deleted cellIDs
+    for (map<pair<int,int>, vector<pair<int,int> > >::iterator mapIt = _edgeToCellIDs.begin(); mapIt!=_edgeToCellIDs.end();mapIt++){
+      vector<pair<int,int> > cellIDSideIndices = mapIt->second;
+      bool eraseEntry = false;
+      for (int i = 0;i<cellIDSideIndices.size();i++){
+	int cellID = cellIDSideIndices[i].first;
+	if (cellID==(*cellIt)){
+	  eraseEntry = true;
+	}
+	if (eraseEntry)
+	  break;
+      }
+      if (eraseEntry){
+	_edgeToCellIDs.erase(mapIt);
+      }
+    }
+  }
+
   rebuildLookups();
+
   // now discard any old coefficients
   for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
+
+  // TODO: modify _edgeToCellID (exception thrown) and delete terms in _elements
 
 }
 
