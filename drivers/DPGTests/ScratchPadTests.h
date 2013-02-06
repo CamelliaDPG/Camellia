@@ -51,6 +51,7 @@ public:
   bool testIntegrateDiscontinuousFunction();
   bool testGalerkinOrthogonality(); 
   bool testLTResidual();
+  bool testRieszIntegration();
 
   std::string testSuiteName();
 };

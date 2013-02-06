@@ -253,12 +253,18 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();   
      
   setup();
-  if (testLTResidual()) {
+  if (testRieszIntegration()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();     
 
+  setup();
+  if (testLTResidual()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
   /*
   setup();
   if (testGalerkinOrthogonality()) {
@@ -797,6 +803,110 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   return success;
 }
 
+// tests to make sure that the rieszNorm computed via matrices is the same as the one computed thru direct integration
+bool ScratchPadTests::testRieszIntegration(){
+  double tol = 1e-11;
+  bool success = true;
+
+  int nCells = 2; 
+  double eps = .25;
+ 
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+
+  // just H1 projection
+  ip->addTerm(v->grad());
+  ip->addTerm(v);
+  ip->addTerm(tau);
+  ip->addTerm(tau->div());
+
+  ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = one;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
+
+  bc->addDirichlet(uhat, squareBoundary, zero);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+   
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+   
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  LinearTermPtr lt = Teuchos::rcp(new LinearTerm);  
+  FunctionPtr fxn = Teuchos::rcp(new Xn(1)); // fxn = x
+  lt->addTerm(fxn*v + fxn->grad()*v->grad());
+  lt->addTerm(fxn*tau->x() + fxn*tau->y() + (fxn->dx() + fxn->dy())*tau->div());
+  Teuchos::RCP<RieszRep> rieszLT = Teuchos::rcp(new RieszRep(mesh, ip, lt));
+  rieszLT->computeRieszRep();
+  double rieszNorm = rieszLT->getNorm();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszLT));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszLT));
+  map<int,FunctionPtr> repFxns;
+  repFxns[v->ID()] = e_v;
+  repFxns[tau->ID()] = e_tau;
+
+  double integratedNorm = sqrt((lt->evaluate(repFxns,false))->integrate(mesh,5,true));
+  success = abs(rieszNorm-integratedNorm)<tol;
+  if (success==false){
+    cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;    
+    return success;
+  }
+}
+
+// tests to make sure the 
 bool ScratchPadTests::testLTResidual(){
   double tol = 1e-11;
   bool success = true;
@@ -883,7 +993,7 @@ bool ScratchPadTests::testLTResidual(){
   double energyError = solution->energyErrorTotal();
 
   LinearTermPtr residual = rhs->linearTerm();
-  residual->addTerm(-confusionBF->testFunctional(solution)); 
+  residual->addTerm(-confusionBF->testFunctional(solution),true); 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep();
   double energyErrorLT = rieszResidual->getNorm();
@@ -894,20 +1004,22 @@ bool ScratchPadTests::testLTResidual(){
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   errFxns[tau->ID()] = e_tau;
-  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false);
+  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); // enrich cubature by 25 to make up for the fact that these are test order functions
 
-  // check that energy error 
-  success = abs(energyError-energyErrorIntegrated)<tol;
-  if (success==false){
-    cout << "Failed testLTResidual; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
-    return success;
-  }
+  // check that energy error computed thru Solution and through rieszRep are the same
   success = abs(energyError-energyErrorLT)<tol;
   if (success==false){
     cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;    
     return success;
   }
+  // checks that matrix-computed and integrated errors are the same
+  success = abs(energyErrorLT-energyErrorIntegrated)<tol;
+  if (success==false){
+    cout << "Failed testLTResidual; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
+    return success;
+  }
+
 }
 
 std::string ScratchPadTests::testSuiteName() {
