@@ -183,6 +183,12 @@ namespace Intrepid {
     return _componentBasis;
   }
   
+  template<class Scalar, class ArrayScalar>
+  int Vectorized_Basis<Scalar, ArrayScalar>::getDofOrdinalFromComponentDofOrdinal(int componentDofOrdinal, int componentIndex) const {
+    int compCardinality = _componentBasis->getCardinality();
+    return componentIndex * compCardinality + componentDofOrdinal;
+  }
+  
 }// namespace Intrepid
 
 #endif

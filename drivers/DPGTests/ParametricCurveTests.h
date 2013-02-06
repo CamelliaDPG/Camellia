@@ -18,6 +18,7 @@ class ParametricCurveTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   bool testBubble();
+  bool testCircularArc();
   bool testLine();
   bool testParametricCurveRefinement(); // tests the kind of thing that will happen to parametric curves during mesh refinement
   bool testPolygon();

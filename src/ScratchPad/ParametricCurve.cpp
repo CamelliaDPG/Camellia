@@ -164,11 +164,20 @@ ParametricCurve::ParametricCurve(ParametricCurvePtr fxn, double t0, double t1) :
   _underlyingFxn = fxn;
   _t0 = t0;
   _t1 = t1;
+  _xFxn = fxn->x();
+  _yFxn = fxn->y();
+  _zFxn = fxn->z();
 }
 
 ParametricCurve::ParametricCurve() : Function(1) {
   _t0 = 0;
   _t1 = 1;
+}
+
+FunctionPtr ParametricCurve::argumentMap() {
+  FunctionPtr t = Teuchos::rcp( new Xn(1) );
+  FunctionPtr argMap = (1-t) * _t0 + t * _t1;
+  return argMap;
 }
 
 ParametricCurvePtr ParametricCurve::interpolatingLine() {
@@ -179,7 +188,7 @@ ParametricCurvePtr ParametricCurve::interpolatingLine() {
   return line(x0, y0, x1, y1);
 }
 
-void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component) {
+void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component, bool useH1) {
   ParametricCurvePtr thisPtr = Teuchos::rcp(this,false);
   ParametricCurvePtr bubble = ParametricCurve::bubble(thisPtr);
   ParametricCurvePtr line = this->interpolatingLine();
@@ -188,14 +197,17 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   VarFactory vf;
   VarPtr v = vf.testVar("v", HGRAD);
   ip_H1->addTerm(v);
-  ip_H1->addTerm(v->grad());
+  if (useH1) { // otherwise, stick with L2
+    ip_H1->addTerm(v->grad());
+  }
   
 //  double x0,y0,x1,y1;
 //  line->value(0, x0,y0);
 //  line->value(1, x1,y1);
   
-  double basisDegree = basis1D->getDegree();
-  BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, basisDegree*2); // basisCache on parametric element
+  int basisDegree = basis1D->getDegree();
+  int cubatureDegree = max(basisDegree*2,15);
+  BasisCachePtr basisCache = BasisCache::basisCache1D(0, 1, cubatureDegree); // basisCache on parametric element
   
   // determine indices for the vertices (we want to project onto the space spanned by the basis \ {vertex nodal functions})
   set<int> vertexNodeFieldIndices;
@@ -302,15 +314,10 @@ void ParametricCurve::value(double t, double &x, double &y, double &z) {
   }
 }
 
-void ParametricCurve::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+void ParametricCurve::values(FieldContainer<double> &values, BasisCachePtr parametricBasisCache) {
+  // BasisCache is in parameter space (that's where physical points lie)
   CHECK_VALUES_RANK(values);
-  // TODO: I think we can actually do without the mapping from ref to parametric space here
-  //       (I think we can just use physicalCubaturePoints(), and assume that basisCache is in
-  //        parametric space...)
-  
-  // we'll depend on the ref cell points, remapped to parametric space
-  FieldContainer<double> parametricPoints = basisCache->getRefCellPoints();
-  mapRefCellPointsToParameterSpace(parametricPoints);
+  FieldContainer<double> parametricPoints = parametricBasisCache->getPhysicalCubaturePoints();
   int numCells = values.dimension(0); // likely to be 1--in any case, we're the same on each cell
   int numPoints = values.dimension(1);
   int spaceDim = values.dimension(2);
@@ -362,15 +369,19 @@ void ParametricCurve::values(FieldContainer<double> &values, BasisCachePtr basis
 }
 
 FunctionPtr ParametricCurve::x() {
-  return _xFxn;
+  // we need to map the argument so that 0 --> _t0, 1 --> _t1
+  if (Function::isNull(_xFxn)) return Function::null();
+  return Function::composedFunction(_xFxn, argumentMap());
 }
 
 FunctionPtr ParametricCurve::y() {
-  return _yFxn;
+  if (Function::isNull(_yFxn)) return Function::null();
+  return Function::composedFunction(_yFxn, argumentMap());
 }
 
 FunctionPtr ParametricCurve::z() {
-  return _zFxn;
+  if (Function::isNull(_zFxn)) return Function::null();
+  return Function::composedFunction(_zFxn, argumentMap());
 }
 
 ParametricCurvePtr ParametricCurve::bubble(ParametricCurvePtr edgeCurve) {
@@ -432,7 +443,8 @@ ParametricCurvePtr ParametricCurve::dt() { // the curve differentiated in t in e
   if (_zFxn.get()) {
     dzdt = tScale * _zFxn->dx();
   }
-  return Teuchos::rcp( new ParametricCurve(dxdt,dydt,dzdt) );
+  ParametricCurvePtr wholeCurve_dt_scaled = ParametricCurve::curve(dxdt,dydt,dzdt);
+  return ParametricCurve::subCurve(wholeCurve_dt_scaled, _t0, _t1);
 }
 
 ParametricCurvePtr ParametricCurve::polygon(vector< pair<double,double> > vertices, vector<double> weights) {
@@ -461,7 +473,6 @@ ParametricCurvePtr ParametricCurve::polygon(vector< pair<double,double> > vertic
   return curveUnion(lines,weights);
 }
 
-
 ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double y1) {
   FunctionPtr t = Teuchos::rcp( new Xn(1) );
   FunctionPtr x0_f = Function::constant(x0);
@@ -471,19 +482,19 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
   
   return Teuchos::rcp(new ParametricCurve(xFxn,yFxn));
 }
-
-void ParametricCurve::mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints) {
-  int numPoints = refPoints.dimension(0);
-  int spaceDim = refPoints.dimension(1);
-  if (spaceDim != 1) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refPoints must be of dimension 1");
-  }
-  for (int i=0; i<numPoints; i++) {
-    double x = refPoints(i,0);
-    double t = (x + 1) / 2;
-    refPoints(i,0) = t;
-  }
-}
+//
+//void ParametricCurve::mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints) {
+//  int numPoints = refPoints.dimension(0);
+//  int spaceDim = refPoints.dimension(1);
+//  if (spaceDim != 1) {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refPoints must be of dimension 1");
+//  }
+//  for (int i=0; i<numPoints; i++) {
+//    double x = refPoints(i,0);
+//    double t = (x + 1) / 2;
+//    refPoints(i,0) = t;
+//  }
+//}
 
 std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(unsigned cellTopoKey) {
   if (cellTopoKey == shards::Quadrilateral<4>::key) {

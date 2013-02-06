@@ -196,6 +196,11 @@ bool CurvilinearMeshTests::testEdgeLength() {
       cout << "testEdgeLength: On square mesh (straight 'curves'), error with H1Order = " << i << " exceeds tol " << tol << endl;
       cout << "Error = " << error << endl;
     }
+    
+    ostringstream filePath;
+    filePath << "/tmp/squareMesh_p" << i << ".dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    
     // p-refine
     if (i < numPRefinements) {
       mesh->pRefine(mesh->getActiveCellIDs());

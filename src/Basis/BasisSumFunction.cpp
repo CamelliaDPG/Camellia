@@ -117,3 +117,7 @@ FunctionPtr NewBasisSumFunction::dz() {
 bool NewBasisSumFunction::boundaryValueOnly() {
   return _boundaryValueOnly;
 }
+
+FunctionPtr NewBasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
+  return Teuchos::rcp( new NewBasisSumFunction(basis,basisCoefficients) );
+}

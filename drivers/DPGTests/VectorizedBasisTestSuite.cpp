@@ -191,6 +191,26 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
         }
       }
     }
+    
+    // test the mapping from oneComp dofOrdinal to twoComp:
+    Vectorized_Basis<double, FieldContainer<double> >* twoCompAsVectorBasis = (Vectorized_Basis<double, FieldContainer<double> >  *) twoComp.get();
+    
+    for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
+      int dofOrdinal_0 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 0);
+      int dofOrdinal_1 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 1);
+      // we expect the lists to be stacked (this is implicit in the test above)
+      // dofOrdinal_0 we expect to be == compDofOrdinal
+      // dofOrdinal_1 we expect to be == compDofOrdinal + oneComp.getCardinality()
+      if (dofOrdinal_0 != compDofOrdinal) {
+        success = false;
+        cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in first component.\n";
+      }
+      if (dofOrdinal_1 != compDofOrdinal + oneComp.getCardinality()) {
+        success = false;
+        cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in second component.\n";
+      }
+    }
+
   }
   return success;
 }
