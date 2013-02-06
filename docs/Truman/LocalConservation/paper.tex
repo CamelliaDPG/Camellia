@@ -56,6 +56,11 @@
 \newcommand{\bfn}{\mbox{\boldmath $n$}}
 \newcommand{\bfH}{\mbox{\boldmath $H$}}
 \newcommand{\HdivK}{\bfH(\text{div},K)}
+\newcommand{\HOneK}{H^{-1}(K)}
+\newcommand{\HOneOmegah}{H^{-1}(\Omega_h)}
+\newcommand{\HdivOmegah}{\bfH(\text{div},\Omega_h)}
+\newcommand{\vdeltau}{v_{\delta\bs u_h}}
+\newcommand{\taudeltau}{\btau_{\delta\bs u_h}}
 
 \newcommand{\eval}[2][\right]{\relax
   \ifx#1\right\relax \left.\fi#2#1\rvert}
@@ -106,6 +111,8 @@
 #4\\
 \end{array}
 \right]}
+
+\renewcommand{\arraystretch}{2.0}
 
 \newtheorem{proposition}{Proposition}
 \newtheorem{corollary}{Corollary}
@@ -311,7 +318,7 @@ $\bs u:=(u,\bsigma,\hat u,\hat t)
 \in\bs U:=L^2(\Omega_h)\times \bs L^2(\Omega_h)\times H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$ 
 such that
 \begin{equation}
-\label{eq:confusionBF}
+\label{eq:variationalFormulation}
 -(\bbeta u-\bsigma,\nabla v)_K+(\hat t,v)_{\partial K}
 + \frac{1}{\epsilon}(\bsigma,\btau)_K
 +(u,\nabla\cdot\btau)_K
@@ -331,6 +338,216 @@ L(\bs u_h,\lambda_k)=\frac{1}{2}\norm{R_V^{-1}(b(\bs
 u_h,\cdot)-(f,\cdot))}^2_{\bs V}-\sum_K\lambda_K(b(\bs u_h,1_K)-l(1_K))\,.
 \label{eq:lagrangian}
 \end{equation}
+
+Taking the G\^ateaux derivative as before, we arrive at the following system
+of equations:
+\begin{equation}
+\left\{
+\begin{array}[c]{rll}
+b(\bs u_h,T(\delta\bs u_h))-\sum_K\lambda_K b(\bs u_h,1_K)
+&=(f,T(\delta\bs u_h)) & \forall\delta\bs u_h\in\bs U_h\\
+b(\bs u_h,1_K) &=(f,1_K) & \forall K\,,
+\end{array}
+\right.
+\label{eq:conservativeSystem}
+\end{equation}
+where $T:=R_V^{-1}B:\bs U_h\rightarrow\bs V$ is the trial-to-test operator.
+
+Since the trial-to-test operator selectively produces test functions in
+$H^1(\Omega_h)$ and $\bs H(\text{div},\Omega_h)$, denote the result
+$v_{\delta\bs u_h}$ when $T(\delta u_h)\in H^1(\Omega_h)$ and
+$\btau_{\delta\bs u_h}$ when $T(\delta u_h)\in \bs H(\text{div},\Omega_h)$.
+Then, putting \ref{eq:conservativeSystem} into more concrete terms for
+convection-diffusion, we get:
+\begin{equation}
+\left\{
+\begin{array}[c]{rll}
+-(\bbeta u-\bsigma,\nabla \vdeltau)+\langle\hat t,\vdeltau\rangle
++ \frac{1}{\epsilon}(\bsigma,\taudeltau)
++(u,\nabla\cdot\taudeltau)
+-\langle\hat u,\taudeltau\cdot\bs n\rangle\\
+-\sum_K\lambda_K (\delta\hat t,1_K)
+&=(f,\vdeltau) & \forall\delta\bs u_h\in\bs U_h\\
+b(\bs u_h,1_K) &=(f,1_K) & \forall K\,.
+\end{array}
+\right.
+\label{eq:conservativeConfusionSystem}
+\end{equation}
+
+The optimal test functions are determined by solving local problems determined
+by the choice of test norm. For illustrative purposes we choose the robust
+test norm developed by Chan \etal\cite{ChanHeuerThanhDemkowicz2012}. With this
+choice, we get our local problem:
+
+Find $\vdeltau\in\HOneK,\,\taudeltau\in\HdivK$ such that:
+\begin{align}
+(\nabla\cdot\taudeltau,\nabla\cdot\delta\btau)_K
+&+\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
++\epsilon(\nabla\vdeltau,\nabla \delta v)_K
++(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\\
+&+\alpha\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}(\vdeltau,\delta v)_K
+\quad\quad\forall\delta v\in\HOneK,\,\delta\btau\in\HdivK\,,
+\label{eq:localSolve}
+\end{align}
+where, typically, $\alpha=1$.
+
+We can decompose the discrete flux space $\hat F_h$ into element conserving
+fluxes and some algebraic complement:
+\begin{equation}
+\hat F_h=\hat F_h^c\oplus\hat F_h^{nc}\,,\quad\hat 
+F_h^{c}:=\{\hat t:\langle\hat t,1_K\rangle=0\quad\forall K\}\,.
+\label{eq:decomposition}
+\end{equation}
+This may be accomplished by employing for fluxes in $\hat F_h^{c}$ traces of
+curls, $\nabla\times\phi$. Restricting ourselves to $\delta\hat t\in\hat
+F_h^{c}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a system  of
+equations that can be solved for $u_h$, $\bsigma_h$, $\hat u$, and $\hat
+t\in\hat F_h^c$. The remaining fluxes, $\hat t\in\hat F_h^{nc}$ are determined
+from \eqref{eq:conservativeConfusionSystem}$_2$. Finally, testing with $\hat
+t\in\hat F_h^{nc}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a
+system of equations that can be solved for Lagrange multipliers $\lambda_K$.
+Additionally, we can pass in local problem \eqref{eq:localSolve} with
+$\alpha\rightarrow0$. The fact that the test functions will be determined then
+up to a constant does not matter, for $\delta\hat t\in\hat F_h^c$, equation
+\eqref{eq:conservativeConfusionSystem}$_1$ is orthogonal to constants. 
+It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
+some later numerical experiments.
+
+\subsection{Proof of Convergence}
+We cannot directly use Brezzi's theorem, but we can reproduce his argument.
+First of all, variational formulation \eqref{eq:variationalFormulation} is
+equivalent to:
+
+Find $\bs u\in\bs U$ such that
+\begin{equation}
+b(\bs u,T(\delta\bs u))=(f,T(\delta\bs u))\quad\forall\bs v\in\bs V\,.
+\label{eq:bilinearForm}
+\end{equation}
+This is because the trial-to-test operator $T=R_V^{-1}B$ is an isomorphism.
+
+Restricting ourselves to $\delta\hat t_h\in\hat F_h^c$, and subtracting
+\eqref{eq:bilinearForm} from \eqref{eq:conservativeConfusionSystem}, we have
+the Galerkin orthogonality condition:
+\begin{align}
+\label{eq:galerkinOrthogonality}
+\frac{1}{\epsilon}(\bsigma_h-\bsigma,\taudeltau)
+&+(u_h-u,\nabla\cdot\taudeltau)
+-\langle\hat u_h-\hat u,\taudeltau\cdot\bs n\rangle
+\nonumber\\
+&-(\bbeta(u_h-u)-(\bsigma_h-\bsigma),\nabla\vdeltau)
++\langle\hat t_h-\hat t,\vdeltau\rangle
+\\
+&\hspace{25ex}\forall(\delta u_h,\delta\bsigma_h,\delta\hat u_h,\delta\hat t_h)
+\in U_h\times\bs S_h\times\hat U_h\times\hat F_h^c\,.
+\nonumber
+\end{align}
+
+We begin with an equivalent of Brezzi's \emph{discrete inf-sup in kernel
+condition}.
+\begin{lemma}
+\label{lemma:infsuplemma}
+The following condition holds:
+\begin{align}
+\sup_{\stackrel{
+(\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
+{U_h\times\bs S_h\times\hat U_h\times\hat F_h^c}
+}
+\frac{\snorm{
+b((u_h,\bsigma_h,\hat u_h,\hat t_h), (\vdeltau,\taudeltau))
+% \frac{1}{\epsilon}(\bsigma_h,\taudeltau)
+% +(u_h,\nabla \cdot\taudeltau)
+% -\langle\hat u_h,\taudeltau\cdot\bs n\rangle
+% -(\bbeta u_h-\bsigma_h,\nabla\vdeltau)
+% +\langle\hat t_h,\vdeltau\rangle
+}}
+{\norm{(\vdeltau,\taudeltau)}}
+\ge\alpha\norm{(u_h,\bsigma_h,\hat u_h,\hat t_h)}\quad\nonumber\\
+\forall(u_h,\bsigma_h,\hat u_h,\hat t_h)
+\in U_h\times\bs S_h\times\hat U_h\times\hat F_h^c\,.
+\label{eq:infsup}
+\end{align}
+
+\end{lemma}
+\begin{proof}
+By the very construction of the trial-to-test operator, the supremum on the
+left is equal to
+\begin{equation}
+\norm{T(u_h,\bsigma_h,\hat u_h,\hat t_h)}_{V}
+=\norm{R_V^{-1}B(u_h,\bsigma_h,\hat u_h, \hat t_h)}_{V}
+=\norm{B(u_h,\bsigma_h,\hat u_h, \hat t_h)}_{V'}
+\label{eq:infsupproof}
+\end{equation}
+The condition follows now from the fact that operator $B$ is bounded below,
+i.e. bilinear form \linebreak$b((u_h,\bsigma_h,\hat u_h, \hat t_h),(v,\btau))$ satisfies
+the inf-sup condition.
+\end{proof}
+
+Assume additionally that flux decomposition \eqref{eq:decomposition} is
+orthogonal. We begin by decomposing $\hat t_h$,
+\begin{equation}
+\hat t_h=\hat t_h^{c}+\hat t_h^{nc}\,.
+\label{eq:fluxdecomposition}
+\end{equation}
+Next, we use the triangle inequality,
+\begin{align}
+\label{eq:triangle}
+\norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h, \hat t-\hat t_h)}&=
+\norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h, \hat t-(\hat t_h^c+\hat t_h^{nc}))}\nonumber\\
+&\le\norm{(u-w_h,\bsigma-\bs s_h,\hat u-\hat w_h, \hat t-(\hat r_h^c+\hat t_h^{nc}))}\\
+&\hspace{3ex}+\norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h, \hat r_h^c-\hat t_h^c)}\nonumber
+\end{align}
+where $w_h\in U_h$, $\bs s_h\in\bs S_h$, $\hat w_h\in\hat U_h$, and $\hat
+r_h^{c}\in\hat F_h$ are arbitrary. The inf-sup in kernel condition now
+implies:
+\begin{align}
+\label{eq:estimate}
+&\norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h, \hat r_h^c-\hat t_h^c)}\\
+&\hspace{8ex}\le\frac{1}{\alpha}
+\sup_{\stackrel{
+(\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
+{U_h\times\bs S_h\times\hat U_h\times\hat F_h^c}
+}
+\frac{\snorm{
+b( (w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat r_h^c-\hat t_h^c),
+(\vdeltau,\taudeltau))
+}}
+{\norm{(\vdeltau,\taudeltau)}}\nonumber\\
+&\hspace{8ex}\le\frac{1}{\alpha}
+\sup_{\stackrel{
+(\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
+{U_h\times\bs S_h\times\hat U_h\times\hat F_h^c}
+}
+\frac{\snorm{
+b( (w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat r_h^c+\hat t_h^{nc}-\hat t),
+(\vdeltau,\taudeltau))
+}}
+{\norm{(\vdeltau,\taudeltau)}}\nonumber\\
+&\hspace{8ex}\le\frac{1}{\alpha}
+\norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat t-(\hat r_h^c+\hat
+t_h^{nc}))}
+\end{align}
+% \frac{1}{\epsilon}(\bs s_h-\bsigma_h,\taudeltau)
+% +(w_h-u_h,\nabla \cdot\taudeltau)
+% -\langle\hat w_h-\hat u_h,\taudeltau\cdot\bs n\rangle
+% -(\bbeta (w_h-u_h)-(\bs s_h-\bsigma_h),\nabla\vdeltau)
+% +\langle\hat r_h^c-\hat t_h^c,\vdeltau\rangle
+where the second step follows from the Galerkin orthogonality condition
+\eqref{eq:galerkinOrthogonality}, and the last step is a consequence of the
+minimum energy extension norm for fluxes. Cobining with \eqref{eq:triangle},
+we get the final stability result:
+\begin{equation}
+\norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h,\hat t-\hat t_h)}
+\leq\left(1+\frac{1}{\alpha}\right)
+\inf_{\stackrel{
+(w_h,\bs s_h,\hat w,\hat r_h^c)\in}
+{U_h\times\bs S_h\times\hat U_h\times\hat F_h^c}
+}
+\norm{(u-w_h,\bsigma-\bs s_h,\hat u-\hat w,\hat t-(\hat r_h^c+\hat t_h^{nc}))}
+\,.
+\label{eq:stability}
+\end{equation}
+
+\section{Numerical Experiments}
 
 % A cursory look at \eqnref{confusionBF} tells us which function spaces to look
 % in for each variable:

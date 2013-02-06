@@ -64,7 +64,7 @@ class InletBC : public Function {
           double y = (*points)(cellIndex,ptIndex,1);
           if (abs(y) <= halfWidth)
             // values(cellIndex, ptIndex) = -1.0*(1.0-y/halfWidth*y/halfWidth);
-            values(cellIndex, ptIndex) = -1.0;
+            values(cellIndex, ptIndex) = 1.0;
           else
             values(cellIndex, ptIndex) = 0;
         }
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr lBoundary = Teuchos::rcp( new LeftBoundary );
   FunctionPtr u1 = Teuchos::rcp( new InletBC );
-  bc->addDirichlet(beta_n_u_hat, lBoundary, u1);
+  bc->addDirichlet(beta_n_u_hat, lBoundary, -u1);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -177,27 +177,28 @@ int main(int argc, char *argv[]) {
   // ==================== SET INITIAL GUESS ==========================
   double u_free = 0.0;
   map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[u->ID()]      = Teuchos::rcp( new ConstantScalarFunction(u_free) );
+  // functionMap[u->ID()]      = Teuchos::rcp( new ConInletBC
+  functionMap[u->ID()]      = Teuchos::rcp( new InletBC );
 
   prevTimeFlow->projectOntoMesh(functionMap);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  // if (enforceLocalConservation) {
-  //   if (steady)
-  //   {
-  //     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  //     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
-  //   }
-  //   else
-  //   {
-  //     // FunctionPtr parity = Teuchos::rcp<Function>( new SideParityFunction );
-  //     // LinearTermPtr conservedQuantity = Teuchos::rcp<LinearTerm>( new LinearTerm(parity, beta_n_u_minus_sigma_n) );
-  //     LinearTermPtr conservedQuantity = Teuchos::rcp<LinearTerm>( new LinearTerm(1.0, beta_n_u_minus_sigma_n) );
-  //     LinearTermPtr sourcePart = Teuchos::rcp<LinearTerm>( new LinearTerm(invDt, u) );
-  //     conservedQuantity->addTerm(sourcePart, true);
-  //     solution->lagrangeConstraints()->addConstraint(conservedQuantity == u_prev_time * invDt);
-  //   }
-  // }
+  if (enforceLocalConservation) {
+    if (steady)
+    {
+      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      solution->lagrangeConstraints()->addConstraint(beta_n_u_hat == zero);
+    }
+    else
+    {
+      // FunctionPtr parity = Teuchos::rcp<Function>( new SideParityFunction );
+      // LinearTermPtr conservedQuantity = Teuchos::rcp<LinearTerm>( new LinearTerm(parity, beta_n_u_minus_sigma_n) );
+      LinearTermPtr conservedQuantity = Teuchos::rcp<LinearTerm>( new LinearTerm(1.0, beta_n_u_hat) );
+      LinearTermPtr sourcePart = Teuchos::rcp<LinearTerm>( new LinearTerm(invDt, u) );
+      conservedQuantity->addTerm(sourcePart, true);
+      solution->lagrangeConstraints()->addConstraint(conservedQuantity == u_prev_time * invDt);
+    }
+  }
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -245,12 +246,12 @@ int main(int argc, char *argv[]) {
           exporter.exportSolution(outfile.str());
 
           // Check local conservation
-          // FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
-          // FunctionPtr source = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
-          // source = invDt * source;
-          // Teuchos::Tuple<double, 3> fluxImbalances = checkConservationTest(flux, source, varFactory, mesh);
-          // cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-          //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+          FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_hat) );
+          FunctionPtr source = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
+          source = -invDt * source;
+          Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, source, varFactory, mesh);
+          cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
+            << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
         }
 
         prevTimeFlow->setSolution(solution); // reset previous time solution to current time sol

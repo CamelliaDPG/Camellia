@@ -108,6 +108,7 @@ private:
   
   bool _reportConditionNumber, _reportTimingResults;
   bool _writeMatrixToMatlabFile;
+  bool _writeMatrixToMatrixMarketFile;
   string _matrixFilePath;
   double _globalSystemConditionEstimate;
   
@@ -219,6 +220,10 @@ public:
   void writeQuadSolutionToFile(int trialID, const string &filePath);
   void setWriteMatrixToFile(bool value,const string &filePath){
     _writeMatrixToMatlabFile = value;
+    _matrixFilePath = filePath;
+  }
+  void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath){
+    _writeMatrixToMatrixMarketFile = value;
     _matrixFilePath = filePath;
   }
   
