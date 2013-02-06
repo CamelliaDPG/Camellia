@@ -31,7 +31,7 @@ public:
   static FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
   
   static void basisWeightsForL2ProjectedInterpolant(FieldContainer<double> &basisCoefficients,
-                                                    BasisPtr basis, MeshPtr mesh, int cellID);
+                                                    VectorBasisPtr basis, MeshPtr mesh, int cellID);
   static ParametricSurfacePtr linearInterpolant(const vector< ParametricCurvePtr > &curves);
   static ParametricSurfacePtr transfiniteInterpolant(const vector< ParametricCurvePtr > &curves);
 };

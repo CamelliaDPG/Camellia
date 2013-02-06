@@ -20,12 +20,14 @@
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
-BasisPtr basisForTransformation(ElementTypePtr cellType) {
+VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
   unsigned int cellTopoKey = cellType->cellTopoPtr->getKey();
   
   int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
   
-  return BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  BasisPtr basis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+  return vectorBasis;
 }
 
 vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
@@ -53,7 +55,7 @@ void roundToOneOrZero(double &value, double tol) {
 
 class CellTransformationFunction : public Function {
   FieldContainer<double> _basisCoefficients;
-  BasisPtr _basis;
+  VectorBasisPtr _basis;
   EOperatorExtended _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
   
@@ -99,7 +101,7 @@ class CellTransformationFunction : public Function {
   }
   
 protected:
-  CellTransformationFunction(BasisPtr basis, FieldContainer<double> &basisCoefficients, EOperatorExtended op) : Function(1) {
+  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, EOperatorExtended op) : Function(1) {
     _basis = basis;
     _basisCoefficients = basisCoefficients;
     _op = op;

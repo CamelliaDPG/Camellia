@@ -29,7 +29,9 @@ class ParametricCurve : public Function {
   
   double remapForSubCurve(double t);
   
-  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
+  FunctionPtr argumentMap();
+  
+//  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
 protected:
   ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
   
@@ -41,7 +43,7 @@ public:
                   FunctionPtr zFxn_x_as_t = Function::null());
   
   ParametricCurvePtr interpolatingLine();
-  void projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component); // component 0 for x, 1 for y, 2 for z
+  void projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component, bool useH1=true); // component 0 for x, 1 for y, 2 for z
   
   // override one of these, according to the space dimension
   virtual void value(double t, double &x);

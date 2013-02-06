@@ -678,6 +678,10 @@ int BasisCache::getSpaceDim() {
 }
 
 // static convenience constructors:
+BasisCachePtr BasisCache::parametric1DCache(int cubatureDegree) {
+  return BasisCache::basisCache1D(0, 1, cubatureDegree);
+}
+
 BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree) { // x0 and x1: physical space endpoints
   int numCells = 1;
   int numVertices = 2;

@@ -2596,7 +2596,6 @@ void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &ed
   }
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, _cellIDsWithCurves));
-  // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function accordingly
 }
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {

@@ -67,6 +67,7 @@ public:
   
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
+  double integrate(BasisCachePtr basisCache);
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell
@@ -107,6 +108,7 @@ public:
   static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
+  static FunctionPtr composedFunction( FunctionPtr f, FunctionPtr arg_g); // note: SLOW! avoid when possible...
   static FunctionPtr constant(double value);
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
@@ -361,7 +363,13 @@ FunctionPtr operator*(vector<double> weight, FunctionPtr f);
 FunctionPtr operator*(FunctionPtr f, vector<double> weight);
 
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator+(FunctionPtr f1, double value);
+FunctionPtr operator+(double value, FunctionPtr f1);
+
 FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator-(FunctionPtr f1, double value);
+FunctionPtr operator-(double value, FunctionPtr f1);
+
 FunctionPtr operator-(FunctionPtr f);
 
 // here, some particular functions
@@ -431,9 +439,9 @@ public:
 };
 
 class Cos_ax : public SimpleFunction {
-  double _a;
+  double _a,_b;
 public:
-  Cos_ax(double a);
+  Cos_ax(double a, double b=0);
   double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
@@ -442,16 +450,17 @@ public:
 };
 
 class Sin_ax : public SimpleFunction {
-  double _a;
+  double _a, _b;
 public:
-  Sin_ax(double a) {
+  Sin_ax(double a, double b=0) {
     _a = a;
+    _b = b;
   }
   double value(double x) {
-    return sin( _a * x);
+    return sin( _a * x + _b);
   }
   FunctionPtr dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a));
+    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
   }
   FunctionPtr dy() {
     return Function::zero();

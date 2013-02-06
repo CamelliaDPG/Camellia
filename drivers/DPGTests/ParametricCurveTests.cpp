@@ -10,11 +10,20 @@
 
 #include "BasisSumFunction.h"
 
+static const double PI  = 3.141592653589793238462;
+
 void ParametricCurveTests::setup() {
   
 }
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testCircularArc()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testLine()) {
     numTestsPassed++;
@@ -82,6 +91,189 @@ bool ParametricCurveTests::testBubble() {
     cout << "Bubble for line is not 0 at t=0.5.\n";
     success = false;
   }
+  
+  return success;
+}
+
+bool ParametricCurveTests::testCircularArc() {
+  bool success = true;
+  
+  // the arc details are copied from CurvilinearMeshTests -- motivation is to diagnose test failure there with a more granular test here
+  double radius = 1.0;
+  double meshWidth = sqrt(2);
+  
+  ParametricCurvePtr circle = ParametricCurve::circle(radius, meshWidth / 2.0, meshWidth / 2.0);
+  ParametricCurvePtr circularArc = ParametricCurve::subCurve(circle,  5.0/8.0, 7.0/8.0);
+  
+  BasisCachePtr basisCache = BasisCache::parametric1DCache(15); // overintegrate to be safe
+  
+  FunctionPtr cos_part = Teuchos::rcp( new Cos_ax(PI/2, 1.25*PI));
+  FunctionPtr sin_part = Teuchos::rcp( new Sin_ax(PI/2, 1.25*PI));
+  FunctionPtr x_t = meshWidth / 2 + cos_part;
+  FunctionPtr y_t = meshWidth / 2 + sin_part;
+  
+  FunctionPtr dx_dt = (- PI / 2) * sin_part;
+  FunctionPtr dy_dt = (PI / 2) * cos_part;
+  
+  // check that we have the right idea for all those functions:
+  if (! x_t->equals(circularArc->x(),basisCache)) {
+    cout << "expected x(0) = " << Function::evaluate(x_t,0);
+    cout << "; actual = " << Function::evaluate(circularArc->x(),0) << endl;
+    cout << "x part of circularArc doesn't match expected.\n";
+    success = false;
+  }
+  if (! y_t->equals(circularArc->y(),basisCache)) {
+    cout << "expected y(0) = " << Function::evaluate(y_t,0);
+    cout << "; actual = " << Function::evaluate(circularArc->y(),0) << endl;
+    cout << "y part of circularArc doesn't match expected.\n";
+    success = false;
+  }
+  
+  if (! dx_dt->equals(circularArc->dt()->x(),basisCache)) {
+    cout << "dx/dt of circularArc doesn't match expected.\n";
+    success = false;
+  }
+  if (! dy_dt->equals(circularArc->dt()->y(),basisCache)) {
+    cout << "dy/dt of circularArc doesn't match expected.\n";
+    success = false;
+  }
+  
+  // test exact curve at t=0.5
+  
+  double tol=1e-14;
+  double t = 0.5;
+  double x_expected = meshWidth / 2;
+  double y_expected = meshWidth / 2 - radius;
+  
+  double x,y,xErr,yErr;
+  // check value
+  circularArc->value(t, x, y);
+  xErr = abs(x-x_expected);
+  yErr = abs(y-y_expected);
+  if (xErr > tol) {
+    cout << "exact arc x at t=0.5 is incorrect.\n";
+    success = false;
+  }
+  if (yErr > tol) {
+    cout << "exact arc y at t=0.5 is incorrect.\n";
+    success = false;
+  }
+  
+  // check derivatives
+  // figuring out what the x derivative should be is a bit of work, I think,
+  // but the y value is at a minimum, so its derivative should be zero
+  y_expected = 0;
+  circularArc->dt()->value(t, x, y);
+  yErr = abs(y-y_expected);
+  if (yErr > tol) {
+    cout << "exact arc dy/dt at t=0.5 is nonzero.\n";
+    success = false;
+  }
+  
+  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
+  BasisPtr quadraticBasis = BasisFactory::getBasis(2, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  
+  // figure out what the weights for the quadratic "middle node" basis function should be:
+  double expected_H1_weight_x, expected_H1_weight_y;
+  double expected_L2_weight_x, expected_L2_weight_y;
+  
+  FunctionPtr middleBasis;
+  {
+    FunctionPtr t = Teuchos::rcp( new Xn(1) );
+    middleBasis = 4 * t * (1-t);
+  }
+  
+  double middleBasisL2_squared = (middleBasis*middleBasis)->integrate(basisCache);
+  double middleBasisH1_squared = ( middleBasis->dx() * middleBasis->dx() )->integrate(basisCache) + middleBasisL2_squared;
+  
+  ParametricCurvePtr circularArcBubble = ParametricCurve::bubble(circularArc);
+  
+  FunctionPtr bubble_x = circularArcBubble->x();
+  FunctionPtr bubble_y = circularArcBubble->y();
+  
+  double x_against_middle_L2 = (bubble_x * middleBasis)->integrate(basisCache);
+  double x_against_middle_H1 = (bubble_x->dx() * middleBasis->dx())->integrate(basisCache) + x_against_middle_L2;
+  
+  double y_against_middle_L2 = (bubble_y * middleBasis)->integrate(basisCache);
+  double y_against_middle_H1 = (bubble_y->dx() * middleBasis->dx())->integrate(basisCache) + y_against_middle_L2;
+  
+  expected_L2_weight_x = x_against_middle_L2 / middleBasisL2_squared;
+  expected_H1_weight_x = x_against_middle_H1 / middleBasisH1_squared;
+  
+  expected_L2_weight_y = y_against_middle_L2 / middleBasisL2_squared;
+  expected_H1_weight_y = y_against_middle_H1 / middleBasisH1_squared;
+  
+  int middleBasisOrdinal = quadraticBasis->getDofOrdinal(1,0,0);
+  
+  FieldContainer<double> basisCoefficients_x, basisCoefficients_y;
+  bool useH1 = false; // just trying to diagnose whether the issue is in derivatives or values (most likely derivatives)
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, useH1);
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, useH1);
+  
+  double weightError_x = abs(expected_L2_weight_x-basisCoefficients_x[middleBasisOrdinal]);
+  double weightError_y = abs(expected_L2_weight_y-basisCoefficients_y[middleBasisOrdinal]);
+  
+  if (weightError_x > tol) {
+    success = false;
+    cout << "testCircularArc(): L2 projection doesn't match expected basis weight in x.\n";
+    cout << "expected " << expected_L2_weight_x << ", was " << basisCoefficients_x[middleBasisOrdinal] << endl;
+  }
+  if (weightError_y > tol) {
+    success = false;
+    cout << "testCircularArc(): L2 projection doesn't match expected basis weight in y.\n";
+    cout << "expected " << expected_L2_weight_y << ", was " << basisCoefficients_y[middleBasisOrdinal] << endl;
+  }
+
+  useH1 = true;
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, useH1);
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, useH1);
+
+  weightError_x = abs(expected_H1_weight_x-basisCoefficients_x[middleBasisOrdinal]);
+  weightError_y = abs(expected_H1_weight_y-basisCoefficients_y[middleBasisOrdinal]);
+
+  if (weightError_x > tol) {
+    success = false;
+    cout << "testCircularArc(): H1 projection doesn't match expected basis weight in x.\n";
+    cout << "expected " << expected_H1_weight_x << ", was " << basisCoefficients_x[middleBasisOrdinal] << endl;
+  }
+  if (weightError_y > tol) {
+    success = false;
+    cout << "testCircularArc(): H1 projection doesn't match expected basis weight in y.\n";
+    cout << "expected " << expected_H1_weight_y << ", was " << basisCoefficients_y[middleBasisOrdinal] << endl;
+  }
+  /*
+  FunctionPtr projection_x = NewBasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_x);
+  FunctionPtr projection_y = NewBasisSumFunction::basisSumFunction(quadraticBasis, basisCoefficients_y);
+  
+  FieldContainer<double> parametricPoint(1,1);
+  parametricPoint[0] = t;
+  FieldContainer<double> refPoint = basisCache->getRefCellPointsForPhysicalPoints(parametricPoint);
+  basisCache->setRefCellPoints(refPoint);
+  FieldContainer<double> value(1,1);
+  projection_x->values(value, basisCache);
+  x = value[0];
+  projection_y->values(value, basisCache);
+  y = value[0];
+  
+  // same expectations at the beginning, except of course now we don't expect to nail it.
+  // but we do expect to be closer than the linear interpolation of the vertices
+  x_expected = meshWidth / 2;
+  y_expected = meshWidth / 2 - radius;
+
+  double linearErr_x = 0; // linear interpolant nails the x value
+  double linearErr_y = abs(y_expected);
+  
+  xErr = abs(x-x_expected);
+  yErr = abs(y-y_expected);
+  
+  if (xErr > linearErr_x + tol) {
+    cout << "quadratic projection-based interpolant has greater error in x than linear interpolant.\n";
+    success = false;
+  }
+  if (yErr > linearErr_y + tol) {
+    cout << "quadratic projection-based interpolant has greater error in y than linear interpolant.\n";
+    success = false;
+  }*/
   
   return success;
 }

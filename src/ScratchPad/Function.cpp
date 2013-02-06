@@ -279,6 +279,17 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   }
 }
 
+double Function::integrate(BasisCachePtr basisCache) {
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  FieldContainer<double> cellIntegrals(numCells);
+  this->integrate(cellIntegrals, basisCache);
+  double sum = 0;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    sum += cellIntegrals[cellIndex];
+  }
+  return sum;
+}
+
 // added by Jesse - integrate over only one cell
 double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
@@ -1181,6 +1192,57 @@ void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
   }
 }
 
+// this is liable to be a bit slow!!
+class ComposedFunction : public Function {
+  FunctionPtr _f, _arg_g;
+public:
+  ComposedFunction(FunctionPtr f, FunctionPtr arg_g) : Function(f->rank()) {
+    _f = f;
+    _arg_g = arg_g;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
+    if (spaceDim==1) { // special case: arg_g is then reasonably scalar-valued
+      fArgPoints.resize(numCells,numPoints);
+    }
+    _arg_g->values(fArgPoints,basisCache);
+    if (spaceDim==1) {
+      fArgPoints.resize(numCells,numPoints,spaceDim);
+    }
+    BasisCachePtr fArgCache = Teuchos::rcp( new PhysicalPointCache(fArgPoints) );
+    _f->values(values, fArgCache);
+  }
+  FunctionPtr dx() {
+    if (isNull(_f->dx()) || isNull(_arg_g->dx())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dx() * Function::composedFunction(_f->dx(),_arg_g);
+  }
+  FunctionPtr dy() {
+    if (isNull(_f->dy()) || isNull(_arg_g->dy())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dy() * Function::composedFunction(_f->dy(),_arg_g);
+  }
+  FunctionPtr dz() {
+    if (isNull(_f->dz()) || isNull(_arg_g->dz())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dz() * Function::composedFunction(_f->dz(),_arg_g);
+  }
+};
+
+FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
+  return Teuchos::rcp( new ComposedFunction(f,arg_g) );
+}
+
 double SimpleFunction::value(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
 }
@@ -1610,8 +1672,24 @@ FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new SumFunction(f1, f2) );
 }
 
+FunctionPtr operator+(FunctionPtr f1, double value) {
+  return f1 + Function::constant(value);
+}
+
+FunctionPtr operator+(double value, FunctionPtr f1) {
+  return f1 + Function::constant(value);
+}
+
 FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2) {
   return f1 + -f2;
+}
+
+FunctionPtr operator-(FunctionPtr f1, double value) {
+  return f1 - Function::constant(value);
+}
+
+FunctionPtr operator-(double value, FunctionPtr f1) {
+  return Function::constant(value) - f1;
 }
 
 FunctionPtr operator-(FunctionPtr f) {
@@ -1820,14 +1898,15 @@ FunctionPtr SimpleSolutionFunction::dz() {
 //  return true;
 //}
 
-Cos_ax::Cos_ax(double a) {
+Cos_ax::Cos_ax(double a, double b) {
   _a = a;
+  _b = b;
 }
 double Cos_ax::value(double x) {
-  return cos( _a * x );
+  return cos( _a * x + _b);
 }
 FunctionPtr Cos_ax::dx() {
-  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a));
+  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a,_b));
 }
 FunctionPtr Cos_ax::dy() {
   return Function::zero();

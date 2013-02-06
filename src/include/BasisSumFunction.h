@@ -60,6 +60,8 @@ class NewBasisSumFunction : public Function {
   FunctionPtr dz();
   
   bool boundaryValueOnly();
+  
+  static FunctionPtr basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients);
 };
 
 #endif

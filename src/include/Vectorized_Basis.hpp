@@ -99,6 +99,8 @@ namespace Intrepid {
     int getNumComponents() const {
       return _numComponents;
     }
+    
+    int getDofOrdinalFromComponentDofOrdinal(int componentDofOrdinal, int componentIndex) const;
   };
 }// namespace Intrepid
 
