@@ -486,7 +486,7 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest) {
   double integral = 0;
   
   // TODO: rewrite this to compute in distributed fashion
@@ -495,7 +495,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false, cubatureDegreeEnrichment) ); // all elements of same type
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
     vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType); // TODO: replace with local variant
 
     int numCells = cells.size();

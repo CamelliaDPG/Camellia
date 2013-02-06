@@ -73,7 +73,7 @@ public:
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   
-  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol);
