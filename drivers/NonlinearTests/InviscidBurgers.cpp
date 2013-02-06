@@ -17,6 +17,7 @@
 #include "PreviousSolutionFunction.h"
 #include "RefinementPattern.h"
 #include "RieszRep.h"
+#include "HessianFilter.h"
 
 #include "TestingUtilities.h"
 #include "FiniteDifferenceUtilities.h" 
@@ -32,6 +33,8 @@
 #include <sstream>
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
+
+void getGradient(FieldContainer<double> &rhsVec, Teuchos::RCP<StandardAssembler> assembler, Epetra_FEVector &xNonlin);
 
 class PositivePart : public Function {
   FunctionPtr _f;
@@ -87,6 +90,7 @@ int main(int argc, char *argv[]) {
 
   int nCells = args.Input<int>("--nCells", "num cells",2);
   int numSteps = args.Input<int>("--numSteps", "num NR steps",20);
+  int useHessian = args.Input<int>("--useHessian", "to use hessian mod or not",0);
 
   int polyOrder = 1; 
   int pToAdd = 1;
@@ -187,26 +191,46 @@ int main(int argc, char *argv[]) {
   solution->setCubatureEnrichmentDegree(10);
 
   ////////////////////////////////////////////////////////////////////
-  // CHECKS ON GRADIENT 
+  // Create residual for Hessian/gradient 
   ////////////////////////////////////////////////////////////////////
 
   FunctionPtr fnhat = Function::solution(fn,solution);
 
   LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual
-  residual->addTerm(- fnhat*v,true);
+  residual->addTerm(-fnhat*v,true);
   residual->addTerm((e1 * (u_prev_squared_div2) + e2 * (u_prev)) * v->grad(),true);
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
 
   Teuchos::RCP< LineSearchStep > LS_Step = Teuchos::rcp(new LineSearchStep(rieszResidual));
+
+  ////////////////////////////////////////////////////////////////////
+  // Create Hessian addition
+  ////////////////////////////////////////////////////////////////////
+
+  VarFactory hessianVars = varFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL);
+  VarPtr du = hessianVars.test(u->ID());
+  BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form
+  hessianBF->addTerm(e_v->dx()*u,du); 
+  Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
+
+  ////////////////////////////////////////////////////////////////////
+  // CHECKS ON GRADIENT 
+  ////////////////////////////////////////////////////////////////////
 
   map<int,set<int> > fluxInds, fieldInds;
   TestingUtilities::getGlobalFieldFluxDofInds(mesh, fluxInds, fieldInds);
   vector<ElementPtr> elems = mesh->activeElements();
-
   double NL_residual = 9e99;
   for (int i = 0;i<numSteps;i++){
+    if (i>0){
+      if (useHessian){
+	solution->setFilter(hessianFilter);       
+	cout << "applying Hessian" << endl;
+      }
+    }
 
     Teuchos::RCP<StandardAssembler> assembler = Teuchos::rcp(new StandardAssembler(solution));
     Epetra_FECrsMatrix K = assembler->initializeMatrix();
@@ -221,15 +245,16 @@ int main(int argc, char *argv[]) {
 
     // only linearized dofs are field dofs, zero them
     Epetra_FEVector xNonlin = assembler->initializeVector(); // automatically starts as 0.0
+    Epetra_FEVector du = assembler->initializeVector(); // automatically starts as 0.0
+    du.Random();
     for (int dofIndex = 0; dofIndex < mesh->numGlobalDofs();dofIndex++){
       if (TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)){
 	(*xNonlin(0))[dofIndex] = (*x(0))[dofIndex];
       }else{
 	(*xNonlin(0))[dofIndex] = 0.0;	  
+	//	(*du(0))[dofIndex] = 0.0; // zero out 
       }
     }
-    Epetra_FEVector KxNonlin = assembler->initializeVector();
-    K.Multiply('N',xNonlin,KxNonlin); // to compute < u, v_opt>, then to move it to the other side
 
     double stepLength = 1.0;
     stepLength = LS_Step->stepSize(backgroundFlow,solution, NL_residual);
@@ -239,48 +264,11 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
     }
-    assembler->assembleProblem(K,b);  // update RHS after accumulating for new 
-
-    FieldContainer<double> residualVector(mesh->numGlobalDofs()),rhsVec(mesh->numGlobalDofs());
-    double nlResidual = 0.0;
-    vector<ElementPtr> elems = mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
-      ElementPtr elem = *elemIt;
-      FieldContainer<double> Rv = assembler->getIPMatrix(elem);
-      int numTrialDofs = assembler->numTrialDofsForElem(elem);
-      int numTestDofs = assembler->numTestDofsForElem(elem);
-      
-      FieldContainer<double> B = assembler->getOverdeterminedStiffness(elem);
-
-      FieldContainer<double> K(numTrialDofs,numTrialDofs), elemGrad(numTrialDofs,1);
-      assembler->getElemData(elem, K, elemGrad);
-      FieldContainer<double> x_K = assembler->getSubVector(xNonlin, elem);
-      SerialDenseWrapper::multiplyAndAdd(elemGrad,K,x_K,'N','N',-1.0,1.0);
-          
-      FieldContainer<double> residualIntegrals(numTestDofs);
-      residual->integrate(residualIntegrals, elem->elementType()->testOrderPtr, BasisCache::basisCacheForCell(mesh,elem->cellID()));
-      residualIntegrals.resize(Rv.dimension(0),1);
-      FieldContainer<double> e_r(Rv.dimension(0),1);
-      SerialDenseWrapper::solveSystemMultipleRHS(e_r,Rv,residualIntegrals);
-      FieldContainer<double> resNorm(1,1);
-      SerialDenseWrapper::multiply(resNorm,e_r,residualIntegrals,'T','N');
-      nlResidual += resNorm(0,0);
-
-      cout << "B dimensions = " << B.dimension(0) << "," << B.dimension(1) << endl;
-      cout << "e_r dimensions = " << e_r.dimension(0) << "," << e_r.dimension(1) << endl;
-
-      // for galerkin orthog / gradient
-      FieldContainer<double> etB(numTrialDofs,1);
-      SerialDenseWrapper::multiply(etB,B,e_r,'T','N');
-      for (int i = 0;i<numTrialDofs;i++){
-	int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
-	residualVector(globalDofIndex) += etB(i);
-	rhsVec(globalDofIndex) += elemGrad(i);
-      }
-    }
-    cout << "nonlinear residual = " << sqrt(nlResidual) << endl;
     
-    // test FIELD DOFS
+    FieldContainer<double> gradVec(mesh->numGlobalDofs());
+    getGradient(gradVec,assembler,xNonlin);
+   
+    // check gradients 
     for (int dofIndex = 0;dofIndex<mesh->numGlobalDofs();dofIndex++){
       // preset ALL fluxes in all solution perturbations - boundary conditions and otherwise
       TestingUtilities::initializeSolnCoeffs(solnPerturbation);
@@ -296,14 +284,53 @@ int main(int argc, char *argv[]) {
       }
 
       double fd_gradient = FiniteDifferenceUtilities::finiteDifferenceGradient(mesh, rieszResidual, backgroundFlow, dofIndex);
-      // CHECK RHS
+      // CHECK RHS/gradient
       if (!isFluxIndex){
-	//	double b = (*b(0))[dofIndex] - (*KxNonlin(0))[dofIndex];
-	double b = rhsVec(dofIndex);
-	cout << "fd gradient = " << fd_gradient << ", while b[" << dofIndex << "] = " << b;
-	cout << " and residual vector = " << residualVector(dofIndex) << endl;
+	double b = gradVec(dofIndex);
+	if (abs(fd_gradient-b)>1e-7){
+	  cout << "fd gradient = " << fd_gradient << ", while b[" << dofIndex << "] = " << b << endl;
+	}
       }
     }    
+
+    // check Hessians - Hdu ~ (G(u+h*du) - G(u))/h
+    double h = 1e-7;
+    TestingUtilities::initializeSolnCoeffs(solnPerturbation);
+    for (int dofIndex = 0;dofIndex<mesh->numGlobalDofs();dofIndex++){
+      TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,(*du(0))[dofIndex],dofIndex);
+    }
+    backgroundFlow->addSolution(solnPerturbation, h); // u+h*du
+    FieldContainer<double> gradVecPerturbed(mesh->numGlobalDofs());
+    getGradient(gradVecPerturbed,assembler,xNonlin);
+    backgroundFlow->addSolution(solnPerturbation, -h); // bring the background flow back to zero   
+
+    FieldContainer<double> fdHessian(mesh->numGlobalDofs());    
+    for (int i = 0;i<mesh->numGlobalDofs();i++){
+      fdHessian(i) = (gradVecPerturbed(i)-gradVec(i))/h;
+    }
+
+    // actual Hessian that we compute
+    FieldContainer<double> computedHessian(mesh->numGlobalDofs());    
+    MeshPtr mesh = assembler->solution()->mesh();
+    vector<ElementPtr> elems = mesh->activeElements();
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
+      ElementPtr elem = *elemIt;
+      FieldContainer<double> du_K = assembler->getSubVector(du, elem);
+      int numTrialDofs = assembler->numTrialDofsForElem(elem);
+      FieldContainer<double> K(numTrialDofs,numTrialDofs), elemHessian(numTrialDofs,1), f(numTrialDofs,1);
+      assembler->getElemData(elem, K, f); // we discard f, not needed for Hessian
+      SerialDenseWrapper::multiplyAndAdd(elemHessian,K,du_K,'N','N',1.0,-1.0);
+      // for galerkin orthog / gradient
+      for (int i = 0;i<numTrialDofs;i++){
+	int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
+	computedHessian(globalDofIndex) += elemHessian(i,0);
+      }
+    }    
+    for (int i = 0;i < mesh->numGlobalDofs();i++){
+      cout << "comped Hessian = " << computedHessian(i) << endl;
+      cout << "fd hessian = " << fdHessian(i) << endl;
+    }
+
     cout << endl;
   }
   
@@ -316,3 +343,27 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+// rhsVec should be size of number of total dofs
+void getGradient(FieldContainer<double> &rhsVec, Teuchos::RCP<StandardAssembler> assembler, Epetra_FEVector &xNonlin){
+
+  //  FieldContainer<double> rhsVec(mesh->numGlobalDofs());  
+  MeshPtr mesh = assembler->solution()->mesh();
+  vector<ElementPtr> elems = mesh->activeElements();
+  for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
+    ElementPtr elem = *elemIt;
+    FieldContainer<double> Rv = assembler->getIPMatrix(elem);
+    int numTrialDofs = assembler->numTrialDofsForElem(elem);
+    int numTestDofs = assembler->numTestDofsForElem(elem);
+
+    FieldContainer<double> K(numTrialDofs,numTrialDofs), elemGrad(numTrialDofs,1);
+    assembler->getElemData(elem, K, elemGrad);
+    FieldContainer<double> x_K = assembler->getSubVector(xNonlin, elem);
+    SerialDenseWrapper::multiplyAndAdd(elemGrad,K,x_K,'N','N',1.0,-1.0);
+
+    // for galerkin orthog / gradient
+    for (int i = 0;i<numTrialDofs;i++){
+      int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
+      rhsVec(globalDofIndex) += elemGrad(i,0);
+    }
+  }
+}
