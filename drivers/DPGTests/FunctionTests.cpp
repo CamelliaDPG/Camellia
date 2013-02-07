@@ -31,6 +31,17 @@ public:
   }
 };
 
+
+class BoundaryLayerFunction : public SimpleFunction {
+  double _eps;
+public:
+  BoundaryLayerFunction(double eps) {
+    _eps = eps;
+  }
+  double value(double x, double y){
+    return exp(x/_eps);
+  }
+};
 void FunctionTests::setup() {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -127,6 +138,13 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testIntegrate()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  setup();
+  if (testAdaptiveIntegrate()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -492,6 +510,34 @@ bool FunctionTests::testIntegrate(){
   if (abs(value)>tol){ // should get zero if integrating x over [-1,1]
     success = false;
     cout << "failing testIntegrate()" << endl;
+  }
+  return success;
+}
+
+bool FunctionTests::testAdaptiveIntegrate(){
+  bool success = true;
+
+  // we must create our own basisCache here because _basisCache
+  // has had its ref cell points set, which basically means it's
+  // opted out of having any help with integration.
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
+  vector<int> cellIDs;
+  cellIDs.push_back(0);
+  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
+  
+  double eps = .1; // 
+  FunctionPtr boundaryLayerFunction = Teuchos::rcp( new BoundaryLayerFunction(eps) );
+  int numCells = basisCache->cellIDs().size();
+  FieldContainer<double> integrals(numCells);
+  double quadtol = 1e-2;
+  double computedIntegral = boundaryLayerFunction->integrate(_spectralConfusionMesh,quadtol);
+  double trueIntegral = (eps*(exp(1/eps) - exp(-1/eps)))*2.0;
+  double diff = trueIntegral-computedIntegral;
+  
+  double tol = 1e-2;
+  if (abs(diff)>tol){ 
+    success = false;
+    cout << "failing testAdaptiveIntegrate() with computed integral " << computedIntegral << " and true integral " << trueIntegral << endl;
   }
   return success;
 }
