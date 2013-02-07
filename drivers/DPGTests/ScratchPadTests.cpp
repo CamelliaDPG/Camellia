@@ -13,6 +13,7 @@
 #include "RieszRep.h"
 #include "TestingUtilities.h"
 #include "MeshUtilities.h"
+#include "SolutionExporter.h" // added by Jesse for testing
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -21,6 +22,16 @@ public:
     bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
     bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
     //    cout << "UnitSquareBoundary: for (" << x << ", " << y << "), (xMatch, yMatch) = (" << xMatch << ", " << yMatch << ")\n";
+    return xMatch || yMatch;
+  }
+};
+
+class SquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
     return xMatch || yMatch;
   }
 };
@@ -97,32 +108,6 @@ public:
     }
   }
 };
-
-// is zero on inflow
-class InflowCutoffFunction : public Function {
-public:
-  bool boundaryValueOnly() { 
-    return true; 
-  } 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
-    double tol = 1e-11;
-    vector<int> cellIDs = basisCache->cellIDs();
-    int numPoints = values.dimension(1);
-    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
-        double x = points(i,j,0);
-        double y = points(i,j,1);
-        values(i,j) = 1.0;
-        bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
-        if (isOnInflow){
-          values(i,j) = 0.0;
-        }
-      }
-    }
-  }
-};
-
 
 class PositiveX : public SpatialFilter {
 public:
@@ -254,6 +239,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
      
   setup();
   if (testRieszIntegration()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+
+  setup();
+  if (testLTResidualSimple()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -870,7 +862,7 @@ bool ScratchPadTests::testRieszIntegration(){
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
 
   bc->addDirichlet(uhat, squareBoundary, zero);
 
@@ -906,13 +898,112 @@ bool ScratchPadTests::testRieszIntegration(){
   }
 }
 
-// tests to make sure the 
+// tests residual computation on simple convection
+bool ScratchPadTests::testLTResidualSimple(){
+  double tol = 1e-11;
+  bool success = true;
+
+  int nCells = 2; 
+ 
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // v terms:
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+
+  // choose the mesh-independent norm even though it may have BLs
+  ip->addTerm(v->grad());
+  ip->addTerm(v);
+
+  ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = one;
+  rhs->addTerm( f * v ); 
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr boundary = Teuchos::rcp( new InflowSquareBoundary );
+  FunctionPtr u_in = Teuchos::rcp(new Uinflow);
+  bc->addDirichlet(beta_n_u, boundary, beta*n*u_in);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+   
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+   
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  double energyError = solution->energyErrorTotal();
+  
+  LinearTermPtr residual = rhs->linearTerm();
+  residual->addTerm(-confusionBF->testFunctional(solution),true); 
+
+  Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  rieszResidual->computeRieszRep();
+  double energyErrorLT = rieszResidual->getNorm();
+
+  int cubEnrich = 0; bool testVsTest = true;
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  map<int,FunctionPtr> errFxns;
+  errFxns[v->ID()] = e_v;
+  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
+  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); 
+  // check that energy error computed thru Solution and through rieszRep are the same  
+  success = abs(energyError-energyErrorLT)<tol;
+  if (success==false){
+    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;    
+    return success;
+  }
+  // checks that matrix-computed and integrated errors are the same
+  success = abs(energyErrorLT-energyErrorIntegrated)<tol;
+  if (success==false){
+    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
+    return success;
+  }
+
+}
+
+// tests to make sure the energy error calculated thru direct integration works for vector valued test functions too
 bool ScratchPadTests::testLTResidual(){
   double tol = 1e-11;
   bool success = true;
 
-  int nCells = 1; 
-  double eps = .25;
+  int nCells = 2; 
+  double eps = .1;
  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
 
@@ -973,7 +1064,7 @@ bool ScratchPadTests::testLTResidual(){
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr squareBoundary = Teuchos::rcp( new UnitSquareBoundary );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
 
   bc->addDirichlet(uhat, squareBoundary, zero);
 
@@ -991,35 +1082,53 @@ bool ScratchPadTests::testLTResidual(){
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
   double energyError = solution->energyErrorTotal();
-
+ 
   LinearTermPtr residual = rhs->linearTerm();
   residual->addTerm(-confusionBF->testFunctional(solution),true); 
+
+  FunctionPtr uh = Function::solution(uhat,solution);
+  FunctionPtr fn = Function::solution(beta_n_u_minus_sigma_n,solution);
+  FunctionPtr uF = Function::solution(u,solution);
+  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);  
+  //  residual->addTerm(- (fn*v - uh*tau->dot_normal()));
+  //  residual->addTerm(- (uF*(tau->div() - beta*v->grad()) + sigma*((1/eps)*tau + v->grad())));
+  //  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion 
+  //  residual->addTerm(uh*tau->dot_normal() - uF*tau->div() - sigma*((1/eps)*tau)); // just tau portion
+
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
   rieszResidual->computeRieszRep();
   double energyErrorLT = rieszResidual->getNorm();
 
-  int cubEnrich = 0; bool testVsTest = true;
+  int cubEnrich = 5; bool testVsTest = true;
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
   FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
   map<int,FunctionPtr> errFxns;
   errFxns[v->ID()] = e_v;
   errFxns[tau->ID()] = e_tau;
   FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
+  /*
+  FunctionPtr err_v = e_v*e_v;
+  FunctionPtr err_tau = e_tau*e_tau;
+  double vErr = err_v->integrate(mesh,cubEnrich,testVsTest);
+  double tauErr = err_tau->integrate(mesh,cubEnrich,testVsTest);
+  double errSum = vErr + tauErr;
+  //  cout << "sqrt(errSum) = " << sqrt(errSum) << ", while vErr = " << vErr << ", and tau err = " << tauErr << endl;
+  */
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); // enrich cubature by 25 to make up for the fact that these are test order functions
 
   // check that energy error computed thru Solution and through rieszRep are the same
-  success = abs(energyError-energyErrorLT)<tol;
-  if (success==false){
-    cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;    
-    return success;
-  }
+  bool success1 = abs(energyError-energyErrorLT)<tol; 
   // checks that matrix-computed and integrated errors are the same
-  success = abs(energyErrorLT-energyErrorIntegrated)<tol;
-  if (success==false){
-    cout << "Failed testLTResidual; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
-    return success;
+  bool success2 = abs(energyErrorLT-energyErrorIntegrated)<tol;
+  success = success1==true && success2==true;
+  if (!success){
+    cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;    
   }
+  VTKExporter exporter(solution, mesh, varFactory);
+  exporter.exportSolution("testLTRes");
+  cout << endl;
 
+  return success;
 }
 
 std::string ScratchPadTests::testSuiteName() {
