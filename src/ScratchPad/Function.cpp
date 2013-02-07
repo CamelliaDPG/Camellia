@@ -305,7 +305,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
 
   vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
 
-  // build list of subcells
+  // build initial list of subcells = all elements
   vector<CacheInfo> subCellCacheInfo;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
@@ -317,9 +317,13 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
   // adaptively refine
   bool allConverged = false;
   vector<CacheInfo> subCellsToCheck = subCellCacheInfo;
-  while (!allConverged){
+  int iter = 0;
+  int maxIter = 1000; // arbitrary
+  while (!allConverged && iter < maxIter){    
     allConverged = true;
+    ++iter;
     // check relative error, tag subcells to refine
+    double tempIntegral = 0.0;
     set<int> subCellsToRefine;    
     for (int i = 0;i<subCellsToCheck.size();i++){
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
@@ -337,14 +341,20 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
       this->integrate(cellIntegral,basisCache);
       this->integrate(enrichedCellIntegral,enrichedCache);
-      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(cellIntegral(0)); // relative error
+      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error      
       if (error > tol){
         allConverged = false;
         subCellsToRefine.insert(i);
+	tempIntegral += enrichedCellIntegral(0);
       }else{
-        integral += enrichedCellIntegral(0);
+	integral += enrichedCellIntegral(0);
       }
     }
+    if (iter == maxIter){
+      integral += tempIntegral;
+      cout << "maxIter reached for adaptive quadrature, returning integral estimate." << endl;
+    }
+    //    cout << "on iter " << iter << " with tempIntegral = " << tempIntegral << " and currrent integral = " << integral << " and " << subCellsToRefine.size() << " subcells to go. Allconverged =  " << allConverged << endl;
 
     // reconstruct subcell list
     vector<CacheInfo> newSubCells;
