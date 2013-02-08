@@ -53,6 +53,7 @@ public:
   bool testLTResidual();
   bool testLTResidualSimple();
   bool testRieszIntegration();
+  bool testResidualMemoryError();
 
   std::string testSuiteName();
 };

@@ -13,7 +13,7 @@
 #include "RieszRep.h"
 #include "TestingUtilities.h"
 #include "MeshUtilities.h"
-#include "SolutionExporter.h" // added by Jesse for testing
+#include "RefinementStrategy.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -43,6 +43,24 @@ public:
     bool xMatch = (abs(x) < tol);
     bool yMatch = (abs(y) < tol);
     return xMatch || yMatch;
+  }
+};
+
+class LRInflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x)<tol); // left inflow
+    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
+    return xMatch || yMatch;
+  }
+};
+class LROutflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0)<tol);
+    return xMatch;
   }
 };
 
@@ -253,6 +271,13 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testLTResidual()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+
+  setup();
+  if (testResidualMemoryError()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -1106,14 +1131,6 @@ bool ScratchPadTests::testLTResidual(){
   errFxns[v->ID()] = e_v;
   errFxns[tau->ID()] = e_tau;
   FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
-  /*
-  FunctionPtr err_v = e_v*e_v;
-  FunctionPtr err_tau = e_tau*e_tau;
-  double vErr = err_v->integrate(mesh,cubEnrich,testVsTest);
-  double tauErr = err_tau->integrate(mesh,cubEnrich,testVsTest);
-  double errSum = vErr + tauErr;
-  //  cout << "sqrt(errSum) = " << sqrt(errSum) << ", while vErr = " << vErr << ", and tau err = " << tauErr << endl;
-  */
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); // enrich cubature by 25 to make up for the fact that these are test order functions
 
   // check that energy error computed thru Solution and through rieszRep are the same
@@ -1124,12 +1141,124 @@ bool ScratchPadTests::testLTResidual(){
   if (!success){
     cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;    
   }
-  VTKExporter exporter(solution, mesh, varFactory);
-  exporter.exportSolution("testLTRes");
-  cout << endl;
+  //  VTKExporter exporter(solution, mesh, varFactory);
+  //  exporter.exportSolution("testLTRes");
+  //  cout << endl;
 
   return success;
 }
+
+bool ScratchPadTests::testResidualMemoryError(){
+
+  double tol = 1e-11;
+  bool success = true;
+
+  int nCells = 2;
+  double eps = 1e-2;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr robIP = Teuchos::rcp(new IP);
+  robIP->addTerm(tau);
+  robIP->addTerm(tau->div());
+  robIP->addTerm(v->grad());
+  robIP->addTerm(v);
+
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  FunctionPtr zero = Function::constant(0.0);
+  FunctionPtr one = Function::constant(1.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = zero;
+  //  FunctionPtr f = one;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new LRInflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new LROutflowSquareBoundary);
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*one);
+  bc->addDirichlet(uhat, outflowBoundary, zero);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));  
+  
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  solution->solve(false);
+  double energyErr1 = solution->energyErrorTotal();
+  cout << "energy err 1 = " << energyErr1 << endl;
+
+  LinearTermPtr residual = rhs->linearTerm(); 
+  residual->addTerm(-confusionBF->testFunctional(solution));  
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
+  rieszResidual->computeRieszRep();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+ 
+  double energyThreshold = 0.2; // for mesh refinements
+  RefinementStrategy refinementStrategy( solution, energyThreshold );  
+
+  refinementStrategy.refine();
+  solution->solve(false);
+  double energyErr2 = solution->energyErrorTotal();
+
+  // if energy error rises
+  if (energyErr1<energyErr2){
+    success = false;
+  }
+
+  return success;
+}
+
 
 std::string ScratchPadTests::testSuiteName() {
   return "ScratchPadTests";
