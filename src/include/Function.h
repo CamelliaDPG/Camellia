@@ -77,7 +77,7 @@ public:
   double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
   // adaptive quadrature
-  double integrate(Teuchos::RCP<Mesh> mesh, double tol);
+  double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
   
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   

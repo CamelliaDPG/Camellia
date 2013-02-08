@@ -299,7 +299,7 @@ double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegr
 }
 
 // added by Jesse - adaptive quadrature rules
-double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
   double integral = 0.0;
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
@@ -331,7 +331,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
       int cubEnrich = 2; // arbitrary
-      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,false,cubEnrich));
+      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,testVsTest,cubEnrich));
       vector<int> cellIDs;
       cellIDs.push_back(cellID);
       basisCache->setPhysicalCellNodes(nodes,cellIDs,true);
