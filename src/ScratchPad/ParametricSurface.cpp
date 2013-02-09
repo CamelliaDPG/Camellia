@@ -44,27 +44,60 @@ class TransfiniteInterpolatingSurface : public ParametricSurface {
   vector< ParametricCurvePtr > _curves;
   vector< pair<double, double> > _vertices;
   bool _neglectVertices; // if true, then the value returned by value() is a "bubble" value...
-public:
-  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves) {
-    _neglectVertices = false;
-    _curves = curves;
-    for (int i=0; i<curves.size(); i++) {
-      _vertices.push_back(make_pair(0,0));
-      _curves[i]->value(0, _vertices[i].first, _vertices[i].second);
+  EOperatorExtended _op;
+  
+  void init(const vector< ParametricCurvePtr > &curves, EOperatorExtended op,
+            const vector< pair<double, double> > &vertices) {
+    if ((op != OP_VALUE) && (op != OP_DX) && (op != OP_DY)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
     }
-    if (_curves.size() != 4) {
+    if (curves.size() != 4) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only quads supported for now...");
     }
-    // we assume that the curves go CCW around the element; we flip the two opposite edges
-    // so both sets of opposite edges run parallel to each other:
-    _curves[2] = ParametricCurve::reverse(_curves[2]);
-    _curves[3] = ParametricCurve::reverse(_curves[3]);
     
-    // since we keep _vertices separately, can just store bubble functions in _curves
-    _curves[0] = ParametricCurve::bubble(_curves[0]);
-    _curves[1] = ParametricCurve::bubble(_curves[1]);
-    _curves[2] = ParametricCurve::bubble(_curves[2]);
-    _curves[3] = ParametricCurve::bubble(_curves[3]);
+    _neglectVertices = false;
+    _curves = curves;
+    _op = op;
+    
+    if (vertices.size() > 0) {
+      _vertices = vertices;
+    } else {
+      for (int i=0; i<curves.size(); i++) {
+        _vertices.push_back(make_pair(0,0));
+        _curves[i]->value(0, _vertices[i].first, _vertices[i].second);
+      }
+    }
+    if (op==OP_VALUE) {
+      // if op is not OP_VALUE, we assume that the functions passed in are already bubbles,
+      // and that they already run parallel to each other...
+      
+      // we assume that the curves go CCW around the element; we flip the two opposite edges
+      // so both sets of opposite edges run parallel to each other:
+      _curves[2] = ParametricCurve::reverse(_curves[2]);
+      _curves[3] = ParametricCurve::reverse(_curves[3]);
+      
+      // since we keep _vertices separately, can just store bubble functions in _curves
+      _curves[0] = ParametricCurve::bubble(_curves[0]);
+      _curves[1] = ParametricCurve::bubble(_curves[1]);
+      _curves[2] = ParametricCurve::bubble(_curves[2]);
+      _curves[3] = ParametricCurve::bubble(_curves[3]);
+    } else if (op==OP_DX) {
+      _curves[0] = _curves[0]->dt();
+      _curves[2] = _curves[2]->dt();
+    } else if (op==OP_DY) {
+      _curves[1] = _curves[1]->dt();
+      _curves[3] = _curves[3]->dt();
+    }
+  }
+protected:
+  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves, EOperatorExtended op,
+                                  const vector< pair<double, double> > &vertices) {
+    init(curves, op, vertices);
+  }
+public:
+  TransfiniteInterpolatingSurface(const vector< ParametricCurvePtr > &curves) {
+    vector< pair<double, double> > vertices;
+    init(curves,OP_VALUE,vertices);
   }
   ParametricCurvePtr edgeBubble(int edgeIndex) {
     return _curves[edgeIndex];
@@ -76,7 +109,34 @@ public:
   const vector< pair<double,double> > &vertices() {
     return _vertices;
   }
+  FunctionPtr dx() {
+    if (_op == OP_VALUE) {
+      return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DX, _vertices) );
+    } else {
+      return Function::null();
+    }
+  }
+  FunctionPtr dy() {
+    if (_op == OP_VALUE) {
+      return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DY, _vertices) );
+    } else {
+      return Function::null();
+    }
+  }
 };
+
+BasisCachePtr parametricCacheForCell(MeshPtr mesh, int cellID) {
+  shards::CellTopology cellTopo = *(mesh->getElement(cellID)->elementType()->cellTopoPtr);
+  BasisCachePtr basisCache;
+  if (cellTopo.getSideCount() == 4) {
+    int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+    int cubatureDegree = max(15,maxTestDegree*2);
+    basisCache = BasisCache::parametricQuadCache(cubatureDegree);
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only quads supported right now.");
+  }
+  return basisCache;
+}
 
 void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<double> &basisCoefficients, VectorBasisPtr basis,
                                                               MeshPtr mesh, int cellID) {
@@ -123,12 +183,13 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
     if (curves.size() != 4) {
       cout << "WARNING: have not worked out the rule for flipping or not flipping edge dofs for anything but quads.\n";
     }
+    double edgeLength = curves[edgeIndex]->linearLength();
     
 //    cout << "edgeIndex " << edgeIndex << endl;
-    
     for (int comp=0; comp<numComponents; comp++) {
       FieldContainer<double> basisCoefficients_comp;
-      curves[edgeIndex]->projectionBasedInterpolant(basisCoefficients_comp, basis1D, comp);
+      bool useH1ForEdgeInterpolant = true;
+      curves[edgeIndex]->projectionBasedInterpolant(basisCoefficients_comp, basis1D, comp, edgeLength, useH1ForEdgeInterpolant);
 //      cout << "for edge " << edgeIndex << " and comp " << comp << ", projection-based interpolant dofs:\n";
 //      cout << basisCoefficients_comp;
 ////      cout << "basis dof coords:\n" << dofCoords;
@@ -182,24 +243,27 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
   
   FunctionPtr edgeInterpolant = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolationCoefficients) );
   
-  IPPtr l2 = Teuchos::rcp( new IP );
+  IPPtr L2 = Teuchos::rcp( new IP );
   // we assume that basis is a vector HGRAD basis
   VarFactory vf;
   VarPtr v = vf.testVar("v", VECTOR_HGRAD);
-  l2->addTerm(v);
+  L2->addTerm(v);
+  
+  IPPtr H1 = Teuchos::rcp( new IP );
+  H1->addTerm(v);
+  H1->addTerm(v->grad());
   
   int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
   
-  // since we'll be integrating pairs of geometry representation functions and these are of the same
-  // order as test functions, we set up the basisCache just as we would for test space inner products...
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true); // true: testVsTest
+//  BasisCachePtr basisCache = parametricCacheForCell(mesh, cellID);
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
   
 //  cout << "edgeInterpolationCoefficients\n" << edgeInterpolationCoefficients;
   
   
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, l2, v, edgeNodeFieldIndices);
+  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeNodeFieldIndices);
   
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together
@@ -215,17 +279,39 @@ void TransfiniteInterpolatingSurface::value(double t1, double t2, double &x, dou
     double x0, y0, x2, y2;
     _curves[0]->value(t1, x0,y0);
     _curves[2]->value(t1, x2,y2);
+
     double x1, y1, x3, y3;
     _curves[1]->value(t2, x1,y1);
     _curves[3]->value(t2, x3,y3);
-    x = x0*(1-t2) + x1 * t1 + x2*t2 + x3*(1-t1);
-    y = y0*(1-t2) + y1 * t1 + y2*t2 + y3*(1-t1);
+
+    if (_op == OP_VALUE) {
+      x = x0*(1-t2) + x1 * t1 + x2*t2 + x3*(1-t1);
+      y = y0*(1-t2) + y1 * t1 + y2*t2 + y3*(1-t1);
+    } else if (_op == OP_DX) {
+      x = x0*(1-t2) + x1 + x2*t2 - x3;
+      y = y0*(1-t2) + y1 + y2*t2 - y3;
+    } else if (_op == OP_DY) {
+      x = -x0 + x1 * t1 + x2 + x3*(1-t1);
+      y = -y0 + y1 * t1 + y2 + y3*(1-t1);
+    }
     
     if (! _neglectVertices) {
-      x += _vertices[0].first*(1-t1)*(1-t2) + _vertices[1].first*   t1 *(1-t2)
-         + _vertices[2].first*   t1*    t2  + _vertices[3].first*(1-t1)*   t2;
-      y += _vertices[0].second*(1-t1)*(1-t2) + _vertices[1].second*   t1 *(1-t2)
-         + _vertices[2].second*   t1*    t2  + _vertices[3].second*(1-t1)*   t2;
+      if (_op == OP_VALUE) {
+        x += _vertices[0].first*(1-t1)*(1-t2) + _vertices[1].first*   t1 *(1-t2)
+           + _vertices[2].first*   t1*    t2  + _vertices[3].first*(1-t1)*   t2;
+        y += _vertices[0].second*(1-t1)*(1-t2) + _vertices[1].second*   t1 *(1-t2)
+           + _vertices[2].second*   t1*    t2  + _vertices[3].second*(1-t1)*   t2;
+      } else if (_op == OP_DX) {
+        x += -_vertices[0].first*(1-t2) + _vertices[1].first*(1-t2)
+           + _vertices[2].first *   t2  - _vertices[3].first*   t2;
+        y += -_vertices[0].second*(1-t2) + _vertices[1].second *(1-t2)
+           + _vertices[2].second*    t2  - _vertices[3].second *   t2;
+      } else if (_op == OP_DY) {
+        x += -_vertices[0].first*(1-t1) - _vertices[1].first*   t1
+           + _vertices[2].first*    t1  + _vertices[3].first*(1-t1);
+        y += -_vertices[0].second*(1-t1) - _vertices[1].second*   t1
+           + _vertices[2].second*    t1  + _vertices[3].second*(1-t1);
+      }
     }
   } else if (_curves.size() == 3) {
     // TODO: implement this
@@ -256,27 +342,16 @@ FieldContainer<double> & ParametricSurface::parametricQuadNodes() { // for CellT
 }
 
 void ParametricSurface::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-  const FieldContainer<double>* refPoints = &(basisCache->getRefCellPoints());
-  int numPoints = refPoints->dimension(0);
-  int spaceDim = refPoints->dimension(1);
-  if (spaceDim != 2) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only 2D supported right now...");
-  }
-  FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
-  int whichCell = 0;
-  CellTools<double>::mapToPhysicalFrame(parametricPoints,*refPoints,
-                                        ParametricSurface::parametricQuadNodes(),
-                                        basisCache->cellTopology(),whichCell);
-  // this is likely only to make sense, practically speaking, for a one-cell basisCache.
-  // so we don't optimize the following to compute values on a single cell and copy to others,
-  // although that would be relatively trivial
-  int numCells = values.dimension(0);
+  const FieldContainer<double>* parametricPoints = &(basisCache->getPhysicalCubaturePoints());
+  int numCells = parametricPoints->dimension(0);
+  int numPoints = parametricPoints->dimension(1);
+  
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     double x, y;
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       double t1, t2;
-      t1 = parametricPoints(ptIndex,0);
-      t2 = parametricPoints(ptIndex,1);
+      t1 = (*parametricPoints)(cellIndex,ptIndex,0);
+      t2 = (*parametricPoints)(cellIndex,ptIndex,1);
       this->value(t1, t2, x, y);
       values(cellIndex,ptIndex,0) = x;
       values(cellIndex,ptIndex,1) = y;
