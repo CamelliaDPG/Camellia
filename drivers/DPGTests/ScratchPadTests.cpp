@@ -13,6 +13,7 @@
 #include "RieszRep.h"
 #include "TestingUtilities.h"
 #include "MeshUtilities.h"
+#include "RefinementStrategy.h"
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -25,6 +26,16 @@ public:
   }
 };
 
+class SquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
+    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
+};
+
 class InflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -32,6 +43,24 @@ public:
     bool xMatch = (abs(x) < tol);
     bool yMatch = (abs(y) < tol);
     return xMatch || yMatch;
+  }
+};
+
+class LRInflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x)<tol); // left inflow
+    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
+    return xMatch || yMatch;
+  }
+};
+class LROutflowSquareBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0)<tol);
+    return xMatch;
   }
 };
 
@@ -97,32 +126,6 @@ public:
     }
   }
 };
-
-// is zero on inflow
-class InflowCutoffFunction : public Function {
-public:
-  bool boundaryValueOnly() { 
-    return true; 
-  } 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
-    double tol = 1e-11;
-    vector<int> cellIDs = basisCache->cellIDs();
-    int numPoints = values.dimension(1);
-    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
-        double x = points(i,j,0);
-        double y = points(i,j,1);
-        values(i,j) = 1.0;
-        bool isOnInflow = (abs(y)<tol) || (abs(x)<tol) ;
-        if (isOnInflow){
-          values(i,j) = 0.0;
-        }
-      }
-    }
-  }
-};
-
 
 class PositiveX : public SpatialFilter {
 public:
@@ -253,19 +256,40 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();   
      
   setup();
-  if (testGalerkinOrthogonality()) {
+  if (testRieszIntegration()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();     
 
-  //  setup();
-  //  if (testGalerkinOrthogonalityVectorValued()) {
-  //    numTestsPassed++;
-  //  }
-  //  numTestsRun++;
-  //  teardown();     
-  
+  setup();
+  if (testLTResidualSimple()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+
+  setup();
+  if (testLTResidual()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+
+  setup();
+  if (testResidualMemoryError()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+  /*
+  setup();
+  if (testGalerkinOrthogonality()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();     
+  */
 }
 
 bool ScratchPadTests::testConstantFunctionProduct() {
@@ -650,6 +674,7 @@ map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
 }
 
 bool ScratchPadTests::testGalerkinOrthogonality(){
+
   double tol = 1e-11;
   bool success = true;
 
@@ -715,6 +740,16 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   map<int,FunctionPtr> err_rep_map;
   err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
 
+  ////////////////////   GET BOUNDARY CONDITION DATA    ///////////////////////
+
+  FieldContainer<int> bcGlobalIndices;
+  FieldContainer<double> bcGlobalValues;
+  mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()));
+  set<int> bcInds;
+  for (int i=0;i<bcGlobalIndices.dimension(0);i++){
+    bcInds.insert(bcGlobalIndices(i));
+  }
+
   ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
 
   BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
@@ -735,7 +770,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       FieldContainer<double> solnCoeffs(info.basisCardinality);
       solnCoeffs(info.basisOrdinal) = 1.0;
       solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-    }
+   } 
     //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
       
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
@@ -748,6 +783,7 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
       success = false;
     }
   }
+  FieldContainer<double> errorJumps(mesh->numGlobalDofs()); //initialized to zero
   // just test fluxes ON INTERNAL SKELETON here
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
@@ -761,39 +797,44 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
 	solnPerturbation->clear();
 	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+	// also add in BCs
+	for (int i = 0;i<bcGlobalIndices.dimension(0);i++){
+	  TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,bcGlobalValues(i),bcGlobalIndices(i));
+	}	
 
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
         FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
         double jump = gradient->integrate(mesh,10);
-        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
-          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
-          cout << dofInfoString(infoMap[globalDofIndex]);
-          success = false;
-        }
+	errorJumps(globalDofIndex) += jump;
       }
+    }
+  }
+  for (int i = 0;i<mesh->numGlobalDofs();i++){
+    if (abs(errorJumps(i))>tol){
+      cout << "Failing Galerkin orthogonality test for fluxes with diff " << errorJumps(i) << " at dof " << i << endl;
+      cout << dofInfoString(infoMap[i]);
+      success = false;
     }
   }
 
   return success;
 }
 
-
-bool ScratchPadTests::testGalerkinOrthogonalityVectorValued(){
-  double tol = 1e-5;
+// tests to make sure that the rieszNorm computed via matrices is the same as the one computed thru direct integration
+bool ScratchPadTests::testRieszIntegration(){
+  double tol = 1e-11;
   bool success = true;
 
+  int nCells = 2; 
+  double eps = .25;
+ 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
+
   // define test variables
   VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  VarPtr tau = varFactory.testVar("tau", HDIV);
   
-  vector<double> beta;
-  beta.push_back(1.0);
-  beta.push_back(1.0);
-  
-  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
@@ -801,142 +842,418 @@ bool ScratchPadTests::testGalerkinOrthogonalityVectorValued(){
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
 
-  ////////////////////   BUILD MESH   ///////////////////////
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
-  double eps = 1e-1; // should avoid robustness issues
-  FunctionPtr n = Function::normal();
-  // v terms:
+  // tau terms:
   confusionBF->addTerm(sigma1 / eps, tau->x());
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
   
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
+  confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-  // robust test norm
-  IPPtr ip = Teuchos::rcp(new IP);//confusionBF->graphNorm();
-  ip->addTerm(v);
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+
+  // just H1 projection
   ip->addTerm(v->grad());
+  ip->addTerm(v);
   ip->addTerm(tau);
   ip->addTerm(tau->div());
 
+  ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = one;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
+
+  bc->addDirichlet(uhat, squareBoundary, zero);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 1;
-  
+  int H1Order = order+1; int pToAdd = 2;
+   
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(4, confusionBF, H1Order, H1Order+pToAdd);
-  
-  ////////////////////   SOLVE   ///////////////////////
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+   
+  ////////////////////   SOLVE & REFINE   ///////////////////////
 
+  LinearTermPtr lt = Teuchos::rcp(new LinearTerm);  
+  FunctionPtr fxn = Teuchos::rcp(new Xn(1)); // fxn = x
+  lt->addTerm(fxn*v + fxn->grad()*v->grad());
+  lt->addTerm(fxn*tau->x() + fxn*tau->y() + (fxn->dx() + fxn->dy())*tau->div());
+  Teuchos::RCP<RieszRep> rieszLT = Teuchos::rcp(new RieszRep(mesh, ip, lt));
+  rieszLT->computeRieszRep();
+  double rieszNorm = rieszLT->getNorm();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszLT));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszLT));
+  map<int,FunctionPtr> repFxns;
+  repFxns[v->ID()] = e_v;
+  repFxns[tau->ID()] = e_tau;
+
+  double integratedNorm = sqrt((lt->evaluate(repFxns,false))->integrate(mesh,5,true));
+  success = abs(rieszNorm-integratedNorm)<tol;
+  if (success==false){
+    cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;    
+    return success;
+  }
+}
+
+// tests residual computation on simple convection
+bool ScratchPadTests::testLTResidualSimple(){
+  double tol = 1e-11;
+  bool success = true;
+
+  int nCells = 2; 
+ 
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // v terms:
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+
+  // choose the mesh-independent norm even though it may have BLs
+  ip->addTerm(v->grad());
+  ip->addTerm(v);
+
+  ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+
+  FunctionPtr zero = Function::constant(0.0);
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = Function::constant(1.0);
-  rhs->addTerm(f*v); 
+  FunctionPtr f = one;
+  rhs->addTerm( f * v ); 
+
+  ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr squareBoundary = Teuchos::rcp(new UnitSquareBoundary);
-  bc->addDirichlet(uhat, squareBoundary, Function::constant(0.0));
+  SpatialFilterPtr boundary = Teuchos::rcp( new InflowSquareBoundary );
+  FunctionPtr u_in = Teuchos::rcp(new Uinflow);
+  bc->addDirichlet(beta_n_u, boundary, beta*n*u_in);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+   
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+   
+  ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
-  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );  
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->solve(false);
-
-  FunctionPtr uFxn = Function::solution(u, solution);
-  FunctionPtr fnhatFxn = Function::solution(beta_n_u_minus_sigma_n,solution);
-  FunctionPtr s1Fxn = Function::solution(sigma1, solution);
-  FunctionPtr s2Fxn = Function::solution(sigma2, solution);
-  FunctionPtr uhatFxn = Function::solution(uhat,solution);
-  vector<double> e1(2),e2(2);
-  e1[0] = 1; e2[1] = 1;
-  FunctionPtr sigma = s1Fxn*e1+s2Fxn*e2;
-
-  // make residual for riesz representation function
-  LinearTermPtr residual = Teuchos::rcp(new LinearTerm);// residual 
-  FunctionPtr parity = Teuchos::rcp(new SideParityFunction);
-  residual->addTerm(fnhatFxn*v - uFxn*(beta*v->grad()) + sigma*v->grad() - f*v);
-  residual->addTerm(uhatFxn*tau->dot_normal() + (1/eps)*sigma*tau + uFxn*tau->div());
-  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(mesh, ip, residual));
-  riesz->computeRieszRep();
-  map<int,FunctionPtr> err_rep_map;
-  err_rep_map[v->ID()] = Teuchos::rcp(new RepFunction(v,riesz));
-  //  err_rep_map[tau->ID()] = Teuchos::rcp(new RepFunction(tau,riesz));
-
-  ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
-
-  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
-  SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
-
-  map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
+  double energyError = solution->energyErrorTotal();
   
-  for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
-       mapIt != infoMap.end(); mapIt++) {
-    int dofIndex = mapIt->first;
-    vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
-    // create perturbation in direction du
-    solnPerturbation->clear(); // clear all solns
-    // set each corresponding local dof to 1.0
-    for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
-         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
-      DofInfo info = *dofInfoIt;
-      FieldContainer<double> solnCoeffs(info.basisCardinality);
-      solnCoeffs(info.basisOrdinal) = 1.0;
-      solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-    }
-      
-    LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
-    FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
-    double grad = gradient->integrate(mesh);
-    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
-      cout << "Failed testGalerkinOrthogonalityVectorValued() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
-      cout << dofInfoString(infoMap[dofIndex]);
-      success = false;
-    }
+  LinearTermPtr residual = rhs->linearTerm();
+  residual->addTerm(-confusionBF->testFunctional(solution),true); 
+
+  Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  rieszResidual->computeRieszRep();
+  double energyErrorLT = rieszResidual->getNorm();
+
+  int cubEnrich = 0; bool testVsTest = true;
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  map<int,FunctionPtr> errFxns;
+  errFxns[v->ID()] = e_v;
+  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
+  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); 
+  // check that energy error computed thru Solution and through rieszRep are the same  
+  success = abs(energyError-energyErrorLT)<tol;
+  if (success==false){
+    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;    
+    return success;
   }
-  // just test fluxes ON INTERNAL SKELETON here
-  vector<ElementPtr> elems = mesh->activeElements();
-  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){  
-    for (int sideIndex = 0;sideIndex < 4;sideIndex++){
-      ElementPtr elem = *elemIt;
-      ElementTypePtr elemType = elem->elementType();
-      vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u_minus_sigma_n->ID(), sideIndex);
-      for (int i = 0;i<localDofIndices.size();i++){
-        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
-        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+  // checks that matrix-computed and integrated errors are the same
+  success = abs(energyErrorLT-energyErrorIntegrated)<tol;
+  if (success==false){
+    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
+    return success;
+  }
 
-	solnPerturbation->clear();
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+}
 
-        LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
-        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // boundary part only if flux
-        double jump = gradient->integrate(mesh);
-        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
-          cout << "Failing Galerkin orthogonality test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
-          cout << dofInfoString(infoMap[globalDofIndex]);
-          success = false;
-        }
-      }
-      localDofIndices = elemType->trialOrderPtr->getDofIndices(uhat->ID(), sideIndex);
-      for (int i = 0;i<localDofIndices.size();i++){
-        int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
-        vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
+// tests to make sure the energy error calculated thru direct integration works for vector valued test functions too
+bool ScratchPadTests::testLTResidual(){
+  double tol = 1e-11;
+  bool success = true;
 
-	solnPerturbation->clear();
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);	
+  int nCells = 2; 
+  double eps = .1;
+ 
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
 
-        LinearTermPtr b_du =  confusionBF->testFunctional(solnPerturbation);
-        FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // boundary part only if flux
-        double jump = gradient->integrate(mesh);
-        if (abs(jump)>tol && !mesh->boundary().boundaryElement((*elemIt)->cellID(),sideIndex)){
-          cout << "Failing Galerkin orthogonality vector valued test for fluxes with diff " << jump << " at dof " << globalDofIndex << "; info:" << endl;
-          cout << dofInfoString(infoMap[globalDofIndex]);
-          success = false;
-        }
-      }
-    }
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+
+  // choose the mesh-independent norm even though it may have BLs
+  ip->addTerm(v->grad());
+  ip->addTerm(v);
+  ip->addTerm(tau);
+  ip->addTerm(tau->div());
+
+  ////////////////////   SPECIFY RHS AND HELPFUL FUNCTIONS   ///////////////////////
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
+
+  FunctionPtr zero = Function::constant(0.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = one;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr squareBoundary = Teuchos::rcp( new SquareBoundary );
+
+  bc->addDirichlet(uhat, squareBoundary, zero);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+   
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+   
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  solution->solve(false);
+  double energyError = solution->energyErrorTotal();
+ 
+  LinearTermPtr residual = rhs->linearTerm();
+  residual->addTerm(-confusionBF->testFunctional(solution),true); 
+
+  FunctionPtr uh = Function::solution(uhat,solution);
+  FunctionPtr fn = Function::solution(beta_n_u_minus_sigma_n,solution);
+  FunctionPtr uF = Function::solution(u,solution);
+  FunctionPtr sigma = e1*Function::solution(sigma1,solution)+e2*Function::solution(sigma2,solution);  
+  //  residual->addTerm(- (fn*v - uh*tau->dot_normal()));
+  //  residual->addTerm(- (uF*(tau->div() - beta*v->grad()) + sigma*((1/eps)*tau + v->grad())));
+  //  residual->addTerm(-(fn*v - uF*beta*v->grad() + sigma*v->grad())); // just v portion 
+  //  residual->addTerm(uh*tau->dot_normal() - uF*tau->div() - sigma*((1/eps)*tau)); // just tau portion
+
+  Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  rieszResidual->computeRieszRep();
+  double energyErrorLT = rieszResidual->getNorm();
+
+  int cubEnrich = 5; bool testVsTest = true;
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+  map<int,FunctionPtr> errFxns;
+  errFxns[v->ID()] = e_v;
+  errFxns[tau->ID()] = e_tau;
+  FunctionPtr err = (ip->evaluate(errFxns,false))->evaluate(errFxns,false); // don't need boundary terms unless they're in IP
+  double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest)); // enrich cubature by 25 to make up for the fact that these are test order functions
+
+  // check that energy error computed thru Solution and through rieszRep are the same
+  bool success1 = abs(energyError-energyErrorLT)<tol; 
+  // checks that matrix-computed and integrated errors are the same
+  bool success2 = abs(energyErrorLT-energyErrorIntegrated)<tol;
+  success = success1==true && success2==true;
+  if (!success){
+    cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;    
+  }
+  //  VTKExporter exporter(solution, mesh, varFactory);
+  //  exporter.exportSolution("testLTRes");
+  //  cout << endl;
+
+  return success;
+}
+
+bool ScratchPadTests::testResidualMemoryError(){
+
+  double tol = 1e-11;
+  bool success = true;
+
+  int nCells = 2;
+  double eps = 1e-2;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr robIP = Teuchos::rcp(new IP);
+  robIP->addTerm(tau);
+  robIP->addTerm(tau->div());
+  robIP->addTerm(v->grad());
+  robIP->addTerm(v);
+
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  FunctionPtr zero = Function::constant(0.0);
+  FunctionPtr one = Function::constant(1.0);
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = zero;
+  //  FunctionPtr f = one;
+  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+
+  ////////////////////   CREATE BCs   ///////////////////////
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new LRInflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new LROutflowSquareBoundary);
+
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*one);
+  bc->addDirichlet(uhat, outflowBoundary, zero);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int order = 2;
+  int H1Order = order+1; int pToAdd = 2;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));  
+  
+  ////////////////////   SOLVE & REFINE   ///////////////////////
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  solution->solve(false);
+  double energyErr1 = solution->energyErrorTotal();
+  cout << "energy err 1 = " << energyErr1 << endl;
+
+  LinearTermPtr residual = rhs->linearTerm(); 
+  residual->addTerm(-confusionBF->testFunctional(solution));  
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
+  rieszResidual->computeRieszRep();
+  FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
+  FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
+ 
+  double energyThreshold = 0.2; // for mesh refinements
+  RefinementStrategy refinementStrategy( solution, energyThreshold );  
+
+  refinementStrategy.refine();
+  solution->solve(false);
+  double energyErr2 = solution->energyErrorTotal();
+
+  // if energy error rises
+  if (energyErr1<energyErr2){
+    success = false;
   }
 
   return success;

@@ -55,14 +55,9 @@ map<int,FieldContainer<double> > RieszRep::integrateRHS(){
     ElementTypePtr elemTypePtr = elem->elementType();   
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
-    vector<int> cellIDs;
-    cellIDs.push_back(cellID); // just do one cell at a time
-
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
-
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // create side cache if ip has boundary values 
+    int cubEnrich = 5; // set to zero for release
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);
@@ -100,13 +95,9 @@ void RieszRep::computeRieszRep(){
     ElementTypePtr elemTypePtr = elem->elementType();   
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
-    vector<int> cellIDs;
-    cellIDs.push_back(cellID); // just do one cell at a time
-
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, true));
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs, true); // create side cache if ip has boundary values 
+    int cubEnrich = 5; // set to zero for release
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);

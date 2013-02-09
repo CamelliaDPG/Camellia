@@ -302,13 +302,13 @@ double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegr
 }
 
 // added by Jesse - adaptive quadrature rules
-double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
   double integral = 0.0;
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
   vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
 
-  // build list of subcells
+  // build initial list of subcells = all elements
   vector<CacheInfo> subCellCacheInfo;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
@@ -320,9 +320,13 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
   // adaptively refine
   bool allConverged = false;
   vector<CacheInfo> subCellsToCheck = subCellCacheInfo;
-  while (!allConverged){
+  int iter = 0;
+  int maxIter = 1000; // arbitrary
+  while (!allConverged && iter < maxIter){    
     allConverged = true;
+    ++iter;
     // check relative error, tag subcells to refine
+    double tempIntegral = 0.0;
     set<int> subCellsToRefine;    
     for (int i = 0;i<subCellsToCheck.size();i++){
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
@@ -330,7 +334,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
       int cubEnrich = 2; // arbitrary
-      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,false,cubEnrich));
+      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,testVsTest,cubEnrich));
       vector<int> cellIDs;
       cellIDs.push_back(cellID);
       basisCache->setPhysicalCellNodes(nodes,cellIDs,true);
@@ -340,14 +344,20 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
       this->integrate(cellIntegral,basisCache);
       this->integrate(enrichedCellIntegral,enrichedCache);
-      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(cellIntegral(0)); // relative error
+      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error      
       if (error > tol){
         allConverged = false;
         subCellsToRefine.insert(i);
+	tempIntegral += enrichedCellIntegral(0);
       }else{
-        integral += enrichedCellIntegral(0);
+	integral += enrichedCellIntegral(0);
       }
     }
+    if (iter == maxIter){
+      integral += tempIntegral;
+      cout << "maxIter reached for adaptive quadrature, returning integral estimate." << endl;
+    }
+    //    cout << "on iter " << iter << " with tempIntegral = " << tempIntegral << " and currrent integral = " << integral << " and " << subCellsToRefine.size() << " subcells to go. Allconverged =  " << allConverged << endl;
 
     // reconstruct subcell list
     vector<CacheInfo> newSubCells;
@@ -501,7 +511,7 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest) {
   double integral = 0;
   
   // TODO: rewrite this to compute in distributed fashion
@@ -510,7 +520,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false, cubatureDegreeEnrichment) ); // all elements of same type
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
     vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType); // TODO: replace with local variant
 
     int numCells = cells.size();

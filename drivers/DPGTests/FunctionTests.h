@@ -55,6 +55,8 @@ public:
   bool testQuotientRule();
 
   bool testIntegrate();
+
+  bool testAdaptiveIntegrate();
   
   bool testJumpIntegral();
 
