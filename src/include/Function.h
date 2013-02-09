@@ -30,6 +30,7 @@ private:
   enum FunctionModificationType{ MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
 protected:
   int _rank;
+  string _displayString; // this is here mostly for identifying functions in the debugger
   void CHECK_VALUES_RANK(FieldContainer<double> &values); // throws exception on bad values rank
 public:
   Function();

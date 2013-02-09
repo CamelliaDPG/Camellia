@@ -89,9 +89,11 @@ public:
 
 Function::Function() {
   _rank = 0;
+  _displayString = this->displayString();
 }
 Function::Function(int rank) { 
-  _rank = rank; 
+  _rank = rank;
+  _displayString = this->displayString();
 }
 
 string Function::displayString() {
@@ -275,6 +277,7 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   FieldContainer<double> myValues(dim);
   this->values(myValues,basisCache);
   for (int i=0; i<myValues.size(); i++) {
+    //cout << "otherValue = " << valuesToAddTo[i] << "; myValue = " << myValues[i] << endl;
     valuesToAddTo[i] += myValues[i];
   }
 }
@@ -439,6 +442,7 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   if ( !sumInto ) {
     cellIntegrals.initialize(0);
   }
+
   FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -610,7 +614,8 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
       
       for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
         *value += *myValue * *otherValue;
-        myValue++; 
+//        cout << "myValue: " << *myValue << "; otherValue: " << *otherValue << endl;
+        myValue++;
         otherValue++;
       }
     }
@@ -1595,10 +1600,14 @@ FunctionPtr VectorizedFunction::dz() {
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
-  if ( f1->rank() == f2->rank() ) {
-    // TODO: work out how to do this for other ranks?
-    if (f1->isZero() || f2->isZero()) {
+  if (f1->isZero() || f2->isZero()) {
+    if ( f1->rank() == f2->rank() ) {
       return Function::zero();
+    } else if ((f1->rank() == 0) || (f2->rank() == 0)) {
+      int result_rank = f1->rank() + f2->rank();
+      return Function::zero(result_rank);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
     }
   }
   return Teuchos::rcp( new ProductFunction(f1,f2) );
