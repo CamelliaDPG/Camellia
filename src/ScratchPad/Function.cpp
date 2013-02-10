@@ -1581,8 +1581,10 @@ FunctionPtr VectorizedFunction::di(int i) {
       break;
     case 1:
       op = IntrepidExtendedTypes::OP_DY;
+      break;
     case 2:
       op = IntrepidExtendedTypes::OP_DZ;
+      break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
       break;
