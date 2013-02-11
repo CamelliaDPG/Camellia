@@ -954,8 +954,8 @@ bool LinearTermTests::testRieszInversion() {
   rieszOrigFxn->values(valOriginal,basisCache);
   rieszIBPFxn->values(valIBP,basisCache);
 
-  double maxDiff,maxDiff1,maxDiff2;
-  double tol = 1e-15;
+  double maxDiff;
+  double tol = 1e-14;
   success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
 
   if (success==false){
