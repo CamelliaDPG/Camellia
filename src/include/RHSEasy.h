@@ -26,7 +26,8 @@ public:
                                      Teuchos::RCP<DofOrdering> testOrdering, 
                                      BasisCachePtr basisCache);
   
-  LinearTermPtr linearTerm();
+  LinearTermPtr linearTerm(); // MUTABLE reference (change this, RHS will change!)
+  LinearTermPtr linearTermCopy(); // copy of RHS as a LinearTerm
 };
 
 #endif
