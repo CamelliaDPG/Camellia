@@ -13,7 +13,9 @@
 #include "RieszRep.h"
 #include "TestingUtilities.h"
 #include "MeshUtilities.h"
+#include "MeshFactory.h"
 #include "RefinementStrategy.h"
+
 
 class UnitSquareBoundary : public SpatialFilter {
 public:
@@ -921,6 +923,7 @@ bool ScratchPadTests::testRieszIntegration(){
     cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;    
     return success;
   }
+  return success;
 }
 
 // tests residual computation on simple convection
@@ -928,7 +931,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   double tol = 1e-11;
   bool success = true;
 
-  int nCells = 2; 
+  int nCells = 2;
  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
 
@@ -994,7 +997,7 @@ bool ScratchPadTests::testLTResidualSimple(){
   solution->solve(false);
   double energyError = solution->energyErrorTotal();
   
-  LinearTermPtr residual = rhs->linearTerm();
+  LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-confusionBF->testFunctional(solution),true); 
 
   Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
@@ -1019,7 +1022,7 @@ bool ScratchPadTests::testLTResidualSimple(){
     cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
     return success;
   }
-
+  return success;
 }
 
 // tests to make sure the energy error calculated thru direct integration works for vector valued test functions too
@@ -1108,7 +1111,7 @@ bool ScratchPadTests::testLTResidual(){
   solution->solve(false);
   double energyError = solution->energyErrorTotal();
  
-  LinearTermPtr residual = rhs->linearTerm();
+  LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-confusionBF->testFunctional(solution),true); 
 
   FunctionPtr uh = Function::solution(uhat,solution);
@@ -1237,7 +1240,7 @@ bool ScratchPadTests::testResidualMemoryError(){
   mesh->registerSolution(solution);
   double energyErr1 = solution->energyErrorTotal();
 
-  LinearTermPtr residual = rhs->linearTerm(); 
+  LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-confusionBF->testFunctional(solution));  
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   rieszResidual->computeRieszRep();
