@@ -1234,8 +1234,8 @@ bool ScratchPadTests::testResidualMemoryError(){
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   solution->solve(false);
+  mesh->registerSolution(solution);
   double energyErr1 = solution->energyErrorTotal();
-  cout << "energy err 1 = " << energyErr1 << endl;
 
   LinearTermPtr residual = rhs->linearTerm(); 
   residual->addTerm(-confusionBF->testFunctional(solution));  
@@ -1252,7 +1252,8 @@ bool ScratchPadTests::testResidualMemoryError(){
   double energyErr2 = solution->energyErrorTotal();
 
   // if energy error rises
-  if (energyErr1<energyErr2){
+  if (energyErr1 < energyErr2) {
+    cout << "energy error increased from " << energyErr1 << " to " << energyErr2 << " after refinement.\n";
     success = false;
   }
 
