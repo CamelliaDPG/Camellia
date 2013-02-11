@@ -63,23 +63,19 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
 //  cout << "ipVector:\n" << ipVector;
   
   map<int,int> oldToNewIndices;
-  map<int,int> newToOldIndices;
   if (fieldIndicesToSkip.size() > 0) {
     // the code to do with fieldIndicesToSkip might not be terribly efficient...
     // (but it's not likely to be called too frequently)
     int i_indices_skipped = 0;
     for (int i=0; i<cardinality; i++) {
-      int new_value;
+      int new_index;
       if (fieldIndicesToSkip.find(i) != fieldIndicesToSkip.end()) {
         i_indices_skipped++;
-        new_value = -1;
+        new_index = -1;
       } else {
-        new_value = i - i_indices_skipped;
+        new_index = i - i_indices_skipped;
       }
-      oldToNewIndices[i] = new_value;
-      if (new_value != -1) {
-        newToOldIndices[new_value] = i;
-      }
+      oldToNewIndices[i] = new_index;
     }
     
     FieldContainer<double> gramMatrixFiltered(numCells,numDofs,numDofs);
@@ -109,7 +105,6 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     ipVector = ipVectorFiltered;
   }
   
-  basisCoefficients.resize(numCells,cardinality);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++){
     
     // TODO: rewrite to take advantage of SerialDenseWrapper...
@@ -124,22 +119,6 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
     Epetra_SerialDenseVector b(Copy,
                                &ipVector(cellIndex,0),
                                ipVector.dimension(1));
-    
-//    if (cellIndex==0) {
-//      cout << "new projectFunctionOntoBasis: matrix A for cellIndex 0 = " << endl;
-//      for (int i=0;i<gramMatrix.dimension(2);i++){
-//        for (int j=0;j<gramMatrix.dimension(1);j++){
-//          cout << A(i,j) << " ";
-//        }
-//        cout << endl;
-//      }
-//      cout << endl;
-//      
-//      cout << "new projectFunctionOntoBasis: vector B for cellIndex 0 = " << endl << endl;
-//      for (int i=0;i<ipVector.dimension(1);i++){
-//        cout << b(i) << endl;
-//      }
-//    }
     
     Epetra_SerialDenseVector x(gramMatrix.dimension(1));
     
@@ -168,6 +147,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
       }
     }
     
+    basisCoefficients.resize(numCells,cardinality);
     for (int i=0;i<cardinality;i++) {
       if (fieldIndicesToSkip.size()==0) {
         basisCoefficients(cellIndex,i) = x(i);

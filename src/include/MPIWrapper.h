@@ -28,6 +28,8 @@ public:
   static void allGather(FieldContainer<int> &allValues, int myValue);
   static void allGather(FieldContainer<int> &values, FieldContainer<int> &myValues);
   
+  static int rank();
+  
   static void entryWiseSum(FieldContainer<double> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)

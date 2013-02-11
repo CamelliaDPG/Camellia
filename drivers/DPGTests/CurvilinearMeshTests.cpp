@@ -11,9 +11,11 @@
 #include "MeshFactory.h"
 #include "Mesh.h"
 #include "Function.h"
+#include "BasisSumFunction.h"
 
 #include "GnuPlotUtil.h"
 
+#include "ParametricSurface.h"
 #include "StokesFormulation.h"
 
 const static double PI  = 3.141592653589793238462;
@@ -27,6 +29,20 @@ void CurvilinearMeshTests::teardown() {
 }
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testH1Projection()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testTransformationJacobian()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testEdgeLength()) {
     numTestsPassed++;
@@ -236,7 +252,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   Edge edge2 = make_pair(3,1); // top
   Edge edge3 = make_pair(1,0); // left
   
-  // for now, instead of going for a full circle, just replace one edge
+  // the full circle, split into 4 edges:
   edgeToCurveMap[edge0] = ParametricCurve::subCurve(circle,  5.0/8.0, 7.0/8.0);
   edgeToCurveMap[edge1] = ParametricCurve::subCurve(circle, -1.0/8.0, 1.0/8.0);
   edgeToCurveMap[edge2] = ParametricCurve::subCurve(circle,  1.0/8.0, 3.0/8.0);
@@ -382,4 +398,322 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
 
 std::string CurvilinearMeshTests::testSuiteName() {
   return "CurvilinearMeshTests";
+}
+
+
+bool CurvilinearMeshTests::testH1Projection() {
+  bool success = true;
+
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  
+  BasisPtr quadraticScalarBasis = BasisFactory::getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr quadraticVectorBasis = BasisFactory::getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  
+  set<int> scalarEdgeNodes = BasisFactory::sideFieldIndices(quadraticScalarBasis);
+  set<int> vectorEdgeNodes = BasisFactory::sideFieldIndices(quadraticVectorBasis);
+  
+  FunctionPtr one = Function::constant(1);
+  
+  // TODO: work out a test that will compare projector of scalar versus vector basis and confirm that vector behaves as expected...
+  
+  double width = 2;
+  double height = 2;
+  
+  // the transfinite interpolant in physical space should be just (x, y)
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr tfi = Function::vectorize(x, y);
+  
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+
+  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
+  
+
+  VarFactory varFactory;
+  VarPtr v = varFactory.testVar("v", VECTOR_HGRAD);
+  IPPtr ip = Teuchos::rcp( new IP );
+  ip->addTerm(v);
+  ip->addTerm(v->grad());
+  
+  for (int H1Order=1; H1Order<5; H1Order++) {
+    MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+    int cellID = 0; // the only cell
+    bool testVsTest = true;
+    
+    BasisPtr basis = BasisFactory::getBasis(H1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    
+    int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
+    
+    FieldContainer<double> basisCoefficients;
+    Projector::projectFunctionOntoBasis(basisCoefficients, tfi, basis, basisCache, ip, v);
+
+    // flatten basisCoefficients (remove the numCells dimension, which is 1)
+    basisCoefficients.resize(basisCoefficients.size());
+    FunctionPtr projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+    
+    double tol=1e-13;
+    if (! projectedFunction->equals(tfi, basisCache, tol) ) {
+      success = false;
+      cout << "For H1Order " << H1Order << ", ";
+      cout << "H^1-projected function does not match original, even though original is in the space.\n";
+      
+      int numCells = 1;
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int spaceDim = 2;
+      FieldContainer<double> values(numCells,numPoints,spaceDim);
+      FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+      tfi->values(expected_values, basisCache);
+      projectedFunction->values(values, basisCache);
+      reportFunctionValueDifferences(basisCache->getPhysicalCubaturePoints(), expected_values,
+                                     values, tol);
+    }
+
+    VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+
+    // For H1Order > 1, we don't expect that the edge interpolant will match the TFI on the element interior; we expect that only on the edges.
+
+    vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
+    ParametricSurfacePtr exactSurface = ParametricSurface::transfiniteInterpolant(curves);
+    int numEdges = curves.size();
+    
+    FieldContainer<double> edgeInterpolantCoefficients;
+    ParametricSurface::basisWeightsForEdgeInterpolant(edgeInterpolantCoefficients, vectorBasis, mesh, cellID);
+    edgeInterpolantCoefficients.resize(edgeInterpolantCoefficients.size());
+    
+    // check that the only nonzeros in edgeInterpolantCoefficients belong to edges
+    set<int> edgeFieldIndices = BasisFactory::sideFieldIndices(vectorBasis, true); // true: include the vertices
+    for (int i=0; i<edgeInterpolantCoefficients.size(); i++) {
+      if (edgeInterpolantCoefficients(i) != 0) {
+        if (edgeFieldIndices.find(i) == edgeFieldIndices.end()) {
+          // then we have a nonzero weight for a non-edge field index
+          cout << "edgeInterpolationCoefficients(" << i << ") = " << edgeInterpolantCoefficients(i);
+          cout << ", but " << i << " is not an edge field index.\n";
+          success = false;
+        }
+      }
+    }
+    
+    // check that the edgeFieldIndices all belong to basis functions that are non-zero on some edge
+    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++) {
+      int fieldIndex = *edgeFieldIt;
+      FieldContainer<double> edgeBasisFunctionWeights(basis->getCardinality());
+      edgeBasisFunctionWeights[fieldIndex] = 1.0;
+      bool nonZeroSomewhere = false;
+      
+      FunctionPtr edgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, edgeBasisFunctionWeights);
+      int basisRank = BasisFactory::getBasisRank(basis);
+      
+      for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
+        if (! edgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) ) {
+          nonZeroSomewhere = true;
+          break;
+        }
+      }
+
+      if (! nonZeroSomewhere ) {
+        success = false;
+        cout << "Field index " << fieldIndex << " is supposed to be an edge field index, but is zero on all edges.\n";
+      }
+    }
+
+    // check that all the non-edgeFieldIndices are zero on all edges
+    for (int fieldIndex=0; fieldIndex < basis->getCardinality(); fieldIndex++) {
+      if (edgeFieldIndices.find(fieldIndex) != edgeFieldIndices.end()) {
+        // edge field index: skip
+        continue;
+      }
+      FieldContainer<double> nonEdgeBasisFunctionWeights(basis->getCardinality());
+      nonEdgeBasisFunctionWeights[fieldIndex] = 1.0;
+      
+      FunctionPtr nonEdgeBasisFunction = NewBasisSumFunction::basisSumFunction(basis, nonEdgeBasisFunctionWeights);
+      int basisRank = BasisFactory::getBasisRank(basis);
+      
+      for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+        BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
+        if (! nonEdgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) ) {
+          success = false;
+          cout << "Field index " << fieldIndex << " is not supposed to be an edge field index, but is non-zero on edge " << sideIndex << ".\n";
+        }
+      }
+    }
+    
+    FunctionPtr edgeFunction = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolantCoefficients) );
+//    
+//    VarFactory vf;
+//    VarPtr v = vf.testVar("v", VECTOR_HGRAD);
+//    IPPtr ip = Teuchos::rcp(new IP);
+//    ip->addTerm(v->grad());
+//    
+//    Projector::projectFunctionOntoBasis(…)
+    
+    for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+      BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
+      if (! edgeFunction->equals(tfi, sideCache, tol) ) {
+        success = false;
+        cout << "For H1Order " << H1Order << ", ";
+        cout << "edge interpolation function does not match original, even though original is in the space.\n";
+        
+        int numCells = 1;
+        int numPoints = sideCache->getRefCellPoints().dimension(0);
+        int spaceDim = 2;
+        FieldContainer<double> values(numCells,numPoints,spaceDim);
+        FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+        tfi->values(expected_values, sideCache);
+        edgeFunction->values(values, sideCache);
+        reportFunctionValueDifferences(sideCache->getPhysicalCubaturePoints(), expected_values,
+                                       values, tol);
+      }
+      
+      // now, it should be the case that the transfinite interpolant (exactSurface) is exactly the same as the edgeFunction
+      // along the edges
+      if (! edgeFunction->equals(exactSurface, sideCache, tol) ) {
+        success = false;
+        cout << "For H1Order " << H1Order << ", ";
+        cout << "edge interpolation function does not match exactSurface, even though original is in the space.\n";
+        
+        int numCells = 1;
+        int numPoints = sideCache->getRefCellPoints().dimension(0);
+        int spaceDim = 2;
+        FieldContainer<double> values(numCells,numPoints,spaceDim);
+        FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+        edgeFunction->values(expected_values, sideCache);
+        exactSurface->values(values, sideCache);
+        reportFunctionValueDifferences(sideCache->getPhysicalCubaturePoints(), expected_values,
+                                       values, tol);
+      }
+    }
+  
+    ParametricSurface::basisWeightsForProjectedInterpolant(basisCoefficients, vectorBasis, mesh, cellID);
+    
+    // check that the basisCoefficients for the edge functions are the same as the edgeCoefficients above
+    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++) {
+      int fieldIndex = *edgeFieldIt;
+      if (basisCoefficients(fieldIndex) != edgeInterpolantCoefficients(fieldIndex) ) {
+        cout << "For field index " << fieldIndex << " (an edge field index), ";
+        cout << "projection-based interpolant weight is " << basisCoefficients(fieldIndex);
+        cout << ", but the edge projection weight is " << edgeInterpolantCoefficients(fieldIndex) << endl;
+        success = false;
+      }
+    }
+    
+    projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
+
+    if (! projectedFunction->equals(tfi, basisCache, tol) ) {
+      success = false;
+      cout << "For H1Order " << H1Order << ", ";
+      cout << "projection-based interpolation function does not match original, even though original is in the space.\n";
+      
+      int numCells = 1;
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int spaceDim = 2;
+      FieldContainer<double> values(numCells,numPoints,spaceDim);
+      FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+      tfi->values(expected_values, basisCache);
+      projectedFunction->values(values, basisCache);
+      reportFunctionValueDifferences(basisCache->getPhysicalCubaturePoints(), expected_values,
+                                     values, tol);
+    }
+    
+  }
+  
+  return success;
+}
+
+bool CurvilinearMeshTests::testTransformationJacobian() {
+  bool success = true;
+  
+  double width = 4.0;
+  double height = 3.0;
+  
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+    
+  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
+  
+  // make a single-element mesh:
+  int H1Order = 1;
+  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+  
+  double tol = 1e-13;
+  
+  for (int i=0; i<4; i++) {
+    H1Order = i+1;
+    mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+    int cellID = 0; // the only cell
+    
+    // add to cubature just as we'll need to do for the 'curvilinear' mesh
+    int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+    
+    // compute jacobians:
+    bool testVsTest = false;
+    BasisCachePtr standardMeshCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
+    
+    // now, set curves for each edge:
+    map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
+    
+    vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
+    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    
+    for (int i=0; i<vertices.size(); i++) {
+      int vertex = vertices[i];
+      int nextVertex = vertices[(i+1) % vertices.size()];
+      pair< int, int > edge = make_pair(vertex,nextVertex);
+      edgeToCurveMap[edge] = lines[i];
+    }
+    
+    mesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    BasisCachePtr curvilinearMeshCache = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    int numSides = mesh->getElement(cellID)->numSides();
+    for (int sideIndex=-1; sideIndex<numSides; sideIndex++) {
+      BasisCachePtr standardCache, curvilinearCache;
+      
+      if (sideIndex < 0) {
+        standardCache = standardMeshCache;
+        curvilinearCache = curvilinearMeshCache;
+      } else {
+        standardCache = standardMeshCache->getSideBasisCache(sideIndex);
+        curvilinearCache = curvilinearMeshCache->getSideBasisCache(sideIndex);
+      }
+      // check that jacobians are equal
+      double maxDiff = 0;
+      if (!fcsAgree(standardCache->getJacobian(), curvilinearCache->getJacobian(), tol, maxDiff)) {
+        success = false;
+        cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobians disagree for k=" << H1Order;
+        cout << " and sideIndex " << sideIndex;
+        if (maxDiff > 0) {
+          cout << ", maxDiff " << maxDiff << endl;
+        } else {
+          cout << "; sizes differ: standard has " << standardCache->getJacobian().size();
+          cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobian().size() << endl;
+        }
+      }
+      if (!fcsAgree(standardCache->getJacobianDet(), curvilinearCache->getJacobianDet(), tol, maxDiff)) {
+        success = false;
+        cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobian determinants disagree for k=" << H1Order;
+        cout << " and sideIndex " << sideIndex;
+        if (maxDiff > 0) {
+          cout << ", maxDiff " << maxDiff << endl;
+        } else {
+          cout << "; sizes differ: standard has " << standardCache->getJacobianDet().size();
+          cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobianDet().size() << endl;
+        }
+      }
+      if (!fcsAgree(standardCache->getJacobianInv(), curvilinearCache->getJacobianInv(), tol, maxDiff)) {
+        success = false;
+        cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobian inverses disagree for k=" << H1Order;
+        cout << " and sideIndex " << sideIndex;
+        if (maxDiff > 0) {
+          cout << ", maxDiff " << maxDiff << endl;
+        } else {
+          cout << "; sizes differ: standard has " << standardCache->getJacobianInv().size();
+          cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobianInv().size() << endl;
+        }
+      }
+    }
+  }
+  
+  return success;
 }

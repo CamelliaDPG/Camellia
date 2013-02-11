@@ -51,17 +51,6 @@ using namespace Intrepid;
 using namespace std;
 using namespace IntrepidExtendedTypes;
 
-/*
- NOTES on what needs to be done to support arbitrary CellTopology (e.g. curvilinear elements):
- Basically, we need to remove the dependence in BasisFactor on cellTopoKeys, and replace that with CellTopology pointers.
- In order to allow optimal reuse, we'll then have to implement a CellTopologyFactory that makes sure that the pointers to
- a particular CellTopology are the same.
- 
- Actually, it occurs to me that we can isolate many of the changes to current code to BasisFactory: for calls involving the
- cellTopoKeys, we simply use this to call the appropriate CellTopologyFactory method to get the pointer to the right CellTopology.
- 
- */
-
 typedef Teuchos::RCP< Basis<double,FieldContainer<double> > > BasisPtr;
 typedef Teuchos::RCP< MultiBasis > MultiBasisPtr;
 typedef Teuchos::RCP< PatchBasis > PatchBasisPtr;
@@ -104,6 +93,10 @@ public:
   static void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
   
   static void setUseEnrichedTraces( bool value );
+  
+  // the following convenience methods belong in Basis or perhaps a wrapper thereof
+  static set<int> sideFieldIndices( BasisPtr basis, bool includeSideSubcells = true); // includeSideSubcells: e.g. include vertices as part of quad sides
+  
 };
 
 #endif

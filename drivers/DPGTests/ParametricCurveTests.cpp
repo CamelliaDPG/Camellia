@@ -9,6 +9,7 @@
 #include "ParametricCurveTests.h"
 
 #include "BasisSumFunction.h"
+#include "ParametricSurface.h"
 
 static const double PI  = 3.141592653589793238462;
 
@@ -17,6 +18,13 @@ void ParametricCurveTests::setup() {
 }
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testTransfiniteInterpolant()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testCircularArc()) {
     numTestsPassed++;
@@ -115,16 +123,24 @@ bool ParametricCurveTests::testCircularArc() {
   FunctionPtr dx_dt = (- PI / 2) * sin_part;
   FunctionPtr dy_dt = (PI / 2) * cos_part;
   
+  double arcIntegral_x = circularArc->x()->integrate(basisCache);
+  double x_t_integral = x_t->integrate(basisCache);
+  
   // check that we have the right idea for all those functions:
   if (! x_t->equals(circularArc->x(),basisCache)) {
-    cout << "expected x(0) = " << Function::evaluate(x_t,0);
-    cout << "; actual = " << Function::evaluate(circularArc->x(),0) << endl;
+    double x1_expected = Function::evaluate(x_t,1);
+    double x1_actual;
+    circularArc->xPart()->value(1,x1_actual);
+    cout << "expected x(0) = " << x1_expected;
+    cout << "; actual = " << x1_actual << endl;
     cout << "x part of circularArc doesn't match expected.\n";
     success = false;
   }
   if (! y_t->equals(circularArc->y(),basisCache)) {
-    cout << "expected y(0) = " << Function::evaluate(y_t,0);
-    cout << "; actual = " << Function::evaluate(circularArc->y(),0) << endl;
+    double y1_actual;
+    circularArc->yPart()->value(1,y1_actual);
+    cout << "expected y(1) = " << Function::evaluate(y_t,1);
+    cout << "; actual = " << y1_actual << endl;
     cout << "y part of circularArc doesn't match expected.\n";
     success = false;
   }
@@ -207,8 +223,9 @@ bool ParametricCurveTests::testCircularArc() {
   
   FieldContainer<double> basisCoefficients_x, basisCoefficients_y;
   bool useH1 = false; // just trying to diagnose whether the issue is in derivatives or values (most likely derivatives)
-  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, useH1);
-  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, useH1);
+  double lengthScale = 1.0;
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, lengthScale, useH1);
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, lengthScale, useH1);
   
   double weightError_x = abs(expected_L2_weight_x-basisCoefficients_x[middleBasisOrdinal]);
   double weightError_y = abs(expected_L2_weight_y-basisCoefficients_y[middleBasisOrdinal]);
@@ -225,8 +242,8 @@ bool ParametricCurveTests::testCircularArc() {
   }
 
   useH1 = true;
-  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, useH1);
-  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, useH1);
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, lengthScale, useH1);
+  circularArcBubble->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, lengthScale, useH1);
 
   weightError_x = abs(expected_H1_weight_x-basisCoefficients_x[middleBasisOrdinal]);
   weightError_y = abs(expected_H1_weight_y-basisCoefficients_y[middleBasisOrdinal]);
@@ -283,8 +300,8 @@ bool ParametricCurveTests::testLine() {
   
   ParametricCurvePtr unitLine = ParametricCurve::line(0, 0, 1, 0);
   ParametricCurvePtr unitLine_dt = unitLine->dt();
-  FunctionPtr unitLine_x = unitLine->x(); // x=t
-  FunctionPtr unitLine_y = unitLine->y(); // 0
+  ParametricFunctionPtr unitLine_x = unitLine->xPart(); // x=t
+  ParametricFunctionPtr unitLine_y = unitLine->yPart(); // 0
   
   vector<double> t_values;
   t_values.push_back(0);
@@ -295,7 +312,8 @@ bool ParametricCurveTests::testLine() {
   double tol=1e-14;
   for (int i=0; i<t_values.size(); i++) {
     double t = t_values[i];
-    double x = Function::evaluate(unitLine_x, t);
+    double x;
+    unitLine_x->value(t, x);
     double expected = t;
     if (abs(x-expected)>tol) {
       cout << "testLine(): unitLine_x differs from expected value.\n";
@@ -303,9 +321,10 @@ bool ParametricCurveTests::testLine() {
   }
   for (int i=0; i<t_values.size(); i++) {
     double t = t_values[i];
-    double x = Function::evaluate(unitLine_y, t);
+    double y;
+    unitLine_y->value(t,y);
     double expected = 0;
-    if (abs(x-expected)>tol) {
+    if (abs(y-expected)>tol) {
       cout << "testLine(): unitLine_y differs from expected value.\n";
     }
   }
@@ -503,9 +522,11 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, dist, linearBasis->getDegree()*2);
   ParametricCurvePtr myLine = ParametricCurve::line(x0, y0, x1, y1);
   
+  bool useH1 = true;
+  double lengthScale = 1.0;
   FieldContainer<double> basisCoefficients_x, basisCoefficients_y;
-  myLine->projectionBasedInterpolant(basisCoefficients_x, linearBasis, 0);
-  myLine->projectionBasedInterpolant(basisCoefficients_y, linearBasis, 1);
+  myLine->projectionBasedInterpolant(basisCoefficients_x, linearBasis, 0, lengthScale, useH1);
+  myLine->projectionBasedInterpolant(basisCoefficients_y, linearBasis, 1, lengthScale, useH1);
   
   if ( ! basisSumInterpolatesCurveEndPoints(basisCoefficients_x,basisCoefficients_y, linearBasis, myLine)) {
     cout << "testProjectionBasedInterpolation() failed: projection-based interpolant doesn't interpolate line endpoints.\n";
@@ -534,8 +555,8 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   
   BasisPtr cubicBasis = BasisFactory::getBasis(3, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
-  myCurve->projectionBasedInterpolant(basisCoefficients_x, cubicBasis, 0);
-  myCurve->projectionBasedInterpolant(basisCoefficients_y, cubicBasis, 1);
+  myCurve->projectionBasedInterpolant(basisCoefficients_x, cubicBasis, 0, lengthScale, useH1);
+  myCurve->projectionBasedInterpolant(basisCoefficients_y, cubicBasis, 1, lengthScale, useH1);
   
   // we should again recover the curve exactly:
   if ( !basisSumEqualsFunction(basisCoefficients_x, cubicBasis, myCurve->x()) ) {
@@ -552,8 +573,8 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
   // finally, project the cubic curve onto a quadratic basis, and check that it interpolates the endpoints
   BasisPtr quadraticBasis = BasisFactory::getBasis(2, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
-  myCurve->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0);
-  myCurve->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1);
+  myCurve->projectionBasedInterpolant(basisCoefficients_x, quadraticBasis, 0, lengthScale, useH1);
+  myCurve->projectionBasedInterpolant(basisCoefficients_y, quadraticBasis, 1, lengthScale, useH1);
   
   if ( ! basisSumInterpolatesCurveEndPoints(basisCoefficients_x,basisCoefficients_y, quadraticBasis, myCurve)) {
     cout << "testProjectionBasedInterpolation() failed: quadratic projection-based interpolant doesn't interpolate cubic curve endpoints.\n";
@@ -567,4 +588,135 @@ bool ParametricCurveTests::testProjectionBasedInterpolation() {
 
 std::string ParametricCurveTests::testSuiteName() {
   return "ParametricCurveTests";
+}
+
+bool ParametricCurveTests::testTransfiniteInterpolant() {
+  bool success = true;
+  
+  // to begin, just let's do a simple quad mesh
+  double width=4, height=3;
+  double x0 = 0, y0 = 0;
+  double x1 = width, y1 = 0;
+  double x2 = width, y2 = height;
+  double x3 = 0, y3 = height;
+  
+  vector< ParametricCurvePtr > edges(4);
+  edges[0] = ParametricCurve::line(x0, y0, x1, y1);
+  edges[1] = ParametricCurve::line(x1, y1, x2, y2);
+  edges[2] = ParametricCurve::line(x2, y2, x3, y3);
+  edges[3] = ParametricCurve::line(x3, y3, x0, y0);
+  
+  ParametricSurfacePtr transfiniteInterpolant = ParametricSurface::transfiniteInterpolant(edges);
+  
+  double x0_actual, y0_actual, x2_actual, y2_actual;
+  transfiniteInterpolant->value(0, 0, x0_actual, y0_actual);
+  transfiniteInterpolant->value(1, 1, x2_actual, y2_actual);
+
+  double tol=1e-14;
+  if ((abs(x0_actual-x0) > tol) || (abs(y0_actual-y0) > tol)) {
+    success = false;
+    cout << "transfinite interpolant doesn't interpolate (x0,y0).\n";
+  }
+  if ((abs(x2_actual-x2) > tol) || (abs(y2_actual-y2) > tol)) {
+    success = false;
+    cout << "transfinite interpolant doesn't interpolate (x2,y2).\n";
+  }
+  
+  // the transfinite interpolant should be just (4t1, 3t2)
+  FunctionPtr t1 = Teuchos::rcp( new Xn(1) );
+  FunctionPtr t2 = Teuchos::rcp( new Yn(1) );
+  FunctionPtr xPart = 4 * t1;
+  FunctionPtr yPart = 3 * t2;
+  FunctionPtr expected_tfi = Function::vectorize(xPart, yPart);
+  
+  int cubatureDegree = 4;
+  tol = 1e-13; // relax a little for the L2 comparison
+  BasisCachePtr parametricCache = BasisCache::parametricQuadCache(cubatureDegree);
+  
+  // a couple quick sanity checks:
+  if (! expected_tfi->equals(expected_tfi, parametricCache)) {
+    success = false;
+    cout << "ERROR in Function::equals(): vector Function does not equal itself.\n";
+  }
+  if (! transfiniteInterpolant->equals(transfiniteInterpolant, parametricCache)) {
+    success = false;
+    cout << "Weird error: transfiniteInterpolant does not equal itself.\n";
+  }
+  
+  // check that the transfiniteInterpolant's value() method matches values()
+  {
+    int numCells = 1;
+    int numPoints = parametricCache->getRefCellPoints().dimension(0);
+    int spaceDim = 2;
+    FieldContainer<double> values(numCells,numPoints,spaceDim);
+    transfiniteInterpolant->values(values, parametricCache);
+    int cellIndex = 0;
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double t1 = parametricCache->getPhysicalCubaturePoints()(cellIndex,ptIndex,0);
+      double t2 = parametricCache->getPhysicalCubaturePoints()(cellIndex,ptIndex,1);
+      double x, y;
+      transfiniteInterpolant->value(t1, t2, x, y);
+      double x_expected = values(cellIndex,ptIndex,0);
+      double y_expected = values(cellIndex,ptIndex,1);
+      if (abs(x-x_expected) > tol) {
+        cout << "transfinite interpolant value() does not match values()\n";
+        success = false;
+      }
+      if (abs(y-y_expected) > tol) {
+        cout << "transfinite interpolant value() does not match values()\n";
+        success = false;
+      }
+    }
+  }
+  
+  if (! expected_tfi->equals(transfiniteInterpolant, parametricCache, tol)) {
+    cout << "transfinite interpolant doesn't match expected.\n";
+    success = false;
+    int numCells = 1;
+    int numPoints = parametricCache->getRefCellPoints().dimension(0);
+    int spaceDim = 2;
+    FieldContainer<double> values(numCells,numPoints,spaceDim);
+    FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+    expected_tfi->values(expected_values, parametricCache);
+    transfiniteInterpolant->values(values, parametricCache);
+    reportFunctionValueDifferences(parametricCache->getPhysicalCubaturePoints(), expected_values,
+                                   values, tol);
+  }
+  
+  // derivatives
+  FunctionPtr xPart_dt1 = Function::constant(4);
+  FunctionPtr yPart_dt1 = Function::constant(0);
+  FunctionPtr expected_tfi_dt1 = Function::vectorize(xPart_dt1, yPart_dt1);
+  if (! expected_tfi_dt1->equals(transfiniteInterpolant->dx(), parametricCache, tol)) {
+    cout << "d/dt1 of transfinite interpolant doesn't match expected.\n";
+    success = false;
+    int numCells = 1;
+    int numPoints = parametricCache->getRefCellPoints().dimension(0);
+    int spaceDim = 2;
+    FieldContainer<double> values(numCells,numPoints,spaceDim);
+    FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+    expected_tfi_dt1->values(expected_values, parametricCache);
+    transfiniteInterpolant->dx()->values(values, parametricCache);
+    reportFunctionValueDifferences(parametricCache->getPhysicalCubaturePoints(), expected_values,
+                                   values, tol);
+  }
+  
+  FunctionPtr xPart_dt2 = Function::constant(0);
+  FunctionPtr yPart_dt2 = Function::constant(3);
+  FunctionPtr expected_tfi_dt2 = Function::vectorize(xPart_dt2, yPart_dt2);
+  if (! expected_tfi_dt2->equals(transfiniteInterpolant->dy(), parametricCache, tol)) {
+    cout << "d/dt2 of transfinite interpolant doesn't match expected.\n";
+    success = false;
+    int numCells = 1;
+    int numPoints = parametricCache->getRefCellPoints().dimension(0);
+    int spaceDim = 2;
+    FieldContainer<double> values(numCells,numPoints,spaceDim);
+    FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+    expected_tfi_dt2->values(expected_values, parametricCache);
+    transfiniteInterpolant->dy()->values(values, parametricCache);
+    reportFunctionValueDifferences(parametricCache->getPhysicalCubaturePoints(), expected_values,
+                                   values, tol);
+  }
+  
+  return success;
 }

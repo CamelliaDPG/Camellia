@@ -135,7 +135,7 @@ protected:
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
-  BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree);
+  BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
   BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
@@ -150,7 +150,6 @@ public:
   Teuchos::RCP< const FieldContainer<double> > getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   Teuchos::RCP< const FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, int sideOrdinal, bool useCubPointsSideRefCell = false);
   
-  // side cache accessor: (new, pretty untested!)
   bool isSideCache();
   Teuchos::RCP<BasisCache> getSideBasisCache(int sideOrdinal);
   Teuchos::RCP<BasisCache> getVolumeBasisCache(); // from sideCache
@@ -164,6 +163,12 @@ public:
   Teuchos::RCP<Mesh> mesh();
   
   void discardPhysicalNodeInfo(); // discards physicalNodes and all transformed basis values.
+  
+  const FieldContainer<double> & getJacobian();
+  const FieldContainer<double> & getJacobianDet();
+  const FieldContainer<double> & getJacobianInv();
+  
+  FieldContainer<double> computeParametricPoints();
   
   virtual const FieldContainer<double> & getPhysicalCubaturePoints();
   const FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
@@ -197,6 +202,8 @@ public:
     
   // static convenience constructors:
   static BasisCachePtr parametric1DCache(int cubatureDegree);
+  static BasisCachePtr parametricQuadCache(int cubatureDegree);
+  static BasisCachePtr parametricQuadCache(int cubatureDegree, const FieldContainer<double> &refCellPoints, int sideCacheIndex=-1);
   static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(Teuchos::RCP<Mesh> mesh, int cellID, bool testVsTest = false,
                                          int cubatureDegreeEnrichment = 0);

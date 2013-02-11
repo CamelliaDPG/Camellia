@@ -19,6 +19,8 @@ public:
   
   bool testEdgeLength();
   bool testCylinderMesh();
+  bool testH1Projection();
+  bool testTransformationJacobian();
   bool testStraightEdgeMesh();
   
   std::string testSuiteName();

@@ -663,6 +663,14 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     }
     
     FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+//    {
+//    // DEBUGGING CODE:
+//      if (! varEvaluation.get()) {
+//        // try that again, so we can step into the code
+//        FunctionPtr varEvaluation = Function::op(varFunction,var->op());        
+//      }
+//    }
+    
     if (fxn.get()) {
       fxn = fxn + f * varEvaluation;
     } else {

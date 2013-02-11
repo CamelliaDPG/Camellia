@@ -15,35 +15,58 @@
 
 using namespace std;
 
-class ParametricCurve;
-typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
-
-class ParametricCurve : public Function {
-  // for now, we don't yet subclass Function.  In order to do this, need 1D BasisCache.
-  // (not hard, but not yet done, and unclear whether this is important for present purposes.)
-  ParametricCurvePtr _underlyingFxn; // the original 0-to-1 function
+class ParametricFunction : public Function {
+  typedef Teuchos::RCP<ParametricFunction> ParametricFunctionPtr;
   
-  FunctionPtr _xFxn, _yFxn, _zFxn;
-  
+  FunctionPtr _underlyingFxn; // the original 0-to-1 function
+  FunctionPtr _argMap; // maps the t values from (0,1) on sub-curve into (t0,t1) on curve
+  double _derivativeOrder;
   double _t0, _t1;
   
-  double remapForSubCurve(double t);
+  void setArgumentMap();
   
+  double remapForSubCurve(double t);
+protected:
+  FunctionPtr underlyingFunction();
+  
+  ParametricFunction(FunctionPtr fxn, double t0, double t1, int derivativeOrder=0);
+public:
+  ParametricFunction(FunctionPtr fxn);
+  void value(double t, double &x);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  
+  FunctionPtr dx(); // same function as dt()
+  ParametricFunctionPtr dt();
+  
+  ParametricFunctionPtr subFunction(double t0, double t1);
+  
+  // parametric function: function on refCellPoints mapped to [0,1]
+  static ParametricFunctionPtr parametricFunction(FunctionPtr fxn, double t0=0, double t1=1);
+};
+typedef Teuchos::RCP<ParametricFunction> ParametricFunctionPtr;
+
+class ParametricCurve : public Function {
+public:
+  typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
+private:
+  ParametricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
   FunctionPtr argumentMap();
   
 //  void mapRefCellPointsToParameterSpace(FieldContainer<double> &refPoints);
 protected:
-  ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
-  
-  ParametricCurvePtr underlyingFunction();
-public:
+//  ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
+  public:
   ParametricCurve();
-  ParametricCurve(FunctionPtr xFxn_x_as_t,
-                  FunctionPtr yFxn_x_as_t = Function::null(),
-                  FunctionPtr zFxn_x_as_t = Function::null());
+  ParametricCurve(ParametricFunctionPtr xFxn_x_as_t,
+                  ParametricFunctionPtr yFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL),
+                  ParametricFunctionPtr zFxn_x_as_t = Teuchos::rcp((ParametricFunction*)NULL));
+  
   
   ParametricCurvePtr interpolatingLine();
-  void projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component, bool useH1=true); // component 0 for x, 1 for y, 2 for z
+
+  double linearLength();
+  void projectionBasedInterpolant(FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
+                                  double lengthScale, bool useH1); // component 0 for x, 1 for y, 2 for z
   
   // override one of these, according to the space dimension
   virtual void value(double t, double &x);
@@ -54,11 +77,13 @@ public:
   
   virtual ParametricCurvePtr dt(); // the curve differentiated in t in each component.
   
-  virtual FunctionPtr dx(); // same as dt() (overrides Function::dx())
-  
   virtual FunctionPtr x();
   virtual FunctionPtr y();
   virtual FunctionPtr z();
+  
+  virtual ParametricFunctionPtr xPart();
+  virtual ParametricFunctionPtr yPart();
+  virtual ParametricFunctionPtr zPart();
   
   static ParametricCurvePtr bubble(ParametricCurvePtr edgeCurve);
   
@@ -79,5 +104,7 @@ public:
   static ParametricCurvePtr reverse(ParametricCurvePtr fxn);
   static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
 };
+typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
+
 
 #endif

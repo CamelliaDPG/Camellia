@@ -138,8 +138,8 @@ BasisCachePtr parametricCacheForCell(MeshPtr mesh, int cellID) {
   return basisCache;
 }
 
-void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<double> &basisCoefficients, VectorBasisPtr basis,
-                                                              MeshPtr mesh, int cellID) {
+void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, VectorBasisPtr basis,
+                                                       MeshPtr mesh, int cellID) {
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
   exactSurface->setNeglectVertices(false);
@@ -155,14 +155,15 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only 2D surfaces supported right now");
   }
   
-  FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
+  edgeInterpolationCoefficients.resize(basis->getCardinality());
   
-  set<int> edgeNodeFieldIndices; // keep track of the indices we've already assigned
-  int vertexDim = 0;
-  int edgeDim = 1;
+  set<int> edgeNodeFieldIndices = BasisFactory::sideFieldIndices(basis,true); // true: include vertex dofs
   
   FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
   ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) compBasis.get())->getDofCoords(dofCoords);
+  
+  int edgeDim = 1;
+  int vertexDim = 0;
   
   // set vertex dofs:
   for (int vertexIndex=0; vertexIndex<curves.size(); vertexIndex++) {
@@ -173,8 +174,6 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
     int basisDofOrdinal_y = basis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 1);
     edgeInterpolationCoefficients[basisDofOrdinal_x] = x;
     edgeInterpolationCoefficients[basisDofOrdinal_y] = y;
-    edgeNodeFieldIndices.insert(basisDofOrdinal_x);
-    edgeNodeFieldIndices.insert(basisDofOrdinal_y);
   }
   
   for (int edgeIndex=0; edgeIndex<curves.size(); edgeIndex++) {
@@ -185,22 +184,22 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
     }
     double edgeLength = curves[edgeIndex]->linearLength();
     
-//    cout << "edgeIndex " << edgeIndex << endl;
+    //    cout << "edgeIndex " << edgeIndex << endl;
     for (int comp=0; comp<numComponents; comp++) {
       FieldContainer<double> basisCoefficients_comp;
-      bool useH1ForEdgeInterpolant = true;
+      bool useH1ForEdgeInterpolant = true; // an experiment
       curves[edgeIndex]->projectionBasedInterpolant(basisCoefficients_comp, basis1D, comp, edgeLength, useH1ForEdgeInterpolant);
-//      cout << "for edge " << edgeIndex << " and comp " << comp << ", projection-based interpolant dofs:\n";
-//      cout << basisCoefficients_comp;
-////      cout << "basis dof coords:\n" << dofCoords;
-//      int basisDofOrdinal = basis->getDofOrdinalFromComponentDofOrdinal(v0_dofOrdinal_comp, comp);
-//      edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[v0_dofOrdinal_1D];
+      //      cout << "for edge " << edgeIndex << " and comp " << comp << ", projection-based interpolant dofs:\n";
+      //      cout << basisCoefficients_comp;
+      ////      cout << "basis dof coords:\n" << dofCoords;
+      //      int basisDofOrdinal = basis->getDofOrdinalFromComponentDofOrdinal(v0_dofOrdinal_comp, comp);
+      //      edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[v0_dofOrdinal_1D];
       
       if (compBasis->getDegree() >= 2) { // then there are some "middle" nodes on the edge
         // get the first dofOrdinal for the edge, so we can check the number of edge basis functions
         int firstEdgeDofOrdinal = compBasis->getDofOrdinal(edgeDim, edgeIndex, 0);
         
-//        cout << "first edge dofOrdinal: " << firstEdgeDofOrdinal << endl;
+        //        cout << "first edge dofOrdinal: " << firstEdgeDofOrdinal << endl;
         
         int numEdgeDofs = compBasis->getDofTag(firstEdgeDofOrdinal)[3];
         if (numEdgeDofs != basis1D->getCardinality() - 2) {
@@ -215,17 +214,16 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
           // now, determine its ordinal in the vector basis
           int basisDofOrdinal = basis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, comp);
           
-//          cout << "edge dof ordinal " << edgeDofOrdinal << " has basis weight " << basisCoefficients_comp[dofOrdinal1D] << " for component " << comp << endl;
-//          cout << "node on cell is at (" << dofCoords(compDofOrdinal,0) << ", " << dofCoords(compDofOrdinal,1) << ")\n";
-//          cout << "mapping to basisDofOrdinal " << basisDofOrdinal << endl;
+          //          cout << "edge dof ordinal " << edgeDofOrdinal << " has basis weight " << basisCoefficients_comp[dofOrdinal1D] << " for component " << comp << endl;
+          //          cout << "node on cell is at (" << dofCoords(compDofOrdinal,0) << ", " << dofCoords(compDofOrdinal,1) << ")\n";
+          //          cout << "mapping to basisDofOrdinal " << basisDofOrdinal << endl;
           
-          edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[dofOrdinal1D];
-          edgeNodeFieldIndices.insert(basisDofOrdinal);
-          
+          edgeInterpolationCoefficients[basisDofOrdinal] = basisCoefficients_comp[dofOrdinal1D];          
         }
       }
     }
   }
+  edgeInterpolationCoefficients.resize(edgeInterpolationCoefficients.size());
   
   // print out a report of what the edge interpolation is doing:
   /*cout << "projection-based interpolation of edges maps the following points:\n";
@@ -240,6 +238,18 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
       cout << "(" << x_ref << ", " << y_ref << ") --> (" << x_phys << ", " << y_phys << ")\n";
     }
   }*/
+}
+
+void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<double> &basisCoefficients, VectorBasisPtr basis,
+                                                              MeshPtr mesh, int cellID) {
+  vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
+  Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
+  exactSurface->setNeglectVertices(false);
+  
+  FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
+  basisWeightsForEdgeInterpolant(edgeInterpolationCoefficients, basis, mesh, cellID);
+  
+  set<int> edgeFieldIndices = BasisFactory::sideFieldIndices(basis,true); // true: include vertex dofs
   
   FunctionPtr edgeInterpolant = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolationCoefficients) );
   
@@ -250,20 +260,19 @@ void ParametricSurface::basisWeightsForL2ProjectedInterpolant(FieldContainer<dou
   L2->addTerm(v);
   
   IPPtr H1 = Teuchos::rcp( new IP );
-  H1->addTerm(v);
+//  H1->addTerm(v); // experiment: seminorm is a norm when the edge dofs are excluded--and this is what LD does
   H1->addTerm(v->grad());
   
   int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
   
 //  BasisCachePtr basisCache = parametricCacheForCell(mesh, cellID);
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-  
-//  cout << "edgeInterpolationCoefficients\n" << edgeInterpolationCoefficients;
-  
+  int cubatureDegree = max(maxTestDegree*2,15); // chosen to match that used in edge projection.
+  int cubatureEnrichment = max(cubatureDegree-maxTestDegree*2,0);
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
   
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeNodeFieldIndices);
+  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, L2, v, edgeFieldIndices);
   
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together
@@ -342,16 +351,16 @@ FieldContainer<double> & ParametricSurface::parametricQuadNodes() { // for CellT
 }
 
 void ParametricSurface::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-  const FieldContainer<double>* parametricPoints = &(basisCache->getPhysicalCubaturePoints());
-  int numCells = parametricPoints->dimension(0);
-  int numPoints = parametricPoints->dimension(1);
+  FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
+  int numCells = parametricPoints.dimension(0);
+  int numPoints = parametricPoints.dimension(1);
   
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     double x, y;
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       double t1, t2;
-      t1 = (*parametricPoints)(cellIndex,ptIndex,0);
-      t2 = (*parametricPoints)(cellIndex,ptIndex,1);
+      t1 = parametricPoints(cellIndex,ptIndex,0);
+      t2 = parametricPoints(cellIndex,ptIndex,1);
       this->value(t1, t2, x, y);
       values(cellIndex,ptIndex,0) = x;
       values(cellIndex,ptIndex,1) = y;
