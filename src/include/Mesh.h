@@ -246,6 +246,10 @@ public:
   vector< ElementPtr > & activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
 
+  int numEdgeToCellIDEntries(){
+    return _edgeToCellIDs.size();
+  }
+
   vector< ElementPtr > & elements();
   vector< ElementPtr > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
@@ -343,6 +347,9 @@ public:
   void writeMeshPartitionsToFile(const string & fileName);
   
   double getCellMeasure(int cellID);
+  double getCellXSize(int cellID);
+  double getCellYSize(int cellID);
+  vector<double> getCellOrientation(int cellID);
 };
 
 typedef Teuchos::RCP<Mesh> MeshPtr;
