@@ -1,3 +1,4 @@
+#include "SolutionExporter.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Constraint.h"
@@ -348,8 +349,7 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  //  double energyThreshold = 0.2; // for mesh refinements
-  double energyThreshold = 0.0; // for mesh refinements
+  double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
    
   ofstream convOut;
@@ -360,14 +360,15 @@ int main(int argc, char *argv[]) {
     solution->condensedSolve(false);
     //    solution->solve(false);
 
+    double quadTol = 1e-7;
     FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
     FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
     FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
     FunctionPtr u_diff = (u_soln - u_exact)*(u_soln - u_exact);
     FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
     FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-    double u_L2_error = u_diff->integrate(mesh);
-    double sigma_L2_error = sig1_diff->integrate(mesh) + sig2_diff->integrate(mesh);
+    double u_L2_error = u_diff->integrate(mesh,quadTol);
+    double sigma_L2_error = sig1_diff->integrate(mesh,quadTol) + sig2_diff->integrate(mesh,quadTol);
     double L2_error = sqrt(u_L2_error + sigma_L2_error);
     double energy_error = solution->energyErrorTotal();
     u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");
@@ -389,17 +390,12 @@ int main(int argc, char *argv[]) {
   // one more solve on the final refined mesh:
   solution->condensedSolve(false);
 
+  VTKExporter exporter(solution, mesh, varFactory);
   if (rank==0){
-    solution->writeFieldsToFile(u->ID(), "u.m");
-    solution->writeFieldsToFile(sigma1->ID(), "s1.m");
-    solution->writeFieldsToFile(sigma2->ID(), "s2.m");
-    solution->writeFluxesToFile(uhat->ID(), "uhat.dat");
-    solution->writeFluxesToFile(beta_n_u_minus_sigma_n->ID(), "fhat.dat");
-
-    solution->writeToVTK("rates.vtu",min(H1Order+1,4));
-    
-    cout << "wrote files: rates.vtu, uhat.dat\n";
+    exporter.exportSolution("robustIP");
+    cout << endl;
   }
+
   return 0; 
   /*
   // determine trialIDs

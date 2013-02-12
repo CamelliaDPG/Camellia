@@ -31,6 +31,7 @@
 #include "StandardAssembler.h" // for system assembly
 #include "SerialDenseWrapper.h" // for system assembly
 #include "TestingUtilities.h" 
+#include "MeshPolyOrderFunction.h"
 
 double pi = 2.0*acos(0.0);
 
@@ -49,6 +50,34 @@ public:
   }
 };
 
+class AnisotropicHScaling : public Function {
+  int _spatialCoord;
+public:
+  AnisotropicHScaling(int spatialCoord){
+    _spatialCoord = spatialCoord;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    MeshPtr mesh = basisCache->mesh();
+    vector<int> cellIDs = basisCache->cellIDs();
+
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      double h = 1.0;
+      if (_spatialCoord==0){
+	h = mesh->getCellXSize(cellIDs[cellIndex]);
+      }else if (_spatialCoord==1){
+	h = mesh->getCellYSize(cellIDs[cellIndex]);
+      }	
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+	values(cellIndex,ptIndex) = sqrt(h);
+      }
+    }
+  }
+};
+
 class invSqrtHScaling : public hFunction {
 public:
   double value(double x, double y, double h) {
@@ -60,8 +89,10 @@ class InflowSquareBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (abs(x)<tol); // left inflow
-    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
+    //    bool xMatch = (abs(x)<tol); // left inflow
+    //    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
+    bool xMatch = (abs(x)<tol);
+    bool yMatch = (abs(y)<tol);
     return xMatch || yMatch;
   }
 };
@@ -79,7 +110,7 @@ class WallSquareBoundary : public SpatialFilter{
 public: 
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (x>.5);
+    bool xMatch = (x>=.5);
     bool yMatch = abs(y)<tol;
     return xMatch && yMatch;
   }
@@ -89,9 +120,9 @@ class NonWallSquareBoundary : public SpatialFilter{
 public: 
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
-    bool xMatch = (x<.5);
-    bool yMatch = abs(y)<tol || abs(y-1.0)<tol;
-    return xMatch && yMatch;
+    bool topWall = abs(y-1.0)<tol;
+    bool bottomWall = (x<.5) && abs(y)<tol;
+    return topWall || bottomWall;
   }
 };
 
@@ -100,149 +131,33 @@ public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
     bool xMatch = (abs(x-1.0)<tol);
-    return xMatch;
-  }
-};
-
-// inflow values for u
-class Uex : public Function {
-  double _eps;
-  int _returnID;
-public:
-  Uex(double eps) : Function(0) {
-    _eps = eps;
-    _returnID = 0;
-  }
-  Uex(double eps,int trialID) : Function(0) {
-    _eps = eps;
-    _returnID = trialID;
-  }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);    
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-
-	double C0 = 0.0;// average of u0
-	double u = C0;
-	double u_x = 0.0;
-	double u_y = 0.0;  	
-	for (int n = 1;n<20;n++){
-
-	  double lambda = n*n*pi*pi*_eps;
-	  double d = sqrt(1.0+4.0*_eps*lambda);
-	  double r1 = (1.0+d)/(2.0*_eps);
-	  double r2 = (1.0-d)/(2.0*_eps);
-    
-	  double Cn = 0.0;            
-	  if (n==1){
-	    Cn = 1.0; // first term only
-	  }    
-	  /*
-	  // discontinuous hat 
-	  Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
-	  Cn /= (n*pi);
-	  Cn /= (n*pi);    
-	  */
-	  // normal stress outflow
-	  double Xbottom;
-	  double Xtop;
-	  double dXtop;
-	  // wall, zero outflow
-	  Xtop = (exp(r2*(x-1))-exp(r1*(x-1)));
-	  Xbottom = (exp(-r2)-exp(-r1));
-	  dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);    
-
-	  double X = Xtop/Xbottom;
-	  double dX = dXtop/Xbottom;
-	  double Y = Cn*cos(n*pi*y);
-	  double dY = -Cn*n*pi*sin(n*pi*y);
-    
-	  u += X*Y;
-	  u_x += _eps * dX*Y;
-	  u_y += _eps * X*dY;
-	}
-	if (_returnID==0){
-	  values(cellIndex,ptIndex) = u;
-	}else if (_returnID==1){
-	  values(cellIndex,ptIndex) = u_x;
-	}else if (_returnID==2){
-	  values(cellIndex,ptIndex) = u_y;
-	}
-      }
-    }
-  }
-};
-
-
-// inflow values for u
-class l2NormOfVector : public Function {
-  FunctionPtr _beta;
-public:
-  l2NormOfVector(FunctionPtr beta) : Function(0){
-    _beta = beta;
-  }
-
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-
-    FieldContainer<double> beta_pts(numCells,numPoints,2);
-    _beta->values(beta_pts,basisCache);
-
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    double tol=1e-14;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-	double b1 =  beta_pts(cellIndex,ptIndex,0);
-	double b2 =  beta_pts(cellIndex,ptIndex,1);
-	double beta_norm =b1*b1 + b2*b2;
-	values(cellIndex,ptIndex) = sqrt(beta_norm);
-      }
-    }
+    bool yMatch = (abs(y-1.0)<tol);
+    return xMatch || yMatch;
   }
 };
 
 int main(int argc, char *argv[]) {
+ 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();  
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;  
-  Epetra_SerialComm Comm;
+  choice::Args args( argc, argv );
 #endif
+  int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
-  int nCells = 2;
-  if ( argc > 1) {
-    nCells = atoi(argv[1]);
-    if (rank==0){
-      cout << "numCells = " << nCells << endl;
-    }
-  }
-  
-  double eps = .01;
-  if (argc > 2){
-    eps = atof(argv[2]);
-    if (rank==0)
-      cout << "eps = " << eps << endl;
-  }
-  
-  int numRefs = 0;
-  if ( argc > 3) {
-    numRefs = atoi(argv[3]);
-    if (rank==0){
-      cout << "numRefs = " << numRefs << endl;
-    }
-  }
+  int nCells = args.Input<int>("--nCells", "num cells",2);  
+  int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
+  double eps = args.Input<double>("--epsilon","diffusion parameter",1e-2);
+
+  FunctionPtr zero = Function::constant(0.0);
+  FunctionPtr one = Function::constant(1.0);
+  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -258,7 +173,7 @@ int main(int argc, char *argv[]) {
 
   vector<double> beta;
   beta.push_back(1.0);
-  beta.push_back(0.0);
+  beta.push_back(1.0);
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
@@ -279,149 +194,146 @@ int main(int argc, char *argv[]) {
 
    // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr C_h = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  /*  
-  robIP->addTerm(v->grad());
-  robIP->addTerm(v);
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm(tau);
-  robIP->addTerm(tau->div());
-  */
-  //  robIP->addTerm( C_h * v);
-  robIP->addTerm( v);
+  FunctionPtr C_h = Teuchos::rcp( new EpsilonScaling(eps) );  
+  //  robIP->addTerm( C_h*v);
+  //  robIP->addTerm( v);
+  robIP->addTerm( C_h*v);
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );
-  //  robIP->addTerm( C_h/sqrt(eps) * tau );
-  robIP->addTerm( 1.0/sqrt(eps) * tau );
+  robIP->addTerm( C_h/sqrt(eps) * tau );  
+  //  robIP->addTerm( (sqrth_x/sqrt(eps))*tau->x());
+  //  robIP->addTerm( (sqrth_y/sqrt(eps))*tau->y());
+
   ////////////////////   SPECIFY RHS   ///////////////////////
 
-  FunctionPtr zero = Function::constant(0.0);
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = zero;
+
+  f = one;
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  //  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
-  //  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary);
+
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary);
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, zero);
+  bc->addDirichlet(uhat, outflowBoundary, zero);
+
   SpatialFilterPtr wallInflow = Teuchos::rcp( new WallInflow);
   SpatialFilterPtr wallBoundary = Teuchos::rcp( new WallSquareBoundary);
   SpatialFilterPtr nonWall = Teuchos::rcp( new NonWallSquareBoundary);
-
-  FunctionPtr u_exact = Teuchos::rcp( new Uex(eps,0) );
-  FunctionPtr sig1_exact = Teuchos::rcp( new Uex(eps,1) );
-  FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
-  //  bc->addDirichlet(uhat, outflowBoundary, zero);
-  //  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact - (sig1_exact*e1+sig2_exact*e2)*n);  
-  bc->addDirichlet(uhat, wallBoundary, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, wallInflow, beta*n*one);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, nonWall, zero);
+  //  bc->addDirichlet(uhat, wallBoundary, one);
+  //  bc->addDirichlet(beta_n_u_minus_sigma_n, wallInflow, zero);
+  //  bc->addDirichlet(beta_n_u_minus_sigma_n, nonWall, zero);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1; int pToAdd = 2;
   
-  FieldContainer<double> quadPoints(4,2);
-  
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-   
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, mesh->activeElements()[0]->cellID());// should be same basisCache for all
-  
-  vector<int> cellIDs;
-  vector< ElementPtr > allElems = mesh->activeElements();
-  vector< ElementPtr >::iterator elemIt;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
-    cellIDs.push_back((*elemIt)->cellID());
-  }
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));  
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
-  solution->solve(false);
-  double energyErr = solution->energyErrorTotal();
-  if (rank==0){
-    cout << "solved..." << endl;
-  }
-
-  /*
-  Teuchos::RCP<StandardAssembler> assembler = Teuchos::rcp(new StandardAssembler(solution));
-  Epetra_FECrsMatrix K = assembler->initializeMatrix();
-  Epetra_FEVector b = assembler->initializeVector();
-  Epetra_FEVector x = assembler->initializeVector();
-  assembler->assembleProblem(K,b);  
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp(new Epetra_LinearProblem(&K,&x,&b));
-  Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver());
-  solver->setProblem(problem);
-  solver->solve();
-  assembler->distributeDofs(x);  
-  */
-
+  //  solution->solve(false);
+  solution->condensedSolve();
   
-  //  LinearTermPtr residual = rhs->linearTerm(); LinearTermPtr bfLT = -confusionBF->testFunctional(solution); residual->addTerm(bfLT);  
-  LinearTermPtr residual = -confusionBF->testFunctional(solution);  LinearTermPtr rhsLT = rhs->linearTerm();  residual->addTerm(rhsLT);  
-  Teuchos::RCP<RieszRep> rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
+  LinearTermPtr residual = rhs->linearTermCopy();
+  residual->addTerm(-confusionBF->testFunctional(solution));  
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   rieszResidual->computeRieszRep();
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
   FunctionPtr e_tau = Teuchos::rcp(new RepFunction(tau,rieszResidual));
-  FunctionPtr xErr = eps*e_v->dx()*e_v->dx() + (C_h*C_h/eps)*(e1*e_tau)*(e1*e_tau);
-  FunctionPtr yErr = eps*e_v->dy()*e_v->dy() + (C_h*C_h/eps)*(e2*e_tau)*(e2*e_tau);    
-  //  FunctionPtr restOfError = (C_h*C_h)*(e_v)*(e_v) + (beta*e_v->grad())*(beta*e_v->grad()) + (e_tau->div())*(e_tau->div()) + (C_h*C_h/eps)*(e_tau)*(e_tau) + eps*(e_v->grad())*(e_v->grad());  
+
   /*
-  map<int,FunctionPtr > errFxns;
-  errFxns[v->ID()] = e_v;
-  errFxns[tau->ID()] = e_tau;
-  FunctionPtr restOfError =  robIP->evaluate(errFxns,false)->evaluate(errFxns,false); 
+   // robust test norm
+  IPPtr tip = Teuchos::rcp(new IP);
+  tip->addTerm(v);
+  tip->addTerm(tau);
+  LinearTermPtr tres = Teuchos::rcp(new LinearTerm);
+  FunctionPtr uh = Function::solution(uhat,solution);
+  FunctionPtr uF = Function::solution(u,solution);
+  tres->addTerm(-uh*tau->dot_normal() + uF*tau->div());
+  RieszRepPtr tr = Teuchos::rcp(new RieszRep(mesh, tip, tres));
+  tr->computeRieszRep();
+  FunctionPtr t_v = Teuchos::rcp(new RepFunction(v,tr));
+  FunctionPtr t_tau = Teuchos::rcp(new RepFunction(tau,tr));
+  double val1 = (tr->getNorm())*(tr->getNorm());
+  double val2 = (t_tau*t_tau)->integrate(mesh,15,true);
+  double val3x = (t_tau->x()*t_tau->x())->integrate(mesh,15,true);
+  double val3y = (t_tau->y()*t_tau->y())->integrate(mesh,15,true);
+  double val3 = val3x+val3y;
+  cout << "val1 = " << val1 << ", val2 = " << val2 << ", val3 = " << val3 << endl;
+  return 0;
   */
   double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
-  
+  RefinementStrategy refinementStrategy( solution, energyThreshold );  
+
   for (int refIndex=0;refIndex<numRefs;refIndex++){
     if (rank==0){
       cout << "on ref index " << refIndex << endl;
-    }
-    vector<int> cellsToRefine,xCells,yCells,regCells;
+    }    
+    vector<int> cellsToRefine,xCells,yCells,regCells,pCells;
     refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
-    rieszResidual->computeRieszRep(); // in preparation  
+    rieszResidual->computeRieszRep(); // in preparation to get anisotropy    
+    map<int, double> energyErrSq = rieszResidual->getNormsSquared(); // in preparation to get anisotropy
     for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
-      int cellID = *cellIt;
-      vector<double> c = mesh->getCellCentroid(cellID);
-      FieldContainer<double> verts(4,2);
-      mesh->verticesForCell(verts, cellID);
-      bool notSingularity=true;
-      for (int i = 0;i<4;i++){
-	if ((abs(verts(i,0)-.5)<1e-8)&&(abs(verts(i,1))<1e-8)){
-	  notSingularity = false;
-	}
-      }
-      bool onWall = c[0]>.5;
-      double yError = yErr->integrate(cellID,mesh,10,true);
-      double xError = xErr->integrate(cellID,mesh,10,true);
-      double thresh = 25.0;
-      bool anisotropicFlag = yError/xError > thresh;
-      bool doAnisotropy = notSingularity && onWall && anisotropicFlag;
-      //      doAnisotropy = false;
-      if (doAnisotropy){ // if ratio is small = y err bigger than xErr
-	yCells.push_back(cellID);
-      }else if (c[0]>.25){
-	regCells.push_back(cellID);
+      int cellID = *cellIt;    
+      int cubEnrich = 10;
+      double vdx = (e_v->dx()*e_v->dx())->integrate(cellID,mesh,cubEnrich,true);
+      double vdy = (e_v->dy()*e_v->dy())->integrate(cellID,mesh,cubEnrich,true);
+      double taux = ((C_h*C_h/eps)*e_tau->x()*e_tau->x())->integrate(cellID,mesh,cubEnrich,true);
+      double tauy = ((C_h*C_h/eps)*e_tau->y()*e_tau->y())->integrate(cellID,mesh,cubEnrich,true);
+      double h1 = mesh->getCellXSize(cellID);
+      double h2 = mesh->getCellYSize(cellID);
+      double min_h = min(h1,h2);
+      double xErr = taux + vdx;
+      double yErr = tauy + vdy;
+      double totalErr = energyErrSq[cellID];
+
+      double thresh = 10.0;
+      bool doYAnisotropy = yErr/xErr>thresh;
+      bool doXAnisotropy = xErr/yErr>thresh;
+      double anisoRatio =  totalErr/(xErr+yErr);
+      double aspectRatio = max(h1/h2,h2/h1);      
+      double maxAspect = 1000;
+      if (min_h>eps){
+	if (doXAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+	  xCells.push_back(cellID);
+	}else if (doYAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+	  yCells.push_back(cellID);
+	}else{
+	  regCells.push_back(cellID);
+	}      
+      }else{
+	pCells.push_back(cellID);
       }
     }
+    mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
     mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
     mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
+    mesh->pRefine(pCells);
+    mesh->enforceOneIrregularity();
 
-    solution->solve(false);
+    solution->condensedSolve();
   }
+
+  /*
+  for (int i = 0;i<mesh->numActiveElements();i++){
+    int cellID = mesh->getActiveElement(i)->cellID();
+    double h1 = mesh->getCellXSize(cellID);
+    cout << "h1 = " << h1 << endl;
+    double h2 = mesh->getCellYSize(cellID);
+    cout << "h2 = " << h2 << endl;
+    cout << endl;
+  }
+  */
   double energyErrFinal = solution->energyErrorTotal();
   if (rank==0){
     cout << "num elements = " << mesh->numActiveElements() << endl;
@@ -431,9 +343,11 @@ int main(int argc, char *argv[]) {
  
   ////////////////////   get residual   ///////////////////////
 
+  FunctionPtr orderFxn = Teuchos::rcp(new MeshPolyOrderFunction(mesh));
   VTKExporter exporter(solution, mesh, varFactory);
   if (rank==0){
     exporter.exportSolution("robustIP");
+    exporter.exportFunction(orderFxn, "meshOrder");
     cout << endl;
   }
  
