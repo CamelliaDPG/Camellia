@@ -637,6 +637,12 @@ bool FunctionTests::testJumpIntegral() {
   return success;
 }
 
+bool FunctionTests::testValuesDottedWithTensor() {
+  bool success = true;
+  // TODO: implement this, and call it above
+  return success;
+}
+
 std::string FunctionTests::testSuiteName() {
   return "FunctionTests";
 }

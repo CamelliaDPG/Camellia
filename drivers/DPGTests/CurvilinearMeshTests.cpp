@@ -18,6 +18,8 @@
 #include "ParametricSurface.h"
 #include "StokesFormulation.h"
 
+#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
+
 const static double PI  = 3.141592653589793238462;
 
 void CurvilinearMeshTests::setup() {
@@ -404,6 +406,11 @@ std::string CurvilinearMeshTests::testSuiteName() {
 bool CurvilinearMeshTests::testH1Projection() {
   bool success = true;
 
+  bool useL2 = false; // H1 semi-norm otherwise
+  
+  // this test sprawls a bit.  It could very reasonably be broken apart into several
+  // others; tests of projection, BasisFactory::sideFieldIndices, etc.
+  
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
   BasisPtr quadraticScalarBasis = BasisFactory::getBasis(2, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
@@ -412,7 +419,135 @@ bool CurvilinearMeshTests::testH1Projection() {
   set<int> scalarEdgeNodes = BasisFactory::sideFieldIndices(quadraticScalarBasis);
   set<int> vectorEdgeNodes = BasisFactory::sideFieldIndices(quadraticVectorBasis);
   
-  FunctionPtr one = Function::constant(1);
+  // how many non-edge nodes are there?
+  int numMiddleNodesScalar = quadraticScalarBasis->getCardinality() - scalarEdgeNodes.size();
+  int numMiddleNodesVector = quadraticVectorBasis->getCardinality() - vectorEdgeNodes.size();
+  
+  if (numMiddleNodesScalar != 1) {
+    cout << "# middle nodes for quadratic scalar basis is " << numMiddleNodesScalar;
+    cout << "; expected 1.";
+    success = false;
+  }
+  if (numMiddleNodesVector != 2) {
+    cout << "# middle nodes for quadratic scalar basis is " << numMiddleNodesScalar;
+    cout << "; expected 2.";
+    success = false;
+  }
+  int middleNodeScalar;
+  vector<int> middleNodeVector;
+  for (int i=0; i<quadraticScalarBasis->getCardinality(); i++) {
+    if (scalarEdgeNodes.find(i) == scalarEdgeNodes.end()) {
+      middleNodeScalar = i;
+    }
+  }
+  for (int i=0; i<quadraticVectorBasis->getCardinality(); i++) {
+    if (vectorEdgeNodes.find(i) == vectorEdgeNodes.end()) {
+      middleNodeVector.push_back( i );
+    }
+  }
+  
+  FieldContainer<double> dofCoords(quadraticScalarBasis->getCardinality(),2);
+  ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) quadraticScalarBasis.get())->getDofCoords(dofCoords);
+  
+  // for quadratic basis, we expect the middle node to be at (0,0)
+  if ((dofCoords(middleNodeScalar,0) != 0.0) || (dofCoords(middleNodeScalar,1) != 0.0)) {
+    cout << "middle node dof coord is (" << dofCoords(middleNodeScalar,0);
+    cout << "," << dofCoords(middleNodeScalar,1) << " not (0,0) as expected.\n";
+    success = false;
+  }
+  
+//  cout << "middle node index for quadratic scalar basis:" << middleNodeScalar << endl;
+  
+  VarFactory varFactory;
+  VarPtr v_vector = varFactory.testVar("v", VECTOR_HGRAD);
+  IPPtr ip_vector = Teuchos::rcp( new IP );
+  if (useL2) {
+    ip_vector->addTerm(v_vector);
+  } else {
+    ip_vector->addTerm(v_vector->grad());
+  }
+  
+  VarPtr v_scalar = varFactory.testVar("v_s", HGRAD);
+  IPPtr ip_scalar = Teuchos::rcp( new IP) ;
+  if (useL2) {
+    ip_scalar->addTerm(v_scalar);
+  } else {
+    ip_scalar->addTerm(v_scalar->grad());
+  }
+  
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  
+  FunctionPtr fxnScalar = x*x;
+  FunctionPtr fxnVector = Function::vectorize(fxnScalar,fxnScalar);
+  
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
+  
+  MeshPtr mesh = MeshFactory::quadMesh(bf, 2, pToAdd, 1.0, 1.0);
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 0, true);
+  
+  
+  double middleNode_norm;
+  double rhs_ip;
+  {
+    // check that the middle node function is what we expect
+    FieldContainer<double> scalarMiddleCoefficients(quadraticScalarBasis->getCardinality());
+    scalarMiddleCoefficients[middleNodeScalar] = 1.0;
+    FunctionPtr middleNodeFunction = NewBasisSumFunction::basisSumFunction(quadraticScalarBasis, scalarMiddleCoefficients);
+    FunctionPtr middleNodeFunction_expected = 4 * x * (1-x) * 4 * y * (1-y);
+    // per Wolfram Alpha:
+    // on unit quad, the L2 norm should be 64/225
+    // the H^1 semi-norm should be 256/45
+    if (! middleNodeFunction->equals(middleNodeFunction_expected, basisCache)) {
+      cout << "middle node function differs from expected.\n";
+      success = false;
+    }
+    if (useL2) {
+      middleNode_norm = (middleNodeFunction_expected * middleNodeFunction_expected)->integrate(basisCache);
+      rhs_ip = (middleNodeFunction_expected * fxnScalar)->integrate(basisCache);
+      // for fxnScalar = x^2, L2 rhs should be ___
+    } else {
+      middleNode_norm = (middleNodeFunction_expected->dx() * middleNodeFunction_expected->dx()
+                        + middleNodeFunction_expected->dy() * middleNodeFunction_expected->dy()
+                         )->integrate(basisCache);
+      rhs_ip = (middleNodeFunction_expected->dx() * fxnScalar->dx()
+                + middleNodeFunction_expected->dy() * fxnScalar->dy()
+                )->integrate(basisCache);
+      // for fxnScalar = x^2, H1 semi-norm rhs should be -8/9
+    }
+  }
+  
+//  cout << "Middle node norm squared: " << middleNode_norm << endl;
+//  cout << "rhs for middle node: " << rhs_ip << endl;
+  
+  FieldContainer<double> scalarCoefficients;
+  FieldContainer<double> vectorCoefficients;
+  Projector::projectFunctionOntoBasis(scalarCoefficients, fxnScalar, quadraticScalarBasis, basisCache, ip_scalar, v_scalar, scalarEdgeNodes);
+  Projector::projectFunctionOntoBasis(vectorCoefficients, fxnVector, quadraticVectorBasis, basisCache, ip_vector, v_vector, vectorEdgeNodes);
+  
+  FieldContainer<double> scalarCoefficients_expected(quadraticScalarBasis->getCardinality());
+  scalarCoefficients_expected(middleNodeScalar) = rhs_ip / middleNode_norm;
+  double maxDiff = 0;
+  double tol = 1e-14;
+  if (! fcsAgree(scalarCoefficients_expected, scalarCoefficients, tol, maxDiff)) {
+    cout << "projectFunctionOntoBasis doesn't match expected weights for scalar projection onto quadratic middle node.\n";
+    cout << "expected:\n" << scalarCoefficients_expected;
+    cout << "actual:\n" << scalarCoefficients;
+    success = false;
+  }
+
+  // need to confirm analytically that the following test is reasonable, but I am pretty sure
+  FieldContainer<double> vectorCoefficients_expected(quadraticVectorBasis->getCardinality());
+  vectorCoefficients_expected(middleNodeVector[0]) = rhs_ip / middleNode_norm;
+  vectorCoefficients_expected(middleNodeVector[1]) = rhs_ip / middleNode_norm;
+  maxDiff = 0;
+  if (! fcsAgree(vectorCoefficients_expected, vectorCoefficients, tol, maxDiff)) {
+    cout << "projectFunctionOntoBasis doesn't match expected weights for vector projection onto quadratic middle nodes.\n";
+    cout << "expected:\n" << vectorCoefficients_expected;
+    cout << "actual:\n" << vectorCoefficients;
+    success = false;
+  }
   
   // TODO: work out a test that will compare projector of scalar versus vector basis and confirm that vector behaves as expected...
   
@@ -420,22 +555,16 @@ bool CurvilinearMeshTests::testH1Projection() {
   double height = 2;
   
   // the transfinite interpolant in physical space should be just (x, y)
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+
   FunctionPtr tfi = Function::vectorize(x, y);
   
-  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
 
-  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
-  
-
-  VarFactory varFactory;
   VarPtr v = varFactory.testVar("v", VECTOR_HGRAD);
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm(v);
   ip->addTerm(v->grad());
   
-  for (int H1Order=1; H1Order<5; H1Order++) {
+  for (int H1Order=2; H1Order<3; H1Order++) { // until we get things working, focus on quadratic case (1 middle node, simpler)
     MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     int cellID = 0; // the only cell
     bool testVsTest = true;
