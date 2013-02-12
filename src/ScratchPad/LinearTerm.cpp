@@ -1002,7 +1002,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
 int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
   return _rank; 
 }
-
+/*
 // added by Jesse --------------------
 
 LinearTermPtr LinearTerm::rieszRep(VarPtr v){
@@ -1216,7 +1216,7 @@ double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInne
 }
 
 // end of added by Jesse --------------------
-
+*/
 // operator overloading niceties:
 
 LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {

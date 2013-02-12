@@ -52,8 +52,6 @@ public:
   bool testSums();
   bool testIntegration();
 
-  bool testEnergyNorm();
-
   bool testRieszInversionAsProjection();
   bool testMixedTermConsistency();
   bool testRieszInversion();
