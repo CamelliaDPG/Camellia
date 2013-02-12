@@ -61,6 +61,8 @@ public:
   bool testJumpIntegral();
 
   bool testValuesDottedWithTensor();
+
+  bool testVectorFunctionDotProduct();
   
   std::string testSuiteName();
 };
