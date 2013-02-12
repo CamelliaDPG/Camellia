@@ -175,6 +175,11 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
+map<int,double> RieszRep::getNormsSquared(){
+
+  return _rieszRepNormSquaredGlobal;
+}
+
 void RieszRep::distributeDofs(){
   int numProcs=1;
   int rank=0;  
