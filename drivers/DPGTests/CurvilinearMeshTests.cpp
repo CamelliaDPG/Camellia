@@ -567,7 +567,7 @@ bool CurvilinearMeshTests::testH1Projection() {
   ip->addTerm(v);
   ip->addTerm(v->grad());
   
-  for (int H1Order=2; H1Order<3; H1Order++) { // until we get things working, focus on quadratic case (1 middle node, simpler)
+  for (int H1Order=1; H1Order<5; H1Order++) {
     MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     int cellID = 0; // the only cell
     bool testVsTest = true;
@@ -737,7 +737,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     H1->addTerm(v_vector->grad());
     Projector::projectFunctionOntoBasis(expectedCoefficients, tfi, basis, basisCache, H1, v);
     
-    tol = 1e-14;
+    tol = 5e-14;
     maxDiff = 0;
     if (! fcsAgree(expectedCoefficients, basisCoefficients, tol, maxDiff)) {
       success = false;

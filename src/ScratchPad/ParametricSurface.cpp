@@ -273,7 +273,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
   
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, L2, v, edgeFieldIndices);
+  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
   
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together
