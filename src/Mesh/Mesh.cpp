@@ -2777,3 +2777,42 @@ double Mesh::getCellMeasure(int cellID)
   BasisCache basisCache(physicalCellNodes, *cellTopo, 1);
   return basisCache.getCellMeasures()(0);
 }
+
+double Mesh::getCellXSize(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(1,0)-vertices(0,0);
+  double yDist = vertices(1,1)-vertices(0,1);
+  return sqrt(xDist*xDist + yDist*yDist);
+}
+
+double Mesh::getCellYSize(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(3,0)-vertices(0,0);
+  double yDist = vertices(3,1)-vertices(0,1);
+  return sqrt(xDist*xDist + yDist*yDist);
+}
+
+vector<double> Mesh::getCellOrientation(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Cell orientation only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(3,0)-vertices(0,0);
+  double yDist = vertices(3,1)-vertices(0,1);
+  vector<double> orientation;
+  orientation.push_back(xDist);
+  orientation.push_back(yDist);
+  return orientation;
+}

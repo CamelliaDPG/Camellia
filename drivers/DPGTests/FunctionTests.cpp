@@ -10,6 +10,7 @@
 #include "SpatiallyFilteredFunction.h"
 #include "Solution.h"
 #include "BasisSumFunction.h"
+#include "MeshUtilities.h"
 
 #include "MeshFactory.h"
 #include "StokesFormulation.h"
@@ -29,6 +30,21 @@ public:
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = 1 - 2*x;
+      }
+    }
+  }
+};
+
+// just for a discontinuity
+class CellIDFunction : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+    for (int i = 0;i<cellIDs.size();i++){
+      for (int j = 0;j<numPoints;j++){
+        values(i,j) = cellIDs[i];
       }
     }
   }
@@ -184,7 +200,13 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
+
+  setup();
+  if (testVectorFunctionDotProduct()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown(); 
 }
 
 bool FunctionTests::testBasisSumFunction() {
@@ -735,6 +757,39 @@ bool FunctionTests::testValuesDottedWithTensor() {
   
     
   return success;
+}
+
+bool FunctionTests::testVectorFunctionDotProduct(){
+  bool success = true;  
+  double tol = 1e-11;
+
+  int H1Order = 4, pToAdd = 0;
+  int nCells = 2;
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(nCells, _confusionBF, H1Order, H1Order+pToAdd);
+
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
+  FunctionPtr x = Teuchos::rcp(new Xn(1));
+  FunctionPtr x4 = Teuchos::rcp(new Xn(4));
+  FunctionPtr exp_x = Teuchos::rcp(new Exp_x);
+  FunctionPtr exp_y = Teuchos::rcp(new Exp_y);
+  FunctionPtr discontinuous = Teuchos::rcp(new CellIDFunction);
+  FunctionPtr f1 = x + 1 + discontinuous;
+  FunctionPtr f2 = x4 + exp_x*exp_y;
+  FunctionPtr f = e1*f1 + e2*f2;
+  
+  double actualValue = (f*f)->integrate(mesh,15);
+  double expectedValue = (f->x()*f->x())->integrate(mesh,15) + (f->y()*f->y())->integrate(mesh,15);
+  if (abs(actualValue-expectedValue)>tol){
+    success = false;      
+    cout << "testVectorFunctionDotProduct(): expected " << expectedValue << " but actualValue was " << actualValue << endl;
+
+  } 
+
+  return success;
+  
 }
 
 std::string FunctionTests::testSuiteName() {

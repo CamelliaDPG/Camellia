@@ -187,13 +187,6 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-
-  setup();
-  if (testEnergyNorm()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
 }
   
 bool LinearTermTests::testSums() {
@@ -586,26 +579,6 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   return success;
 }
-
-bool LinearTermTests::testEnergyNorm() {
-  bool success = true;
-  
-  IPPtr ip = Teuchos::rcp( new IP );
-  ip->addTerm(v1); // L^2 on an HGrad var
-  ip->addTerm(q1); // L^2 on Hdiv var
-
-  FunctionPtr one = Function::constant(1);
-  LinearTermPtr identity = one*v1; 
-
-  double norm = identity->energyNormTotal(mesh,ip); // should be equal to the sqrt of the measure of the domain [-1,1]^2
-
-  double tol = 1e-15;
-  if (abs(norm-2.0)>tol){
-    success = false;
-  }
-  return success;
-}
-
 
 bool LinearTermTests::testRieszInversionAsProjection() {
   bool success = true;
