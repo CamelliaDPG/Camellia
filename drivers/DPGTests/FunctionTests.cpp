@@ -10,7 +10,6 @@
 #include "SpatiallyFilteredFunction.h"
 #include "Solution.h"
 #include "BasisSumFunction.h"
-#include "MeshUtilities.h"
 
 #include "MeshFactory.h"
 #include "StokesFormulation.h"
@@ -30,21 +29,6 @@ public:
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = 1 - 2*x;
-      }
-    }
-  }
-};
-
-// just for a discontinuity
-class CellIDFunction : public Function {
-public:
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
-    vector<int> cellIDs = basisCache->cellIDs();
-    int numPoints = values.dimension(1);
-    FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
-        values(i,j) = cellIDs[i];
       }
     }
   }
@@ -142,14 +126,14 @@ void FunctionTests::setup() {
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
-  if (testValuesDottedWithTensor()) {
+  if (testBasisSumFunction()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
   setup();
-  if (testBasisSumFunction()) {
+  if (testValuesDottedWithTensor()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -200,13 +184,7 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-
-  setup();
-  if (testVectorFunctionDotProduct()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown(); 
+  
 }
 
 bool FunctionTests::testBasisSumFunction() {
@@ -269,6 +247,15 @@ bool FunctionTests::testBasisSumFunction() {
             cout << "l2norm of basisSumFxn: " << basisSumFxn->l2norm(spectralConfusionMesh) << endl;
             cout << "l2norm of solnFxn: " << solnFxn->l2norm(spectralConfusionMesh) << endl;
           }
+          l2diff = (solnFxn->dx() - basisSumFxn->dx())->l2norm(spectralConfusionMesh);
+          //          cout << "l2diff = " << l2diff << endl;
+          if (l2diff > tol) {
+            success = false;
+            cout << "testBasisSumFunction: l2diff of dx() " << l2diff << " exceeds tol of " << tol << endl;
+            cout << "l2norm of basisSumFxn->dx(): " << basisSumFxn->dx()->l2norm(spectralConfusionMesh) << endl;
+            cout << "l2norm of solnFxn->dx(): " << solnFxn->dx()->l2norm(spectralConfusionMesh) << endl;
+          }
+          
         } else {
           FieldContainer<double> cellIntegral(1);
           // compute l2 diff of integral along the one side where we can legitimately assert equality:
@@ -741,55 +728,22 @@ bool FunctionTests::testValuesDottedWithTensor() {
     }
   }
   
-  // finally, let's try the same sort of thing, but now with a vector-valued basis
-  BasisPtr vectorBasisTemp = BasisFactory::getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
-  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
-
-  BasisPtr compBasis = vectorBasis->getComponentBasis();
-  
-  // create a new v, and a new dofOrdering
-  VarPtr v_vector = vf.testVar("v_vector", VECTOR_HGRAD);
-  dofOrdering = Teuchos::rcp( new DofOrdering );
-  dofOrdering->addEntry(v_vector->ID(), vectorBasis, v_vector->rank());
-
-  DofOrderingPtr dofOrderingComp = Teuchos::rcp( new DofOrdering );
-  dofOrderingComp->addEntry(v->ID(), compBasis, v->rank());
-  
+//  // finally, let's try the same sort of thing, but now with a vector-valued basis
+//  BasisPtr vectorBasisTemp = BasisFactory::getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+//  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
+//
+//  BasisPtr compBasis = vectorBasis->getComponentBasis();
+//  
+//  // create a new v, and a new dofOrdering
+//  VarPtr v_vector = vf.testVar("v_vector", VECTOR_HGRAD);
+//  dofOrdering = Teuchos::rcp( new DofOrdering );
+//  dofOrdering->addEntry(v_vector->ID(), vectorBasis, v_vector->rank());
+//
+//  DofOrderingPtr dofOrderingComp = Teuchos::rcp( new DofOrdering );
+//  dofOrderingComp->addEntry(v->ID(), compBasis, v->rank());
+//  
     
   return success;
-}
-
-bool FunctionTests::testVectorFunctionDotProduct(){
-  bool success = true;  
-  double tol = 1e-11;
-
-  int H1Order = 4, pToAdd = 0;
-  int nCells = 2;
-  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(nCells, _confusionBF, H1Order, H1Order+pToAdd);
-
-  vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
-
-  FunctionPtr x = Teuchos::rcp(new Xn(1));
-  FunctionPtr x4 = Teuchos::rcp(new Xn(4));
-  FunctionPtr exp_x = Teuchos::rcp(new Exp_x);
-  FunctionPtr exp_y = Teuchos::rcp(new Exp_y);
-  FunctionPtr discontinuous = Teuchos::rcp(new CellIDFunction);
-  FunctionPtr f1 = x + 1 + discontinuous;
-  FunctionPtr f2 = x4 + exp_x*exp_y;
-  FunctionPtr f = e1*f1 + e2*f2;
-  
-  double actualValue = (f*f)->integrate(mesh,15);
-  double expectedValue = (f->x()*f->x())->integrate(mesh,15) + (f->y()*f->y())->integrate(mesh,15);
-  if (abs(actualValue-expectedValue)>tol){
-    success = false;      
-    cout << "testVectorFunctionDotProduct(): expected " << expectedValue << " but actualValue was " << actualValue << endl;
-
-  } 
-
-  return success;
-  
 }
 
 std::string FunctionTests::testSuiteName() {
