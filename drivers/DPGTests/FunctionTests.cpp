@@ -11,6 +11,9 @@
 #include "Solution.h"
 #include "BasisSumFunction.h"
 
+#include "MeshFactory.h"
+#include "StokesFormulation.h"
+
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
 class UPrev : public Function {
 public:
@@ -121,6 +124,13 @@ void FunctionTests::setup() {
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  
+  setup();
+  if (testValuesDottedWithTensor()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testBasisSumFunction()) {
@@ -639,7 +649,91 @@ bool FunctionTests::testJumpIntegral() {
 
 bool FunctionTests::testValuesDottedWithTensor() {
   bool success = true;
-  // TODO: implement this, and call it above
+  
+  vector< FunctionPtr > vectorFxns;
+  
+  double xValue = 3, yValue = 4;
+  FunctionPtr simpleVector = Function::vectorize(Function::constant(xValue), Function::constant(yValue));
+  vectorFxns.push_back(simpleVector);
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  vectorFxns.push_back( Function::vectorize(x*x, x*y) );
+  
+  VGPStokesFormulation vgpStokes = VGPStokesFormulation(1.0);
+  BFPtr bf = vgpStokes.bf();
+  
+  int h1Order = 1;
+  MeshPtr mesh = MeshFactory::quadMesh(bf, h1Order);
+  
+  int cellID=0; // the only cell
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+
+  for (int i=0; i<vectorFxns.size(); i++) {
+    FunctionPtr vectorFxn_i = vectorFxns[i];
+    for (int j=0; j<vectorFxns.size(); j++) {
+      FunctionPtr vectorFxn_j = vectorFxns[j];
+      FunctionPtr dotProduct = vectorFxn_i * vectorFxn_j;
+      FunctionPtr expectedDotProduct = vectorFxn_i->x() * vectorFxn_j->x() + vectorFxn_i->y() * vectorFxn_j->y();
+      if (! expectedDotProduct->equals(dotProduct, basisCache)) {
+        cout << "testValuesDottedWithTensor() failed: expected dot product does not match dotProduct.\n";
+        success = false;
+      }
+    }
+  }
+  
+  // now, let's try the same thing, but for a LinearTerm dot product
+  VarFactory vf;
+  VarPtr v = vf.testVar("v", HGRAD);
+  
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering );
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  BasisPtr basis = BasisFactory::getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  dofOrdering->addEntry(v->ID(), basis, v->rank());
+  
+  int numCells = 1;
+  int numFields = basis->getCardinality();
+  
+  for (int i=0; i<vectorFxns.size(); i++) {
+    FunctionPtr f_i = vectorFxns[i];
+    LinearTermPtr lt_i = f_i * v;
+    LinearTermPtr lt_i_x = f_i->x() * v;
+    LinearTermPtr lt_i_y = f_i->y() * v;
+    for (int j=0; j<vectorFxns.size(); j++) {
+      FunctionPtr f_j = vectorFxns[j];
+      LinearTermPtr lt_j = f_j * v;
+      LinearTermPtr lt_j_x = f_j->x() * v;
+      LinearTermPtr lt_j_y = f_j->y() * v;
+      FieldContainer<double> values(numCells,numFields,numFields);
+      lt_i->integrate(values, dofOrdering, lt_j, dofOrdering, basisCache);
+      FieldContainer<double> values_expected(numCells,numFields,numFields);
+      lt_i_x->integrate(values_expected,dofOrdering,lt_j_x,dofOrdering,basisCache);
+      lt_i_y->integrate(values_expected,dofOrdering,lt_j_y,dofOrdering,basisCache);
+      double tol = 1e-14;
+      double maxDiff = 0;
+      if (!fcsAgree(values, values_expected, tol, maxDiff)) {
+        cout << "FunctionTests::testValuesDottedWithTensor: ";
+        cout << "dot product and sum of the products of scalar components differ by maxDiff " << maxDiff;
+        cout << " in LinearTerm::integrate().\n";
+        success = false;
+      }
+    }
+  }
+  
+  // finally, let's try the same sort of thing, but now with a vector-valued basis
+  BasisPtr vectorBasisTemp = BasisFactory::getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
+
+  BasisPtr compBasis = vectorBasis->getComponentBasis();
+  
+  // create a new v, and a new dofOrdering
+  VarPtr v_vector = vf.testVar("v_vector", VECTOR_HGRAD);
+  dofOrdering = Teuchos::rcp( new DofOrdering );
+  dofOrdering->addEntry(v_vector->ID(), vectorBasis, v_vector->rank());
+
+  DofOrderingPtr dofOrderingComp = Teuchos::rcp( new DofOrdering );
+  dofOrderingComp->addEntry(v->ID(), compBasis, v->rank());
+  
+    
   return success;
 }
 

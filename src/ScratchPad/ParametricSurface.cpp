@@ -138,7 +138,8 @@ BasisCachePtr parametricCacheForCell(MeshPtr mesh, int cellID) {
   return basisCache;
 }
 
-void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, VectorBasisPtr basis,
+void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, 
+                                                       VectorBasisPtr basis,
                                                        MeshPtr mesh, int cellID) {
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
