@@ -782,6 +782,11 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
       
       ls.first->values(fValues,basisCache);
       
+//      if (ls.first->rank() == 2) {
+//        cout << "fValues:\n" << fValues;
+//        cout << "basisValues:\n" << *basisValues;
+//      }
+      
       int numFields = basis->getCardinality();
       
       Teuchos::Array<int> fDim(fValues.rank());

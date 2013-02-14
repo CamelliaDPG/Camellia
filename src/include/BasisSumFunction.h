@@ -46,7 +46,7 @@ class NewBasisSumFunction : public Function {
     _coefficients = basisCoefficients;
     _boundaryValueOnly = boundaryValueOnly;
     _basis = basis; // note - _basis->getBaseCellTopology
-    _op = OP_VALUE;
+    _op = op;
     int cardinality = basis->getCardinality();
     TEUCHOS_TEST_FOR_EXCEPTION( _coefficients.dimension(0) != cardinality,
                                std::invalid_argument,

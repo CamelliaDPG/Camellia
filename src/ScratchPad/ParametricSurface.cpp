@@ -138,7 +138,8 @@ BasisCachePtr parametricCacheForCell(MeshPtr mesh, int cellID) {
   return basisCache;
 }
 
-void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, VectorBasisPtr basis,
+void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, 
+                                                       VectorBasisPtr basis,
                                                        MeshPtr mesh, int cellID) {
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
@@ -272,7 +273,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
   
   // project, skipping edgeNodeFieldIndices:
-  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, L2, v, edgeFieldIndices);
+  Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
   
   basisCoefficients.resize(basis->getCardinality()); // get rid of dummy numCells dimension
   // add the two sets of basis coefficients together

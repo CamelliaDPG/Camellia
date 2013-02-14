@@ -91,6 +91,22 @@ public:
       }
     }
   }
+  
+  static void reportFCDifferences(const FieldContainer<double> &values1, const FieldContainer<double> &values2, double tol) {
+    int rank = MPIWrapper::rank();
+    if (rank != 0) {
+      return;
+    }
+    
+    for (int i=0; i<values1.size(); i++) {
+      double diff = abs(values1[i]-values2[i]);
+      
+      if (diff > tol) {
+        cout << "values differ by " << diff << " at index " << i << ": ";
+        cout << values1[i] << " ≠ " << values2[i] << endl;
+      }
+    }
+  }
 };
 
 #endif

@@ -32,6 +32,13 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testCylinderMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testH1Projection()) {
     numTestsPassed++;
   }
@@ -54,13 +61,6 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testStraightEdgeMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testCylinderMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -106,7 +106,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   double previousError = 1000;
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
-    double approximateArea = one->integrate(mesh);
+    double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
     cout << "For k=" << i << ", implied value of pi: " << impliedPi;
     cout << " (error " << abs(PI-impliedPi) << ")\n";
@@ -117,9 +117,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
-//    ostringstream filePath;
-//    filePath << "/tmp/cylinderFlowMesh" << H1Order << ".dat";
-//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    ostringstream filePath;
+    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     // p-refine
     if (i < numPRefinements) {
@@ -541,6 +541,9 @@ bool CurvilinearMeshTests::testH1Projection() {
   FieldContainer<double> vectorCoefficients_expected(quadraticVectorBasis->getCardinality());
   vectorCoefficients_expected(middleNodeVector[0]) = rhs_ip / middleNode_norm;
   vectorCoefficients_expected(middleNodeVector[1]) = rhs_ip / middleNode_norm;
+  
+//  cout << "expected solution to projection problem at quadratic middle node:" << rhs_ip / middleNode_norm << endl;
+  
   maxDiff = 0;
   if (! fcsAgree(vectorCoefficients_expected, vectorCoefficients, tol, maxDiff)) {
     cout << "projectFunctionOntoBasis doesn't match expected weights for vector projection onto quadratic middle nodes.\n";
@@ -551,8 +554,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   
   // TODO: work out a test that will compare projector of scalar versus vector basis and confirm that vector behaves as expected...
   
-  double width = 2;
-  double height = 2;
+  double width = 1;
+  double height = 1;
   
   // the transfinite interpolant in physical space should be just (x, y)
 
@@ -564,7 +567,7 @@ bool CurvilinearMeshTests::testH1Projection() {
   ip->addTerm(v);
   ip->addTerm(v->grad());
   
-  for (int H1Order=2; H1Order<3; H1Order++) { // until we get things working, focus on quadratic case (1 middle node, simpler)
+  for (int H1Order=1; H1Order<5; H1Order++) {
     MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     int cellID = 0; // the only cell
     bool testVsTest = true;
@@ -725,6 +728,56 @@ bool CurvilinearMeshTests::testH1Projection() {
         cout << ", but the edge projection weight is " << edgeInterpolantCoefficients(fieldIndex) << endl;
         success = false;
       }
+    }
+    
+    // compute the expected basis weights:
+    FieldContainer<double> expectedCoefficients;
+    IPPtr H1 = Teuchos::rcp(new IP); // here we need the full H1, not just the semi-norm
+    H1->addTerm(v_vector);
+    H1->addTerm(v_vector->grad());
+    Projector::projectFunctionOntoBasis(expectedCoefficients, tfi, basis, basisCache, H1, v);
+    
+    tol = 5e-14;
+    maxDiff = 0;
+    if (! fcsAgree(expectedCoefficients, basisCoefficients, tol, maxDiff)) {
+      success = false;
+      cout << "Expected coefficients do not match actual:\n";
+      reportFCDifferences(expectedCoefficients, basisCoefficients, tol);
+    }
+    
+    FieldContainer<double> tfiCoefficients;
+    Projector::projectFunctionOntoBasis(tfiCoefficients, tfi, basis, basisCache, H1, v);
+    
+    FieldContainer<double> edgeCoefficients;
+    Projector::projectFunctionOntoBasis(edgeCoefficients, edgeFunction, basis, basisCache, H1, v);
+    
+    FieldContainer<double> projectedDifferenceCoefficients;
+    Projector::projectFunctionOntoBasis(projectedDifferenceCoefficients, tfi-edgeFunction, basis, basisCache, H1, v);
+    
+//    cout << "tfiCoefficients:\n" << tfiCoefficients;
+//    cout << "edgeCoefficients:\n" << edgeCoefficients;
+//    cout << "projectedDifferenceCoefficients:\n" << projectedDifferenceCoefficients;
+    
+//    cout << "edge interpolation coefficients:\n" << edgeInterpolantCoefficients;
+//    cout << "projected tfi coefficients:\n" << expectedCoefficients;
+//    cout << "projection-based interpolant coefficients:\n" << basisCoefficients;
+    
+    expectedCoefficients.resize(expectedCoefficients.size()); // flatten
+    FunctionPtr expectedFunction = NewBasisSumFunction::basisSumFunction(basis, expectedCoefficients);
+    if (! expectedFunction->equals(tfi, basisCache, tol) ) {
+      cout << "For H1Order " << H1Order << ", ";
+      cout << "Problem with test?? expected function does not match tfi.\n";
+      success = false;
+      int numCells = 1;
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int spaceDim = 2;
+      FieldContainer<double> values(numCells,numPoints,spaceDim);
+      FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
+      tfi->values(expected_values, basisCache);
+      projectedFunction->values(values, basisCache);
+      reportFunctionValueDifferences(basisCache->getPhysicalCubaturePoints(), expected_values,
+                                     values, tol);
+
     }
     
     projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
