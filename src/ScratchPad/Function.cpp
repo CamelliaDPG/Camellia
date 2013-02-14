@@ -301,6 +301,35 @@ double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegr
   return cellIntegral(0);
 }
 
+map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  vector<int> cellIDs;
+  for (int i = 0;i<mesh->numActiveElements();i++){
+    cellIDs.push_back(mesh->getActiveElement(i)->cellID());
+  }
+  return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
+}
+
+// PARALLELIZE
+map<int, double> Function::cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+
+  int numCells = cellIDs.size();
+  FieldContainer<double> integrals(numCells);
+  for (int i = 0;i<numCells;i++){
+    int cellID = cellIDs[i];
+    if (mesh->partitionForCellID(cellID) == myPartition){
+      integrals(i) = integrate(cellID,mesh,cubatureDegreeEnrichment,testVsTest);
+    }
+  }
+  MPIWrapper::entryWiseSum(integrals);
+  map<int,double> integralMap;
+  for (int i = 0;i<numCells;i++){
+    integralMap[cellIDs[i]] = integrals(i);
+  }
+  return integralMap;
+}
+
+
 // added by Jesse - adaptive quadrature rules
 double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
   double integral = 0.0;
