@@ -1036,6 +1036,10 @@ bool LinearTermTests::testLinearTermEvaluation(){
   double eps = .1;
 
   FunctionPtr one = Function::constant(1.0);
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -1069,18 +1073,10 @@ bool LinearTermTests::testLinearTermEvaluation(){
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-  // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  robIP->addTerm( v);
-  robIP->addTerm( sqrt(eps) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( 1.0/sqrt(eps) * tau );  
-
   LinearTermPtr vVecLT = Teuchos::rcp(new LinearTerm);
   LinearTermPtr tauVecLT = Teuchos::rcp(new LinearTerm);
-  vVecLT->addTerm(sqrt(eps)*v->grad());
-  tauVecLT->addTerm(1.0/sqrt(eps)*tau);
+  vVecLT->addTerm(one*v->grad());
+  tauVecLT->addTerm(one*tau);
 
   ////////////////////   BUILD MESH   ///////////////////////
 
@@ -1092,10 +1088,10 @@ bool LinearTermTests::testLinearTermEvaluation(){
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
 
   //////////////////// evaluate LinearTerms /////////////////
+
   map<int,FunctionPtr> errRepMap;
   errRepMap[v->ID()] = one;
-  errRepMap[tau->ID()] = one;
-
+  errRepMap[tau->ID()] = one*e1+one*e2; // vector valued fxn (1,1)
   FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
   FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
   FunctionPtr xErr = (errTau->x())*(errTau->x()) + (errV->dx())*(errV->dx());
