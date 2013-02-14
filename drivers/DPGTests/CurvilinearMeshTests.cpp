@@ -32,6 +32,13 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testCylinderMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testH1Projection()) {
     numTestsPassed++;
   }
@@ -54,13 +61,6 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testStraightEdgeMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testCylinderMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -106,7 +106,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   double previousError = 1000;
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
-    double approximateArea = one->integrate(mesh);
+    double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
     cout << "For k=" << i << ", implied value of pi: " << impliedPi;
     cout << " (error " << abs(PI-impliedPi) << ")\n";
@@ -117,9 +117,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
-//    ostringstream filePath;
-//    filePath << "/tmp/cylinderFlowMesh" << H1Order << ".dat";
-//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    ostringstream filePath;
+    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     // p-refine
     if (i < numPRefinements) {
