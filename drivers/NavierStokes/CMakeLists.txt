@@ -1,4 +1,4 @@
-set(DRIVER_NAME NavierStokes)
+set(DRIVER_NAME NS)
 project(${DRIVER_NAME})
 
 set(SRC
