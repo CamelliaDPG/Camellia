@@ -71,8 +71,8 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testHUnrefinementForConfusion() ) {
     numTestsPassed++;
   }
-  numTestsRun++;
   */
+  numTestsRun++;
   if (testMeshSolvePointwise() ) {
     numTestsPassed++;
   }
@@ -2020,12 +2020,47 @@ bool MeshTestSuite::testMultiBasisCrash(){
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
   int order = exactSolution.H1Order();
   int pToAdd = 1;
-  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(4, 2, exactSolution.bilinearForm(), order, order+pToAdd);
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(4,2, exactSolution.bilinearForm(), order, order+pToAdd);
 
   ////////////////////////////////////////////////////////////////////
   // REFINE MESH TO TRIGGER EXCEPTION
   ////////////////////////////////////////////////////////////////////
-
+  /*
+  for (int i = 0;i<3;i++){
+    vector<int> xC;
+    vector<int> yC;
+    vector<int> rC;
+    switch (i){
+    case 0:
+      rC.push_back(0);
+      rC.push_back(2);
+      yC.push_back(1);
+      yC.push_back(3);
+      break;
+    case 1:
+      yC.push_back(4);
+      yC.push_back(6);
+      yC.push_back(10);
+      rC.push_back(15);
+      break;
+    case 2:
+      break;
+    case 3:
+      
+      break;
+    }
+    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
+    mesh->enforceOneIrregularity();
+    for (int i = 0;i<mesh->numActiveElements();i++){
+      int cellID = mesh->getActiveElement(i)->cellID();
+      vector<double> c = mesh->getCellCentroid(cellID);
+      cout << "centroid of cell " << cellID << " = " << c[0] << ", " << c[1] << endl;
+    }
+    cout << endl;      
+  }
+  */
   for (int i = 0;i<5;i++){
     vector<int> xC;
     vector<int> yC;
