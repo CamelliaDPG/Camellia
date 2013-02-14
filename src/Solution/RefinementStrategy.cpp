@@ -165,3 +165,55 @@ void RefinementStrategy::setResults(RefinementResults &solnResults, int numEleme
   solnResults.numDofs = numDofs;
   solnResults.totalEnergyError = totalEnergyError;
 }
+
+void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr) {
+  // greedy refinement algorithm - mark cells for refinement
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+
+  vector<int> xCells, yCells, regCells;
+  getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells);
+ 
+  // record results prior to refinement
+  RefinementResults results;
+  double totalEnergyError = _solution->energyErrorTotal();
+  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  _results.push_back(results);
+  
+  mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
+    
+  if (_enforceOneIrregularity)
+    mesh->enforceOneIrregularity();
+    
+  if (printToConsole) {
+    cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
+    cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
+  }
+}
+
+void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells){  
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  vector<int> cellsToRefine;
+  getCellsAboveErrorThreshhold(cellsToRefine);
+  for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
+    int cellID = *cellIt;    
+    int cubEnrich = 10;
+    double h1 = mesh->getCellXSize(cellID);
+    double h2 = mesh->getCellYSize(cellID);
+    double min_h = min(h1,h2);
+    
+    double thresh = 10.0; // arbitrary
+    bool doYAnisotropy = yErr[cellID]/xErr[cellID] > thresh;
+    bool doXAnisotropy = xErr[cellID]/yErr[cellID] > thresh;
+    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a non-stretched element
+    double maxAspect = 1000.0; // use value from LD's paper
+    if (doXAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+      xCells.push_back(cellID);
+    }else if (doYAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+      yCells.push_back(cellID);
+    }else{
+      regCells.push_back(cellID);
+    }        
+  }
+}
