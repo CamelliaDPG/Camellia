@@ -571,7 +571,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     } else {
       this->integrate(cellIntegrals, basisCache);
     }
-    cout << "cellIntegrals:\n" << cellIntegrals;
+//    cout << "cellIntegrals:\n" << cellIntegrals;
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       integral += cellIntegrals(cellIndex);
     }

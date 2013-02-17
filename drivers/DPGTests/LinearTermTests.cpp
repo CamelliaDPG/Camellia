@@ -1032,7 +1032,6 @@ bool LinearTermTests::testIntegrateMixedBasis() {
 
 bool LinearTermTests::testLinearTermEvaluation(){
   bool success = true;
-  int nCells = 2;
   double eps = .1;
 
   FunctionPtr one = Function::constant(1.0);
@@ -1040,52 +1039,16 @@ bool LinearTermTests::testLinearTermEvaluation(){
   e1.push_back(1.0);e1.push_back(0.0);
   e2.push_back(0.0);e2.push_back(1.0);
 
-
-  ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
-  // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
 
-  vector<double> beta; beta.push_back(1.0); beta.push_back(0.0);
-  
-  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
-  // tau terms:
-  confusionBF->addTerm(sigma1 / eps, tau->x());
-  confusionBF->addTerm(sigma2 / eps, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(uhat, -tau->dot_normal());
-  
-  // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( -u, beta * v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-  
-  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-
+  // define a couple LinearTerms
   LinearTermPtr vVecLT = Teuchos::rcp(new LinearTerm);
   LinearTermPtr tauVecLT = Teuchos::rcp(new LinearTerm);
   vVecLT->addTerm(sqrt(eps)*v->grad());
   tauVecLT->addTerm((1/sqrt(eps))*tau);
-
-  ////////////////////   BUILD MESH   ///////////////////////
-
-  // define nodes for mesh
-  int order = 3;
-  int H1Order = order+1; int pToAdd = 2;
-  
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
 
   //////////////////// evaluate LinearTerms /////////////////
 
