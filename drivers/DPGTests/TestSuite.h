@@ -8,6 +8,8 @@ using namespace std;
 
 #include "MPIWrapper.h"
 
+#include "Function.h"
+
 using namespace Intrepid;
 
 // abstract class for tests
@@ -90,6 +92,26 @@ public:
         }
       }
     }
+  }
+  
+  static void reportFunctionValueDifferences(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache, double tol) {
+    TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "f1 and f2 must have same rank.");
+    
+    const FieldContainer<double>* physPointsPtr = &(basisCache->getPhysicalCubaturePoints());
+    Teuchos::Array<int> indexArray;
+    int numCells = physPointsPtr->dimension(0);
+    int numPoints = physPointsPtr->dimension(1);
+    int spaceDim = physPointsPtr->dimension(2);
+    indexArray.push_back(numCells);
+    indexArray.push_back(numPoints);
+    for (int r=0; r<f1->rank(); r++) {
+      indexArray.push_back(spaceDim);
+    }
+    FieldContainer<double> f1values(indexArray);
+    FieldContainer<double> f2values(indexArray);
+    f1->values(f1values,basisCache);
+    f2->values(f2values,basisCache);
+    reportFunctionValueDifferences(*physPointsPtr, f1values, f2values, tol);
   }
   
   static void reportFCDifferences(const FieldContainer<double> &values1, const FieldContainer<double> &values2, double tol) {

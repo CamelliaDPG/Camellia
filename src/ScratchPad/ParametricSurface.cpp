@@ -109,34 +109,25 @@ public:
   const vector< pair<double,double> > &vertices() {
     return _vertices;
   }
-  FunctionPtr dx() {
+  FunctionPtr dt1() {
     if (_op == OP_VALUE) {
       return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DX, _vertices) );
     } else {
       return Function::null();
     }
   }
-  FunctionPtr dy() {
+  FunctionPtr dt2() {
     if (_op == OP_VALUE) {
       return Teuchos::rcp( new TransfiniteInterpolatingSurface(_curves, OP_DY, _vertices) );
     } else {
       return Function::null();
     }
   }
-};
-
-BasisCachePtr parametricCacheForCell(MeshPtr mesh, int cellID) {
-  shards::CellTopology cellTopo = *(mesh->getElement(cellID)->elementType()->cellTopoPtr);
-  BasisCachePtr basisCache;
-  if (cellTopo.getSideCount() == 4) {
-    int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
-    int cubatureDegree = max(15,maxTestDegree*2);
-    basisCache = BasisCache::parametricQuadCache(cubatureDegree);
-  } else {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only quads supported right now.");
+  FunctionPtr grad() {
+    FunctionPtr parametricGradient = Function::vectorize(dt1(), dt2());
+    return ParametricCurve::parametricGradientWrapper(parametricGradient);
   }
-  return basisCache;
-}
+};
 
 void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &edgeInterpolationCoefficients, 
                                                        VectorBasisPtr basis,
@@ -267,7 +258,6 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
   
-//  BasisCachePtr basisCache = parametricCacheForCell(mesh, cellID);
   int cubatureDegree = max(maxTestDegree*2,15); // chosen to match that used in edge projection.
   int cubatureEnrichment = max(cubatureDegree-maxTestDegree*2,0);
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
@@ -281,6 +271,16 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
     basisCoefficients[i] += edgeInterpolationCoefficients[i];
   }
   
+}
+
+FunctionPtr ParametricSurface::dt1() {
+  // default: no dt1() defined
+  return Function::null();
+}
+
+FunctionPtr ParametricSurface::dt2() {
+  // default: no dt2() defined
+  return Function::null();
 }
 
 void TransfiniteInterpolatingSurface::value(double t1, double t2, double &x, double &y) {

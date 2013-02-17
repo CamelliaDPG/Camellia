@@ -115,13 +115,16 @@ void ParametricFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   }
 }
 
-FunctionPtr ParametricFunction::dx() { // really dt
-  return dt();
+FunctionPtr ParametricFunction::dx() {
+  // dx() applies a piola transform (increments _derivativeOrder); dt() does not
+  double tScale = _t1 - _t0;
+  return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder+1) );
 }
 
 ParametricFunctionPtr ParametricFunction::dt() {
+  // dx() applies a piola transform (increments _derivativeOrder); dt() does not
   double tScale = _t1 - _t0;
-  return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder+1) );
+  return Teuchos::rcp( new ParametricFunction(tScale * _underlyingFxn->dx(),_t0,_t1,_derivativeOrder) );
 }
 
 ParametricFunctionPtr ParametricFunction::parametricFunction(FunctionPtr fxn, double t0, double t1) {
@@ -229,6 +232,10 @@ public:
     double curve_t1 = _cutPoints[curveIndex+1];
     double curve_t = (t - curve_t0) / (curve_t1 - curve_t0);
     _curves[curveIndex]->value(curve_t, x,y);
+  }
+  
+  ParametricCurvePtr dt() {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
   }
 };
 
@@ -538,6 +545,103 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
 //    refPoints(i,0) = t;
 //  }
 //}
+
+class ParametricGradientWrapper : public Function {
+  FunctionPtr _parametricGradient;
+  bool _convertBasisCacheToParametricSpace;
+public:
+  ParametricGradientWrapper(FunctionPtr parametricGradient, bool convertBasisCacheToParametricSpace = false) : Function(parametricGradient->rank()) {
+    _parametricGradient = parametricGradient;
+    _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    unsigned cellTopoKey = basisCache->cellTopology().getBaseKey();
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    Teuchos::Array<int> dimensions;
+    values.dimensions(dimensions);
+    FieldContainer<double> parametricValuesMultiCell(dimensions);
+    // this is formally multi-cell, but I think in practice it will generally be just one
+    // (one reason I'm not worrying about extra copies of data for each cell in parametricValuesMultiCell
+    //  — I'm expecting there just to be one cell, therefore just one copy.)
+    if ( ! _convertBasisCacheToParametricSpace) {
+      _parametricGradient->values(parametricValuesMultiCell, basisCache);
+    } else {
+      dimensions[0] = 1; // one cell
+      parametricValuesMultiCell.resize(dimensions);
+      BasisCachePtr parametricCache;
+      if (cellTopoKey == shards::Quadrilateral<4>::key) {
+        parametricCache = BasisCache::parametricQuadCache(basisCache->cubatureDegree(), basisCache->getRefCellPoints());
+      } else if (cellTopoKey == shards::Line<2>::key) {
+        parametricCache = BasisCache::parametric1DCache(basisCache->cubatureDegree());
+        parametricCache->setRefCellPoints(basisCache->getRefCellPoints());
+      }
+      _parametricGradient->values(parametricValuesMultiCell, parametricCache);
+    }
+    
+    int spaceDim = basisCache->getSpaceDim();
+    int numCells = values.dimension(0);
+    typedef FunctionSpaceTools fst;
+    // HGRADtransformGRAD expects (F,P,D) for input, which here can be understood as (1,P,D)--one field
+    dimensions[0] = 1; // one cell
+    // get a FieldContainer referring just to the first cell's values (all cells have the same values)
+    FieldContainer<double> parametricValues(dimensions, &parametricValuesMultiCell[0]); // shallow copy
+
+    FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
+    
+    if ((cellTopoKey == shards::Line<2>::key) || (cellTopoKey == shards::Quadrilateral<4>::key)) {
+      // modify the jacobianInverse to account for the fact that we're on [0,1], not [-1,1]
+      // basisCache's transformation goes from [-1,1] to [x0,x1]
+      // F(xi)  = xi * (x1-x0) / 2 + (x1+x0) / 2
+      // F'(xi) = (x1-x0) / 2 is the jacobian.
+      // Our G(t) = t * (x1-x0) + x0
+      // G'(t) = x1-x0
+      // so the jacobian is doubled, and the inverse jacobian is halved.
+      for (int i=0; i<jacobianInverse.size(); i++) {
+        jacobianInverse[i] /= 2.0;
+      }
+    } else if (cellTopoKey == shards::Triangle<3>::key) {
+      // parametric space has same dimensions as ref triangle: nothing to do
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported CellTopology.");
+    }
+    
+    // apply "Piola" transform to values
+    if (spaceDim==1) {
+      // add field component to values/parametricValues:
+      values.resize(numCells,1,numPoints,spaceDim);
+      parametricValues.resize(1,numPoints,spaceDim);
+      fst::HGRADtransformGRAD<double>(values, jacobianInverse, parametricValues);
+      values.resize(numCells,numPoints); // in 1D, Camellia Function "gradients" are scalar-valued (different from Intrepid's take on it).
+    } else {
+      cout << "Parametric points:\n" << basisCache->computeParametricPoints();
+      for (int d=0; d<spaceDim; d++) { // d is the function component index
+        FieldContainer<double> parametricValues_d (1,numPoints,spaceDim); // F,P,D
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          for (int derivative_direction=0; derivative_direction<spaceDim; derivative_direction++) {
+            parametricValues_d(0,ptIndex,derivative_direction) = parametricValues(0,ptIndex,d,derivative_direction);
+          }
+        }
+        cout << "for d=" << d << ", parametricValues_d:\n" << parametricValues_d;
+        FieldContainer<double> values_d(numCells,1,numPoints,spaceDim);
+//        cout << "jacobianInverse:\n" << jacobianInverse;
+        fst::HGRADtransformGRAD<double>(values_d, jacobianInverse, parametricValues_d);
+        // now, place values_d in the appropriate spots in values
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+          for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+            for (int derivative_direction=0; derivative_direction<spaceDim; derivative_direction++) {
+              values(cellIndex,ptIndex,d,derivative_direction) = values_d(cellIndex,0,ptIndex,derivative_direction);
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+FunctionPtr ParametricCurve::parametricGradientWrapper(FunctionPtr parametricGradient, bool convertBasisCacheToParametricSpace) {
+  // translates gradients from parametric to physical space
+  return Teuchos::rcp( new ParametricGradientWrapper(parametricGradient, convertBasisCacheToParametricSpace) );
+}
 
 std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(unsigned cellTopoKey) {
   if (cellTopoKey == shards::Quadrilateral<4>::key) {

@@ -57,6 +57,30 @@ public:
   }
 };*/
 
+MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
+  if (quadNodes.size() != 8) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "quadNodes must be 4 x 2");
+  }
+  int spaceDim = 2;
+  vector< FieldContainer<double> > vertices;
+  for (int i=0; i<4; i++) {
+    FieldContainer<double> vertex(spaceDim);
+    vertex[0] = quadNodes[2*i];
+    vertex[1] = quadNodes[2*i+1];
+    vertices.push_back(vertex);
+  }
+  vector< vector<int> > elementVertices;
+  vector<int> cell0;
+  cell0.push_back(0);
+  cell0.push_back(1);
+  cell0.push_back(2);
+  cell0.push_back(3);
+  elementVertices.push_back(cell0);
+  
+  MeshPtr mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bf, H1Order, pToAddTest) );
+  return mesh;
+}
+
 MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements) {
   FieldContainer<double> quadPoints(4,2);

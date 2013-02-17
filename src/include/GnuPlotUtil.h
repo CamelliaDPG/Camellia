@@ -178,8 +178,21 @@ public:
   
   // badly named, maybe: we support arbitrary space dimension...
   static void writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints) {
-    int numPoints = dataPoints.dimension(0);
-    int spaceDim = dataPoints.dimension(1);
+    FieldContainer<double> dataPointsCopy = dataPoints;
+    
+    if (dataPoints.rank()==3) {
+      int numCells = dataPoints.dimension(0);
+      int numPoints = dataPoints.dimension(1);
+      int spaceDim = dataPoints.dimension(2);
+      dataPointsCopy.resize(numCells*numPoints, spaceDim);
+    }
+    
+    if (dataPointsCopy.rank() != 2) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"writeXYPoints only supports containers of rank 2 or 3");
+    }
+    
+    int numPoints = dataPointsCopy.dimension(0);
+    int spaceDim = dataPointsCopy.dimension(1);
     
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
@@ -194,12 +207,12 @@ public:
     for (int i=0; i<numPoints; i++) {
       if ((spaceDim==3) && (i>0)) {
         // for 3D point sets, separate new x values with a new line.
-        if (dataPoints(i,0) != dataPoints(i-1,0)) {
+        if (dataPointsCopy(i,0) != dataPointsCopy(i-1,0)) {
           fout << "\n";
         }
       }
       for (int d=0; d<spaceDim; d++) {
-        fout << dataPoints(i,d) << "   ";
+        fout << dataPointsCopy(i,d) << "   ";
       }
       fout << "\n";
     }

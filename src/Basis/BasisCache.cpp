@@ -792,3 +792,17 @@ BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr ele
   
   return basisCache;
 }
+BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo) {
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  FieldContainer<double> physicalCellNodes(1,4,2);
+  physicalCellNodes(0,0,0) = 0;
+  physicalCellNodes(0,0,1) = 0;
+  physicalCellNodes(0,1,0) = width;
+  physicalCellNodes(0,1,1) = 0;
+  physicalCellNodes(0,2,0) = width;
+  physicalCellNodes(0,2,1) = height;
+  physicalCellNodes(0,3,0) = 0;
+  physicalCellNodes(0,3,1) = height;
+  
+  return Teuchos::rcp(new BasisCache(physicalCellNodes, quad_4, cubDegree, createSideCacheToo));
+}

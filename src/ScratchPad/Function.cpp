@@ -458,6 +458,10 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
+//    if (cellIndex==6) {
+////      cout << "Function::integrate() values:\n" << values;
+//      cout << "weightedMeasures:\n" << *weightedMeasures;
+//    }
   }
 }
 
@@ -514,14 +518,13 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
 double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest) {
   double integral = 0;
   
-  // TODO: rewrite this to compute in distributed fashion
   int myPartition = Teuchos::GlobalMPISession::getRank();
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
-    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType); // TODO: replace with local variant
+    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
 
     int numCells = cells.size();
     vector<int> cellIDs;
@@ -539,6 +542,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     } else {
       this->integrate(cellIntegrals, basisCache);
     }
+    cout << "cellIntegrals:\n" << cellIntegrals;
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       integral += cellIntegrals(cellIndex);
     }
@@ -1185,6 +1189,21 @@ FunctionPtr SumFunction::dz() {
     return null();
   }
   return _f1->dz() + _f2->dz();
+}
+
+FunctionPtr SumFunction::grad() {
+  if ( isNull(_f1->grad()) || isNull(_f2->grad()) ) {
+    return null();
+  } else {
+    return _f1->grad() + _f2->grad();
+  }
+}
+FunctionPtr SumFunction::div() {
+  if ( isNull(_f1->div()) || isNull(_f2->div()) ) {
+    return null();
+  } else {
+    return _f1->div() + _f2->div();
+  }
 }
 
 double hFunction::value(double x, double y, double h) {

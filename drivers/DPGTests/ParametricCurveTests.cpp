@@ -11,6 +11,9 @@
 #include "BasisSumFunction.h"
 #include "ParametricSurface.h"
 
+#include "StokesFormulation.h"
+#include "MeshFactory.h"
+
 static const double PI  = 3.141592653589793238462;
 
 void ParametricCurveTests::setup() {
@@ -18,6 +21,13 @@ void ParametricCurveTests::setup() {
 }
 
 void ParametricCurveTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testGradientWrapper()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testTransfiniteInterpolant()) {
     numTestsPassed++;
@@ -291,6 +301,164 @@ bool ParametricCurveTests::testCircularArc() {
     cout << "quadratic projection-based interpolant has greater error in y than linear interpolant.\n";
     success = false;
   }*/
+  
+  return success;
+}
+
+bool ParametricCurveTests::testGradientWrapper() {
+  bool success = true;
+  
+  // create an artificial function whose gradient is "interesting" and known
+  FunctionPtr t1 = Teuchos::rcp( new Xn(1) );
+  FunctionPtr t2 = Teuchos::rcp( new Yn(1) );
+  FunctionPtr xt = t1 + t1 * t2;
+  FunctionPtr yt = t2 + 2 * t1 * t2;
+  FunctionPtr xt_dt1 = 1 + t2;
+  FunctionPtr xt_dt2 = t1;
+  FunctionPtr yt_dt1 = 2 * t2;
+  FunctionPtr yt_dt2 = 1 + 2 * t1;
+  
+  FunctionPtr ft = Function::vectorize(xt, yt);
+  FunctionPtr ft_dt1 = Function::vectorize(xt_dt1, yt_dt1);
+  FunctionPtr ft_dt2 = Function::vectorize(xt_dt2, yt_dt2);
+  
+  FunctionPtr ft_gradt = Function::vectorize(ft_dt1, ft_dt2);
+  
+  // first test: confirm that on a parametric quad, the wrapped function agrees with the naked one
+  int cubatureDegree = 5;
+  BasisCachePtr parametricQuadCache = BasisCache::parametricQuadCache(cubatureDegree);
+  FunctionPtr fx_gradx = ParametricCurve::parametricGradientWrapper(ft_gradt, true);
+
+  double tol = 1e-14;
+  if (! ft_gradt->equals(fx_gradx, parametricQuadCache)) {
+    success = false;
+    cout << "on a parametric quad, the wrapped gradient doesn't agree with the naked one";
+    reportFunctionValueDifferences(ft_gradt, fx_gradx, parametricQuadCache, tol);
+  }
+  if (! ft_gradt->equals(ft->grad(), parametricQuadCache)) {
+    success = false;
+    cout << "on a parametric quad, manual gradient disagrees with automatic one (error in test construction, likely).";
+    reportFunctionValueDifferences(ft_gradt, ft->grad(), parametricQuadCache, tol);
+  }
+  
+  // on the quad domain defined by (0,0), (1,0), (2,3), (0,1),
+  // some algebra shows that for x and y as functions of the parametric
+  // coordinates, we have
+  // x = t1 +     t1 * t2
+  // y = t2 + 2 * t1 * t2
+  // which gives the result that our original function f(t1,t2) = (t1 + t1 * t2, t2 + 2 * t1 * t2) =  (x, y)
+  
+  FunctionPtr x = Teuchos::rcp( new Xn(1) ); // understood in physical space
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  FunctionPtr f1_xy = x;
+  FunctionPtr f2_xy = y;
+  FunctionPtr f_xy = Function::vectorize(f1_xy, f2_xy);
+  
+  // set up the quad domain
+  FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+  physicalCellNodes(0,0,0) = 0;
+  physicalCellNodes(0,0,1) = 0;
+  
+  physicalCellNodes(0,1,0) = 1;
+  physicalCellNodes(0,1,1) = 0;
+  
+  physicalCellNodes(0,2,0) = 2;
+  physicalCellNodes(0,2,1) = 3;
+  
+  physicalCellNodes(0,3,0) = 0;
+  physicalCellNodes(0,3,1) = 1;
+  
+  // physical space BasisCache:
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, quad_4, cubatureDegree));
+
+  // as a preliminary test, check that the Jacobian values and inverse values agree with our expectations
+  // we expect the Jacobian to be:
+  //        [ 1 + t2      t1 ]
+  // 1/2 *  [                ]
+  //        [ 2 * t2  1 + t2 ]
+  // where (t1,t2) are parametric coordinates and the 1/2 comes from the transformation from reference
+  // to parametric space
+  int numCells = 1;
+  int numPoints = basisCache->getRefCellPoints().dimension(0);
+  int spaceDim = 2;
+  FieldContainer<double> jacobianExpected(numCells,numPoints,spaceDim,spaceDim);
+  FieldContainer<double> jacobianInvExpected(numCells,numPoints,spaceDim,spaceDim);
+  // also check that the function we've chosen has the expected values
+  // by first computing its gradient in parametric space and then dividing by 2 to account
+  // for the transformation from reference to parametric space
+  FieldContainer<double> fgrad_based_jacobian(numCells,numPoints,spaceDim,spaceDim);
+  ft_gradt->values(fgrad_based_jacobian, parametricQuadCache);
+  FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    double t1 = parametricPoints(0,ptIndex,0);
+    double t2 = parametricPoints(0,ptIndex,1);
+    jacobianExpected(0,ptIndex,0,0) = 0.5 * (1 + t2);
+    jacobianExpected(0,ptIndex,0,1) = 0.5 * (t1);
+    jacobianExpected(0,ptIndex,1,0) = 0.5 * (2 * t2);
+    jacobianExpected(0,ptIndex,1,1) = 0.5 * (1 + 2 * t1);
+    jacobianInvExpected(0,ptIndex,0,0) = (2.0 / (1 + 2 * t1 + t2) ) * (1 + 2 * t1);
+    jacobianInvExpected(0,ptIndex,0,1) = (2.0 / (1 + 2 * t1 + t2) ) * (- t1);
+    jacobianInvExpected(0,ptIndex,1,0) = (2.0 / (1 + 2 * t1 + t2) ) * (- 2 * t2);
+    jacobianInvExpected(0,ptIndex,1,1) = (2.0 / (1 + 2 * t1 + t2) ) * (1 + t2);
+    
+    fgrad_based_jacobian(0,ptIndex,0,0) /= 2.0;
+    fgrad_based_jacobian(0,ptIndex,0,1) /= 2.0;
+    fgrad_based_jacobian(0,ptIndex,1,0) /= 2.0;
+    fgrad_based_jacobian(0,ptIndex,1,1) /= 2.0;
+  }
+  FieldContainer<double> jacobian = basisCache->getJacobian();
+  FieldContainer<double> jacobianInv = basisCache->getJacobianInv();
+  double maxDiff = 0;
+  if (! fcsAgree(jacobianExpected, jacobian, tol, maxDiff)) {
+    success = false;
+    cout << "Jacobian expected does not match actual.\n";
+    reportFunctionValueDifferences(parametricPoints, jacobian, jacobianExpected, tol);
+  }
+  if (! fcsAgree(jacobianInvExpected, jacobianInv, tol, maxDiff)) {
+    success = false;
+    cout << "Jacobian inverse expected does not match actual.\n";
+    reportFunctionValueDifferences(parametricPoints, jacobianInv, jacobianInvExpected, tol);
+  }
+  if (! fcsAgree(fgrad_based_jacobian, jacobianExpected, tol, maxDiff)) {
+    success = false;
+    cout << "Jacobian from fgrad does not agree with the transformation jacobian (problem with test?).\n";
+    reportFunctionValueDifferences(parametricPoints, fgrad_based_jacobian, jacobianExpected, tol);
+  }
+  
+  // test that the gradient values agree
+  if (! fx_gradx->equals(f_xy->grad(), basisCache)) {
+    success = false;
+    cout << "wrapped gradient does not agree with analytically transformed function.\n";
+    reportFunctionValueDifferences(fx_gradx, f_xy->grad(), basisCache, tol);
+  }
+  
+  // finally, although this isn't really the right place for this, it is convenient here
+  // to test the TFI for the "mesh" we were concerned with above.
+  int H1Order = 5;
+  BFPtr bf = VGPStokesFormulation(1.0).bf();
+  physicalCellNodes.resize(4,2);
+  int horizontalElements = 1, verticalElements = 1;
+  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes);
+  
+  int cellID = 0;
+  vector< ParametricCurvePtr > edges = mesh->parametricEdgesForCell(cellID);
+  ParametricSurfacePtr tfi = ParametricSurface::transfiniteInterpolant(edges);
+
+  double v2[2];
+  edges[2]->value(0, v2[0], v2[1]);
+  cout << "v2 = (" << v2[0] << ", " << v2[1] << ")\n";
+  
+  if ( ! tfi->equals(f_xy, basisCache) ) {
+    success = false;
+    cout << "TFI does not agree with analytically constructed transformation function.\n";
+    reportFunctionValueDifferences(tfi, f_xy, basisCache, tol);
+  }
+  if ( ! tfi->grad()->equals(f_xy->grad(), basisCache) ) {
+    success = false;
+    cout << "TFI does not agree with analytically constructed transformation function.\n";
+    reportFunctionValueDifferences(tfi->grad(), f_xy->grad(), basisCache, tol);
+  }
   
   return success;
 }
@@ -630,7 +798,6 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
   FunctionPtr expected_tfi = Function::vectorize(xPart, yPart);
   
   int cubatureDegree = 4;
-  tol = 1e-13; // relax a little for the L2 comparison
   BasisCachePtr parametricCache = BasisCache::parametricQuadCache(cubatureDegree);
   
   // a couple quick sanity checks:
@@ -687,7 +854,7 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
   FunctionPtr xPart_dt1 = Function::constant(4);
   FunctionPtr yPart_dt1 = Function::constant(0);
   FunctionPtr expected_tfi_dt1 = Function::vectorize(xPart_dt1, yPart_dt1);
-  if (! expected_tfi_dt1->equals(transfiniteInterpolant->dx(), parametricCache, tol)) {
+  if (! expected_tfi_dt1->equals(transfiniteInterpolant->dt1(), parametricCache, tol)) {
     cout << "d/dt1 of transfinite interpolant doesn't match expected.\n";
     success = false;
     int numCells = 1;
@@ -696,7 +863,7 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
     FieldContainer<double> values(numCells,numPoints,spaceDim);
     FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
     expected_tfi_dt1->values(expected_values, parametricCache);
-    transfiniteInterpolant->dx()->values(values, parametricCache);
+    transfiniteInterpolant->dt1()->values(values, parametricCache);
     reportFunctionValueDifferences(parametricCache->getPhysicalCubaturePoints(), expected_values,
                                    values, tol);
   }
@@ -704,7 +871,7 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
   FunctionPtr xPart_dt2 = Function::constant(0);
   FunctionPtr yPart_dt2 = Function::constant(3);
   FunctionPtr expected_tfi_dt2 = Function::vectorize(xPart_dt2, yPart_dt2);
-  if (! expected_tfi_dt2->equals(transfiniteInterpolant->dy(), parametricCache, tol)) {
+  if (! expected_tfi_dt2->equals(transfiniteInterpolant->dt2(), parametricCache, tol)) {
     cout << "d/dt2 of transfinite interpolant doesn't match expected.\n";
     success = false;
     int numCells = 1;
@@ -713,8 +880,30 @@ bool ParametricCurveTests::testTransfiniteInterpolant() {
     FieldContainer<double> values(numCells,numPoints,spaceDim);
     FieldContainer<double> expected_values(numCells,numPoints,spaceDim);
     expected_tfi_dt2->values(expected_values, parametricCache);
-    transfiniteInterpolant->dy()->values(values, parametricCache);
+    transfiniteInterpolant->dt2()->values(values, parametricCache);
     reportFunctionValueDifferences(parametricCache->getPhysicalCubaturePoints(), expected_values,
+                                   values, tol);
+  }
+  
+  BasisCachePtr physicalBasisCache = BasisCache::quadBasisCache(width, height, cubatureDegree);
+  
+  FunctionPtr one = Function::constant(1);
+  FunctionPtr expected_tfi_dx = Function::vectorize(one, Function::zero());
+  FunctionPtr expected_tfi_dy = Function::vectorize(Function::zero(), one);
+  
+  FunctionPtr expected_tfi_grad = Function::vectorize(expected_tfi_dx, expected_tfi_dy);
+
+  if (! expected_tfi_grad->equals(transfiniteInterpolant->grad(), physicalBasisCache, tol)) {
+    cout << "grad of transfinite interpolant doesn't match expected.\n";
+    success = false;
+    int numCells = 1;
+    int numPoints = physicalBasisCache->getRefCellPoints().dimension(0);
+    int spaceDim = 2;
+    FieldContainer<double> values(numCells,numPoints,spaceDim,spaceDim);
+    FieldContainer<double> expected_values(numCells,numPoints,spaceDim,spaceDim);
+    expected_tfi_grad->values(expected_values, physicalBasisCache);
+    transfiniteInterpolant->grad()->values(values, physicalBasisCache);
+    reportFunctionValueDifferences(physicalBasisCache->getPhysicalCubaturePoints(), expected_values,
                                    values, tol);
   }
   

@@ -25,6 +25,9 @@ public:
   ParametricSurface() : Function(1) { // vector valued
     
   }
+  virtual FunctionPtr dt1();
+  virtual FunctionPtr dt2();
+  
   virtual void value(double t1, double t2, double &x, double &y) = 0;
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   

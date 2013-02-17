@@ -209,6 +209,7 @@ public:
                                          int cubatureDegreeEnrichment = 0);
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
                                              int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
+  static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
 };
 
 #endif

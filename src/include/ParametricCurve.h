@@ -103,6 +103,9 @@ protected:
   
   static ParametricCurvePtr reverse(ParametricCurvePtr fxn);
   static ParametricCurvePtr subCurve(ParametricCurvePtr fxn, double t0, double t1); // t0: the start of the subcurve; t1: the end
+  
+  
+  static FunctionPtr parametricGradientWrapper(FunctionPtr parametricGradient, bool convertBasisCacheToParametricSpace = false); // translates gradients from parametric to physical space.  If convertBasisCacheToParametricSpace is false, that's essentially an assertion that the Function passed in does its own conversion to parametric space for the points, and the only responsibility of the wrapper is the Piola transform.  If convertBasisCacheToParametricSpace is true, then the points will be remapped by the wrapper as well.  Right now, the convertBasisCacheToParametricSpace = false is the one in active use in the production code, because there the FunctionPtr is a ParametricSurface that does the spatial mapping, while we use convertBasisCacheToParametricSpace = true for a test where a Function is more manually constructed.
 };
 typedef Teuchos::RCP<ParametricCurve> ParametricCurvePtr;
 
