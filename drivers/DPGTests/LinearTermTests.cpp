@@ -187,6 +187,14 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+
+  setup();
+  if (testLinearTermEvaluation()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
 }
   
 bool LinearTermTests::testSums() {
@@ -1011,11 +1019,6 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   LinearTermPtr field =  1.0 * u;
   lt->addTerm(field,true);
   lt->integrate(integrals, elemType->trialOrderPtr, basisCache);
-//  for (int c = 0;c<numCells;c++) {
-//    for (int i = 0;i<numTrialDofs;i++){
-//      cout << "lt at cell " << c << " and dof " << i << "= " << integrals(c,i) << endl;
-//    }
-//  }
  
   double tol = 1e-12;
   double maxDiff;
@@ -1025,6 +1028,85 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   }
 
   return success;
+}
+
+bool LinearTermTests::testLinearTermEvaluation(){
+  bool success = true;
+  int nCells = 2;
+  double eps = .1;
+
+  FunctionPtr one = Function::constant(1.0);
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+
+  vector<double> beta; beta.push_back(1.0); beta.push_back(0.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  LinearTermPtr vVecLT = Teuchos::rcp(new LinearTerm);
+  LinearTermPtr tauVecLT = Teuchos::rcp(new LinearTerm);
+  vVecLT->addTerm(sqrt(eps)*v->grad());
+  tauVecLT->addTerm((1/sqrt(eps))*tau);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+
+  // define nodes for mesh
+  int order = 3;
+  int H1Order = order+1; int pToAdd = 2;
+  
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+
+  //////////////////// evaluate LinearTerms /////////////////
+
+  map<int,FunctionPtr> errRepMap;
+  errRepMap[v->ID()] = one;
+  errRepMap[tau->ID()] = one*e1+one*e2; // vector valued fxn (1,1)
+  FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
+  FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
+  bool xTauZero = errTau->x()->isZero();
+  bool yTauZero = errTau->y()->isZero();
+  bool xVZero = errV->dx()->isZero();
+  bool yVZero = errV->dy()->isZero();
+  /*
+  FunctionPtr xErr = (errTau->x())*(errTau->x()) + (errV->dx())*(errV->dx());
+  FunctionPtr yErr = (errTau->y())*(errTau->y()) + (errV->dy())*(errV->dy());
+  double xErrVal = xErr->integrate(mesh,15,true);
+  */
+
+  // if we don't crash, return success
+  return success;
+
 }
 
 std::string LinearTermTests::testSuiteName() {

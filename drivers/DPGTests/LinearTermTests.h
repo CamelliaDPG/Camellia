@@ -57,6 +57,8 @@ public:
   bool testRieszInversion();
   bool testIntegrateMixedBasis();
 
+  bool testLinearTermEvaluation();
+
   std::string testSuiteName();
 };
 

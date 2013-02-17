@@ -2,7 +2,6 @@
 #include "Mesh.h"
 #include "Solution.h"
 #include "ZoltanMeshPartitionPolicy.h"
-
 #include "LagrangeConstraints.h"
 
 #include "RefinementStrategy.h"
@@ -20,7 +19,9 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
 
 #include "InnerProductScratchPad.h"
@@ -33,7 +34,7 @@
 #include "Element.h"
 
 #include "MeshPolyOrderFunction.h"
-#include "CondensationSolver.h"
+#include "SolutionExporter.h"
 
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
@@ -442,17 +443,23 @@ void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;
+  choice::Args args( argc, argv );
 #endif
+
+  int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  int nCells = args.Input<int>("--nCells", "num cells",2);  
+  int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
+  double Re = args.Input<double>("--Re","Reynolds number",1e3);
+  int useAnisotropy = args.Input<int>("--useAnisotropy","anisotropy flag (0 false, 1 true)",0);
+
   int polyOrder = 2;
-  int pToAdd = 2; // for tests
+  int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
-  double Re = 1e3;
   double Ma = 3.0;
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
 
@@ -461,10 +468,8 @@ int main(int argc, char *argv[]) {
     cout << "Running with parameters Re = " << Re << ", Mach = " << Ma << endl;
   }
   
-  bool useTriangles = false;
-  
-  FieldContainer<double> domainPoints(4,2);
-  
+  bool useTriangles = false;  
+  FieldContainer<double> domainPoints(4,2);  
   domainPoints(0,0) = 0.0; // x1
   domainPoints(0,1) = 0.0; // y1
   domainPoints(1,0) = X_BOUNDARY;
@@ -475,20 +480,6 @@ int main(int argc, char *argv[]) {
   domainPoints(3,1) = YTOP;  
   
   int H1Order = polyOrder + 1;
-  int nCells = 1;
-  if ( argc > 1) {
-    nCells = atoi(argv[1]);
-    if (rank==0){
-      cout << "nCells = " << nCells << endl;
-    }
-  }
-  int numRefs = 0;
-  if ( argc > 2) {
-    numRefs = atoi(argv[2]);
-    if (rank==0){
-      cout << "numRefs = " << numRefs << endl;
-    }
-  }
   int horizontalCells = 2*nCells, verticalCells = nCells;
  
   ////////////////////////////////////////////////////////////////////
@@ -539,11 +530,11 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(domainPoints, horizontalCells, 
                                                 verticalCells, bf, H1Order, 
                                                 H1Order+pToAdd, useTriangles);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   MeshInfo meshInfo(mesh); // gets info like cell measure, etc
 
   //  FunctionPtr partitions = Teuchos::rcp( new PartitionFunction(mesh) );
-  
+ 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
@@ -558,11 +549,18 @@ int main(int argc, char *argv[]) {
   vector<double> e2(2); // (0,1)
   e1[0] = 1;
   e2[1] = 1;
-  
+
+  FunctionPtr u1_prev = Function::solution(u1,backgroundFlow);
+  FunctionPtr u2_prev = Function::solution(u2,backgroundFlow);
+  FunctionPtr rho_prev = Function::solution(rho,backgroundFlow);
+  FunctionPtr T_prev = Function::solution(T,backgroundFlow);
+
+  /*
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u1) );
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u2) );
   FunctionPtr rho_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, rho) );  
   FunctionPtr T_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, T) );
+  */
 
   // linearized stresses (q_i is linear, so doesn't need linearizing)
   FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma11) );
@@ -823,17 +821,9 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double CFL = .9; // not exactly CFL, just how we want our timestep to change w/min h
-  double hmin = sqrt(meshInfo.getMinCellMeasure());
-  bool useCFL = false; // rescale dt with min mesh size
-  double dtMin = .25;
-
-  //  double dt = max(dtMin,hmin*CFL);
   double dt = .1;
 
   if (rank==0){
-    cout << "CFL = " << CFL << endl;
-    cout << "hmin = " << hmin << endl;
     cout << "Timestep dt = " << dt << endl;
   }
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
@@ -1076,7 +1066,7 @@ int main(int argc, char *argv[]) {
   // =============================================================================================
 
   SpatialFilterPtr freeBottom = Teuchos::rcp( new FreeStreamBoundaryBottom );
-  bc->addDirichlet(F1nhat, freeBottom, zero); // for consistency
+  //  bc->addDirichlet(F1nhat, freeBottom, zero); // for consistency
   bc->addDirichlet(u2hat,  freeBottom, zero); // sym bcs
   bc->addDirichlet(F2nhat, freeBottom, zero); // sets zero y-stress in free stream bottom boundary
   bc->addDirichlet(F4nhat, freeBottom, zero); // sets zero heat-flux in free stream bottom boundary
@@ -1088,42 +1078,11 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
-  int enrichDegree = H1Order; // just for kicks. 
+  int enrichDegree = H1Order-1; // just for kicks. 
   cout << "enriching cubature by " << enrichDegree << endl;
   solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
 
   //  solution->setReportTimingResults(true); // print out timing 
-
-  bool setOutflowBC = false;
-  if (setOutflowBC){
-    bool usePenalty = true;
-    if (usePenalty){
-      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-      SpatialFilterPtr outflow = Teuchos::rcp( new OutflowBoundary);
-      FunctionPtr subsonicIndicator = Teuchos::rcp( new SubsonicIndicator(u1hat_prev, That_prev, GAMMA, cv) );
-      // conditions on u_n = u_1, sigma_ns = sigma_12, q_1 flux
-      pc->addConstraint(subsonicIndicator*u1hat == subsonicIndicator*u1hat_prev,outflow);
-      pc->addConstraint(subsonicIndicator*F3nhat == subsonicIndicator*F3nhat_prev,outflow);
-      pc->addConstraint(subsonicIndicator*F4nhat == subsonicIndicator*F4nhat_prev,outflow);
-
-      solution->setFilter(pc);
-
-    } else {
-      SpatialFilterPtr subsonicOutflow = Teuchos::rcp( new SubsonicOutflow(u1hat_prev, That_prev, GAMMA, cv));
-      /*
-      bc->addDirichlet(u1hat, subsonicOutflow, u1hat_prev); // u_n
-      bc->addDirichlet(F3nhat, subsonicOutflow, F3nhat_prev); // sigma_12
-      bc->addDirichlet(F4nhat, subsonicOutflow, F4nhat_prev); // q_1
-      */
-      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-      pc->addConstraint(u1hat == u1hat_prev_time,subsonicOutflow);
-      pc->addConstraint(F3nhat == F3nhat_prev_time,subsonicOutflow);
-      pc->addConstraint(F4nhat == F4nhat_prev_time,subsonicOutflow);
-
-      solution->setFilter(pc);
-
-    }
-  }
 
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
@@ -1138,6 +1097,97 @@ int main(int argc, char *argv[]) {
 
   int numTimeSteps = 150; // max time steps
   int numNRSteps = 1;
+
+  ////////////////////////////////////////////////////////////////////
+  // REFINE MESH TO TRIGGER EXCEPTION
+  ////////////////////////////////////////////////////////////////////
+
+  for (int i = 0;i<5;i++){
+    vector<int> xC;
+    vector<int> yC;
+    vector<int> rC;
+    switch (i){
+    case 0:
+      rC.push_back(2);
+      rC.push_back(4);
+      rC.push_back(6);
+      break;
+    case 1:
+      rC.push_back(9);
+      rC.push_back(12);
+      rC.push_back(13);
+      rC.push_back(16);
+      rC.push_back(17);
+      break;
+    case 2:
+      rC.push_back(20);
+      rC.push_back(21);
+      rC.push_back(24);
+      rC.push_back(25);
+      rC.push_back(28);
+      rC.push_back(29);
+      rC.push_back(32);
+      yC.push_back(30);
+      break;
+    case 3:
+      rC.push_back(33);
+      rC.push_back(36);
+      rC.push_back(37);
+      rC.push_back(43);
+      rC.push_back(46);
+      rC.push_back(47);
+      rC.push_back(51);
+      rC.push_back(54);
+      rC.push_back(55);
+      rC.push_back(58);
+      rC.push_back(60);
+      rC.push_back(61);
+
+      yC.push_back(18);
+      yC.push_back(19);
+      yC.push_back(26);
+      yC.push_back(31);      
+      yC.push_back(34);
+      yC.push_back(35);
+      yC.push_back(38);
+      yC.push_back(39);
+      yC.push_back(40);
+      yC.push_back(41);
+      yC.push_back(50);
+      yC.push_back(52);
+      yC.push_back(56);
+      yC.push_back(57);
+      break;
+    case 4:
+      vector<double> c = mesh->getCellCentroid(93);
+      if (rank==0)
+	cout << "centroid coords for cellID 93 = " << c[0] << ", " << c[1] << endl;
+
+      rC.push_back(93);   
+      break;
+    }
+    if (rank==0)
+      cout << "on refinement " << i << endl;
+    if (rank==0)
+      cout << "x refs" << endl;
+
+    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+    if (rank==0)
+      cout << "y refs" << endl;
+    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+    if (rank==0)
+      cout << "r refs" << endl;
+    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
+    if (rank==0)
+      cout << "one irreg" << endl;
+    mesh->enforceOneIrregularity();
+  }
+  VTKExporter solExport(solution, mesh, varFactory);
+  if (rank==0){
+    solExport.exportSolution("preRefMesh");
+  }
+  return 0;
+  
   
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
@@ -1173,21 +1223,27 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (rank==0){
-    FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
-    polyOrderFunction->writeValuesToMATLABFile(mesh,"polyOrder.m");
-  }
-
   ////////////////////////////////////////////////////////////////////
   // PSEUDO-TIME SOLVE STRATEGY 
   ////////////////////////////////////////////////////////////////////
 
-  bool useAdaptTS = false;
+  VTKExporter exporter(solution, mesh, varFactory);
+  VTKExporter backgroundFlowExporter(backgroundFlow, mesh, varFactory);
+
+  LinearTermPtr residual = rhs->linearTermCopy();
+  residual->addTerm(-bf->testFunctional(solution));  
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
+  rieszResidual->computeRieszRep();
+  FunctionPtr ev1 = Teuchos::rcp(new RepFunction(v1,rieszResidual));
+  FunctionPtr ev2 = Teuchos::rcp(new RepFunction(v2,rieszResidual));
+  FunctionPtr ev3 = Teuchos::rcp(new RepFunction(v3,rieszResidual));
+  FunctionPtr ev4 = Teuchos::rcp(new RepFunction(v4,rieszResidual));
+  FunctionPtr etau1 = Teuchos::rcp(new RepFunction(tau1,rieszResidual));
+  FunctionPtr etau2 = Teuchos::rcp(new RepFunction(tau2,rieszResidual));
+  FunctionPtr etau3 = Teuchos::rcp(new RepFunction(tau3,rieszResidual));
+
   if (rank==0){
     cout << "doing timesteps";
-    if ((rank==0) && useAdaptTS){
-      cout << " using adaptive timestepping";
-    }
     cout << endl;  
   }
 
@@ -1196,31 +1252,21 @@ int main(int argc, char *argv[]) {
   for (int k = 0;k<=numRefs;k++){    
 
     ofstream residualFile;      
-    ofstream dtFile;      
     if (rank==0){
       std::ostringstream refNum;
       refNum << k;
       string filename1 = "time_res" + refNum.str()+ ".txt";
       residualFile.open(filename1.c_str());
-      //      string filename2 = "dt" + refNum.str()+ ".txt";
-      //      dtFile.open(filename2.c_str());      
     }
-
     double L2_time_residual = 1e7;
     int i = 0;
     while(L2_time_residual > time_tol && (i<numTimeSteps)){
       for (int j = 0;j<numNRSteps;j++){
-	solution->solve(false); 
-	//	solution->condensedSolve(false);  
+	//	solution->solve(false); 
+	solution->condensedSolve(false);  
 	if (mesh->numActiveElements() > 2000){
 	  solution->condensedSolve(true);  // turn on save memory flag	  
 	}
-	// clear fluxes that we use for subsonic outflow, which accumulate
-	backgroundFlow->clearSolution(That->ID());
-	backgroundFlow->clearSolution(u1hat->ID());
-	backgroundFlow->clearSolution(F3nhat->ID());
-	backgroundFlow->clearSolution(F4nhat->ID());
-
 	backgroundFlow->addSolution(solution,1.0); // update with dU
       }         
      
@@ -1235,7 +1281,6 @@ int main(int argc, char *argv[]) {
 
       if (rank==0){
        residualFile << L2_time_residual << endl;
-       //       dtFile << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
 
        cout << "at timestep i = " << i << " with dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << ", and time residual = " << L2_time_residual << endl;    	
 
@@ -1243,26 +1288,10 @@ int main(int argc, char *argv[]) {
        if (writeTimestepFiles){
 	 std::ostringstream oss;
 	 oss << k << "_" << i ;
-	 std::ostringstream dat;
-	 dat<<".dat";
-	 std::ostringstream vtu;
-	 vtu<<".vtu";
-	 string Ustr("U_NS");      
-	 solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-	 solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-	 solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());
-	 solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );
-	 solution->writeFluxesToFile(F2nhat->ID(),"F2nhat"+oss.str()+dat.str() );
-	 solution->writeFluxesToFile(F3nhat->ID(),"F3nhat"+oss.str()+dat.str() );
-	 solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str() );
-	 backgroundFlow->writeFluxesToFile(u1hat->ID(),"u1hat_prev" +oss.str()+dat.str());
-	 backgroundFlow->writeFluxesToFile(u2hat->ID(),"u2hat_prev" +oss.str()+dat.str());
-	 backgroundFlow->writeFluxesToFile(That->ID(), "That_prev" +oss.str()+dat.str());
-	 backgroundFlow->writeFluxesToFile(F1nhat->ID(),"F1nhat_prev"+oss.str()+dat.str() );
-	 backgroundFlow->writeFluxesToFile(F2nhat->ID(),"F2nhat_prev"+oss.str()+dat.str() );
-	 backgroundFlow->writeFluxesToFile(F3nhat->ID(),"F3nhat_prev"+oss.str()+dat.str() );
-	 backgroundFlow->writeFluxesToFile(F4nhat->ID(),"F4nhat_prev"+oss.str()+dat.str() );
-	 backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));       
+	 string Ustr("U");      
+	 string dUstr("dU");      
+	 exporter.exportSolution(string("dU") + oss.str());
+	 backgroundFlowExporter.exportSolution(string("U") + oss.str());
        }
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
@@ -1272,22 +1301,11 @@ int main(int argc, char *argv[]) {
     
     // Print results from processor with rank 0
     if (rank==0){
-      residualFile.close();
-      //      dtFile.close();	
-
       std::ostringstream oss;
-      oss << k ;
-      std::ostringstream dat;
-      dat<<".dat";
-      std::ostringstream vtu;
-      vtu<<".vtu";
-      string Ustr("U_NS");      	
-      solution->writeFluxesToFile(F1nhat->ID(),"F1nhat"+oss.str()+dat.str() );      
-      solution->writeFluxesToFile(u1hat->ID(),"u1hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(u2hat->ID(),"u2hat" +oss.str()+dat.str());
-      solution->writeFluxesToFile(That->ID(), "That" +oss.str()+dat.str());   
-      solution->writeFluxesToFile(F4nhat->ID(),"F4nhat"+oss.str()+dat.str());
-      backgroundFlow->writeToVTK(Ustr+oss.str()+vtu.str(),min(polyOrder+1,4));
+      oss << k ;      
+      residualFile.close();
+      exporter.exportSolution(string("dU")+oss.str());
+      backgroundFlowExporter.exportSolution(string("U")+oss.str());
     }
 
     // get entropy
@@ -1296,9 +1314,9 @@ int main(int argc, char *argv[]) {
     FunctionPtr s = Teuchos::rcp(new LogFunction(p_prev/rhoToTheGamma));
     FunctionPtr H = rho_prev*s; // entropy functional
     FunctionPtr Hsq = H*H; // entropy functional sq
-    //    FunctionPtr Hnorm = Teuchos::rcp(new NormSqOverElement(H,mesh));
 
     // compute energy error and plot
+    /*
     map<int, double> energyErrorMap = solution->energyError();
     if (rank==0){
       std::ostringstream refNum;
@@ -1310,24 +1328,81 @@ int main(int argc, char *argv[]) {
       H->writeValuesToMATLABFile(mesh,"entropy"+refNum.str()+mfile.str());
       Hsq->writeValuesToMATLABFile(mesh,"entropySq"+refNum.str()+mfile.str());
     }
-
+    */
     if (k<numRefs){
       if (rank==0){
 	cout << "Performing refinement number " << k << endl;
       }     
-      //      energyError = solution->energyErrorTotal();
-      refinementStrategy->refine(rank==0);    
+      if (!useAnisotropy){
+	refinementStrategy->refine(rank==0);          // isotropic
+      }else{	       
+	rieszResidual->computeRieszRep();
+	FunctionPtr vxErr = ev1->dx()*ev1->dx() + ev2->dx()*ev2->dx() + ev3->dx()*ev3->dx() + ev4->dx()*ev4->dx();
+	FunctionPtr vyErr = ev1->dy()*ev1->dy() + ev2->dy()*ev2->dy() + ev3->dy()*ev3->dy() + ev4->dy()*ev4->dy();
+	FunctionPtr tauXErr = etau1->x()*etau1->x() + etau2->x()*etau2->x() + etau3->x()*etau3->x();
+	FunctionPtr tauYErr = etau1->y()*etau1->y() + etau2->y()*etau2->y() + etau3->y()*etau3->y();
+	FunctionPtr xErr = (1/sqrt(Re))*vxErr + (ReScaling*Re)*tauXErr;
+	FunctionPtr yErr = (1/sqrt(Re))*vyErr + (ReScaling*Re)*tauYErr;
+	vector<int> cellIDs;
+	refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
+	map<int,double> xErrMap = xErr->cellIntegrals(cellIDs,mesh,15,true);
+	map<int,double> yErrMap = yErr->cellIntegrals(cellIDs,mesh,15,true);
+	//	refinementStrategy->refine(rank==0,xErrMap,yErrMap); //anisotropic refinements
+	vector<int> xCells,yCells,regCells;
+	for (int i = 0;i<cellIDs.size();i++){
+	  int cellID = cellIDs[i];
+	  vector<double> c = mesh->getCellCentroid(cellID);
+	  bool onWall = c[0]>1.0; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
+	  double ratio = xErrMap[cellID]/yErrMap[cellID];
+	  double thresh = 10.0;
+	  if (onWall && ratio > thresh){
+	    xCells.push_back(cellID);
+	  }else if (onWall && ratio < 1.0/thresh){
+	    yCells.push_back(cellID);
+	  }else{
+	    regCells.push_back(cellID);
+	  }
+	}
+	// write refined cells to file
+	if (rank==0){
+	  ofstream xCellFile;
+	  ofstream yCellFile;      
+	  ofstream regCellFile;      
+	  std::ostringstream refNum;
+	  refNum << k;
+	  string filename1 = "xCellsAtRef" + refNum.str()+ ".txt";
+	  string filename2 = "yCellsAtRef" + refNum.str()+ ".txt";
+	  string filename3 = "regCellsAtRef" + refNum.str()+ ".txt";
+	  xCellFile.open(filename1.c_str());
+	  yCellFile.open(filename2.c_str());
+	  regCellFile.open(filename3.c_str());      
+
+	  for (int i = 0;i<xCells.size();i++){
+	    xCellFile << xCells[i] << endl;
+	    cout << "xCells = " << xCells[i] << endl;
+	  }	  
+	  for (int i = 0;i<yCells.size();i++){
+	    yCellFile << yCells[i] << endl;	    
+	    cout << "yCells = " << yCells[i] << endl;
+	  }
+	  for (int i = 0;i<regCells.size();i++){
+	    regCellFile << regCells[i] << endl;
+	    cout << "regCells = " << regCells[i] << endl;
+	  }
+	  xCellFile.close();
+	  yCellFile.close();
+	  regCellFile.close();		  
+	}
+	mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+	mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+	mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
+	mesh->enforceOneIrregularity();
+      }
+
       if (rank==0){
 	cout << "Done with  refinement number " << k << endl;
       }   
 
-      if (useCFL){
-	double hmin = sqrt(meshInfo.getMinCellMeasure());
-	((ScalarParamFunction*)invDt.get())->set_param(1.0/max(dtMin,CFL*hmin));
-	if (rank==0){
-	  cout << "minCellSize = " << hmin << ", dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
-	}
-      }
       // RESET solution every refinement - make sure discretization error doesn't creep in
       backgroundFlow->projectOntoMesh(functionMap);
       prevTimeFlow->projectOntoMesh(functionMap);

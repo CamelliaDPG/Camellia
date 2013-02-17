@@ -73,6 +73,9 @@ public:
   static bool testHUnrefinementForConfusion();
   static bool testRefinementPattern();
   static bool testPointContainment();
+
+  // added by Jesse
+  static bool testMultiBasisCrash();
 };
 
 #endif

@@ -35,6 +35,8 @@ public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
   void setEnforceOneIrregularity(bool value);
   virtual void refine(bool printToConsole=false);
+  virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
+  void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells);
   virtual void refineCells(vector<int> &cellIDs);
   static void pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
   static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
