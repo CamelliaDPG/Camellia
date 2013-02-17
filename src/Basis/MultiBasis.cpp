@@ -484,35 +484,6 @@ int MultiBasis::relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdina
     dofOffset += basis->getCardinality();
     previousMaxReachable = maxReachableLeaf;
   }
-  { // if we get here, should throw an exception
-    // copying code so that we can repeat its execution in the debugger for the failure case
-    int numBases = _bases.size();
-    int maxReachableLeaf = 0; // for a given basis
-    int previousMaxReachable = 0;
-    BasisPtr basis; // the basis that contains the leaf...
-    int dofOffset = 0;
-    for (int basisIndex=0; basisIndex<numBases; basisIndex++) {
-      basis = _bases[basisIndex];
-      if ( BasisFactory::isMultiBasis(basis) ) {
-        MultiBasis* multiBasis = (MultiBasis*) basis.get();
-        maxReachableLeaf += multiBasis->numLeafNodes();
-      } else {
-        maxReachableLeaf += 1;
-      }
-      if (leafOrdinal < maxReachableLeaf) {
-        if ( BasisFactory::isMultiBasis(basis) ) {
-          MultiBasis* multiBasis = (MultiBasis*) basis.get();
-          return dofOffset + multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal, leafOrdinal - previousMaxReachable);
-        } else {
-          return dofOffset + basisDofOrdinal;
-          // (we'll need to be more careful in 3D!)
-        }
-      }
-      dofOffset += basis->getCardinality();
-      previousMaxReachable = maxReachableLeaf;
-    }
-    
-  }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
 }
 
