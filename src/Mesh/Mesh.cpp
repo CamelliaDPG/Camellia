@@ -2195,6 +2195,13 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     int childSideIndex = (*entryIt).second;
     ElementPtr childCell = parent->getChild(childCellIndex);
     
+    // new code 2-16-13:
+    while (childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() == 1) ) {
+      pair<int, int> childEntry = childCell->childIndicesForSide(childSideIndex)[0];
+      childSideIndex = childEntry.second;
+      childCell = childCell->getChild(childEntry.first);
+    } // end new code 2-16-13
+    
     if ( childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() > 1)) {
       childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex,bigNeighborPolyOrder) );
     } else {

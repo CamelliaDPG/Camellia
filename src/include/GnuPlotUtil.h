@@ -20,6 +20,7 @@ public:
     if (transformationFunction.get()==NULL) {
       // then the computational and exact meshes are the same: call the other method:
       writeExactMeshSkeleton(filePath,mesh,2);
+      return;
     }
     
     int spaceDim = mesh->getDimension(); // not that this will really work in 3D...

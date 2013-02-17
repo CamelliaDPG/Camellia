@@ -62,6 +62,8 @@
 
 #include "MeshUtilities.h"
 
+#include "GnuPlotUtil.h"
+
 using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
@@ -2014,7 +2016,6 @@ bool MeshTestSuite::testPointContainment() {
   return success;
 }
 bool MeshTestSuite::testMultiBasisCrash(){
-  double tol = 2e-12; // had to increase for triangles
   bool success = true;  
   int polyOrder = 2;
   PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
@@ -2121,7 +2122,17 @@ bool MeshTestSuite::testMultiBasisCrash(){
       rC.push_back(93);  // refinement breaks on this one
       break;
     }
-    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+//    if (i==4) {
+//      FieldContainer<double> vertices(4,2);
+//      mesh->verticesForCell(vertices, 78);
+//      cout << "vertices for cell 78:\n" << vertices;
+//      mesh->verticesForCell(vertices, 91);
+//      cout << "vertices for cell 91:\n" << vertices;
+//      mesh->verticesForCell(vertices, 93);
+//      cout << "vertices for cell 93:\n" << vertices;
+//      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/multiBasisRefinementTest.dat", mesh);
+//    }
+    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());
     mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
     mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
     mesh->enforceOneIrregularity();
