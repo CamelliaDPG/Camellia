@@ -259,6 +259,11 @@ public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+  
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();

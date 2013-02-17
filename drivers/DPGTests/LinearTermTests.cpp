@@ -1057,10 +1057,16 @@ bool LinearTermTests::testLinearTermEvaluation(){
   errRepMap[tau->ID()] = one*e1+one*e2; // vector valued fxn (1,1)
   FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
   FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
-  bool xTauZero = errTau->x()->isZero();
-  bool yTauZero = errTau->y()->isZero();
-  bool xVZero = errV->dx()->isZero();
-  bool yVZero = errV->dy()->isZero();
+  try {
+    bool xTauZero = errTau->x()->isZero();
+    bool yTauZero = errTau->y()->isZero();
+    bool xVZero = errV->dx()->isZero();
+    bool yVZero = errV->dy()->isZero();
+    
+  } catch (...) {
+    cout << "testLinearTermEvaluation: Caught exception.\n";
+    success = false;
+  }
   /*
   FunctionPtr xErr = (errTau->x())*(errTau->x()) + (errV->dx())*(errV->dx());
   FunctionPtr yErr = (errTau->y())*(errTau->y()) + (errV->dy())*(errV->dy());

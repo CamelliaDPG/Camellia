@@ -1067,6 +1067,39 @@ FunctionPtr ProductFunction::dz() {
   return _f1 * _f2->dz() + _f2 * _f1->dz();
 }
 
+FunctionPtr ProductFunction::x() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take x component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->x())) {
+    return null();
+  }
+  return _f1 * _f2->x();
+}
+
+FunctionPtr ProductFunction::y() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take y component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->y())) {
+    return null();
+  }
+  return _f1 * _f2->y();
+}
+
+FunctionPtr ProductFunction::z() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take z component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->z())) {
+    return null();
+  }
+  return _f1 * _f2->z();
+}
+
 int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
   if (f1->rank() == f2->rank()) return 0;
   if (f1->rank() == 0) return f2->rank();
