@@ -123,7 +123,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
     previousError = error;
     
     // DEBUGGING code
-    if ((i==3) || (i==4)) {
+    if (true) { //((i==3) || (i==4)) {
       // here, we're getting a negative area for cellID 6
       // to start, let's visualize the cubature points
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 6);
@@ -136,13 +136,13 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       FieldContainer<double> refPoints(pointsInLine,2);
       for (int i=0; i<pointsInLine; i++) {
         refPoints(i,0) = 0;
-        refPoints(i,1) = 2.0 * (i) / (pointsInLine) - 1.0;
+        refPoints(i,1) = 2.0 * (i) / (pointsInLine-1) - 1.0;
       }
       basisCache->setRefCellPoints(refPoints);
       GnuPlotUtil::writeXYPoints("/tmp/cellID6_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
       // now, a horizontal line
       for (int i=0; i<pointsInLine; i++) {
-        refPoints(i,0) = 2.0 * (i) / (pointsInLine) - 1.0;
+        refPoints(i,0) = 2.0 * (i) / (pointsInLine-1) - 1.0;
         refPoints(i,1) = 0;
       }
       basisCache->setRefCellPoints(refPoints);

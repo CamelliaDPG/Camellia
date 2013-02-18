@@ -99,8 +99,8 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
         }
       }
     }
-//    cout << "gramMatrixFiltered:\n" << gramMatrixFiltered;
-//    cout << "ipVectorFiltered:\n" << ipVectorFiltered;
+    cout << "gramMatrixFiltered:\n" << gramMatrixFiltered;
+    cout << "ipVectorFiltered:\n" << ipVectorFiltered;
     gramMatrix = gramMatrixFiltered;
     ipVector = ipVectorFiltered;
   }

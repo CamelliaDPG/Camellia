@@ -613,7 +613,7 @@ public:
       fst::HGRADtransformGRAD<double>(values, jacobianInverse, parametricValues);
       values.resize(numCells,numPoints); // in 1D, Camellia Function "gradients" are scalar-valued (different from Intrepid's take on it).
     } else {
-      cout << "Parametric points:\n" << basisCache->computeParametricPoints();
+//      cout << "Parametric points:\n" << basisCache->computeParametricPoints();
       for (int d=0; d<spaceDim; d++) { // d is the function component index
         FieldContainer<double> parametricValues_d (1,numPoints,spaceDim); // F,P,D
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -621,7 +621,7 @@ public:
             parametricValues_d(0,ptIndex,derivative_direction) = parametricValues(0,ptIndex,d,derivative_direction);
           }
         }
-        cout << "for d=" << d << ", parametricValues_d:\n" << parametricValues_d;
+//        cout << "for d=" << d << ", parametricValues_d:\n" << parametricValues_d;
         FieldContainer<double> values_d(numCells,1,numPoints,spaceDim);
 //        cout << "jacobianInverse:\n" << jacobianInverse;
         fst::HGRADtransformGRAD<double>(values_d, jacobianInverse, parametricValues_d);
