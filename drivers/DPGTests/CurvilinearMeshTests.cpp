@@ -32,13 +32,6 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
-  if (testCylinderMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
   if (testH1Projection()) {
     numTestsPassed++;
   }
@@ -61,6 +54,13 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testStraightEdgeMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testCylinderMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -106,7 +106,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   double previousError = 1000;
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
-    double approximateArea = one->integrate(mesh,5);
+    double approximateArea = one->integrate(mesh);
     double impliedPi = (width * height - approximateArea) / (r*r);
     cout << "For k=" << i << ", implied value of pi: " << impliedPi;
     cout << " (error " << abs(PI-impliedPi) << ")\n";
@@ -117,39 +117,10 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
-    ostringstream filePath;
-    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    ostringstream filePath;
+//    filePath << "/tmp/cylinderFlowMesh" << H1Order << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
-    
-    // DEBUGGING code
-    if (true) { //((i==3) || (i==4)) {
-      // here, we're getting a negative area for cellID 6
-      // to start, let's visualize the cubature points
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 6);
-      double area = basisCache->getCellMeasures()[0];
-      cout << "area of cellID 6 is " << area << endl;
-      FieldContainer<double> cubaturePoints = basisCache->getPhysicalCubaturePoints();
-      GnuPlotUtil::writeXYPoints("/tmp/cellID6_cubPoints.dat", cubaturePoints);
-      // try drawing a vertical line in the reference element
-      int pointsInLine = 15;
-      FieldContainer<double> refPoints(pointsInLine,2);
-      for (int i=0; i<pointsInLine; i++) {
-        refPoints(i,0) = 0;
-        refPoints(i,1) = 2.0 * (i) / (pointsInLine-1) - 1.0;
-      }
-      basisCache->setRefCellPoints(refPoints);
-      GnuPlotUtil::writeXYPoints("/tmp/cellID6_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
-      // now, a horizontal line
-      for (int i=0; i<pointsInLine; i++) {
-        refPoints(i,0) = 2.0 * (i) / (pointsInLine-1) - 1.0;
-        refPoints(i,1) = 0;
-      }
-      basisCache->setRefCellPoints(refPoints);
-      GnuPlotUtil::writeXYPoints("/tmp/cellID6_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
-    }
-    
-    
     // p-refine
     if (i < numPRefinements) {
       mesh->pRefine(allCells);
@@ -828,6 +799,24 @@ bool CurvilinearMeshTests::testH1Projection() {
     }
     
   }
+  
+  return success;
+}
+
+bool CurvilinearMeshTests::testPointsRemainInsideElement() {
+  bool success = true;
+  
+  double width = 1.0;
+  double height = 1.0;
+  
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
+  
+  int H1Order = 1;
+  int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
+  
+  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+  
+  ParametricCurvePtr halfCircle;
   
   return success;
 }
