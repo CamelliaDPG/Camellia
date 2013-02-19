@@ -261,6 +261,8 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   int cubatureDegree = max(maxTestDegree*2,15); // chosen to match that used in edge projection.
   int cubatureEnrichment = max(cubatureDegree-maxTestDegree*2,0);
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
+  // because we're determining the transformation function, disable it inside basisCache!
+  basisCache->setTransformationFunction(Function::null());
   
   // project, skipping edgeNodeFieldIndices:
   Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);

@@ -560,6 +560,13 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
   _cellSideParities = cellSideParities;
 }
 
+void BasisCache::setTransformationFunction(FunctionPtr fxn) {
+  _transformationFxn = fxn;
+  // recompute physical points and jacobian values
+  determinePhysicalPoints();
+  determineJacobian();
+}
+
 void BasisCache::determinePhysicalPoints() {
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
