@@ -31,12 +31,14 @@ void CurvilinearMeshTests::teardown() {
 }
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  setup();
-  if (testPointsRemainInsideElement()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
+  // following test disabled because we never got around to testing anything
+  // (mostly just used as a driver to output data to file in course of debugging)
+//  setup();
+//  if (testPointsRemainInsideElement()) {
+//    numTestsPassed++;
+//  }
+//  numTestsRun++;
+//  teardown();
   
   setup();
   if (testCylinderMesh()) {
@@ -138,31 +140,31 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
-    ostringstream filePath;
-    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    ostringstream filePath;
+//    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     
     // DEBUGGING code
-    if (true) { //((i==3) || (i==4)) {
-      // here, we're getting a negative area for cellID 6
-      // to start, let's visualize the cubature points
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 6);
-      double area = basisCache->getCellMeasures()[0];
-      cout << "area of cellID 6 is " << area << endl;
-//      FieldContainer<double> cubaturePoints = basisCache->getPhysicalCubaturePoints();
-//      GnuPlotUtil::writeXYPoints("/tmp/cellID6_cubPoints.dat", cubaturePoints);
-      // try drawing a vertical line in the reference element
-      int pointsInLine = 15;
-      FieldContainer<double> refPoints;
-      lineAcrossQuadRefCell(refPoints, pointsInLine, false);
-      basisCache->setRefCellPoints(refPoints);
-      GnuPlotUtil::writeXYPoints("/tmp/cellID6_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
-      // now, a horizontal line
-      lineAcrossQuadRefCell(refPoints, pointsInLine, true);
-      basisCache->setRefCellPoints(refPoints);
-      GnuPlotUtil::writeXYPoints("/tmp/cellID6_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
-    }
+//    if (true) { //((i==3) || (i==4)) {
+//      // here, we're getting a negative area for cellID 6
+//      // to start, let's visualize the cubature points
+//      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 6);
+//      double area = basisCache->getCellMeasures()[0];
+//      cout << "area of cellID 6 is " << area << endl;
+////      FieldContainer<double> cubaturePoints = basisCache->getPhysicalCubaturePoints();
+////      GnuPlotUtil::writeXYPoints("/tmp/cellID6_cubPoints.dat", cubaturePoints);
+//      // try drawing a vertical line in the reference element
+//      int pointsInLine = 15;
+//      FieldContainer<double> refPoints;
+//      lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+//      basisCache->setRefCellPoints(refPoints);
+//      GnuPlotUtil::writeXYPoints("/tmp/cellID6_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+//      // now, a horizontal line
+//      lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+//      basisCache->setRefCellPoints(refPoints);
+//      GnuPlotUtil::writeXYPoints("/tmp/cellID6_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+//    }
     
     
     // p-refine
