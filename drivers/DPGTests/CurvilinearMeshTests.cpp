@@ -993,6 +993,11 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
       mesh_pRefined->setEdgeToCurveMap(edgeToCurveMap);
     }
     
+    vector< ParametricCurvePtr > curves1, curves2, curves3;
+    // curves1: manual construction
+    // curves2: p-refinement
+    // curves3: manually set curves after p-refinement
+    
     for (int H1Order=1; H1Order < 5; H1Order++) {
       MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes, pToAdd);
       
@@ -1004,6 +1009,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
       edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
       
       mesh->setEdgeToCurveMap(edgeToCurveMap);
+      curves1 = mesh->parametricEdgesForCell(cellID);
       
       GnuPlotUtil::writeExactMeshSkeleton("/tmp/hemkerSegment.dat", mesh, 15);
       
@@ -1019,12 +1025,31 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
       GnuPlotUtil::writeXYPoints("/tmp/hemkerSegment_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
       
       {
+        curves2 = mesh_pRefined->parametricEdgesForCell(cellID);
         mesh_pRefined->setEdgeToCurveMap(edgeToCurveMap);
+        curves3 = mesh_pRefined->parametricEdgesForCell(cellID);
 
+        // because we've messed with basisCache's refCellPoints, get a new basisCache
+        basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
+        
+        // now that we have the various curves defined, let's compare them
+        for (int i=0; i<curves1.size(); i++) {
+          if (! curves1[i]->equals(curves2[i], basisCache) ) {
+            cout << "For H1Order " << H1Order << ", ";
+            cout << "curves1 and curves2 differ in entry " << i << endl;
+            success = false;
+          }
+          if (! curves2[i]->equals(curves3[i], basisCache) ) {
+            cout << "For H1Order " << H1Order << ", ";
+            cout << "curves2 and curves3 differ in entry " << i << endl;
+            success = false;
+          }
+        }
+        
         // stuff with the second mesh, which is p-refined (trying to tease out how the different paths differ)
         GnuPlotUtil::writeExactMeshSkeleton("/tmp/copyHemkerSegment.dat", mesh_pRefined, 15);
         
-        BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
+        basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
         int pointsInLine = 15;
         FieldContainer<double> refPoints;
         lineAcrossQuadRefCell(refPoints, pointsInLine, false);
@@ -1038,6 +1063,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
         vector<int> cellIDs;
         cellIDs.push_back(cellID);
         mesh_pRefined->pRefine(cellIDs);
+        
       }
     }
   }
