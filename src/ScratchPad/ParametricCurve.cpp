@@ -454,8 +454,8 @@ ParametricCurvePtr ParametricCurve::circle(double r, double x0, double y0) {
 
 ParametricCurvePtr ParametricCurve::circularArc(double r, double x0, double y0, double theta0, double theta1) {
   ParametricCurvePtr circleFxn = circle(r, x0, y0);
-  double t0 = theta0 / 2.0 * PI;
-  double t1 = theta1 / 2.0 * PI;
+  double t0 = theta0 / (2.0 * PI);
+  double t1 = theta1 / (2.0 * PI);
   return subCurve(circleFxn, t0, t1);
 }
 
