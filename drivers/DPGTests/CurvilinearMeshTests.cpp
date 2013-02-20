@@ -210,6 +210,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 bool CurvilinearMeshTests::testEdgeLength() {
   bool success = true;
   
+  cout << setprecision(15);
+  double tol = 1e-14;
+  
   // to begin, a very simple test: do we compute the correct perimeter for a square?
   FunctionPtr oneOnBoundary = Function::meshBoundaryCharacteristic();
   
@@ -221,14 +224,62 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
-  // make a single-element mesh:
   int H1Order = 1;
+  
+  // first test, before we get into the circular stuff: define a parabolic edge
+  // whose exact integral we know (and which is exactly representable by our geometry)
+  {
+    FunctionPtr t = Teuchos::rcp( new Xn(1) );
+    FunctionPtr x = 2 * t - 1;
+    FunctionPtr y = x * x - 1;
+    
+    ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
+    
+    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+    physicalCellNodes(0,0,0) = -1;
+    physicalCellNodes(0,0,1) = 0;
+    
+    physicalCellNodes(0,1,0) = 1;
+    physicalCellNodes(0,1,1) = 0;
+    
+    physicalCellNodes(0,2,0) = 1;
+    physicalCellNodes(0,2,1) = 1;
+    
+    physicalCellNodes(0,3,0) = -1;
+    physicalCellNodes(0,3,1) = 1;
+    
+    int quadraticOrder = 2;
+    MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
+    
+    int cellID = 0;
+    vector<int> vertices = quadMesh->vertexIndicesForCell(cellID);
+    pair<int,int> edge = make_pair(vertices[0],vertices[1]);
+    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    edgeToCurveMap[edge] = bottomCurve;
+    
+    quadMesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    // the arclength of y = x^2 from -1 to 1 is sqrt(5) + 0.5 * asin(2)
+    // and the straight edges have total length 3:
+    double expectedPerimeter = 3 + sqrt(5) + 0.5 * asinh(2);
+    
+    for (int hRefinement=0; hRefinement<5; hRefinement++) {
+      double perimeter = oneOnBoundary->integrate(quadMesh);
+      double err = abs( perimeter - expectedPerimeter );
+      if (err > tol) {
+        cout << "For h-refinement " << hRefinement << ", edge integral of y=x^2 does not match expected.\n";
+        cout << "err = " << err << endl;
+      }      
+      quadMesh->hRefine(quadMesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+    }
+  }
+  
+  
+  // make a single-element mesh:
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   double perimeter = oneOnBoundary->integrate(mesh);
   
-  cout << setprecision(15);
-  
-  double tol = 1e-14;
+
   double expectedPerimeter = 4*(meshWidth);
   double err = abs(perimeter - expectedPerimeter);
   if (err > tol) {
