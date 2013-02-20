@@ -590,7 +590,15 @@ void BasisCache::determinePhysicalPoints() {
   if ( ! Function::isNull(_transformationFxn) ) {
     FieldContainer<double> newPhysCubPoints(_numCells,numPoints,_spaceDim);
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
-    _transformationFxn->values(newPhysCubPoints, thisPtr);
+    
+    // the usual story: we don't want to use the transformation Function inside the BasisCache
+    // while the transformation Function is using the BasisCache to determine its values.
+    // So we move _transformationFxn out of the way for a moment:
+    FunctionPtr transformationFxn = _transformationFxn;
+    _transformationFxn = Function::null();
+    transformationFxn->values(newPhysCubPoints, thisPtr);
+    _transformationFxn = transformationFxn;
+    
     _physCubPoints = newPhysCubPoints;
   }
 }
