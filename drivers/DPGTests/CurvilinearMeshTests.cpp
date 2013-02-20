@@ -31,6 +31,13 @@ void CurvilinearMeshTests::teardown() {
 }
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testEdgeLength()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   // following test disabled because we never got around to testing anything
   // (mostly just used as a driver to output data to file in course of debugging)
 //  setup();
@@ -56,13 +63,6 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testTransformationJacobian()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testEdgeLength()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -112,7 +112,7 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   
   //  double approximateArea = one->integrate(mesh);
   
-  //  cout << setprecision(15);
+  cout << setprecision(15);
   //  cout << "Exact area:" << trueArea << endl;
   //  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
   //
@@ -226,6 +226,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   double perimeter = oneOnBoundary->integrate(mesh);
   
+  cout << setprecision(15);
+  
   double tol = 1e-14;
   double expectedPerimeter = 4*(meshWidth);
   double err = abs(perimeter - expectedPerimeter);
@@ -261,9 +263,9 @@ bool CurvilinearMeshTests::testEdgeLength() {
       cout << "Error = " << error << endl;
     }
     
-    ostringstream filePath;
-    filePath << "/tmp/squareMesh_p" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    ostringstream filePath;
+//    filePath << "/tmp/squareMesh_p" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     
     // p-refine
     if (i < numPRefinements) {
@@ -342,12 +344,13 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   // now, do much the same thing, except with h-refinements:
   H1Order = 2;
-  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth, 1, 1);
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   previousError = 1000;
   numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
+    
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
     cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
