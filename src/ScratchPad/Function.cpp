@@ -59,6 +59,24 @@ public:
       }
     }
   }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+//  FunctionPtr dz() {
+//    return Function::zero();
+//  }
+};
+
+class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction {
+  
+public:
+  MeshSkeletonCharacteristicFunction() : ConstantScalarFunction(1, "|_{\\Gamma_h}") {
+    
+  }
+  bool boundaryValueOnly() { return true; }
 };
 
 // private class SimpleSolutionFunction:
@@ -891,6 +909,11 @@ FunctionPtr Function::meshBoundaryCharacteristic() {
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
 }
 
+FunctionPtr Function::meshSkeletonCharacteristic() {
+   // 1 on mesh skeleton, 0 elsewhere
+  return Teuchos::rcp( new MeshSkeletonCharacteristicFunction );
+}
+
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
   static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
   return _normal;
@@ -921,6 +944,14 @@ FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
 FunctionPtr Function::null() {
   static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
   return _null;
+}
+
+FunctionPtr Function::xn(int n) {
+  return Teuchos::rcp( new Xn(n) );
+}
+
+FunctionPtr Function::yn(int n) {
+  return Teuchos::rcp( new Yn(n) );
 }
 
 FunctionPtr Function::zero(int rank) {

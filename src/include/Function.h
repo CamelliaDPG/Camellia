@@ -117,6 +117,7 @@ public:
   static FunctionPtr composedFunction( FunctionPtr f, FunctionPtr arg_g); // note: SLOW! avoid when possible...
   static FunctionPtr constant(double value);
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
+  static FunctionPtr meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
@@ -125,6 +126,9 @@ public:
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero(int rank=0);
   static FunctionPtr restrictToCellBoundary(FunctionPtr f);
+  
+  static FunctionPtr xn(int n=1);
+  static FunctionPtr yn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
