@@ -55,7 +55,7 @@ public:
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
   virtual FunctionPtr div();
-  virtual FunctionPtr grad();
+  virtual FunctionPtr grad(int numComponents=-1);
   
 // inverse() presently unused: and unclear how useful...
 //  virtual FunctionPtr inverse();
@@ -300,7 +300,7 @@ public:
   FunctionPtr dy();
   FunctionPtr dz();
   
-  FunctionPtr grad(); // gradient of sum is the sum of gradients
+  FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
   FunctionPtr div();  // divergence of sum is sum of divergences
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);

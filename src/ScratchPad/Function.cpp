@@ -247,17 +247,38 @@ FunctionPtr Function::dy() {
 FunctionPtr Function::dz() {
   return Function::null();
 }
-FunctionPtr Function::grad() {
-  FunctionPtr dxFxn = dx();
-  FunctionPtr dyFxn = dy();
-  FunctionPtr dzFxn = dz();
-  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Function::null();
-  } else if (dzFxn.get() == NULL) {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
-  } else {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+FunctionPtr Function::grad(int numComponents) {
+    FunctionPtr dxFxn = dx();
+    FunctionPtr dyFxn = dy();
+    FunctionPtr dzFxn = dz();
+  if (numComponents==-1) { // default: just use as many non-null components as available
+    if (dxFxn.get()==NULL) {
+      return Function::null();
+    } else if (dyFxn.get()==NULL) {
+      // special case: in 1D, grad() returns a scalar
+      return dxFxn;
+    } else if (dzFxn.get() == NULL) {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
+  } else if (numComponents==1) {
+    // special case: we don't "vectorize" in 1D
+    return dxFxn;
+  } else if (numComponents==2) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Function::vectorize(dxFxn, dyFxn);
+    }
+  } else if (numComponents==3) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL) || (dzFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
 }
 //FunctionPtr Function::inverse() {
 //  return Function::null();
@@ -1291,11 +1312,11 @@ FunctionPtr SumFunction::dz() {
   return _f1->dz() + _f2->dz();
 }
 
-FunctionPtr SumFunction::grad() {
-  if ( isNull(_f1->grad()) || isNull(_f2->grad()) ) {
+FunctionPtr SumFunction::grad(int numComponents) {
+  if ( isNull(_f1->grad(numComponents)) || isNull(_f2->grad(numComponents)) ) {
     return null();
   } else {
-    return _f1->grad() + _f2->grad();
+    return _f1->grad(numComponents) + _f2->grad(numComponents);
   }
 }
 FunctionPtr SumFunction::div() {

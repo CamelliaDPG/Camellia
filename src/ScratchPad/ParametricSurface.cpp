@@ -123,7 +123,10 @@ public:
       return Function::null();
     }
   }
-  FunctionPtr grad() {
+  FunctionPtr grad(int numComponents) {
+    if ((numComponents != -1) && (numComponents != 2)) { // -1 means "however many components are available" (2, here)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TransfiniteInterpolatingSurface only supports gradients in 2D.");
+    }
     FunctionPtr parametricGradient = Function::vectorize(dt1(), dt2());
     return ParametricCurve::parametricGradientWrapper(parametricGradient);
   }

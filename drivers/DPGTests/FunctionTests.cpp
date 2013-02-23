@@ -206,15 +206,16 @@ bool FunctionTests::testBasisSumFunction() {
   // the Solution with those coefficients
 
   // define a new mesh: more interesting if we're not on the ref cell
+  int spaceDim = 2;
   FieldContainer<double> quadPoints(4,2);
   
-  quadPoints(0,0) = -1.0; // x1
-  quadPoints(0,1) = -1.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = -1.0;
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 2.0;
+  quadPoints(1,1) = 0.0;
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = -1.0;
+  quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
   int H1Order = 1, pToAdd = 0;
@@ -238,7 +239,8 @@ bool FunctionTests::testBasisSumFunction() {
   for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     int numSides = trialSpace->getNumSidesForVarID(trialID);
-    bool boundaryValued = numSides!=1;
+    bool boundaryValued = numSides != 1;
+    // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
@@ -251,7 +253,7 @@ bool FunctionTests::testBasisSumFunction() {
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
         FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
-        if (!boundaryValued) { // only look at volume variables for now
+        if (!boundaryValued) {
           double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
 //          cout << "l2diff = " << l2diff << endl;
           if (l2diff > tol) {
@@ -269,6 +271,20 @@ bool FunctionTests::testBasisSumFunction() {
             cout << "l2norm of solnFxn->dx(): " << solnFxn->dx()->l2norm(spectralConfusionMesh) << endl;
           }
           
+          // test that the restriction to a side works
+          for (int i=0; i<volumeCache->cellTopology().getSideCount(); i++) {
+            BasisCachePtr mySideCache = volumeCache->getSideBasisCache(i);
+            if (! solnFxn->equals(basisSumFxn, mySideCache, tol)) {
+              success = false;
+              cout << "testBasisSumFunction: on side 0, l2diff of " << l2diff << " exceeds tol of " << tol << endl;
+              reportFunctionValueDifferences(solnFxn, basisSumFxn, mySideCache, tol);
+            }
+            if (! solnFxn->grad(spaceDim)->equals(basisSumFxn->grad(spaceDim), mySideCache, tol)) {
+              success = false;
+              cout << "testBasisSumFunction: on side 0, l2diff of dx() " << l2diff << " exceeds tol of " << tol << endl;
+              reportFunctionValueDifferences(solnFxn->grad(spaceDim), basisSumFxn->grad(spaceDim), mySideCache, tol);
+            }
+          }
         } else {
           FieldContainer<double> cellIntegral(1);
           // compute l2 diff of integral along the one side where we can legitimately assert equality:

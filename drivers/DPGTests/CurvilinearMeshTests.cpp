@@ -265,14 +265,12 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     // since our map from straight edges is the identity,
     // the expected jacobian function along the side is
-    // [  1  ?? ]
-    // [  1  ?? ]
-    // i.e. where [D,D] = [spaceComp, derivDirection],
-    // we know the derivDirection=x part.  (IS THIS RIGHT?? I'M NOT SURE...)
-    FunctionPtr expectedJacobian;
+    // [  1  0 ]
+    // [  0  1 ]
+    FunctionPtr expectedTransformation, expectedJacobian;
     {
-      FunctionPtr x = Teuchos::rcp( new Xn(1) );
-      expectedJacobian = Function::vectorize(Function::constant(1), Function::constant(1));
+      expectedTransformation = Function::vectorize(Function::xn(1), Function::yn(1));
+      expectedJacobian = expectedTransformation->grad();
     }
     
     for (int hRefinement=0; hRefinement<5; hRefinement++) {
@@ -281,12 +279,25 @@ bool CurvilinearMeshTests::testEdgeLength() {
       int numCells = 1;
       int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
       int spaceDim = 2;
-      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim);
+      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim,spaceDim
+                                                    );
       expectedJacobian->values(expectedJacobianValues,sideCache);
-      FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim); // will need to filter out every other entry
+      FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim);
       quadMesh->getTransformationFunction()->grad()->values(jacobianValues,sideCache);
       
-      // TODO: finish writing this....
+      double maxDiff = 0;
+      
+      if (! expectedTransformation->equals(quadMesh->getTransformationFunction(), sideCache)) {
+        success = false;
+        cout << "testEdgeLength(): expected values don't match transformation function values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedTransformation, quadMesh->getTransformationFunction(), sideCache, tol);
+      }
+      
+      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) {
+        success = false;
+        cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedJacobian, quadMesh->getTransformationFunction()->grad(), sideCache, tol);
+      }
       
       double perimeter = oneOnBoundary->integrate(quadMesh);
       double err = abs( perimeter - expectedPerimeter );
