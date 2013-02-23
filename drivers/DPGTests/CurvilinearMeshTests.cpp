@@ -226,18 +226,18 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int H1Order = 1;
   
-  // first test, before we get into the circular stuff: define a parabolic edge
+  // first test, before we get into the circular stuff: define a sloped edge
   // whose exact integral we know (and which is exactly representable by our geometry)
   {
     FunctionPtr t = Teuchos::rcp( new Xn(1) );
     FunctionPtr x = 2 * t - 1;
-    FunctionPtr y = x * x - 1;
+    FunctionPtr y = x - 1;
     
     ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
     
     FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
     physicalCellNodes(0,0,0) = -1;
-    physicalCellNodes(0,0,1) = 0;
+    physicalCellNodes(0,0,1) = -2;
     
     physicalCellNodes(0,1,0) = 1;
     physicalCellNodes(0,1,1) = 0;
@@ -259,16 +259,41 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     quadMesh->setEdgeToCurveMap(edgeToCurveMap);
     
-    // the arclength of y = x^2 from -1 to 1 is sqrt(5) + 0.5 * asin(2)
-    // and the straight edges have total length 3:
-    double expectedPerimeter = 3 + sqrt(5) + 0.5 * asinh(2);
+    // the length of the sloped edge is 2 sqrt (2)
+    // and the other edges have total length of 5:
+    double expectedPerimeter = 6 + 2 * sqrt(2);
+    
+    // since our map from straight edges is the identity,
+    // the expected jacobian function along the side is
+    // [  1  ?? ]
+    // [  1  ?? ]
+    // i.e. where [D,D] = [spaceComp, derivDirection],
+    // we know the derivDirection=x part.  (IS THIS RIGHT?? I'M NOT SURE...)
+    FunctionPtr expectedJacobian;
+    {
+      FunctionPtr x = Teuchos::rcp( new Xn(1) );
+      expectedJacobian = Function::vectorize(Function::constant(1), Function::constant(1));
+    }
     
     for (int hRefinement=0; hRefinement<5; hRefinement++) {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
+      BasisCachePtr sideCache = basisCache->getSideBasisCache(0);
+      int numCells = 1;
+      int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+      int spaceDim = 2;
+      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim);
+      expectedJacobian->values(expectedJacobianValues,sideCache);
+      FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim); // will need to filter out every other entry
+      quadMesh->getTransformationFunction()->grad()->values(jacobianValues,sideCache);
+      
+      // TODO: finish writing this....
+      
       double perimeter = oneOnBoundary->integrate(quadMesh);
       double err = abs( perimeter - expectedPerimeter );
       if (err > tol) {
-        cout << "For h-refinement " << hRefinement << ", edge integral of y=x^2 does not match expected.\n";
+        cout << "For h-refinement " << hRefinement << ", edge integral of y=x-1 does not match expected.\n";
         cout << "err = " << err << endl;
+        cout << "expected perimeter = " << expectedPerimeter << "; actual = " << perimeter << endl;
       }      
       quadMesh->hRefine(quadMesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }

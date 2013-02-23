@@ -137,7 +137,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
     }
   }
   
-  FieldContainer<double> compValues(hgradBasis->getCardinality(),linePoints.dimension(0));
+  FieldContainer<double> compValues(hgradBasis->getCardinality(),numPoints);
   hgradBasis->getValues(compValues, linePoints, Intrepid::OPERATOR_VALUE);
   
   FieldContainer<double> values(hgradBasis->getCardinality(),linePoints.dimension(0),1); // one component
@@ -210,6 +210,37 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
         cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in second component.\n";
       }
     }
+    
+    // finally, test the ordering of gradient values
+    // these should be in the order f_i,j
+    FieldContainer<double> compGradValues(hgradBasis->getCardinality(),numPoints,spaceDim);
+    FieldContainer<double> vectorGradValues(twoComp->getCardinality(),numPoints,spaceDim,spaceDim);
+    
+    hgradBasis->getValues(compGradValues, linePoints, OPERATOR_GRAD);
+    twoCompAsVectorBasis->getValues(vectorGradValues, linePoints, OPERATOR_GRAD);
+    
+    for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
+      for (int comp=0; comp<2; comp++) {
+        int vectorDofOrdinal = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, comp);
+        for (int k=0; k<numPoints; k++) {
+          double dfi_d0_expected = compGradValues(compDofOrdinal,k,0); // i: the comp index
+          double dfi_d1_expected = compGradValues(compDofOrdinal,k,1);
+          
+          double dfi_d0_actual = vectorGradValues(vectorDofOrdinal,k,comp,0);
+          double dfi_d1_actual = vectorGradValues(vectorDofOrdinal,k,comp,1);
+          
+          if ( ( abs(dfi_d0_expected - dfi_d0_actual) != 0) || ( abs(dfi_d1_expected - dfi_d1_actual) != 0) ) {
+            success = false;
+            cout << myName << ": expected gradient differs from actual\n";
+            cout << "component grad values\n" << compGradValues;
+            cout << "vector grad values:\n" << vectorGradValues;
+            return success;
+          }
+        }
+      }
+
+    }
+    
 
   }
   return success;

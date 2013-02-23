@@ -138,6 +138,12 @@ void LinearTermTests::teardown() {
 }
 
 void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testBoundaryPlusVolumeTerms()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testIntegrateMixedBasis()) {
@@ -162,13 +168,6 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testRieszInversion()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
- 
-  setup();
-  if (testBoundaryPlusVolumeTerms()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -425,6 +424,13 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     FunctionPtr n = Function::normal();
     
     LinearTermPtr ibp = vector_fxn * n * v1 - vector_fxn * v1->grad();
+    
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    FieldContainer<double> vector_fxn_values(numCells,numPoints,spaceDim);
+    vector_fxn->values(vector_fxn_values,basisCache);
+//    cout << "vector_fxn values: \n" << vector_fxn_values;
     
     double boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
     double volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);

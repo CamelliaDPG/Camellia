@@ -487,6 +487,12 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
+//    if (basisCache->getSideIndex() == 0) {
+//      cout << "basisCache for side 0, physical cubature points:\n" << basisCache->getPhysicalCubaturePoints();
+//      cout << "basisCache for side 0, integrate() values:\n" << values;
+//      cout << "basisCache for side 0, weightedMeasures:\n" << *
+//      weightedMeasures;
+//    }
 //    if (cellIndex==6) {
 ////      cout << "Function::integrate() values:\n" << values;
 //      cout << "weightedMeasures:\n" << *weightedMeasures;
@@ -611,8 +617,6 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
   scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
 }
 
-// note that valuesDottedWithTensor isn't called by anything right now
-// (it's totally untried!! -- trying for first time with NewBurgersDriver, in RHS)
 void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache) {
@@ -637,6 +641,9 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
   this->values(myTensorValues,basisCache);
   FieldContainer<double> otherTensorValues(tensorValueIndex);
   tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
+  
+//  cout << "myTensorValues:\n" << myTensorValues;
+//  cout << "otherTensorValues:\n" << otherTensorValues;
   
   // clear out the spatial indices of tensorValueIndex so we can use it as index
   for (int d=0; d<_rank; d++) {

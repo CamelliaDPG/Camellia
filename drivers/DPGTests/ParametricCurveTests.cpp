@@ -447,7 +447,7 @@ bool ParametricCurveTests::testGradientWrapper() {
 
   double v2[2];
   edges[2]->value(0, v2[0], v2[1]);
-  cout << "v2 = (" << v2[0] << ", " << v2[1] << ")\n";
+//  cout << "v2 = (" << v2[0] << ", " << v2[1] << ")\n";
   
   if ( ! tfi->equals(f_xy, basisCache) ) {
     success = false;

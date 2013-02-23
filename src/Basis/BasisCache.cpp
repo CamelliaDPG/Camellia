@@ -111,6 +111,7 @@ void BasisCache::createSideCaches() {
     for (int i=0; i<numSideTrialIDs; i++) {
       if (_trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
         maxDegreeBasisOnSide = _trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+        maxTrialDegree = maxDegreeBasisOnSide->getDegree();
       }
     }
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
@@ -686,9 +687,11 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
                                                      _cubWeights,
                                                      _sideIndex,
                                                      _cellTopo);
-//      cout << "_cellJacobian:\n" << _cellJacobian;
-//      cout << "_cubWeights:\n" << _cubWeights;
-//      cout << "_weightedMeasure:\n" << _weightedMeasure;
+//      if (_sideIndex==0) {
+//        cout << "_cellJacobian:\n" << _cellJacobian;
+//        cout << "_cubWeights:\n" << _cubWeights;
+//        cout << "_weightedMeasure:\n" << _weightedMeasure;
+//      }
       
       // get normals
       _sideNormals.resize(_numCells, numCubPoints, _spaceDim);
