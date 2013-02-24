@@ -121,40 +121,30 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(_cellIndex == -1, std::invalid_argument, "must call setCellIndex before calling values!");
 
 //    cout << "_basisCoefficients:\n" << _basisCoefficients;
+        
+    int numDofs = _basis->getCardinality();
     
-    int transformedCellIndex = _cellIndex;
+    int spaceDim = basisCache->getSpaceDim();
     
-    Teuchos::RCP<const FieldContainer<double> > transformedValues;
-    if (_op == OP_VALUE) {
-      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
-      int cardinality = _basis->getCardinality();
-      const FieldContainer<double>* refCellPoints;
-      if (basisCache->isSideCache()) {
-        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
-      } else {
-        refCellPoints = &basisCache->getRefCellPoints();
-      }
-      int numPoints = refCellPoints->dimension(0);
-      int spaceDim = basisCache->getSpaceDim();
-      FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
-      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
-      basisValues.resize(1,cardinality,numPoints,spaceDim);
-      transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
-      transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
-    } else {
-      bool useSideRefCellPoints = basisCache->isSideCache();
-      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
-//      cout << "transformedValues:\n" << *transformedValues;
+    bool basisIsVolumeBasis = true;
+    if (spaceDim==2) {
+      basisIsVolumeBasis = (_basis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+    } else if (spaceDim==3) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
     }
-    // (C,F,P,D)
     
-    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
-    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
-    // later...
+    bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
     
-    int cardinality = _basisCoefficients.size();
+    constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
+    
+    // transformedValues has dimensions (C,F,P,[D,D])
+    // therefore, the rank of the sum is transformedValues->rank() - 3
+    int rank = transformedValues->rank() - 3;
+    TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
+    
+    
+    int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    int spaceDim = values.dimension(2);
     
     // initialize the values we're responsible for setting
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -163,13 +153,67 @@ public:
       }
     }
     
-    for (int i=0; i<cardinality; i++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        for (int d=0; d<spaceDim; d++) {
-          values(_cellIndex,ptIndex,d) += _basisCoefficients(i) * (*transformedValues)(transformedCellIndex,i,ptIndex,d);
+    int entriesPerPoint = values.size() / (numCells * numPoints);
+    for (int i=0;i<numDofs;i++){
+      double weight = _basisCoefficients(i);
+      for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+        int valueIndex = (_cellIndex*numPoints + ptIndex)*entriesPerPoint;
+        int basisValueIndex = (_cellIndex*numPoints*numDofs + i*numPoints + ptIndex) * entriesPerPoint;
+        double *value = &values[valueIndex];
+        const double *basisValue = &((*transformedValues)[basisValueIndex]);
+        for (int j=0; j<entriesPerPoint; j++) {
+          *value++ += *basisValue++ * weight;
         }
       }
-    }
+    }    
+    
+    // original implementation follows
+    // (the above adapted from NewBasisSumFunction)
+//    if (_op == OP_VALUE) {
+//      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
+//      int cardinality = _basis->getCardinality();
+//      const FieldContainer<double>* refCellPoints;
+//      if (basisCache->isSideCache()) {
+//        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
+//      } else {
+//        refCellPoints = &basisCache->getRefCellPoints();
+//      }
+//      int numPoints = refCellPoints->dimension(0);
+//      int spaceDim = basisCache->getSpaceDim();
+//      FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
+//      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
+//      basisValues.resize(1,cardinality,numPoints,spaceDim);
+//      transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
+//      transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
+//    } else {
+//      bool useSideRefCellPoints = basisCache->isSideCache();
+//      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
+////      cout << "transformedValues:\n" << *transformedValues;
+//    }
+//    // (C,F,P,D)
+//    
+//    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
+//    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
+//    // later...
+//    
+//    int cardinality = _basisCoefficients.size();
+//    int numPoints = values.dimension(1);
+//    int spaceDim = values.dimension(2);
+//    
+//    // initialize the values we're responsible for setting
+//    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//      for (int d=0; d<spaceDim; d++) {
+//        values(_cellIndex,ptIndex,d) = 0.0;
+//      }
+//    }
+//    
+//    for (int i=0; i<cardinality; i++) {
+//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//        for (int d=0; d<spaceDim; d++) {
+//          values(_cellIndex,ptIndex,d) += _basisCoefficients(i) * (*transformedValues)(transformedCellIndex,i,ptIndex,d);
+//        }
+//      }
+//    }
   }
   
   int basisDegree() {

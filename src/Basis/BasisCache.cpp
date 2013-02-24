@@ -597,6 +597,16 @@ void BasisCache::determinePhysicalPoints() {
     // So we move _transformationFxn out of the way for a moment:
     FunctionPtr transformationFxn = _transformationFxn;
     _transformationFxn = Function::null();
+    {
+      // size cell Jacobian containers—the dimensions are used even for HGRAD basis OP_VALUE, which
+      // may legitimately be invoked by transformationFxn, below...
+      _cellJacobian.resize(_numCells, numPoints, _spaceDim, _spaceDim);
+      _cellJacobInv.resize(_numCells, numPoints, _spaceDim, _spaceDim);
+      _cellJacobDet.resize(_numCells, numPoints);
+      // (the sizes here agree with what's done in determineJacobian, so the resizing there should be
+      //  basically free if we've done it here.)
+    }
+    
     transformationFxn->values(newPhysCubPoints, thisPtr);
     _transformationFxn = transformationFxn;
     

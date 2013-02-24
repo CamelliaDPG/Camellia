@@ -276,27 +276,35 @@ bool CurvilinearMeshTests::testEdgeLength() {
     for (int hRefinement=0; hRefinement<5; hRefinement++) {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
       BasisCachePtr sideCache = basisCache->getSideBasisCache(0);
+      
+      // need sideCache not to retransform things so we can test the transformationFxn itself:
+      // TODO: think through this carefully, and/or try with basisCache to confirm that the interior works
+      //       the way we're asking the edge to.  We have reason to think the interior is working...
+      basisCache->setTransformationFunction(Function::null());
+      sideCache->setTransformationFunction(Function::null());
+      
       int numCells = 1;
       int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
       int spaceDim = 2;
-      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim,spaceDim
-                                                    );
+      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim,spaceDim);
       expectedJacobian->values(expectedJacobianValues,sideCache);
       FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim);
-      quadMesh->getTransformationFunction()->grad()->values(jacobianValues,sideCache);
+      FunctionPtr transformationFxn = quadMesh->getTransformationFunction();
+      FunctionPtr transformationJacobian = transformationFxn->grad();
+      transformationJacobian->values(jacobianValues,sideCache);
       
       double maxDiff = 0;
       
-      if (! expectedTransformation->equals(quadMesh->getTransformationFunction(), sideCache)) {
+      if (! expectedTransformation->equals(transformationFxn, sideCache)) {
         success = false;
         cout << "testEdgeLength(): expected values don't match transformation function values along sloped edge.\n";
-        reportFunctionValueDifferences(expectedTransformation, quadMesh->getTransformationFunction(), sideCache, tol);
+        reportFunctionValueDifferences(expectedTransformation, transformationFxn, sideCache, tol);
       }
       
       if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) {
         success = false;
         cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along sloped edge.\n";
-        reportFunctionValueDifferences(expectedJacobian, quadMesh->getTransformationFunction()->grad(), sideCache, tol);
+        reportFunctionValueDifferences(expectedJacobian, transformationJacobian, sideCache, tol);
       }
       
       double perimeter = oneOnBoundary->integrate(quadMesh);
