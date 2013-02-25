@@ -3,7 +3,7 @@
 \usepackage{authblk}
 \usepackage{amsmath, amssymb, amsthm, mathtools}
 \usepackage{graphicx}
-\usepackage{subfigure}
+% \usepackage{subfigure}
 
 \def\btau{\boldsymbol\tau}
 \def\bsigma{\boldsymbol\sigma}
@@ -548,115 +548,177 @@ we get the final stability result:
 \end{equation}
 
 \section{Numerical Experiments}
+We explore each of the following experiments with two sets of test norms: the
+standard graph norm, and the aforementioned robust norm.
 
-% A cursory look at \eqnref{confusionBF} tells us which function spaces to look
-% in for each variable:
-% \[
-% \begin{array}{lll}
-% u\in L^2(\Omega_h) \quad& \hat u\in H^{1/2}(\Gamma_h) \quad& v\in H^1(\Omega_h)\\
-% \bsigma\in \mathbf{L}^2(\Omega_h) \quad& \hat t\in H^{-1/2}(\Gamma_h) \quad&
-% \btau\in \bs{H}(\bs{div},\Omega_h)\,.\\
-% \end{array}
-% \]
+\subsection{Erickson-Johnson Model Problem}
+The Erickson-Johnson problem is one of the few convection-diffusion problems
+with a known analytical solution. Take a domain $\Omega=[0,1]^2$, with
+$\bbeta=(1,0)^T$, $f=0$ and boundary conditions $\hat t=u_0$ when
+$\beta_n\le0$, and $u_0$ is the trace of the exact solution. For
+$n=1,2,\cdots$, let
+$\lambda_n=n^2*\pi^2*\epsilon$,
+$r_n=\frac{1+\sqrt{1+4\epsilon\lambda_n}}{2\epsilon}$, and 
+$s_n=\frac{1-\sqrt{1+4\epsilon\lambda_n}}{2\epsilon}$, the exact solution
+is
+\begin{equation}
+u(x,y)=C_0+\sum_{n=1}^\infty C_n\frac{\exp(s_n(x-1))-\exp(r_n(x-1))}
+{r_n\exp(-s_n)-s_n\exp(-s_n)}\cos(n\pi y)\,.
+\label{eq:ericksonExact}
+\end{equation}
+Taking $\epsilon=0.01$, $C_1=1$, and $C_{n\neq1}=0$, the exact solution looks
+like Figure \ref{fig:erickson}. We solve this problem with both conservative
+and nonconservative formulations of DPG with both graph and robust test norms.
 
-% All that is left to pin down this problem is a definition of our test norm so
-% we can invert the Riesz operator and calculate our optimal test functions.
-% Within each element, we perform a Bubnov-Galerkin solve for the optimal test
-% functions. Define finite-dimensional subspaces
-% $\mb{U}_h\subset\mb{U}:=L^2(\Omega_h)\times\mb{L}^2(\Omega_h)\times
-% H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$ the trial space and 
-% $\mb{V}_h\subset\mb{V}:=H^1(\Omega_h)\times H(div,\Omega_h)$ the ``enriched''
-% test space.
-% For each $\mathbf{u}=\{u,\bsigma,\hat u,\hat t\}\in\mathbf{U}_h$, find
-% $\mathbf{v}_{\mathbf{u}}=\{v_\mathbf{u},\btau_\mathbf{u}\}\in\mathbf{V_h}$ such that
-% \[
-% (\mathbf{v_u},\mathbf{w})_\mathbf{V}=b(\mathbf{u},\mathbf{w})\quad\forall\mathbf{w}\in\mathbf{V}
-% \]
-% As mentioned earlier the choice of test norm on $V$ can have profound
-% influence on the robustness of our method. Unfortunately, the structure of the
-% optimal test norm makes it non-localizable. For many problems, it suffices to
-% use the so-call quasi-optimal test norm which is based on the adjoint of the
-% $B$ operator, but for convection-diffusion type equations, the adjoint
-% develops boundary layers which make solving for the optimal test functions
-% much more difficult for small diffusion. In an earlier consideration of DPG
-% for convection-diffusion problems, Chan \etal developed the more robust
-% test norm\cite{ChanHeuerThanhDemkowicz2012}, 
-% \begin{equation}
-% \label{eq:robustNorm}
-% \norm{(v,\btau)}^2_{\mathbf{V},\Omega_h}=
-% \norm{\nabla\cdot\btau}^2+\norm{\min\left\{\frac{1}{\sqrt{\epsilon}},\frac{1}{\sqrt{|K|}}\right\}\btau}^2
-% +\epsilon\norm{\nabla v}^2+\norm{\bbeta\cdot\nabla v}^2
-% +\norm{\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}v^2}\,.
-% \end{equation}
-% Unfortunately, this test norm also has a few issues. For one, some of the
-% assumptions that went into its development break down as the flow field
-% degenerates to zero. In such cases the final $L^2$ term on $v$ can register
-% higher error levels and trigger unnecessary refinements in smooth regions, see
-% ref{}.
-%TODO: have Jesse write about this
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.6\textwidth]{figs/Erickson/exact.png}
+\caption{Erickson-Johnson exact solution}
+\label{fig:erickson}
+\end{figure}
 
-% \subsection{Locally Conservative Formulation}
-% A simple control volume analysis will tell us that a locally conservative
-% method must enforce that
-% \begin{equation}
-% \int_{\partial K}\hat t=\int_K f\,,\quad\forall K\in\Omega_h\,,
-% \label{eq:localconservation}
-% \end{equation}
-% which is equivalent to having the set
-% $\mathbf{v}_K:=\{v,\btau\}=\{1_K,\boldsymbol0\}$ for $K=1,\dots,N$ ($N$ is the
-% number of mesh elements)
-% in the test space, where each $1_K$ has value one on element $K$ and zero
-% elsewhere.  In fact, if we insert this test function into
-% \eqnref{confusionBF}, all of the $\tau$ and $\grad v$ terms vanish and we are
-% left exactly with this condition.
-% Numerical experiments imply that local conservation occurs in one dimension,
-% but the standard DPG method is not exactly locally conservative for higher
-% dimensional problems.
-% 
-% Following Moro \etal\cite{MoroNguyenPeraire11}, we can explicitly augment our
-% test space with constants through the use of Lagrange multipliers. Going back
-% to \eqnref{rieszapplied}, we can define our Lagrange function,
-% \begin{equation}
-% \label{eq:lagrangian}
-% L(u_h,\blambda) = \frac{1}{2}\norm{R_V^{-1}(Bu_h-l)}_V^2
-% -\sum_K\lambda_K\underbrace{\langle Bu_h-l,\mathbf{v}_K\rangle}_
-% {\langle\hat t, 1_K\rangle_{\partial K}-\langle g,1_K\rangle_K}\,,
-% \end{equation}
-% where $\blambda=\{\lambda_1,\cdots,\lambda_N\}$.
-% We then proceed as before and find the critical points of \eqnref{lagrangian},
-% \begin{equation}
-% \label{eq:modifiedBF}
-% \frac{\partial L(u_h,\blambda)}{\partial u_h}=b(u_h,R_V^{-1}B\delta u_h)
-% -l(R_V^{-1}B\delta u_h)
-% -\sum_K\lambda_K b(\delta
-% u_h,\mathbf{v}_K)=0\,,\quad\forall\delta u_h\in U_h
-% \end{equation}
-% \begin{equation}
-% \label{eq:constraint}
-% \frac{\partial
-% L(u_h,\blambda)}{\partial\lambda_K}=-b(u_h,\mathbf{v}_K)+l(\mathbf{v}_K)=0\,,\quad\forall
-% K\,.
-% \end{equation}
-% Equation \eqnref{modifiedBF} is just \eqnref{DPGmethod} with the extra
-% Lagrange terms. As usual, the second equation just enforces the constraint. As
-% a consequence, we now explicitly have constants in our test space and should
-% enforce local conservation to machine precision. The negative side is that we
-% have added an additional unknown associated with every mesh element and turned
-% our well-behaved minimization into a saddle point problem.
-% 
-% This change has further consequences to how we compute our optimal test
-% functions. Since constants are now explicitly represented in the test space,
-% we only need to search for optimal test functions in the orthogonal complement
-% of constants. The final term in \eqnref{robustNorm} is somewhat troublesome,
-% but becomes unnecessary when solving in the orthogonal complement of
-% constants. Instead, we can replace it with a much nicer zero mean term. Thus,
-% \eqnref{robustNorm} becomes
-% \begin{equation}
-% \norm{(v,\btau)}^2_{\mathbf{V},\Omega_h}=
-% \norm{\nabla\cdot\btau}^2+\norm{\min\left\{\frac{1}{\sqrt{\epsilon}},\frac{1}{\sqrt{|K|}}\right\}\btau}^2\\
-% +\epsilon\norm{\nabla v}^2+\norm{\bbeta\cdot\nabla
-% v}^2+\left(\int_Kv\right)^2\,.
-% \end{equation}
+We plot the $L^2$ and energy error for the various methods in Figures
+\ref{fig:ericksonGraphError} and \ref{fig:ericksonRobustError}. Encouragingly,
+the conservative and nonconservative plots appear to lay right on top of each
+other. This indicates that the conservative formulation at least doensn't hurt
+our convergence significantly.
+
+\begin{figure}[h!]
+\centering
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Erickson/graphError.pdf}
+\caption{Error in Erickson-Johnson solution with graph norm}
+\label{fig:ericksonGraphError}
+}\quad
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Erickson/robustError.pdf}
+\caption{Error in Erickson-Johnson solution with robust norm}
+\label{fig:ericksonRobustError}
+}
+\end{figure}
+
+We plot the flux imbalance errors in Figures \ref{fig:ericksonGraphFlux} and
+\ref{fig:ericksonRobustFlux}. As expected, the element conservative
+formulation brings these errors to the order of machine precision, but it is
+worth pointing out that the flux imbalances for standard DPG are reasonable,
+especially under refinement.
+
+\begin{figure}[h!]
+\centering
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Erickson/graphFlux.pdf}
+\caption{Flux imbalance in Erickson-Johnson solutions with graph norm}
+\label{fig:ericksonGraphFlux}
+}\quad
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Erickson/robustFlux.pdf}
+\caption{Flux imbalance in Erickson-Johnson solutions with robust norm}
+\label{fig:ericksonRobustFlux}
+}
+\end{figure}
+
+\subsection{Skewed Convection-Diffusion Problem}
+This is a standard convection-diffusion problem with a skewed convection
+vector relative to the mesh. The problem setup is identical to the
+Erickson-Johnson problems except that $\bbeta=(2,1)$. The following results
+are for $\epsilon=10^{-4}$. 
+
+On our initial mesh, we see no noticeable difference between conservative and
+nonconservative results, though the choice of test norm affects things
+dramatically. The graph norm produces a solution which is comparable to an L2
+project of the exact solution. In this case, the field variable don't show the
+very small boundary layer along the right and top surfaces, though a
+visualization of the traces would show that the wall boundary condition is in
+fact being enforced. As we refine, the field variables will begin to reflect
+the boundary layer. On the other hand, the robust norm does show a boundary
+layer being formed in the field variables. 
+
+\begin{figure}[h!]
+\centering
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/graph0c.png}
+\caption{Conservative skewed convection-diffusion with graph norm, initial mesh}
+\label{fig:confusionGraph0c}
+}\quad
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/robust0c.png}
+\caption{Conservative skewed convection-diffusion with robust norm, initial mesh}
+\label{fig:confusionRobust0c}
+}
+\end{figure}
+
+As we refine, the three results, nonconservative with graph or robust norm,
+and conservative with graph norm converge to a an essentially identical
+solution (to the eyeball norm), as represented by
+Figure~\ref{fig:confusionGraph8c}. However, the conservative formulation with
+the robust norm seems to exhibit some noise at the right wall as seen in
+Figure~\ref{fig:confusionRobust8c}.
+
+% \begin{figure}[h!]
+% \centering
+% \parbox{0.45\textwidth}{
+% \includegraphics[width=0.45\textwidth]{figs/Confusion/graph8nc.png}
+% \caption{Nonconservative skewed convection-diffusion with graph norm, after 8
+% refinements}
+% \label{fig:confusionGraph8nc}
+% }\quad
+% \parbox{0.45\textwidth}{
+% \includegraphics[width=0.45\textwidth]{figs/Confusion/robust8nc.png}
+% \caption{Nonconservative skewed convection-diffusion with robust norm, after 8
+% refinements}
+% \label{fig:confusionRobust8nc}
+% }
+% \end{figure}
+
+\begin{figure}[h!]
+\centering
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/graph8c.png}
+\caption{Conservative skewed convection-diffusion with graph norm, after 8
+refinements}
+\label{fig:confusionGraph8c}
+}\quad
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/robust8c.png}
+\caption{Conservative skewed convection-diffusion with robust norm, after 8
+refinements}
+\label{fig:confusionRobust8c}
+}
+\end{figure}
+
+If we zoom in on one of the noisy areas, as we do in
+Figure~\ref{fig:confusionRobust8c_zoom}, we see overshoots on the order of 32
+and undershoots on the order of -13, where the exact solution varies between 0
+and 1. The cause of these overshoots and undershoots is a little mystery,
+especially because they don't show up until 8 refinement steps in. We will
+explore this problem a little more when we look at the wedge problem.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.6\textwidth]{figs/Confusion/robust8c_zoom.png}
+\caption{Zoomed in conservative skewed convection-diffusion problem after 8
+refinements}
+\label{fig:confusionRobust8c_zoom}
+\end{figure}
+
+Finally, we plot the flux imbalances for the several methods in
+Figure~\ref{fig:confusionGraphFlux} and Figure~\ref{fig:confusionRobustFlux}.
+Interestingly, it appears the effectiveness of our local conservation
+formulation drops as we refine with the graph norm.
+
+\begin{figure}[h!]
+\centering
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/graphFlux.pdf}
+\caption{Flux imbalance in skewed confusion solutions with graph norm}
+\label{fig:confusionGraphFlux}
+}\quad
+\parbox{0.45\textwidth}{
+\includegraphics[width=0.45\textwidth]{figs/Confusion/robustFlux.pdf}
+\caption{Flux imbalance in skewed confusion solutions with robust norm}
+\label{fig:confusionRobustFlux}
+}
+\end{figure}
 
 \bibliographystyle{plain}
 \bibliography{../DPG}

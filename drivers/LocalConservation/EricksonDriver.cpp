@@ -57,7 +57,7 @@ public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
     bool topMatch = (abs(y-1.0) < tol);
-    bool bottomMatch = (abs(y-1.0) < tol);
+    bool bottomMatch = (abs(y) < tol);
     return topMatch || bottomMatch;
   }
 };
