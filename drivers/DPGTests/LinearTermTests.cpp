@@ -138,6 +138,12 @@ void LinearTermTests::teardown() {
 }
 
 void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testBoundaryPlusVolumeTerms()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testIntegrateMixedBasis()) {
@@ -166,13 +172,6 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
- 
-  setup();
-  if (testBoundaryPlusVolumeTerms()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
   
   setup();
   if (testSums()) {
@@ -189,11 +188,12 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
 
   setup();
-  if (testEnergyNorm()) {
+  if (testLinearTermEvaluation()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+
 }
   
 bool LinearTermTests::testSums() {
@@ -425,6 +425,13 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     
     LinearTermPtr ibp = vector_fxn * n * v1 - vector_fxn * v1->grad();
     
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    FieldContainer<double> vector_fxn_values(numCells,numPoints,spaceDim);
+    vector_fxn->values(vector_fxn_values,basisCache);
+//    cout << "vector_fxn values: \n" << vector_fxn_values;
+    
     double boundaryIntegralSum = ibp->evaluate(var_values,true)->integrate(mesh);
     double volumeIntegralSum   = ibp->evaluate(var_values,false)->integrate(mesh);
     double actualValue = boundaryIntegralSum + volumeIntegralSum;
@@ -586,26 +593,6 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   
   return success;
 }
-
-bool LinearTermTests::testEnergyNorm() {
-  bool success = true;
-  
-  IPPtr ip = Teuchos::rcp( new IP );
-  ip->addTerm(v1); // L^2 on an HGrad var
-  ip->addTerm(q1); // L^2 on Hdiv var
-
-  FunctionPtr one = Function::constant(1);
-  LinearTermPtr identity = one*v1; 
-
-  double norm = identity->energyNormTotal(mesh,ip); // should be equal to the sqrt of the measure of the domain [-1,1]^2
-
-  double tol = 1e-15;
-  if (abs(norm-2.0)>tol){
-    success = false;
-  }
-  return success;
-}
-
 
 bool LinearTermTests::testRieszInversionAsProjection() {
   bool success = true;
@@ -954,8 +941,8 @@ bool LinearTermTests::testRieszInversion() {
   rieszOrigFxn->values(valOriginal,basisCache);
   rieszIBPFxn->values(valIBP,basisCache);
 
-  double maxDiff,maxDiff1,maxDiff2;
-  double tol = 1e-15;
+  double maxDiff;
+  double tol = 1e-14;
   success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
 
   if (success==false){
@@ -1038,11 +1025,6 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   LinearTermPtr field =  1.0 * u;
   lt->addTerm(field,true);
   lt->integrate(integrals, elemType->trialOrderPtr, basisCache);
-//  for (int c = 0;c<numCells;c++) {
-//    for (int i = 0;i<numTrialDofs;i++){
-//      cout << "lt at cell " << c << " and dof " << i << "= " << integrals(c,i) << endl;
-//    }
-//  }
  
   double tol = 1e-12;
   double maxDiff;
@@ -1052,6 +1034,54 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   }
 
   return success;
+}
+
+bool LinearTermTests::testLinearTermEvaluation(){
+  bool success = true;
+  double eps = .1;
+
+  FunctionPtr one = Function::constant(1.0);
+  vector<double> e1,e2;
+  e1.push_back(1.0);e1.push_back(0.0);
+  e2.push_back(0.0);e2.push_back(1.0);
+
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+
+  // define a couple LinearTerms
+  LinearTermPtr vVecLT = Teuchos::rcp(new LinearTerm);
+  LinearTermPtr tauVecLT = Teuchos::rcp(new LinearTerm);
+  vVecLT->addTerm(sqrt(eps)*v->grad());
+  tauVecLT->addTerm((1/sqrt(eps))*tau);
+
+  //////////////////// evaluate LinearTerms /////////////////
+
+  map<int,FunctionPtr> errRepMap;
+  errRepMap[v->ID()] = one;
+  errRepMap[tau->ID()] = one*e1+one*e2; // vector valued fxn (1,1)
+  FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
+  FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
+  try {
+    bool xTauZero = errTau->x()->isZero();
+    bool yTauZero = errTau->y()->isZero();
+    bool xVZero = errV->dx()->isZero();
+    bool yVZero = errV->dy()->isZero();
+    
+  } catch (...) {
+    cout << "testLinearTermEvaluation: Caught exception.\n";
+    success = false;
+  }
+  /*
+  FunctionPtr xErr = (errTau->x())*(errTau->x()) + (errV->dx())*(errV->dx());
+  FunctionPtr yErr = (errTau->y())*(errTau->y()) + (errV->dy())*(errV->dy());
+  double xErrVal = xErr->integrate(mesh,15,true);
+  */
+
+  // if we don't crash, return success
+  return success;
+
 }
 
 std::string LinearTermTests::testSuiteName() {

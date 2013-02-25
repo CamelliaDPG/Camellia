@@ -118,56 +118,67 @@ namespace Intrepid {
   void Vectorized_Basis<Scalar, ArrayScalar>::getVectorizedValues(ArrayScalar& outputValues,
                                                                   const ArrayScalar & componentOutputValues,
                                                                   int fieldIndex) const {
+    // fieldIndex argument because sometimes outputValues has dimensions (C,F,P,#comp,...)
+    // and other times (F,P,#comp,...)
+    
+    TEUCHOS_TEST_FOR_EXCEPTION((fieldIndex != 0) && (fieldIndex != 1), std::invalid_argument,
+                               "fieldIndex must be 0 or 1");
+    
     //cout << "componentOutputValues: \n" << componentOutputValues;
     TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(fieldIndex) != this->basisCardinality_,
-                       std::invalid_argument, "outputValues.dimension(fieldIndex) != this->basisCardinality_");
+                               std::invalid_argument, "outputValues.dimension(fieldIndex) != this->basisCardinality_");
     TEUCHOS_TEST_FOR_EXCEPTION( componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality(),
-                       std::invalid_argument, "componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality()");
+                               std::invalid_argument, "componentOutputValues.dimension(fieldIndex) != _componentBasis->getCardinality()");
     int pointIndex = fieldIndex+1;
     TEUCHOS_TEST_FOR_EXCEPTION( outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex),
-                       std::invalid_argument, "outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex)");
+                               std::invalid_argument, "outputValues.dimension(pointIndex) != componentOutputValues.dimension(pointIndex)");
     Teuchos::Array<int> dimensions;
     outputValues.dimensions(dimensions);
     outputValues.initialize(0.0);
-    int numComponents = dimensions[dimensions.size() - 1];
+    int numFields = dimensions[fieldIndex];
+    int numPoints = dimensions[fieldIndex+1];
+    int numComponents = dimensions[fieldIndex+2];
     if (_numComponents != numComponents) {
       TEUCHOS_TEST_FOR_EXCEPTION ( _numComponents != numComponents, std::invalid_argument,
-                          "final dimension of outputValues must match the number of vector components.");
+                                  "fieldIndex+2 dimension of outputValues must match the number of vector components.");
     }
     int componentCardinality = _componentBasis->getCardinality();
     
-    int numComponentOutputValues = componentOutputValues.size();
-    int numVectorValues = outputValues.size() / _numComponents;
-    
-    Teuchos::Array< Teuchos::Array<int> > basisAddresses(this->basisCardinality_);
-    
-    for (int i=0; i<this->basisCardinality_; i++) {
-      int compositeAddress = i;
-      Teuchos::Array<int> compAddress(_numComponents,-1); // a vector each of whose entries corresponds to a field in the component basis, initialized to -1
-      int liveComponentIndex = compositeAddress / componentCardinality;
-      int componentField = compositeAddress % componentCardinality;
-      compAddress[liveComponentIndex] = componentField;
-      basisAddresses[i] = compAddress;
+    for (int i=fieldIndex+3; i<dimensions.size(); i++) {
+      dimensions[i] = 0;
     }
-    for (int i=0; i<numVectorValues; i++) {
-      // the enumeration indices in outputValues will be i*_numComponents + componentIndex
-      Teuchos::Array<int> multiIndex(outputValues.rank());
-      outputValues.getMultiIndex(multiIndex, i*_numComponents);
-      int basisIndex = multiIndex[fieldIndex];
-      Teuchos::Array<int> componentMultiIndex = multiIndex;
-      componentMultiIndex.pop_back(); // get rid of last, component dimension
-      for (int compIndex=0; compIndex<_numComponents; compIndex++) {
-        if (basisAddresses[basisIndex][compIndex] >= 0) {
-          componentMultiIndex[fieldIndex] = basisAddresses[basisIndex][compIndex];
-          //cout <<  "basisAddresses[basisIndex][compIndex]: " <<  basisAddresses[basisIndex][compIndex] << endl;
-          outputValues[i*_numComponents+compIndex] = componentOutputValues.getValue(componentMultiIndex);
-        } else {
-          outputValues[i*_numComponents+compIndex] = 0.0;
+    
+    int numCells = (fieldIndex==1) ? dimensions[0] : 1;
+    
+    int compValuesPerPoint = componentOutputValues.size() / (numCells * componentCardinality * numPoints);
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      if (fieldIndex==1) {
+        dimensions[0] = cellIndex;
+      }
+      for (int field=0; field<componentCardinality; field++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          dimensions[fieldIndex+1] = ptIndex;
+          dimensions[fieldIndex+2] = 0; // component dimension
+          Teuchos::Array<int> compIndexArray = dimensions;
+          compIndexArray.pop_back(); // removes the last 0 (conceptually it's fieldIndex + 2 that corresponds to the comp dimension, but it's all 0s from fieldIndex+2 on...)
+          compIndexArray[fieldIndex] = field;
+          int compEnumerationOffset = componentOutputValues.getEnumeration(compIndexArray);
+          for (int comp=0; comp<numComponents; comp++) {
+            dimensions[fieldIndex] = field + componentCardinality * comp;
+            dimensions[fieldIndex+2] = comp;
+            int outputEnumerationOffset = outputValues.getEnumeration(dimensions);
+            const double *compValue = &componentOutputValues[compEnumerationOffset];
+            double *outValue = &outputValues[outputEnumerationOffset];
+            for (int i=0; i<compValuesPerPoint; i++) {
+              *outValue++ = *compValue++;
+            }
+          }
         }
       }
     }
-    //cout << "getVectorizedValues: componentOutputValues:\n" << componentOutputValues;
-    //cout << "getVectorizedValues: outputValues:\n" << outputValues;
+//    cout << "getVectorizedValues: componentOutputValues:\n" << componentOutputValues;
+//    cout << "getVectorizedValues: outputValues:\n" << outputValues;
   }
   
   template<class Scalar, class ArrayScalar>
@@ -181,6 +192,12 @@ namespace Intrepid {
   template<class Scalar, class ArrayScalar>
   const Teuchos::RCP< Basis<Scalar, ArrayScalar> > Vectorized_Basis<Scalar, ArrayScalar>::getComponentBasis() const {
     return _componentBasis;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  int Vectorized_Basis<Scalar, ArrayScalar>::getDofOrdinalFromComponentDofOrdinal(int componentDofOrdinal, int componentIndex) const {
+    int compCardinality = _componentBasis->getCardinality();
+    return componentIndex * compCardinality + componentDofOrdinal;
   }
   
 }// namespace Intrepid

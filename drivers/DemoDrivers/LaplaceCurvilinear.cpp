@@ -119,7 +119,6 @@ int main(int argc, char *argv[]) {
       study.solve(quadPoints);
     }
     
-    
     if (rank==0) {
       cout << study.TeXErrorRateTable();
       cout << "******** Best Approximation comparison: ********\n";

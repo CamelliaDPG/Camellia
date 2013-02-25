@@ -663,7 +663,16 @@ FunctionPtr LinearTerm::evaluate(map< int, FunctionPtr> &varFunctions, bool boun
     }
     
     FunctionPtr varEvaluation = Function::op(varFunction,var->op());
+    {
+    // DEBUGGING CODE:
+      if (! varEvaluation.get()) {
+        // try that again, so we can step into the code
+        FunctionPtr varEvaluation = Function::op(varFunction,var->op());        
+      }
+    }
+    
     if (fxn.get()) {
+      
       fxn = fxn + f * varEvaluation;
     } else {
       fxn = f * varEvaluation;
@@ -774,6 +783,11 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
       
       ls.first->values(fValues,basisCache);
       
+//      if (ls.first->rank() == 2) {
+//        cout << "fValues:\n" << fValues;
+//        cout << "basisValues:\n" << *basisValues;
+//      }
+      
       int numFields = basis->getCardinality();
       
       Teuchos::Array<int> fDim(fValues.rank());
@@ -786,6 +800,10 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         for (int d=0; d<fRank; d++) {
           entriesPerPoint *= spaceDim;
         }
+//        if (fRank > 0) {
+//          cout << "basisValues:\n" << *basisValues;
+//          cout << "fValues:\n" << fValues;
+//        }
         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
           fDim[0] = cellIndex; bDim[0] = cellIndex;
           for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -807,6 +825,10 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, BasisPtr basi
         // could pretty easily fold the scalar case above into the code below
         // (just change the logic in the pointer increments)
         int entriesPerPoint = 1;
+        
+//        cout << "basisValues:\n" << basisValues;
+//        cout << "fValues:\n" << fValues;
+        
         // now that we've changed so that we handle scalar function multiplication separately,
         // we don't hit this code for scalar functions.  I.e. scalarF == false always.
         bool scalarF = ls.first->rank() == 0;
@@ -957,6 +979,9 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
       } else { // vector/tensor result
         // could pretty easily fold the scalar case above into the code below
         // (just change the logic in the pointer increments)
+//        cout << "fxnValues:\n" << fxnValues;
+//        cout << "fValues:\n" << fValues;
+        
         int entriesPerPoint = 1;
         // now that we've changed so that we handle scalar function multiplication separately,
         // we don't hit this code for scalar functions.  I.e. scalarF == false always.
@@ -994,7 +1019,7 @@ void LinearTerm::values(FieldContainer<double> &values, int varID, FunctionPtr f
 int LinearTerm::rank() const {   // 0 for scalar, 1 for vector, etc.
   return _rank; 
 }
-
+/*
 // added by Jesse --------------------
 
 LinearTermPtr LinearTerm::rieszRep(VarPtr v){
@@ -1208,7 +1233,7 @@ double LinearTerm::energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInne
 }
 
 // end of added by Jesse --------------------
-
+*/
 // operator overloading niceties:
 
 LinearTerm& LinearTerm::operator=(const LinearTerm &rhs) {

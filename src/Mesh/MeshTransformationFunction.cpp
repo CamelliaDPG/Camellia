@@ -20,12 +20,14 @@
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
-BasisPtr basisForTransformation(ElementTypePtr cellType) {
+VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
   unsigned int cellTopoKey = cellType->cellTopoPtr->getKey();
   
   int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
   
-  return BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  BasisPtr basis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+  return vectorBasis;
 }
 
 vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
@@ -53,7 +55,7 @@ void roundToOneOrZero(double &value, double tol) {
 
 class CellTransformationFunction : public Function {
   FieldContainer<double> _basisCoefficients;
-  BasisPtr _basis;
+  VectorBasisPtr _basis;
   EOperatorExtended _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
   
@@ -99,7 +101,7 @@ class CellTransformationFunction : public Function {
   }
   
 protected:
-  CellTransformationFunction(BasisPtr basis, FieldContainer<double> &basisCoefficients, EOperatorExtended op) : Function(1) {
+  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, EOperatorExtended op) : Function(1) {
     _basis = basis;
     _basisCoefficients = basisCoefficients;
     _op = op;
@@ -111,103 +113,7 @@ public:
     _op = OP_VALUE;
     ElementPtr cell = mesh->getElement(cellID);
     _basis = basisForTransformation(cell->elementType());
-    ParametricSurface::basisWeightsForL2ProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
-    /*
-    int numEdges = edgeFunctions.size();
-    int cardinality = _basis->getCardinality();
-    _basisCoefficients.resize(cardinality);
-    int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
-    int numPoints = cardinality / spaceDim;
-    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "only 2D supported right now");
-    vector< ParametricCurvePtr > straightEdges = edgeLines(mesh, cellID);
-
-    FieldContainer<double> points(numPoints,spaceDim);
-    FieldContainer<double> transformedPoints(numPoints,spaceDim);
-    FieldContainer<double> refCellPoints;
-    
-    if ( numEdges != 4) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only quads supported right now");
-//      points = pointLatticeTriangle(numPoints, straightEdges);
-//      transformedPoints = pointLatticeTriangle(numPoints, edgeFunctions);
-    } else {
-      points = pointLatticeQuad(numPoints, straightEdges);
-      transformedPoints = pointLatticeQuad(numPoints, edgeFunctions);
-      refCellPoints = pointLatticeQuad(numPoints, ParametricCurve::referenceQuadEdges());
-      
-//      cout << "points:\n" << points;
-//      cout << "transformedPoints:\n" << transformedPoints;
-    }
-    
-    // now, since _basis is defined on refCell, compute preimage of points
-    // (would be cleaner to do the parametric function thing on the ref cell)
-//    FieldContainer<double> refCellPoints(numPoints,spaceDim);
-//    CellTools<double>::mapToReferenceFrame(refCellPoints,points,mesh->physicalCellNodesForCell(cellID),
-//                                           *(cell->elementType()->cellTopoPtr),0);
-    FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
-    _basis->getValues(basisValues, refCellPoints, Intrepid::OPERATOR_VALUE);
-    
-    // reshape to make a square matrix:
-    basisValues.resize(cardinality, numPoints*spaceDim);
-    
-    GnuPlotUtil::writeXYPoints("/tmp/refCellPoints.dat", refCellPoints);
-    GnuPlotUtil::writeXYPoints("/tmp/transformedPoints.dat", transformedPoints);
-    
-    // reshape transformedPoints to be a vector:
-    transformedPoints.resize(numPoints*spaceDim);
-    // rows should be the points, so we want to use the transpose of this
-    SerialDenseSolveWrapper::solveSystem(_basisCoefficients, basisValues, transformedPoints, true);
-    
-//    if (_basis->getDegree()>1) {
-//      cout << "---------- WORKING DATA -----------\n";
-//      cout << "basisValues:\n" << basisValues;
-//      cout << "refCellPoints:\n" << refCellPoints;
-//    }
-    
-    bool checkCoefficients = true; // checks to make sure _basisCoefficients do the job
-    if (checkCoefficients) {
-      double tol = 1e-14;
-      basisValues.resize(cardinality,numPoints,spaceDim);
-      transformedPoints.resize(numPoints,spaceDim);
-      for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-        double xValue = 0, yValue = 0;
-        for (int basisOrdinal=0; basisOrdinal<cardinality; basisOrdinal++) {
-          double weight = _basisCoefficients(basisOrdinal);
-          xValue += weight * basisValues(basisOrdinal,ptIndex,0);
-          yValue += weight * basisValues(basisOrdinal,ptIndex,1);
-        }
-        double xValueExpected = transformedPoints(ptIndex,0);
-        double yValueExpected = transformedPoints(ptIndex,1);
-        double xDiff = abs(xValue-xValueExpected);
-        double yDiff = abs(yValue-yValueExpected);
-        if ((xDiff > tol) || (yDiff > tol) ) {
-          cout << "WARNING: MeshTransformationFunction fails to transform to desired point lattice.\n";
-          cout << "Expected: (" <<  xValueExpected << "," << yValueExpected << "), but got (";
-          cout << xValue << "," << yValue << ")\n";
-        }
-      }
-      
-      // one more check: use our values() method to compute values with these refCellPoints
-      FieldContainer<double> transformedPointsToCheck(1,numPoints,spaceDim);
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      basisCache->setRefCellPoints(refCellPoints);
-      this->setCellIndex(0);
-      this->values(transformedPointsToCheck,basisCache);
-      for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-        double xValue = transformedPointsToCheck(0,ptIndex,0);
-        double yValue = transformedPointsToCheck(0,ptIndex,1);
-        double xValueExpected = transformedPoints(ptIndex,0);
-        double yValueExpected = transformedPoints(ptIndex,1);
-        double xDiff = abs(xValue-xValueExpected);
-        double yDiff = abs(yValue-yValueExpected);
-        if ((xDiff > tol) || (yDiff > tol) ) {
-          cout << "WARNING: MeshTransformationFunction fails to transform to desired point lattice (using the values() method).\n";
-          cout << "Expected: (" <<  xValueExpected << "," << yValueExpected << "), but got (";
-          cout << xValue << "," << yValue << ")\n";
-        } else {
-//          cout << "Point " << ptIndex << ": Success\n";
-        }
-      }
-    }*/
+    ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -215,40 +121,30 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(_cellIndex == -1, std::invalid_argument, "must call setCellIndex before calling values!");
 
 //    cout << "_basisCoefficients:\n" << _basisCoefficients;
+        
+    int numDofs = _basis->getCardinality();
     
-    int transformedCellIndex = _cellIndex;
+    int spaceDim = basisCache->getSpaceDim();
     
-    Teuchos::RCP<const FieldContainer<double> > transformedValues;
-    if (_op == OP_VALUE) {
-      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
-      int cardinality = _basis->getCardinality();
-      const FieldContainer<double>* refCellPoints;
-      if (basisCache->isSideCache()) {
-        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
-      } else {
-        refCellPoints = &basisCache->getRefCellPoints();
-      }
-      int numPoints = refCellPoints->dimension(0);
-      int spaceDim = basisCache->getSpaceDim();
-      FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
-      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
-      basisValues.resize(1,cardinality,numPoints,spaceDim);
-      transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
-      transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
-    } else {
-      bool useSideRefCellPoints = basisCache->isSideCache();
-      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
-//      cout << "transformedValues:\n" << *transformedValues;
+    bool basisIsVolumeBasis = true;
+    if (spaceDim==2) {
+      basisIsVolumeBasis = (_basis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+    } else if (spaceDim==3) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
     }
-    // (C,F,P,D)
     
-    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
-    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
-    // later...
+    bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
     
-    int cardinality = _basisCoefficients.size();
+    constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
+    
+    // transformedValues has dimensions (C,F,P,[D,D])
+    // therefore, the rank of the sum is transformedValues->rank() - 3
+    int rank = transformedValues->rank() - 3;
+    TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
+    
+    
+    int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    int spaceDim = values.dimension(2);
     
     // initialize the values we're responsible for setting
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -257,13 +153,67 @@ public:
       }
     }
     
-    for (int i=0; i<cardinality; i++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        for (int d=0; d<spaceDim; d++) {
-          values(_cellIndex,ptIndex,d) += _basisCoefficients(i) * (*transformedValues)(transformedCellIndex,i,ptIndex,d);
+    int entriesPerPoint = values.size() / (numCells * numPoints);
+    for (int i=0;i<numDofs;i++){
+      double weight = _basisCoefficients(i);
+      for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+        int valueIndex = (_cellIndex*numPoints + ptIndex)*entriesPerPoint;
+        int basisValueIndex = (_cellIndex*numPoints*numDofs + i*numPoints + ptIndex) * entriesPerPoint;
+        double *value = &values[valueIndex];
+        const double *basisValue = &((*transformedValues)[basisValueIndex]);
+        for (int j=0; j<entriesPerPoint; j++) {
+          *value++ += *basisValue++ * weight;
         }
       }
-    }
+    }    
+    
+    // original implementation follows
+    // (the above adapted from NewBasisSumFunction)
+//    if (_op == OP_VALUE) {
+//      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
+//      int cardinality = _basis->getCardinality();
+//      const FieldContainer<double>* refCellPoints;
+//      if (basisCache->isSideCache()) {
+//        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
+//      } else {
+//        refCellPoints = &basisCache->getRefCellPoints();
+//      }
+//      int numPoints = refCellPoints->dimension(0);
+//      int spaceDim = basisCache->getSpaceDim();
+//      FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
+//      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
+//      basisValues.resize(1,cardinality,numPoints,spaceDim);
+//      transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
+//      transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
+//    } else {
+//      bool useSideRefCellPoints = basisCache->isSideCache();
+//      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
+////      cout << "transformedValues:\n" << *transformedValues;
+//    }
+//    // (C,F,P,D)
+//    
+//    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
+//    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
+//    // later...
+//    
+//    int cardinality = _basisCoefficients.size();
+//    int numPoints = values.dimension(1);
+//    int spaceDim = values.dimension(2);
+//    
+//    // initialize the values we're responsible for setting
+//    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//      for (int d=0; d<spaceDim; d++) {
+//        values(_cellIndex,ptIndex,d) = 0.0;
+//      }
+//    }
+//    
+//    for (int i=0; i<cardinality; i++) {
+//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//        for (int d=0; d<spaceDim; d++) {
+//          values(_cellIndex,ptIndex,d) += _basisCoefficients(i) * (*transformedValues)(transformedCellIndex,i,ptIndex,d);
+//        }
+//      }
+//    }
   }
   
   int basisDegree() {

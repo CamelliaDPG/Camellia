@@ -38,6 +38,10 @@ void MPIWrapper::allGather(FieldContainer<int> &allValues, FieldContainer<int> &
 #endif
 }
 
+int MPIWrapper::rank() {
+  return Teuchos::GlobalMPISession::getRank();
+}
+
 // sum the contents of inValues across all processors, and stores the result in outValues
 // the rank of outValues determines the nature of the sum:
 // if outValues has dimensions (D1,D2,D3), say, then inValues must agree in the first three dimensions,

@@ -55,9 +55,19 @@ public:
   bool testQuotientRule();
 
   bool testIntegrate();
+
+  bool testAdaptiveIntegrate();
+  
+  bool testJacobianOrdering();
   
   bool testJumpIntegral();
 
+  bool testValuesDottedWithTensor();
+  
+  bool testVectorFunctionDotProduct();
+  
+  bool testVectorFunctionValuesOrdering();
+  
   std::string testSuiteName();
 };
 

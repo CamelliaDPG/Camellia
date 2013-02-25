@@ -46,3 +46,7 @@ void RHSEasy::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
 LinearTermPtr RHSEasy::linearTerm() {
   return _lt;
 }
+
+LinearTermPtr RHSEasy::linearTermCopy() {
+  return Teuchos::rcp( new LinearTerm (*_lt) );
+}

@@ -102,6 +102,7 @@ class RieszRep {
   void computeRieszRep();
 
   double getNorm();
+  map<int,double> getNormsSquared();
 
   void distributeDofs();
 

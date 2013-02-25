@@ -137,7 +137,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
     }
   }
   
-  FieldContainer<double> compValues(hgradBasis->getCardinality(),linePoints.dimension(0));
+  FieldContainer<double> compValues(hgradBasis->getCardinality(),numPoints);
   hgradBasis->getValues(compValues, linePoints, Intrepid::OPERATOR_VALUE);
   
   FieldContainer<double> values(hgradBasis->getCardinality(),linePoints.dimension(0),1); // one component
@@ -191,6 +191,57 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
         }
       }
     }
+    
+    // test the mapping from oneComp dofOrdinal to twoComp:
+    Vectorized_Basis<double, FieldContainer<double> >* twoCompAsVectorBasis = (Vectorized_Basis<double, FieldContainer<double> >  *) twoComp.get();
+    
+    for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
+      int dofOrdinal_0 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 0);
+      int dofOrdinal_1 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 1);
+      // we expect the lists to be stacked (this is implicit in the test above)
+      // dofOrdinal_0 we expect to be == compDofOrdinal
+      // dofOrdinal_1 we expect to be == compDofOrdinal + oneComp.getCardinality()
+      if (dofOrdinal_0 != compDofOrdinal) {
+        success = false;
+        cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in first component.\n";
+      }
+      if (dofOrdinal_1 != compDofOrdinal + oneComp.getCardinality()) {
+        success = false;
+        cout << "getDofOrdinalFromComponentDofOrdinal() not returning expected value in second component.\n";
+      }
+    }
+    
+    // finally, test the ordering of gradient values
+    // these should be in the order f_i,j
+    FieldContainer<double> compGradValues(hgradBasis->getCardinality(),numPoints,spaceDim);
+    FieldContainer<double> vectorGradValues(twoComp->getCardinality(),numPoints,spaceDim,spaceDim);
+    
+    hgradBasis->getValues(compGradValues, linePoints, OPERATOR_GRAD);
+    twoCompAsVectorBasis->getValues(vectorGradValues, linePoints, OPERATOR_GRAD);
+    
+    for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
+      for (int comp=0; comp<2; comp++) {
+        int vectorDofOrdinal = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, comp);
+        for (int k=0; k<numPoints; k++) {
+          double dfi_d0_expected = compGradValues(compDofOrdinal,k,0); // i: the comp index
+          double dfi_d1_expected = compGradValues(compDofOrdinal,k,1);
+          
+          double dfi_d0_actual = vectorGradValues(vectorDofOrdinal,k,comp,0);
+          double dfi_d1_actual = vectorGradValues(vectorDofOrdinal,k,comp,1);
+          
+          if ( ( abs(dfi_d0_expected - dfi_d0_actual) != 0) || ( abs(dfi_d1_expected - dfi_d1_actual) != 0) ) {
+            success = false;
+            cout << myName << ": expected gradient differs from actual\n";
+            cout << "component grad values\n" << compGradValues;
+            cout << "vector grad values:\n" << vectorGradValues;
+            return success;
+          }
+        }
+      }
+
+    }
+    
+
   }
   return success;
 }

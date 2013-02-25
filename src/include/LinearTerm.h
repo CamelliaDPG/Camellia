@@ -110,6 +110,7 @@ public:
   
   string displayString(); // TeX by convention
   
+  /*
   // -------------- added by Jesse --------------------
 
   void computeRieszRep(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip);
@@ -120,6 +121,7 @@ public:
   double energyNormTotal(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<DPGInnerProduct> ip); // global energy norm
 
   // -------------- end of added by Jesse --------------------
+  */
 
   void addTerm(const LinearTerm &a, bool overrideTypeCheck=false);
   void addTerm(LinearTermPtr aPtr, bool overrideTypeCheck=false);

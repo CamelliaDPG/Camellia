@@ -52,12 +52,12 @@ public:
   bool testSums();
   bool testIntegration();
 
-  bool testEnergyNorm();
-
   bool testRieszInversionAsProjection();
   bool testMixedTermConsistency();
   bool testRieszInversion();
   bool testIntegrateMixedBasis();
+
+  bool testLinearTermEvaluation();
 
   std::string testSuiteName();
 };

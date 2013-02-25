@@ -25,13 +25,18 @@ public:
   ParametricSurface() : Function(1) { // vector valued
     
   }
+  virtual FunctionPtr dt1();
+  virtual FunctionPtr dt2();
+  
   virtual void value(double t1, double t2, double &x, double &y) = 0;
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
   static FieldContainer<double> &parametricQuadNodes(); // for CellTools cellWorkset argument
   
-  static void basisWeightsForL2ProjectedInterpolant(FieldContainer<double> &basisCoefficients,
-                                                    BasisPtr basis, MeshPtr mesh, int cellID);
+  static void basisWeightsForEdgeInterpolant(FieldContainer<double> &basisCoefficients,
+                                             VectorBasisPtr basis, MeshPtr mesh, int cellID);
+  static void basisWeightsForProjectedInterpolant(FieldContainer<double> &basisCoefficients,
+                                                    VectorBasisPtr basis, MeshPtr mesh, int cellID);
   static ParametricSurfacePtr linearInterpolant(const vector< ParametricCurvePtr > &curves);
   static ParametricSurfacePtr transfiniteInterpolant(const vector< ParametricCurvePtr > &curves);
 };

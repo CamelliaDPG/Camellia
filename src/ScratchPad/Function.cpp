@@ -59,6 +59,24 @@ public:
       }
     }
   }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+//  FunctionPtr dz() {
+//    return Function::zero();
+//  }
+};
+
+class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction {
+  
+public:
+  MeshSkeletonCharacteristicFunction() : ConstantScalarFunction(1, "|_{\\Gamma_h}") {
+    
+  }
+  bool boundaryValueOnly() { return true; }
 };
 
 // private class SimpleSolutionFunction:
@@ -89,9 +107,11 @@ public:
 
 Function::Function() {
   _rank = 0;
+  _displayString = this->displayString();
 }
 Function::Function(int rank) { 
-  _rank = rank; 
+  _rank = rank;
+  _displayString = this->displayString();
 }
 
 string Function::displayString() {
@@ -227,17 +247,38 @@ FunctionPtr Function::dy() {
 FunctionPtr Function::dz() {
   return Function::null();
 }
-FunctionPtr Function::grad() {
-  FunctionPtr dxFxn = dx();
-  FunctionPtr dyFxn = dy();
-  FunctionPtr dzFxn = dz();
-  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Function::null();
-  } else if (dzFxn.get() == NULL) {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
-  } else {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+FunctionPtr Function::grad(int numComponents) {
+    FunctionPtr dxFxn = dx();
+    FunctionPtr dyFxn = dy();
+    FunctionPtr dzFxn = dz();
+  if (numComponents==-1) { // default: just use as many non-null components as available
+    if (dxFxn.get()==NULL) {
+      return Function::null();
+    } else if (dyFxn.get()==NULL) {
+      // special case: in 1D, grad() returns a scalar
+      return dxFxn;
+    } else if (dzFxn.get() == NULL) {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
+  } else if (numComponents==1) {
+    // special case: we don't "vectorize" in 1D
+    return dxFxn;
+  } else if (numComponents==2) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Function::vectorize(dxFxn, dyFxn);
+    }
+  } else if (numComponents==3) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL) || (dzFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
 }
 //FunctionPtr Function::inverse() {
 //  return Function::null();
@@ -275,8 +316,20 @@ void Function::addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr 
   FieldContainer<double> myValues(dim);
   this->values(myValues,basisCache);
   for (int i=0; i<myValues.size(); i++) {
+    //cout << "otherValue = " << valuesToAddTo[i] << "; myValue = " << myValues[i] << endl;
     valuesToAddTo[i] += myValues[i];
   }
+}
+
+double Function::integrate(BasisCachePtr basisCache) {
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  FieldContainer<double> cellIntegrals(numCells);
+  this->integrate(cellIntegrals, basisCache);
+  double sum = 0;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    sum += cellIntegrals[cellIndex];
+  }
+  return sum;
 }
 
 // added by Jesse - integrate over only one cell
@@ -287,14 +340,43 @@ double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegr
   return cellIntegral(0);
 }
 
+map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  vector<int> cellIDs;
+  for (int i = 0;i<mesh->numActiveElements();i++){
+    cellIDs.push_back(mesh->getActiveElement(i)->cellID());
+  }
+  return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
+}
+
+// PARALLELIZE
+map<int, double> Function::cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+
+  int numCells = cellIDs.size();
+  FieldContainer<double> integrals(numCells);
+  for (int i = 0;i<numCells;i++){
+    int cellID = cellIDs[i];
+    if (mesh->partitionForCellID(cellID) == myPartition){
+      integrals(i) = integrate(cellID,mesh,cubatureDegreeEnrichment,testVsTest);
+    }
+  }
+  MPIWrapper::entryWiseSum(integrals);
+  map<int,double> integralMap;
+  for (int i = 0;i<numCells;i++){
+    integralMap[cellIDs[i]] = integrals(i);
+  }
+  return integralMap;
+}
+
+
 // added by Jesse - adaptive quadrature rules
-double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest) {
   double integral = 0.0;
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
   vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
 
-  // build list of subcells
+  // build initial list of subcells = all elements
   vector<CacheInfo> subCellCacheInfo;
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
@@ -306,9 +388,13 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
   // adaptively refine
   bool allConverged = false;
   vector<CacheInfo> subCellsToCheck = subCellCacheInfo;
-  while (!allConverged){
+  int iter = 0;
+  int maxIter = 1000; // arbitrary
+  while (!allConverged && iter < maxIter){    
     allConverged = true;
+    ++iter;
     // check relative error, tag subcells to refine
+    double tempIntegral = 0.0;
     set<int> subCellsToRefine;    
     for (int i = 0;i<subCellsToCheck.size();i++){
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
@@ -316,7 +402,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
       int cubEnrich = 2; // arbitrary
-      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,false,cubEnrich));
+      BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,testVsTest,cubEnrich));
       vector<int> cellIDs;
       cellIDs.push_back(cellID);
       basisCache->setPhysicalCellNodes(nodes,cellIDs,true);
@@ -326,14 +412,20 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol) {
       FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
       this->integrate(cellIntegral,basisCache);
       this->integrate(enrichedCellIntegral,enrichedCache);
-      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(cellIntegral(0)); // relative error
+      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error      
       if (error > tol){
         allConverged = false;
         subCellsToRefine.insert(i);
+	tempIntegral += enrichedCellIntegral(0);
       }else{
-        integral += enrichedCellIntegral(0);
+	integral += enrichedCellIntegral(0);
       }
     }
+    if (iter == maxIter){
+      integral += tempIntegral;
+      cout << "maxIter reached for adaptive quadrature, returning integral estimate." << endl;
+    }
+    //    cout << "on iter " << iter << " with tempIntegral = " << tempIntegral << " and currrent integral = " << integral << " and " << subCellsToRefine.size() << " subcells to go. Allconverged =  " << allConverged << endl;
 
     // reconstruct subcell list
     vector<CacheInfo> newSubCells;
@@ -428,11 +520,22 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   if ( !sumInto ) {
     cellIntegrals.initialize(0);
   }
+
   FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
+//    if (basisCache->getSideIndex() == 0) {
+//      cout << "basisCache for side 0, physical cubature points:\n" << basisCache->getPhysicalCubaturePoints();
+//      cout << "basisCache for side 0, integrate() values:\n" << values;
+//      cout << "basisCache for side 0, weightedMeasures:\n" << *
+//      weightedMeasures;
+//    }
+//    if (cellIndex==6) {
+////      cout << "Function::integrate() values:\n" << values;
+//      cout << "weightedMeasures:\n" << *weightedMeasures;
+//    }
   }
 }
 
@@ -486,17 +589,16 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest) {
   double integral = 0;
   
-  // TODO: rewrite this to compute in distributed fashion
   int myPartition = Teuchos::GlobalMPISession::getRank();
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
   
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, false, cubatureDegreeEnrichment) ); // all elements of same type
-    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType); // TODO: replace with local variant
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
+    vector< ElementPtr > cells = mesh->elementsOfType(myPartition, elemType);
 
     int numCells = cells.size();
     vector<int> cellIDs;
@@ -514,6 +616,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     } else {
       this->integrate(cellIntegrals, basisCache);
     }
+//    cout << "cellIntegrals:\n" << cellIntegrals;
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       integral += cellIntegrals(cellIndex);
     }
@@ -553,8 +656,6 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
   scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
 }
 
-// note that valuesDottedWithTensor isn't called by anything right now
-// (it's totally untried!! -- trying for first time with NewBurgersDriver, in RHS)
 void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache) {
@@ -580,6 +681,9 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
   FieldContainer<double> otherTensorValues(tensorValueIndex);
   tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
   
+//  cout << "myTensorValues:\n" << myTensorValues;
+//  cout << "otherTensorValues:\n" << otherTensorValues;
+  
   // clear out the spatial indices of tensorValueIndex so we can use it as index
   for (int d=0; d<_rank; d++) {
     tensorValueIndex[d+2] = 0;
@@ -599,7 +703,8 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
       
       for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
         *value += *myValue * *otherValue;
-        myValue++; 
+//        cout << "myValue: " << *myValue << "; otherValue: " << *otherValue << endl;
+        myValue++;
         otherValue++;
       }
     }
@@ -825,6 +930,11 @@ FunctionPtr Function::meshBoundaryCharacteristic() {
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
 }
 
+FunctionPtr Function::meshSkeletonCharacteristic() {
+   // 1 on mesh skeleton, 0 elsewhere
+  return Teuchos::rcp( new MeshSkeletonCharacteristicFunction );
+}
+
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
   static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
   return _normal;
@@ -855,6 +965,14 @@ FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
 FunctionPtr Function::null() {
   static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
   return _null;
+}
+
+FunctionPtr Function::xn(int n) {
+  return Teuchos::rcp( new Xn(n) );
+}
+
+FunctionPtr Function::yn(int n) {
+  return Teuchos::rcp( new Yn(n) );
 }
 
 FunctionPtr Function::zero(int rank) {
@@ -1006,6 +1124,39 @@ FunctionPtr ProductFunction::dz() {
   }
   // otherwise, apply product rule:
   return _f1 * _f2->dz() + _f2 * _f1->dz();
+}
+
+FunctionPtr ProductFunction::x() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take x component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->x())) {
+    return null();
+  }
+  return _f1 * _f2->x();
+}
+
+FunctionPtr ProductFunction::y() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take y component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->y())) {
+    return null();
+  }
+  return _f1 * _f2->y();
+}
+
+FunctionPtr ProductFunction::z() {
+  if (this->rank() == 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't take z component of scalar function.");
+  }
+  // otherwise, _f2 is the rank > 0 function
+  if (isNull(_f2->z())) {
+    return null();
+  }
+  return _f1 * _f2->z();
 }
 
 int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
@@ -1161,6 +1312,21 @@ FunctionPtr SumFunction::dz() {
   return _f1->dz() + _f2->dz();
 }
 
+FunctionPtr SumFunction::grad(int numComponents) {
+  if ( isNull(_f1->grad(numComponents)) || isNull(_f2->grad(numComponents)) ) {
+    return null();
+  } else {
+    return _f1->grad(numComponents) + _f2->grad(numComponents);
+  }
+}
+FunctionPtr SumFunction::div() {
+  if ( isNull(_f1->div()) || isNull(_f2->div()) ) {
+    return null();
+  } else {
+    return _f1->div() + _f2->div();
+  }
+}
+
 double hFunction::value(double x, double y, double h) {
     return h;
 }
@@ -1179,6 +1345,57 @@ void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
       values(cellIndex,ptIndex) = value(x,y,h);
     }
   }
+}
+
+// this is liable to be a bit slow!!
+class ComposedFunction : public Function {
+  FunctionPtr _f, _arg_g;
+public:
+  ComposedFunction(FunctionPtr f, FunctionPtr arg_g) : Function(f->rank()) {
+    _f = f;
+    _arg_g = arg_g;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
+    FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
+    if (spaceDim==1) { // special case: arg_g is then reasonably scalar-valued
+      fArgPoints.resize(numCells,numPoints);
+    }
+    _arg_g->values(fArgPoints,basisCache);
+    if (spaceDim==1) {
+      fArgPoints.resize(numCells,numPoints,spaceDim);
+    }
+    BasisCachePtr fArgCache = Teuchos::rcp( new PhysicalPointCache(fArgPoints) );
+    _f->values(values, fArgCache);
+  }
+  FunctionPtr dx() {
+    if (isNull(_f->dx()) || isNull(_arg_g->dx())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dx() * Function::composedFunction(_f->dx(),_arg_g);
+  }
+  FunctionPtr dy() {
+    if (isNull(_f->dy()) || isNull(_arg_g->dy())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dy() * Function::composedFunction(_f->dy(),_arg_g);
+  }
+  FunctionPtr dz() {
+    if (isNull(_f->dz()) || isNull(_arg_g->dz())) {
+      return Function::null();
+    }
+    // chain rule:
+    return _arg_g->dz() * Function::composedFunction(_f->dz(),_arg_g);
+  }
+};
+
+FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
+  return Teuchos::rcp( new ComposedFunction(f,arg_g) );
 }
 
 double SimpleFunction::value(double x) {
@@ -1504,8 +1721,10 @@ FunctionPtr VectorizedFunction::di(int i) {
       break;
     case 1:
       op = IntrepidExtendedTypes::OP_DY;
+      break;
     case 2:
       op = IntrepidExtendedTypes::OP_DZ;
+      break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
       break;
@@ -1533,10 +1752,14 @@ FunctionPtr VectorizedFunction::dz() {
 }
 
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
-  if ( f1->rank() == f2->rank() ) {
-    // TODO: work out how to do this for other ranks?
-    if (f1->isZero() || f2->isZero()) {
+  if (f1->isZero() || f2->isZero()) {
+    if ( f1->rank() == f2->rank() ) {
       return Function::zero();
+    } else if ((f1->rank() == 0) || (f2->rank() == 0)) {
+      int result_rank = f1->rank() + f2->rank();
+      return Function::zero(result_rank);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
     }
   }
   return Teuchos::rcp( new ProductFunction(f1,f2) );
@@ -1610,8 +1833,24 @@ FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2) {
   return Teuchos::rcp( new SumFunction(f1, f2) );
 }
 
+FunctionPtr operator+(FunctionPtr f1, double value) {
+  return f1 + Function::constant(value);
+}
+
+FunctionPtr operator+(double value, FunctionPtr f1) {
+  return f1 + Function::constant(value);
+}
+
 FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2) {
   return f1 + -f2;
+}
+
+FunctionPtr operator-(FunctionPtr f1, double value) {
+  return f1 - Function::constant(value);
+}
+
+FunctionPtr operator-(double value, FunctionPtr f1) {
+  return Function::constant(value) - f1;
 }
 
 FunctionPtr operator-(FunctionPtr f) {
@@ -1820,14 +2059,15 @@ FunctionPtr SimpleSolutionFunction::dz() {
 //  return true;
 //}
 
-Cos_ax::Cos_ax(double a) {
+Cos_ax::Cos_ax(double a, double b) {
   _a = a;
+  _b = b;
 }
 double Cos_ax::value(double x) {
-  return cos( _a * x );
+  return cos( _a * x + _b);
 }
 FunctionPtr Cos_ax::dx() {
-  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a));
+  return -_a * (FunctionPtr) Teuchos::rcp(new Sin_ax(_a,_b));
 }
 FunctionPtr Cos_ax::dy() {
   return Function::zero();

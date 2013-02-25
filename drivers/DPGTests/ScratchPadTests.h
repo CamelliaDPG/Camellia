@@ -49,8 +49,11 @@ public:
   bool testPenaltyConstraints();
   bool testLinearTermEvaluationConsistency();
   bool testIntegrateDiscontinuousFunction();
-  bool testGalerkinOrthogonality();
-  bool testGalerkinOrthogonalityVectorValued();
+  bool testGalerkinOrthogonality(); 
+  bool testLTResidual();
+  bool testLTResidualSimple();
+  bool testRieszIntegration();
+  bool testResidualMemoryError();
 
   std::string testSuiteName();
 };

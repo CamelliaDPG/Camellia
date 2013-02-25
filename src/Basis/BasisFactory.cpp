@@ -351,3 +351,26 @@ bool BasisFactory::isPatchBasis(BasisPtr basis) {
 void BasisFactory::setUseEnrichedTraces( bool value ) {
   _useEnrichedTraces = value;
 }
+
+set<int> BasisFactory::sideFieldIndices( BasisPtr basis, bool includeSideSubcells ) { // includeSideSubcells: e.g. include vertices as part of quad sides
+  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  int dim = cellTopo.getDimension();
+  int subcellDim_start = includeSideSubcells ? 0 : dim - 1;
+  set<int> indices;
+  for (int subcellDim = subcellDim_start; subcellDim < dim; subcellDim++) {
+    int numSubcells = cellTopo.getSubcellCount(subcellDim);
+    for (int subcellIndex=0; subcellIndex<numSubcells; subcellIndex++) {
+      // check that there is at least one dof for the subcell before asking for the first one:
+      if (   (basis->getDofOrdinalData().size() > subcellDim)
+          && (basis->getDofOrdinalData()[subcellDim].size() > subcellIndex)
+          && (basis->getDofOrdinalData()[subcellDim][subcellIndex].size() > 0) ) {
+        int firstDofOrdinal = basis->getDofOrdinal(subcellDim, subcellIndex, 0);
+        int numDofs = basis->getDofTag(firstDofOrdinal)[3];
+        for (int dof=0; dof<numDofs; dof++) {
+          indices.insert(basis->getDofOrdinal(subcellDim, subcellIndex, dof));
+        }
+      }
+    }
+  }
+  return indices;
+}

@@ -3,6 +3,7 @@
 #include "PreviousSolutionFunction.h"
 #include "MeshUtilities.h"
 #include "SolutionExporter.h"
+#include "ZoltanMeshPartitionPolicy.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -32,6 +33,16 @@ class invSqrtHScaling : public hFunction {
 public:
   double value(double x, double y, double h) {
     return sqrt(1.0/h);
+  }
+};
+
+class WholeBoundary : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool xMatch = ((abs(x)<tol) || (abs(x-1.0)<tol)); // left inflow
+    bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
+    return xMatch || yMatch;
   }
 };
 
@@ -103,6 +114,24 @@ public:
     double tol = 1e-14;
     bool xMatch = (abs(x-1.0)<tol);
     return xMatch;
+  }
+};
+
+// inflow values for u
+class Bubble : public Function {
+public:
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);	
+	values(cellIndex,ptIndex) = y*(1.0-y)*(1.0-x);
+      }
+    }
   }
 };
 
@@ -200,6 +229,7 @@ public:
   }
 };
 
+
 // inflow values for u
 class l2NormOfVector : public Function {
   FunctionPtr _beta;
@@ -280,15 +310,18 @@ int main(int argc, char *argv[]) {
   int pToAdd = 3;
 
   args.Process();
+  
   if (rank==0){
     cout << "Epsilon = " << eps << endl;
-    cout << "Number of refinements = " << numRefs << endl;
     cout << "Number of pre-refinements = " << numPreRefs << endl;
+    /*
+    cout << "Number of refinements = " << numRefs << endl;
     cout << "Number of cells in initial mesh = " << nCells << endl;
     cout << "Use of robust BC = " << useRobustBC << endl;
     cout << "Cubature enrichment degree = " << cubEnrich << endl;
+    */
   }
-
+  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -358,23 +391,27 @@ int main(int argc, char *argv[]) {
   //  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary(beta) );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary);
+  SpatialFilterPtr wholeBoundary = Teuchos::rcp( new WholeBoundary);
 
   FunctionPtr u_exact = Teuchos::rcp( new Uex(eps,0) );
   FunctionPtr sig1_exact = Teuchos::rcp( new Uex(eps,1) );
   FunctionPtr sig2_exact = Teuchos::rcp( new Uex(eps,2) );  
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-
-  bc->addDirichlet(uhat, outflowBoundary, zero); // wall BC - constant throughout
-
+  FunctionPtr bubble = Teuchos::rcp(new Bubble);
   if (useRobustBC){
-    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
+    //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact-(sig1_exact*e1 + sig2_exact*e2)*n);  
+    //    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact);  
+    bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*bubble);  
+    bc->addDirichlet(uhat, outflowBoundary, zero); // wall BC - constant throughout
   }else{
-    bc->addDirichlet(uhat, inflowBoundary, u_exact);  
+    bc->addDirichlet(uhat, wholeBoundary, u_exact);  
+    //    bc->addDirichlet(uhat, wholeBoundary, bubble);
   }
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   /*
   FunctionPtr usq = u_exact*u_exact;
   double u_int = usq->integrate(mesh,cubEnrich); 
@@ -553,11 +590,12 @@ int main(int argc, char *argv[]) {
     /////////////////////////////////////////////////////////////////////////////
   }
 
-  //  solution->condensedSolve(false);  
+  solution->condensedSolve(false);  
 
   VTKExporter exporter(solution, mesh, varFactory);
   if (rank==0){
-    //    exporter.exportSolution("qopt");
+    exporter.exportSolution("qopt");
+    cout << endl;
   }
 
   return 0;

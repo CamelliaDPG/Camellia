@@ -58,17 +58,22 @@
 #include "Element.h"
 #include "ElementType.h"
 #include "BasisFactory.h"
-
 #include <sstream>
+
+#include "MeshUtilities.h"
+
+#include "GnuPlotUtil.h"
 
 using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "WARNING: skipping unrefinement test.\n";
-//  numTestsRun++;
-//  if (testHUnrefinementForConfusion() ) {
-//    numTestsPassed++;
-//  }
+  /*
+  numTestsRun++;
+  if (testHUnrefinementForConfusion() ) {
+    numTestsPassed++;
+  }
+  */
   numTestsRun++;
   if (testMeshSolvePointwise() ) {
     numTestsPassed++;
@@ -89,6 +94,13 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testHRefinement() ) {
     numTestsPassed++;
   }
+
+  // added by Jesse
+  numTestsRun++;
+  if (testMultiBasisCrash() ) {
+    numTestsPassed++;
+  }
+
   numTestsRun++;
   if (testFluxIntegration() ) {
     numTestsPassed++;
@@ -1298,7 +1310,6 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   ConfusionManufacturedSolution exactSolution(epsilon,beta_x,beta_y);
   
   int H1Order = 3;
-  int horizontalCells = 4; int verticalCells = 4;
   
   // before we hRefine, compute a solution for comparison after refinement
   Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp(new MathInnerProduct(exactSolution.bilinearForm()));
@@ -1306,8 +1317,7 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
   set<int> cellsToRefine;
   cellsToRefine.clear();
   
-  // start with a fresh 2x1 mesh:
-  horizontalCells = 1; verticalCells = 1;
+  int horizontalCells = 1; int verticalCells = 1;
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
   Solution solution = Solution(mesh, exactSolution.bc(), exactSolution.ExactSolution::rhs(), ip);
@@ -1324,8 +1334,12 @@ bool MeshTestSuite::testHUnrefinementForConfusion() {
       int cellID = descendants[j].first;
       cellsToRefine.insert(cellID);
     }
+
+    cout << "b4 refining num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+    cout << "b4 unref num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     mesh->hUnrefine(cellsToRefine);
+    cout << "num edge cID entries = " << mesh->numEdgeToCellIDEntries() << endl;
     if (! MeshTestUtility::checkMeshConsistency(mesh) ) {
       success = false;
       cout << "FAILURE: after unrefinement, mesh fails consistency check.\n";
@@ -1999,5 +2013,129 @@ bool MeshTestSuite::testPointContainment() {
     testIndex++;
   }
   
+  return success;
+}
+bool MeshTestSuite::testMultiBasisCrash(){
+  bool success = true;  
+  int polyOrder = 2;
+  PoissonExactSolution exactSolution(PoissonExactSolution::POLYNOMIAL, polyOrder);
+  int order = exactSolution.H1Order();
+  int pToAdd = 1;
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(4,2, exactSolution.bilinearForm(), order, order+pToAdd);
+
+  ////////////////////////////////////////////////////////////////////
+  // REFINE MESH TO TRIGGER EXCEPTION
+  ////////////////////////////////////////////////////////////////////
+  /*
+  for (int i = 0;i<3;i++){
+    vector<int> xC;
+    vector<int> yC;
+    vector<int> rC;
+    switch (i){
+    case 0:
+      rC.push_back(0);
+      rC.push_back(2);
+      yC.push_back(1);
+      yC.push_back(3);
+      break;
+    case 1:
+      yC.push_back(4);
+      yC.push_back(6);
+      yC.push_back(10);
+      rC.push_back(15);
+      break;
+    case 2:
+      break;
+    case 3:
+      
+      break;
+    }
+    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
+    mesh->enforceOneIrregularity();
+    for (int i = 0;i<mesh->numActiveElements();i++){
+      int cellID = mesh->getActiveElement(i)->cellID();
+      vector<double> c = mesh->getCellCentroid(cellID);
+      cout << "centroid of cell " << cellID << " = " << c[0] << ", " << c[1] << endl;
+    }
+    cout << endl;      
+  }
+  */
+  for (int i = 0;i<5;i++){
+    vector<int> xC;
+    vector<int> yC;
+    vector<int> rC;
+    switch (i){
+    case 0:
+      rC.push_back(2);
+      rC.push_back(4);
+      rC.push_back(6);
+      break;
+    case 1:
+      rC.push_back(9);
+      rC.push_back(12);
+      rC.push_back(13);
+      rC.push_back(16);
+      rC.push_back(17);
+      break;
+    case 2:
+      rC.push_back(20);
+      rC.push_back(21);
+      rC.push_back(24);
+      rC.push_back(25);
+      rC.push_back(28);
+      rC.push_back(29);
+      rC.push_back(32);
+      yC.push_back(30);
+      break;
+    case 3:
+      rC.push_back(33);
+      rC.push_back(36);
+      rC.push_back(37);
+      rC.push_back(43);
+      rC.push_back(46);
+      rC.push_back(47);
+      rC.push_back(51);
+      rC.push_back(54);
+      rC.push_back(55);
+      rC.push_back(58);
+      rC.push_back(60);
+      rC.push_back(61);
+
+      yC.push_back(18);
+      yC.push_back(19);
+      yC.push_back(26);
+      yC.push_back(31);      
+      yC.push_back(34);
+      yC.push_back(35);
+      yC.push_back(38);
+      yC.push_back(39);
+      yC.push_back(40);
+      yC.push_back(41);
+      yC.push_back(50);
+      yC.push_back(52);
+      yC.push_back(56);
+      yC.push_back(57);
+      break;
+    case 4:
+      rC.push_back(93);  // refinement breaks on this one
+      break;
+    }
+//    if (i==4) {
+//      FieldContainer<double> vertices(4,2);
+//      mesh->verticesForCell(vertices, 78);
+//      cout << "vertices for cell 78:\n" << vertices;
+//      mesh->verticesForCell(vertices, 91);
+//      cout << "vertices for cell 91:\n" << vertices;
+//      mesh->verticesForCell(vertices, 93);
+//      cout << "vertices for cell 93:\n" << vertices;
+//      GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/multiBasisRefinementTest.dat", mesh);
+//    }
+    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());
+    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
+    mesh->enforceOneIrregularity();
+  }
   return success;
 }

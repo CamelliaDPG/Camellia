@@ -20,6 +20,7 @@ public:
     if (transformationFunction.get()==NULL) {
       // then the computational and exact meshes are the same: call the other method:
       writeExactMeshSkeleton(filePath,mesh,2);
+      return;
     }
     
     int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
@@ -39,7 +40,7 @@ public:
       bool neglectCurves = true;
       vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
-      int numPointsPerEdge = cell->elementType()->testOrderPtr->maxBasisDegree() * 2; // 2 points for linear, 4 for quadratic, etc.
+      int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
       int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
       FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
@@ -178,8 +179,21 @@ public:
   
   // badly named, maybe: we support arbitrary space dimension...
   static void writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints) {
-    int numPoints = dataPoints.dimension(0);
-    int spaceDim = dataPoints.dimension(1);
+    FieldContainer<double> dataPointsCopy = dataPoints;
+    
+    if (dataPoints.rank()==3) {
+      int numCells = dataPoints.dimension(0);
+      int numPoints = dataPoints.dimension(1);
+      int spaceDim = dataPoints.dimension(2);
+      dataPointsCopy.resize(numCells*numPoints, spaceDim);
+    }
+    
+    if (dataPointsCopy.rank() != 2) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"writeXYPoints only supports containers of rank 2 or 3");
+    }
+    
+    int numPoints = dataPointsCopy.dimension(0);
+    int spaceDim = dataPointsCopy.dimension(1);
     
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
@@ -194,12 +208,12 @@ public:
     for (int i=0; i<numPoints; i++) {
       if ((spaceDim==3) && (i>0)) {
         // for 3D point sets, separate new x values with a new line.
-        if (dataPoints(i,0) != dataPoints(i-1,0)) {
+        if (dataPointsCopy(i,0) != dataPointsCopy(i-1,0)) {
           fout << "\n";
         }
       }
       for (int d=0; d<spaceDim; d++) {
-        fout << dataPoints(i,d) << "   ";
+        fout << dataPointsCopy(i,d) << "   ";
       }
       fout << "\n";
     }

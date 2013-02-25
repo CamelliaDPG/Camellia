@@ -111,9 +111,18 @@ FunctionPtr NewBasisSumFunction::dz() {
   if (_op != OP_VALUE) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
-  return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
+  // a bit of a hack: if the topology defined in 3D, then we'll define a derivative there...
+  if (_basis->getBaseCellTopology().getDimension() > 2) {
+    return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
+  } else {
+    return Function::null();
+  }
 }
 
 bool NewBasisSumFunction::boundaryValueOnly() {
   return _boundaryValueOnly;
+}
+
+FunctionPtr NewBasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients) {
+  return Teuchos::rcp( new NewBasisSumFunction(basis,basisCoefficients) );
 }

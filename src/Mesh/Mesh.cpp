@@ -1872,13 +1872,43 @@ void Mesh::hUnrefine(const set<int> &cellIDs) {
       }
     }
   }
-    
+
+  // added by Jesse to try to fix bug
+  for (set<int>::iterator cellIt = deletedCellIDs.begin(); cellIt != deletedCellIDs.end(); cellIt++) {
+    // erase from _elements list
+    for (int i = 0; i<_elements.size();i++){
+      if (_elements[i]->cellID()==(*cellIt)){
+	_elements.erase(_elements.begin()+i);
+	break;
+      }
+    }
+    // erase any pairs from _edgeToCellIDs having to do with deleted cellIDs
+    for (map<pair<int,int>, vector<pair<int,int> > >::iterator mapIt = _edgeToCellIDs.begin(); mapIt!=_edgeToCellIDs.end();mapIt++){
+      vector<pair<int,int> > cellIDSideIndices = mapIt->second;
+      bool eraseEntry = false;
+      for (int i = 0;i<cellIDSideIndices.size();i++){
+	int cellID = cellIDSideIndices[i].first;
+	if (cellID==(*cellIt)){
+	  eraseEntry = true;
+	}
+	if (eraseEntry)
+	  break;
+      }
+      if (eraseEntry){
+	_edgeToCellIDs.erase(mapIt);
+      }
+    }
+  }
+
   rebuildLookups();
+
   // now discard any old coefficients
   for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
+
+  // TODO: modify _edgeToCellID (exception thrown) and delete terms in _elements
 
 }
 
@@ -2164,6 +2194,13 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     int childCellIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
     ElementPtr childCell = parent->getChild(childCellIndex);
+    
+    // new code 2-16-13:
+    while (childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() == 1) ) {
+      pair<int, int> childEntry = childCell->childIndicesForSide(childSideIndex)[0];
+      childSideIndex = childEntry.second;
+      childCell = childCell->getChild(childEntry.first);
+    } // end new code 2-16-13
     
     if ( childCell->isParent() && (childCell->childIndicesForSide(childSideIndex).size() > 1)) {
       childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex,bigNeighborPolyOrder) );
@@ -2566,7 +2603,6 @@ void Mesh::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &ed
   }
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(thisPtr, _cellIDsWithCurves));
-  // TODO: on mesh refinement, modify the edgeToCurveMap and transformation function accordingly
 }
 
 void Mesh::setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly) {
@@ -2747,4 +2783,43 @@ double Mesh::getCellMeasure(int cellID)
   Teuchos::RCP< shards::CellTopology > cellTopo = elemType->cellTopoPtr;  
   BasisCache basisCache(physicalCellNodes, *cellTopo, 1);
   return basisCache.getCellMeasures()(0);
+}
+
+double Mesh::getCellXSize(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(1,0)-vertices(0,0);
+  double yDist = vertices(1,1)-vertices(0,1);
+  return sqrt(xDist*xDist + yDist*yDist);
+}
+
+double Mesh::getCellYSize(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(3,0)-vertices(0,0);
+  double yDist = vertices(3,1)-vertices(0,1);
+  return sqrt(xDist*xDist + yDist*yDist);
+}
+
+vector<double> Mesh::getCellOrientation(int cellID){
+  ElementPtr elem = getElement(cellID);
+  int spaceDim = 2; // assuming 2D
+  int numSides = elem->numSides();
+  TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Cell orientation only defined for quads right now.");
+  FieldContainer<double> vertices(numSides,spaceDim); 
+  verticesForCell(vertices, cellID);
+  double xDist = vertices(3,0)-vertices(0,0);
+  double yDist = vertices(3,1)-vertices(0,1);
+  vector<double> orientation;
+  orientation.push_back(xDist);
+  orientation.push_back(yDist);
+  return orientation;
 }

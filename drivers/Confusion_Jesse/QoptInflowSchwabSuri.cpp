@@ -8,7 +8,9 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
 
 bool enforceLocalConservation = false;
@@ -207,7 +209,7 @@ public:
   double value(double x, double y){
     double tol = 1e-12;
     double val = 0.0;    
-    if ( abs(y)<tol){
+    if ( abs(x)<tol){
       val = 1.0;
     }
     return val;
@@ -308,7 +310,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int order = 2; 
+  int order = 2;
   if (argc > 2){
     order = atoi(argv[2]);
     if (rank==0){
@@ -441,6 +443,7 @@ int main(int argc, char *argv[]) {
   convOutFile << "erickson_qopt_" << -floor(log(eps)/log(10)) << "_" << order << "_" << pToAdd <<".txt";
   convOut.open(convOutFile.str().c_str());
   solution->condensedSolve(false);
+  //  solution->solve(false);
 
   FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
   FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );

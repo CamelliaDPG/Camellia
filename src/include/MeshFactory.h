@@ -18,6 +18,8 @@ public:
   static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest=2,
                           double width=1.0, double height=1.0, int horizontalElements=1, int verticalElements=1);
   
+  static MeshPtr quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest=2);
+  
   static MeshPtr hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                             BilinearFormPtr bilinearForm, int H1Order, int pToAddTest);
   

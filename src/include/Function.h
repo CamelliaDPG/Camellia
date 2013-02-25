@@ -30,6 +30,7 @@ private:
   enum FunctionModificationType{ MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
 protected:
   int _rank;
+  string _displayString; // this is here mostly for identifying functions in the debugger
   void CHECK_VALUES_RANK(FieldContainer<double> &values); // throws exception on bad values rank
 public:
   Function();
@@ -54,7 +55,7 @@ public:
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
   virtual FunctionPtr div();
-  virtual FunctionPtr grad();
+  virtual FunctionPtr grad(int numComponents=-1);
   
 // inverse() presently unused: and unclear how useful...
 //  virtual FunctionPtr inverse();
@@ -67,16 +68,22 @@ public:
   
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
+  double integrate(BasisCachePtr basisCache);
   void integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   
-  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
+  // return all cell integrals
+  map<int,double> cellIntegrals( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
+  // return cell integrals specified in input argument cellIDs
+  map<int,double> cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
+  
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
   // adaptive quadrature
-  double integrate(Teuchos::RCP<Mesh> mesh, double tol);
+  double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
   
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
@@ -107,8 +114,10 @@ public:
   static bool isNull(FunctionPtr f);
   
   // static Function construction methods:
+  static FunctionPtr composedFunction( FunctionPtr f, FunctionPtr arg_g); // note: SLOW! avoid when possible...
   static FunctionPtr constant(double value);
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
+  static FunctionPtr meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
   static FunctionPtr vectorize(FunctionPtr f1, FunctionPtr f2);
   static FunctionPtr normal(); // unit outward-facing normal on each element boundary
@@ -117,6 +126,9 @@ public:
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero(int rank=0);
   static FunctionPtr restrictToCellBoundary(FunctionPtr f);
+  
+  static FunctionPtr xn(int n=1);
+  static FunctionPtr yn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
@@ -251,6 +263,11 @@ public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
+  
+  FunctionPtr x();
+  FunctionPtr y();
+  FunctionPtr z();
+  
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
@@ -282,6 +299,9 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  
+  FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
+  FunctionPtr div();  // divergence of sum is sum of divergences
   
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
@@ -361,7 +381,13 @@ FunctionPtr operator*(vector<double> weight, FunctionPtr f);
 FunctionPtr operator*(FunctionPtr f, vector<double> weight);
 
 FunctionPtr operator+(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator+(FunctionPtr f1, double value);
+FunctionPtr operator+(double value, FunctionPtr f1);
+
 FunctionPtr operator-(FunctionPtr f1, FunctionPtr f2);
+FunctionPtr operator-(FunctionPtr f1, double value);
+FunctionPtr operator-(double value, FunctionPtr f1);
+
 FunctionPtr operator-(FunctionPtr f);
 
 // here, some particular functions
@@ -431,9 +457,9 @@ public:
 };
 
 class Cos_ax : public SimpleFunction {
-  double _a;
+  double _a,_b;
 public:
-  Cos_ax(double a);
+  Cos_ax(double a, double b=0);
   double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
@@ -442,16 +468,17 @@ public:
 };
 
 class Sin_ax : public SimpleFunction {
-  double _a;
+  double _a, _b;
 public:
-  Sin_ax(double a) {
+  Sin_ax(double a, double b=0) {
     _a = a;
+    _b = b;
   }
   double value(double x) {
-    return sin( _a * x);
+    return sin( _a * x + _b);
   }
   FunctionPtr dx() {
-    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a));
+    return _a * (FunctionPtr) Teuchos::rcp(new Cos_ax(_a,_b));
   }
   FunctionPtr dy() {
     return Function::zero();
