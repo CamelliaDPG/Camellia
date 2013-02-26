@@ -293,6 +293,48 @@ double Function::integrate(BasisCachePtr basisCache) {
   return sum;
 }
 
+// added by Jesse to check positivity of a function
+bool Function::isPositive(BasisCachePtr basisCache){
+  bool isPositive = true;
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);  
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);  
+  FieldContainer<double> fxnValues(numCells,numPoints);
+  this->values(fxnValues, basisCache);  
+  
+  for (int i = 0;i<fxnValues.size();i++){
+    if (fxnValues[i]<0.0){
+      isPositive=false;
+    }
+  }
+  return isPositive;  
+}
+
+bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTest){
+  bool isPositive = true;
+  bool isPositiveOnPartition = true;
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+  vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubEnrich);    					   
+    bool isPositiveOnCell = this->isPositive(basisCache);
+    if (!isPositiveOnCell){
+      isPositiveOnPartition = false;
+      break;
+    }
+  }
+  int numPositivePartitions = 1;
+  if (!isPositiveOnPartition){
+    numPositivePartitions = 0;
+  }
+  int totalPositivePartitions = MPIWrapper::sum(numPositivePartitions);
+  if (totalPositivePartitions<Teuchos::GlobalMPISession::getNProc())
+    isPositive=false;
+
+  return isPositive;
+}
+
+
 // added by Jesse - integrate over only one cell
 double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
