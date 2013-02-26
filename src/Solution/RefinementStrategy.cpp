@@ -15,6 +15,11 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
+  _anisotropicThreshhold = 10.0;
+}
+
+void RefinementStrategy::setAnisotropicThreshhold(double value){
+  _anisotropicThreshhold = value;
 }
 
 void RefinementStrategy::setEnforceOneIrregularity(bool value) {
@@ -198,16 +203,15 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
   getCellsAboveErrorThreshhold(cellsToRefine);
   for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
     int cellID = *cellIt;    
-    int cubEnrich = 10;
     double h1 = mesh->getCellXSize(cellID);
     double h2 = mesh->getCellYSize(cellID);
     double min_h = min(h1,h2);
     
-    double thresh = 10.0; // arbitrary
+    double thresh = _anisotropicThreshhold;
     bool doYAnisotropy = yErr[cellID]/xErr[cellID] > thresh;
     bool doXAnisotropy = xErr[cellID]/yErr[cellID] > thresh;
-    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a non-stretched element
-    double maxAspect = 1000.0; // use value from LD's paper
+    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
+    double maxAspect = 75.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100, we take it lower for better conditioning
     if (doXAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
       xCells.push_back(cellID);
     }else if (doYAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
