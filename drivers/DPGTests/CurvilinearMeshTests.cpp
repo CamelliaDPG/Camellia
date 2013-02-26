@@ -226,18 +226,18 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int H1Order = 1;
   
-  // first test, before we get into the circular stuff: define a parabolic edge
+  // first test, before we get into the circular stuff: define a sloped edge
   // whose exact integral we know (and which is exactly representable by our geometry)
   {
     FunctionPtr t = Teuchos::rcp( new Xn(1) );
     FunctionPtr x = 2 * t - 1;
-    FunctionPtr y = x * x - 1;
+    FunctionPtr y = x - 1;
     
     ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
     
     FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
     physicalCellNodes(0,0,0) = -1;
-    physicalCellNodes(0,0,1) = 0;
+    physicalCellNodes(0,0,1) = -2;
     
     physicalCellNodes(0,1,0) = 1;
     physicalCellNodes(0,1,1) = 0;
@@ -259,16 +259,60 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     quadMesh->setEdgeToCurveMap(edgeToCurveMap);
     
-    // the arclength of y = x^2 from -1 to 1 is sqrt(5) + 0.5 * asin(2)
-    // and the straight edges have total length 3:
-    double expectedPerimeter = 3 + sqrt(5) + 0.5 * asinh(2);
+    // the length of the sloped edge is 2 sqrt (2)
+    // and the other edges have total length of 5:
+    double expectedPerimeter = 6 + 2 * sqrt(2);
+    
+    // since our map from straight edges is the identity,
+    // the expected jacobian function along the side is
+    // [  1  0 ]
+    // [  0  1 ]
+    FunctionPtr expectedTransformation, expectedJacobian;
+    {
+      expectedTransformation = Function::vectorize(Function::xn(1), Function::yn(1));
+      expectedJacobian = expectedTransformation->grad();
+    }
     
     for (int hRefinement=0; hRefinement<5; hRefinement++) {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
+      BasisCachePtr sideCache = basisCache->getSideBasisCache(0);
+      
+      // need sideCache not to retransform things so we can test the transformationFxn itself:
+      // TODO: think through this carefully, and/or try with basisCache to confirm that the interior works
+      //       the way we're asking the edge to.  We have reason to think the interior is working...
+      basisCache->setTransformationFunction(Function::null());
+      sideCache->setTransformationFunction(Function::null());
+      
+      int numCells = 1;
+      int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+      int spaceDim = 2;
+      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim,spaceDim);
+      expectedJacobian->values(expectedJacobianValues,sideCache);
+      FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim);
+      FunctionPtr transformationFxn = quadMesh->getTransformationFunction();
+      FunctionPtr transformationJacobian = transformationFxn->grad();
+      transformationJacobian->values(jacobianValues,sideCache);
+      
+      double maxDiff = 0;
+      
+      if (! expectedTransformation->equals(transformationFxn, sideCache)) {
+        success = false;
+        cout << "testEdgeLength(): expected values don't match transformation function values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedTransformation, transformationFxn, sideCache, tol);
+      }
+      
+      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) {
+        success = false;
+        cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedJacobian, transformationJacobian, sideCache, tol);
+      }
+      
       double perimeter = oneOnBoundary->integrate(quadMesh);
       double err = abs( perimeter - expectedPerimeter );
       if (err > tol) {
-        cout << "For h-refinement " << hRefinement << ", edge integral of y=x^2 does not match expected.\n";
+        cout << "For h-refinement " << hRefinement << ", edge integral of y=x-1 does not match expected.\n";
         cout << "err = " << err << endl;
+        cout << "expected perimeter = " << expectedPerimeter << "; actual = " << perimeter << endl;
       }      
       quadMesh->hRefine(quadMesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }
