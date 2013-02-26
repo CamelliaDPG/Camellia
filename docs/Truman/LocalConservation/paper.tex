@@ -3,7 +3,8 @@
 \usepackage{authblk}
 \usepackage{amsmath, amssymb, amsthm, mathtools}
 \usepackage{graphicx}
-% \usepackage{subfigure}
+\usepackage{caption}
+\usepackage{subcaption}
 
 \def\btau{\boldsymbol\tau}
 \def\bsigma{\boldsymbol\sigma}
@@ -583,18 +584,21 @@ the conservative and nonconservative plots appear to lay right on top of each
 other. This indicates that the conservative formulation at least doensn't hurt
 our convergence significantly.
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/graphError.pdf}
-\caption{Error in Erickson-Johnson solution with graph norm}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/graphError.pdf}
+\caption{With graph norm}
 \label{fig:ericksonGraphError}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/robustError.pdf}
-\caption{Error in Erickson-Johnson solution with robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/robustError.pdf}
+\caption{With robust norm}
 \label{fig:ericksonRobustError}
-}
+\end{subfigure}
+\caption{Error in Erickson-Johnson solutions}
 \end{figure}
 
 We plot the flux imbalance errors in Figures \ref{fig:ericksonGraphFlux} and
@@ -603,18 +607,21 @@ formulation brings these errors to the order of machine precision, but it is
 worth pointing out that the flux imbalances for standard DPG are reasonable,
 especially under refinement.
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/graphFlux.pdf}
-\caption{Flux imbalance in Erickson-Johnson solutions with graph norm}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/graphFlux.pdf}
+\caption{With graph norm}
 \label{fig:ericksonGraphFlux}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/robustFlux.pdf}
-\caption{Flux imbalance in Erickson-Johnson solutions with robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/robustFlux.pdf}
+\caption{With robust norm}
 \label{fig:ericksonRobustFlux}
-}
+\end{subfigure}
+\caption{Flux imbalance in Erickson-Johnson solutions}
 \end{figure}
 
 \subsection{Skewed Convection-Diffusion Problem}
@@ -633,18 +640,21 @@ fact being enforced. As we refine, the field variables will begin to reflect
 the boundary layer. On the other hand, the robust norm does show a boundary
 layer being formed in the field variables. 
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graph0c.png}
-\caption{Conservative skewed convection-diffusion with graph norm, initial mesh}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graph0c.png}
+\caption{Conservative with graph norm}
 \label{fig:confusionGraph0c}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robust0c.png}
-\caption{Conservative skewed convection-diffusion with robust norm, initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robust0c.png}
+\caption{Conservative with robust norm}
 \label{fig:confusionRobust0c}
-}
+\end{subfigure}
+\caption{Skewed convection-diffusion problem with initial mesh}
 \end{figure}
 
 As we refine, the three results, nonconservative with graph or robust norm,
@@ -654,36 +664,23 @@ Figure~\ref{fig:confusionGraph8c}. However, the conservative formulation with
 the robust norm seems to exhibit some noise at the right wall as seen in
 Figure~\ref{fig:confusionRobust8c}.
 
-% \begin{figure}[h!]
-% \centering
-% \parbox{0.45\textwidth}{
-% \includegraphics[width=0.45\textwidth]{figs/Confusion/graph8nc.png}
-% \caption{Nonconservative skewed convection-diffusion with graph norm, after 8
-% refinements}
-% \label{fig:confusionGraph8nc}
-% }\quad
-% \parbox{0.45\textwidth}{
-% \includegraphics[width=0.45\textwidth]{figs/Confusion/robust8nc.png}
-% \caption{Nonconservative skewed convection-diffusion with robust norm, after 8
-% refinements}
-% \label{fig:confusionRobust8nc}
-% }
-% \end{figure}
-
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graph8c.png}
-\caption{Conservative skewed convection-diffusion with graph norm, after 8
-refinements}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graph8c.png}
+\includegraphics[width=\textwidth]{figs/Confusion/graph8c_mesh.png}
+\caption{Conservative with graph norm}
 \label{fig:confusionGraph8c}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robust8c.png}
-\caption{Conservative skewed convection-diffusion with robust norm, after 8
-refinements}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robust8c.png}
+\includegraphics[width=\textwidth]{figs/Confusion/robust8c_mesh.png}
+\caption{Conservative with robust norm}
 \label{fig:confusionRobust8c}
-}
+\end{subfigure}
+\caption{Skewed convection-diffusion problem after 8 refinements}
 \end{figure}
 
 If we zoom in on one of the noisy areas, as we do in
@@ -706,18 +703,57 @@ Figure~\ref{fig:confusionGraphFlux} and Figure~\ref{fig:confusionRobustFlux}.
 Interestingly, it appears the effectiveness of our local conservation
 formulation drops as we refine with the graph norm.
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graphFlux.pdf}
-\caption{Flux imbalance in skewed confusion solutions with graph norm}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graphFlux.pdf}
+\caption{With graph norm}
 \label{fig:confusionGraphFlux}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robustFlux.pdf}
-\caption{Flux imbalance in skewed confusion solutions with robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robustFlux.pdf}
+\caption{With robust norm}
 \label{fig:confusionRobustFlux}
-}
+\end{subfigure}
+\caption{Flux imbalance in skewed confusion solutions}
+\end{figure}
+
+\subsection{Double Glazing Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/graph6c.png}
+\caption{Conservative with graph norm}
+\label{fig:doubleglazingGraph6c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/robust6c.png}
+\caption{Conservative with robust norm}
+\label{fig:doubleglazingRobust6c}
+\end{subfigure}
+\caption{Double glazing problem after 6 refinements}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:doubleglazingGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:doubleglazingRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in double glazing solutions}
 \end{figure}
 
 \bibliographystyle{plain}
