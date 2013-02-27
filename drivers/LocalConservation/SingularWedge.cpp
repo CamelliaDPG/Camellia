@@ -4,8 +4,6 @@
 //
 //  Created by Truman Ellis on 6/4/2012.
 
-// Nate's addition because he doesn't want to Truman's build system:
-//#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
 #include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
@@ -254,10 +252,14 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("singularwedge_err.txt");
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
+    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
       outfile << "singularwedge_" << refIndex;
@@ -269,6 +271,9 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -297,6 +302,8 @@ int main(int argc, char *argv[]) {
       refinementStrategy.hRefineCells(mesh, cells_h);
     }
   }
+  if (commRank == 0)
+    errOut.close();
   
   return 0;
 }

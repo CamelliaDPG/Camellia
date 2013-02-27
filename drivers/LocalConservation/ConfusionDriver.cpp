@@ -36,24 +36,7 @@ class EpsilonScaling : public hFunction {
   }
 };
 
-class EntireBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      return true;
-    }
-};
-
-class UnitSquareBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
-      bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
-      return xMatch || yMatch;
-    }
-};
-
-class InflowSquareBoundary : public SpatialFilter {
+class InflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
@@ -63,7 +46,7 @@ class InflowSquareBoundary : public SpatialFilter {
     }
 };
 
-class OutflowSquareBoundary : public SpatialFilter {
+class OutflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
@@ -162,15 +145,11 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  // bf->addTerm(sigma1 / epsilon, tau->x());
-  // bf->addTerm(sigma2 / epsilon, tau->y());
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
 
   // v terms:
-  // bf->addTerm( sigma1, v->dx() );
-  // bf->addTerm( sigma2, v->dy() );
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
@@ -203,8 +182,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowSquareBoundary );
-  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowSquareBoundary );
+  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary );
+  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowBoundary );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
   bc->addDirichlet(uhat, outflowBoundary, u0);
 
@@ -230,7 +209,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) = 0.0;
   meshBoundary(3,1) = 1.0;
 
-  int horizontalCells = 1, verticalCells = 1;
+  int horizontalCells = 4, verticalCells = 4;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
@@ -248,10 +227,14 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("confusion_err.txt");
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
+    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
       outfile << "confusion_" << refIndex;
@@ -264,11 +247,16 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  if (commRank == 0)
+    errOut.close();
 
   return 0;
 }
