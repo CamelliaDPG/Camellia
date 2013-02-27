@@ -199,6 +199,8 @@ public:
   int getSpaceDim();
   
   void setMaxCubatureDegree(int value);
+  
+  void setTransformationFunction(FunctionPtr fxn);
     
   // static convenience constructors:
   static BasisCachePtr parametric1DCache(int cubatureDegree);

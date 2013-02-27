@@ -32,6 +32,29 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testEdgeLength()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  // following test disabled because we never got around to testing anything
+  // (mostly just used as a driver to output data to file in course of debugging)
+//  setup();
+//  if (testPointsRemainInsideElement()) {
+//    numTestsPassed++;
+//  }
+//  numTestsRun++;
+//  teardown();
+  
+  setup();
+  if (testCylinderMesh()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testH1Projection()) {
     numTestsPassed++;
   }
@@ -46,25 +69,25 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   setup();
-  if (testEdgeLength()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
   if (testStraightEdgeMesh()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
-  
-  setup();
-  if (testCylinderMesh()) {
-    numTestsPassed++;
+}
+
+void lineAcrossQuadRefCell(FieldContainer<double> &refPoints, int numPoints, bool horizontal) {
+  int pointsInLine = numPoints;
+  refPoints.resize(pointsInLine,2);
+  for (int i=0; i<pointsInLine; i++) {
+    if (horizontal) {
+      refPoints(i,0) = 2.0 * (i) / (pointsInLine-1) - 1.0;
+      refPoints(i,1) = 0;
+    } else {
+      refPoints(i,0) = 0;
+      refPoints(i,1) = 2.0 * (i) / (pointsInLine-1) - 1.0;
+    }
   }
-  numTestsRun++;
-  teardown();
 }
 
 bool CurvilinearMeshTests::testCylinderMesh() {
@@ -85,14 +108,14 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   
   MeshPtr mesh = MeshFactory::hemkerMesh(width, height, r, bf, H1Order, pToAdd);
   
-//  GnuPlotUtil::writeExactMeshSkeleton("/tmp/cylinderFlowExactMesh.dat", mesh, 10);
+  //  GnuPlotUtil::writeExactMeshSkeleton("/tmp/cylinderFlowExactMesh.dat", mesh, 10);
   
-//  double approximateArea = one->integrate(mesh);
+  //  double approximateArea = one->integrate(mesh);
   
-//  cout << setprecision(15);
-//  cout << "Exact area:" << trueArea << endl;
-//  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
-//
+  cout << setprecision(15);
+  //  cout << "Exact area:" << trueArea << endl;
+  //  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
+  //
   
   int numCells = mesh->numElements();
   set<int> allCells;
@@ -106,11 +129,11 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   double previousError = 1000;
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
-    double approximateArea = one->integrate(mesh);
+    double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
     cout << "For k=" << i << ", implied value of pi: " << impliedPi;
     cout << " (error " << abs(PI-impliedPi) << ")\n";
-//    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
+    //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence
       success = false;
@@ -118,9 +141,32 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
 //    ostringstream filePath;
-//    filePath << "/tmp/cylinderFlowMesh" << H1Order << ".dat";
+//    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
 //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
+    
+    // DEBUGGING code
+//    if (true) { //((i==3) || (i==4)) {
+//      // here, we're getting a negative area for cellID 6
+//      // to start, let's visualize the cubature points
+//      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 6);
+//      double area = basisCache->getCellMeasures()[0];
+//      cout << "area of cellID 6 is " << area << endl;
+////      FieldContainer<double> cubaturePoints = basisCache->getPhysicalCubaturePoints();
+////      GnuPlotUtil::writeXYPoints("/tmp/cellID6_cubPoints.dat", cubaturePoints);
+//      // try drawing a vertical line in the reference element
+//      int pointsInLine = 15;
+//      FieldContainer<double> refPoints;
+//      lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+//      basisCache->setRefCellPoints(refPoints);
+//      GnuPlotUtil::writeXYPoints("/tmp/cellID6_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+//      // now, a horizontal line
+//      lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+//      basisCache->setRefCellPoints(refPoints);
+//      GnuPlotUtil::writeXYPoints("/tmp/cellID6_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+//    }
+    
+    
     // p-refine
     if (i < numPRefinements) {
       mesh->pRefine(allCells);
@@ -144,12 +190,12 @@ bool CurvilinearMeshTests::testCylinderMesh() {
       cout << "Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
       cout << "Current error = " << error << "; previous = " << previousError << endl;
     }
-//    ostringstream filePath;
-//    filePath << "/tmp/cylinderFlowMesh_h" << i << ".dat";
-//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
-//    filePath.str("");
-//    filePath << "/tmp/cylinderFlowMesh_h" << i << "_straight_lines.dat";
-//    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
+    //    ostringstream filePath;
+    //    filePath << "/tmp/cylinderFlowMesh_h" << i << ".dat";
+    //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    //    filePath.str("");
+    //    filePath << "/tmp/cylinderFlowMesh_h" << i << "_straight_lines.dat";
+    //    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
     previousError = error;
     
     // h-refine
@@ -164,6 +210,9 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 bool CurvilinearMeshTests::testEdgeLength() {
   bool success = true;
   
+  cout << setprecision(15);
+  double tol = 1e-14;
+  
   // to begin, a very simple test: do we compute the correct perimeter for a square?
   FunctionPtr oneOnBoundary = Function::meshBoundaryCharacteristic();
   
@@ -175,12 +224,106 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
-  // make a single-element mesh:
   int H1Order = 1;
+  
+  // first test, before we get into the circular stuff: define a sloped edge
+  // whose exact integral we know (and which is exactly representable by our geometry)
+  {
+    FunctionPtr t = Teuchos::rcp( new Xn(1) );
+    FunctionPtr x = 2 * t - 1;
+    FunctionPtr y = x - 1;
+    
+    ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
+    
+    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+    physicalCellNodes(0,0,0) = -1;
+    physicalCellNodes(0,0,1) = -2;
+    
+    physicalCellNodes(0,1,0) = 1;
+    physicalCellNodes(0,1,1) = 0;
+    
+    physicalCellNodes(0,2,0) = 1;
+    physicalCellNodes(0,2,1) = 1;
+    
+    physicalCellNodes(0,3,0) = -1;
+    physicalCellNodes(0,3,1) = 1;
+    
+    int quadraticOrder = 2;
+    MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
+    
+    int cellID = 0;
+    vector<int> vertices = quadMesh->vertexIndicesForCell(cellID);
+    pair<int,int> edge = make_pair(vertices[0],vertices[1]);
+    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    edgeToCurveMap[edge] = bottomCurve;
+    
+    quadMesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    // the length of the sloped edge is 2 sqrt (2)
+    // and the other edges have total length of 5:
+    double expectedPerimeter = 6 + 2 * sqrt(2);
+    
+    // since our map from straight edges is the identity,
+    // the expected jacobian function along the side is
+    // [  1  0 ]
+    // [  0  1 ]
+    FunctionPtr expectedTransformation, expectedJacobian;
+    {
+      expectedTransformation = Function::vectorize(Function::xn(1), Function::yn(1));
+      expectedJacobian = expectedTransformation->grad();
+    }
+    
+    for (int hRefinement=0; hRefinement<5; hRefinement++) {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
+      BasisCachePtr sideCache = basisCache->getSideBasisCache(0);
+      
+      // need sideCache not to retransform things so we can test the transformationFxn itself:
+      // TODO: think through this carefully, and/or try with basisCache to confirm that the interior works
+      //       the way we're asking the edge to.  We have reason to think the interior is working...
+      basisCache->setTransformationFunction(Function::null());
+      sideCache->setTransformationFunction(Function::null());
+      
+      int numCells = 1;
+      int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+      int spaceDim = 2;
+      FieldContainer<double> expectedJacobianValues(numCells,numPoints,spaceDim,spaceDim);
+      expectedJacobian->values(expectedJacobianValues,sideCache);
+      FieldContainer<double> jacobianValues(numCells,numPoints,spaceDim,spaceDim);
+      FunctionPtr transformationFxn = quadMesh->getTransformationFunction();
+      FunctionPtr transformationJacobian = transformationFxn->grad();
+      transformationJacobian->values(jacobianValues,sideCache);
+      
+      double maxDiff = 0;
+      
+      if (! expectedTransformation->equals(transformationFxn, sideCache)) {
+        success = false;
+        cout << "testEdgeLength(): expected values don't match transformation function values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedTransformation, transformationFxn, sideCache, tol);
+      }
+      
+      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) {
+        success = false;
+        cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along sloped edge.\n";
+        reportFunctionValueDifferences(expectedJacobian, transformationJacobian, sideCache, tol);
+      }
+      
+      double perimeter = oneOnBoundary->integrate(quadMesh);
+      double err = abs( perimeter - expectedPerimeter );
+      if (err > tol) {
+        cout << "For h-refinement " << hRefinement << ", edge integral of y=x-1 does not match expected.\n";
+        cout << "err = " << err << endl;
+        cout << "expected perimeter = " << expectedPerimeter << "; actual = " << perimeter << endl;
+      }      
+      quadMesh->hRefine(quadMesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
+    }
+  }
+  
+  
+  // make a single-element mesh:
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   double perimeter = oneOnBoundary->integrate(mesh);
   
-  double tol = 1e-14;
+
   double expectedPerimeter = 4*(meshWidth);
   double err = abs(perimeter - expectedPerimeter);
   if (err > tol) {
@@ -190,7 +333,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   }
   
   map< Edge, ParametricCurvePtr > edgeToCurveMap;
-
+  
   int cellID = 0; // the only cell
   vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
   vector< int > vertices = mesh->vertexIndicesForCell(cellID);
@@ -207,7 +350,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   int numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
-//    cout << "perimeter: " << perimeter << endl;
+    //    cout << "perimeter: " << perimeter << endl;
     double error = abs(expectedPerimeter - perimeter);
     if (error > tol) {
       success = false;
@@ -215,9 +358,9 @@ bool CurvilinearMeshTests::testEdgeLength() {
       cout << "Error = " << error << endl;
     }
     
-    ostringstream filePath;
-    filePath << "/tmp/squareMesh_p" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    ostringstream filePath;
+//    filePath << "/tmp/squareMesh_p" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     
     // p-refine
     if (i < numPRefinements) {
@@ -231,7 +374,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   int numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
-//    cout << "perimeter: " << perimeter << endl;
+    //    cout << "perimeter: " << perimeter << endl;
     double error = abs(expectedPerimeter - perimeter);
     if (error > tol) {
       success = false;
@@ -275,7 +418,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   numPRefinements = 5;
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
-//    cout << "perimeter: " << perimeter << endl;
+    //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
     cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
     double error = abs(truePerimeter - perimeter);
@@ -296,13 +439,14 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   // now, do much the same thing, except with h-refinements:
   H1Order = 2;
-  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
+  mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth, 1, 1);
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   previousError = 1000;
   numHRefinements = 5;
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
-//    cout << "perimeter: " << perimeter << endl;
+    
+    //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
     cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
     
@@ -344,8 +488,8 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
   
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
-
-    // make a single-element mesh:
+  
+  // make a single-element mesh:
   int H1Order = 1;
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
   double approximateArea = one->integrate(mesh);
@@ -358,12 +502,12 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     cout << "Error: even regular mesh (no curves set) gets the area wrong.\n";
   }
   
-//  GnuPlotUtil::writeExactMeshSkeleton("/tmp/unitMesh.dat", mesh, 2);
+  //  GnuPlotUtil::writeExactMeshSkeleton("/tmp/unitMesh.dat", mesh, 2);
   
   for (int i=0; i<4; i++) {
     H1Order = i+1;
     mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
-  
+    
     // now, set curves for each edge:
     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
     
@@ -390,11 +534,11 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
       cout << " has area " << approximateArea << "; should be " << trueArea << "." << endl;
     }
     
-//    ostringstream filePath;
-//    filePath << "/tmp/unitMesh" << H1Order << ".dat";
-//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+    //    ostringstream filePath;
+    //    filePath << "/tmp/unitMesh" << H1Order << ".dat";
+    //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
   }
-
+  
   return success;
 }
 
@@ -405,7 +549,7 @@ std::string CurvilinearMeshTests::testSuiteName() {
 
 bool CurvilinearMeshTests::testH1Projection() {
   bool success = true;
-
+  
   bool useL2 = false; // H1 semi-norm otherwise
   
   // this test sprawls a bit.  It could very reasonably be broken apart into several
@@ -456,7 +600,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     success = false;
   }
   
-//  cout << "middle node index for quadratic scalar basis:" << middleNodeScalar << endl;
+  //  cout << "middle node index for quadratic scalar basis:" << middleNodeScalar << endl;
   
   VarFactory varFactory;
   VarPtr v_vector = varFactory.testVar("v", VECTOR_HGRAD);
@@ -509,7 +653,7 @@ bool CurvilinearMeshTests::testH1Projection() {
       // for fxnScalar = x^2, L2 rhs should be ___
     } else {
       middleNode_norm = (middleNodeFunction_expected->dx() * middleNodeFunction_expected->dx()
-                        + middleNodeFunction_expected->dy() * middleNodeFunction_expected->dy()
+                         + middleNodeFunction_expected->dy() * middleNodeFunction_expected->dy()
                          )->integrate(basisCache);
       rhs_ip = (middleNodeFunction_expected->dx() * fxnScalar->dx()
                 + middleNodeFunction_expected->dy() * fxnScalar->dy()
@@ -518,8 +662,8 @@ bool CurvilinearMeshTests::testH1Projection() {
     }
   }
   
-//  cout << "Middle node norm squared: " << middleNode_norm << endl;
-//  cout << "rhs for middle node: " << rhs_ip << endl;
+  //  cout << "Middle node norm squared: " << middleNode_norm << endl;
+  //  cout << "rhs for middle node: " << rhs_ip << endl;
   
   FieldContainer<double> scalarCoefficients;
   FieldContainer<double> vectorCoefficients;
@@ -536,13 +680,13 @@ bool CurvilinearMeshTests::testH1Projection() {
     cout << "actual:\n" << scalarCoefficients;
     success = false;
   }
-
+  
   // need to confirm analytically that the following test is reasonable, but I am pretty sure
   FieldContainer<double> vectorCoefficients_expected(quadraticVectorBasis->getCardinality());
   vectorCoefficients_expected(middleNodeVector[0]) = rhs_ip / middleNode_norm;
   vectorCoefficients_expected(middleNodeVector[1]) = rhs_ip / middleNode_norm;
   
-//  cout << "expected solution to projection problem at quadratic middle node:" << rhs_ip / middleNode_norm << endl;
+  //  cout << "expected solution to projection problem at quadratic middle node:" << rhs_ip / middleNode_norm << endl;
   
   maxDiff = 0;
   if (! fcsAgree(vectorCoefficients_expected, vectorCoefficients, tol, maxDiff)) {
@@ -558,10 +702,10 @@ bool CurvilinearMeshTests::testH1Projection() {
   double height = 1;
   
   // the transfinite interpolant in physical space should be just (x, y)
-
+  
   FunctionPtr tfi = Function::vectorize(x, y);
   
-
+  
   VarPtr v = varFactory.testVar("v", VECTOR_HGRAD);
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm(v);
@@ -579,7 +723,7 @@ bool CurvilinearMeshTests::testH1Projection() {
     
     FieldContainer<double> basisCoefficients;
     Projector::projectFunctionOntoBasis(basisCoefficients, tfi, basis, basisCache, ip, v);
-
+    
     // flatten basisCoefficients (remove the numCells dimension, which is 1)
     basisCoefficients.resize(basisCoefficients.size());
     FunctionPtr projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
@@ -600,11 +744,11 @@ bool CurvilinearMeshTests::testH1Projection() {
       reportFunctionValueDifferences(basisCache->getPhysicalCubaturePoints(), expected_values,
                                      values, tol);
     }
-
+    
     VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
-
+    
     // For H1Order > 1, we don't expect that the edge interpolant will match the TFI on the element interior; we expect that only on the edges.
-
+    
     vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
     ParametricSurfacePtr exactSurface = ParametricSurface::transfiniteInterpolant(curves);
     int numEdges = curves.size();
@@ -643,13 +787,13 @@ bool CurvilinearMeshTests::testH1Projection() {
           break;
         }
       }
-
+      
       if (! nonZeroSomewhere ) {
         success = false;
         cout << "Field index " << fieldIndex << " is supposed to be an edge field index, but is zero on all edges.\n";
       }
     }
-
+    
     // check that all the non-edgeFieldIndices are zero on all edges
     for (int fieldIndex=0; fieldIndex < basis->getCardinality(); fieldIndex++) {
       if (edgeFieldIndices.find(fieldIndex) != edgeFieldIndices.end()) {
@@ -672,13 +816,13 @@ bool CurvilinearMeshTests::testH1Projection() {
     }
     
     FunctionPtr edgeFunction = Teuchos::rcp( new NewBasisSumFunction(basis, edgeInterpolantCoefficients) );
-//    
-//    VarFactory vf;
-//    VarPtr v = vf.testVar("v", VECTOR_HGRAD);
-//    IPPtr ip = Teuchos::rcp(new IP);
-//    ip->addTerm(v->grad());
-//    
-//    Projector::projectFunctionOntoBasis(…)
+    //
+    //    VarFactory vf;
+    //    VarPtr v = vf.testVar("v", VECTOR_HGRAD);
+    //    IPPtr ip = Teuchos::rcp(new IP);
+    //    ip->addTerm(v->grad());
+    //
+    //    Projector::projectFunctionOntoBasis(…)
     
     for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
@@ -716,7 +860,7 @@ bool CurvilinearMeshTests::testH1Projection() {
                                        values, tol);
       }
     }
-  
+    
     ParametricSurface::basisWeightsForProjectedInterpolant(basisCoefficients, vectorBasis, mesh, cellID);
     
     // check that the basisCoefficients for the edge functions are the same as the edgeCoefficients above
@@ -754,13 +898,13 @@ bool CurvilinearMeshTests::testH1Projection() {
     FieldContainer<double> projectedDifferenceCoefficients;
     Projector::projectFunctionOntoBasis(projectedDifferenceCoefficients, tfi-edgeFunction, basis, basisCache, H1, v);
     
-//    cout << "tfiCoefficients:\n" << tfiCoefficients;
-//    cout << "edgeCoefficients:\n" << edgeCoefficients;
-//    cout << "projectedDifferenceCoefficients:\n" << projectedDifferenceCoefficients;
+    //    cout << "tfiCoefficients:\n" << tfiCoefficients;
+    //    cout << "edgeCoefficients:\n" << edgeCoefficients;
+    //    cout << "projectedDifferenceCoefficients:\n" << projectedDifferenceCoefficients;
     
-//    cout << "edge interpolation coefficients:\n" << edgeInterpolantCoefficients;
-//    cout << "projected tfi coefficients:\n" << expectedCoefficients;
-//    cout << "projection-based interpolant coefficients:\n" << basisCoefficients;
+    //    cout << "edge interpolation coefficients:\n" << edgeInterpolantCoefficients;
+    //    cout << "projected tfi coefficients:\n" << expectedCoefficients;
+    //    cout << "projection-based interpolant coefficients:\n" << basisCoefficients;
     
     expectedCoefficients.resize(expectedCoefficients.size()); // flatten
     FunctionPtr expectedFunction = NewBasisSumFunction::basisSumFunction(basis, expectedCoefficients);
@@ -777,11 +921,11 @@ bool CurvilinearMeshTests::testH1Projection() {
       projectedFunction->values(values, basisCache);
       reportFunctionValueDifferences(basisCache->getPhysicalCubaturePoints(), expected_values,
                                      values, tol);
-
+      
     }
     
     projectedFunction = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients) );
-
+    
     if (! projectedFunction->equals(tfi, basisCache, tol) ) {
       success = false;
       cout << "For H1Order " << H1Order << ", ";
@@ -806,17 +950,223 @@ bool CurvilinearMeshTests::testH1Projection() {
 bool CurvilinearMeshTests::testPointsRemainInsideElement() {
   bool success = true;
   
-  double width = 1.0;
-  double height = 1.0;
+  double width = 5.0;
+  double height = 5.0;
   
   BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
   
-  int H1Order = 1;
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
-  MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+  for (int H1Order=1; H1Order < 5; H1Order++) {
+    MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
+    
+    ParametricCurvePtr halfCircleTop = ParametricCurve::circularArc(width/2, width/2, height, 0, PI);
+    ParametricCurvePtr halfCircleBottom = ParametricCurve::circularArc(width/2, width/2, 0, PI, 0); // PI to 0: from left vertex to right
+    
+    int cellID = 0;
+    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    edgeToCurveMap[make_pair(vertices[0], vertices[1])] = halfCircleBottom;
+    edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
+    
+    mesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    GnuPlotUtil::writeExactMeshSkeleton("/tmp/halfCircles.dat", mesh, 15);
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int pointsInLine = 15;
+    FieldContainer<double> refPoints;
+    lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+    // now, a horizontal line
+    lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+  }
   
-  ParametricCurvePtr halfCircle;
+  for (int H1Order=1; H1Order < 5; H1Order++) {
+    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+    physicalCellNodes(0,0,0) = 0;
+    physicalCellNodes(0,0,1) = 0;
+    
+    physicalCellNodes(0,1,0) = 0.75*width;
+    physicalCellNodes(0,1,1) = 0;
+    
+    physicalCellNodes(0,2,0) = width;
+    physicalCellNodes(0,2,1) = height;
+    
+    physicalCellNodes(0,3,0) = 0;
+    physicalCellNodes(0,3,1) = height;
+    
+    MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes, pToAdd);
+    
+    ParametricCurvePtr halfCircleTop = ParametricCurve::circularArc(width/2, width/2, height, 0, PI);
+    
+    int cellID = 0;
+    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
+    
+    mesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    GnuPlotUtil::writeExactMeshSkeleton("/tmp/oneHalfCircle.dat", mesh, 15);
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int pointsInLine = 15;
+    FieldContainer<double> refPoints;
+    lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/oneHalfCircle_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+    // now, a horizontal line
+    lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/oneHalfCircle_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+  }
+  
+  
+  for (int H1Order=1; H1Order < 5; H1Order++) {
+    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+    
+    physicalCellNodes(0,0,0) = 0;
+    physicalCellNodes(0,0,1) = height;
+    
+    physicalCellNodes(0,1,0) = 0;
+    physicalCellNodes(0,1,1) = 0;
+    
+    physicalCellNodes(0,2,0) = width;
+    physicalCellNodes(0,2,1) = 0;
+    
+    physicalCellNodes(0,3,0) = width;
+    physicalCellNodes(0,3,1) = width+height;
+    
+    MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes, pToAdd);
+    
+    ParametricCurvePtr quarterCircleTop = ParametricCurve::circularArc(width, 0, width+height, 2*PI, 3*PI/2);
+    
+    int cellID = 0;
+    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+    edgeToCurveMap[make_pair(vertices[3], vertices[0])] = quarterCircleTop;
+    
+    mesh->setEdgeToCurveMap(edgeToCurveMap);
+    
+    GnuPlotUtil::writeExactMeshSkeleton("/tmp/quarterCircle.dat", mesh, 15);
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int pointsInLine = 15;
+    FieldContainer<double> refPoints;
+    lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/quarterCircle_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+    // now, a horizontal line
+    lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+    basisCache->setRefCellPoints(refPoints);
+    GnuPlotUtil::writeXYPoints("/tmp/quarterCircle_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+  }
+  
+  {
+    int start_H1Order = 1;
+    double r = 2 * width / 3;
+    
+    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+    physicalCellNodes(0,0,0) = 0;
+    physicalCellNodes(0,0,1) = 0;
+    
+    physicalCellNodes(0,1,0) = 3 * r / 2;
+    physicalCellNodes(0,1,1) = 0;
+    
+    physicalCellNodes(0,2,0) = r / sqrt(2);
+    physicalCellNodes(0,2,1) = (2.5 - 1/sqrt(2)) * r;
+    
+    physicalCellNodes(0,3,0) = 0;
+    physicalCellNodes(0,3,1) = 1.5 * r;
+    
+    MeshPtr mesh_pRefined = MeshFactory::quadMesh(bf, start_H1Order, physicalCellNodes, pToAdd);
+
+    {
+      int cellID = 0;
+      vector< int > vertices = mesh_pRefined->vertexIndicesForCell(cellID);
+      map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+      ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
+      edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
+      mesh_pRefined->setEdgeToCurveMap(edgeToCurveMap);
+    }
+    
+    vector< ParametricCurvePtr > curves1, curves2, curves3;
+    // curves1: manual construction
+    // curves2: p-refinement
+    // curves3: manually set curves after p-refinement
+    
+    for (int H1Order=1; H1Order < 5; H1Order++) {
+      MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes, pToAdd);
+      
+      ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
+      
+      int cellID = 0;
+      vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+      map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+      edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
+      
+      mesh->setEdgeToCurveMap(edgeToCurveMap);
+      curves1 = mesh->parametricEdgesForCell(cellID);
+      
+      GnuPlotUtil::writeExactMeshSkeleton("/tmp/hemkerSegment.dat", mesh, 15);
+      
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      int pointsInLine = 15;
+      FieldContainer<double> refPoints;
+      lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+      basisCache->setRefCellPoints(refPoints);
+      GnuPlotUtil::writeXYPoints("/tmp/hemkerSegment_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+      // now, a horizontal line
+      lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+      basisCache->setRefCellPoints(refPoints);
+      GnuPlotUtil::writeXYPoints("/tmp/hemkerSegment_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+      
+      {
+        curves2 = mesh_pRefined->parametricEdgesForCell(cellID);
+        mesh_pRefined->setEdgeToCurveMap(edgeToCurveMap);
+        curves3 = mesh_pRefined->parametricEdgesForCell(cellID);
+
+        // because we've messed with basisCache's refCellPoints, get a new basisCache
+        basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
+        
+        // now that we have the various curves defined, let's compare them
+        for (int i=0; i<curves1.size(); i++) {
+          if (! curves1[i]->equals(curves2[i], basisCache) ) {
+            cout << "For H1Order " << H1Order << ", ";
+            cout << "curves1 and curves2 differ in entry " << i << endl;
+            success = false;
+          }
+          if (! curves2[i]->equals(curves3[i], basisCache) ) {
+            cout << "For H1Order " << H1Order << ", ";
+            cout << "curves2 and curves3 differ in entry " << i << endl;
+            success = false;
+          }
+        }
+        
+        // stuff with the second mesh, which is p-refined (trying to tease out how the different paths differ)
+        GnuPlotUtil::writeExactMeshSkeleton("/tmp/copyHemkerSegment.dat", mesh_pRefined, 15);
+        
+        basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
+        int pointsInLine = 15;
+        FieldContainer<double> refPoints;
+        lineAcrossQuadRefCell(refPoints, pointsInLine, false);
+        basisCache->setRefCellPoints(refPoints);
+        GnuPlotUtil::writeXYPoints("/tmp/copyHemkerSegment_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+        // now, a horizontal line
+        lineAcrossQuadRefCell(refPoints, pointsInLine, true);
+        basisCache->setRefCellPoints(refPoints);
+        GnuPlotUtil::writeXYPoints("/tmp/copyHemkerSegment_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+        
+        vector<int> cellIDs;
+        cellIDs.push_back(cellID);
+        mesh_pRefined->pRefine(cellIDs);
+        
+      }
+    }
+  }
   
   return success;
 }
@@ -828,7 +1178,7 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
   double height = 3.0;
   
   BilinearFormPtr bf = VGPStokesFormulation(1.0).bf();
-    
+  
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
   
   // make a single-element mesh:

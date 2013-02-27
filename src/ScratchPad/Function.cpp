@@ -59,6 +59,24 @@ public:
       }
     }
   }
+  FunctionPtr dx() {
+    return Function::zero();
+  }
+  FunctionPtr dy() {
+    return Function::zero();
+  }
+//  FunctionPtr dz() {
+//    return Function::zero();
+//  }
+};
+
+class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction {
+  
+public:
+  MeshSkeletonCharacteristicFunction() : ConstantScalarFunction(1, "|_{\\Gamma_h}") {
+    
+  }
+  bool boundaryValueOnly() { return true; }
 };
 
 // private class SimpleSolutionFunction:
@@ -229,17 +247,38 @@ FunctionPtr Function::dy() {
 FunctionPtr Function::dz() {
   return Function::null();
 }
-FunctionPtr Function::grad() {
-  FunctionPtr dxFxn = dx();
-  FunctionPtr dyFxn = dy();
-  FunctionPtr dzFxn = dz();
-  if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
-    return Function::null();
-  } else if (dzFxn.get() == NULL) {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
-  } else {
-    return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+FunctionPtr Function::grad(int numComponents) {
+    FunctionPtr dxFxn = dx();
+    FunctionPtr dyFxn = dy();
+    FunctionPtr dzFxn = dz();
+  if (numComponents==-1) { // default: just use as many non-null components as available
+    if (dxFxn.get()==NULL) {
+      return Function::null();
+    } else if (dyFxn.get()==NULL) {
+      // special case: in 1D, grad() returns a scalar
+      return dxFxn;
+    } else if (dzFxn.get() == NULL) {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn) );
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
+  } else if (numComponents==1) {
+    // special case: we don't "vectorize" in 1D
+    return dxFxn;
+  } else if (numComponents==2) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Function::vectorize(dxFxn, dyFxn);
+    }
+  } else if (numComponents==3) {
+    if ((dxFxn.get() == NULL) || (dyFxn.get()==NULL) || (dzFxn.get()==NULL)) {
+      return Function::null();
+    } else {
+      return Teuchos::rcp( new VectorizedFunction(dxFxn,dyFxn,dzFxn) );
+    }
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
 }
 //FunctionPtr Function::inverse() {
 //  return Function::null();
@@ -487,6 +526,12 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
+//    if (basisCache->getSideIndex() == 0) {
+//      cout << "basisCache for side 0, physical cubature points:\n" << basisCache->getPhysicalCubaturePoints();
+//      cout << "basisCache for side 0, integrate() values:\n" << values;
+//      cout << "basisCache for side 0, weightedMeasures:\n" << *
+//      weightedMeasures;
+//    }
 //    if (cellIndex==6) {
 ////      cout << "Function::integrate() values:\n" << values;
 //      cout << "weightedMeasures:\n" << *weightedMeasures;
@@ -611,8 +656,6 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
   scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
 }
 
-// note that valuesDottedWithTensor isn't called by anything right now
-// (it's totally untried!! -- trying for first time with NewBurgersDriver, in RHS)
 void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
                                       FunctionPtr tensorFunctionOfLikeRank, 
                                       BasisCachePtr basisCache) {
@@ -637,6 +680,9 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
   this->values(myTensorValues,basisCache);
   FieldContainer<double> otherTensorValues(tensorValueIndex);
   tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
+  
+//  cout << "myTensorValues:\n" << myTensorValues;
+//  cout << "otherTensorValues:\n" << otherTensorValues;
   
   // clear out the spatial indices of tensorValueIndex so we can use it as index
   for (int d=0; d<_rank; d++) {
@@ -884,6 +930,11 @@ FunctionPtr Function::meshBoundaryCharacteristic() {
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
 }
 
+FunctionPtr Function::meshSkeletonCharacteristic() {
+   // 1 on mesh skeleton, 0 elsewhere
+  return Teuchos::rcp( new MeshSkeletonCharacteristicFunction );
+}
+
 FunctionPtr Function::normal() { // unit outward-facing normal on each element boundary
   static FunctionPtr _normal = Teuchos::rcp( new UnitNormalFunction );
   return _normal;
@@ -914,6 +965,14 @@ FunctionPtr Function::vectorize(FunctionPtr f1, FunctionPtr f2) {
 FunctionPtr Function::null() {
   static FunctionPtr _null = Teuchos::rcp( (Function*) NULL );
   return _null;
+}
+
+FunctionPtr Function::xn(int n) {
+  return Teuchos::rcp( new Xn(n) );
+}
+
+FunctionPtr Function::yn(int n) {
+  return Teuchos::rcp( new Yn(n) );
 }
 
 FunctionPtr Function::zero(int rank) {
@@ -1253,11 +1312,11 @@ FunctionPtr SumFunction::dz() {
   return _f1->dz() + _f2->dz();
 }
 
-FunctionPtr SumFunction::grad() {
-  if ( isNull(_f1->grad()) || isNull(_f2->grad()) ) {
+FunctionPtr SumFunction::grad(int numComponents) {
+  if ( isNull(_f1->grad(numComponents)) || isNull(_f2->grad(numComponents)) ) {
     return null();
   } else {
-    return _f1->grad() + _f2->grad();
+    return _f1->grad(numComponents) + _f2->grad(numComponents);
   }
 }
 FunctionPtr SumFunction::div() {

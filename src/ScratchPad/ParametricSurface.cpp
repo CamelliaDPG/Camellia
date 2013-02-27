@@ -123,7 +123,10 @@ public:
       return Function::null();
     }
   }
-  FunctionPtr grad() {
+  FunctionPtr grad(int numComponents) {
+    if ((numComponents != -1) && (numComponents != 2)) { // -1 means "however many components are available" (2, here)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TransfiniteInterpolatingSurface only supports gradients in 2D.");
+    }
     FunctionPtr parametricGradient = Function::vectorize(dt1(), dt2());
     return ParametricCurve::parametricGradientWrapper(parametricGradient);
   }
@@ -261,6 +264,8 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   int cubatureDegree = max(maxTestDegree*2,15); // chosen to match that used in edge projection.
   int cubatureEnrichment = max(cubatureDegree-maxTestDegree*2,0);
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
+  // because we're determining the transformation function, disable it inside basisCache!
+  basisCache->setTransformationFunction(Function::null());
   
   // project, skipping edgeNodeFieldIndices:
   Projector::projectFunctionOntoBasis(basisCoefficients, exactSurface-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);

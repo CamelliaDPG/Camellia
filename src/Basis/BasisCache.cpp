@@ -111,6 +111,7 @@ void BasisCache::createSideCaches() {
     for (int i=0; i<numSideTrialIDs; i++) {
       if (_trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
         maxDegreeBasisOnSide = _trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+        maxTrialDegree = maxDegreeBasisOnSide->getDegree();
       }
     }
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
@@ -560,6 +561,13 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
   _cellSideParities = cellSideParities;
 }
 
+void BasisCache::setTransformationFunction(FunctionPtr fxn) {
+  _transformationFxn = fxn;
+  // recompute physical points and jacobian values
+  determinePhysicalPoints();
+  determineJacobian();
+}
+
 void BasisCache::determinePhysicalPoints() {
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   if ( Function::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation) {
@@ -583,7 +591,25 @@ void BasisCache::determinePhysicalPoints() {
   if ( ! Function::isNull(_transformationFxn) ) {
     FieldContainer<double> newPhysCubPoints(_numCells,numPoints,_spaceDim);
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
-    _transformationFxn->values(newPhysCubPoints, thisPtr);
+    
+    // the usual story: we don't want to use the transformation Function inside the BasisCache
+    // while the transformation Function is using the BasisCache to determine its values.
+    // So we move _transformationFxn out of the way for a moment:
+    FunctionPtr transformationFxn = _transformationFxn;
+    _transformationFxn = Function::null();
+    {
+      // size cell Jacobian containers—the dimensions are used even for HGRAD basis OP_VALUE, which
+      // may legitimately be invoked by transformationFxn, below...
+      _cellJacobian.resize(_numCells, numPoints, _spaceDim, _spaceDim);
+      _cellJacobInv.resize(_numCells, numPoints, _spaceDim, _spaceDim);
+      _cellJacobDet.resize(_numCells, numPoints);
+      // (the sizes here agree with what's done in determineJacobian, so the resizing there should be
+      //  basically free if we've done it here.)
+    }
+    
+    transformationFxn->values(newPhysCubPoints, thisPtr);
+    _transformationFxn = transformationFxn;
+    
     _physCubPoints = newPhysCubPoints;
   }
 }
@@ -671,9 +697,11 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
                                                      _cubWeights,
                                                      _sideIndex,
                                                      _cellTopo);
-//      cout << "_cellJacobian:\n" << _cellJacobian;
-//      cout << "_cubWeights:\n" << _cubWeights;
-//      cout << "_weightedMeasure:\n" << _weightedMeasure;
+//      if (_sideIndex==0) {
+//        cout << "_cellJacobian:\n" << _cellJacobian;
+//        cout << "_cubWeights:\n" << _cubWeights;
+//        cout << "_weightedMeasure:\n" << _weightedMeasure;
+//      }
       
       // get normals
       _sideNormals.resize(_numCells, numCubPoints, _spaceDim);

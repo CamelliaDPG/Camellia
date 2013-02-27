@@ -157,13 +157,13 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
-  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );

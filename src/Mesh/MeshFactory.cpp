@@ -129,8 +129,8 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   //  cout << "innerVertices:\n" << innerVertices;
   //  cout << "outerVertices:\n" << outerVertices;
   
-  GnuPlotUtil::writeXYPoints("/tmp/innerVertices.dat", innerVertices);
-  GnuPlotUtil::writeXYPoints("/tmp/outerVertices.dat", outerVertices);
+//  GnuPlotUtil::writeXYPoints("/tmp/innerVertices.dat", innerVertices);
+//  GnuPlotUtil::writeXYPoints("/tmp/outerVertices.dat", outerVertices);
   
   vector< vector<int> > elementVertices;
   

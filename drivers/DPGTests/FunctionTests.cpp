@@ -124,6 +124,19 @@ void FunctionTests::setup() {
 }
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testVectorFunctionValuesOrdering()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testJacobianOrdering()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testBasisSumFunction()) {
@@ -193,15 +206,16 @@ bool FunctionTests::testBasisSumFunction() {
   // the Solution with those coefficients
 
   // define a new mesh: more interesting if we're not on the ref cell
+  int spaceDim = 2;
   FieldContainer<double> quadPoints(4,2);
   
-  quadPoints(0,0) = -1.0; // x1
-  quadPoints(0,1) = -1.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = -1.0;
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 2.0;
+  quadPoints(1,1) = 0.0;
   quadPoints(2,0) = 1.0;
   quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = -1.0;
+  quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
   int H1Order = 1, pToAdd = 0;
@@ -225,7 +239,8 @@ bool FunctionTests::testBasisSumFunction() {
   for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     int numSides = trialSpace->getNumSidesForVarID(trialID);
-    bool boundaryValued = numSides!=1;
+    bool boundaryValued = numSides != 1;
+    // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
@@ -238,7 +253,7 @@ bool FunctionTests::testBasisSumFunction() {
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
         FunctionPtr basisSumFxn = Teuchos::rcp( new NewBasisSumFunction(basis, basisCoefficients, OP_VALUE, boundaryValued) );
-        if (!boundaryValued) { // only look at volume variables for now
+        if (!boundaryValued) {
           double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
 //          cout << "l2diff = " << l2diff << endl;
           if (l2diff > tol) {
@@ -256,6 +271,20 @@ bool FunctionTests::testBasisSumFunction() {
             cout << "l2norm of solnFxn->dx(): " << solnFxn->dx()->l2norm(spectralConfusionMesh) << endl;
           }
           
+          // test that the restriction to a side works
+          for (int i=0; i<volumeCache->cellTopology().getSideCount(); i++) {
+            BasisCachePtr mySideCache = volumeCache->getSideBasisCache(i);
+            if (! solnFxn->equals(basisSumFxn, mySideCache, tol)) {
+              success = false;
+              cout << "testBasisSumFunction: on side 0, l2diff of " << l2diff << " exceeds tol of " << tol << endl;
+              reportFunctionValueDifferences(solnFxn, basisSumFxn, mySideCache, tol);
+            }
+            if (! solnFxn->grad(spaceDim)->equals(basisSumFxn->grad(spaceDim), mySideCache, tol)) {
+              success = false;
+              cout << "testBasisSumFunction: on side 0, l2diff of dx() " << l2diff << " exceeds tol of " << tol << endl;
+              reportFunctionValueDifferences(solnFxn->grad(spaceDim), basisSumFxn->grad(spaceDim), mySideCache, tol);
+            }
+          }
         } else {
           FieldContainer<double> cellIntegral(1);
           // compute l2 diff of integral along the one side where we can legitimately assert equality:
@@ -561,6 +590,88 @@ bool FunctionTests::testAdaptiveIntegrate(){
   return success;
 }
 
+bool FunctionTests::testJacobianOrdering() {
+  bool success = true;
+  
+  FunctionPtr y = Teuchos::rcp( new Yn(1) );
+  
+  FunctionPtr f = Function::vectorize(y, Function::zero());
+  
+  // test 1: Jacobian ordering is f_i,j
+  int spaceDim = 2;
+  int cellID = 0;
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(_spectralConfusionMesh, cellID);
+  
+  FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+  int numCells = physicalPoints.dimension(0);
+  int numPoints = physicalPoints.dimension(1);
+  
+  FieldContainer<double> expectedValues(numCells, numPoints, spaceDim, spaceDim);
+  
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      expectedValues(cellIndex,ptIndex,0,0) = 0;
+      expectedValues(cellIndex,ptIndex,0,1) = 1;
+      expectedValues(cellIndex,ptIndex,1,0) = 0;
+      expectedValues(cellIndex,ptIndex,1,1) = 0;
+    }
+  }
+  
+  FieldContainer<double> values(numCells, numPoints, spaceDim, spaceDim);
+  f->grad()->values(values, basisCache);
+  
+  double maxDiff = 0;
+  double tol = 1e-14;
+  if (! fcsAgree(expectedValues, values, tol, maxDiff)) {
+    cout << "expectedValues does not match values in testJacobianOrdering().\n";
+    reportFunctionValueDifferences(physicalPoints, expectedValues, values, tol);
+    success = false;
+  }
+  
+  // test 2: ordering of VectorizedBasis agrees
+  // (actually implemented where it belongs, in Vectorized_BasisTestSuite)
+  
+  // test 3: ordering of CellTools::getJacobian
+  FieldContainer<double> nodes(1,4,2);
+  nodes(0,0,0) =  1;
+  nodes(0,0,1) = -2;
+  nodes(0,1,0) =  1;
+  nodes(0,1,1) =  2;
+  nodes(0,2,0) = -1;
+  nodes(0,2,1) =  2;
+  nodes(0,3,0) = -1;
+  nodes(0,3,1) = -2;
+  
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  int cubDegree = 4;
+  BasisCachePtr rotatedCache = Teuchos::rcp( new BasisCache(nodes, quad_4, cubDegree) );
+  
+  physicalPoints = rotatedCache->getPhysicalCubaturePoints();
+  numCells = physicalPoints.dimension(0);
+  numPoints = physicalPoints.dimension(1);
+  
+  FieldContainer<double> expectedJacobian(numCells,numPoints,spaceDim,spaceDim);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      expectedJacobian(cellIndex,ptIndex,0,0) = 0;
+      expectedJacobian(cellIndex,ptIndex,0,1) = -1;
+      expectedJacobian(cellIndex,ptIndex,1,0) = 2;
+      expectedJacobian(cellIndex,ptIndex,1,1) = 0;
+    }
+  }
+  
+  FieldContainer<double> jacobianValues = rotatedCache->getJacobian();
+  
+  maxDiff = 0;
+  if (! fcsAgree(expectedJacobian, jacobianValues, tol, maxDiff)) {
+    cout << "expectedJacobian does not match jacobianValues in testJacobianOrdering().\n";
+    reportFunctionValueDifferences(physicalPoints, expectedJacobian, jacobianValues, tol);
+    success = false;
+  }
+  
+  return success;
+}
+
 class CellIDFilteredFunction : public Function {
   FunctionPtr _fxn;
   set<int> _cellIDs;
@@ -686,6 +797,8 @@ bool FunctionTests::testValuesDottedWithTensor() {
       if (! expectedDotProduct->equals(dotProduct, basisCache)) {
         cout << "testValuesDottedWithTensor() failed: expected dot product does not match dotProduct.\n";
         success = false;
+        double tol = 1e-14;
+        reportFunctionValueDifferences(dotProduct, expectedDotProduct, basisCache, tol);
       }
     }
   }
@@ -743,6 +856,45 @@ bool FunctionTests::testValuesDottedWithTensor() {
 //  dofOrderingComp->addEntry(v->ID(), compBasis, v->rank());
 //  
     
+  return success;
+}
+
+bool FunctionTests::testVectorFunctionValuesOrdering() {
+  bool success = true;
+  
+  FunctionPtr x = Teuchos::rcp( new Xn(1) );
+  FunctionPtr x_vector = Function::vectorize(x, Function::zero());
+  
+  BasisCachePtr basisCache = BasisCache::parametricQuadCache(10);
+  
+  FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+  int numCells = points.dimension(0);
+  int numPoints = points.dimension(1);
+  int spaceDim = points.dimension(2);
+  FieldContainer<double> values(numCells,numPoints,spaceDim);
+  
+  x_vector->values(values, basisCache);
+  
+//  cout << "(x,0) function values:\n" << values;
+  
+  double tol = 1e-14;
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+      double xValueExpected = points(cellIndex,ptIndex,0);
+      double yValueExpected = 0;
+      double xValue = values(cellIndex,ptIndex,0);
+      double yValue = values(cellIndex,ptIndex,1);
+      double xErr = abs(xValue-xValueExpected);
+      double yErr = abs(yValue-yValueExpected);
+      if ( (xErr > tol) || (yErr > tol) ) {
+        success = false;
+        cout << "testVectorFunctionValuesOrdering(): vectorized function values incorrect (presumably out of order).\n";
+        cout << "x: " << xValueExpected << " ≠ " << xValue << endl;
+        cout << "y: " << yValueExpected << " ≠ " << yValue << endl;
+      }
+    }
+  }
+  
   return success;
 }
 

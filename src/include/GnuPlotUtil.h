@@ -40,7 +40,7 @@ public:
       bool neglectCurves = true;
       vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
-      int numPointsPerEdge = cell->elementType()->testOrderPtr->maxBasisDegree() * 2; // 2 points for linear, 4 for quadratic, etc.
+      int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
       int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
       FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
