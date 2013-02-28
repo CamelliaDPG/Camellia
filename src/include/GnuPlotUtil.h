@@ -97,7 +97,7 @@ public:
     
     fout << "# Plot with:\n";
     fout << setprecision(2);
-    fout << "# set size square\n";
+    fout << "# set size ratio -1\n";
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
@@ -108,7 +108,7 @@ public:
     fout.close();
     
     ofstream scriptOut((filePath + ".p").c_str());
-    scriptOut << "set size square\n";
+    scriptOut << "set size ratio -1\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
@@ -166,7 +166,7 @@ public:
     fout.close();
     
     ofstream scriptOut((filePath + ".p").c_str());
-    scriptOut << "set size square\n";
+    scriptOut << "set size ratio -1\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
@@ -221,9 +221,41 @@ public:
     fout.close();
   }
   
-  static void writeContourPlotScript(const string &filePathOfData) {
-    ofstream fout((filePathOfData + ".p").c_str());
-    // TODO: finish this method!
+  static void writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
+                                     const string &outputFile) {
+    ofstream fout((outputFile).c_str());
+    ostringstream splotLine;
+    splotLine << "splot ";
+    for (int i=0; i<filePathsOfData.size(); i++) {
+      string filePath = filePathsOfData[i];
+      splotLine << "\"" << filePath << "\" using 1:2:3 notitle with lines lc rgb \"#0000ff\"";
+      if (i != filePathsOfData.size()-1) {
+        splotLine << ", ";
+      }
+    }
+    splotLine << "\n";
+    int levelNumber = 0;
+    ostringstream levelsString;
+    for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++, levelNumber++) {
+      levelsString << *levelIt;
+      if (levelNumber != contourLevels.size() - 1) {
+        levelsString << ", ";
+      }
+    }
+    fout << splotLine.str() << endl;
+    fout << "unset surface" << endl;
+    fout << "set cntr levels discrete " << levelsString.str() << endl;
+    fout << "set contour base" << endl;
+    fout << "set view map" << endl;
+    fout << "unset clabel" << endl;
+    fout << "set cntrparam bspline" << endl;
+    fout << "set size ratio -1" << endl;
+    fout << "set style data lines" << endl;
+    fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    fout << "set out '" << outputFile << ".eps'\n";
+    fout << "replot" << endl;
+    fout << "set term pop\n";
+    
     fout.close();
   }
 };
