@@ -34,6 +34,8 @@
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
 
+#include "GnuPlotUtil.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -160,7 +162,17 @@ FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr 
     xyzData(ptIndex,1) = points(ptIndex,1);
     xyzData(ptIndex,2) = values(ptIndex);
   }
-  return values;
+  return xyzData;
+}
+
+set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsPerLevel=1) {
+  // traverse diagonal of (i*numPoints + j) data from solutionData()
+  int numPoints = sqrt(pointData.dimension(0));
+  set<double> levels;
+  for (int i=0; i<numPoints; i+=pointsPerLevel) {
+    levels.insert(pointData(i*numPoints + i,2)); // format for pointData has values at (ptIndex, 2)
+  }
+  return levels;
 }
 
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
@@ -215,7 +227,7 @@ int main(int argc, char *argv[]) {
   bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool useMumps = false;
+  bool useMumps = true;
   bool compareWithOverkillMesh = false;
   bool useAdHocHPRefinements = false;
   bool startWithZeroSolutionAfterRefinement = true;
@@ -624,7 +636,7 @@ int main(int argc, char *argv[]) {
 //        dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
 //      }
       
-      refinementStrategy->refine(rank==0); // print to console on rank 0
+      refinementStrategy->refine(false); //rank==0); // print to console on rank 0
       
 //      if (! MeshTestUtility::checkMeshConsistency(mesh)) {
 //        if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
@@ -823,6 +835,17 @@ int main(int argc, char *argv[]) {
       cout << "wrote files: u1.dat, u2.dat, p.dat\n";
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
+    
+    FieldContainer<double> points = pointGrid(0, 1, 0, 1, 100);
+    FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
+    GnuPlotUtil::writeXYPoints("phi_patch_navierStokes_cavity.dat", pointData);
+    set<double> patchContourLevels = diagonalContourLevels(pointData);
+    vector<string> patchDataPath;
+    patchDataPath.push_back("phi_patch_navierStokes_cavity.dat");
+    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "lidCavityNavierStokes.p");
+    
+    GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
+
     
     writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
     writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
