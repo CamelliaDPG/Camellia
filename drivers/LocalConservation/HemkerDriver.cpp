@@ -23,14 +23,6 @@
 #include "choice.hpp"
 #endif
 
-// bool enforceLocalConservation = false;
-// double epsilon = 1e-4;
-// int numRefs = 10;
-// int nseg = 8;
-// bool readMesh = false;
-// bool CircleMesh = false;
-// bool TriangulateMesh = false;
-
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:
