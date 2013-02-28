@@ -131,7 +131,7 @@ public:
   }
 };
 
-FieldContainer<double> pointGrid(double xMin, double xMax, doubly yMin, double yMax, int numPoints) {
+FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints) {
   vector<double> points1D_x, points1D_y;
   for (int i=0; i<numPoints; i++) {
     points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
@@ -176,10 +176,10 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   //    fout << "Y = zeros(numPoints);\n";
   fout << "U = zeros(" << numPoints << "," << numPoints << ");\n";
   for (int i=0; i<numPoints; i++) {
-    fout << "X(" << i+1 << ")=" << points1D_x[i] << ";\n";
+    fout << "X(" << i+1 << ")=" << points(i,0) << ";\n";
   }
   for (int i=0; i<numPoints; i++) {
-    fout << "Y(" << i+1 << ")=" << points1D_y[i] << ";\n";
+    fout << "Y(" << i+1 << ")=" << points(i,1) << ";\n";
   }
   
   for (int i=0; i<numPoints; i++) {
