@@ -1019,6 +1019,116 @@ test norm, we still appear to maintain acceptable levels of conservation.
 \label{fig:wedge_flux}
 \end{figure}
 
+\subsection{Inner Layer Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:innerlayerGraph18nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:innerlayerRobust18nc}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8nc}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:innerlayerGraph18c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:innerlayerRobust18c}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8c}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:innerlayerGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:innerlayerRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in inner layer solutions}
+\label{fig:innerlayer_flux}
+\end{figure}
+
+\subsection{Discontinuous Source Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8nc.png}
+\caption{Nonconservative with graph norm}
+\label{fig:discontinuousGraph8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8nc.png}
+\caption{Nonconservative with robust norm}
+\label{fig:discontinuousRobust8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8c.png}
+\caption{Conservative with graph norm}
+\label{fig:discontinuousGraph8c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8c.png}
+\caption{Conservative with robust norm}
+\label{fig:discontinuousRobust8c}
+\end{subfigure}
+\caption{Discontinuous source problem after 8 refinements}
+\label{fig:discontinuous}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:discontinuousGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:discontinuousRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in discontinuous source solutions}
+\label{fig:discontinuous_flux}
+\end{figure}
+
 \subsection{Hemker Problem}
 The Hemker problem is defined on a domain
 $\Omega=\{[-3,9]\times[-3,3]\}\{(x,y):x^2+y^2<1\}$, essentially a simplified
@@ -1053,28 +1163,28 @@ nice on inflow.
 \includegraphics[width=\textwidth]{figs/Hemker/graph4nc.png}
 \includegraphics[width=\textwidth]{figs/Hemker/graph4nc_mesh.png}
 \caption{Nonconservative with graph norm}
-\label{fig:hemkerGraph14nc}
+\label{fig:hemkerGraph4nc}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/robust4nc.png}
 \includegraphics[width=\textwidth]{figs/Hemker/robust4nc_mesh.png}
 \caption{Nonconservative with robust norm}
-\label{fig:hemkerRobust14nc}
+\label{fig:hemkerRobust4nc}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/graph4c.png}
 \includegraphics[width=\textwidth]{figs/Hemker/graph4c_mesh.png}
 \caption{Conservative with graph norm}
-\label{fig:hemkerGraph14c}
+\label{fig:hemkerGraph4c}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/robust4c.png}
 \includegraphics[width=\textwidth]{figs/Hemker/robust4c_mesh.png}
 \caption{Conservative with robust norm}
-\label{fig:hemkerRobust14c}
+\label{fig:hemkerRobust4c}
 \end{subfigure}
 \caption{Hemker problem after 4 refinements}
 \label{fig:hemker4}
@@ -1087,28 +1197,28 @@ nice on inflow.
 \includegraphics[width=\textwidth]{figs/Hemker/graph8nc.png}
 \includegraphics[width=\textwidth]{figs/Hemker/graph8nc_mesh.png}
 \caption{Nonconservative with graph norm}
-\label{fig:hemkerGraph18nc}
+\label{fig:hemkerGraph8nc}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/robust8nc.png}
 \includegraphics[width=\textwidth]{figs/Hemker/robust8nc_mesh.png}
 \caption{Nonconservative with robust norm}
-\label{fig:hemkerRobust18nc}
+\label{fig:hemkerRobust8nc}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/graph8c.png}
 \includegraphics[width=\textwidth]{figs/Hemker/graph8c_mesh.png}
 \caption{Conservative with graph norm}
-\label{fig:hemkerGraph18c}
+\label{fig:hemkerGraph8c}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/robust8c.png}
 \includegraphics[width=\textwidth]{figs/Hemker/robust8c_mesh.png}
 \caption{Conservative with robust norm}
-\label{fig:hemkerRobust18c}
+\label{fig:hemkerRobust8c}
 \end{subfigure}
 \caption{Hemker problem after 8 refinements}
 \label{fig:hemker8}
