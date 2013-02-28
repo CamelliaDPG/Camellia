@@ -37,23 +37,6 @@ public:
   }
 };
 
-class EntireBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    return true;
-  }
-};
-
-class UnitSquareBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
-    bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
-    return xMatch || yMatch;
-  }
-};
-
 class RightBoundary : public SpatialFilter {
 public:
   bool matchesPoint(double x, double y) {
@@ -256,10 +239,14 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.3; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("doubleglazing_err.txt");
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
+    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
       outfile << "doubleglazing_" << refIndex;
@@ -271,11 +258,16 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  if (commRank == 0)
+    errOut.close();
   
   return 0;
 }
