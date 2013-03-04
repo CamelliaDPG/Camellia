@@ -5,7 +5,6 @@
 //  Created by Truman Ellis on 6/4/2012.
 
 // Nate's addition because he doesn't want to Truman's build system:
-//#define Camellia_MeshDir string("/Users/nroberts/Documents/Camellia/meshes/")
 #include "CamelliaConfig.h"
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
@@ -14,16 +13,14 @@
 #include "LagrangeConstraints.h"
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
-
-
-bool enforceLocalConservation = false;
-double epsilon = 1e-4;
-double numRefs = 5;
 
 class EpsilonScaling : public hFunction {
   double _epsilon;
@@ -94,7 +91,7 @@ class U0 : public Function {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           double r = sqrt(x*x + y*y); 
-          values(cellIndex,ptIndex) = r-1.0;
+          values(cellIndex,ptIndex) = (r-1.0)/(sqrt(2)-1);
           // values(cellIndex,ptIndex) = 1.0;
         }
       }
@@ -127,67 +124,68 @@ public:
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank=mpiSession.getRank();
-  int numProcs=mpiSession.getNProc();
+  choice::MpiArgs args( argc, argv );
 #else
-  int rank = 0;
-  int numProcs = 1;
+  choice::Args args( argc, argv );
 #endif
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+
+  // Required arguments
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
+  bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+
+  // Optional arguments (have defaults)
+  double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-4);
+  args.Process();
+
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
-  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
   
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr uhat = varFactory.traceVar("u_hat");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("t_hat");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
+  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
   
   FunctionPtr beta = Teuchos::rcp(new Beta());
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  confusionBF->addTerm(sigma1 / epsilon, tau->x());
-  confusionBF->addTerm(sigma2 / epsilon, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(-uhat, tau->dot_normal());
+  bf->addTerm(sigma / epsilon, tau);
+  bf->addTerm(u, tau->div());
+  bf->addTerm(-uhat, tau->dot_normal());
   
   // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( beta * u, - v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  bf->addTerm( sigma, v->grad() );
+  bf->addTerm( beta * u, - v->grad() );
+  bf->addTerm( beta_n_u_minus_sigma_n, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  // mathematician's norm
-  IPPtr mathIP = Teuchos::rcp(new IP());
-  mathIP->addTerm(tau);
-  mathIP->addTerm(tau->div());
-
-  mathIP->addTerm(v);
-  mathIP->addTerm(v->grad());
-
-  // quasi-optimal norm
-  IPPtr qoptIP = Teuchos::rcp(new IP);
-  qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / epsilon+ v->grad() );
-  qoptIP->addTerm( beta * v->grad() - tau->div() );
-
-  // robust test norm
-  IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-  if (!enforceLocalConservation)
-    robIP->addTerm( ip_scaling * v );
-  robIP->addTerm( sqrt(epsilon) * v->grad() );
-  robIP->addTerm( beta * v->grad() );
-  robIP->addTerm( tau->div() );
-  robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  if (enforceLocalConservation)
-    robIP->addZeroMeanTerm( v );
+  IPPtr ip = Teuchos::rcp(new IP);
+  if (graphNorm)
+  {
+    ip = bf->graphNorm();
+  }
+  else
+  {
+    // robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    if (!enforceLocalConservation)
+      ip->addTerm( ip_scaling * v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    // Weight these two terms for inflow
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->div() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    if (enforceLocalConservation)
+      ip->addZeroMeanTerm( v );
+  }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -226,10 +224,10 @@ int main(int argc, char *argv[]) {
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd, false);
+                                                bf, H1Order, H1Order+pToAdd, false);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
+  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
   if (enforceLocalConservation) {
@@ -239,14 +237,19 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("vortex_err.txt");
   
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
-    if (rank==0){
+    double energy_error = solution->energyErrorTotal();
+    if (commRank==0){
       stringstream outfile;
       outfile << "vortex_" << refIndex;
-      solution->writeToVTK(outfile.str(), 5);
+      exporter.exportSolution(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -254,11 +257,16 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
-      refinementStrategy.refine(rank==0); // print to console on rank 0
+      refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  if (commRank == 0)
+    errOut.close();
   
   return 0;
 }

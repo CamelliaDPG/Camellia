@@ -3,7 +3,8 @@
 \usepackage{authblk}
 \usepackage{amsmath, amssymb, amsthm, mathtools}
 \usepackage{graphicx}
-% \usepackage{subfigure}
+\usepackage{caption}
+\usepackage{subcaption}
 
 \def\btau{\boldsymbol\tau}
 \def\bsigma{\boldsymbol\sigma}
@@ -583,18 +584,21 @@ the conservative and nonconservative plots appear to lay right on top of each
 other. This indicates that the conservative formulation at least doensn't hurt
 our convergence significantly.
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/graphError.pdf}
-\caption{Error in Erickson-Johnson solution with graph norm}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/graphError.pdf}
+\caption{With graph norm}
 \label{fig:ericksonGraphError}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/robustError.pdf}
-\caption{Error in Erickson-Johnson solution with robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/robustError.pdf}
+\caption{With robust norm}
 \label{fig:ericksonRobustError}
-}
+\end{subfigure}
+\caption{Error in Erickson-Johnson solutions}
 \end{figure}
 
 We plot the flux imbalance errors in Figures \ref{fig:ericksonGraphFlux} and
@@ -603,18 +607,21 @@ formulation brings these errors to the order of machine precision, but it is
 worth pointing out that the flux imbalances for standard DPG are reasonable,
 especially under refinement.
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/graphFlux.pdf}
-\caption{Flux imbalance in Erickson-Johnson solutions with graph norm}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/graphFlux.pdf}
+\caption{With graph norm}
 \label{fig:ericksonGraphFlux}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Erickson/robustFlux.pdf}
-\caption{Flux imbalance in Erickson-Johnson solutions with robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Erickson/robustFlux.pdf}
+\caption{With robust norm}
 \label{fig:ericksonRobustFlux}
-}
+\end{subfigure}
+\caption{Flux imbalance in Erickson-Johnson solutions}
 \end{figure}
 
 \subsection{Skewed Convection-Diffusion Problem}
@@ -633,18 +640,21 @@ fact being enforced. As we refine, the field variables will begin to reflect
 the boundary layer. On the other hand, the robust norm does show a boundary
 layer being formed in the field variables. 
 
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graph0c.png}
-\caption{Conservative skewed convection-diffusion with graph norm, initial mesh}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graph0c.png}
+\caption{Conservative with graph norm}
 \label{fig:confusionGraph0c}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robust0c.png}
-\caption{Conservative skewed convection-diffusion with robust norm, initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robust0c.png}
+\caption{Conservative with robust norm}
 \label{fig:confusionRobust0c}
-}
+\end{subfigure}
+\caption{Skewed convection-diffusion problem with initial mesh}
 \end{figure}
 
 As we refine, the three results, nonconservative with graph or robust norm,
@@ -654,36 +664,23 @@ Figure~\ref{fig:confusionGraph8c}. However, the conservative formulation with
 the robust norm seems to exhibit some noise at the right wall as seen in
 Figure~\ref{fig:confusionRobust8c}.
 
-% \begin{figure}[h!]
-% \centering
-% \parbox{0.45\textwidth}{
-% \includegraphics[width=0.45\textwidth]{figs/Confusion/graph8nc.png}
-% \caption{Nonconservative skewed convection-diffusion with graph norm, after 8
-% refinements}
-% \label{fig:confusionGraph8nc}
-% }\quad
-% \parbox{0.45\textwidth}{
-% \includegraphics[width=0.45\textwidth]{figs/Confusion/robust8nc.png}
-% \caption{Nonconservative skewed convection-diffusion with robust norm, after 8
-% refinements}
-% \label{fig:confusionRobust8nc}
-% }
-% \end{figure}
-
-\begin{figure}[h!]
+\begin{figure}
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graph8c.png}
-\caption{Conservative skewed convection-diffusion with graph norm, after 8
-refinements}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graph8c.png}
+\includegraphics[width=\textwidth]{figs/Confusion/graph8c_mesh.png}
+\caption{Conservative with graph norm}
 \label{fig:confusionGraph8c}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robust8c.png}
-\caption{Conservative skewed convection-diffusion with robust norm, after 8
-refinements}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robust8c.png}
+\includegraphics[width=\textwidth]{figs/Confusion/robust8c_mesh.png}
+\caption{Conservative with robust norm}
 \label{fig:confusionRobust8c}
-}
+\end{subfigure}
+\caption{Skewed convection-diffusion problem after 8 refinements}
 \end{figure}
 
 If we zoom in on one of the noisy areas, as we do in
@@ -706,18 +703,543 @@ Figure~\ref{fig:confusionGraphFlux} and Figure~\ref{fig:confusionRobustFlux}.
 Interestingly, it appears the effectiveness of our local conservation
 formulation drops as we refine with the graph norm.
 
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:confusionGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Confusion/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:confusionRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in skewed confusion solutions}
+\end{figure}
+
+\subsection{Double Glazing Problem}
+This nominal problem definition takes the same unit square domain with 
+\[
+\bbeta=\binom{2(2y-1)(1-(2x-1)^2)}{-2(2x-1)(1-(2y-1)^2)}\,;\quad f=0\,;\quad
+\hat u=
+\begin{cases}
+1 & \mbox{on }\Gamma_{right}\\
+0 & \mbox{else }
+\end{cases}\,,
+\]
+except that this definition for the boundary is not legal for $\hat u\in
+H^{\frac{1}{2}}(\Gamma_h)$ which is continuous. Therefore we use a ramp of
+width $\sqrt{\epsilon}$ on the right edge to go from 0 to 1. The following
+results are for $\epsilon=10^{-2}$. Note that $\bbeta=(0,0)^T$ at the center
+of the domain.
+
+The choice of test norm appears to have a small effect on the choice mesh
+refinement choices as shown in Figure~\ref{fig:doubleglazing}. Other than
+that, the conservative and nonconservative solutions behave almost exactly to
+the eye. The flux imbalances in Figure~\ref{fig:doubleglazing_flux} are what
+we would expect. The nonconservative formulation appears to become more
+conservative with refinement.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/graph6c.png}
+\caption{Conservative with graph norm}
+\label{fig:doubleglazingGraph6c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/robust6c.png}
+\caption{Conservative with robust norm}
+\label{fig:doubleglazingRobust6c}
+\end{subfigure}
+\caption{Double glazing problem after 6 refinements}
+\label{fig:doubleglazing}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:doubleglazingGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/DoubleGlazing/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:doubleglazingRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in double glazing solutions}
+\label{fig:doubleglazing_flux}
+\end{figure}
+
+\subsection{Vortex Problem}
+This problem models a mildly diffusive vortex convecting fluid in a circle. We
+deal with domain $\Omega=[-1,1]^2$ with $\epsilon=10^{-4}$, $\bbeta=(-y,x)^T$,
+and $f=0$. Note that $\bbeta=0$ at the domain center. We have an inflow
+boundary condition when $\bbeta\cdot\mathbf{n}<0$, in which case we set $\hat
+t=\bbeta\cdot\mathbf{n}\cdot u_0$ where
+$u_0=\frac{\sqrt{x^2+y^2}-1}{\sqrt{2}-1}$ which will vary from 0 at the center
+of boundary edges to 1 at corners. We don't enforce an outflow boundary.
+
+Each of the four methods seems to have it's own specific refinement pattern,
+but in general we can see that the nonconservative formulations seem to place
+much more refinements in the center of the vortex where the solution is
+constant. The conservative formulations seem to recognize that more error is
+concentrated on the edges of the vortex where we have a sharp change from
+constant values to linear growth in terms of radius. Again we see that
+standard DPG appears to approach conservation with refinement, and
+unfortunately the conservative formulation appears to be losing enforcement
+under the robust norm.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/graph6nc.png}
+\caption{Nonconservative with graph norm}
+\label{fig:vortexGraph6nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/robust6nc.png}
+\caption{Nonconservative with robust norm}
+\label{fig:vortexRobust6nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/graph6c.png}
+\caption{Conservative with graph norm}
+\label{fig:vortexGraph6c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/robust6c.png}
+\caption{Conservative with robust norm}
+\label{fig:vortexRobust6c}
+\end{subfigure}
+\caption{Vortex problem after 6 refinements}
+\label{fig:vortex}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:vortexGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Vortex/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:vortexRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in vortex solutions}
+\label{fig:vortex_flux}
+\end{figure}
+
+\subsection{Wedge Problem}
+We devised this problem to examine some of the issues we were having blow up
+of the solution under the robust test norm. The domain is a rectangle
+$[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom edges with
+the origin at $(0,0)$ is removed. The convection vector $\bbeta=(1,0)^T$,
+$\epsilon=10^{-1}$, and we apply boundary conditions $\hat t=0$ on the left
+inflow edge, $\hat u=0$ on the top edge, $\bbeta\cdot\mathbf{n}\cdot\hat
+u-\hat t=\sigma_n=0$ on the right outflow edge, $\hat u=1$ on the leading edge
+of the wedge, and $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge
+of the wedge.
+
+When the colorscale is scaled from 0 to 1, the macro view of all of the
+solutions looks nearly identical as seen in Figure~\ref{fig:wedge}. However,
+we start to see some differences in the refinement patterns in
+Figure~\ref{fig:wedge_mesh} indicating that the various methods distribute
+error in different ways. We see more evidence of this when we zoom in on the
+tip of the wedge where we get a change in boundary conditions. The graph norm
+solutions don't exhibit any significant problems here. The nonconservative and
+conservative solutions vary smoothly in the range $(-0.00127, 1.03)$, plus or
+minus some less significant digits. The nonconservative robust solution jumps
+from -19.6 to 20.3 at the tip, though this appears to be a very localized
+phenominon. Adding local conservation appears to exacerbate this situation as
+the solution varies from -20.0 to 23.2 and appears to polute a larger area of
+the problem. We implemented a crude hp-adaptive refinement strategy in order
+to try to resolve any singularities present in the solution. If the cell
+measure dips below $5\times10^{-4}$, we switch from h-adaptivity to
+p-adaptivity. Figure~\ref{fig:wedge_poly} shows the resultant polynomial
+orders after refinement. It really appears that the apparent singularities in
+the robust solutions are not physical phenomena that just need resolution, but
+a weakness in the method with the robust test norm.
+
+We plot the flux imbalances in Figure~\ref{fig:wedge_flux}. Despite the
+extreme overshoots and undershoots in the conservative method with the robust
+test norm, we still appear to maintain acceptable levels of conservation.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16nc.png}
+\caption{Nonconservative with graph norm}
+\label{fig:wedgeGraph16nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16nc.png}
+\caption{Nonconservative with robust norm}
+\label{fig:wedgeRobust16nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16c.png}
+\caption{Conservative with graph norm}
+\label{fig:wedgeGraph16c}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16c.png}
+\caption{Conservative with robust norm}
+\label{fig:wedgeRobust16c}
+\end{subfigure}
+\caption{Wedge problem after 16 refinements}
+\label{fig:wedge}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:wedgeGraph16nc_mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:wedgeRobust16nc_mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:wedgeGraph16c_mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:wedgeRobust16c_mesh}
+\end{subfigure}
+\caption{Wedge problem mesh after 16 refinements}
+\label{fig:wedge_mesh}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16nc_zoom.png}
+\caption{Nonconservative with graph norm}
+\label{fig:wedgeGraph16nc_zoom}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16nc_zoom.png}
+\caption{Nonconservative with robust norm}
+\label{fig:wedgeRobust16nc_zoom}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16c_zoom.png}
+\caption{Conservative with graph norm}
+\label{fig:wedgeGraph16c_zoom}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16c_zoom.png}
+\caption{Conservative with robust norm}
+\label{fig:wedgeRobust16c_zoom}
+\end{subfigure}
+\caption{Wedge problem zoomed in after 16 refinements}
+\label{fig:wedge_zoom}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16nc_poly.png}
+\caption{Nonconservative with graph norm}
+\label{fig:wedgeGraph16nc_poly}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16nc_poly.png}
+\caption{Nonconservative with robust norm}
+\label{fig:wedgeRobust16nc_poly}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graph16c_poly.png}
+\caption{Conservative with graph norm}
+\label{fig:wedgeGraph16c_poly}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robust16c_poly.png}
+\caption{Conservative with robust norm}
+\label{fig:wedgeRobust16c_poly}
+\end{subfigure}
+\caption{Wedge problem poly after 16 refinements}
+\label{fig:wedge_poly}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:wedgeGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Wedge/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:wedgeRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in wedge solutions}
+\label{fig:wedge_flux}
+\end{figure}
+
+\subsection{Inner Layer Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:innerlayerGraph18nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:innerlayerRobust18nc}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8nc}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:innerlayerGraph18c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:innerlayerRobust18c}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8c}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:innerlayerGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:innerlayerRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in inner layer solutions}
+\label{fig:innerlayer_flux}
+\end{figure}
+
+\subsection{Discontinuous Source Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8nc.png}
+\caption{Nonconservative with graph norm}
+\label{fig:discontinuousGraph8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8nc.png}
+\caption{Nonconservative with robust norm}
+\label{fig:discontinuousRobust8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8c.png}
+\caption{Conservative with graph norm}
+\label{fig:discontinuousGraph8c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8c.png}
+\caption{Conservative with robust norm}
+\label{fig:discontinuousRobust8c}
+\end{subfigure}
+\caption{Discontinuous source problem after 8 refinements}
+\label{fig:discontinuous}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:discontinuousGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:discontinuousRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in discontinuous source solutions}
+\label{fig:discontinuous_flux}
+\end{figure}
+
+\subsection{Hemker Problem}
+The Hemker problem is defined on a domain
+$\Omega=\{[-3,9]\times[-3,3]\}\{(x,y):x^2+y^2<1\}$, essentially a simplified
+model of flow past an infinite cylinder. We start with the initial mesh shown
+in Figure~\ref{fig:hemkerInitial} in which we approximate the circle by 32
+linear segments. Our code does not fully support curvilinear elements at this
+time, so as we refine, we just subdivide the initial linear segments. The
+boundary conditions are $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the left
+inflow boundary, $\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the
+right outflow boundary, $\hat t=0$ on the top and bottom edges, and $\hat u=1$
+on the cylinder.
+
 \begin{figure}[h!]
 \centering
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/graphFlux.pdf}
-\caption{Flux imbalance in skewed confusion solutions with graph norm}
-\label{fig:confusionGraphFlux}
-}\quad
-\parbox{0.45\textwidth}{
-\includegraphics[width=0.45\textwidth]{figs/Confusion/robustFlux.pdf}
-\caption{Flux imbalance in skewed confusion solutions with robust norm}
-\label{fig:confusionRobustFlux}
-}
+\includegraphics[width=0.8\textwidth]{figs/Hemker/initial_mesh.png}
+\caption{Initial mesh for the Hemker problem}
+\label{fig:hemkerInitial}
+\end{figure}
+
+After some early refinement steps in which the graph norm solutions exhibit
+some strange behavior (see Figure~\ref{fig:hemker4}) all four methods appear
+to converge toward a decent solution as shown in Figure~\ref{fig:hemker8}. The
+different methods seem to prioritize different parts of the mesh for
+refinement, but with sufficient refinement, the differences in the actual
+solution are fairly insignificant. TODO: Explain why $\hat u$ boundary is not
+nice on inflow.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph4nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph4nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:hemkerGraph4nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust4nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust4nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:hemkerRobust4nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph4c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph4c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:hemkerGraph4c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust4c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust4c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:hemkerRobust4c}
+\end{subfigure}
+\caption{Hemker problem after 4 refinements}
+\label{fig:hemker4}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph8nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:hemkerGraph8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust8nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:hemkerRobust8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph8c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph8c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:hemkerGraph8c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust8c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust8c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:hemkerRobust8c}
+\end{subfigure}
+\caption{Hemker problem after 8 refinements}
+\label{fig:hemker8}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:hemkerGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:hemkerRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in Hemker solutions}
+\label{fig:hemker_flux}
 \end{figure}
 
 \bibliographystyle{plain}
