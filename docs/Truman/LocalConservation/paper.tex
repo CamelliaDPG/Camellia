@@ -1019,6 +1019,229 @@ test norm, we still appear to maintain acceptable levels of conservation.
 \label{fig:wedge_flux}
 \end{figure}
 
+\subsection{Inner Layer Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:innerlayerGraph18nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:innerlayerRobust18nc}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8nc}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/graph8c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:innerlayerGraph18c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c.png}
+\includegraphics[width=\textwidth]{figs/InnerLayer/robust8c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:innerlayerRobust18c}
+\end{subfigure}
+\caption{Inner layer problem after 8 refinements}
+\label{fig:innerlayer8c}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:innerlayerGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/InnerLayer/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:innerlayerRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in inner layer solutions}
+\label{fig:innerlayer_flux}
+\end{figure}
+
+\subsection{Discontinuous Source Problem}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8nc.png}
+\caption{Nonconservative with graph norm}
+\label{fig:discontinuousGraph8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8nc.png}
+\caption{Nonconservative with robust norm}
+\label{fig:discontinuousRobust8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/graph8c.png}
+\caption{Conservative with graph norm}
+\label{fig:discontinuousGraph8c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Discontinuous/robust8c.png}
+\caption{Conservative with robust norm}
+\label{fig:discontinuousRobust8c}
+\end{subfigure}
+\caption{Discontinuous source problem after 8 refinements}
+\label{fig:discontinuous}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:discontinuousGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:discontinuousRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in discontinuous source solutions}
+\label{fig:discontinuous_flux}
+\end{figure}
+
+\subsection{Hemker Problem}
+The Hemker problem is defined on a domain
+$\Omega=\{[-3,9]\times[-3,3]\}\{(x,y):x^2+y^2<1\}$, essentially a simplified
+model of flow past an infinite cylinder. We start with the initial mesh shown
+in Figure~\ref{fig:hemkerInitial} in which we approximate the circle by 32
+linear segments. Our code does not fully support curvilinear elements at this
+time, so as we refine, we just subdivide the initial linear segments. The
+boundary conditions are $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the left
+inflow boundary, $\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the
+right outflow boundary, $\hat t=0$ on the top and bottom edges, and $\hat u=1$
+on the cylinder.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/Hemker/initial_mesh.png}
+\caption{Initial mesh for the Hemker problem}
+\label{fig:hemkerInitial}
+\end{figure}
+
+After some early refinement steps in which the graph norm solutions exhibit
+some strange behavior (see Figure~\ref{fig:hemker4}) all four methods appear
+to converge toward a decent solution as shown in Figure~\ref{fig:hemker8}. The
+different methods seem to prioritize different parts of the mesh for
+refinement, but with sufficient refinement, the differences in the actual
+solution are fairly insignificant. TODO: Explain why $\hat u$ boundary is not
+nice on inflow.
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph4nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph4nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:hemkerGraph4nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust4nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust4nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:hemkerRobust4nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph4c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph4c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:hemkerGraph4c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust4c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust4c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:hemkerRobust4c}
+\end{subfigure}
+\caption{Hemker problem after 4 refinements}
+\label{fig:hemker4}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph8nc_mesh.png}
+\caption{Nonconservative with graph norm}
+\label{fig:hemkerGraph8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust8nc_mesh.png}
+\caption{Nonconservative with robust norm}
+\label{fig:hemkerRobust8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graph8c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/graph8c_mesh.png}
+\caption{Conservative with graph norm}
+\label{fig:hemkerGraph8c}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robust8c.png}
+\includegraphics[width=\textwidth]{figs/Hemker/robust8c_mesh.png}
+\caption{Conservative with robust norm}
+\label{fig:hemkerRobust8c}
+\end{subfigure}
+\caption{Hemker problem after 8 refinements}
+\label{fig:hemker8}
+\end{figure}
+
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\caption{With graph norm}
+\label{fig:hemkerGraphFlux}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\caption{With robust norm}
+\label{fig:hemkerRobustFlux}
+\end{subfigure}
+\caption{Flux imbalance in Hemker solutions}
+\label{fig:hemker_flux}
+\end{figure}
+
 \bibliographystyle{plain}
 \bibliography{../DPG}
 \end{document}

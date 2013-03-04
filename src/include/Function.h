@@ -84,6 +84,9 @@ public:
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
+
+  bool isPositive(BasisCachePtr basisCache);
+  bool isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich = 0, bool testVsTest = false);
   
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
