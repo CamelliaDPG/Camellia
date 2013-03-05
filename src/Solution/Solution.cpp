@@ -3136,34 +3136,34 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
 
   int cellID = elem->cellID();
 
-  ElementTypePtr elemTypePtr = elem->elementType();   
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
-  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
-  //  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
-  //  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
-    
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
+  BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true, _cubatureEnrichmentDegree);
+
+  ElementTypePtr elemTypePtr = elem->elementType();       
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
   int numTrialDofs = trialOrderingPtr->totalDofs();
   int numTestDofs = testOrderingPtr->totalDofs();
-  //  cout << "test and trial dofs = " << numTrialDofs << ", " << numTestDofs << endl;
 
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
+  /*
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
   bool createSideCacheToo = true;
+  */
   vector<int> cellIDs;
   cellIDs.push_back(cellID); // just do one cell at a time
+  /*
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-  
   CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+  */ 
 
   FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
       
   _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
   
-  bool estimateElemCondition = false;
+  bool estimateElemCondition = true;
   if (estimateElemCondition){
     Epetra_SerialDenseMatrix IPK(numTestDofs,numTestDofs);
     Epetra_SerialDenseMatrix x(numTestDofs);
@@ -3178,12 +3178,11 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
     solver.SetVectors(x,b);
     double invCondNumber;
     int err = solver.ReciprocalConditionEstimate(invCondNumber);    
-    cout << "condition number of element " << cellID << " = " << 1.0/invCondNumber << endl;
+    cout << "condition number of element " << cellID << " with h1,h2 = " << _mesh->getCellXSize(cellID) << ", " << _mesh->getCellYSize(cellID) << " = " << 1.0/invCondNumber << endl;
   }
 
   FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
-  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
-					    cellSideParities, basisCache);
+  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
 
   //  FieldContainer<double> finalStiffness(1,numTrialDofs,numTrialDofs);
   finalStiffness.resize(1,numTrialDofs,numTrialDofs);
@@ -3717,8 +3716,7 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
 
-/*
-void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
+/*void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
   vector<int> trialVolumeIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> fluxTraceIDs = _mesh->bilinearForm()->trialBoundaryIDs();
     
@@ -3754,6 +3752,9 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   
   for (vector<int>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
     int childID = *childIDIt;
+    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
+    _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
+    cout << "projecting from cell ID " << cellID << " onto " << " cell ID " << childID << endl;
     projectOntoCell(functionMap,childID);
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       projectOntoCell(sideFunctionMap[sideIndex], childID);

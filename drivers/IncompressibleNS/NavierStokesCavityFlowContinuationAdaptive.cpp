@@ -1,5 +1,5 @@
 //
-//  NavierStokesCavityFlowDriver.cpp
+//  NavierStokesCavityFlowAdaptive.cpp
 //  Camellia
 //
 //  Created by Nathan Roberts on 4/14/12.
@@ -46,7 +46,6 @@
 using namespace std;
 
 // static double REYN = 100;
-static double Re = 400; // matches John Evans's dissertation, p. 183
 
 VarFactory varFactory; 
 // test variables:
@@ -234,57 +233,43 @@ int main(int argc, char *argv[]) {
   double nonlinearStepSize = 1.0;
   double dt = 0.5;
   double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
-//  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
+  //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
-//  double eps = 0.0; // John Evans's problem: not in H^1
+  //  double eps = 0.0; // John Evans's problem: not in H^1
   bool enforceLocalConservation = false;
-  bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = true;
-  bool compareWithOverkillMesh = false;
-  bool useAdHocHPRefinements = false;
-  bool startWithZeroSolutionAfterRefinement = true;
   
-  bool artificialTimeStepping = false;
-  
-  int horizontalCells = 2, verticalCells = 2;
-  
-  int overkillMeshSize = 8;
-  int overkillPolyOrder = 7; // H1 order
+  int horizontalCells, verticalCells;
   
   int maxIters = 50; // for nonlinear steps
   
+  vector<double> ReValues;
+  
   // usage: polyOrder [numRefinements]
   // parse args:
-  if ((argc != 4) && (argc != 3) && (argc != 2) && (argc != 5)) {
-    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [Reyn=400]]\n";
+  if (argc < 6) {
+    cout << "Usage: NavierStokesCavityFlowContinuationFixedMesh fieldPolyOrder hCells vCells energyErrorGoal Re0 [Re1 ...]\n";
     return -1;
   }
   int polyOrder = atoi(argv[1]);
-  int numRefs = 10;
-  if ( argc == 3) {
-    numRefs = atoi(argv[2]);
-  }
-  if ( argc == 4) {
-    numRefs = atoi(argv[2]);
-    Re = atof(argv[3]);
-  }
-  if ( argc == 5) {
-    numRefs = atoi(argv[2]);
-    Re = atof(argv[3]);
-    horizontalCells = atoi(argv[4]);
-    verticalCells = horizontalCells;
+  horizontalCells = atoi(argv[2]);
+  verticalCells = atoi(argv[3]);
+  double energyErrorGoal = atof(argv[4]);
+  for (int i=5; i<argc; i++) {
+    ReValues.push_back(atof(argv[i]));
   }
   if (rank == 0) {
-    cout << "numRefinements = " << numRefs << endl;
-    cout << "Re = " << Re << endl;
-    cout << "initial mesh: " << horizontalCells << " x " << verticalCells << endl;
-    if (artificialTimeStepping) cout << "dt = " << dt << endl;
-    if (!startWithZeroSolutionAfterRefinement) {
-      cout << "NOTE: experimentally, NOT starting with 0 solution after refinement...\n";
+    cout << "L^2 order: " << polyOrder << endl;
+    cout << "initial mesh size: " << horizontalCells << " x " << verticalCells << endl;
+    cout << "energy error goal: " << energyErrorGoal << endl;
+    cout << "Reynolds number values for continuation:\n";
+    for (int i=0; i<ReValues.size(); i++) {
+      cout << ReValues[i] << ", ";
     }
+    cout << endl;
   }
   
   FieldContainer<double> quadPoints(4,2);
@@ -297,14 +282,14 @@ int main(int argc, char *argv[]) {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
-
+  
   // define meshes:
   int H1Order = polyOrder + 1;
   bool useTriangles = false;
   bool meshHasTriangles = useTriangles;
   
   double minL2Increment = 1e-8;
-
+  
   // get variable definitions:
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   u1 = varFactory.fieldVar(VGP_U1_S);
@@ -326,22 +311,10 @@ int main(int argc, char *argv[]) {
   tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
   q = varFactory.testVar(VGP_Q_S, HGRAD);
   
-//  // create a pointer to a new mesh:
-//  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-//                                                navierStokesBF, H1Order, H1Order+pToAdd, useTriangles);
-
-//  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-//  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
-//  IPPtr ip = initGraphInnerProductStokes(mu);
-
-//  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) ); // accumulated solution
-//  SolutionPtr solnIncrement = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-//  solnIncrement->setReportConditionNumber(false);
-  
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
   FunctionPtr zero = Function::zero();
-  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
+  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(1);
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
@@ -353,42 +326,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = problem.mesh();
   mesh->registerSolution(solution);
   mesh->registerSolution(solnIncrement);
-
-//  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
-//    // add time marching terms for momentum equations (v1 and v2):
-  if (artificialTimeStepping) {
-    FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
-//    // LHS gets u_inc / dt:
-    BFPtr bf = problem.bf();
-    bf->addTerm(-dt_inv * u1, v1);
-    bf->addTerm(-dt_inv * u2, v2);
-    problem.setIP( bf->graphNorm() );
-  }
-//  }
-  
-//  if (rank==0) {
-//    cout << "********** STOKES BF **********\n";
-//    stokesBFMath->printTrialTestInteractions();
-//    cout << "\n\n********** NAVIER-STOKES BF **********\n";
-//    navierStokesBF->printTrialTestInteractions();
-//    cout << "\n\n";
-//  }
-  
-  // set initial guess (all zeros is probably a decent initial guess here)
-//  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
-//  map< int, FunctionPtr > initialGuesses;
-//  initialGuesses[u1->ID()] = zero;
-//  initialGuesses[u2->ID()] = zero;
-//  initialGuesses[sigma11->ID()] = zero;
-//  initialGuesses[sigma12->ID()] = zero;
-//  initialGuesses[sigma21->ID()] = zero;
-//  initialGuesses[sigma22->ID()] = zero;
-//  initialGuesses[p->ID()] = zero;
-//  initialGuesses[u1hat->ID()] = zero;
-//  initialGuesses[u2hat->ID()] = zero;
-//  initialGuesses[t1n->ID()] = zero;
-//  initialGuesses[t2n->ID()] = zero;
-//  solution->projectOntoMesh(initialGuesses);
   
   ///////////////////////////////////////////////////////////////////////////
   
@@ -416,10 +353,9 @@ int main(int argc, char *argv[]) {
   streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                    streamBF, H1Order+pToAddForStreamFunction,
                                    H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
-
+  
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
   
-  Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
   vector< VarPtr > fields;
   fields.push_back(u1);
@@ -454,49 +390,13 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
-
+  
   FunctionPtr u1_prev = Function::solution(u1,solution);
   FunctionPtr u2_prev = Function::solution(u2,solution);
   
   FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
   FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
-    
-//  if ( ! usePicardIteration ) {
-//    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
-//    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
-//  // as long as we don't subtract from the RHS, I think the following is actually right:
-////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-//  } else {
-////    bc->addDirichlet(u1hat, entireBoundary, u1_0);
-////    bc->addDirichlet(u2hat, entireBoundary, u2_0);
-//    // experiment:
-//    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-//    pc->addConstraint(u1hat==u1_0,entireBoundary);
-//    pc->addConstraint(u2hat==u2_0,entireBoundary);
-//    solnIncrement->setFilter(pc);
-//  }
-//  bc->addZeroMeanConstraint(p);
-//  
-  /////////////////// SOLVE OVERKILL //////////////////////
-//  if (compareWithOverkillMesh) {
-//    // TODO: fix this to make it work with Navier-Stokes
-//    cout << "WARNING: still need to switch overkill to handle nonlinear iteration...\n";
-//    overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
-//                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
-//    
-//    if (rank == 0) {
-//      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
-//      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
-//    }
-//    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//    overkillSolution->solve();
-//    if (rank == 0)
-//      cout << "...solved.\n";
-//    double overkillEnergyError = overkillSolution->energyErrorTotal();
-//    if (rank == 0)
-//      cout << "overkill energy error: " << overkillEnergyError << endl;
-//  }
+  
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   
@@ -509,9 +409,9 @@ int main(int argc, char *argv[]) {
   ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
   
   Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
-//  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
+  //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
   streamBC->addDirichlet(phi_hat, entireBoundary, zero);
-//  streamBC->addZeroMeanConstraint(phi);
+  //  streamBC->addZeroMeanConstraint(phi);
   
   IPPtr streamIP = Teuchos::rcp( new IP );
   streamIP->addTerm(q_s);
@@ -525,63 +425,8 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
     solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
-  
-  FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
-  
-  double energyThreshold = 0.20; // for mesh refinements
-  Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  if (useAdHocHPRefinements) {
-//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-//    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "need to build against LidDrivenFlowRefinementStrategy before using ad hoc hp refinements");
-  } else {
-    if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
-    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
-//    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
-  }
-  
-  refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
-  refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
-
-  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                               stepSize,
-                                                                                               nonlinearRelativeEnergyTolerance));
-  
-  Teuchos::RCP<NonlinearSolveStrategy> finalSolveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                               stepSize,
-                                                                                               nonlinearRelativeEnergyTolerance / 10));
-
-  
-  
-//  solveStrategy->setUsePicardIteration(usePicardIteration);
-  
-  // run some refinements on the initial linear problem
-//  int numInitialRefs = 5;
-//  for (int refIndex=0; refIndex<numInitialRefs; refIndex++){    
-//    solnIncrement->solve();
-//    refinementStrategy->refine(rank==0); // print to console on rank 0
-//  }
-//  solveStrategy->solve(rank==0);
-  
-  if (true) { // do regular refinement strategy...
-    FieldContainer<double> bottomCornerPoints(2,2);
-    bottomCornerPoints(0,0) = 1e-10;
-    bottomCornerPoints(0,1) = 1e-10;
-    bottomCornerPoints(1,0) = 1 - 1e-10;
-    bottomCornerPoints(1,1) = 1e-10;
-    
-    FieldContainer<double> topCornerPoints(4,2);
-    topCornerPoints(0,0) = 1e-10;
-    topCornerPoints(0,1) = 1 - 1e-12;
-    topCornerPoints(1,0) = 1 - 1e-10;
-    topCornerPoints(1,1) = 1 - 1e-12;
-    topCornerPoints(2,0) = 1e-12;
-    topCornerPoints(2,1) = 1 - 1e-10;
-    topCornerPoints(3,0) = 1 - 1e-12;
-    topCornerPoints(3,1) = 1 - 1e-10;
-    
-    bool printToConsole = rank==0;
+      
+  if (true) {    
     FunctionPtr u1_incr = Function::solution(u1, solnIncrement);
     FunctionPtr u2_incr = Function::solution(u2, solnIncrement);
     FunctionPtr sigma11_incr = Function::solution(sigma11, solnIncrement);
@@ -594,128 +439,42 @@ int main(int argc, char *argv[]) {
     + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
     + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
-    for (int refIndex=0; refIndex<numRefs; refIndex++){
-      if (startWithZeroSolutionAfterRefinement) {
-        // start with a fresh (zero) initial guess for each adaptive mesh:
-        solution->clear();
-        problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
-      }
-      
-      double incr_norm;
-      do {
-        problem.iterate(useLineSearch);
-        incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-        if (rank==0) {
-          cout << "\x1B[2K"; // Erase the entire current line.
-          cout << "\x1B[0E"; // Move to the beginning of the current line.
-          cout << "Refinement # " << refIndex << ", iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
-          flush(cout);
-        }
-      } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+    double energyThreshold = 0.20;
+    Teuchos::RCP< RefinementStrategy > refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
 
-      if (rank==0)
-        cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
-      
-      // reset iteration count to 1 (for the background flow):
-      problem.setIterationCount(1);
-      
-//      solveStrategy->solve(printToConsole);
-      
-      
-//      if (compareWithOverkillMesh) {
-//        Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//        solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
-//        if (refIndex==numRefs-1) { // last refinement
-//          solution->writeFieldsToFile(p->ID(),"pressure.m");
-//          overkillSolution->writeFieldsToFile(p->ID(), "pressure_overkill.m");
-//        }
-//
-//        projectedSoln->addSolution(overkillSolution,-1.0);
-//
-//        if (refIndex==numRefs-1) { // last refinement
-//          projectedSoln->writeFieldsToFile(p->ID(), "pressure_error_vs_overkill.m");
-//        }
-//        double L2errorSquared = 0.0;
-//        for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
-//          VarPtr var = *fieldIt;
-//          int fieldID = var->ID();
-//          double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-//          if (rank==0)
-//            cout << "L2error for " << var->name() << ": " << L2error << endl;
-//          L2errorSquared += L2error * L2error;
-//        }
-//        
-//        int numGlobalDofs = mesh->numGlobalDofs();
-//        if (rank==0)
-//          cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
-//        dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-//      }
-      
-      refinementStrategy->refine(false); //rank==0); // print to console on rank 0
-      
-//      if (! MeshTestUtility::checkMeshConsistency(mesh)) {
-//        if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
-//      }
-      // find top corner cells:
-      vector< Teuchos::RCP<Element> > topCorners = mesh->elementsForPoints(topCornerPoints);
-      if (rank==0) {// print out top corner cellIDs
-        cout << "Refinement # " << refIndex+1 << " complete.\n";
-        vector<int> cornerIDs;
-        cout << "top-left corner ID: " << topCorners[0]->cellID() << endl;
-        cout << "top-right corner ID: " << topCorners[1]->cellID() << endl;
-      }
+    for (int i=0; i<ReValues.size(); i++) {
+      double Re = ReValues[i];
+      Re_param->setValue(Re);
+      if (rank==0) cout << "Solving with Re = " << Re << ":\n";
+      double energyErrorTotal;
+      do {
+        double incr_norm;
+        do {
+          problem.iterate(useLineSearch);
+          incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+          if (rank==0) {
+            cout << "\x1B[2K"; // Erase the entire current line.
+            cout << "\x1B[0E"; // Move to the beginning of the current line.
+            cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+            flush(cout);
+          }
+        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        if (rank==0) cout << endl;
+        problem.setIterationCount(1); // 1 means reuse background flow (which we must, given that we want continuation in Re...)
+        energyErrorTotal = solution->energyErrorTotal();
+        if (energyErrorTotal > energyErrorGoal) {
+          refinementStrategy->refine(false);
+        }
+        cout << "Energy error: " << energyErrorTotal << endl;
+      } while (energyErrorTotal > energyErrorGoal);
     }
-    // one more solve on the final refined mesh:
-    if (rank==0) cout << "Final solve:\n";
-    if (startWithZeroSolutionAfterRefinement) {
-      // start with a fresh (zero) initial guess for each adaptive mesh:
-      solution->clear();
-      problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
-    }
-    double incr_norm;
-    do {
-      problem.iterate(useLineSearch);
-      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-      if (rank==0) {
-        cout << "\x1B[2K"; // Erase the entire current line.
-        cout << "\x1B[0E"; // Move to the beginning of the current line.
-        cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
-        flush(cout);
-      }
-    } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
-    if (rank==0) cout << endl;
-    
-//    if (enforceLocalConservationInFinalSolve && !enforceLocalConservation) {
-//      solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
-//    }
-//    
-//    finalSolveStrategy->solve(printToConsole);
   }
-//  if (compareWithOverkillMesh) {
-//    Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//    solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
-//    
-//    projectedSoln->addSolution(overkillSolution,-1.0);
-//    double L2errorSquared = 0.0;
-//    for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
-//      VarPtr var = *fieldIt;
-//      int fieldID = var->ID();
-//      double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-//      if (rank==0)
-//        cout << "L2error for " << var->name() << ": " << L2error << endl;
-//      L2errorSquared += L2error * L2error;
-//    }
-//    int numGlobalDofs = mesh->numGlobalDofs();
-//    if (rank==0)
-//      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
-//    dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-//  }
   
   double energyErrorTotal = solution->energyErrorTotal();
   double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
   if (rank == 0) {
-    cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
-    cout << "Final energy error: " << energyErrorTotal << endl;
+    cout << "final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
+    cout << "energy error: " << energyErrorTotal << endl;
     cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
   
@@ -769,14 +528,6 @@ int main(int argc, char *argv[]) {
       // pick out the ones for testOne:
       massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
     }
-    //      int numSides = 4;
-    //      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    //        for (int i=0; i<elems.size(); i++) {
-    //          int cellID = cellIDs[i];
-    //          // pick out the ones for testOne:
-    //          massFluxIntegral[cellID] += fakeRHSIntegrals(i,testOneIndex);
-    //        }
-    //      }
     // find the largest:
     for (int i=0; i<elems.size(); i++) {
       int cellID = cellIDs[i];
@@ -807,13 +558,6 @@ int main(int argc, char *argv[]) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
-  //  mesh->unregisterMesh(streamMesh);
-  //  streamMesh->registerMesh(mesh);
-  //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
-  //  for (int refIndex=0; refIndex < 3; refIndex++) {
-  //    streamSolution->solve(false);
-  //    streamRefinementStrategy.refine(rank==0);
-  //  }
   
   streamSolution->solve(useMumps);
   energyErrorTotal = streamSolution->energyErrorTotal();
@@ -849,7 +593,6 @@ int main(int argc, char *argv[]) {
       solution->writeToFile(u2->ID(), "p.dat");
       cout << "wrote files: u1.dat, u2.dat, p.dat\n";
     }
-    polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
     
     FieldContainer<double> points = pointGrid(0, 1, 0, 1, 100);
     FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
@@ -859,32 +602,12 @@ int main(int argc, char *argv[]) {
     patchDataPath.push_back("phi_patch_navierStokes_cavity.dat");
     GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "lidCavityNavierStokes.p");
     
-    GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
-
+    GnuPlotUtil::writeExactMeshSkeleton("lid_navierStokes_continuation_adaptive", mesh, 2);
     
     writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
     writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
     writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
     writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
-}
-  
-  if (compareWithOverkillMesh) {
-    cout << "******* Adaptivity Convergence Report *******\n";
-    cout << "dofs\tL2 error\n";
-    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-      int dofs = entryIt->first;
-      double err = entryIt->second;
-      cout << dofs << "\t" << err << endl;
-    }
-    ofstream fout("overkillComparison.txt");
-    fout << "******* Adaptivity Convergence Report *******\n";
-    fout << "dofs\tL2 error\n";
-    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-      int dofs = entryIt->first;
-      double err = entryIt->second;
-      fout << dofs << "\t" << err << endl;
-    }
-    fout.close();
   }
   
   return 0;
