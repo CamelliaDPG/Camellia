@@ -145,6 +145,14 @@ set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowDriver.cpp"
   )
 
+set( NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowContinuationFixedMesh.cpp"
+  )
+
+set( NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowContinuationAdaptive.cpp"
+  )
+
 set( LAPLACE_CURVILINEAR_DRIVER
   "${DEMO_DRIVERS_DIR}/LaplaceCurvilinear.cpp"
   )
@@ -237,6 +245,8 @@ add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOK
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
+add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE})
+add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
 add_executable(NavierStokesHemkerDriver ${NAVIER_STOKES_HEMKER_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
@@ -266,6 +276,16 @@ target_link_libraries(DPGTests
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NavierStokesCavityFlowDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesCavityFlowContinuationAdaptive
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesCavityFlowContinuationFixedMesh
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

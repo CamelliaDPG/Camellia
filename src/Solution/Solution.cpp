@@ -3717,8 +3717,7 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }
 
-/*
-void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
+/*void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType, const vector<int> &childIDs) {
   vector<int> trialVolumeIDs = _mesh->bilinearForm()->trialVolumeIDs();
   vector<int> fluxTraceIDs = _mesh->bilinearForm()->trialBoundaryIDs();
     
@@ -3754,6 +3753,9 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   
   for (vector<int>::const_iterator childIDIt=childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
     int childID = *childIDIt;
+    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
+    _solutionForCellIDGlobal[childID] = FieldContainer<double>(_mesh->getElement(childID)->elementType()->trialOrderPtr->totalDofs());
+    cout << "projecting from cell ID " << cellID << " onto " << " cell ID " << childID << endl;
     projectOntoCell(functionMap,childID);
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       projectOntoCell(sideFunctionMap[sideIndex], childID);

@@ -16,6 +16,8 @@
 
 #include "BasisFactory.h"
 
+#include "ParameterFunction.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -169,10 +171,23 @@ set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsP
   // traverse diagonal of (i*numPoints + j) data from solutionData()
   int numPoints = sqrt(pointData.dimension(0));
   set<double> levels;
-  for (int i=0; i<numPoints; i+=pointsPerLevel) {
+  for (int i=0; i<numPoints; i++) {
     levels.insert(pointData(i*numPoints + i,2)); // format for pointData has values at (ptIndex, 2)
   }
-  return levels;
+  // traverse the counter-diagonal
+  for (int i=0; i<numPoints; i++) {
+    levels.insert(pointData(i*numPoints + numPoints-1-i,2)); // format for pointData has values at (ptIndex, 2)
+  }
+  set<double> filteredLevels;
+  int i=0;
+  pointsPerLevel *= 2;
+  for (set<double>::iterator levelIt = levels.begin(); levelIt != levels.end(); levelIt++) {
+    if (i%pointsPerLevel==0) {
+      filteredLevels.insert(*levelIt);
+    }
+    i++;
+  }
+  return filteredLevels;
 }
 
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
@@ -326,8 +341,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
   FunctionPtr zero = Function::zero();
-  
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPoints,
+  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u
