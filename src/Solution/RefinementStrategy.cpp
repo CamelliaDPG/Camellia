@@ -15,6 +15,11 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
+  _anisotropicThreshhold = 10.0;
+}
+
+void RefinementStrategy::setAnisotropicThreshhold(double value){
+  _anisotropicThreshhold = value;
 }
 
 void RefinementStrategy::setEnforceOneIrregularity(bool value) {
@@ -193,21 +198,30 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
 }
 
 void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells){  
+  map<int,double> threshMap;
+  vector<ElementPtr> elems = _solution->mesh()->activeElements();
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){    
+    threshMap[(*elemIt)->cellID()] = _anisotropicThreshhold;
+  }
+  getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells,threshMap);
+}
+
+// anisotropy with variable threshholding
+void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap){  
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
   vector<int> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);
   for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
     int cellID = *cellIt;    
-    int cubEnrich = 10;
     double h1 = mesh->getCellXSize(cellID);
     double h2 = mesh->getCellYSize(cellID);
     double min_h = min(h1,h2);
     
-    double thresh = 10.0; // arbitrary
+    double thresh = threshMap[cellID];
     bool doYAnisotropy = yErr[cellID]/xErr[cellID] > thresh;
     bool doXAnisotropy = xErr[cellID]/yErr[cellID] > thresh;
-    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a non-stretched element
-    double maxAspect = 1000.0; // use value from LD's paper
+    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
+    double maxAspect = 75.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100, we take it lower for better conditioning
     if (doXAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
       xCells.push_back(cellID);
     }else if (doYAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
@@ -216,4 +230,75 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
       regCells.push_back(cellID);
     }        
   }
+}
+
+// enforcing one-irregularity with anisotropy - ONLY FOR QUADS RIGHT NOW.  ALSO NOT PARALLELIZED
+
+bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells){
+  bool success = true;
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  int maxIters = mesh->numActiveElements(); // should not refine more than the number of elements...
+
+  // build children list - for use in "upgrading" refinements to prevent deadlocking
+  vector<int> xChildren,yChildren;
+  for (vector<int>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
+    ElementPtr elem = mesh->getElement(*cellIt);
+    for (int i = 0;i<elem->numChildren();i++){
+      xChildren.push_back(elem->getChild(i)->cellID());
+    }
+  }
+  // build children list
+  for (vector<int>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
+    ElementPtr elem = mesh->getElement(*cellIt);
+    for (int i = 0;i<elem->numChildren();i++){
+      yChildren.push_back(elem->getChild(i)->cellID());
+    }   
+  }
+
+  bool meshIsNotRegular = true; // assume it's not regular and check elements
+  int i = 0;
+  while (meshIsNotRegular && i<maxIters) {
+    cout << "fixing irregularity " << endl;
+    vector <int> irregularQuadCells,xUpgrades,yUpgrades;
+    vector< Teuchos::RCP< Element > > newActiveElements = mesh->activeElements();
+    vector< Teuchos::RCP< Element > >::iterator newElemIt;
+    
+    for (newElemIt = newActiveElements.begin(); newElemIt != newActiveElements.end(); newElemIt++) {
+      Teuchos::RCP< Element > current_element = *(newElemIt);
+      bool isIrregular = false;
+      for (int sideIndex=0; sideIndex < current_element->numSides(); sideIndex++) {
+        int mySideIndexInNeighbor;
+        Element* neighbor; // may be a parent
+        current_element->getNeighbor(neighbor, mySideIndexInNeighbor, sideIndex);
+        int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
+        if (numNeighborsOnSide > 2) isIrregular=true;
+      }
+      if (isIrregular){
+	int cellID = current_element->cellID();
+	bool isXRefined = std::find(xChildren.begin(),xChildren.end(),cellID)!=xChildren.end();
+	bool isYRefined = std::find(yChildren.begin(),yChildren.end(),cellID)!=yChildren.end();
+	bool isPreviouslyRefined = (isXRefined || isYRefined);
+	if (!isPreviouslyRefined){ // if the cell to refine has already been refined anisotropically, don't refine it again, 
+	  irregularQuadCells.push_back(cellID);
+	}else if (isXRefined){ 
+	  yUpgrades.push_back(cellID);
+	}else if (isYRefined){ 
+	  xUpgrades.push_back(cellID);
+	}
+      }
+    }
+    if (irregularQuadCells.size()>0) {
+      mesh->hRefine(irregularQuadCells,RefinementPattern::regularRefinementPatternQuad());
+      mesh->hRefine(xUpgrades,RefinementPattern::xAnisotropicRefinementPatternQuad());
+      mesh->hRefine(yUpgrades,RefinementPattern::yAnisotropicRefinementPatternQuad());
+      irregularQuadCells.clear(); xUpgrades.clear(); yUpgrades.clear();
+    } else {
+      meshIsNotRegular=false;
+    }
+    ++i;
+  }
+  if (i>=maxIters){
+    success = false;
+  }
+  return success;
 }

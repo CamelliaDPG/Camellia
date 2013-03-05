@@ -61,8 +61,20 @@
 #include <sstream>
 
 #include "MeshUtilities.h"
-
+#include "ZoltanMeshPartitionPolicy.h"
 #include "GnuPlotUtil.h"
+#include "RefinementStrategy.h"
+
+// just for the test to close a mesh anisotropically
+#include "SolutionExporter.h"
+#include "Solution.h"
+#include "VarFactory.h"
+#include "BCEasy.h"
+#include "RHSEasy.h"
+#include "RHS.h"
+#include "BC.h"
+#include "BF.h"
+
 
 using namespace Intrepid;
 
@@ -100,6 +112,12 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testMultiBasisCrash() ) {
     numTestsPassed++;
   }
+  cout << "passed multibasis crash" << endl;
+  numTestsRun++;
+  if (testAnisotropicCrash() ) {
+    numTestsPassed++;
+  }
+  cout << "passed aniso crash" << endl;
 
   numTestsRun++;
   if (testFluxIntegration() ) {
@@ -2137,5 +2155,78 @@ bool MeshTestSuite::testMultiBasisCrash(){
     mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
     mesh->enforceOneIrregularity();
   }
+  return success;
+}
+
+// test a second crash that is observed in anisotropic NavierStokes refinement
+bool MeshTestSuite::testAnisotropicCrash(){
+  int order = 1;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+
+  ////////////////////   CREATE BCs   ///////////////////////
+
+  int pToAdd = 1;
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  ////////////////////////////////////////////////////////////////////
+  // REFINE MESH TO TRIGGER EXCEPTION
+  ////////////////////////////////////////////////////////////////////
+  vector<ElementPtr> elems = mesh->activeElements();
+  
+  // create "swastika" mesh
+  vector<int> xC,yC;
+  yC.push_back(1);yC.push_back(2);
+  xC.push_back(0);xC.push_back(3);
+  
+  mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());        
+  elems = mesh->activeElements();
+ 
+  // trigger naive algorithm infinite loop (deadlock?)
+  xC.clear();yC.clear();
+  xC.push_back(6);
+  mesh->hRefine(xC,RefinementPattern::xAnisotropicRefinementPatternQuad());
+  //  mesh->hRefine(xC,RefinementPattern::regularRefinementPatternQuad());
+  //  mesh->enforceOneIrregularity();
+
+  RefinementStrategy refinementStrategy(solution,.2);
+  bool success = refinementStrategy.enforceAnisotropicOneIrregularity(xC,yC);
+
+  
   return success;
 }

@@ -3136,34 +3136,34 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
 
   int cellID = elem->cellID();
 
-  ElementTypePtr elemTypePtr = elem->elementType();   
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
-  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
-  //  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));
-  //  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true));
-    
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID, false, _cubatureEnrichmentDegree);
+  BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true, _cubatureEnrichmentDegree);
+
+  ElementTypePtr elemTypePtr = elem->elementType();       
   DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
   int numTrialDofs = trialOrderingPtr->totalDofs();
   int numTestDofs = testOrderingPtr->totalDofs();
-  //  cout << "test and trial dofs = " << numTrialDofs << ", " << numTestDofs << endl;
 
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
+  /*
+  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
   bool createSideCacheToo = true;
+  */
   vector<int> cellIDs;
   cellIDs.push_back(cellID); // just do one cell at a time
+  /*
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-  
   CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+  */ 
 
   FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
       
   _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
   
-  bool estimateElemCondition = false;
+  bool estimateElemCondition = true;
   if (estimateElemCondition){
     Epetra_SerialDenseMatrix IPK(numTestDofs,numTestDofs);
     Epetra_SerialDenseMatrix x(numTestDofs);
@@ -3178,12 +3178,11 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
     solver.SetVectors(x,b);
     double invCondNumber;
     int err = solver.ReciprocalConditionEstimate(invCondNumber);    
-    cout << "condition number of element " << cellID << " = " << 1.0/invCondNumber << endl;
+    cout << "condition number of element " << cellID << " with h1,h2 = " << _mesh->getCellXSize(cellID) << ", " << _mesh->getCellYSize(cellID) << " = " << 1.0/invCondNumber << endl;
   }
 
   FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
-  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
-					    cellSideParities, basisCache);
+  _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
 
   //  FieldContainer<double> finalStiffness(1,numTrialDofs,numTrialDofs);
   finalStiffness.resize(1,numTrialDofs,numTrialDofs);
