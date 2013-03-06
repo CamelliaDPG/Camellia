@@ -434,8 +434,8 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
   
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solnIncrement, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solnIncrement, u1) );
+  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1) );
+  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1) );
   
   FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
   FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
@@ -555,6 +555,10 @@ int main(int argc, char *argv[]) {
       cout << Function::evaluate(vorticity, x, y) << endl;
     }
   }
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true); // speeds up the stream solution solve
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
   
   FunctionPtr u1_sq = u1_prev * u1_prev;
   FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
