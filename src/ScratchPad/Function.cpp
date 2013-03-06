@@ -341,8 +341,9 @@ bool Function::isPositive(BasisCachePtr basisCache){
   this->values(fxnValues, basisCache);  
   
   for (int i = 0;i<fxnValues.size();i++){
-    if (fxnValues[i]<0.0){
+    if (fxnValues[i] <= 0.0){
       isPositive=false;
+      break;
     }
   }
   return isPositive;  
@@ -356,6 +357,25 @@ bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTes
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubEnrich);    					   
+    
+    // if we want to check positivity on uniformly spaced points
+    if ((*elemIt)->numSides()==4){ // tensor product structure only works with quads
+      FieldContainer<double> origPts = basisCache->getRefCellPoints();      
+      int numPts1D = ceil(sqrt(origPts.dimension(0)));
+      int numPts = numPts1D*numPts1D;
+      FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
+      double h = 1.0/(numPts1D-1); 
+      int iter = 0;
+      for (int i = 0;i<numPts1D;i++){
+	for (int j = 0;j<numPts1D;j++){
+	  uniformSpacedPts(iter,0) = 2*h*i-1.0;
+	  uniformSpacedPts(iter,1) = 2*h*j-1.0;
+	  iter++;
+	}	
+      }
+      basisCache->setRefCellPoints(uniformSpacedPts);
+    }
+
     bool isPositiveOnCell = this->isPositive(basisCache);
     if (!isPositiveOnCell){
       isPositiveOnPartition = false;
