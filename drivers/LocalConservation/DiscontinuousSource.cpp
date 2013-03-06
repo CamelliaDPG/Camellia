@@ -15,6 +15,8 @@
 #include "PreviousSolutionFunction.h"
 #include "CheckConservation.h"
 #include "SolutionExporter.h"
+#include "StandardAssembler.h"
+#include "SerialDenseWrapper.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -33,6 +35,13 @@ class EpsilonScaling : public hFunction {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
+  }
+};
+
+class ZeroMeanScaling : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/(h*h);
   }
 };
 
@@ -90,12 +99,13 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
   bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
 
   // Optional arguments (have defaults)
   double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-3);
-  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
-  bool enforceLocalConservation = args.Input("--conserve", "enforce local conservation", false);
+  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -136,15 +146,16 @@ int main(int argc, char *argv[]) {
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    if (!enforceLocalConservation)
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    if (!zeroL2)
       ip->addTerm( ip_scaling * v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    if (enforceLocalConservation)
-      ip->addZeroMeanTerm( v );
+    if (zeroL2)
+      ip->addZeroMeanTerm( h2_scaling*v );
   }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
@@ -198,14 +209,32 @@ int main(int argc, char *argv[]) {
 
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  StandardAssembler assembler(solution);
   VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("discontinuous_err.txt");
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+    // // Loop through elements and check conditioning
+    // vector<ElementPtr> elems = mesh->activeElements();
+    // for (vector<ElementPtr>::iterator it = elems.begin(); it != elems.end(); ++it)
+    // {
+    //   ElementPtr elem = *it;
+    //   FieldContainer<double> ipMatrix = assembler.getIPMatrix(elem);
+    //   double cellMeasure = mesh->getCellMeasure(elem->cellID());
+    //   double condNumber = SerialDenseWrapper::getMatrixConditionNumber(ipMatrix);
+    //   cout << cellMeasure << " " << condNumber << endl;
+    // }
+    // cout << endl;
+
+    // Solve
     solution->solve(false);
 
+    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
-      outfile << "discontinuousSource_" << refIndex;
+      outfile << "discontinuous_" << refIndex;
       exporter.exportSolution(outfile.str());
       // solution->writeToVTK(outfile.str());
 
@@ -214,11 +243,16 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh, 0);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  if (commRank == 0)
+    errOut.close();
 
   return 0;
 }
