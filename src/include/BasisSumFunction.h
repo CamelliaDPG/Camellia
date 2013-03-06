@@ -25,12 +25,7 @@ private:
   FieldContainer<double> _coefficients;
   FieldContainer<double> _physicalCellNodes;
 public:
-  BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes){
-    _coefficients = basisCoefficients;
-    _basis = basis; // note - _basis->getBaseCellTopology
-    _physicalCellNodes = physicalCellNodes; // note - rank 3, but dim(0) = 1
-    TEUCHOS_TEST_FOR_EXCEPTION(_coefficients.dimension(0)!=basis->getCardinality(),std::invalid_argument,"BasisSumFunction: coefficients passed in do not match cardinality of basis.");
-  }
+  BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes);
   virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
 };
 
@@ -42,16 +37,7 @@ class NewBasisSumFunction : public Function {
   bool _boundaryValueOnly;
  public:
   NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
-                      EOperatorExtended op = OP_VALUE, bool boundaryValueOnly = false) : Function( BasisFactory::getBasisRank(basis) ) {
-    _coefficients = basisCoefficients;
-    _boundaryValueOnly = boundaryValueOnly;
-    _basis = basis; // note - _basis->getBaseCellTopology
-    _op = op;
-    int cardinality = basis->getCardinality();
-    TEUCHOS_TEST_FOR_EXCEPTION( _coefficients.dimension(0) != cardinality,
-                               std::invalid_argument,
-                               "BasisSumFunction: coefficients passed in do not match cardinality of basis.");
-  }
+                      EOperatorExtended op = OP_VALUE, bool boundaryValueOnly = false);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
   FunctionPtr x();

@@ -436,36 +436,7 @@ class VGPStokesFormulation : public StokesFormulation {
   VarPtr tau1, tau2, q, v1, v2;
   BFPtr _bf;
   IPPtr _graphNorm;
-  double _mu;
-  
-public:
-  static VarFactory vgpVarFactory() {
-    // sets the order of the variables in a canonical way
-    // uses the publicly accessible strings from above, so that VarPtrs
-    // can be looked up...
-    
-    VarFactory varFactory;
-    VarPtr myVar;
-    myVar = varFactory.testVar(VGP_V1_S, HGRAD);
-    myVar = varFactory.testVar(VGP_V2_S, HGRAD);
-    myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
-    myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
-    myVar = varFactory.testVar(VGP_Q_S, HGRAD);
-    
-    myVar = varFactory.traceVar(VGP_U1HAT_S);
-    myVar = varFactory.traceVar(VGP_U2HAT_S);
-    
-    myVar = varFactory.fluxVar(VGP_T1HAT_S);
-    myVar = varFactory.fluxVar(VGP_T2HAT_S);
-    myVar = varFactory.fieldVar(VGP_U1_S);
-    myVar = varFactory.fieldVar(VGP_U2_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA11_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA12_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA21_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA22_S);
-    myVar = varFactory.fieldVar(VGP_P_S);
-    return varFactory;
-  }
+  FunctionPtr _mu;
   
   void initVars() {
     // create the VarPtrs:
@@ -492,7 +463,7 @@ public:
     p = varFactory.fieldVar(VGP_P_S);
   }
   
-  VGPStokesFormulation(double mu) {
+  void init(FunctionPtr mu) {
     _mu = mu;
     
     initVars();
@@ -531,24 +502,47 @@ public:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)
     _bf->addTerm(-u2,q->dy());
     _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-
+    
     _graphNorm = _bf->graphNorm();
-//    _graphNorm = Teuchos::rcp( new IP );
-//    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-//    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-//    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-//    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-//    _graphNorm->addTerm( v1->dx() + v2->dy() );     // pressure
-//    _graphNorm->addTerm( tau1->div() - q->dx() );    // u1
-//    _graphNorm->addTerm( tau2->div() - q->dy() );    // u2
-//    
-//    // L^2 terms:
-//    _graphNorm->addTerm( v1 );
-//    _graphNorm->addTerm( v2 );
-//    _graphNorm->addTerm( q );
-//    _graphNorm->addTerm( tau1 );
-//    _graphNorm->addTerm( tau2 );
   }
+  
+public:
+  static VarFactory vgpVarFactory() {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+    
+    VarFactory varFactory;
+    VarPtr myVar;
+    myVar = varFactory.testVar(VGP_V1_S, HGRAD);
+    myVar = varFactory.testVar(VGP_V2_S, HGRAD);
+    myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
+    myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
+    myVar = varFactory.testVar(VGP_Q_S, HGRAD);
+    
+    myVar = varFactory.traceVar(VGP_U1HAT_S);
+    myVar = varFactory.traceVar(VGP_U2HAT_S);
+    
+    myVar = varFactory.fluxVar(VGP_T1HAT_S);
+    myVar = varFactory.fluxVar(VGP_T2HAT_S);
+    myVar = varFactory.fieldVar(VGP_U1_S);
+    myVar = varFactory.fieldVar(VGP_U2_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA11_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA12_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA21_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA22_S);
+    myVar = varFactory.fieldVar(VGP_P_S);
+    return varFactory;
+  }
+  
+  VGPStokesFormulation(FunctionPtr mu) {
+    init(mu);
+  }
+  
+  VGPStokesFormulation(double mu) {
+    init(Function::constant(mu));
+  }
+  
   BFPtr bf() {
     return _bf;
   }

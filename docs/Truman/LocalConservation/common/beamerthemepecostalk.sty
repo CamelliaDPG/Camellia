@@ -1,0 +1,48 @@
+% Copyright 2004 by Manuel Carro <mcarro@fi.upm.es>
+%
+% This file may be distributed and/or modified
+%
+% 1. under the LaTeX Project Public License and/or
+% 2. under the GNU Public License.
+%
+% See the file doc/licenses/LICENSE for more details.
+
+\mode<presentation>
+
+\newif\ifbeamer@secheader
+\beamer@secheaderfalse
+
+\DeclareOptionBeamer{secheader}{\beamer@secheadertrue}
+\ProcessOptionsBeamer
+
+\usecolortheme{rose}
+\useinnertheme[shadow]{rounded}
+\usecolortheme{dolphin}
+\useoutertheme{pecoslines}
+
+\usepackage[scaled]{helvet}
+%\usepackage{eulervm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\setbeamertemplate{items}[circle]
+\setbeamertemplate{itemize subitem}[triangle]
+\definecolor{pecos1}{RGB}{5,28,61}
+\definecolor{pecos2}{RGB}{0,75,145}
+\definecolor{pecos3}{RGB}{11,48,84}
+\definecolor{pecos4}{RGB}{51,51,51}
+\definecolor{pecos5}{RGB}{194,207,202}
+\definecolor{pecos6}{RGB}{255,153,0}
+\definecolor{pecos7}{RGB}{252,245,235}
+\definecolor{wine}{RGB}{48,24,0}
+\definecolor{problems}{RGB}{21,41,48}
+\definecolor{threesome}{RGB}{24,72,72}
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+\usecolortheme[named=pecos3]{structure}
+\newcommand{\zapspace}{\topsep=0pt\partopsep=0pt\itemsep=0pt\parskip=0pt}
+
+\setbeamertemplate{navigation symbols}{}
+\mode
+<all>
