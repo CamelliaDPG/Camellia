@@ -373,6 +373,7 @@ public:
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2);
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
 FunctionPtr operator/(FunctionPtr f1, double divisor);
+FunctionPtr operator/(double value, FunctionPtr scalarDivisor);
 
 //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
 //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2);

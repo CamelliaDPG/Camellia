@@ -44,8 +44,6 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
   }
   if (!basisCache.get()) cout << "basisCache is nil!\n";
   if (!_soln.get()) cout << "_soln is nil!\n";
-  // TODO: get the mesh-checking thing working, along with an override that lets you
-  //       say these two meshes are the same...
   // values are stored in (C,P,D) order
   if (basisCache->mesh().get() == _soln->mesh().get()) {
     _solnExpression->evaluate(values, _soln, basisCache);

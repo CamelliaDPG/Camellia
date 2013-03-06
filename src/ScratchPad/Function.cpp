@@ -1808,17 +1808,18 @@ FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
 }
 
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
-  if ( (f1->rank() == 0) ) {
-    // TODO: work out how to do this for other ranks?
-    if ( f1->isZero() ) {
-      return Function::zero();
-    }
+  if ( f1->isZero() ) {
+    return Function::zero(f1->rank());
   }
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
 }
 
 FunctionPtr operator/(FunctionPtr f1, double divisor) {
   return f1 / Teuchos::rcp( new ConstantScalarFunction(divisor) );
+}
+
+FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
+  return Function::constant(value) / scalarDivisor;
 }
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {

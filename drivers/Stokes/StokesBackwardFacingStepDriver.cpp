@@ -12,6 +12,7 @@
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
 #include "GnuPlotUtil.h"
+#include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -156,6 +157,16 @@ FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double y
   return points;
 }
 
+set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsPerLevel=1) {
+  // traverse diagonal of (i*numPoints + j) data from solutionData()
+  int numPoints = sqrt(pointData.dimension(0));
+  set<double> levels;
+  for (int i=0; i<numPoints; i+=pointsPerLevel) {
+    levels.insert(pointData(i*numPoints + i,2)); // format for pointData has values at (ptIndex, 2)
+  }
+  return levels;
+}
+
 FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1) {
   int numPoints = points.dimension(0);
   FieldContainer<double> values(numPoints);
@@ -223,8 +234,12 @@ int main(int argc, char *argv[]) {
 #else
 #endif
   int pToAdd = 2; // for optimal test function approximation
+  double energyThreshold = 0.20; // for mesh refinements
   int pToAddForStreamFunction = pToAdd;
-  bool enforceLocalConservation = true;
+  bool enforceLocalConservation = false;
+  bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
+  bool useExperimentalH1Norm = true; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
+
   bool useSGP = false; // stream-gradient-pressure formulation (velocity-gradient-pressure is the alternative)
   //  if (useSGP) {
   //    enforceLocalConservation = false; // automatic for SGP
@@ -232,14 +247,17 @@ int main(int argc, char *argv[]) {
   
   // usage: polyOrder [numRefinements]
   // parse args:
-  if ((argc != 3) && (argc != 2)) {
-    cout << "Usage: StokesBackwardFacingStepDriver fieldPolyOrder [numRefinements=10]\n";
+  if ((argc != 3) && (argc != 2) && (argc != 4)) {
+    cout << "Usage: StokesBackwardFacingStepDriver fieldPolyOrder [numRefinements=10 [adaptThresh=0.20]\n";
     return -1;
   }
   int polyOrder = atoi(argv[1]);
   int numRefs = 10;
-  if ( argc == 3) {
+  if ( ( argc == 3 ) || (argc == 4)) {
     numRefs = atoi(argv[2]);
+  }
+  if (argc == 4) {
+    energyThreshold = atof(argv[3]);
   }
   if (rank == 0)
     cout << "numRefinements = " << numRefs << endl;
@@ -413,9 +431,25 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm(q1->div());
     qoptIP->addTerm(q2->div());
     //    qoptIP->addTerm(q3->div());
-  } else {
+  } else if (useExperimentalHdivNorm) {
     qoptIP->addTerm( mu * v1->grad() + q1 ); // sigma11, sigma12
     qoptIP->addTerm( mu * v2->grad() + q2 ); // sigma21, sigma22
+    qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+    qoptIP->addTerm( v3->dx() );    // u1
+    qoptIP->addTerm( v3->dy() );    // u2    
+  } else if (useExperimentalH1Norm) {
+    // then we're "legally" allowed to reverse the integration by parts of both u1 and u2 terms...
+    qoptIP->addTerm( mu * v1->grad() + q1 ); // sigma11, sigma12
+    qoptIP->addTerm( mu * v2->grad() + q2 ); // sigma21, sigma22
+    qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
+    // For now, we add these in anyway...
+    qoptIP->addTerm( q1->div() );    // u1
+    qoptIP->addTerm( q2->div() );    // u2
+  } else {
+    qoptIP->addTerm( mu * v1->dx() + q1->x() ); // sigma11, sigma12
+    qoptIP->addTerm( mu * v1->dy() + q1->y() ); // sigma11, sigma12
+    qoptIP->addTerm( mu * v2->dx() + q2->x() ); // sigma21, sigma22
+    qoptIP->addTerm( mu * v2->dy() + q2->y() ); // sigma21, sigma22
     qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
     qoptIP->addTerm( q1->div() - v3->dx() );    // u1
     qoptIP->addTerm( q2->div() - v3->dy() );    // u2
@@ -439,8 +473,9 @@ int main(int argc, char *argv[]) {
   BFPtr streamBF;
   SolutionPtr streamSolution;
   // define bilinear form for stream function:
+  
+  VarFactory streamVarFactory;
   if (! useSGP) {
-    VarFactory streamVarFactory;
     VarPtr phi_hat = streamVarFactory.traceVar("\\widehat{\\phi}");
     VarPtr psin_hat = streamVarFactory.fluxVar("\\widehat{\\psi}_n");
     VarPtr psi_1 = streamVarFactory.fieldVar("\\psi_1");
@@ -513,7 +548,6 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
-  double energyThreshold = 0.20; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   
   // just an experiment:
@@ -535,6 +569,12 @@ int main(int argc, char *argv[]) {
     }
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
+    }
+    if (useExperimentalHdivNorm) {
+      cout << "NOTE: Using experimental H(div) norm!\n";
+    }
+    if (useExperimentalH1Norm) {
+      cout << "NOTE: Using experimental H^1 norm!\n";
     }
   }
   
@@ -651,6 +691,14 @@ int main(int argc, char *argv[]) {
       solution->writeFieldsToFile(u2->ID(), "u2.m");
       streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
     }
+    
+    VTKExporter exporter(solution, mesh, varFactory);
+    exporter.exportSolution("backStepSoln", H1Order*2);
+    
+    
+    VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
+    streamExporter.exportSolution("backStepStreamSoln", H1Order*2);
+    
     solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
     solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
     solution->writeFieldsToFile(p->ID(), "p.m");
@@ -661,8 +709,37 @@ int main(int argc, char *argv[]) {
       writePatchValues(0, 8, 0, 2, streamSolution, phi, "phi_patch.m");
       writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
       
-      FieldContainer<double> eastPatchPoints = pointGrid(4, 5, 0, 1, 100);
-      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", solutionData(eastPatchPoints, streamSolution, phi));
+      FieldContainer<double> eastPoints = pointGrid(4, 8, 0, 2, 100);
+      FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_east.dat", eastPointData);
+
+      FieldContainer<double> westPoints = pointGrid(0, 4, 1, 2, 100);
+      FieldContainer<double> westPointData = solutionData(westPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_west.dat", westPointData);
+      
+      set<double> contourLevels = diagonalContourLevels(eastPointData,4);
+      
+      vector<string> dataPaths;
+      dataPaths.push_back("phi_east.dat");
+      dataPaths.push_back("phi_west.dat");
+      GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
+      
+      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.65, 100);
+      FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
+      set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData);
+      vector<string> patchDataPath;
+      patchDataPath.push_back("phi_patch_east.dat");
+      GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p");
+      
+      GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
+      
+//      ofstream fout("phiContourLevels.dat");
+//      fout << setprecision(15);
+//      for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++) {
+//        fout << *levelIt << ", ";
+//      }
+//      fout.close();
     }
     //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
     //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");

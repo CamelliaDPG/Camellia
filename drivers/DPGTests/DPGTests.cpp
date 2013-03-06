@@ -156,7 +156,8 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
+  //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
@@ -167,7 +168,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );

@@ -1,0 +1,202 @@
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{Motivation}
+ Why DPG?
+ \begin{itemize}
+ \item Robust for singularly perturbed problems.
+ \item Stable in the preasymptotic regime.
+ \item Perfect for adaptive mesh refinement.
+ \end{itemize}
+ \bigskip
+ 
+ Why local conservation?
+ \begin{itemize}
+ \item Local conservation is a priority for the CFD community.
+ \item For a system of hyperbolic conservation laws, the Lax-Wendroff theorem
+ guarantees that a convergent, locally conservative numerical method converges
+ to the correct weak solution.
+ \end{itemize}
+ \bigskip
+ 
+ Why convection-diffusion?
+ \begin{itemize}
+ \item Model problem for Navier-Stokes.
+ \end{itemize}
+ \end{frame}
+ \begin{comment}
+ Hopefully Nate and Jesse's talks explained some of the attractions of
+ developing the discontinuous Petrov-Galkerin method for fluid problems, but
+ here are a couple key points.
+ DPG has proved robust in the face of singularly perturbed problems which holds
+ promise for high Reynold's number flows.
+ You do not need a domain expert to craft well designed meshes for each new
+ problem. We are mathematically guaranteed to remain stable under very coarse
+ meshes while adaptively refining toward a solution.
+ 
+ But if we are concerned with realistic flows, why are we worried about local
+ conservation in the convection-diffusion equation. First of all, in order for
+ DPG to be accepted by the CFD community, we need to pacify some of their
+ concerns about local conservation - a very weighty issue among CFD
+ practitioners. There are also some attractive reasons, mathematically to
+ develop a locally conservative method, such as the Lax-Wendroff theorem which
+ uses local conservation as one of two conditions to guarantee that a numerical
+ solution converges to the weak solution of a system of hyperbolic conservation
+ laws. But before we jump in and start trying to enforce local conservation in
+ our solutions to the Navier-Stokes equations, we are starting with something a
+ little simpler, the convection-diffusion equation.
+ \end{comment}
+ 
+ 
+ %===============================================================================
+ % The Abstract Problem and Minimization of the Residual
+ %===============================================================================
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{The Abstract Problem and Minimization of the Residual}
+ Take $U,V$ Hilbert.\\
+ \vspace{5mm}
+ We seek $u \in U$ such that
+ \[
+ b(u,v) = l(v) \quad \forall v \in V,
+ \]
+ where $b$ and $l$ are linear in $v$.  Define $B$ by $Bu = b(u,\cdot) \in V'$; $Bu$ is a linear functional on the test space $V$.\\
+ \vspace{5mm}
+ We seek to minimize the residual in the discrete space $U_{h} \subset U$:
+ \begin{align*}
+ u_{h} = \underset{w_{h} \in U_{h}} \argmin \,\, \frac{1}{2} \norm{Bw_{h}-l}_{V'}^{2}.
+ \end{align*}
+ \end{frame}
+ \begin{comment}
+ Let's first develop the abstract theory of DPG before applying it to the
+ convection diffusion equation and then modifying it to enforce local
+ conservation. These next couple slides should look familiar, I borrowed them
+ from Nate.
+ 
+ Start with two Hilbert spaces. Our problem seeks a solution u in Hilbert space
+ U that satisfies this bilinear form for all test functions in V. Now define
+ operator B: U -> V' through the bilinear form. Our problem can then be
+ thought of as minimizing a residual in the dual space of V.
+ \end{comment}
+ 
+ 
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{The Abstract Problem and Minimization of the Residual}
+ \begin{align*}
+ u_{h} = \underset{w_{h} \in U_{h}} \argmin \,\, \frac{1}{2} \norm{Bw_{h}-l}_{V'}^{2}.
+ \end{align*}
+ 
+ % PATTER: ``not especially easy to work with'': non-constructive; involves taking a supremum
+ Now, the dual space $V'$ is not especially easy to work with; we would prefer to work with $V$ itself.  Recalling that the Riesz operator $R_{V} : V \rightarrow V'$ defined by 
+ \begin{align*}
+ \langle R_{V}v, \delta v\rangle=(v,\delta v)_{V}, \quad \forall \delta v \in V,
+ \end{align*}
+ is an \emph{isometry}---$\norm{R_{V}v}_{V'} = \norm{v}_{V}$---we can rewrite the term we want
+ to minimize as a norm in $V$:
+ 
+ \begin{align*}
+ \frac{1}{2} \norm{Bw_{h}-l}_{V'}^{2} &= \frac{1}{2} \norm{R_{V}^{-1}\left(Bw_{h}-l\right)}_{V}^{2}\\
+                                                               &= \frac{1}{2} \left(R_{V}^{-1}\left(Bw_{h}-l\right), R_{V}^{-1}\left(Bw_{h}-l\right) \right)_{V}.
+ \end{align*}
+ \end{frame}
+ \begin{comment}
+ Working in the dual space is not especially conducive to developing a
+ numerical method, but through the Riesz representation theorem, we can
+ associate every member of the dual space with a member of V through the Riesz
+ map which is defined by the choice of norm on V. This is an isometry, meaning
+ that norms are preserved after the map.
+ 
+ Now, using the inverse Riesz map, we can reframe our problem as an inner
+ product on the V space.
+ \end{comment}
+ 
+ 
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{The Abstract Problem and Minimization of the Residual}
+ We seek to minimize
+ \begin{align*}
+ \frac{1}{2} \left(R_{V}^{-1}\left(Bw_{h}-l\right), R_{V}^{-1}\left(Bw_{h}-l\right) \right)_{V}.
+ \end{align*}
+ The first-order optimality condition requires that the G\^ateaux derivative be equal to zero for minimizer $u_{h}$; assuming $B$ is linear, we have
+ \begin{align*}
+ \left(R_{V}^{-1}\left(Bu_{h}-l\right), R_{V}^{-1}B \delta u_{h} \right)_{V} = 0, \quad \forall \delta u_{h} \in U_{h}.
+ \end{align*}
+ By the definition of $R_{V}$, this is equivalent to
+ \begin{align*} % PATTER: use the phrase ``duality pairing''
+ \langle Bu_{h} - l, R_{V}^{-1}B \delta u_{h} \rangle = 0 \quad \forall \delta u_{h} \in U_{h}.
+ \end{align*}
+ \end{frame}
+ \begin{comment}
+ So the goal is to minimize this inner product. Obviously, the Gateaux
+ derivative will be zero at the minimizer. And by definition of the Riesz
+ map, we can turn this inner product into a duality pairing.
+ \end{comment}
+ 
+ 
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{The Abstract Problem and Minimization of the Residual}
+ We have:
+ \begin{align*}
+ \langle Bu_{h} - l, R_{V}^{-1}B \delta u_{h} \rangle = 0 \quad \forall \delta u_{h} \in U_{h}.
+ \end{align*}
+ Now, if we identify $v_{\delta u_{h}} = R_{V}^{-1}B \delta u_{h}$ as a test function, we can rewrite this as
+ \begin{align*}
+ b(u_{h},v_{\delta u_{h}}) &= l(v_{\delta u_{h}}).
+ \end{align*}
+ 
+ Thus, the discrete solution that minimizes the residual is exactly attained by
+ testing the original equation with appropriate test functions.  We call these
+ \pecosbold{optimal test functions}.\footnote{\FootSize \bibentry{DPG2}}
+ \end{frame}
+ \begin{comment}
+ We are getting close to a recognizable bilinear form again. If we now identify
+ our test function as the inverse Riesz map applied to B applied to delta uh,
+ we get a bilinear form with a very specific test function that minimizes the
+ residual. We call these optimal test functions.
+ \end{comment}
+
+
+ %===============================================================================
+ % NEW SLIDE
+ %===============================================================================
+ \begin{frame}
+ \frametitle{DPG for Convection-Diffusion}
+ Combining the two equations, we arrive at the bilinear form.
+ \bigskip
+ 
+ Find $\mathbf{u}=\{u,\bsigma,\hat u,\hat f\}\in\mathbf{U}$
+ such that
+ \[
+ b(\mathbf{u},\mathbf{v}) =
+ l(\mathbf{v})\quad\forall\mathbf{v}=\{v,\btau\}\in\mathbf{V}
+ \]
+ where $b$ and $l$ are linear in $\mathbf{v}$ and
+ \[
+ b(\mathbf{u},\mathbf{v}) =
+ \int_K-(\bbeta u-\bsigma)\cdot\nabla v+\frac{1}{\epsilon}\bsigma\cdot\btau+u\nabla\cdot\btau
+ +\int_{\partial K}\hat f v-\hat u\btau\cdot n\,,
+ \]
+ \[
+ l(\mathbf{v})=\int_K gv\,,
+ \]
+ \[
+ \begin{array}{lll}
+ u\in L^2(K) & \hat u\in H^1(K)|_{\partial K} & v\in H^1(K)\\
+ \bsigma\in \mathbf{L}^2(K) & \hat f\in H(div,K)|_{\partial K} & \btau\in H(div,K)\\
+ \end{array}\,.
+ \]
+ Define $B$ by $B\mathbf{u}=b(\mathbf{u},\cdot)\in\mathbf{V}'$.
+ \end{frame}
+

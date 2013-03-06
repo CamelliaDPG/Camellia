@@ -148,7 +148,7 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
 }
 
 enum NormChoice {
-  GraphNorm, NaiveNorm, L2Norm
+  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm
 };
 
 enum ExactSolutionChoice {
@@ -185,7 +185,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
    
    where:
    formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"}
-   normChoice = {"opt"|"naive"}
+   normChoice = {"opt"|"naive"|"l2"|"h1"}
    
    */
   
@@ -233,6 +233,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     normChoice = NaiveNorm;
   } else if (normChoiceStr == "l2") {
     normChoice = L2Norm;
+  } else if (normChoiceStr == "h1") {
+    normChoice = H1ExperimentalNorm;
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
@@ -386,7 +388,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = HDGSingular;
+  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
   bool reportConditionNumber = false;
   
@@ -421,6 +423,7 @@ int main(int argc, char *argv[]) {
   if (normChoice == NaiveNorm) normChoiceStr = "naive";
   else if (normChoice == GraphNorm) normChoiceStr = "graph";
   else if (normChoice == L2Norm) normChoiceStr = "l2";
+  else if (normChoice == H1ExperimentalNorm) normChoiceStr = "H^1 Experimental";
   else normChoiceStr = "unknownNorm";
   
   string exactSolnChoiceStr;
@@ -451,6 +454,7 @@ int main(int argc, char *argv[]) {
   }
   
   if (rank == 0) {
+    cout << "polyOrder = " << polyOrder << endl;
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
@@ -641,6 +645,33 @@ int main(int argc, char *argv[]) {
     }
   } else if (normChoice == L2Norm) {
     ip = stokesForm->bf()->l2Norm();
+  } else if (normChoice == H1ExperimentalNorm) {
+    if (formulationType != VGP) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only VGP supported for the H^1 experimental norm right now.");
+    }
+    
+    IPPtr myIP = Teuchos::rcp( new IP );
+    VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+    
+    VarPtr v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+    VarPtr v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+    VarPtr tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+    VarPtr tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+    VarPtr q = varFactory.testVar(VGP_Q_S, HGRAD);
+
+    myIP->addTerm( mu * v1->grad() + tau1 ); // sigma11, sigma12
+    myIP->addTerm( mu * v2->grad() + tau2 ); // sigma21, sigma22
+    myIP->addTerm( v1->dx() + v2->dy() );     // pressure
+    myIP->addTerm( tau1->div() );    // u1
+    myIP->addTerm( tau2->div() );    // u2
+    
+    myIP->addTerm(v1);
+    myIP->addTerm(v2);
+    myIP->addTerm(tau1);
+    myIP->addTerm(tau2);
+    myIP->addTerm(q);
+    
+    ip = myIP;
   }
   
   if (rank==0) 
@@ -744,7 +775,8 @@ int main(int argc, char *argv[]) {
 //      
 //      study.solve(quadPoints);
       
-      study.solve(vertices,elementVertices,useConformingTraces);
+      cout << "WARNING: commented out the HDG singular solve (need to fix call to study).\n";
+//      study.solve(vertices,elementVertices,useConformingTraces);
       
       // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
       // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)
