@@ -7,7 +7,7 @@
 
 #include <Teuchos_Tuple.hpp>
 
-Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 5)
+Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
 {
   double maxMassFluxIntegral = 0.0;
   double totalMassFlux = 0.0;

@@ -36,6 +36,13 @@ class EpsilonScaling : public hFunction {
   }
 };
 
+class ZeroMeanScaling : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/(h*h);
+  }
+};
+
 class InflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
@@ -102,13 +109,15 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
+  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
   bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
-  bool theta = atan(args.Input<double>("--atan", "value to take the arctan of"));
+  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
 
   // Optional arguments (have defaults)
   double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-6);
-  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
-  bool enforceLocalConservation = args.Input("--conserve", "enforce local conservation", false);
+  double pi = 2.0*acos(0.0);
+  double theta = pi/180*args.Input("--theta", "angle in degrees", 30);
+  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -130,15 +139,11 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
-  // bf->addTerm(sigma1 / epsilon, tau->x());
-  // bf->addTerm(sigma2 / epsilon, tau->y());
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
 
   // v terms:
-  // bf->addTerm( sigma1, v->dx() );
-  // bf->addTerm( sigma2, v->dy() );
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
@@ -153,15 +158,16 @@ int main(int argc, char *argv[]) {
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    if (!enforceLocalConservation)
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    if (!zeroL2)
       ip->addTerm( ip_scaling * v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    if (enforceLocalConservation)
-      ip->addZeroMeanTerm( v );
+    if (zeroL2)
+      ip->addZeroMeanTerm( h2_scaling*v );
   }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
@@ -186,8 +192,6 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   int H1Order = 3, pToAdd = 2;
-  // Teuchos::RCP<Mesh> mesh = Mesh::readMsh("quad.msh", bf, H1Order, pToAdd);
-  // Teuchos::RCP<Mesh> mesh = Mesh::readTriangle(Camellia_MeshDir + "Quad/quad.1", bf, H1Order, pToAdd);
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
 
@@ -200,7 +204,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) = 0.0;
   meshBoundary(3,1) = 1.0;
 
-  int horizontalCells = 10, verticalCells = 10;
+  int horizontalCells = 2, verticalCells = 2;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
@@ -218,15 +222,18 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
+  ofstream errOut;
+  if (commRank == 0)
+    errOut.open("innerlayer_err.txt");
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     solution->solve(false);
 
+    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
       outfile << "innerlayer_" << refIndex;
       exporter.exportSolution(outfile.str());
-      // solution->writeToVTK(outfile.str());
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -234,11 +241,16 @@ int main(int argc, char *argv[]) {
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
         << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+
+      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
+        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
+  if (commRank == 0)
+    errOut.close();
 
   return 0;
 }

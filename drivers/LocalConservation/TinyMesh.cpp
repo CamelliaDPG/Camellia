@@ -25,6 +25,8 @@
 #include "choice.hpp"
 #endif
 
+double meshSize;
+
 class EpsilonScaling : public hFunction {
   double _epsilon;
   public:
@@ -59,8 +61,8 @@ class OutflowBoundary : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool xMatch = (abs(x-1.0) < tol);
-      bool yMatch = (abs(y-1.0) < tol);
+      bool xMatch = (abs(x-meshSize) < tol);
+      bool yMatch = (abs(y-meshSize) < tol);
       return xMatch || yMatch;
     }
 };
@@ -106,6 +108,7 @@ int main(int argc, char *argv[]) {
   // Optional arguments (have defaults)
   double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-3);
   bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
+  meshSize = args.Input("--meshSize", "mesh size", .125);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -186,12 +189,12 @@ int main(int argc, char *argv[]) {
 
   meshBoundary(0,0) = 0.0; // x1
   meshBoundary(0,1) = 0.0; // y1
-  meshBoundary(1,0) = 1.0;
+  meshBoundary(1,0) = meshSize;
   meshBoundary(1,1) = 0.0;
-  meshBoundary(2,0) = 1.0;
-  meshBoundary(2,1) = 1.0;
+  meshBoundary(2,0) = meshSize;
+  meshBoundary(2,1) = meshSize;
   meshBoundary(3,0) = 0.0;
-  meshBoundary(3,1) = 1.0;
+  meshBoundary(3,1) = meshSize;
 
   int horizontalCells = 4, verticalCells = 4;
 
@@ -213,7 +216,7 @@ int main(int argc, char *argv[]) {
   VTKExporter exporter(solution, mesh, varFactory);
   ofstream errOut;
   if (commRank == 0)
-    errOut.open("discontinuous_err.txt");
+    errOut.open("tinymesh_err.txt");
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){    
     // // Loop through elements and check conditioning
@@ -234,7 +237,7 @@ int main(int argc, char *argv[]) {
     double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
-      outfile << "discontinuous_" << refIndex;
+      outfile << "tinymesh_" << refIndex;
       exporter.exportSolution(outfile.str());
       // solution->writeToVTK(outfile.str());
 
