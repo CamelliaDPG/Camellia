@@ -52,7 +52,7 @@ public:
   void bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<ElementType> elemType,
 		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
-  LinearTermPtr testFunctional(SolutionPtr trialSolution);
+  LinearTermPtr testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms=false);
 };
 
 typedef Teuchos::RCP<BF> BFPtr;

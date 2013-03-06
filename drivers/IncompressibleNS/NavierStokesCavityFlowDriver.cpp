@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
   double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
-  bool enforceLocalConservation = false;
+  bool enforceLocalConservation = true;
   bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
@@ -618,6 +618,8 @@ int main(int argc, char *argv[]) {
       
       // reset iteration count to 1 (for the background flow):
       problem.setIterationCount(1);
+      // reset iteration count to 0 (to start from 0 initial guess):
+//      problem.setIterationCount(0);
       
 //      solveStrategy->solve(printToConsole);
       
@@ -859,7 +861,7 @@ int main(int argc, char *argv[]) {
     patchDataPath.push_back("phi_patch_navierStokes_cavity.dat");
     GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "lidCavityNavierStokes.p");
     
-    GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
+    GnuPlotUtil::writeComputationalMeshSkeleton("nsCavityMesh", mesh);
 
     
     writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
