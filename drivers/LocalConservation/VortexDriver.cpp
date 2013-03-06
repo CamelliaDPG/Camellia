@@ -37,6 +37,12 @@ public:
   }
 };
 
+class ZeroMeanScaling : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/(h*h);
+  }
+};
 
 class InflowSquareBoundary : public SpatialFilter {
   FunctionPtr _beta;
@@ -138,6 +144,7 @@ int main(int argc, char *argv[]) {
 
   // Optional arguments (have defaults)
   double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-4);
+  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -176,15 +183,16 @@ int main(int argc, char *argv[]) {
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    if (!enforceLocalConservation)
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    if (!zeroL2)
       ip->addTerm( ip_scaling * v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    if (enforceLocalConservation)
-      ip->addZeroMeanTerm( v );
+    if (zeroL2)
+      ip->addZeroMeanTerm( h2_scaling*v );
   }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
