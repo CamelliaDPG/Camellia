@@ -660,9 +660,11 @@ layer being formed in the field variables.
 As we refine, the three results, nonconservative with graph or robust norm,
 and conservative with graph norm converge to a an essentially identical
 solution (to the eyeball norm), as represented by
-Figure~\ref{fig:confusionGraph8c}. However, the conservative formulation with
-the robust norm seems to exhibit some noise at the right wall as seen in
-Figure~\ref{fig:confusionRobust8c}.
+Figure~\ref{fig:confusionGraph8c}. 
+
+% However, the conservative formulation with
+% the robust norm seems to exhibit some noise at the right wall as seen in
+% Figure~\ref{fig:confusionRobust8c}.
 
 \begin{figure}
 \centering
@@ -683,20 +685,20 @@ Figure~\ref{fig:confusionRobust8c}.
 \caption{Skewed convection-diffusion problem after 8 refinements}
 \end{figure}
 
-If we zoom in on one of the noisy areas, as we do in
-Figure~\ref{fig:confusionRobust8c_zoom}, we see overshoots on the order of 32
-and undershoots on the order of -13, where the exact solution varies between 0
-and 1. The cause of these overshoots and undershoots is a little mystery,
-especially because they don't show up until 8 refinement steps in. We will
-explore this problem a little more when we look at the wedge problem.
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.6\textwidth]{figs/Confusion/robust8c_zoom.png}
-\caption{Zoomed in conservative skewed convection-diffusion problem after 8
-refinements}
-\label{fig:confusionRobust8c_zoom}
-\end{figure}
+% If we zoom in on one of the noisy areas, as we do in
+% Figure~\ref{fig:confusionRobust8c_zoom}, we see overshoots on the order of 32
+% and undershoots on the order of -13, where the exact solution varies between 0
+% and 1. The cause of these overshoots and undershoots is a little mystery,
+% especially because they don't show up until 8 refinement steps in. We will
+% explore this problem a little more when we look at the wedge problem.
+% 
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[width=0.6\textwidth]{figs/Confusion/robust8c_zoom.png}
+% \caption{Zoomed in conservative skewed convection-diffusion problem after 8
+% refinements}
+% \label{fig:confusionRobust8c_zoom}
+% \end{figure}
 
 Finally, we plot the flux imbalances for the several methods in
 Figure~\ref{fig:confusionGraphFlux} and Figure~\ref{fig:confusionRobustFlux}.
@@ -1115,13 +1117,13 @@ test norm, we still appear to maintain acceptable levels of conservation.
 \centering
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/Hemker/graphFlux.pdf}
+\includegraphics[width=\textwidth]{figs/Discontinuous/graphFlux.pdf}
 \caption{With graph norm}
 \label{fig:discontinuousGraphFlux}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/Hemker/robustFlux.pdf}
+\includegraphics[width=\textwidth]{figs/Discontinuous/robustFlux.pdf}
 \caption{With robust norm}
 \label{fig:discontinuousRobustFlux}
 \end{subfigure}
