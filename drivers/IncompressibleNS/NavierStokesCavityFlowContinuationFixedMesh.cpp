@@ -477,10 +477,12 @@ int main(int argc, char *argv[]) {
     FunctionPtr sigma21_incr = Function::solution(sigma21, solnIncrement);
     FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
     FunctionPtr p_incr = Function::solution(p, solnIncrement);
-    
-    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-    + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
-    + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+    if (rank==0)
+      cout << "NOTE: using weaker L^2 increment (just u and p) as convergence criterion.\n";
+    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
+//    FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+//    + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+//    + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
     for (int i=0; i<ReValues.size(); i++) {
       double Re = ReValues[i];
