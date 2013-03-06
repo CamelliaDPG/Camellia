@@ -202,7 +202,7 @@ IPPtr BF::naiveNorm() {
   return ip;  
 }
 
-LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {
+LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms) {
   LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
        btIt != _terms.end(); btIt++) {
@@ -210,7 +210,9 @@ LinearTermPtr BF::testFunctional(SolutionPtr trialSolution) {
     LinearTermPtr trialTerm = btIt->first;
     LinearTermPtr testTerm = btIt->second;
     FunctionPtr trialValue = Teuchos::rcp( new PreviousSolutionFunction(trialSolution, trialTerm) );
-    functional = functional + trialValue * testTerm;
+    if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) ) {
+      functional = functional + trialValue * testTerm;
+    }
   }
   return functional;
 }

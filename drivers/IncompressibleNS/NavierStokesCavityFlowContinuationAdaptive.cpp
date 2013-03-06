@@ -440,7 +440,7 @@ int main(int argc, char *argv[]) {
     + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
     double energyThreshold = 0.20;
-    Teuchos::RCP< RefinementStrategy > refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
+    Teuchos::RCP< RefinementStrategy > refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
 
     for (int i=0; i<ReValues.size(); i++) {
       double Re = ReValues[i];
@@ -461,11 +461,13 @@ int main(int argc, char *argv[]) {
         } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
         problem.setIterationCount(1); // 1 means reuse background flow (which we must, given that we want continuation in Re...)
-        energyErrorTotal = solution->energyErrorTotal();
+        energyErrorTotal = solnIncrement->energyErrorTotal(); //solution->energyErrorTotal();
         if (energyErrorTotal > energyErrorGoal) {
           refinementStrategy->refine(false);
         }
-        cout << "Energy error: " << energyErrorTotal << endl;
+        if (rank==0) {
+          cout << "Energy error: " << energyErrorTotal << endl;
+        }
       } while (energyErrorTotal > energyErrorGoal);
     }
   }

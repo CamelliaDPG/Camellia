@@ -217,6 +217,51 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   fout.close();
 }
 
+vector<double> horizontalCenterLinePoints() {
+  // points where values are often reported in the literature
+  vector<double> xPoints;
+  xPoints.push_back(0.0000);
+  xPoints.push_back(0.0312);
+  xPoints.push_back(0.0391);
+  xPoints.push_back(0.0469);
+  xPoints.push_back(0.0547);
+  xPoints.push_back(0.0937);
+  xPoints.push_back(0.1406);
+  xPoints.push_back(0.1953);
+  xPoints.push_back(0.5000);
+  xPoints.push_back(0.7656);
+  xPoints.push_back(0.7734);
+  xPoints.push_back(0.8437);
+  xPoints.push_back(0.9062);
+  xPoints.push_back(0.9219);
+  xPoints.push_back(0.9297);
+  xPoints.push_back(0.9375);
+  xPoints.push_back(1.0000);
+  return xPoints;
+}
+
+vector<double> verticalCenterLinePoints() {
+  vector<double> yPoints;
+  yPoints.push_back(1.0000);
+  yPoints.push_back(0.9766);
+  yPoints.push_back(0.9688);
+  yPoints.push_back(0.9609);
+  yPoints.push_back(0.9531);
+  yPoints.push_back(0.8516);
+  yPoints.push_back(0.7344);
+  yPoints.push_back(0.6172);
+  yPoints.push_back(0.5000);
+  yPoints.push_back(0.4531);
+  yPoints.push_back(0.2813);
+  yPoints.push_back(0.1719);
+  yPoints.push_back(0.1016);
+  yPoints.push_back(0.0703);
+  yPoints.push_back(0.0625);
+  yPoints.push_back(0.0547);
+  yPoints.push_back(0.0000);
+  return yPoints;
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0;
 #ifdef HAVE_MPI
@@ -389,8 +434,8 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
   
-  FunctionPtr u1_prev = Function::solution(u1,solution);
-  FunctionPtr u2_prev = Function::solution(u2,solution);
+  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solnIncrement, u1) );
+  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solnIncrement, u1) );
   
   FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
   FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
@@ -465,6 +510,52 @@ int main(int argc, char *argv[]) {
     cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
   
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
+  // the next bit commented out -- Function::evaluate() must depend only on space, not on the mesh (prev soln depends on mesh)
+  if (rank == 0) {
+    cout << "**** horizontal center line, values ****\n";
+    cout << "u2:\n";
+    double x,y;
+    y = 0.5;
+    vector<double> xPoints = horizontalCenterLinePoints();
+    for (int i=0; i<xPoints.size(); i++) {
+      x = xPoints[i];
+      cout << Function::evaluate(u2_prev, x, y) << endl;
+    }
+    cout << "p:\n";
+    for (int i=0; i<xPoints.size(); i++) {
+      x = xPoints[i];
+      cout << Function::evaluate(p_prev, x, y) << endl;
+    }
+    cout << "omega (backed out from u1 and u2)\n";
+    for (int i=0; i<xPoints.size(); i++) {
+      x = xPoints[i];
+      cout << Function::evaluate(vorticity, x, y) << endl;
+    }
+    
+    cout << "**** vertical center line, values ****\n";
+    x = 0.5;
+    vector<double> yPoints = verticalCenterLinePoints();
+    cout << "u1:\n";
+    for (int i=0; i<yPoints.size(); i++) {
+      y = yPoints[i];
+      cout << Function::evaluate(u1_prev, x, y) << endl;
+    }
+    cout << "p:\n";
+    for (int i=0; i<yPoints.size(); i++) {
+      y = yPoints[i];
+      cout << Function::evaluate(p_prev, x, y) << endl;
+    }
+    cout << "omega (backed out from u1 and u2)\n";
+    for (int i=0; i<yPoints.size(); i++) {
+      y = yPoints[i];
+      cout << Function::evaluate(vorticity, x, y) << endl;
+    }
+  }
+  
   FunctionPtr u1_sq = u1_prev * u1_prev;
   FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
   FunctionPtr u_mag = Teuchos::rcp( new SqrtFunction( u_dot_u ) );
@@ -472,7 +563,6 @@ int main(int argc, char *argv[]) {
   FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
   
   // check that the zero mean pressure is being correctly imposed:
-  FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
   double p_avg = p_prev->integrate(mesh);
   if (rank==0)
     cout << "Integral of pressure: " << p_avg << endl;
