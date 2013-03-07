@@ -171,6 +171,7 @@ void RefinementStrategy::setResults(RefinementResults &solnResults, int numEleme
   solnResults.totalEnergyError = totalEnergyError;
 }
 
+// without variable anisotropic threshholding
 void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr) {
   // greedy refinement algorithm - mark cells for refinement
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
@@ -190,6 +191,35 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
     
   if (_enforceOneIrregularity)
     mesh->enforceOneIrregularity();
+    
+  if (printToConsole) {
+    cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
+    cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
+  }
+}
+
+// with variable anisotropic threshholding
+void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap) {
+  // greedy refinement algorithm - mark cells for refinement
+  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+
+  vector<int> xCells, yCells, regCells;
+  getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells, threshMap);
+ 
+  // record results prior to refinement
+  RefinementResults results;
+  double totalEnergyError = _solution->energyErrorTotal();
+  setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
+  _results.push_back(results);
+  
+  mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
+    
+  if (_enforceOneIrregularity){
+    //    mesh->enforceOneIrregularity();
+    enforceAnisotropicOneIrregularity(xCells,yCells);
+  }
     
   if (printToConsole) {
     cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
@@ -218,13 +248,14 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     double min_h = min(h1,h2);
     
     double thresh = threshMap[cellID];
-    bool doYAnisotropy = yErr[cellID]/xErr[cellID] > thresh;
-    bool doXAnisotropy = xErr[cellID]/yErr[cellID] > thresh;
+    double ratio = xErr[cellID]/yErr[cellID];
+    bool doXAnisotropy = ratio > thresh;
+    bool doYAnisotropy = ratio < 1.0/thresh;
     double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
-    double maxAspect = 75.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100, we take it lower for better conditioning
-    if (doXAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+    double maxAspect = 100.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100
+    if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
       xCells.push_back(cellID);
-    }else if (doYAnisotropy && aspectRatio<maxAspect){ // if ratio is small = y err bigger than xErr
+    }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
       yCells.push_back(cellID);
     }else{
       regCells.push_back(cellID);
@@ -258,7 +289,6 @@ bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, 
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   int i = 0;
   while (meshIsNotRegular && i<maxIters) {
-    cout << "fixing irregularity " << endl;
     vector <int> irregularQuadCells,xUpgrades,yUpgrades;
     vector< Teuchos::RCP< Element > > newActiveElements = mesh->activeElements();
     vector< Teuchos::RCP< Element > >::iterator newElemIt;

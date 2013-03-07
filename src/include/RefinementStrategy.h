@@ -38,6 +38,7 @@ public:
   void setAnisotropicThreshhold(double value);
   virtual void refine(bool printToConsole=false);
   virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
+  void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap);
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells);
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap);
   bool enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells);
