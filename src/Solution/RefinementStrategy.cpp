@@ -190,7 +190,8 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
     
   if (_enforceOneIrregularity)
-    mesh->enforceOneIrregularity();
+    //    mesh->enforceOneIrregularity();
+    enforceAnisotropicOneIrregularity(xCells,yCells);
     
   if (printToConsole) {
     cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
@@ -254,9 +255,9 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
     double maxAspect = 100.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100
     if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      xCells.push_back(cellID);
+      yCells.push_back(cellID); // cut along x-axis
     }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      yCells.push_back(cellID);
+      xCells.push_back(cellID); // cut along y-axis
     }else{
       regCells.push_back(cellID);
     }        
