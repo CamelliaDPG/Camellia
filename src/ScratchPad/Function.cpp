@@ -410,7 +410,6 @@ map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDe
   return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
 }
 
-// PARALLELIZE
 map<int, double> Function::cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
