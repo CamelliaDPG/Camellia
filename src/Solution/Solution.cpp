@@ -3163,7 +3163,7 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
       
   _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
   
-  bool estimateElemCondition = true;
+  bool estimateElemCondition = false;
   if (estimateElemCondition){
     Epetra_SerialDenseMatrix IPK(numTestDofs,numTestDofs);
     Epetra_SerialDenseMatrix x(numTestDofs);
