@@ -25,7 +25,6 @@
 #endif
 
 #include "InnerProductScratchPad.h"
-#include "PreviousSolutionFunction.h"
 #include "TestSuite.h"
 #include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
@@ -47,6 +46,19 @@ static const double X_BOUNDARY = 2.0;
 
 using namespace std;
 
+class InvHsq : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/(h*h);
+  }
+};
+
+class InvH : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/h;
+  }
+};
 // ===================== Mesh functions ====================
 
 class MeshInfo {
@@ -55,35 +67,20 @@ public:
   MeshInfo(MeshPtr mesh){
     _mesh = mesh;
   }
-  map<int,double> getCellMeasures(){	
-    map<int,double> cellMeasures;
-    vector< ElementTypePtr > elemTypes = _mesh->elementTypes(); 
-    vector< ElementTypePtr >::iterator typeIt;
-    for (typeIt=elemTypes.begin();typeIt!=elemTypes.end();typeIt++){
-      ElementTypePtr elemTypePtr = (*typeIt);
-      BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh));  
-      vector< ElementPtr > elemsOfType =_mesh->elementsOfTypeGlobal(elemTypePtr);
-      vector<int> cellIDs;
-      for (int i = 0;i<elemsOfType.size();i++){
-	cellIDs.push_back(elemsOfType[i]->cellID());
-      }
-      basisCache->setPhysicalCellNodes(_mesh->physicalCellNodesGlobal(elemTypePtr ), cellIDs, false); // no side cache
-  
-      FieldContainer<double> cell_h = basisCache->getCellMeasures();
-      int numElems = _mesh->numElementsOfType( elemTypePtr );
-      for (int i = 0;i < numElems;i++){
-	cellMeasures[cellIDs[i]] = cell_h(i);	
-      }      
-    }
-    return cellMeasures;
-  }
-
   double getMinCellMeasure(){
-    map<int,double> cellMeasures = getCellMeasures();
-    map<int,double>::iterator hIt;
     double minMeasure = 1e7;
-    for (hIt = cellMeasures.begin();hIt != cellMeasures.end();hIt++){
-      minMeasure = min(minMeasure, hIt->second);
+    vector<ElementPtr> elems = _mesh->activeElements();
+    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+      minMeasure = min(minMeasure, _mesh->getCellMeasure((*elemIt)->cellID()));
+    }
+    return minMeasure;
+  }
+  double getMinCellSideLength(){
+    double minMeasure = 1e7;
+    vector<ElementPtr> elems = _mesh->activeElements();
+    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+      minMeasure = min(minMeasure, _mesh->getCellXSize((*elemIt)->cellID()));
+      minMeasure = min(minMeasure, _mesh->getCellYSize((*elemIt)->cellID()));
     }
     return minMeasure;
   }
@@ -137,6 +134,35 @@ public:
     }
   }
 };
+
+class PositiveFunction : public Function {
+  FunctionPtr _f;
+  double _minVal;
+public:
+  PositiveFunction(FunctionPtr f) : Function(0) {
+    _f = f;
+    _minVal = 1e-7;
+  }
+  PositiveFunction(FunctionPtr f,double minVal) : Function(0) {
+    _f = f;
+    _minVal = minVal;
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    CHECK_VALUES_RANK(values);
+    _f->values(values,basisCache);    
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+        double value = values(cellIndex,ptIndex);
+	if (value < _minVal){
+	  values(cellIndex,ptIndex) = _minVal;
+	}
+      }
+    }
+  }
+};
+
 class LogFunction : public Function {
   FunctionPtr _f;
 public:
@@ -212,21 +238,32 @@ public:
   }
 };
 
-class SqrtHFunction : public hFunction {
-public:
-  SqrtHFunction() {
+class hPowerFunction : public Function {
+  double _power;
+  int _xyDim;
+public: 
+  hPowerFunction(double power){
+    _power = power;
+    _xyDim = 0; // isotropic assumption
   }
-  double value(double x, double y, double h) {
-    return sqrt(h);
+  hPowerFunction(double power, int anisotropicDimension){
+    _power = power;
+    _xyDim = anisotropicDimension;
   }
-};
-
-class InvSqrtHFunction : public hFunction {
-public:
-  InvSqrtHFunction() {
-  }
-  double value(double x, double y, double h) {
-    return 1.0/sqrt(h);
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+    MeshPtr mesh = basisCache->mesh();
+    vector<int> cellIDs = basisCache->cellIDs();
+    int numPoints = values.dimension(1);
+    for (int i = 0;i<cellIDs.size();i++){
+      double h = mesh->getCellXSize(cellIDs[i]); // default to x-direction
+      if (_xyDim == 1){
+	h = mesh->getCellYSize(cellIDs[i]);
+      }
+      double hPower = pow(h,_power);      
+      for (int j = 0;j<numPoints;j++){
+	values(i,j) = hPower;
+      }
+    }
   }
 };
 
@@ -423,7 +460,7 @@ public:
 
 void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
 
-  FunctionPtr zero = Teuchos::rcp(new ConstantScalarFunction(0.0));
+  FunctionPtr zero = Function::constant(0.0);
   
   sparseFxnMatrix::iterator testIt;
   for (testIt = A.begin();testIt!=A.end();testIt++){
@@ -447,17 +484,21 @@ int main(int argc, char *argv[]) {
 #else
   choice::Args args( argc, argv );
 #endif
-
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   int nCells = args.Input<int>("--nCells", "num cells",2);  
   int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
   double Re = args.Input<double>("--Re","Reynolds number",1e3);
-  int useAnisotropy = args.Input<int>("--useAnisotropy","anisotropy flag (0 false, 1 true)",0);
-
+  double dt = args.Input<double>("--dt","Timestep",.25);
+  double anisotropicThresh = args.Input<int>("--anisotropicThresh","anisotropy threshhold",10.0);
+  bool useAnisotropy = args.Input<bool>("--useAnisotropy","anisotropy flag",false);
+  bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",false); // default to zero
+  int pToAdd = args.Input<double>("--pToAdd", "test space enrichment",2); 
+  int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
+  double time_tol = args.Input<double>("--timeTol", "time step tolerance",1e-8);
+  int hScaleOption = args.Input<double>("--hScaleOption","option to scale terms to offset conditioning for small h", 0);
   int polyOrder = 2;
-  int pToAdd = 3; // for tests
   
   // define our manufactured solution or problem bilinear form:
   double Ma = 3.0;
@@ -465,7 +506,8 @@ int main(int argc, char *argv[]) {
 
   if (rank==0){
     cout << "Running with polynomial order " << polyOrder << ", delta p = " << pToAdd << endl;
-    cout << "Running with parameters Re = " << Re << ", Mach = " << Ma << endl;
+    cout << "Running with parameters Re = " << Re << ", Mach = " << Ma << ", and dt = " << dt << " with time tol = " << time_tol << endl;
+    cout << "AnisotropyFlag = " << useAnisotropy << ", and aniso thresh = " << anisotropicThresh << endl;
   }
   
   bool useTriangles = false;  
@@ -530,7 +572,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(domainPoints, horizontalCells, 
                                                 verticalCells, bf, H1Order, 
                                                 H1Order+pToAdd, useTriangles);
-  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
   MeshInfo meshInfo(mesh); // gets info like cell measure, etc
 
   //  FunctionPtr partitions = Teuchos::rcp( new PartitionFunction(mesh) );
@@ -552,27 +594,23 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr u1_prev = Function::solution(u1,backgroundFlow);
   FunctionPtr u2_prev = Function::solution(u2,backgroundFlow);
+  //  FunctionPtr rho_prev = Teuchos::rcp(new PositiveFunction(Function::solution(rho,backgroundFlow))); // cutoff neg parts
   FunctionPtr rho_prev = Function::solution(rho,backgroundFlow);
   FunctionPtr T_prev = Function::solution(T,backgroundFlow);
 
-  /*
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u2) );
-  FunctionPtr rho_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, rho) );  
-  FunctionPtr T_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, T) );
-  */
-
   // linearized stresses (q_i is linear, so doesn't need linearizing)
-  FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma11) );
-  FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma12) );
-  FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, sigma22) );
+  FunctionPtr sigma11_prev = Function::solution(sigma11,backgroundFlow);
+  FunctionPtr sigma12_prev = Function::solution(sigma12,backgroundFlow);
+  FunctionPtr sigma22_prev = Function::solution(sigma22,backgroundFlow);
 
   // previous timestep quantities
-  FunctionPtr u1_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u1) );
-  FunctionPtr u2_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u2) );
-  FunctionPtr rho_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, rho) );
-  FunctionPtr T_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, T) );
+  FunctionPtr u1_prev_time = Function::solution(u1,prevTimeFlow); 
+  FunctionPtr u2_prev_time = Function::solution(u2,prevTimeFlow); 
+  FunctionPtr rho_prev_time = Function::solution(rho,prevTimeFlow); 
+  FunctionPtr T_prev_time = Function::solution(T,prevTimeFlow);
+  
 
+  /*
   // for subsonic outflow 
   FunctionPtr u1hat_prev  = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u1hat ) );
   FunctionPtr That_prev   = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, That  ) );
@@ -585,8 +623,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr F2nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F2nhat) );
   FunctionPtr F3nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F3nhat) );
   FunctionPtr F4nhat_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, F4nhat) );
-
-  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  */
+  FunctionPtr zero = Function::constant(0.0);    
 
   // ==================== SET INITIAL GUESS ==========================
 
@@ -596,10 +634,10 @@ int main(int argc, char *argv[]) {
   double T_free = 1/(GAMMA*(GAMMA-1.0)*Ma*Ma); // TODO - check this value - from Capon paper
 
   map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[rho->ID()] = Teuchos::rcp( new ConstantScalarFunction(rho_free) );
-  functionMap[u1->ID()] = Teuchos::rcp( new ConstantScalarFunction(u1_free) );
-  functionMap[u2->ID()] = Teuchos::rcp( new ConstantScalarFunction(u2_free) );
-  functionMap[T->ID()] = Teuchos::rcp( new ConstantScalarFunction(T_free) );
+  functionMap[rho->ID()] = Function::constant(rho_free);
+  functionMap[u1->ID()] = Function::constant(u1_free);
+  functionMap[u2->ID()] = Function::constant(u2_free);
+  functionMap[T->ID()] = Function::constant(T_free);
 
   // everything else = 0; previous stresses sigma_ij = 0 as well
   backgroundFlow->projectOntoMesh(functionMap);
@@ -635,9 +673,9 @@ int main(int argc, char *argv[]) {
   double beta = 0.0;
   FunctionPtr T_visc;
   if (abs(beta)<1e-14){
-    T_visc = Teuchos::rcp( new ConstantScalarFunction(1.0) );  
+    T_visc = Function::constant(1.0);
   }else{
-    T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1.0/1000.0) );  // set 1/Re = min viscosity
+    T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, 1e-4) );  // set 1/Re = min viscosity
   }
   FunctionPtr mu = T_visc / Re;
   FunctionPtr lambda = -.66 * T_visc / Re;
@@ -697,7 +735,7 @@ int main(int argc, char *argv[]) {
   A_euler[v2->ID()][T->ID()] = dpdT*e1;
 
   // x-momentum viscous terms
-  FunctionPtr negOne =  Teuchos::rcp( new ConstantScalarFunction(-1.0));
+  FunctionPtr negOne = Function::constant(-1.0);
   A_visc[v2->ID()][sigma11->ID()] = negOne*e1;
   A_visc[v2->ID()][sigma12->ID()] = negOne*e2;
 
@@ -767,7 +805,7 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr lambda_factor_fxn = lambda / (4.0 * mu * (mu + lambda) );
   FunctionPtr two_mu = 2*mu; 
-  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0));
+  FunctionPtr one = Function::constant(1.0);
 
   // 1st stress eqn
   eps_visc[tau1->ID()][sigma11->ID()] = (one/two_mu - lambda_factor_fxn)*e1;
@@ -786,8 +824,8 @@ int main(int argc, char *argv[]) {
   eps_euler[tau2->ID()][u2->ID()] = one;
 
   // Heat stress equation
-  eps_visc[tau3->ID()][q1->ID()] = one/kappa*e1; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
-  eps_visc[tau3->ID()][q2->ID()] = one/kappa*e2; //Teuchos::rcp(new ConstantScalarFunction(1.0/kappa));
+  eps_visc[tau3->ID()][q1->ID()] = one/kappa*e1; 
+  eps_visc[tau3->ID()][q2->ID()] = one/kappa*e2; 
   eps_euler[tau3->ID()][T->ID()] = one;
   
   // Stress (Hdiv) equations 
@@ -821,8 +859,6 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  double dt = .1;
-
   if (rank==0){
     cout << "Timestep dt = " << dt << endl;
   }
@@ -835,39 +871,72 @@ int main(int argc, char *argv[]) {
   FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
   FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
 
+  LinearTermPtr time_res_LT = Teuchos::rcp(new LinearTerm);
   // mass 
   bf->addTerm(rho,invDt*v1);    
   FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
-  rhs->addTerm( (time_res_1 * invDt) * v1);
+  time_res_LT->addTerm( (time_res_1 * invDt) * v1);
     
   // x momentum
   bf->addTerm(u1_prev * rho + rho_prev * u1, invDt * v2);
   FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
-  rhs->addTerm((time_res_2*invDt) * v2);
+  time_res_LT->addTerm((time_res_2*invDt) * v2);
 
   // y momentum
   bf->addTerm(u2_prev * rho + rho_prev * u2, invDt * v3);
   FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
-  rhs->addTerm((time_res_3 *  invDt ) *v3);
+  time_res_LT->addTerm((time_res_3 *  invDt ) *v3);
 
   // energy  
   bf->addTerm((e) * rho + (dedu1*rho_prev) * u1 + (dedu2*rho_prev) * u2 + (dedT*rho_prev) * T, invDt * v4 );
   FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
-  rhs->addTerm((time_res_4 * invDt) * v4);    
+  time_res_LT->addTerm((time_res_4 * invDt) * v4);    
+  
+  rhs->addTerm(time_res_LT);
 
   ////////////////////////////////////////////////////////////////////
   // DEFINE INNER PRODUCT
   ////////////////////////////////////////////////////////////////////
+
+  IPPtr ip = Teuchos::rcp( new IP );
+  LinearTermPtr tauVecLTx = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
+  LinearTermPtr tauVecLTy = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
+  LinearTermPtr vVecLTx = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
+  LinearTermPtr vVecLTy = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
+
+  ////////////////////////////////////////////////////////////////////
+  // H-scaling terms for conditioning/approximation V
+  ////////////////////////////////////////////////////////////////////
+
   // function to scale the squared guy by epsilon/|K| 
   FunctionPtr ReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) ); 
 
-  IPPtr ip = Teuchos::rcp( new IP );
+  FunctionPtr invH = Teuchos::rcp(new InvH); // 1/h
+  FunctionPtr invHsq = Teuchos::rcp(new InvHsq); // 1/h^2
+  FunctionPtr sqrtH = Teuchos::rcp(new hPowerFunction(.25)); // sqrt(h) - squared in IP
+  FunctionPtr invSqrtH = Teuchos::rcp(new hPowerFunction(-.25)); // 1/sqrt(h) 
+
+  // only really need to scale one or two of these to achieve better conditioning
+  FunctionPtr streamlineHScale = Function::constant(1.0);    
+  FunctionPtr l2HScale = Function::constant(1.0);
+  FunctionPtr zeroMeanHScale = Function::constant(0.0);
+  switch (hScaleOption){
+  case 1:
+    l2HScale = invH; // ||v|| -> ||v||/h 
+    break;
+  case 2:
+    zeroMeanHScale = invHsq; // int(v)^2 -> int(v)^2/h^4
+    break;
+  case 3:
+    streamlineHScale = sqrtH; // scale beta\dot \grad v by h
+    break;
+  default: // do nothing
+    break;
+  }
 
   ////////////////////////////////////////////////////////////////////
   // Timestep L2 portion of V
   ////////////////////////////////////////////////////////////////////
-
-  FunctionPtr invSqrtH = Teuchos::rcp(new InvSqrtHFunction);
 
   // rho dt term
   ip->addTerm(invDt*(v1 + u1_prev*v2 + u2_prev*v3 + e*v4));
@@ -883,8 +952,10 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   //  FunctionPtr radialWeight = Teuchos::rcp(new RadialWeightFunction(1.0/Re));
-  map<int, LinearTermPtr> tauVec;
+  map<int, LinearTermPtr> tauVec, tauX, tauY;
   initLinearTermVector(eps_visc,tauVec); // initialize to LinearTermPtrs of dimensions of eps_visc
+  initLinearTermVector(eps_visc,tauX); // initialize to LinearTermPtrs of dimensions of eps_visc
+  initLinearTermVector(eps_visc,tauY); // initialize to LinearTermPtrs of dimensions of eps_visc
 
   for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
     int testID = testIt->first;
@@ -894,6 +965,8 @@ int main(int argc, char *argv[]) {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       tauVec[trialID] = tauVec[trialID] + trialWeight*TAU[testID];
+      tauX[trialID] = tauX[trialID] + (e1*trialWeight)*(TAU[testID]->x());
+      tauY[trialID] = tauY[trialID] + (e2*trialWeight)*(TAU[testID]->y());
     }
   } 
   // adds dual test portion to IP
@@ -901,15 +974,26 @@ int main(int argc, char *argv[]) {
   for (tauIt = tauVec.begin();tauIt != tauVec.end();tauIt++){
     LinearTermPtr ipSum = tauIt->second;
     ip->addTerm(ReScaling*ipSum);
+  }  
+  // for anisotropic bits - x and y contributions to erro
+  for (tauIt = tauX.begin();tauIt!=tauX.end();tauIt++){
+    LinearTermPtr lt = tauIt->second;
+    tauVecLTx->addTerm(ReScaling*lt);
+  }
+  for (tauIt = tauY.begin();tauIt!=tauY.end();tauIt++){
+    LinearTermPtr lt = tauIt->second;
+    tauVecLTy->addTerm(ReScaling*lt);
   }
  
   ////////////////////////////////////////////////////////////////////
   // epsilon portion of grad V
   ////////////////////////////////////////////////////////////////////
-  FunctionPtr SqrtReInv = Teuchos::rcp(new ConstantScalarFunction(1.0/sqrt(Re)));
+  FunctionPtr SqrtReInv = Function::constant(1.0/sqrt(Re));
 
-  map<int, LinearTermPtr> vEpsVec;
+  map<int, LinearTermPtr> vEpsVec, vEpsX, vEpsY;
   initLinearTermVector(A_visc,vEpsVec); // initialize to LinearTermPtrs of dimensions of A_visc
+  initLinearTermVector(A_visc,vEpsX); // initialize to LinearTermPtrs of dimensions of A_euler
+  initLinearTermVector(A_visc,vEpsY); // initialize to LinearTermPtrs of dimensions of A_euler
 
   for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
     int testID = testIt->first;
@@ -919,6 +1003,8 @@ int main(int argc, char *argv[]) {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       vEpsVec[trialID] = vEpsVec[trialID] + trialWeight*V[testID]->grad();
+      vEpsX[trialID] = vEpsX[trialID] + (e1*trialWeight)*V[testID]->dx();
+      vEpsY[trialID] = vEpsY[trialID] + (e2*trialWeight)*V[testID]->dy();
     }
   } 
   // adds dual test portion to IP
@@ -927,12 +1013,20 @@ int main(int argc, char *argv[]) {
     LinearTermPtr ipSum = vEpsIt->second;
     ip->addTerm(SqrtReInv*ipSum);
   }
- 
+  // for anisotropic bits - x and y contributions to erro
+  for (vEpsIt = vEpsX.begin();vEpsIt != vEpsX.end();vEpsIt++){
+    LinearTermPtr lt = vEpsIt->second;
+    vVecLTx->addTerm(lt);
+  }
+  for (vEpsIt = vEpsY.begin();vEpsIt != vEpsY.end();vEpsIt++){
+    LinearTermPtr lt = vEpsIt->second;
+    vVecLTy->addTerm(lt);
+  }
+
   ////////////////////////////////////////////////////////////////////
   // "streamline" portion of grad V
   ////////////////////////////////////////////////////////////////////
 
-  Teuchos::RCP<Function> sqrtH = Teuchos::rcp(new SqrtHFunction);
   map<int, LinearTermPtr> vStreamVec;
   initLinearTermVector(A_euler,vStreamVec); // initialize to LinearTermPtrs of dimensions of A_euler
   for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
@@ -949,7 +1043,7 @@ int main(int argc, char *argv[]) {
   map<int, LinearTermPtr>::iterator vStreamIt;
   for (vStreamIt = vStreamVec.begin();vStreamIt != vStreamVec.end();vStreamIt++){
     LinearTermPtr ipSum = vStreamIt->second;
-    //    ip->addTerm(sqrtH*ipSum); // for conditioning!
+    //    ip->addTerm(streamlineHScale*ipSum); // for conditioning!
     ip->addTerm(ipSum);
   }
  
@@ -957,20 +1051,25 @@ int main(int argc, char *argv[]) {
   // rest of the test terms (easier)
   ////////////////////////////////////////////////////////////////////
 
-  ip->addTerm( ReScaling*v1 );
-  ip->addTerm( ReScaling*v2 );
-  ip->addTerm( ReScaling*v3 );
-  ip->addTerm( ReScaling*v4 );    
-  //  ip->addTerm( v1 ); // doesn't get smaller with Re -> 0
-  //  ip->addTerm( v2 );
-  //  ip->addTerm( v3 );
-  //  ip->addTerm( v4 );    
+  ip->addTerm( l2HScale*v1 ); // doesn't get smaller with Re -> 0
+  ip->addTerm( l2HScale*v2 );
+  ip->addTerm( l2HScale*v3 );
+  ip->addTerm( l2HScale*v4 );    
+  
+  if (hScaleOption==2){
+    ip->addZeroMeanTerm( zeroMeanHScale*v1 );
+    ip->addZeroMeanTerm( zeroMeanHScale*v2 );
+    ip->addZeroMeanTerm( zeroMeanHScale*v3 );
+    ip->addZeroMeanTerm( zeroMeanHScale*v4 );
+  }
 
   // div remains the same (identity operator in classical variables)
   ip->addTerm(tau1->div());
   ip->addTerm(tau2->div());
   ip->addTerm(tau3->div());
-  
+
+  //  ip = bf->graphNorm();
+ 
   //  ////////////////////////////////////////////////////////////////////
   //  // DEFINE RHS
   //  ////////////////////////////////////////////////////////////////////
@@ -1024,18 +1123,18 @@ int main(int argc, char *argv[]) {
   double p_free = (gam1 * cv) * rho_free * T_free;
   double e_free = .5*(u1_free*u1_free+u2_free*u2_free) + cv*T_free; // kinetic + internal energy
 
-  FunctionPtr m1_free = Teuchos::rcp( new ConstantScalarFunction(rho_free*u1_free) );
-  FunctionPtr m2_free = Teuchos::rcp( new ConstantScalarFunction(rho_free*u2_free) );
+  FunctionPtr m1_free = Function::constant(rho_free*u1_free); 
+  FunctionPtr m2_free = Function::constant(rho_free*u2_free); 
 
   // inviscid momentum contributions
-  FunctionPtr mom_x1_free = Teuchos::rcp( new ConstantScalarFunction( rho_free * u1_free*u1_free + p_free)) ;
-  FunctionPtr mom_x2_free = Teuchos::rcp( new ConstantScalarFunction(rho_free * u1_free * u2_free)) ;
-  FunctionPtr mom_y1_free = Teuchos::rcp( new ConstantScalarFunction( rho_free * u1_free * u2_free ));
-  FunctionPtr mom_y2_free = Teuchos::rcp( new ConstantScalarFunction(rho_free * u2_free*u2_free + p_free ));
+  FunctionPtr mom_x1_free = Function::constant(rho_free * u1_free*u1_free + p_free); 
+  FunctionPtr mom_x2_free = Function::constant(rho_free * u1_free * u2_free);
+  FunctionPtr mom_y1_free = Function::constant(rho_free * u1_free * u2_free);
+  FunctionPtr mom_y2_free = Function::constant(rho_free * u2_free*u2_free + p_free );
 
   double rho_e_p_free =  (rho_free * e_free + p_free);
-  FunctionPtr energy_1_free = Teuchos::rcp( new ConstantScalarFunction(rho_e_p_free * u1_free) );
-  FunctionPtr energy_2_free = Teuchos::rcp( new ConstantScalarFunction( rho_e_p_free * u2_free) );
+  FunctionPtr energy_1_free = Function::constant(rho_e_p_free * u1_free);
+  FunctionPtr energy_2_free = Function::constant(rho_e_p_free * u2_free);
 
   // inflow BCs   
   bc->addDirichlet(F1nhat, inflowBoundary, ( e1 * m1_free + e2 * m2_free) * n );
@@ -1048,18 +1147,19 @@ int main(int argc, char *argv[]) {
   // wall BCs
   double Tscale = 1.0 + gam1*Ma*Ma/2.0; // from pj capon paper "adaptive finite element method compressible...".  Is equal to 2.8 for Mach 3 and Gamma = 1.4;
 
-  bc->addDirichlet(F1nhat, wallBoundary, zero); // for consistency?
+  //  bc->addDirichlet(F1nhat, wallBoundary, zero); // for consistency?
   bc->addDirichlet(u2hat, wallBoundary, zero);
   bc->addDirichlet(u1hat, wallBoundary, zero);
-  bc->addDirichlet(That, wallBoundary, Teuchos::rcp(new ConstantScalarFunction(T_free*Tscale))); 
+  bc->addDirichlet(That, wallBoundary, Function::constant(T_free*Tscale));
+  
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets zero heat-flux in free stream bottom boundary
 
   // =============================================================================================
 
   // symmetry BCs
   SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  //  bc->addDirichlet(u2hat,  freeTop, zero); // top sym bc
-  bc->addDirichlet(F1nhat, freeTop, zero); // for consistency
+  //  bc->addDirichlet(F1nhat, freeTop, zero); // for consistency, but this one doesn't make much diff  
+  bc->addDirichlet(u2hat,  freeTop, zero); // top sym bc
   bc->addDirichlet(F2nhat, freeTop, zero);
   bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
 
@@ -1079,10 +1179,9 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, ip));
   int enrichDegree = H1Order-1; // just for kicks. 
-  cout << "enriching cubature by " << enrichDegree << endl;
+  if (rank==0)
+    cout << "enriching cubature by " << enrichDegree << endl;
   solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
-
-  //  solution->setReportTimingResults(true); // print out timing 
 
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
@@ -1096,104 +1195,11 @@ int main(int argc, char *argv[]) {
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
   int numTimeSteps = 150; // max time steps
-  int numNRSteps = 1;
 
-  ////////////////////////////////////////////////////////////////////
-  // REFINE MESH TO TRIGGER EXCEPTION
-  ////////////////////////////////////////////////////////////////////
-
-  for (int i = 0;i<5;i++){
-    vector<int> xC;
-    vector<int> yC;
-    vector<int> rC;
-    switch (i){
-    case 0:
-      rC.push_back(2);
-      rC.push_back(4);
-      rC.push_back(6);
-      break;
-    case 1:
-      rC.push_back(9);
-      rC.push_back(12);
-      rC.push_back(13);
-      rC.push_back(16);
-      rC.push_back(17);
-      break;
-    case 2:
-      rC.push_back(20);
-      rC.push_back(21);
-      rC.push_back(24);
-      rC.push_back(25);
-      rC.push_back(28);
-      rC.push_back(29);
-      rC.push_back(32);
-      yC.push_back(30);
-      break;
-    case 3:
-      rC.push_back(33);
-      rC.push_back(36);
-      rC.push_back(37);
-      rC.push_back(43);
-      rC.push_back(46);
-      rC.push_back(47);
-      rC.push_back(51);
-      rC.push_back(54);
-      rC.push_back(55);
-      rC.push_back(58);
-      rC.push_back(60);
-      rC.push_back(61);
-
-      yC.push_back(18);
-      yC.push_back(19);
-      yC.push_back(26);
-      yC.push_back(31);      
-      yC.push_back(34);
-      yC.push_back(35);
-      yC.push_back(38);
-      yC.push_back(39);
-      yC.push_back(40);
-      yC.push_back(41);
-      yC.push_back(50);
-      yC.push_back(52);
-      yC.push_back(56);
-      yC.push_back(57);
-      break;
-    case 4:
-      vector<double> c = mesh->getCellCentroid(93);
-      if (rank==0)
-	cout << "centroid coords for cellID 93 = " << c[0] << ", " << c[1] << endl;
-
-      rC.push_back(93);   
-      break;
-    }
-    if (rank==0)
-      cout << "on refinement " << i << endl;
-    if (rank==0)
-      cout << "x refs" << endl;
-
-    mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
-    if (rank==0)
-      cout << "y refs" << endl;
-    mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());    
-    if (rank==0)
-      cout << "r refs" << endl;
-    mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
-    if (rank==0)
-      cout << "one irreg" << endl;
-    mesh->enforceOneIrregularity();
-  }
-  VTKExporter solExport(solution, mesh, varFactory);
-  if (rank==0){
-    solExport.exportSolution("preRefMesh");
-  }
-  return 0;
-  
-  
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
   ////////////////////////////////////////////////////////////////////
 
-  int numPreRefs = 0;
   if (rank==0){
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
@@ -1209,8 +1215,8 @@ int main(int argc, char *argv[]) {
       mesh->verticesForCell(vertices, cellID);
       bool cellIDset = false;	
       for (int j = 0;j<numSides;j++){ 	
-	if (vertices(j,0)>=1.0 && vertices(j,1)==0 && !cellIDset){ // if at the wall
-	  //	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
+	//	if (vertices(j,0)>=1.0 && vertices(j,1)==0 && !cellIDset){ // if at the wall
+	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
 	  wallCells.push_back(cellID);
 	  cellIDset = true;
 	}
@@ -1222,7 +1228,15 @@ int main(int argc, char *argv[]) {
       //      mesh->pRefine(wallCells);
     }
   }
+  if (numPreRefs>0){
+    double minSideLength = meshInfo.getMinCellSideLength() ;
+    double minCellMeasure = meshInfo.getMinCellMeasure() ;
+    if (rank==0){
+      cout << "after prerefs, sqrt min cell measure = " << sqrt(minCellMeasure) << ", min side length = " << minSideLength << endl;
+    }
+  }
 
+  
   ////////////////////////////////////////////////////////////////////
   // PSEUDO-TIME SOLVE STRATEGY 
   ////////////////////////////////////////////////////////////////////
@@ -1233,14 +1247,31 @@ int main(int argc, char *argv[]) {
   LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-bf->testFunctional(solution));  
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
-  rieszResidual->computeRieszRep();
   FunctionPtr ev1 = Teuchos::rcp(new RepFunction(v1,rieszResidual));
   FunctionPtr ev2 = Teuchos::rcp(new RepFunction(v2,rieszResidual));
   FunctionPtr ev3 = Teuchos::rcp(new RepFunction(v3,rieszResidual));
   FunctionPtr ev4 = Teuchos::rcp(new RepFunction(v4,rieszResidual));
   FunctionPtr etau1 = Teuchos::rcp(new RepFunction(tau1,rieszResidual));
-  FunctionPtr etau2 = Teuchos::rcp(new RepFunction(tau2,rieszResidual));
+  FunctionPtr etau2 = Teuchos::rcp(new RepFunction(tau2,rieszResidual)); 
   FunctionPtr etau3 = Teuchos::rcp(new RepFunction(tau3,rieszResidual));
+  map<int,FunctionPtr> errRepMap;
+  errRepMap[v1->ID()] = ev1;
+  errRepMap[v2->ID()] = ev2;
+  errRepMap[v3->ID()] = ev3;
+  errRepMap[v4->ID()] = ev4;
+  errRepMap[tau1->ID()] = etau1;
+  errRepMap[tau2->ID()] = etau2;
+  errRepMap[tau3->ID()] = etau3;
+
+  // for timestepping
+  RieszRepPtr rieszTimeResidual = Teuchos::rcp(new RieszRep(mesh, ip, time_res_LT));
+
+  // get entropy
+  FunctionPtr rhoToTheGamma = Teuchos::rcp(new PowerFunction(rho_prev,GAMMA));
+  FunctionPtr p_prev = (GAMMA-1.0)*rho_prev*cv*T_prev;
+  FunctionPtr s = Teuchos::rcp(new LogFunction(p_prev/rhoToTheGamma));
+  FunctionPtr H = rho_prev*s; // entropy functional
+  FunctionPtr Hsq = H*H; // entropy functional sq   
 
   if (rank==0){
     cout << "doing timesteps";
@@ -1248,8 +1279,7 @@ int main(int argc, char *argv[]) {
   }
 
   // time steps
-  double time_tol = 1e-8;
-  for (int k = 0;k<=numRefs;k++){    
+  for (int k = 0;k < numRefs+1;k++){    
 
     ofstream residualFile;      
     if (rank==0){
@@ -1261,15 +1291,55 @@ int main(int argc, char *argv[]) {
     double L2_time_residual = 1e7;
     int i = 0;
     while(L2_time_residual > time_tol && (i<numTimeSteps)){
-      for (int j = 0;j<numNRSteps;j++){
-	//	solution->solve(false); 
-	solution->condensedSolve(false);  
-	if (mesh->numActiveElements() > 2000){
-	  solution->condensedSolve(true);  // turn on save memory flag	  
+
+      double alpha = 0.0; // to initialize
+      int nriter = 0;int maxNRIter = 4;
+      int posEnrich = 10;
+      while (alpha<1.0 && nriter < maxNRIter){
+	solution->condensedSolve(false);  // don't save memory (maybe turn on if ndofs > maxDofs?)      
+	alpha = 1.0; 
+	if (useLineSearch){ // to enforce positivity of density rho
+	  double lineSearchFactor = .75; double eps = 1e-7;
+	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
+	  bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
+	  int iter = 0; int maxIter = 20;
+	  while (!rhoIsPositive && iter < maxIter){
+	    alpha = alpha*lineSearchFactor;
+	    rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution); 
+	    rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
+	    //	    backgroundFlow->addSolution(solution,alpha); // update with dU
+	    bool rhoIsPositive = Function::solution(rho,backgroundFlow)->isPositive(mesh,posEnrich); 
+	    //	    backgroundFlow->addSolution(solution,-alpha); // un-update with dU
+	    iter++;
+	  }
+	  if (rank==0 && alpha < 1.0){
+	    cout << "line search factor alpha = " << alpha << endl;
+	  }      
 	}
-	backgroundFlow->addSolution(solution,1.0); // update with dU
-      }         
+	backgroundFlow->addSolution(solution,alpha); // update with dU
+	nriter++;
+	if (useLineSearch){
+	  bool rhoIsPositive = Function::solution(rho,backgroundFlow)->isPositive(mesh,posEnrich); 
+	  if (rank==0 && !rhoIsPositive){
+	    cout << "non positive density detected!" << endl;
+	    std::ostringstream oss;
+	    oss << i << "_" << nriter;
+	    backgroundFlowExporter.exportSolution(string("U_NR") + oss.str());
+	  }
+	}
+      }
      
+      rieszTimeResidual->computeRieszRep();
+      double timeRes = rieszTimeResidual->getNorm();
+      L2_time_residual = timeRes;
+      /*
+      double tres1 = time_res_1->l2norm(mesh);
+      double tres2 = time_res_2->l2norm(mesh);
+      double tres3 = time_res_3->l2norm(mesh);
+      double tres4 = time_res_4->l2norm(mesh);
+      double tres = sqrt(tres1*tres1 + tres2*tres2 + tres3*tres3 + tres4*tres4)/dt;      
+      */
+
       // subtract solutions to get residual
       prevTimeFlow->addSolution(backgroundFlow,-1.0);       
       double L2rho = prevTimeFlow->L2NormOfSolutionGlobal(rho->ID());
@@ -1277,12 +1347,12 @@ int main(int argc, char *argv[]) {
       double L2u2 = prevTimeFlow->L2NormOfSolutionGlobal(u2->ID());
       double L2T = prevTimeFlow->L2NormOfSolutionGlobal(T->ID());
       double L2_time_residual_sq = L2rho*L2rho + L2u1*L2u1 + L2u2*L2u2 + L2T*L2T;
-      L2_time_residual= sqrt(L2_time_residual_sq)/dt;
+      double secondTimeRes = sqrt(L2_time_residual_sq)/dt;      
 
       if (rank==0){
        residualFile << L2_time_residual << endl;
 
-       cout << "at timestep i = " << i << " with dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << ", and time residual = " << L2_time_residual << endl;    	
+       cout << "at timestep i = " << i << " with dt = " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << ", and time residual = " << L2_time_residual << ", vs 2nd time residual " << secondTimeRes << endl;
 
        bool writeTimestepFiles = false;
        if (writeTimestepFiles){
@@ -1295,11 +1365,30 @@ int main(int argc, char *argv[]) {
        }
       }     
       prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
+      /*
+      double minSideLength = meshInfo.getMinCellSideLength() ;
+      double minCellMeasure = meshInfo.getMinCellMeasure() ;
+      if (rank==0){
+	cout << "sqrt min cell measure = " << sqrt(minCellMeasure) << ", min side length = " << minSideLength << endl;
+      }
 
+      // check conditioning of smallest elements
+      vector<ElementPtr> elems = mesh->activeElements();
+      for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt != elems.end();elemIt++){
+	int cellID = (*elemIt)->cellID();
+	if (mesh->getCellMeasure(cellID)==minCellMeasure){
+	  FieldContainer<double> ipMat = assembler.getIPMatrix((*elemIt));
+	  double cond = SerialDenseWrapper::getMatrixConditionNumber(ipMat);
+	  if (rank==0)
+	    cout << "condition number of cell " << cellID << " with sqrt of measure " << sqrt(minCellMeasure) << " is " << cond << endl;
+	}
+      }
+      */
       i++;
     }
     
     // Print results from processor with rank 0
+    //    FunctionPtr threshFunction = Teuchos::rcp( new EnergyErrorFunction(Hsq->cellIntegrals(mesh,0,true)) );
     if (rank==0){
       std::ostringstream oss;
       oss << k ;      
@@ -1307,13 +1396,6 @@ int main(int argc, char *argv[]) {
       exporter.exportSolution(string("dU")+oss.str());
       backgroundFlowExporter.exportSolution(string("U")+oss.str());
     }
-
-    // get entropy
-    FunctionPtr rhoToTheGamma = Teuchos::rcp(new PowerFunction(rho_prev,GAMMA));
-    FunctionPtr p_prev = (GAMMA-1.0)*rho_prev*cv*T_prev;
-    FunctionPtr s = Teuchos::rcp(new LogFunction(p_prev/rhoToTheGamma));
-    FunctionPtr H = rho_prev*s; // entropy functional
-    FunctionPtr Hsq = H*H; // entropy functional sq
 
     // compute energy error and plot
     /*
@@ -1328,7 +1410,7 @@ int main(int argc, char *argv[]) {
       H->writeValuesToMATLABFile(mesh,"entropy"+refNum.str()+mfile.str());
       Hsq->writeValuesToMATLABFile(mesh,"entropySq"+refNum.str()+mfile.str());
     }
-    */
+    */    
     if (k<numRefs){
       if (rank==0){
 	cout << "Performing refinement number " << k << endl;
@@ -1336,85 +1418,78 @@ int main(int argc, char *argv[]) {
       if (!useAnisotropy){
 	refinementStrategy->refine(rank==0);          // isotropic
       }else{	       
+	if (rank==0)
+	  cout << "doing anisotropic refs" << endl;
+
 	rieszResidual->computeRieszRep();
-	FunctionPtr vxErr = ev1->dx()*ev1->dx() + ev2->dx()*ev2->dx() + ev3->dx()*ev3->dx() + ev4->dx()*ev4->dx();
-	FunctionPtr vyErr = ev1->dy()*ev1->dy() + ev2->dy()*ev2->dy() + ev3->dy()*ev3->dy() + ev4->dy()*ev4->dy();
-	FunctionPtr tauXErr = etau1->x()*etau1->x() + etau2->x()*etau2->x() + etau3->x()*etau3->x();
-	FunctionPtr tauYErr = etau1->y()*etau1->y() + etau2->y()*etau2->y() + etau3->y()*etau3->y();
-	FunctionPtr xErr = (1/sqrt(Re))*vxErr + (ReScaling*Re)*tauXErr;
-	FunctionPtr yErr = (1/sqrt(Re))*vyErr + (ReScaling*Re)*tauYErr;
+	bool boundaryPart = false;
+	FunctionPtr errTauX = tauVecLTx->evaluate(errRepMap,boundaryPart);
+	FunctionPtr errTauY = tauVecLTy->evaluate(errRepMap,boundaryPart);
+	FunctionPtr errVX = vVecLTx->evaluate(errRepMap,boundaryPart);
+	FunctionPtr errVY = vVecLTy->evaluate(errRepMap,boundaryPart);
+	FunctionPtr xErr = (errVX)*(errVX) + (errTauX)*(errTauX);
+	FunctionPtr yErr = (errVY)*(errVY) + (errTauY)*(errTauY);
+
+	double maxThresh = anisotropicThresh;
 	vector<int> cellIDs;
 	refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
-	map<int,double> xErrMap = xErr->cellIntegrals(cellIDs,mesh,15,true);
-	map<int,double> yErrMap = yErr->cellIntegrals(cellIDs,mesh,15,true);
-	//	refinementStrategy->refine(rank==0,xErrMap,yErrMap); //anisotropic refinements
+	int cubEnrich = 5; bool testVsTest = true;
+	map<int,double> xErrMap = xErr->cellIntegrals(cellIDs,mesh,cubEnrich,testVsTest);
+	map<int,double> yErrMap = yErr->cellIntegrals(cellIDs,mesh,cubEnrich,testVsTest);
 	vector<int> xCells,yCells,regCells;
+	map<int,double> threshMap;
 	for (int i = 0;i<cellIDs.size();i++){
 	  int cellID = cellIDs[i];
 	  vector<double> c = mesh->getCellCentroid(cellID);
-	  bool onWall = c[0]>1.0; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
+	  bool atWall = c[0]>1.0; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
+	  FieldContainer<double> vv(4,2); mesh->verticesForCell(vv, cellID);
+	  bool vertexOnWall = false; bool vertexAtSingularity = false;
+	  for (int j = 0;j<4;j++){
+	    if (abs(vv(j,1))<(1.0/Re)*(c[0])) // if any vertex is close to wall - if vertex y coord < (1/Re)*(1+x)
+	      vertexOnWall = true;	    
+	    if ((abs(vv(j,0)-1.0) + abs(vv(j,1)))<1e-10)
+	      vertexAtSingularity = true;
+	  }
+	  bool onWall = !vertexAtSingularity; //&& vertexOnWall; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
 	  double ratio = xErrMap[cellID]/yErrMap[cellID];
-	  double thresh = 10.0;
-	  if (onWall && ratio > thresh){
-	    xCells.push_back(cellID);
-	  }else if (onWall && ratio < 1.0/thresh){
-	    yCells.push_back(cellID);
-	  }else{
-	    regCells.push_back(cellID);
+	  threshMap[cellID] = anisotropicThresh;
+	  if (vertexOnWall && atWall){
+	    threshMap[cellID] = 2.0; //anisotropicThresh/10.0; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
 	  }
+	  if (vertexAtSingularity || !atWall){
+	    threshMap[cellID] = maxThresh; // want ISOTROPIC refinements only at or before singularity
+	  }
+	  if (rank==0)
+	    cout << "ratio for cell " << cellID << " = " << ratio << ", and threshMap = " << threshMap[cellID] << endl;
+
 	}
-	// write refined cells to file
+
+	refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap); //anisotropic refinements	
 	if (rank==0){
-	  ofstream xCellFile;
-	  ofstream yCellFile;      
-	  ofstream regCellFile;      
-	  std::ostringstream refNum;
-	  refNum << k;
-	  string filename1 = "xCellsAtRef" + refNum.str()+ ".txt";
-	  string filename2 = "yCellsAtRef" + refNum.str()+ ".txt";
-	  string filename3 = "regCellsAtRef" + refNum.str()+ ".txt";
-	  xCellFile.open(filename1.c_str());
-	  yCellFile.open(filename2.c_str());
-	  regCellFile.open(filename3.c_str());      
-
-	  for (int i = 0;i<xCells.size();i++){
-	    xCellFile << xCells[i] << endl;
-	    cout << "xCells = " << xCells[i] << endl;
-	  }	  
-	  for (int i = 0;i<yCells.size();i++){
-	    yCellFile << yCells[i] << endl;	    
-	    cout << "yCells = " << yCells[i] << endl;
-	  }
-	  for (int i = 0;i<regCells.size();i++){
-	    regCellFile << regCells[i] << endl;
-	    cout << "regCells = " << regCells[i] << endl;
-	  }
-	  xCellFile.close();
-	  yCellFile.close();
-	  regCellFile.close();		  
+	  cout << "Num elements = " << mesh->numActiveElements() << ", and num dofs = " << mesh->numGlobalDofs() << endl;
 	}
-	mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
-	mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
-	mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
-	mesh->enforceOneIrregularity();
       }
-
+      
       if (rank==0){
 	cout << "Done with  refinement number " << k << endl;
-      }   
-
-      // RESET solution every refinement - make sure discretization error doesn't creep in
-      backgroundFlow->projectOntoMesh(functionMap);
-      prevTimeFlow->projectOntoMesh(functionMap);
+      }        
       
+      // RESET solution every refinement - make sure discretization error doesn't creep in
+      //      backgroundFlow->projectOntoMesh(functionMap);
+      //      prevTimeFlow->projectOntoMesh(functionMap);
+
     } else {
       if (rank==0){
 	cout << "Finishing it off with the final solve" << endl;
       }
+      solution->setReportTimingResults(true);
     }
-
+    
   }
-
-
+  if (rank==0){
+    exporter.exportSolution("dU");
+    backgroundFlowExporter.exportSolution("U");
+  }
+  
   return 0;
 }
