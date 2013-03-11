@@ -2,6 +2,8 @@
 
 #include "HessianFilter.h"
 #include "RieszRep.h"
+#include "ParameterFunction.h"
+#include "LagrangeConstraints.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
@@ -165,6 +167,13 @@ void IncompressibleFormulationsTests::teardown() {
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
+  
+  setup();
+  if ( testVGPNavierStokesLocalConservation() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
   
   setup();
   if (testVGPStokesFormulationGraphNorm()) {
@@ -1144,6 +1153,87 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
     }
   }
  
+  return success;
+}
+
+// U1_0: used in lid-driven cavity flow BCs (for local conservation test below)
+class U1_0 : public SimpleFunction {
+  double _eps;
+public:
+  U1_0(double eps) {
+    _eps = eps;
+  }
+  double value(double x, double y) {
+    double tol = 1e-14;
+    if (abs(y-1.0) < tol) { // top boundary
+      if ( (abs(x) < _eps) ) { // top left
+        return x / _eps;
+      } else if ( abs(1.0-x) < _eps) { // top right
+        return (1.0-x) / _eps;
+      } else { // top middle
+        return 1;
+      }
+    } else { // not top boundary: 0.0
+      return 0.0;
+    }
+  }
+};
+
+bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
+  bool success = true;
+  
+  // really just checking against a single bug right now: getting 0 rows and columns
+  // in the second iterate for Navier-Stokes when local conservation is turned on...
+  
+  int pToAdd = 3; // for optimal test function approximation
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC
+  bool enforceLocalConservation = true;
+  int horizontalCells = 3, verticalCells = 3;
+  
+  int polyOrder = 1;
+  double Re = 400;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+  
+  // define meshes:
+  int H1Order = polyOrder + 1;
+  
+  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
+  FunctionPtr u2_0 = Function::zero();
+  FunctionPtr zero = Function::zero();
+  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+                                                          horizontalCells,verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_0, u2_0,  // BC for u
+                                                          zero, zero); // zero forcing function
+  SolutionPtr solution = problem.backgroundFlow();
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  
+  // get variable definitions:
+  VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+  VarPtr u1hat = varFactory.traceVar(VGP_U1HAT_S);
+  VarPtr u2hat = varFactory.traceVar(VGP_U2HAT_S);
+  
+  if (enforceLocalConservation) {
+    solution     ->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+    solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+  }
+  
+  bool useLineSearch = false;
+  problem.iterate(useLineSearch);
+  
+  problem.iterate(useLineSearch); // get zero rows and column warnings here
+  
   return success;
 }
 
