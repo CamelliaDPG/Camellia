@@ -149,7 +149,7 @@ public:
     return 1.0/invCond;
   }
 
-  void writeMatrixToMatlabFile(const string& filePath, FieldContainer<double> &A){
+  static void writeMatrixToMatlabFile(const string& filePath, FieldContainer<double> &A){
     int N = A.dimension(0);
     int M = A.dimension(1);
     ofstream matrixFile;
