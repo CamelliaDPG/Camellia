@@ -255,6 +255,7 @@ public:
     fout << "set out '" << outputFile << ".eps'\n";
     fout << "replot" << endl;
     fout << "set term pop\n";
+    fout << "replot" << endl;
     
     fout.close();
   }
