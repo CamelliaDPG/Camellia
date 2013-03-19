@@ -76,6 +76,7 @@ set<int> BilinearForm::_normalOperators;
 
 BilinearForm::BilinearForm() {
   _useSPDSolveForOptimalTestFunctions = false;
+  _useIterativeRefinementsWithSPDSolve = false;
 }
 
 const vector< int > & BilinearForm::trialIDs() {
@@ -278,7 +279,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
       
       if ( solver.ShouldEquilibrate() ) {
         solver.FactorWithEquilibration(true);
-        solver.SolveToRefinedSolution(false);
+        solver.SolveToRefinedSolution(_useIterativeRefinementsWithSPDSolve);
       }
       int result = solver.Factor();
       if (result != 0) {
@@ -846,4 +847,8 @@ const set<int> & BilinearForm::normalOperators() {
 
 void BilinearForm::setUseSPDSolveForOptimalTestFunctions(bool value) {
   _useSPDSolveForOptimalTestFunctions = value;
+}
+
+void BilinearForm::setUseIterativeRefinementsWithSPDSolve(bool value) {
+  _useIterativeRefinementsWithSPDSolve = value;
 }

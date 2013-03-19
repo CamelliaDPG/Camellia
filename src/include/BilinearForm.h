@@ -112,11 +112,12 @@ public:
   static const set<int> & normalOperators(); // the set of all operators that use the normal
   
   void setUseSPDSolveForOptimalTestFunctions(bool value);
+  void setUseIterativeRefinementsWithSPDSolve(bool value);
 protected:
  
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
-  bool _useSPDSolveForOptimalTestFunctions;
+  bool _useSPDSolveForOptimalTestFunctions, _useIterativeRefinementsWithSPDSolve;
 };
 
 typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;
