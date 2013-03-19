@@ -115,7 +115,11 @@ public:
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
     scriptOut << "replot\n";
+    scriptOut << "set terminal png\n";
+    scriptOut << "set out '" << filePath << ".png'\n";
+    scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -173,7 +177,11 @@ public:
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
     scriptOut << "replot\n";
+    scriptOut << "set terminal png\n";
+    scriptOut << "set out '" << filePath << ".png'\n";
+    scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -254,6 +262,9 @@ public:
     fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     fout << "set out '" << outputFile << ".eps'\n";
     fout << "replot" << endl;
+    fout << "set terminal png\n";
+    fout << "set out '" << filePath << ".png'\n";
+    fout << "replot\n";
     fout << "set term pop\n";
     fout << "replot" << endl;
     
