@@ -51,10 +51,14 @@
 
 class MeshUtilities {
  public:
+  
   static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
   
   static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
+  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, string sparseFileToWriteTo="");
+  
+  static void writeMatrixToSparseDataFile(FieldContainer<double> &matrix, string filename); // really belongs elsewhere
 };
 
 #endif

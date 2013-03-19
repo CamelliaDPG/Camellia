@@ -114,8 +114,12 @@ public:
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
+//    scriptOut << "replot\n";
+//    scriptOut << "set terminal png\n";
+//    scriptOut << "set out '" << filePath << ".png'\n";
     scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -172,8 +176,12 @@ public:
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
+//    scriptOut << "replot\n";
+//    scriptOut << "set terminal png\n";
+//    scriptOut << "set out '" << filePath << ".png'\n";
     scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -253,7 +261,10 @@ public:
     fout << "set style data lines" << endl;
     fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     fout << "set out '" << outputFile << ".eps'\n";
-    fout << "replot" << endl;
+//    fout << "replot" << endl;
+//    fout << "set terminal png\n";
+//    fout << "set out '" << outputFile << ".png'\n";
+    fout << "replot\n";
     fout << "set term pop\n";
     fout << "replot" << endl;
     
