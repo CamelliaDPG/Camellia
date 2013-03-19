@@ -8,6 +8,8 @@
 
 #include "IP.h"
 
+#include "SerialDenseSolveWrapper.h"
+
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
@@ -104,6 +106,44 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
           innerProduct(c, i, j) += valAdd;
         }
   }
+}
+
+void writeMatrixToSparseDataFile(FieldContainer<double> &matrix, string filename) {
+  // matlab-friendly format (use spconvert)
+  int rows = matrix.dimension(0);
+  int cols = matrix.dimension(1);
+  ofstream fout(filename.c_str());
+  // specify dimensions:
+  fout << rows << "\t" << cols << "\t"  << 0 << endl;
+  double tol = 1e-15;
+  for (int i=0; i<rows; i++) {
+    for (int j=0; j<cols; j++) {
+      if (abs(matrix(i,j)) > tol) { // nonzero
+        fout << i+1 << "\t" << j+1 << "\t" << matrix(i,j) << endl;
+      }
+    }
+  }
+  fout.close();
+}
+
+double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
+  int testDofs = testSpace->totalDofs();
+  int numCells = basisCache->cellIDs().size();
+  FieldContainer<double> innerProduct(numCells,testDofs,testDofs);
+  this->computeInnerProductMatrix(innerProduct, testSpace, basisCache);
+  double maxConditionNumber = -1;
+  Teuchos::Array<int> cellIP_dim;
+  cellIP_dim.push_back(testDofs);
+  cellIP_dim.push_back(testDofs);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
+    double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(cellIP);
+    maxConditionNumber = max(maxConditionNumber,conditionNumber);
+    if (cellIndex==0) { // debugging/corroborating results
+      writeMatrixToSparseDataFile(cellIP, "/tmp/cell0_ip.dat");
+    }
+  }
+  return maxConditionNumber;
 }
 
 // compute IP vector when var==fxn
