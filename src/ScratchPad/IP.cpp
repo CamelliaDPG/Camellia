@@ -108,24 +108,6 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   }
 }
 
-void writeMatrixToSparseDataFile(FieldContainer<double> &matrix, string filename) {
-  // matlab-friendly format (use spconvert)
-  int rows = matrix.dimension(0);
-  int cols = matrix.dimension(1);
-  ofstream fout(filename.c_str());
-  // specify dimensions:
-  fout << rows << "\t" << cols << "\t"  << 0 << endl;
-  double tol = 1e-15;
-  for (int i=0; i<rows; i++) {
-    for (int j=0; j<cols; j++) {
-      if (abs(matrix(i,j)) > tol) { // nonzero
-        fout << i+1 << "\t" << j+1 << "\t" << matrix(i,j) << endl;
-      }
-    }
-  }
-  fout.close();
-}
-
 double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
   int testDofs = testSpace->totalDofs();
   int numCells = basisCache->cellIDs().size();
@@ -139,9 +121,6 @@ double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr bas
     FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
     double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(cellIP);
     maxConditionNumber = max(maxConditionNumber,conditionNumber);
-    if (cellIndex==0) { // debugging/corroborating results
-      writeMatrixToSparseDataFile(cellIP, "/tmp/cell0_ip.dat");
-    }
   }
   return maxConditionNumber;
 }
