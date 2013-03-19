@@ -31,14 +31,19 @@ protected:
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;  
   double _anisotropicThreshhold;
+  double _maxAspectRatio;
   vector< RefinementResults > _results;
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
+  void setMaxAspectRatio(double value);
+
   virtual void refine(bool printToConsole=false);
   virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
   void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap);
+  void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap);
+
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells);
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap);
   bool enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells);
