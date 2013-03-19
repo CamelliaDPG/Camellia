@@ -1266,28 +1266,6 @@ map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionP
   return solnMap;
 }
 
-class U1_0 : public SimpleFunction { // defines BC for cavity flow, used in local conservation test below
-  double _eps;
-public:
-  U1_0(double eps) {
-    _eps = eps;
-  }
-  double value(double x, double y) {
-    double tol = 1e-14;
-    if (abs(y-1.0) < tol) { // top boundary
-      if ( (abs(x) < _eps) ) { // top left
-        return x / _eps;
-      } else if ( abs(1.0-x) < _eps) { // top right
-        return (1.0-x) / _eps;
-      } else { // top middle
-        return 1;
-      }
-    } else { // not top boundary: 0.0
-      return 0.0;
-    }
-  }
-};
-
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConservation() {
   bool success = true;
   
