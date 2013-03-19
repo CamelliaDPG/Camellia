@@ -18,10 +18,7 @@
 //#include "CGSolver.h"
 #include "MPIWrapper.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 using namespace std;
 
@@ -262,7 +259,7 @@ int main(int argc, char *argv[]) {
   bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = false;
-  bool weightTestNormDerivativesByH = false;
+  bool weightTestNormDerivativesByH = true;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
@@ -560,6 +557,11 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( h * tau1->div() - q->dx() ); // u1
     qoptIP->addTerm( h * tau2->div() - q->dy() ); // u2
+    qoptIP->addTerm( v1 / h );
+    qoptIP->addTerm( v2 / h );
+    qoptIP->addTerm(  q / h);
+    qoptIP->addTerm( tau1 );
+    qoptIP->addTerm( tau2 );
   } else {
     qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
@@ -568,14 +570,22 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( tau1->div() - q->dx() );     // u1
     qoptIP->addTerm( tau2->div() - q->dy() );     // u2
+    qoptIP->addTerm( sqrt(beta) * v1 );
+    qoptIP->addTerm( sqrt(beta) * v2 );
+    qoptIP->addTerm( sqrt(beta) * q );
+    qoptIP->addTerm( sqrt(beta) * tau1 );
+    qoptIP->addTerm( sqrt(beta) * tau2 );
   }
-  qoptIP->addTerm( sqrt(beta) * v1 );
-  qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * q );
-  qoptIP->addTerm( sqrt(beta) * tau1 );
-  qoptIP->addTerm( sqrt(beta) * tau2 );
   
   ip = qoptIP;
+  
+  if (rank==0) {
+    int cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    double conditionNumber = qoptIP->computeMaxConditionNumber(testSpace,basisCache);
+    cout << "Gram matrix cond # for cell 0: " << conditionNumber << endl;
+  }
   
   if (rank==0) 
     ip->printInteractions();
