@@ -149,6 +149,20 @@ public:
     return 1.0/invCond;
   }
 
+  void writeMatrixToMatlabFile(const string& filePath, FieldContainer<double> &A){
+    int N = A.dimension(0);
+    int M = A.dimension(1);
+    ofstream matrixFile;
+    matrixFile.open(filePath.c_str());
+    
+    for (int i = 0;i<N;i++){
+      for (int j = 0;j<M;j++){
+	matrixFile << A(i,j) << " ";
+      }
+      matrixFile << endl;
+    }
+    matrixFile.close();
+  }
 };
 
 #endif
