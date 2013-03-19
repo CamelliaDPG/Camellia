@@ -136,6 +136,11 @@ void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<Element
 }
 
 IPPtr BF::graphNorm() {
+  map<int, double> varWeights;
+  return graphNorm(varWeights);
+}
+
+IPPtr BF::graphNorm(const map<int, double> &varWeights) {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;
   map<int, LinearTermPtr> testTermsForVarID;
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
@@ -161,7 +166,16 @@ IPPtr BF::graphNorm() {
   IPPtr ip = Teuchos::rcp( new IP );
   for ( map<int, LinearTermPtr>::iterator testTermIt = testTermsForVarID.begin();
        testTermIt != testTermsForVarID.end(); testTermIt++ ) {
-    ip->addTerm( testTermIt->second );
+    double weight = 1.0;
+    int varID = testTermIt->first;
+    if (varWeights.find(varID) != varWeights.end()) {
+      double trialWeight = varWeights.find(varID)->second;
+      if (trialWeight <= 0) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "variable weights must be positive.");
+      }
+      weight = 1.0 / sqrt(trialWeight);
+    }
+    ip->addTerm( Function::constant(weight) * testTermIt->second );
   }
   // L^2 terms:
   map< int, VarPtr > testVars = _varFactory.testVars();
