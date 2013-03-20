@@ -47,21 +47,30 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, str
   double maxConditionNumber = -1;
   for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
     int cellID = *cellIt;
-    BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    bool testVsTest = true;
+    BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
     DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
     int testDofs = testSpace->totalDofs();
     int numCells = 1;
     FieldContainer<double> innerProductMatrix(numCells,testDofs,testDofs);
     ip->computeInnerProductMatrix(innerProductMatrix, testSpace, cellBasisCache);
+    // reshape:
+    innerProductMatrix.resize(testDofs,testDofs);
     double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(innerProductMatrix);
     if (conditionNumber > maxConditionNumber) {
       maxConditionNumber = conditionNumber;
       maxConditionNumberIPMatrix = innerProductMatrix;
       maxCellID = cellID;
+    } else if (maxConditionNumberIPMatrix.size()==0) {
+      // could be that the estimation failed--we still want a copy of the matrix written to file.
+      maxConditionNumberIPMatrix = innerProductMatrix;
     }
   }
   if (sparseFileToWriteTo.length() > 0) {
-    writeMatrixToSparseDataFile(maxConditionNumberIPMatrix, sparseFileToWriteTo);
+    if (maxConditionNumberIPMatrix.size() > 0) {
+      writeMatrixToSparseDataFile(maxConditionNumberIPMatrix, sparseFileToWriteTo);
+    }
   }
-  cout << "max condition number occurs in cellID " << maxCellID << endl;
+//  cout << "max condition number occurs in cellID " << maxCellID << endl;
+  return maxConditionNumber;
 }
