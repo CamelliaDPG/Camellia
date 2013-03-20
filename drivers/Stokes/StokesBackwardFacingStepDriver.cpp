@@ -17,6 +17,8 @@
 #include "StokesFormulation.h"
 #include "MeshUtilities.h"
 
+#include "RefinementPattern.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -249,6 +251,7 @@ int main(int argc, char *argv[]) {
   bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
+  bool finalSolveUsesStandardGraphNorm = false;
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -514,11 +517,6 @@ int main(int argc, char *argv[]) {
   streamBF->addTerm(phi, v_s->div());
   streamBF->addTerm(-phi_hat, v_s->dot_normal());
   
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
-  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
-  streamRHS->addTerm(vorticity * q_s);
-  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-  
   Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
   //  streamBC->addDirichlet(psin_hat, entireBoundary, u0_cross_n);
   Teuchos::RCP<SpatialFilter> wallBoundary = Teuchos::rcp( new WallBoundary );
@@ -538,7 +536,7 @@ int main(int argc, char *argv[]) {
   
   streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAdd+pToAddForStreamFunction) );
   
-  streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
+  streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC ) );
   
   mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
   
@@ -573,6 +571,11 @@ int main(int argc, char *argv[]) {
     refinementStrategy.refine();
   }
   
+  // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
+  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  
   if (rank == 0) {
     cout << "Starting mesh has " << mesh->numActiveElements() << " elements and ";
     cout << mesh->numGlobalDofs() << " total dofs.\n";
@@ -600,6 +603,7 @@ int main(int argc, char *argv[]) {
     solution->solve(false);
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
+  
   // one more solve on the final refined mesh:
   solution->solve(false);
   double energyErrorTotal = solution->energyErrorTotal();
@@ -608,6 +612,42 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Max condition number estimate: " << maxConditionNumber << endl;
   }
+  
+  IPPtr ipToCompare = stokesBF->graphNorm();
+  Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
+  
+  solutionToCompare->solve(false);
+  
+  FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
+  FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
+  
+  FunctionPtr u1_soln = Function::solution(u1, solution);
+  FunctionPtr u2_soln = Function::solution(u2, solution);
+  
+  double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh);
+  double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh);
+  
+  double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
+  
+  if (rank==0) {
+    cout << "L^2 differences with automatic graph norm:\n";
+    cout << "    u1: " << u1_l2difference << endl;
+    cout << "    u2: " << u2_l2difference << endl;
+    cout << "Graph norm max condition number: " << graph_maxConditionNumber << endl;
+  }
+  
+  
+  if (finalSolveUsesStandardGraphNorm) {
+    if (rank==0)
+      cout << "switching to graph norm for final solve";
+    solution = solutionToCompare;
+  }
+  
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+  Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+  streamRHS->addTerm(vorticity * q_s);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+  
   
   //  FunctionPtr u1_sq = u1_prev * u1_prev;
   //  FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
@@ -687,6 +727,9 @@ int main(int argc, char *argv[]) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
+  
+  streamSolution->setIP(streamIP);
+  streamSolution->setRHS(streamRHS);
   
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();
