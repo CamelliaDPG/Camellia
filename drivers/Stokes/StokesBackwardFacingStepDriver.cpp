@@ -15,6 +15,7 @@
 #include "SolutionExporter.h"
 
 #include "StokesFormulation.h"
+#include "MeshUtilities.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -244,8 +245,10 @@ int main(int argc, char *argv[]) {
   bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
   bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
   bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
-  bool useWeightedGraphNorm = true;   // weights to emphasize the sigma (u-derivative) terms in trial space norm
+  bool useWeightedGraphNorm = false;   // weights to improve conditioning of the local problems
   bool useCEFormulation = false;
+  bool useIterativeRefinementsWithSPDSolve = false;
+  bool useSPDLocalSolve = false;
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -369,6 +372,9 @@ int main(int argc, char *argv[]) {
   
   if (rank==0)
     stokesBF->printTrialTestInteractions();
+  
+  stokesBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
+  stokesBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
   
   ///////////////////////////////////////////////////////////////////////////
   SpatialFilterPtr nonOutflowBoundary = Teuchos::rcp( new NonOutflowBoundary );
@@ -527,6 +533,9 @@ int main(int argc, char *argv[]) {
   streamIP->addTerm(v_s);
   streamIP->addTerm(v_s->div());
   
+  streamBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
+  streamBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
+  
   streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAdd+pToAddForStreamFunction) );
   
   streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
@@ -594,8 +603,11 @@ int main(int argc, char *argv[]) {
   // one more solve on the final refined mesh:
   solution->solve(false);
   double energyErrorTotal = solution->energyErrorTotal();
-  if (rank == 0) 
+  double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, "bfs_maxConditionIPMatrix.dat");
+  if (rank == 0) {
     cout << "Final energy error: " << energyErrorTotal << endl;
+    cout << "Max condition number estimate: " << maxConditionNumber << endl;
+  }
   
   //  FunctionPtr u1_sq = u1_prev * u1_prev;
   //  FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);

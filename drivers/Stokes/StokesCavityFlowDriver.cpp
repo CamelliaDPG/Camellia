@@ -581,7 +581,7 @@ int main(int argc, char *argv[]) {
   
   if (rank==0) {
     int cellID = 0;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true);
     DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
     double conditionNumber = qoptIP->computeMaxConditionNumber(testSpace,basisCache);
     cout << "Gram matrix cond # for cell 0: " << conditionNumber << endl;
