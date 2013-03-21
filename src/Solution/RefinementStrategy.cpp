@@ -16,11 +16,16 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
   _anisotropicThreshhold = 10.0;
+  _maxAspectRatio = 2^5; // five anisotropic refinements of an element
   _min_h = min_h;
 }
 
 void RefinementStrategy::setAnisotropicThreshhold(double value){
   _anisotropicThreshhold = value;
+}
+
+void RefinementStrategy::setMaxAspectRatio(double value){
+  _maxAspectRatio = value;
 }
 
 void RefinementStrategy::setEnforceOneIrregularity(bool value) {
@@ -205,7 +210,8 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
     
   if (_enforceOneIrregularity)
-    mesh->enforceOneIrregularity();
+    //    mesh->enforceOneIrregularity();
+    enforceAnisotropicOneIrregularity(xCells,yCells);
     
   if (printToConsole) {
     cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
@@ -213,8 +219,17 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   }
 }
 
-// with variable anisotropic threshholding
 void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap) {
+  map<int,double> hRefMap;
+  vector<ElementPtr> elems = _solution->mesh()->activeElements();
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){    
+    hRefMap[(*elemIt)->cellID()] = true; // default to h-refinement
+  }
+}
+
+// with variable anisotropic threshholding and p-refinement specification
+void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap) {
+
   // greedy refinement algorithm - mark cells for refinement
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
 
@@ -226,7 +241,32 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
   double totalEnergyError = _solution->energyErrorTotal();
   setResults(results, mesh->numElements(), mesh->numGlobalDofs(), totalEnergyError);
   _results.push_back(results);
+
+  // check if any cells should be marked for p-refinement
+  vector<int> pCells;
+  for (vector<int>::iterator cellIt = xCells.begin();cellIt!=xCells.end();cellIt++){
+    int cellID = *cellIt;
+    if (!useHRefMap[cellID]){
+      pCells.push_back(cellID);
+      xCells.erase(cellIt);
+    }
+  }
+  for (vector<int>::iterator cellIt = yCells.begin();cellIt!=yCells.end();cellIt++){
+    int cellID = *cellIt;
+    if (!useHRefMap[cellID]){
+      pCells.push_back(cellID);
+      yCells.erase(cellIt);
+    }
+  }
+  for (vector<int>::iterator cellIt = regCells.begin();cellIt!=regCells.end();cellIt++){
+    int cellID = *cellIt;
+    if (!useHRefMap[cellID]){
+      pCells.push_back(cellID);
+      regCells.erase(cellIt);
+    }
+  }
   
+  mesh->pRefine(pCells); // p-refine FIRST
   mesh->hRefine(xCells, RefinementPattern::xAnisotropicRefinementPatternQuad());    
   mesh->hRefine(yCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
   mesh->hRefine(regCells, RefinementPattern::regularRefinementPatternQuad());        
@@ -267,11 +307,11 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     bool doXAnisotropy = ratio > thresh;
     bool doYAnisotropy = ratio < 1.0/thresh;
     double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
-    double maxAspect = 100.0; // conservative aspect ratio from LD's DPG III: Adaptivity paper is 100
+    double maxAspect = _maxAspectRatio; // the conservative aspect ratio from LD's DPG III: Adaptivity paper is 100. 
     if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      xCells.push_back(cellID);
+      xCells.push_back(cellID); // cut along y-axis
     }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      yCells.push_back(cellID);
+      yCells.push_back(cellID); // cut along x-axis
     }else{
       regCells.push_back(cellID);
     }        

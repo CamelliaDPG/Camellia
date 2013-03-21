@@ -71,8 +71,9 @@
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
 
-//#include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
+#include "Epetra_SerialSymDenseMatrix.h"
+#include "Epetra_SerialSpdDenseSolver.h"
 #include "Epetra_DataAccess.h"
 
 // Shards includes
@@ -1660,71 +1661,70 @@ void Solution::computeErrorRepresentation() {
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
-    //    FieldContainer<double> rhsRepresentation(numCells,numTestDofs);
-    
-    Epetra_SerialDenseSolver solver;
+   
+    Epetra_SerialSpdDenseSolver solver;
     
     for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
       
       //      cout << "In compute error rep local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
       // changed to Copy from View for debugging...
-      Epetra_SerialDenseMatrix ipMatrixT(Copy, &ipMatrix(localCellIndex,0,0),
+      Epetra_SerialDenseMatrix ipMatrixT_nonsym(Copy, &ipMatrix(localCellIndex,0,0),
                                          ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
                                          ipMatrix.dimension(2),ipMatrix.dimension(1));
+
+      // sym matrix format for Cholesky
+      Epetra_SerialSymDenseMatrix ipMatrixT(Copy, ipMatrixT_nonsym.A(), ipMatrixT_nonsym.LDA(), numTestDofs);    
       
       Epetra_SerialDenseMatrix rhs(Copy, & (_residualForElementType[elemTypePtr.get()](localCellIndex,0)),
                                    _residualForElementType[elemTypePtr.get()].dimension(1), // stride
                                    _residualForElementType[elemTypePtr.get()].dimension(1), 1);
-
-
-      /*      
-      int info = rhs.Reshape(numTestDofs,2); // add an extra column
-      if (info!=0){
-	cout << "could not reshape matrix - error code " << info << endl;
-      }      
-      for(int i = 0;i < numTestDofs; i++){
-	rhs(i,1) = _rhsForElementType[elemTypePtr.get()](localCellIndex,i);
-      }
-      Epetra_SerialDenseMatrix representationMatrix(numTestDofs,2);
-      */    
       
       Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
       solver.SetMatrix(ipMatrixT);
-      //    solver.SolveWithTranspose(true); // not that it should matter -- ipMatrix should be symmetric
-      int success = solver.SetVectors(representationMatrix, rhs);
-      
+      int success = solver.SetVectors(representationMatrix, rhs);      
       if (success != 0) {
         cout << "computeErrorRepresentation: failed to SetVectors with error " << success << endl;
       }
       
       bool equilibrated = false;
+
       if ( solver.ShouldEquilibrate() ) {
-        solver.EquilibrateMatrix();
-        solver.EquilibrateRHS();
+        solver.FactorWithEquilibration(true);
+        solver.SolveToRefinedSolution(false);
         equilibrated = true;
       }
-      
+      /*
+      if ( solver.ShouldEquilibrate() ) {
+	solver.EquilibrateMatrix();
+	solver.EquilibrateRHS();
+        equilibrated = true;
+      }
+      */
+      success = solver.Factor();
+      if (success!=0){
+	cout << "computeErrorRepresentation: Solver failed to factor with error: " << success << endl;
+      }
       success = solver.Solve();
       
       if (success != 0) {
         cout << "computeErrorRepresentation: Solve FAILED with error: " << success << endl;
       }
       
+      /*
       if (equilibrated) {
         success = solver.UnequilibrateLHS();
         if (success != 0) {
           cout << "computeErrorRepresentation: unequilibration FAILED with error: " << success << endl;
         }
       }
+      */
       
       for (int i=0; i<numTestDofs; i++) {
         errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
-	//        rhsRepresentation(localCellIndex,i) = representationMatrix(i,1);
       }
     }
     _errorRepresentationForElementType[elemTypePtr.get()] = errorRepresentation;
-    //    _rhsRepresentationForElementType[elemTypePtr.get()] = rhsRepresentation;
   }
 }
 
@@ -3146,18 +3146,9 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
   int numTestDofs = testOrderingPtr->totalDofs();
 
   FieldContainer<double> cellSideParities  = _mesh->cellSideParitiesForCell(cellID);
-  /*
-  FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
 
-  bool createSideCacheToo = true;
-  */
   vector<int> cellIDs;
   cellIDs.push_back(cellID); // just do one cell at a time
-  /*
-  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-  ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-  CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
-  */ 
 
   FieldContainer<double> ipMatrix(1,numTestDofs,numTestDofs);
       
@@ -3173,6 +3164,7 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
 	IPK(i,j) = ipMatrix(0,i,j);
       }      
     }
+    // use cholesky factorization/sym matrix
     Epetra_SerialDenseSolver solver;
     solver.SetMatrix(IPK);
     solver.SetVectors(x,b);
@@ -3184,9 +3176,10 @@ void Solution::getElemData(ElementPtr elem, FieldContainer<double> &finalStiffne
   FieldContainer<double> optTestCoeffs(1,numTrialDofs,numTestDofs);
   _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
 
-  //  FieldContainer<double> finalStiffness(1,numTrialDofs,numTrialDofs);
   finalStiffness.resize(1,numTrialDofs,numTrialDofs);
-
+  
+  // use cholesky
+  _mesh->bilinearForm()->setUseSPDSolveForOptimalTestFunctions(true);
   BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
       
   //  FieldContainer<double> localRHSVector(1, numTrialDofs);
