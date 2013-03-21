@@ -230,6 +230,65 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   fout.close();
 }
 
+double getSolutionValueAtPoint(double x, double y, SolutionPtr soln, VarPtr var) {
+  double spaceDim = 2;
+  FieldContainer<double> point(1,spaceDim);
+  FieldContainer<double> value(1); // one value
+  point(0,0) = x;
+  point(0,1) = y;
+  soln->solutionValues(value, var->ID(), point);
+  return value[0];
+}
+
+void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr streamSoln, VarPtr phi) {
+  // find the x recirculation region first
+  int numIterations = 20;
+  double x,y;
+  y = 0.01;
+  {
+    double xGuessLeft = 4.25;
+    double xGuessRight = 4.60;
+    double leftValue = getSolutionValueAtPoint(xGuessLeft, y, streamSoln, phi);
+    double rightValue = getSolutionValueAtPoint(xGuessRight, y, streamSoln, phi);
+    if (leftValue * rightValue > 0) {
+      cout << "Error: leftValue and rightValue have same sign.\n";
+    }
+    for (int i=0; i<numIterations; i++) {
+      double xGuess = (xGuessLeft + xGuessRight) / 2;
+      double middleValue = getSolutionValueAtPoint(xGuess, y, streamSoln, phi);
+      if (middleValue * leftValue > 0) { // same sign
+        xGuessLeft = xGuess;
+        leftValue = middleValue;
+      }
+      if (middleValue * rightValue > 0) {
+        xGuessRight = xGuess;
+        rightValue = middleValue;
+      }
+      xPoint = xGuess;
+    }
+  }
+  {
+    double yGuessTop = 0.60;
+    double yGuessBottom = 0.20;
+    x = 4.01;
+    double topValue = getSolutionValueAtPoint(x, yGuessTop, streamSoln, phi);
+    double bottomValue = getSolutionValueAtPoint(x, yGuessBottom, streamSoln, phi);
+    for (int i=0; i<numIterations; i++) {
+      double yGuess = (yGuessTop + yGuessBottom) / 2;
+      double middleValue = getSolutionValueAtPoint(x, yGuess, streamSoln, phi);
+      if (middleValue * topValue > 0) { // same sign
+        yGuessTop = yGuess;
+        topValue = middleValue;
+      }
+      if (middleValue * bottomValue > 0) {
+        yGuessBottom = yGuess;
+        bottomValue = middleValue;
+      }
+      yPoint = yGuess;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
@@ -252,6 +311,8 @@ int main(int argc, char *argv[]) {
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
   bool finalSolveUsesStandardGraphNorm = false;
+  
+  double min_h = 0; //1.0 / 128.0;
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -534,7 +595,7 @@ int main(int argc, char *argv[]) {
   streamBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
   streamBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
   
-  streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAdd+pToAddForStreamFunction) );
+  streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
   
   streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC ) );
   
@@ -561,7 +622,7 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
+  RefinementStrategy refinementStrategy( solution, energyThreshold, min_h );
   
   // just an experiment:
   //  refinementStrategy.setEnforceOneIrregurity(false);
@@ -613,35 +674,35 @@ int main(int argc, char *argv[]) {
     cout << "Max condition number estimate: " << maxConditionNumber << endl;
   }
   
-  IPPtr ipToCompare = stokesBF->graphNorm();
-  Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
-  
-  solutionToCompare->solve(false);
-  
-  FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
-  FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
-  
-  FunctionPtr u1_soln = Function::solution(u1, solution);
-  FunctionPtr u2_soln = Function::solution(u2, solution);
-  
-  double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh);
-  double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh);
-  
-  double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
-  
-  if (rank==0) {
-    cout << "L^2 differences with automatic graph norm:\n";
-    cout << "    u1: " << u1_l2difference << endl;
-    cout << "    u2: " << u2_l2difference << endl;
-    cout << "Graph norm max condition number: " << graph_maxConditionNumber << endl;
-  }
-  
-  
-  if (finalSolveUsesStandardGraphNorm) {
-    if (rank==0)
-      cout << "switching to graph norm for final solve";
-    solution = solutionToCompare;
-  }
+//  IPPtr ipToCompare = stokesBF->graphNorm();
+//  Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
+//
+//  solutionToCompare->solve(false);
+//  
+//  FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
+//  FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
+//  
+//  FunctionPtr u1_soln = Function::solution(u1, solution);
+//  FunctionPtr u2_soln = Function::solution(u2, solution);
+//  
+//  double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh);
+//  double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh);
+//  
+//  double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
+//  
+//  if (rank==0) {
+//    cout << "L^2 differences with automatic graph norm:\n";
+//    cout << "    u1: " << u1_l2difference << endl;
+//    cout << "    u2: " << u2_l2difference << endl;
+//    cout << "Graph norm max condition number: " << graph_maxConditionNumber << endl;
+//  }
+//  
+//  
+//  if (finalSolveUsesStandardGraphNorm) {
+//    if (rank==0)
+//      cout << "switching to graph norm for final solve";
+//    solution = solutionToCompare;
+//  }
   
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
@@ -733,9 +794,13 @@ int main(int argc, char *argv[]) {
   
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();
+  double x,y;
+  computeRecirculationRegion(x, y, streamSolution, phi);
   if (rank == 0) {  
     cout << "...solved.\n";
     cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+    cout << "Recirculation region top: y=" << y << endl;
+    cout << "Recirculation region right: x=" << x << endl;
   }
   
   if (rank==0){
@@ -772,13 +837,17 @@ int main(int argc, char *argv[]) {
     dataPaths.push_back("phi_west.dat");
     GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
     
-    FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.65, 100);
+    double xTics = 0.1, yTics = -1;
+    FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.45, 200);
     FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
     GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
-    set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData);
+    set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
+    // be sure to the 0 contour, where the direction should change:
+    patchContourLevels.insert(0);
+    
     vector<string> patchDataPath;
     patchDataPath.push_back("phi_patch_east.dat");
-    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p");
+    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
     
     GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
       

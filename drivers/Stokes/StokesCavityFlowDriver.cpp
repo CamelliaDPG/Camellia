@@ -383,7 +383,7 @@ int main(int argc, char *argv[]) {
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                     streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
+                                     streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
     // top (left to right):
@@ -454,7 +454,7 @@ int main(int argc, char *argv[]) {
 //    elementVertices.push_back(el5);
     
     mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
-    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+pToAddForStreamFunction, pToAdd) );
+    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
     
     // trapezoidal singularity-avoiding mesh below.  (triangular above)
     //    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
