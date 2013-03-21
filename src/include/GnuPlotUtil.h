@@ -230,7 +230,7 @@ public:
   }
   
   static void writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
-                                     const string &outputFile) {
+                                     const string &outputFile, double xTics=-1, double yTics=-1) {
     ofstream fout((outputFile).c_str());
     ostringstream splotLine;
     splotLine << "splot ";
@@ -258,6 +258,12 @@ public:
     fout << "unset clabel" << endl;
     fout << "set cntrparam bspline" << endl;
     fout << "set size ratio -1" << endl;
+    if (xTics > 0) {
+      fout << "set xtics " << xTics << endl;
+    }
+    if (yTics > 0) {
+      fout << "set ytics" << yTics << endl;
+    }
     fout << "set style data lines" << endl;
     fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     fout << "set out '" << outputFile << ".eps'\n";
