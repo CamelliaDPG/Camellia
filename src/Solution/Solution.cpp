@@ -1682,8 +1682,7 @@ void Solution::computeErrorRepresentation() {
       Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
       solver.SetMatrix(ipMatrixT);
-      int success = solver.SetVectors(representationMatrix, rhs);
-      
+      int success = solver.SetVectors(representationMatrix, rhs);      
       if (success != 0) {
         cout << "computeErrorRepresentation: failed to SetVectors with error " << success << endl;
       }
@@ -1702,18 +1701,24 @@ void Solution::computeErrorRepresentation() {
         equilibrated = true;
       }
       */
+      success = solver.Factor();
+      if (success!=0){
+	cout << "computeErrorRepresentation: Solver failed to factor with error: " << success << endl;
+      }
       success = solver.Solve();
       
       if (success != 0) {
         cout << "computeErrorRepresentation: Solve FAILED with error: " << success << endl;
       }
       
+      /*
       if (equilibrated) {
-	//	success = solver.UnequilibrateLHS();
+        success = solver.UnequilibrateLHS();
         if (success != 0) {
           cout << "computeErrorRepresentation: unequilibration FAILED with error: " << success << endl;
         }
       }
+      */
       
       for (int i=0; i<numTestDofs; i++) {
         errorRepresentation(localCellIndex,i) = representationMatrix(i,0);
