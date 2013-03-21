@@ -184,7 +184,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
      StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
    
    where:
-   formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"}
+   formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
    normChoice = {"opt"|"naive"|"l2"|"h1"}
    
    */
@@ -244,6 +244,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     formulationType = DDS;
   } else if (formulationTypeStr == "ddsp") {
     formulationType = DDSP;
+  } else if (formulationTypeStr == "ce") {
+    formulationType = CE;
   } else {
     formulationType = VSP;
     formulationTypeStr = "vsp";
@@ -388,7 +390,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
+  ExactSolutionChoice exactSolnChoice = HDGSingular;
   
   bool reportConditionNumber = false;
   
@@ -490,6 +492,8 @@ int main(int argc, char *argv[]) {
     case VSP:
       stokesForm = Teuchos::rcp(new VSPStokesFormulation(mu));
       break;
+    case CE:
+      stokesForm = Teuchos::rcp(new CEStokesFormulation(mu));
     default:
       break;
   }
@@ -746,6 +750,9 @@ int main(int argc, char *argv[]) {
         
     if ( exactSolnChoice != HDGSingular ) {
       study.solve(quadPoints,useConformingTraces);
+      // debug code:
+//      DofOrderingPtr trialSpace = study.getSolution(0)->mesh()->getElement(0)->elementType()->trialOrderPtr;
+//      cout << "trial space for cell 0 on 1x1 mesh: \n" << *trialSpace;
     } else {
       // L-shaped domain
       vector<FieldContainer<double> > vertices;
@@ -762,21 +769,10 @@ int main(int argc, char *argv[]) {
 //                              minLogElements, maxLogElements, 
 //                              polyOrder+1, pToAdd, false, useTriangles, false);
       
-      // DEBUGGING: as a test, remove the reentrant corner:
-      // immediate motivation is simply that my MATLAB plotters don't handle the L-shape well.
-//      quadPoints(0,0) = -1.0; // x1
-//      quadPoints(0,1) =  0.0; // y1
-//      quadPoints(1,0) =  1.0;
-//      quadPoints(1,1) =  0.0;
-//      quadPoints(2,0) =  1.0;
-//      quadPoints(2,1) =  1.0;
-//      quadPoints(3,0) = -1.0;
-//      quadPoints(3,1) =  1.0;
-//      
-//      study.solve(quadPoints);
-      
-      cout << "WARNING: commented out the HDG singular solve (need to fix call to study).\n";
-//      study.solve(vertices,elementVertices,useConformingTraces);
+//      cout << "WARNING: commented out the HDG singular solve (need to fix call to study).\n";
+      const map< Edge, ParametricCurvePtr > edgeToCurveMap; //no curves
+      MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
+      study.solve(geometry,useConformingTraces);
       
       // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
       // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)

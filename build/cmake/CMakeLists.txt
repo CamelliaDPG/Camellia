@@ -133,6 +133,10 @@ set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
 )
 
+set( CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/ConditioningExperimentDriver.cpp"
+)
+
 set( NEW_CONFUSION_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewConfusionDriver.cpp"
 )
@@ -240,6 +244,7 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 #
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
+add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
@@ -260,6 +265,11 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 # (TPLs) with which Trilinos was built.
 #
 
+target_link_libraries(ConditioningExperimentDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
 target_link_libraries(NewBurgersDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}

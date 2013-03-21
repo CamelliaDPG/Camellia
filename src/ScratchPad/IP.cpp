@@ -8,6 +8,8 @@
 
 #include "IP.h"
 
+#include "SerialDenseSolveWrapper.h"
+
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
@@ -104,6 +106,23 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
           innerProduct(c, i, j) += valAdd;
         }
   }
+}
+
+double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
+  int testDofs = testSpace->totalDofs();
+  int numCells = basisCache->cellIDs().size();
+  FieldContainer<double> innerProduct(numCells,testDofs,testDofs);
+  this->computeInnerProductMatrix(innerProduct, testSpace, basisCache);
+  double maxConditionNumber = -1;
+  Teuchos::Array<int> cellIP_dim;
+  cellIP_dim.push_back(testDofs);
+  cellIP_dim.push_back(testDofs);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
+    double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(cellIP);
+    maxConditionNumber = max(maxConditionNumber,conditionNumber);
+  }
+  return maxConditionNumber;
 }
 
 // compute IP vector when var==fxn

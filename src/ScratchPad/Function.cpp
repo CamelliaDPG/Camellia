@@ -1388,6 +1388,10 @@ FunctionPtr SumFunction::div() {
   }
 }
 
+string hFunction::displayString() {
+  return "h";
+}
+
 double hFunction::value(double x, double y, double h) {
     return h;
 }

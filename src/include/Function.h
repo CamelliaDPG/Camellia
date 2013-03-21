@@ -316,6 +316,7 @@ class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  string displayString();
 };
 
 class UnitNormalFunction : public Function {

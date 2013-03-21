@@ -120,7 +120,7 @@ public:
     Epetra_SerialDenseMatrix bVectors(N,nRHS);
     for (int i = 0;i<N;i++){
       for (int j = 0;j<nRHS;j++){
-	bVectors(i,j) = b(i,j);
+        bVectors(i,j) = b(i,j);
       }
     }
 
@@ -153,12 +153,38 @@ public:
 
     for (int i=0;i<N;i++){
       for (int j=0;j<nRHS;j++){
-	x(i,j) = xVectors(i,j);
+        x(i,j) = xVectors(i,j);
       }
     }
   }
-
-
+  
+  static double estimateConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
+    Epetra_SerialDenseSolver solver;
+    
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    
+    if (! useATranspose) {
+      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
+    }
+    
+    Epetra_SerialDenseMatrix AMatrix(Copy,
+                                     &A(0,0),
+                                     A.dimension(0),
+                                     A.dimension(1),
+                                     A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)
+    
+    solver.SetMatrix(AMatrix);
+      
+    double rcond=0;
+    double result = solver.ReciprocalConditionEstimate(rcond);
+    if (result == 0) // success
+      return 1.0 / rcond;
+    else
+      return -1.0;
+  }
 };
 
 #endif

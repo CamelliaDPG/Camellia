@@ -18,10 +18,7 @@
 //#include "CGSolver.h"
 #include "MPIWrapper.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 using namespace std;
 
@@ -262,7 +259,7 @@ int main(int argc, char *argv[]) {
   bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = false;
-  bool weightTestNormDerivativesByH = false;
+  bool weightTestNormDerivativesByH = true;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
@@ -386,7 +383,7 @@ int main(int argc, char *argv[]) {
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                     streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
+                                     streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
     // top (left to right):
@@ -457,7 +454,7 @@ int main(int argc, char *argv[]) {
 //    elementVertices.push_back(el5);
     
     mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
-    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+pToAddForStreamFunction, pToAdd) );
+    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
     
     // trapezoidal singularity-avoiding mesh below.  (triangular above)
     //    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
@@ -560,6 +557,11 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( h * tau1->div() - q->dx() ); // u1
     qoptIP->addTerm( h * tau2->div() - q->dy() ); // u2
+    qoptIP->addTerm( v1 / h );
+    qoptIP->addTerm( v2 / h );
+    qoptIP->addTerm(  q / h);
+    qoptIP->addTerm( tau1 );
+    qoptIP->addTerm( tau2 );
   } else {
     qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
@@ -568,14 +570,22 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( tau1->div() - q->dx() );     // u1
     qoptIP->addTerm( tau2->div() - q->dy() );     // u2
+    qoptIP->addTerm( sqrt(beta) * v1 );
+    qoptIP->addTerm( sqrt(beta) * v2 );
+    qoptIP->addTerm( sqrt(beta) * q );
+    qoptIP->addTerm( sqrt(beta) * tau1 );
+    qoptIP->addTerm( sqrt(beta) * tau2 );
   }
-  qoptIP->addTerm( sqrt(beta) * v1 );
-  qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * q );
-  qoptIP->addTerm( sqrt(beta) * tau1 );
-  qoptIP->addTerm( sqrt(beta) * tau2 );
   
   ip = qoptIP;
+  
+  if (rank==0) {
+    int cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true);
+    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    double conditionNumber = qoptIP->computeMaxConditionNumber(testSpace,basisCache);
+    cout << "Gram matrix cond # for cell 0: " << conditionNumber << endl;
+  }
   
   if (rank==0) 
     ip->printInteractions();

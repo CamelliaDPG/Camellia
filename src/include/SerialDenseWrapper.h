@@ -138,15 +138,18 @@ public:
     convertSDMToFC(x,xVectors);
   }
 
-  static double getMatrixConditionNumber(FieldContainer<double> &A){
+  static double getMatrixConditionNumber(FieldContainer<double> &A) {
     int N = A.dimension(0);
     int M = A.dimension(1);
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseSolver solver;
     solver.SetMatrix(AMatrix); 
     double invCond;
-    solver.ReciprocalConditionEstimate(invCond);
-    return 1.0/invCond;
+    int result = solver.ReciprocalConditionEstimate(invCond);
+    if (result == 0) // success
+      return 1.0/invCond;
+    else // failure
+      return -1;
   }
 
   static void writeMatrixToMatlabFile(const string& filePath, FieldContainer<double> &A){

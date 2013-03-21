@@ -10,13 +10,14 @@
 #include "Mesh.h"
 #include "Solution.h"
 
-RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold) {
+RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h) {
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
   _anisotropicThreshhold = 10.0;
   _maxAspectRatio = 2^5; // five anisotropic refinements of an element
+  _min_h = min_h;
 }
 
 void RefinementStrategy::setAnisotropicThreshhold(double value){
@@ -44,13 +45,24 @@ void RefinementStrategy::refine(bool printToConsole) {
   double maxError = 0.0;
   double totalEnergyError = 0.0;
   
+  map<int, double> cellMeasures;
+  set<int> cellIDs = mesh->getActiveCellIDs();
+  for (set<int>::iterator cellIt=cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    int cellID = *cellIt;
+    cellMeasures[cellID] = mesh->getCellMeasure(cellID);
+  }
+  
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
        activeElemIt != activeElements.end(); activeElemIt++) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
     double cellEnergyError = energyError->find(cellID)->second;
-    maxError = max(cellEnergyError,maxError);
-    totalEnergyError += cellEnergyError * cellEnergyError; 
+    
+    double h = sqrt(cellMeasures[cellID]);
+    if (h > _min_h) {
+      maxError = max(cellEnergyError,maxError);
+    }
+    totalEnergyError += cellEnergyError * cellEnergyError;
   }
   totalEnergyError = sqrt(totalEnergyError);
   if ( printToConsole && _reportPerCellErrors ) {
@@ -79,10 +91,13 @@ void RefinementStrategy::refine(bool printToConsole) {
        activeElemIt != activeElements.end(); activeElemIt++){
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
-    double cellEnergyError = energyError->find(cellID)->second;
-    if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
-      //      cout << "refining cellID " << cellID << endl;
-      cellsToRefine.push_back(cellID);
+    double h = sqrt(cellMeasures[cellID]);
+    if (h > _min_h) {
+      double cellEnergyError = energyError->find(cellID)->second;
+      if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
+        //      cout << "refining cellID " << cellID << endl;
+        cellsToRefine.push_back(cellID);
+      }
     }
   }
   

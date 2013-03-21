@@ -347,6 +347,7 @@ int main(int argc, char *argv[]) {
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u
                                                           zero, zero); // zero forcing function
+  
   SolutionPtr solution = problem.backgroundFlow();
   SolutionPtr solnIncrement = problem.solutionIncrement();
   
@@ -623,41 +624,8 @@ int main(int argc, char *argv[]) {
       
 //      solveStrategy->solve(printToConsole);
       
-      
-//      if (compareWithOverkillMesh) {
-//        Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//        solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
-//        if (refIndex==numRefs-1) { // last refinement
-//          solution->writeFieldsToFile(p->ID(),"pressure.m");
-//          overkillSolution->writeFieldsToFile(p->ID(), "pressure_overkill.m");
-//        }
-//
-//        projectedSoln->addSolution(overkillSolution,-1.0);
-//
-//        if (refIndex==numRefs-1) { // last refinement
-//          projectedSoln->writeFieldsToFile(p->ID(), "pressure_error_vs_overkill.m");
-//        }
-//        double L2errorSquared = 0.0;
-//        for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
-//          VarPtr var = *fieldIt;
-//          int fieldID = var->ID();
-//          double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-//          if (rank==0)
-//            cout << "L2error for " << var->name() << ": " << L2error << endl;
-//          L2errorSquared += L2error * L2error;
-//        }
-//        
-//        int numGlobalDofs = mesh->numGlobalDofs();
-//        if (rank==0)
-//          cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
-//        dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-//      }
-      
       refinementStrategy->refine(false); //rank==0); // print to console on rank 0
       
-//      if (! MeshTestUtility::checkMeshConsistency(mesh)) {
-//        if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
-//      }
       // find top corner cells:
       vector< Teuchos::RCP<Element> > topCorners = mesh->elementsForPoints(topCornerPoints);
       if (rank==0) {// print out top corner cellIDs

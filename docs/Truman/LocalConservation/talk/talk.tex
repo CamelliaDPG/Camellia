@@ -260,8 +260,6 @@ the problem allows these to be statically condensed out. The most interesting
 consequence of this modification (apart from enforcing local conservation) is
 that we can modify the search space for our optimal test functions to be
 the orthogonal complement of constants.
-
-?? Is there a modified source term?
 \end{comment}
 
 
@@ -290,7 +288,7 @@ developed the following robust norm for convection-diffusion.
 +\norm{\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}v}^2
 }}_{\text{no longer necessary to make this a norm}}}
 \only<2>{\underbrace{\color{red}{
-+\left(\int_Kv\right)^2
++\left(\frac{1}{|K|}\int_Kv\right)^2
 }}_{\text{zero mean term}}}
 $}
 \end{align*}
@@ -362,21 +360,18 @@ u(x,y)=C_0+\sum_{n=1}^\infty C_n
 \begin{frame}
 \frametitle{Skewed Convection-Diffusion Problem}
 \only<1>{
-After 8 refinement steps
-\begin{columns}[b]
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+After 8 refinement steps, $\epsilon=10^{-4}$, $\bbeta=(1,0)^T$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/Confusion/robust8nc.png}
-\end{figure}
-\end{column}
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/Confusion/robust8c_mesh.png}
+\end{subfigure}
 \end{figure}
-\end{column}
-\end{columns}
 }
 \only<2>{
 \begin{figure}[t]
@@ -395,25 +390,24 @@ After 8 refinement steps
 \begin{frame}
 \frametitle{Double Glazing Problem}
 \only<1>{
-After 6 refinement steps
-\begin{columns}[b]
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+After 6 refinement steps, $\epsilon=10^{-2}$, $\bbeta=\left( 
+\begin{array}{c}
+2(2y-1)(1-(2x-1)^2) \\
+-2(2x-1)(1-(2y-1)^2) \\
+\end{array}\right)$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/DoubleGlazing/robust6nc.png}
-
-Without Local Conservation
-\end{figure}
-\end{column}
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/DoubleGlazing/robust6c.png}
-
-With Local Conservation
+\caption*{With local conservation}
+\end{subfigure}
 \end{figure}
-\end{column}
-\end{columns}
 }
 \only<2>{
 \begin{figure}[t]
@@ -432,25 +426,20 @@ With Local Conservation
 \begin{frame}
 \frametitle{Vortex Problem}
 \only<1>{
-After 6 refinement steps
-\begin{columns}[b]
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+After 6 refinement steps, $\epsilon=10^{-4}$, $\bbeta=(-y,x)^T$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/Vortex/robust6nc.png}
-
-Without Local Conservation
-\end{figure}
-\end{column}
-\begin{column}{0.5\textwidth}
-\begin{figure}[t]
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
 \includegraphics[width=1.0\textwidth]{../figs/Vortex/robust6c.png}
-
-With Local Conservation
+\caption*{With local conservation}
+\end{subfigure}
 \end{figure}
-\end{column}
-\end{columns}
 }
 \only<2>{
 \begin{figure}[t]
@@ -479,7 +468,7 @@ Explain theory???
 \begin{frame}
 \frametitle{Wedge Problem}
 \only<1>{
-After 16 refinement steps
+After 16 refinement steps, $\epsilon=10^{-2}$, $\bbeta=(1,0)^T$
 \begin{figure}
 \centering
 \begin{subfigure}[t]{0.4\textwidth}
@@ -546,39 +535,108 @@ After 16 refinement steps
 \begin{frame}
 \frametitle{Discontinuous Source Problem}
 \only<1>{
-After 16 refinement steps
+After 8 refinement steps, $\epsilon=10^{-3}$,
+$\bbeta=(0.5/\sqrt{1.25},1/\sqrt{1.25})^T$, $f=\pm 1$
 \begin{figure}
 \centering
-\begin{subfigure}[t]{0.45\textwidth}
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
-\includegraphics[width=\textwidth]{../figs/Discontinuous/robust8c.png}
+\includegraphics[width=1.0\textwidth]{../figs/Discontinuous/robust8nc.png}
+\caption*{Without local conservation}
 \end{subfigure}
-\begin{subfigure}[t]{0.45\textwidth}
+\begin{subfigure}[t]{0.49\textwidth}
 \centering
-\includegraphics[width=\textwidth]{../figs/Discontinuous/robustFlux.pdf}
+\includegraphics[width=1.0\textwidth]{../figs/Discontinuous/robust8c.png}
+\caption*{With local conservation}
 \end{subfigure}
 \end{figure}
 }
 \only<2>{
-\begin{columns}[b]
-\begin{column}{0.5\textwidth}
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{../figs/Discontinuous/robust8c.png}
+\includegraphics[width=0.7\textwidth]{../figs/Discontinuous/robustFlux.pdf}
 \end{figure}
-\end{column}
-\begin{column}{0.5\textwidth}
-\vspace{-5ex}
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{../figs/Discontinuous/robustFlux.pdf}
-\end{figure}
-\end{column}
-\end{columns}
 }
 \end{frame}
 \begin{comment}
 \end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Inviscid Burgers' Equation}
+\only<1>{
+\vspace{-0.5em}
+\[
+\frac{\partial u}{\partial t}+u\frac{\partial u}{\partial
+x}=0
+\quad\Leftrightarrow\quad
+\nabla_{x,t}\cdot\left(\begin{array}{c}
+\frac{u^2}{2}\\
+u
+\end{array}\right)=0
+\]
+\vspace{-1.5em}
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Burgers/graph8nc.png}
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Burgers/graph8c.png}
+\caption*{With local conservation}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/Burgers/graphFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+This problem is slightly off-topic in that we are no longer dealing with the
+convection-diffusion equation. Instead we consider the inviscid Burgers
+equation which can be formulated as a nonlinear hyperbolic conservation law,
+letting us relate directly to the Lax-Wendroff theorem. A common argument for
+local conservation is that shock speed can be off if we don't have a
+conservative method, and the Burgers' equation is often given as an example.
+We choose to work with a space-time formulation where x follows the x axis and
+time the y. So without going through the DPG derivation, let's just see how
+our two methods behave. Apart from some slight differences in refinement
+pattern, the two methods appear nearly identical.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Summary}
+What have we done?
+\begin{itemize}
+\item We've turned our minimization problem into a saddlepoint problem.
+\item The change is computationally feasible.
+\item Mathematically, it gets rid of troublesome term.
+\end{itemize}
+
+\vspace{2ex}
+Does it make a difference?
+\begin{itemize}
+\item Enforcement changes refinement strategy.
+\item Standard DPG is nearly conservative in practice.
+\item Usually we get the same results with better conservation.
+\item Some improvement on condition number for local solves.
+\end{itemize}
+\vspace{2ex}
+\visible<2->{\pecosbold{We need to study the effect on real fluid dynamics.}}
+\end{frame}
 
 
 % %===============================================================================
