@@ -32,8 +32,9 @@ protected:
   bool _reportPerCellErrors;  
   double _anisotropicThreshhold;
   vector< RefinementResults > _results;
+  double _min_h;
 public:
-  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
+  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0);
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   virtual void refine(bool printToConsole=false);
