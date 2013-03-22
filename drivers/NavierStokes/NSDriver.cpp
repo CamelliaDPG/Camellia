@@ -487,9 +487,9 @@ public:
     _amplitude = amplitude;
   }
   double value(double x, double y){
-    return _amplitude*exp(-.5*((x-1.0)*(x-1.0)+y*y)/_width)
+    return _amplitude*exp(-((x-1.0)*(x-1.0)+y*y)/(_width*_width));
   }
-}
+};
 
 void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
 
@@ -711,9 +711,9 @@ int main(int argc, char *argv[]) {
   }else{
     T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, T_free/2.0) );  // set min viscosity
   }
-  
+ 
   // try a point artificial diffusion at the plate edge...
-  FunctionPtr artificialDiffusion = Teuchos::rcp(new TwoDGaussian(1/Re,10/Re));
+  mu = T_visc/Re + Teuchos::rcp(new TwoDGaussian(1/(1000*Re),.01));
 
   FunctionPtr mu = T_visc / Re + artificialDiffusion;
   FunctionPtr lambda = -.66 * T_visc / Re;
