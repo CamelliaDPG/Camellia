@@ -306,7 +306,7 @@ int main(int argc, char *argv[]) {
   bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
   bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
   bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
-  bool useWeightedGraphNorm = false;   // weights to improve conditioning of the local problems
+  bool useWeightedGraphNorm = true;   // weights to improve conditioning of the local problems
   bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
@@ -386,8 +386,13 @@ int main(int argc, char *argv[]) {
     
     t1n = varFactory.fluxVar("\\widehat{t_{1n}}");
     t2n = varFactory.fluxVar("\\widehat{t_{2n}}");
-    u1 = varFactory.fieldVar("u_1");
-    u2 = varFactory.fieldVar("u_2");
+    if (!useWeightedGraphNorm) {
+      u1 = varFactory.fieldVar("u_1");
+      u2 = varFactory.fieldVar("u_2");
+    } else {
+      u1 = varFactory.fieldVar("u_1", HGRAD);
+      u2 = varFactory.fieldVar("u_2", HGRAD);
+    }
     sigma11 = varFactory.fieldVar("\\sigma_11");
     sigma12 = varFactory.fieldVar("\\sigma_12");
     sigma21 = varFactory.fieldVar("\\sigma_21");
@@ -426,7 +431,9 @@ int main(int argc, char *argv[]) {
       stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
     } else {
       // unsure whether I should divide q through by h in this equation
-      // (I divide it in the test norm)
+      // (I divide it in the test norm) -- the RHS here is 0, so mathematically the two are
+      // equivalent.  Therefore conditioning should decide, and my conclusion is that
+      // we're better conditioned without the division by h.
       // q:
       stokesBF->addTerm(-u1,q->dx());// / h); // (-u, grad q)
       stokesBF->addTerm(-u2,q->dy());// / h);
@@ -525,8 +532,8 @@ int main(int argc, char *argv[]) {
       qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
       qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
       qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
-      qoptIP->addTerm( tau1->div() - q->dx() / h );     // u1
-      qoptIP->addTerm( tau2->div() - q->dy() / h);     // u2
+      qoptIP->addTerm( h * tau1->div() - q->dx() );     // u1
+      qoptIP->addTerm( h * tau2->div() - q->dy());     // u2
       
       qoptIP->addTerm( v1 );
       qoptIP->addTerm( v2 );
@@ -794,13 +801,14 @@ int main(int argc, char *argv[]) {
   
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();
-  double x,y;
-  computeRecirculationRegion(x, y, streamSolution, phi);
+  // commenting out the recirculation region computation, because it doesn't work yet.
+//  double x,y;
+//  computeRecirculationRegion(x, y, streamSolution, phi);
   if (rank == 0) {  
     cout << "...solved.\n";
     cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
-    cout << "Recirculation region top: y=" << y << endl;
-    cout << "Recirculation region right: x=" << x << endl;
+//    cout << "Recirculation region top: y=" << y << endl;
+//    cout << "Recirculation region right: x=" << x << endl;
   }
   
   if (rank==0){
