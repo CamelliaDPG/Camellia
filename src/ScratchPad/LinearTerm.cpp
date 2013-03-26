@@ -151,7 +151,7 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
   
   int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > basis;
+  BasisPtr basis;
   bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
   bool boundaryTerm = thisFluxOrTrace || forceBoundaryTerm || basisCache->isSideCache();
   

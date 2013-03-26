@@ -251,7 +251,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
       bool impositionReported = false;
       // 2. Determine global dof indices and values, in one pass per side
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis = trialOrderingPtr->getBasis(trialID,sideIndex);
+        BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideIndex);
         int numDofs = basis->getCardinality();
         
         int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
@@ -330,7 +330,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         int spaceDim = physicalCellNodes.dimension(2);
         
         DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis = trialOrderingPtr->getBasis(trialID,0);
+        BasisPtr basis = trialOrderingPtr->getBasis(trialID,0);
         int basisCardinality = basis->getCardinality();
         FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
         CellTools<double>::mapToReferenceFrame(refPoints,physicalCellNodes,physicalCellNodes,cellTopo);

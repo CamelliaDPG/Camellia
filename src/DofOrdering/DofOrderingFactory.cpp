@@ -39,6 +39,8 @@
 
 #include "BilinearForm.h"
 
+#include "Basis.h"
+
 DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
   _bilinearForm = bilinearForm;
 }
@@ -53,7 +55,7 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
-    Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis;
+    BasisPtr basis;
     int basisRank;
     basis = BasisFactory::getBasis( basisRank, polyOrder, cellTopo.getKey(), fs);
     testOrder->addEntry(testID,basis,basisRank);
@@ -291,7 +293,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
         if (! BasisFactory::isMultiBasis(basis) ) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
         }
-        MultiBasis* multiBasis = (MultiBasis*) basis.get();
+        MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
         varIDsToUpgrade[varID] = multiBasis->getSubBasis(childIndexInParentSide);
       }
     }
@@ -310,7 +312,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
                                     DofOrderingPtr &secondOrdering, int secondSideIndex,
                                     const shards::CellTopology &secondCellTopo) {
   // upgrades the lesser-order basis 
-  map<int, BasisPtr> varIDsToUpgrade;
+  map<int, BasisPtr > varIDsToUpgrade;
   int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
   set<int> varIDs = firstOrdering->getVarIDs();
   set<int>::iterator idIt;
@@ -453,7 +455,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       if (replacePatchBasis) {
         if (BasisFactory::isPatchBasis(basis)) {
           // if we have a PatchBasis, then we want to get the underlying basis...
-          basis = ((PatchBasis*)basis.get())->nonPatchAncestorBasis();
+          basis = ((PatchBasis<>*)basis.get())->nonPatchAncestorBasis();
         }
       }
       fs = BasisFactory::getBasisFunctionSpace(basis);

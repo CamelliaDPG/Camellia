@@ -63,6 +63,7 @@
 
 class Solution;
 class MeshTransformationFunction;
+class MeshPartitionPolicy;
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef pair<int,int> Edge;

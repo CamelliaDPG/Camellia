@@ -302,7 +302,7 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
   
   bool testBasisIsVolumeBasis = true;
   if (spaceDim==2) {
-    testBasisIsVolumeBasis = (testBasis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+    testBasisIsVolumeBasis = (testBasis->domainTopology().getBaseKey() != shards::Line<2>::key);
   } else if (spaceDim==3) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in testBasisIsVolumeBasis determination.");
   }

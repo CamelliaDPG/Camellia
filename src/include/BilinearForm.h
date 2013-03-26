@@ -36,12 +36,12 @@
 
 #include "CamelliaIntrepidExtendedTypes.h" // defined by us
 
+#include "DofOrdering.h"
+
 class BasisCache;
 class ElementType;
-class DofOrdering;
 typedef Teuchos::RCP< BasisCache > BasisCachePtr;
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
 
 using namespace std;
 using namespace Intrepid;

@@ -5,7 +5,6 @@
 #include "Teuchos_RCP.hpp"
 
 // Intrepid includes
-#include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
 #include "BasisFactory.h"
@@ -13,6 +12,8 @@
 #include "BasisCache.h"
 
 #include "AbstractFunction.h"
+
+#include "Basis.h"
 
 using namespace Intrepid;
 using namespace std;

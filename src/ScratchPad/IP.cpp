@@ -207,7 +207,7 @@ bool IP::hasBoundaryTerms() {
 //    set<int>::iterator testIt1;
 //    set<int>::iterator testIt2;
 //    
-//    Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > test1Basis, test2Basis;
+//    BasisPtr test1Basis, test2Basis;
 //    
 //    for (testIt1= testIDs.begin(); testIt1 != testIDs.end(); testIt1++) {
 //      int testID1 = *testIt1;

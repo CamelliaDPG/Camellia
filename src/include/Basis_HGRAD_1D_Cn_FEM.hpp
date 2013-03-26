@@ -33,7 +33,7 @@ namespace Intrepid {
    \endverbatim
    */
   template<class Scalar, class ArrayScalar> 
-  class Basis_HGRAD_1D_Cn_FEM : public Vectorized_Basis<Scalar, ArrayScalar> {
+  class Basis_HGRAD_1D_Cn_FEM : public Intrepid::Basis<Scalar, ArrayScalar> {
   private:
     int _spaceDim;
     

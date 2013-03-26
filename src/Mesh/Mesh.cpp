@@ -1146,7 +1146,7 @@ void Mesh::determineDofPairings() {
               // marry the last node from one MB leaf to first node from the next
               // note that we're doing this for both traces and fluxes, but with traces this is redundant
               BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID,sideIndex);
-              MultiBasis* multiBasis = (MultiBasis *) basis.get();
+              MultiBasis<>* multiBasis = (MultiBasis<> *) basis.get(); // Dynamic cast would be better
               vector< pair<int,int> > adjacentDofOrdinals = multiBasis->adjacentVertexOrdinals();
               for (vector< pair<int,int> >::iterator dofPairIt = adjacentDofOrdinals.begin();
                    dofPairIt != adjacentDofOrdinals.end(); dofPairIt++) {

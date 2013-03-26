@@ -37,7 +37,10 @@
 
 #include "BasisEvaluation.h"
 #include "BasisFactory.h"
-#include "Vectorized_Basis.hpp"
+
+#include "Intrepid_CellTools.hpp"
+#include "Intrepid_DefaultCubatureFactory.hpp"
+#include "Intrepid_FunctionSpaceTools.hpp"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;

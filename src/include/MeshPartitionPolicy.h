@@ -14,13 +14,11 @@
 
 using namespace Intrepid;
 
-class Mesh; // avoid circular dependency by doing forward declaration
+#include "Mesh.h"
 
 class MeshPartitionPolicy {
 public:
   virtual void partitionMesh(Mesh *mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells);
 };
-
-#include "Mesh.h"
 
 #endif

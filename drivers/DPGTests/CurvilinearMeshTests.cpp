@@ -757,7 +757,7 @@ bool CurvilinearMeshTests::testH1Projection() {
                                      values, tol);
     }
     
-    VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+    VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false);
     
     // For H1Order > 1, we don't expect that the edge interpolant will match the TFI on the element interior; we expect that only on the edges.
     
