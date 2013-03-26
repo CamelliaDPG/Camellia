@@ -177,6 +177,10 @@ set( INCOMP_NS_STUDY
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesStudy.cpp"
   )
 
+set( uBLAS_CHOLESKY_TEST
+  "${DRIVERS_DIR}/uBLAS/cholesky_test.cpp"
+)
+
 set( STOKES_SOURCES
   "${STOKES_DIR}/StokesManufacturedSolution.cpp"
   "${STOKES_DIR}/StokesBilinearForm.cpp"
@@ -257,6 +261,7 @@ add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRI
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
+add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 
 #
 # EDIT HERE: Change trilinosExample to the name of the executable
