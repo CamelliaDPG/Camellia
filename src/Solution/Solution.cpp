@@ -895,7 +895,7 @@ void Solution::integrateBasisFunctions(FieldContainer<double> &values, ElementTy
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(1) != basisCardinality,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
+  BasisPtr trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
 //  int numSides = elemTypePtr->trialOrderPtr->getNumSidesForVarID(trialID);
   
@@ -1162,7 +1162,7 @@ void Solution::integrateSolution(FieldContainer<double> &values, ElementTypePtr 
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr))");
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 1,
                      std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr))");
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
+  BasisPtr trialBasis;
   trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
   
   int cubDegree = trialBasis->getDegree();
@@ -1229,7 +1229,7 @@ void Solution::integrateFlux(FieldContainer<double> &values, ElementTypePtr elem
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // Get numerical integration points and weights
     DefaultCubatureFactory<double>  cubFactory;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = dofOrdering.getBasis(trialID,sideIndex);
+    BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
     int basisRank = dofOrdering.getBasisRank(trialID);
     int cubDegree = 2*basis->getDegree();
     
@@ -1314,7 +1314,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   
   Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
   
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
   
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
@@ -1883,7 +1883,7 @@ void Solution::solutionValuesOverCells(FieldContainer<double> &values, int trial
 
     Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
     
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
+    BasisPtr basis = trialOrder->getBasis(trialID,0); // 0 assumes field var
     int basisCardinality = basis->getCardinality();
 
     Teuchos::RCP< FieldContainer<double> > basisValues;
@@ -2064,7 +2064,7 @@ void Solution::solutionValues(FieldContainer<double> &values, int trialID, const
     
     Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
     
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+    BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
     int basisRank = trialOrder->getBasisRank(trialID);
     int basisCardinality = basis->getCardinality();
 
@@ -2150,7 +2150,7 @@ void Solution::solutionValues(FieldContainer<double> &values,
   
   Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
   
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
     
   int basisRank = trialOrder->getBasisRank(trialID);
   int basisCardinality = basis->getCardinality();
@@ -2470,7 +2470,7 @@ FieldContainer<double> Solution::solutionForElementTypeGlobal(ElementTypePtr ele
 void Solution::basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
                                         const FieldContainer<double> &allCoeffs,
                                         int trialID, int sideIndex) {
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
   
   int basisCardinality = basis->getCardinality();
   basisCoeffs.resize(basisCardinality);
@@ -2486,7 +2486,7 @@ void Solution::solnCoeffsForCellID(FieldContainer<double> &solnCoeffs, int cellI
   
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
     cout << "Warning: solution for cellID " << cellID << " not found; returning 0.\n";
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+    BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
     int basisCardinality = basis->getCardinality();
     solnCoeffs.resize(basisCardinality);
     solnCoeffs.initialize();
@@ -2539,7 +2539,7 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
   ElementTypePtr elemTypePtr = _mesh->elements()[cellID]->elementType();
   
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = trialOrder->getBasis(trialID,sideIndex);
+  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
   
   int basisCardinality = basis->getCardinality();
   if ( _solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() ) {
@@ -3610,14 +3610,14 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
         lastSide = side;
       }
       for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++) {
-        Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
+        BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
         setSolnCoeffsForCellID(basisCoefficients,cellID,trialID,sideIndex);
       }
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(side != -1, std::invalid_argument, "sideIndex for fields must = -1");
-      Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
       //      cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
@@ -3659,7 +3659,7 @@ void Solution::projectOntoCell(const map<int, Teuchos::RCP<AbstractFunction> > &
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
     
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+    BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
     
     FieldContainer<double> basisCoefficients;
     Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, physicalCellNodes);

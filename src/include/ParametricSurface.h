@@ -15,6 +15,8 @@
 #include "Function.h"
 #include "Mesh.h"
 
+#include "VectorizedBasis.h"
+
 using namespace std;
 
 class ParametricSurface;

@@ -843,7 +843,7 @@ bool FunctionTests::testValuesDottedWithTensor() {
   
 //  // finally, let's try the same sort of thing, but now with a vector-valued basis
 //  BasisPtr vectorBasisTemp = BasisFactory::getBasis(h1Order, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
-//  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
+//  VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, FieldContainer<double> > *)vectorBasisTemp.get(),false);
 //
 //  BasisPtr compBasis = vectorBasis->getComponentBasis();
 //  

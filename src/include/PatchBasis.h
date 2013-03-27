@@ -1,6 +1,6 @@
 // @HEADER
 //
-// Copyright © 2011 Nathan V. Roberts. All Rights Reserved.
+// Copyright © 2013 Nathan V. Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -31,7 +31,6 @@
 #ifndef DPG_PATCH_BASIS
 #define DPG_PATCH_BASIS
 
-#include "Intrepid_Basis.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
@@ -40,37 +39,60 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
+#include "Basis.h"
+
 using namespace std;
-using namespace Intrepid;
+typedef Intrepid::EOperator EOperator;
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
-class PatchBasis : public DoubleBasis {
+template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class PatchBasis;
+template<class Scalar, class ArrayScalar> class PatchBasis : public Camellia::Basis<Scalar,ArrayScalar> {
   shards::CellTopology _patchCellTopo;
   shards::CellTopology _parentTopo;
-  FieldContainer<double> _patchNodesInParentRefCell;
+  ArrayScalar _patchNodesInParentRefCell;
   BasisPtr _parentBasis;
-  FieldContainer<double> _parentRefNodes;
+  ArrayScalar _parentRefNodes;
   
-  void computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
-                            FieldContainer<double> &cellJacobDet, const FieldContainer<double> &inputPointsParentRefCell) const;
+  void computeCellJacobians(ArrayScalar &cellJacobian, ArrayScalar &cellJacobInv,
+                            ArrayScalar &cellJacobDet, const ArrayScalar &inputPointsParentRefCell) const;
   
-  void initializeTags();
+  void initializeTags() const;
 public:
-  PatchBasis(BasisPtr parentBasis, FieldContainer<double> &patchNodesInParentRefCell, shards::CellTopology &patchCellTopo);
-  
-  void getValues(FieldContainer<double> &outputValues, const FieldContainer<double> &  inputPoints,
-                 const EOperator operatorType) const;
-  void getValues(FieldContainer<double> & outputValues,
-                 const FieldContainer<double> &   inputPoints,
-                 const FieldContainer<double> &    cellVertices,
-                 const EOperator        operatorType) const;
 
-  BasisPtr nonPatchAncestorBasis(); // the ancestor of whom all descendants are PatchBases
+  PatchBasis(BasisPtr parentBasis, ArrayScalar &patchNodesInParentRefCell, shards::CellTopology &patchCellTopo);
   
-  BasisPtr parentBasis(); // the immediate parent
+  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
+                 const EOperator operatorType) const;
   
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getSubBasis(int basisIndex) const;
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getLeafBasis(int leafOrdinal) const;
+  
+  vector< pair<int,int> > adjacentVertexOrdinals() const; // NOTE: prototype, untested code!
+  
+  // domain info on which the basis is defined:
+  shards::CellTopology domainTopology() const;
+  
+  // dof ordinal subsets:
+//  std::set<int> dofOrdinalsForEdges(bool includeVertices = true);
+//  std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true);
+//  std::set<int> dofOrdinalsForInterior();
+//  std::set<int> dofOrdinalsForVertices();
+  
+//  int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
+  
+  // range info for basis values:
+  int rangeDimension() const;
+  int rangeRank() const;
+  
+  int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal) const;
+  
+  void getCubature(ArrayScalar &cubaturePoints, ArrayScalar &cubatureWeights, int maxTestDegree) const;
+  
+  BasisPtr nonPatchAncestorBasis() const; // the ancestor of whom all descendants are PatchBases
+  BasisPtr parentBasis() const; // the immediate parent
 };
+
+typedef Teuchos::RCP< PatchBasis<> > PatchBasisPtr;
+
+#include "PatchBasisDef.h"
 
 #endif

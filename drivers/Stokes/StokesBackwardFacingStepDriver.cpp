@@ -6,7 +6,6 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
-#include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
@@ -23,6 +22,8 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #else
 #endif
+
+#include "StreamDriverUtil.h"
 
 using namespace std;
 
@@ -146,100 +147,6 @@ public:
   }
 };
 
-FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints) {
-  vector<double> points1D_x, points1D_y;
-  for (int i=0; i<numPoints; i++) {
-    points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
-    points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
-  }
-  int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      points(pointIndex,0) = points1D_x[i];
-      points(pointIndex,1) = points1D_y[j];
-    }
-  }
-  return points;
-}
-
-set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsPerLevel=1) {
-  // traverse diagonal of (i*numPoints + j) data from solutionData()
-  int numPoints = sqrt(pointData.dimension(0));
-  set<double> levels;
-  for (int i=0; i<numPoints; i+=pointsPerLevel) {
-    levels.insert(pointData(i*numPoints + i,2)); // format for pointData has values at (ptIndex, 2)
-  }
-  return levels;
-}
-
-FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1) {
-  int numPoints = points.dimension(0);
-  FieldContainer<double> values(numPoints);
-  solution->solutionValues(values, u1->ID(), points);
-  
-  FieldContainer<double> xyzData(numPoints, 3);
-  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-    xyzData(ptIndex,0) = points(ptIndex,0);
-    xyzData(ptIndex,1) = points(ptIndex,1);
-    xyzData(ptIndex,2) = values(ptIndex);
-  }
-  return xyzData;
-}
-
-void writePatchValues(double xMin, double xMax, double yMin, double yMax,
-                      SolutionPtr solution, VarPtr u1, string filename) {
-  vector<double> points1D_x, points1D_y;
-  int numPoints = 100;
-  for (int i=0; i<numPoints; i++) {
-    points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
-    points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
-  }
-  int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      points(pointIndex,0) = points1D_x[i];
-      points(pointIndex,1) = points1D_y[j];
-    }
-  }
-  FieldContainer<double> values1(numPoints*numPoints);
-  FieldContainer<double> values2(numPoints*numPoints);
-  solution->solutionValues(values1, u1->ID(), points);
-  ofstream fout(filename.c_str());
-  fout << setprecision(15);
-  
-  fout << "X = zeros(" << numPoints << ",1);\n";
-  //    fout << "Y = zeros(numPoints);\n";
-  fout << "U = zeros(" << numPoints << "," << numPoints << ");\n";
-  for (int i=0; i<numPoints; i++) {
-    fout << "X(" << i+1 << ")=" << points1D_x[i] << ";\n";
-  }
-  for (int i=0; i<numPoints; i++) {
-    fout << "Y(" << i+1 << ")=" << points1D_y[i] << ";\n";
-  }
-  
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      fout << "U("<<i+1<<","<<j+1<<")=" << values1(pointIndex) << ";" << endl;
-    }
-  }
-  fout.close();
-}
-
-double getSolutionValueAtPoint(double x, double y, SolutionPtr soln, VarPtr var) {
-  double spaceDim = 2;
-  FieldContainer<double> point(1,spaceDim);
-  FieldContainer<double> value(1); // one value
-  point(0,0) = x;
-  point(0,1) = y;
-  soln->solutionValues(value, var->ID(), point);
-  return value[0];
-}
-
 void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr streamSoln, VarPtr phi) {
   // find the x recirculation region first
   int numIterations = 20;
@@ -306,7 +213,7 @@ int main(int argc, char *argv[]) {
   bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
   bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
   bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
-  bool useWeightedGraphNorm = false;   // weights to improve conditioning of the local problems
+  bool useWeightedGraphNorm = true;   // weights to improve conditioning of the local problems
   bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
@@ -386,8 +293,13 @@ int main(int argc, char *argv[]) {
     
     t1n = varFactory.fluxVar("\\widehat{t_{1n}}");
     t2n = varFactory.fluxVar("\\widehat{t_{2n}}");
-    u1 = varFactory.fieldVar("u_1");
-    u2 = varFactory.fieldVar("u_2");
+    if (!useWeightedGraphNorm) {
+      u1 = varFactory.fieldVar("u_1");
+      u2 = varFactory.fieldVar("u_2");
+    } else {
+      u1 = varFactory.fieldVar("u_1", HGRAD);
+      u2 = varFactory.fieldVar("u_2", HGRAD);
+    }
     sigma11 = varFactory.fieldVar("\\sigma_11");
     sigma12 = varFactory.fieldVar("\\sigma_12");
     sigma21 = varFactory.fieldVar("\\sigma_21");
@@ -426,7 +338,9 @@ int main(int argc, char *argv[]) {
       stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
     } else {
       // unsure whether I should divide q through by h in this equation
-      // (I divide it in the test norm)
+      // (I divide it in the test norm) -- the RHS here is 0, so mathematically the two are
+      // equivalent.  Therefore conditioning should decide, and my conclusion is that
+      // we're better conditioned without the division by h.
       // q:
       stokesBF->addTerm(-u1,q->dx());// / h); // (-u, grad q)
       stokesBF->addTerm(-u2,q->dy());// / h);
@@ -525,8 +439,8 @@ int main(int argc, char *argv[]) {
       qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
       qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
       qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
-      qoptIP->addTerm( tau1->div() - q->dx() / h );     // u1
-      qoptIP->addTerm( tau2->div() - q->dy() / h);     // u2
+      qoptIP->addTerm( h * tau1->div() - q->dx() );     // u1
+      qoptIP->addTerm( h * tau2->div() - q->dy());     // u2
       
       qoptIP->addTerm( v1 );
       qoptIP->addTerm( v2 );
@@ -794,13 +708,14 @@ int main(int argc, char *argv[]) {
   
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();
-  double x,y;
-  computeRecirculationRegion(x, y, streamSolution, phi);
+  // commenting out the recirculation region computation, because it doesn't work yet.
+//  double x,y;
+//  computeRecirculationRegion(x, y, streamSolution, phi);
   if (rank == 0) {  
     cout << "...solved.\n";
     cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
-    cout << "Recirculation region top: y=" << y << endl;
-    cout << "Recirculation region right: x=" << x << endl;
+//    cout << "Recirculation region top: y=" << y << endl;
+//    cout << "Recirculation region right: x=" << x << endl;
   }
   
   if (rank==0){

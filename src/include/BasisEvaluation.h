@@ -36,19 +36,14 @@
 #ifndef DPGTrilinos_BasisEvaluation_h
 #define DPGTrilinos_BasisEvaluation_h
 
-#include "Intrepid_CellTools.hpp"
-#include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-
 #include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
 #include "BilinearForm.h"
-#include "Vectorized_Basis.hpp"
-
-#include "BasisFactory.h"
+#include "VectorizedBasis.h"
+#include "Basis.h"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"

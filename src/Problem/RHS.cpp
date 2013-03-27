@@ -36,7 +36,7 @@ void RHS::integrateAgainstStandardBasis(FieldContainer<double> &rhsVector,
   set<int> testIDs = testOrdering->getVarIDs();
   set<int>::iterator testIterator;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
+  BasisPtr testBasis;
   
   FieldContainer<double> rhsPointValues; // the rhs method will resize...	
   

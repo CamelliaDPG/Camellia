@@ -81,8 +81,11 @@
 #include "Projector.h"
 #include "BasisCache.h"
 
+#include "Basis.h"
+
 using namespace std;
 using namespace Intrepid;
+using namespace Camellia;
 
 ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, shards::CellTopology &cellTopo) {
   Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology(cellTopo));
@@ -129,16 +132,17 @@ void DPGTests::createBases() {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis;
-  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >() );
+  BasisPtr basis;
+  int rangeDimension = 2, scalarRank = 0, vectorRank = 1;
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank) );
   BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >() );
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank ) );
   BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL) );
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank ) );
   BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL) );
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank ) );
   BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >() );
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >()), rangeDimension, vectorRank ) );
   BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
 }
 
@@ -157,11 +161,11 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
   //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
@@ -423,7 +427,7 @@ bool DPGTests::testDofOrdering() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis
+  BasisPtr traceBasis
   = 
   BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
@@ -527,7 +531,7 @@ bool DPGTests::testComputeStiffnessDx() {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis 
+  BasisPtr basis 
   = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
@@ -660,7 +664,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis
+  BasisPtr traceBasis
   = 
   BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
@@ -673,7 +677,7 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > testBasis
+  BasisPtr testBasis
   = 
   BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
   testOrdering->addEntry(0,testBasis,0);
@@ -786,7 +790,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis 
+  BasisPtr traceBasis 
   = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
                            line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
@@ -797,7 +801,7 @@ bool DPGTests::testComputeStiffnessTrace() {
   }
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > testBasis 
+  BasisPtr testBasis 
   = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
   
@@ -958,7 +962,7 @@ bool DPGTests::testMathInnerProductDx() {
   DofOrdering lowestOrderHGRADOrdering;
   
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -1122,7 +1126,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   if ( ! conforming ) {
     shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
     int basisRank;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis 
+    BasisPtr basis 
     = BasisFactory::getBasis(basisRank,C3_FAKE_POLY_ORDER,
                              line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     
@@ -1301,7 +1305,7 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
   int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis
+  BasisPtr basis
   = 
   BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
@@ -2130,7 +2134,7 @@ bool DPGTests::testComputeOptimalTest() {
     }
     
     int basisRank;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis
+    BasisPtr basis
     = 
     BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     
@@ -2533,10 +2537,10 @@ bool DPGTests::testProjection(){
   FieldContainer<double> basisCoefficients;
 
   int polyOrder = 5; // some large number
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = basisFactory.getBasis( polyOrder, cellTopoKey, fs);  
+  BasisPtr basis = basisFactory.getBasis( polyOrder, cellTopoKey, fs);  
 
   // creating basisCache to compute values at certain points
-  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  shards::CellTopology cellTopo = basis->domainTopology();
   int basisRank = BasisFactory::getBasisRank(basis);
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   int ID = 0; // fake ID 

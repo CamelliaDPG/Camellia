@@ -1,6 +1,6 @@
 // @HEADER
 //
-// Copyright © 2011 Nathan V. Roberts. All Rights Reserved.
+// Copyright © 2013 Nathan V. Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -31,7 +31,7 @@
 #ifndef DPG_MULTI_BASIS
 #define DPG_MULTI_BASIS
 
-#include "Intrepid_Basis.hpp"
+#include "Basis.h"
 #include "Intrepid_FieldContainer.hpp"
 
 // Shards includes
@@ -43,45 +43,58 @@
 using namespace std;
 using namespace Intrepid;
 
-typedef Basis<double, FieldContainer<double> > DoubleBasis;
-typedef Teuchos::RCP< DoubleBasis > BasisPtr;
-
-class MultiBasis : public DoubleBasis {
+template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class MultiBasis;
+template<class Scalar, class ArrayScalar> class MultiBasis : public Camellia::Basis<Scalar,ArrayScalar> {  
   shards::CellTopology _cellTopo;
   FieldContainer<double> _subRefNodes;
-  vector< BasisPtr > _bases;
+  vector< Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > > _bases;
   int _numLeaves;
   
-  void computeCellJacobians(FieldContainer<double> &cellJacobian, FieldContainer<double> &cellJacobInv,
-                            FieldContainer<double> &cellJacobDet, const FieldContainer<double> &inputPointsSubRefCell,
+  void computeCellJacobians(ArrayScalar &cellJacobian, ArrayScalar &cellJacobInv,
+                            ArrayScalar &cellJacobDet, const ArrayScalar &inputPointsSubRefCell,
                             int subRefCellIndex) const;
   
-  void initializeTags();
+  void initializeTags() const;
 public:
   // below, subRefNodes means the coordinates of the nodes of the children in the parent/reference cell
   // if there are N nodes in D-dimensional cellTopo and C bases in bases, then subRefNodes should have dimensions (C,N,D)
-  MultiBasis(vector< BasisPtr > bases, FieldContainer<double> &subRefNodes, shards::CellTopology &cellTopo);
-
-  void getValues(FieldContainer<double> &outputValues, const FieldContainer<double> &  inputPoints,
+  MultiBasis(vector< Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > > bases, ArrayScalar &subRefNodes, shards::CellTopology &cellTopo);
+  
+  void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
                  const EOperator operatorType) const;
-  void getValues(FieldContainer<double> & outputValues,
-                 const FieldContainer<double> &   inputPoints,
-                 const FieldContainer<double> &    cellVertices,
-                 const EOperator        operatorType) const;
   
-  BasisPtr getSubBasis(int basisIndex);
-  BasisPtr getLeafBasis(int leafOrdinal);
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getSubBasis(int basisIndex) const;
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > getLeafBasis(int leafOrdinal) const;
   
-  vector< pair<int,int> > adjacentVertexOrdinals(); // NOTE: prototype, untested code!
+  vector< pair<int,int> > adjacentVertexOrdinals() const; // NOTE: prototype, untested code!
   
-  int numLeafNodes();
-  int numSubBases();
+  // domain info on which the basis is defined:
+  shards::CellTopology domainTopology() const;
   
-  int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal);
+  // dof ordinal subsets:
+//  std::set<int> dofOrdinalsForEdges(bool includeVertices = true);
+//  std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true);
+//  std::set<int> dofOrdinalsForInterior();
+//  std::set<int> dofOrdinalsForVertices();
   
-  void getCubature(FieldContainer<double> &cubaturePoints, FieldContainer<double> &cubatureWeights, int maxTestDegree);
+  int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
   
-  void printInfo();
+  // range info for basis values:
+  int rangeDimension() const;
+  int rangeRank() const;
+  
+  int numLeafNodes() const;
+  int numSubBases() const;
+  
+  int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal) const;
+  
+  void getCubature(ArrayScalar &cubaturePoints, ArrayScalar &cubatureWeights, int maxTestDegree) const;
+  
+  void printInfo() const;
 };
+
+typedef Teuchos::RCP< MultiBasis<> > MultiBasisPtr;
+
+#include "MultiBasisDef.h"
 
 #endif

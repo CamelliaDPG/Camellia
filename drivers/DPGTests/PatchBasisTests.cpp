@@ -697,10 +697,10 @@ void PatchBasisTests::teardown() {
   _testPoints1DLeftParent.resize(0);
   _testPoints1DMiddleParent.resize(0);
   _testPoints1DRightParent.resize(0);
-  _parentBasis = Teuchos::rcp((DoubleBasis *)NULL);
-  _patchBasisLeft = Teuchos::rcp((PatchBasis *)NULL);
-  _patchBasisMiddle = Teuchos::rcp((PatchBasis *)NULL);
-  _patchBasisRight = Teuchos::rcp((PatchBasis *)NULL);
+  _parentBasis = Teuchos::rcp((Camellia::Basis<> *)NULL);
+  _patchBasisLeft = Teuchos::rcp((PatchBasis<> *)NULL);
+  _patchBasisMiddle = Teuchos::rcp((PatchBasis<> *)NULL);
+  _patchBasisRight = Teuchos::rcp((PatchBasis<> *)NULL);
   
   _mesh = Teuchos::rcp((Mesh *)NULL);
   _sw = Teuchos::rcp((Element *)NULL);

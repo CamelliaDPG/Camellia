@@ -41,7 +41,7 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "BasisFactory.h"
+#include "Basis.h"
 
 using namespace Intrepid;
 using namespace std;
@@ -65,7 +65,7 @@ class DofOrdering {
 public:
   DofOrdering(); // constructor
   
-  void addEntry(int varID, Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis, int basisRank, int sideIndex = 0);
+  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = 0);
   
   bool hasBasisEntry(int varID, int sideIndex);
   bool hasSideVarIDs();

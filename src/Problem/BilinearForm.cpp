@@ -372,8 +372,7 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
   vector<int> trialIDs = this->trialIDs();
   vector<int>::iterator trialIterator;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
+  BasisPtr trialBasis, testBasis;
   
   stiffness.initialize(0.0);
   

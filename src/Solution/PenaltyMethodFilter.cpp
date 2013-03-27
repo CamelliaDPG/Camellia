@@ -59,7 +59,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         int testTrialID = constrTestPair.first;
         
         // get basis to integrate for testing fxns
-        Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
+        BasisPtr testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
         FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache->getTransformedWeightedValues(testTrialBasis,trialOperator,
                                                                                                               sideIndex,false));
         // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
@@ -81,7 +81,7 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
           int trialID = constrPair.first;
           
           // get basis to integrate
-          Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);
+          BasisPtr trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);
           // for trial: the value lives on the side, so we don't use the volume coords either:
           FieldContainer<double> trialValuesTransformed = *(basisCache->getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
           // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
