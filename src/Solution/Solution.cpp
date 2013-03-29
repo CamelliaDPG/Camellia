@@ -103,9 +103,9 @@
 #include "Var.h"
 
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
-  // TODO: work out how to suppress the console output here
   double condest = -1;
   AztecOO solverForConditionEstimate(problem);
+  solverForConditionEstimate.SetAztecOption(AZ_diagnostics,AZ_none);
   solverForConditionEstimate.SetAztecOption(AZ_solver, AZ_cg_condnum);
   solverForConditionEstimate.ConstructPreconditioner(condest);
   return condest;
@@ -2934,6 +2934,14 @@ void Solution::condensedSolve(bool saveMemory){
 
   if (_reportTimingResults){
     cout << "on rank " << rank << ", time for solve = " << timer.ElapsedTime() << endl;
+  }
+
+  if (_reportConditionNumber) {
+    double condest = conditionNumberEstimate(*problem_cond);
+    if (rank == 0) {
+      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
+    }
+    _globalSystemConditionEstimate = condest;
   }
 
   timer.ResetStartTime();
