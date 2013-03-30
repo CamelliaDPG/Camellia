@@ -28,6 +28,8 @@
 
 #include "BasisFactory.h"
 
+#include "MeshUtilities.h"
+
 #include "Solver.h"
 #include "CGSolver.h"
 
@@ -148,7 +150,7 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
 }
 
 enum NormChoice {
-  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm
+  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm, UnitCompliantGraphNorm
 };
 
 enum ExactSolutionChoice {
@@ -185,7 +187,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
    
    where:
    formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
-   normChoice = {"opt"|"naive"|"l2"|"h1"}
+   normChoice = {"opt"|"naive"|"l2"|"h1"|"compliant"}
    
    */
   
@@ -235,6 +237,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     normChoice = L2Norm;
   } else if (normChoiceStr == "h1") {
     normChoice = H1ExperimentalNorm;
+  } else if (normChoiceStr == "compliant") {
+    normChoice = UnitCompliantGraphNorm;
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
@@ -390,11 +394,17 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = HDGSingular;
+  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
-  bool reportConditionNumber = false;
+  bool reportConditionNumber = false; // we don't believe Solution's condition number estimate anyhow
+  
+  bool computeMaxGramConditionNumber = true; // for Gram matrices
   
   bool useTrueTracesForVVP = true;
+  
+  bool dontImposeZeroMeanPressure = false;
+  
+  bool writeGlobalStiffnessMatrixToFile = false;
   
   bool useCG = false;
   bool useMumps = true;
@@ -426,6 +436,7 @@ int main(int argc, char *argv[]) {
   else if (normChoice == GraphNorm) normChoiceStr = "graph";
   else if (normChoice == L2Norm) normChoiceStr = "l2";
   else if (normChoice == H1ExperimentalNorm) normChoiceStr = "H^1 Experimental";
+  else if (normChoice == UnitCompliantGraphNorm) normChoiceStr = "unit-compliant graph";
   else normChoiceStr = "unknownNorm";
   
   string exactSolnChoiceStr;
@@ -439,7 +450,7 @@ int main(int argc, char *argv[]) {
     pToAdd = 3;
   }
 //  if (formulationType==VVP) {
-//    // for at least the singular solution and VVP on quads, find that we get much better results 
+//    // for at least the singular solution and VVP on quads, find that we get much better results
 //    // with 3 than 2...
 //    pToAdd = 3;
 //  }
@@ -451,9 +462,9 @@ int main(int argc, char *argv[]) {
 //  }
   
   bool useConformingTraces = true;
-  if (exactSolnChoice == HDGSingular) {
-    useConformingTraces = false;
-  }
+//  if (exactSolnChoice == HDGSingular) {
+//    useConformingTraces = false;
+//  }
   
   if (rank == 0) {
     cout << "polyOrder = " << polyOrder << endl;
@@ -466,6 +477,14 @@ int main(int argc, char *argv[]) {
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
     cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
     cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
+    cout << "dontImposeZeroMeanPressure = " << (dontImposeZeroMeanPressure ? "true" : "false") << endl;
+    cout << "writeGlobalStiffnessMatrixToFile = " << (writeGlobalStiffnessMatrixToFile ? "true" : "false") << endl;
+    cout << "computeMaxGramConditionNumber = " << (computeMaxGramConditionNumber ? "true" : "false") << endl;
+  }
+  
+  if ((normChoice == UnitCompliantGraphNorm) && (formulationType != VGP)) {
+    cout << "Error: unit-compliant graph norm only supported for VGP right now.\n";
+    exit(1);
   }
   
   double mu = 1.0;
@@ -484,7 +503,7 @@ int main(int argc, char *argv[]) {
       stokesForm = Teuchos::rcp(new DDSPStokesFormulation(mu));
       break;        
     case VGP:
-      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu));
+      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu, normChoice==UnitCompliantGraphNorm));
       break;
     case VVP:
       stokesForm = Teuchos::rcp(new VVPStokesFormulation(mu, useTrueTracesForVVP));
@@ -633,6 +652,16 @@ int main(int argc, char *argv[]) {
     
     mySolution = stokesForm->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
   }
+
+  BCPtr bc = mySolution->bc();
+  if (dontImposeZeroMeanPressure) {
+    vector<int> fieldIDs;
+    stokesForm->primaryTrialIDs(fieldIDs);
+    int pressureID = fieldIDs[2];
+    dynamic_cast< BCEasy* >(bc.get())->removeZeroMeanConstraint(pressureID);
+    // instead, use a single-point BC on pressure
+    dynamic_cast< BCEasy* >(bc.get())->addSinglePointBC(pressureID, p_exact);
+  }
   
   Teuchos::RCP<DPGInnerProduct> ip;
   if (normChoice == GraphNorm) {
@@ -676,6 +705,8 @@ int main(int argc, char *argv[]) {
     myIP->addTerm(q);
     
     ip = myIP;
+  } else if (normChoice==UnitCompliantGraphNorm) {
+    ip = dynamic_cast< VGPStokesFormulation* >(stokesForm.get())->unitCompliantGraphNorm();
   }
   
   if (rank==0) 
@@ -725,11 +756,12 @@ int main(int argc, char *argv[]) {
     HConvergenceStudy study(mySolution,
                             mySolution->bilinearForm(),
                             mySolution->ExactSolution::rhs(),
-                            mySolution->bc(), ip,  
+                            bc, ip,  
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setReportConditionNumber(reportConditionNumber);
+    study.setWriteGlobalStiffnessToDisk(writeGlobalStiffnessMatrixToFile,"stokes_study_stiffness");
     int maxTestDegree = polyOrder + 1 + pToAdd;
     int cubatureDegreeInMesh = polyOrder + maxTestDegree;
     
@@ -780,8 +812,44 @@ int main(int argc, char *argv[]) {
     int cubatureEnrichment = useTriangles ? 0 : 15;
     double p_integral = p_exact->integrate(study.getSolution(maxLogElements)->mesh(), cubatureEnrichment);
     
+    if (dontImposeZeroMeanPressure) {
+      // then we need to adjust the solutions by subtracting off the mean of the pressure
+      vector<int> fieldIDs;
+      stokesForm->primaryTrialIDs(fieldIDs);
+      int pressureID = fieldIDs[2];
+      VarPtr pressure = Var::varForTrialID(pressureID, stokesForm->bf());
+      double pressure_L2norm = p_exact->l2norm(study.getSolution(maxLogElements)->mesh(),cubatureEnrichment);
+
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        SolutionPtr soln = study.getSolution(i);
+        FunctionPtr pressure_soln = Function::solution(pressure, soln);
+        double pressure_integral = pressure_soln->integrate(soln->mesh());
+        map<int, FunctionPtr > functionMap;
+        functionMap[pressureID] = pressure_soln - pressure_integral;
+        soln->projectOntoMesh(functionMap);
+        double relativeError = (pressure_soln - pressure_integral - p_exact)->l2norm(soln->mesh()) / pressure_L2norm;
+        cout << "relative pressure error for logElements " << i << ": "  << relativeError << endl;
+      }
+      // now have study recompute the errors
+      study.computeErrors();
+    }
+    
+    if (computeMaxGramConditionNumber) {
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        SolutionPtr soln = study.getSolution(i);
+        ostringstream fileNameStream;
+        fileNameStream << "stokesStudy_maxConditionIPMatrix_" << i << ".dat";
+        IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), fileNameStream.str());
+        if (rank==0) {
+          cout << "max Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
+          cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
+        }
+      }
+    }
+    
     if (rank == 0) {
-      cout << "Integral of pressure: " << setprecision(15) << p_integral << endl;
+      cout << "Integral of exact pressure: " << setprecision(15) << p_integral << endl;
 
       cout << study.TeXErrorRateTable();
       vector<int> primaryVariables;
