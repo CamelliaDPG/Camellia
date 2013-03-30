@@ -599,7 +599,7 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> points = pointGrid(0, 1, 0, 1, 100);
     FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
     GnuPlotUtil::writeXYPoints("phi_patch_navierStokes_cavity.dat", pointData);
-    set<double> patchContourLevels = diagonalContourLevels(pointData);
+    set<double> patchContourLevels = diagonalContourLevels(pointData,1);
     vector<string> patchDataPath;
     patchDataPath.push_back("phi_patch_navierStokes_cavity.dat");
     GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "lidCavityNavierStokes.p");
