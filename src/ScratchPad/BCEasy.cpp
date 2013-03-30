@@ -39,7 +39,7 @@ public:
       entriesPerPoint *= dim[d];
       dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
     }
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     FieldContainer<bool> pointsMatch1(numCells,numPoints);
     FieldContainer<bool> pointsMatch2(numCells,numPoints);
     
@@ -111,9 +111,16 @@ void BCEasy::addZeroMeanConstraint( VarPtr field ) {
   _zeroMeanConstraints.insert( field->ID() );
 }
 
-//  addSinglePointBC( VarPtr field ) {
-//    _singlePointBCs.insert( field->ID() );
-//  }
+void BCEasy::removeZeroMeanConstraint( int fieldID ) {
+  if (_zeroMeanConstraints.find(fieldID) != _zeroMeanConstraints.end()) {
+    _zeroMeanConstraints.erase( _zeroMeanConstraints.find(fieldID) );
+  }
+}
+  
+void BCEasy::addSinglePointBC( int fieldID, FunctionPtr valueFunction, SpatialFilterPtr spatialPoints ) {
+  DirichletBC bc = make_pair(spatialPoints, valueFunction);
+  _singlePointBCs[ fieldID ] = bc;
+}
 
 bool BCEasy::bcsImposed(int varID) { // returns true if there are any BCs anywhere imposed on varID
   return _dirichletBCs.find(varID) != _dirichletBCs.end();
@@ -124,7 +131,7 @@ map< int, DirichletBC > & BCEasy::dirichletBCs() {
 }
 
 void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
-              int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
+                      int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
   FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
   
   int numCells = physicalPoints.dimension(0);
@@ -159,10 +166,39 @@ void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bo
   f->values(dirichletValues,basisCache);
 }
 
+void BCEasy::imposeBC(int varID, FieldContainer<double> &physicalPoints,
+                      FieldContainer<double> &unitNormals,
+                      FieldContainer<double> &dirichletValues,
+                      FieldContainer<bool> &imposeHere) {
+  if (_singlePointBCs.find(varID) == _singlePointBCs.end()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BCEasy::imposeBC only supports singleton points.");
+  }
+  DirichletBC bc = _singlePointBCs[varID];
+  SpatialFilterPtr filter = bc.first;
+  FunctionPtr f = bc.second;
+  
+  BasisCachePtr basisCache = Teuchos::rcp( new PhysicalPointCache(physicalPoints) );
+  
+  filter->matchesPoints(imposeHere,basisCache);
+  f->values(dirichletValues,basisCache);
+  
+  bool pointMatched = false; // make sure we just impose this once
+  for (int i=0; i<imposeHere.size(); i++) {
+    if (imposeHere[i]) {
+      if (pointMatched) {
+        // then don't impose here
+        imposeHere[i] = false;
+      } else {
+        pointMatched = true;
+      }
+    }
+  }
+}
+
 bool BCEasy::singlePointBC(int varID) {
   // for now, these are unsupported
-  return false;
-  //    return _singlePointBCs.find(varID) != _singlePointBCs.end();
+//  return false;
+  return _singlePointBCs.find(varID) != _singlePointBCs.end();
 } 
 
 bool BCEasy::imposeZeroMeanConstraint(int varID) {
