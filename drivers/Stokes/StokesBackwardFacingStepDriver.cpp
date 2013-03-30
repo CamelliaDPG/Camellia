@@ -214,10 +214,11 @@ int main(int argc, char *argv[]) {
   bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
   bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
   bool useWeightedGraphNorm = true;   // weights to improve conditioning of the local problems
+  bool useExtendedPrecisionForOptimalTestInversion = true;
   bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
-  bool finalSolveUsesStandardGraphNorm = false;
+  bool finalSolveUsesStandardGraphNorm = true;
   
   double min_h = 0; //1.0 / 128.0;
   
@@ -353,7 +354,8 @@ int main(int argc, char *argv[]) {
   
   stokesBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
   stokesBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
-  
+  stokesBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
+
   ///////////////////////////////////////////////////////////////////////////
   SpatialFilterPtr nonOutflowBoundary = Teuchos::rcp( new NonOutflowBoundary );
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowBoundary );
@@ -508,6 +510,7 @@ int main(int argc, char *argv[]) {
   
   streamBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
   streamBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
+  streamBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
   
   streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
   
@@ -547,9 +550,12 @@ int main(int argc, char *argv[]) {
   }
   
   // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
-  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  // COMMENTING THESE LINES OUT AS A TEST: TODO: UNCOMMENT THEM.
+  if (rank==0)
+    cout << "NOTE: using anisotropic initial mesh.  Should change back after test complete!\n";
+//  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+//  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
   
   if (rank == 0) {
     cout << "Starting mesh has " << mesh->numActiveElements() << " elements and ";
@@ -572,6 +578,12 @@ int main(int argc, char *argv[]) {
     if (useGraphNormStrongerTau) {
       cout << "NOTE: Using \"tau-strengthened\" graph norm.\n";
     }
+    if (useExtendedPrecisionForOptimalTestInversion) {
+      cout << "NOTE: using extended precision (long double) for Gram matrix inversion.\n";
+    }
+    if (finalSolveUsesStandardGraphNorm) {
+      cout << "NOTE: will use standard graph norm for final solve.\n";
+    }
   }
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
@@ -588,35 +600,40 @@ int main(int argc, char *argv[]) {
     cout << "Max condition number estimate: " << maxConditionNumber << endl;
   }
   
-//  IPPtr ipToCompare = stokesBF->graphNorm();
-//  Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
-//
-//  solutionToCompare->solve(false);
-//  
-//  FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
-//  FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
-//  
-//  FunctionPtr u1_soln = Function::solution(u1, solution);
-//  FunctionPtr u2_soln = Function::solution(u2, solution);
-//  
-//  double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh);
-//  double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh);
-//  
-//  double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
-//  
-//  if (rank==0) {
-//    cout << "L^2 differences with automatic graph norm:\n";
-//    cout << "    u1: " << u1_l2difference << endl;
-//    cout << "    u2: " << u2_l2difference << endl;
-//    cout << "Graph norm max condition number: " << graph_maxConditionNumber << endl;
-//  }
-//  
-//  
-//  if (finalSolveUsesStandardGraphNorm) {
-//    if (rank==0)
-//      cout << "switching to graph norm for final solve";
-//    solution = solutionToCompare;
-//  }
+  
+  if (finalSolveUsesStandardGraphNorm) {
+    if (rank==0)
+      cout << "switching to graph norm for final solve";
+    
+    IPPtr ipToCompare = stokesBF->graphNorm();
+    Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
+
+    solutionToCompare->solve(false);
+    
+    FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
+    FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
+    
+    FunctionPtr u1_soln = Function::solution(u1, solution);
+    FunctionPtr u2_soln = Function::solution(u2, solution);
+    
+    double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh) / u1_soln->l2norm(mesh);
+    double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh) / u2_soln->l2norm(mesh);
+    
+    double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
+    
+    if (rank==0) {
+      cout << "L^2 differences with automatic graph norm:\n";
+      cout << "    u1: " << u1_l2difference * 100 << "%" << endl;
+      cout << "    u2: " << u2_l2difference * 100 << "%" << endl;
+    }  
+    solution = solutionToCompare;
+    
+    double energyErrorTotal = solution->energyErrorTotal();
+    if (rank == 0) {
+      cout << "Final energy error (standard graph norm): " << energyErrorTotal << endl;
+      cout << "Max condition number estimate (standard graph norm): " << graph_maxConditionNumber << endl;
+    }
+  }
   
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
