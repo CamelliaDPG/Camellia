@@ -102,12 +102,20 @@
 
 #include "Var.h"
 
+#include "AztecOO_ConditionNumber.h"
+
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
-  double condest = -1;
-  AztecOO solverForConditionEstimate(problem);
-  solverForConditionEstimate.SetAztecOption(AZ_diagnostics,AZ_none);
-  solverForConditionEstimate.SetAztecOption(AZ_solver, AZ_cg_condnum);
-  solverForConditionEstimate.ConstructPreconditioner(condest);
+  AztecOOConditionNumber conditionEstimator;
+  conditionEstimator.initialize(*problem.GetOperator());
+  
+  cout << "WARNING: Solution::conditionNumberEstimate(): At least for small matrices, condition number estimates appear to be off by quite a bit.\n";
+  
+  int maxIters = 40000;
+  double tol = 1e-10;
+  int status = conditionEstimator.computeConditionNumber(maxIters, tol);
+  cout << "status result from computeConditionNumber(): " << status << endl;
+  double condest = conditionEstimator.getConditionNumber();
+  
   return condest;
 }
 
@@ -2563,6 +2571,16 @@ void Solution::setSolnCoeffsForCellID(FieldContainer<double> &solnCoeffsToSet, i
 // protected method; used for solution comparison...
 const map< int, FieldContainer<double> > & Solution::solutionForCellIDGlobal() const {
   return _solutionForCellIDGlobal;
+}
+
+void Solution::setWriteMatrixToFile(bool value, const string &filePath) {
+  _writeMatrixToMatlabFile = value;
+  _matrixFilePath = filePath;
+}
+
+void Solution::setWriteMatrixToMatrixMarketFile(bool value, const string &filePath) {
+  _writeMatrixToMatrixMarketFile = value;
+  _matrixFilePath = filePath;
 }
 
 // Jesse's additions below:
