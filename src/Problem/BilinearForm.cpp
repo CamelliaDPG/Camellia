@@ -43,6 +43,8 @@
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+#include "cholesky.hpp"
+
 static const string & S_OP_VALUE = "";
 static const string & S_OP_GRAD = "\\nabla ";
 static const string & S_OP_CURL = "\\nabla \\times ";
@@ -77,6 +79,7 @@ set<int> BilinearForm::_normalOperators;
 BilinearForm::BilinearForm() {
   _useSPDSolveForOptimalTestFunctions = false;
   _useIterativeRefinementsWithSPDSolve = false;
+  _useExtendedPrecisionSolveForOptimalTestFunctions = false;
 }
 
 const vector< int > & BilinearForm::trialIDs() {
@@ -178,7 +181,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
   //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
   
-  if (! _useSPDSolveForOptimalTestFunctions) {
+  if ((! _useSPDSolveForOptimalTestFunctions) && (!_useExtendedPrecisionSolveForOptimalTestFunctions)) {
     Epetra_SerialDenseSolver solver;
     
     int solvedAll = 0;
@@ -249,7 +252,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
       
     }
     return solvedAll;
-  } else {
+  } else if (_useSPDSolveForOptimalTestFunctions && !_useExtendedPrecisionSolveForOptimalTestFunctions) {
     Epetra_SerialSpdDenseSolver solver;
     
     int solvedAll = 0;
@@ -303,10 +306,43 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
       
       //cout << "computeOptimalTest: ipMatrix.oneNorm = " << oneNorm << endl;
       
+    } 
+    return solvedAll;
+  } else { // _useExtendedPrecisionSolveForOptimalTestFunctions == true
+    int solvedAll = 0;
+    typedef long double DBL;
+    typedef ublas::row_major  ORI;
+    int gramSize = numTestDofs;
+    ublas::matrix<DBL, ORI> A (gramSize, gramSize);
+    ublas::matrix<DBL, ORI> L (gramSize, gramSize);
+    ublas::vector<DBL> x (gramSize);
+    
+    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+      // copy the inner product for this cell into matrix A
+      // (could optimize this using pointer arithmetic)
+      for (int i=0; i<gramSize; i++) {
+        for (int j=0; j<gramSize; j++) {
+          A(i,j) = innerProductMatrix(cellIndex,i,j);
+        }
+      }
+      size_t res = cholesky_decompose(A, L);
+      if (res != 0) { // failure: communicate by setting solvedAll
+        solvedAll = res;
+      }
+      // now solve for each rhs corresponding to the stiffness matrix columns for this cell
+      for (int j=0; j<numTrialDofs; j++) {
+        // copy from transposed stiffness matrix:
+        for (int i=0; i<gramSize; i++) {
+          x(i) = stiffnessMatrixT(cellIndex,j,i);
+        }
+        cholesky_solve(L, x, ublas::lower());
+        for (int i=0; i<gramSize; i++) {
+          optimalTestWeights(cellIndex,j,i) = x(i);
+        }
+      }
     }
     return solvedAll;
   }
-  
 }
 
 void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, ElementTypePtr elemType,
@@ -850,4 +886,8 @@ void BilinearForm::setUseSPDSolveForOptimalTestFunctions(bool value) {
 
 void BilinearForm::setUseIterativeRefinementsWithSPDSolve(bool value) {
   _useIterativeRefinementsWithSPDSolve = value;
+}
+
+void BilinearForm::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value) {
+  _useExtendedPrecisionSolveForOptimalTestFunctions = value;
 }
