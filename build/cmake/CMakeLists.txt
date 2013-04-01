@@ -13,6 +13,13 @@ cmake_minimum_required(VERSION 2.8)
 # You do _not_ need to edit this line.
 FIND_PACKAGE(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
 
+SET(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "/usr/local/")
+
+FIND_PACKAGE(Boost)
+if (Boost_FOUND)
+  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+endif()
+
 find_package(VTK REQUIRED)
 include(${VTK_USE_FILE})
 if(VTK_LIBRARIES)

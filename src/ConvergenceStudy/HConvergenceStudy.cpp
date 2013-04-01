@@ -190,6 +190,13 @@ map< int, double > HConvergenceStudy::exactSolutionNorm() {
 void HConvergenceStudy::computeErrors() {
   SolutionPtr solution = _solutions[0];
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
+  
+  // clear all the data structures:
+  _solutionErrors.clear();
+  _solutionRates.clear();
+  _bestApproximationErrors.clear();
+  _bestApproximationRates.clear();
+  
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     vector< Teuchos::RCP<Solution> >::iterator solutionIt;
@@ -313,6 +320,11 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    if (_writeGlobalStiffnessToDisk) {
+      ostringstream fileName;
+      fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
+      solution->setWriteMatrixToFile(true, fileName.str());
+    }
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
     solution->setReportConditionNumber(_reportConditionNumber);
@@ -359,6 +371,11 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    if (_writeGlobalStiffnessToDisk) {
+      ostringstream fileName;
+      fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
+      solution->setWriteMatrixToFile(true, fileName.str());
+    }
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
     solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
@@ -694,4 +711,10 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
 
 void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {
   _solver = solver;
+}
+
+
+void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix) {
+  _writeGlobalStiffnessToDisk = value;
+  _globalStiffnessFilePrefix = globalStiffnessFilePrefix;
 }

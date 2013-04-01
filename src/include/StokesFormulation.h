@@ -437,10 +437,11 @@ class VGPStokesFormulation : public StokesFormulation {
   BFPtr _bf;
   IPPtr _graphNorm;
   FunctionPtr _mu;
+  bool _enriched_velocity;
   
   void initVars() {
     // create the VarPtrs:
-    varFactory = vgpVarFactory();
+    varFactory = vgpVarFactory(_enriched_velocity);
     
     // look up the created VarPtrs:
     v1 = varFactory.testVar(VGP_V1_S, HGRAD);
@@ -456,6 +457,14 @@ class VGPStokesFormulation : public StokesFormulation {
     t2n = varFactory.fluxVar(VGP_T2HAT_S);
     u1 = varFactory.fieldVar(VGP_U1_S);
     u2 = varFactory.fieldVar(VGP_U2_S);
+    if (! _enriched_velocity) {
+      u1 = varFactory.fieldVar(VGP_U1_S);
+      u2 = varFactory.fieldVar(VGP_U2_S);
+    } else {
+      u1 = varFactory.fieldVar(VGP_U1_S, HGRAD);
+      u2 = varFactory.fieldVar(VGP_U2_S, HGRAD);
+    }
+    
     sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
     sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
     sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
@@ -463,8 +472,9 @@ class VGPStokesFormulation : public StokesFormulation {
     p = varFactory.fieldVar(VGP_P_S);
   }
   
-  void init(FunctionPtr mu) {
+  void init(FunctionPtr mu, bool enriched_velocity) {
     _mu = mu;
+    _enriched_velocity = enriched_velocity;
     
     initVars();
     
@@ -507,7 +517,7 @@ class VGPStokesFormulation : public StokesFormulation {
   }
   
 public:
-  static VarFactory vgpVarFactory() {
+  static VarFactory vgpVarFactory(bool enriched_velocity = false) {
     // sets the order of the variables in a canonical way
     // uses the publicly accessible strings from above, so that VarPtrs
     // can be looked up...
@@ -525,8 +535,13 @@ public:
     
     myVar = varFactory.fluxVar(VGP_T1HAT_S);
     myVar = varFactory.fluxVar(VGP_T2HAT_S);
-    myVar = varFactory.fieldVar(VGP_U1_S);
-    myVar = varFactory.fieldVar(VGP_U2_S);
+    if (! enriched_velocity) {
+      myVar = varFactory.fieldVar(VGP_U1_S);
+      myVar = varFactory.fieldVar(VGP_U2_S);
+    } else {
+      myVar = varFactory.fieldVar(VGP_U1_S, HGRAD);
+      myVar = varFactory.fieldVar(VGP_U2_S, HGRAD);
+    }
     myVar = varFactory.fieldVar(VGP_SIGMA11_S);
     myVar = varFactory.fieldVar(VGP_SIGMA12_S);
     myVar = varFactory.fieldVar(VGP_SIGMA21_S);
@@ -535,12 +550,12 @@ public:
     return varFactory;
   }
   
-  VGPStokesFormulation(FunctionPtr mu) {
-    init(mu);
+  VGPStokesFormulation(FunctionPtr mu, bool enriched_velocity = false) {
+    init(mu, enriched_velocity);
   }
   
-  VGPStokesFormulation(double mu) {
-    init(Function::constant(mu));
+  VGPStokesFormulation(double mu, bool enriched_velocity = false) {
+    init(Function::constant(mu), enriched_velocity);
   }
   
   BFPtr bf() {
@@ -548,6 +563,24 @@ public:
   }
   IPPtr graphNorm() {
     return _graphNorm;
+  }
+  IPPtr unitCompliantGraphNorm() {
+    FunctionPtr h = Teuchos::rcp( new hFunction() );
+    IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
+    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
+    compliantGraphNorm->addTerm( h * tau1->div() - q->dx() ); // u1 --the q's have been scaled by 1/h
+    compliantGraphNorm->addTerm( h * tau2->div() - q->dy());  // u2
+    
+    compliantGraphNorm->addTerm( v1 );
+    compliantGraphNorm->addTerm( v2 );
+    compliantGraphNorm->addTerm( q ); // should be q / h, but we're allowed to scale this term as we like
+    compliantGraphNorm->addTerm( tau1 );
+    compliantGraphNorm->addTerm( tau2 );
+    return compliantGraphNorm;
   }
   VarPtr ui(int i) {
     if (i==0) return u1;

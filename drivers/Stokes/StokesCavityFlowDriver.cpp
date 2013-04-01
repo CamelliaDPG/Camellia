@@ -214,6 +214,7 @@ int main(int argc, char *argv[]) {
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
+  bool symmetricRefinements = true; // symmetric across the horizontal midline
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
@@ -222,6 +223,7 @@ int main(int argc, char *argv[]) {
   bool useCG = false;
   bool compareWithOverkillMesh = false;
   bool useWeightedGraphNorm = false;
+  bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
@@ -313,6 +315,8 @@ int main(int argc, char *argv[]) {
   stokesBFMath->addTerm(-u2,q->dy());
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
   
+  stokesBFMath->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
+  
   ///////////////////////////////////////////////////////////////////////////
   
   // define bilinear form for stream function:
@@ -333,6 +337,8 @@ int main(int argc, char *argv[]) {
   streamBF->addTerm(psi_2, v_s->y());
   streamBF->addTerm(phi, v_s->div());
   streamBF->addTerm(-phi_hat, v_s->dot_normal());
+  
+  streamBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
   
   // define meshes:
   int H1Order = polyOrder + 1;
@@ -500,6 +506,9 @@ int main(int argc, char *argv[]) {
     if (induceCornerRefinements) {
       cout << "Artificially inducing refinements in bottom corners.\n";
     }
+    if (symmetricRefinements) {
+      cout << "Imposing symmetric refinements on top and bottom of mesh.\n";
+    }
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
     } else {
@@ -621,7 +630,13 @@ int main(int argc, char *argv[]) {
   if (useAdHocHPRefinements) 
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
     refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-  else
+  else if (symmetricRefinements) {
+    // we again use the problem-specific LidDrivenFlowRefinementStrategy, but now with hMin = 0, and maxP = H1Order-1 (i.e. never refine in p)
+    Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 0,
+                                                                                                                            H1Order-1, rank==0 ));
+    lidRefinementStrategy->setSymmetricRefinements(true);
+    refinementStrategy = lidRefinementStrategy;
+  } else
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   
   // just an experiment:
@@ -930,17 +945,17 @@ int main(int argc, char *argv[]) {
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
     
-    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
-    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
-    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+//    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
+//    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
+//    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
+//    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
     
     map<double,string> scaleToName;
     scaleToName[1]   = "cavityPatch";
     scaleToName[0.1] = "cavityPatchEddy1";
     scaleToName[0.01] = "cavityPatchEddy2";
-    scaleToName[0.001] = "cavityPatchEddy3";
-    scaleToName[0.0001] = "cavityPatchEddy4";
+    scaleToName[0.002] = "cavityPatchEddy3";
+    scaleToName[0.0002] = "cavityPatchEddy4";
     
     for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
       double scale = entryIt->first;

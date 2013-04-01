@@ -114,7 +114,7 @@ int main(int argc, char * argv[] )
   boost::timer  t1;
   double pr, de, sv;
 
-  typedef double DBL;
+  typedef long double DBL;
   typedef ublas::row_major  ORI;
   {
     // use dense matrix

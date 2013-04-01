@@ -218,14 +218,9 @@ public:
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
-  void setWriteMatrixToFile(bool value,const string &filePath){
-    _writeMatrixToMatlabFile = value;
-    _matrixFilePath = filePath;
-  }
-  void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath){
-    _writeMatrixToMatrixMarketFile = value;
-    _matrixFilePath = filePath;
-  }
+  
+  void setWriteMatrixToFile(bool value,const string &filePath);
+  void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath);
   
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;

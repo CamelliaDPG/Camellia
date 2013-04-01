@@ -79,6 +79,9 @@ class HConvergenceStudy {
   void randomlyRefine(Teuchos::RCP<Mesh> mesh);
   bool _reportRelativeErrors;
   
+  bool _writeGlobalStiffnessToDisk;
+  string _globalStiffnessFilePrefix;
+  
   map< int, vector<double> > _bestApproximationErrors; // trialID --> vector of errors for various meshes
   map< int, vector<double> > _solutionErrors;
   map< int, vector<double> > _bestApproximationErrorsDerivedVariables; // derived var index --> vector of errors for various meshes
@@ -95,7 +98,6 @@ class HConvergenceStudy {
   
   Teuchos::RCP<Solver> _solver;
   
-  void computeErrors();
   int minNumElements();
   
   Teuchos::RCP<Solution> bestApproximation(Teuchos::RCP<Mesh> mesh);
@@ -133,6 +135,7 @@ public:
   
   map< int, double > exactSolutionNorm();
 
+  void computeErrors();
   string convergenceDataMATLAB(int trialID, int minPolyOrder = 1);
   string TeXErrorRateTable(const string &filePathPrefix="");
   string TeXErrorRateTable(const vector<int> &trialIDs, const string &filePathPrefix="");
@@ -148,6 +151,7 @@ public:
   
   void setSolver( Teuchos::RCP<Solver> solver);
   
+  void setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix);
 };
 
 #endif
