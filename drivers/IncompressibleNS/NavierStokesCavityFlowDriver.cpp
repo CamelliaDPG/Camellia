@@ -250,6 +250,7 @@ int main(int argc, char *argv[]) {
     bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
     bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "enforce local conservation using Lagrange constraints", false);
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
+    double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
     
     args.Process();
     
@@ -325,8 +326,6 @@ int main(int argc, char *argv[]) {
     bool useTriangles = false;
     bool meshHasTriangles = useTriangles;
     
-    double minL2Increment = 3e-8;
-
     // get variable definitions:
     VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
     u1 = varFactory.fieldVar(VGP_U1_S);
