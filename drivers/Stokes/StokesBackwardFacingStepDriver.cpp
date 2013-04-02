@@ -213,12 +213,12 @@ int main(int argc, char *argv[]) {
   bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
   bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
   bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
-  bool useWeightedGraphNorm = true;   // weights to improve conditioning of the local problems
-  bool useExtendedPrecisionForOptimalTestInversion = true;
+  bool useCompliantGraphNorm = false;   // weights to improve conditioning of the local problems
+  bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
-  bool finalSolveUsesStandardGraphNorm = true;
+  bool finalSolveUsesStandardGraphNorm = false;
   
   double min_h = 0; //1.0 / 128.0;
   
@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
     
     t1n = varFactory.fluxVar("\\widehat{t_{1n}}");
     t2n = varFactory.fluxVar("\\widehat{t_{2n}}");
-    if (!useWeightedGraphNorm) {
+    if (!useCompliantGraphNorm) {
       u1 = varFactory.fieldVar("u_1");
       u2 = varFactory.fieldVar("u_2");
     } else {
@@ -332,7 +332,7 @@ int main(int argc, char *argv[]) {
     stokesBF->addTerm( -p, v2->dy());
     stokesBF->addTerm( t2n, v2);
     
-    if (! useWeightedGraphNorm) {
+    if (! useCompliantGraphNorm) {
         // q:
       stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
       stokesBF->addTerm(-u2,q->dy());
@@ -435,18 +435,18 @@ int main(int argc, char *argv[]) {
       // For now, we add these in anyway...
       qoptIP->addTerm( tau1->div() );    // u1
       qoptIP->addTerm( tau2->div() );    // u2
-    } else if (useWeightedGraphNorm) {
+    } else if (useCompliantGraphNorm) {
       qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
       qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
       qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
       qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
-      qoptIP->addTerm( h * tau1->div() - q->dx() );     // u1
-      qoptIP->addTerm( h * tau2->div() - q->dy());     // u2
+      qoptIP->addTerm( mu * v1->dx() + mu * v2->dy() );   // pressure
+      qoptIP->addTerm( h * tau1->div() - h * q->dx() );   // u1
+      qoptIP->addTerm( h * tau2->div() - h * q->dy());    // u2
       
-      qoptIP->addTerm( v1 );
-      qoptIP->addTerm( v2 );
-      qoptIP->addTerm( q ); // should be q / h, but we're allowed to scale this term as we like
+      qoptIP->addTerm( (mu / h) * v1 );
+      qoptIP->addTerm( (mu / h) * v2 );
+      qoptIP->addTerm( q );
       qoptIP->addTerm( tau1 );
       qoptIP->addTerm( tau2 );
     } else { // some version of graph norm, then
@@ -551,11 +551,11 @@ int main(int argc, char *argv[]) {
   
   // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
   // COMMENTING THESE LINES OUT AS A TEST: TODO: UNCOMMENT THEM.
-  if (rank==0)
-    cout << "NOTE: using anisotropic initial mesh.  Should change back after test complete!\n";
-//  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-//  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-//  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//  if (rank==0)
+//    cout << "NOTE: using anisotropic initial mesh.  Should change back after test complete!\n";
+  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
   
   if (rank == 0) {
     cout << "Starting mesh has " << mesh->numActiveElements() << " elements and ";
@@ -572,8 +572,8 @@ int main(int argc, char *argv[]) {
     if (useExperimentalH1Norm) {
       cout << "NOTE: Using experimental H^1 norm!\n";
     }
-    if (useWeightedGraphNorm) {
-      cout << "NOTE: Using weighted graph norm.\n";
+    if (useCompliantGraphNorm) {
+      cout << "NOTE: Using unit-compliant graph norm.\n";
     }
     if (useGraphNormStrongerTau) {
       cout << "NOTE: Using \"tau-strengthened\" graph norm.\n";
@@ -663,6 +663,9 @@ int main(int argc, char *argv[]) {
   double maxMassFluxIntegral = 0.0;
   double totalMassFlux = 0.0;
   double totalAbsMassFlux = 0.0;
+  double totalAbsMassFluxInterior = 0;
+  double totalAbsMassFluxBoundary = 0;
+  
   double maxCellMeasure = 0;
   double minCellMeasure = 1;
   for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
@@ -703,12 +706,19 @@ int main(int argc, char *argv[]) {
       maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
       totalMassFlux += massFluxIntegral[cellID];
       totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+      if (mesh->boundary().boundaryElement(cellID)) {
+        totalAbsMassFluxBoundary += abs( massFluxIntegral[cellID] );
+      } else {
+        totalAbsMassFluxInterior += abs( massFluxIntegral[cellID] );
+      }
     }
   }
   if (rank==0) {
     cout << "largest mass flux: " << maxMassFluxIntegral << endl;
     cout << "total mass flux: " << totalMassFlux << endl;
     cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+    cout << "sum of mass flux absolute value (interior elements): " << totalAbsMassFluxInterior << endl;
+    cout << "sum of mass flux absolute value (boundary elements): " << totalAbsMassFluxBoundary << endl;
     cout << "largest h: " << sqrt(maxCellMeasure) << endl;
     cout << "smallest h: " << sqrt(minCellMeasure) << endl;
     cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
