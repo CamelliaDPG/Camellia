@@ -61,6 +61,7 @@ public:
   void setMesh(Mesh* mesh);
   void addElement( int cellID, int sideIndex ); // sideIndex: which of this element's sides is the boundary
   void deleteElement( int cellID, int sideIndex ); // sideIndex: which of this element's sides is the boundary
+  bool boundaryElement( int cellID );
   bool boundaryElement( int cellID, int sideIndex );
   vector< pair<int, int > > boundaryElements(Teuchos::RCP< ElementType > elemTypePtr);
   void bcsToImpose(FieldContainer<int> &globalIndices, FieldContainer<double> &globalValues, BC &bc, set<int>& globalIndexFilter);

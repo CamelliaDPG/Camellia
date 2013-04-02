@@ -57,6 +57,16 @@ void Boundary::addElement( int cellID, int sideIndex ) {
   _boundaryElements.insert( make_pair(cellID,sideIndex) );
 }
 
+bool Boundary::boundaryElement(int cellID) {
+  int numSides = _mesh->getElement(cellID)->numSides();
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    if (boundaryElement(cellID,sideIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Boundary::boundaryElement( int cellID, int sideIndex ) {
   pair<int,int> key = make_pair(cellID,sideIndex);  
   return _boundaryElements.find(key) != _boundaryElements.end();
