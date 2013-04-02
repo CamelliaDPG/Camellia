@@ -85,6 +85,7 @@ void RefinementStrategy::refine(bool printToConsole) {
   _results.push_back(results);
   
   vector<int> cellsToRefine;
+  vector<int> cellsToPRefine;
   
   // do refinements on cells with error above threshold
   for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
@@ -92,16 +93,19 @@ void RefinementStrategy::refine(bool printToConsole) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
     double h = sqrt(cellMeasures[cellID]);
-    if (h > _min_h) {
       double cellEnergyError = energyError->find(cellID)->second;
       if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
         //      cout << "refining cellID " << cellID << endl;
-        cellsToRefine.push_back(cellID);
+        if (h > _min_h) {
+          cellsToRefine.push_back(cellID);
+        } else {
+          cellsToPRefine.push_back(cellID);
+        }
       }
-    }
   }
   
   refineCells(cellsToRefine);
+  pRefineCells(mesh, cellsToPRefine);
   
   if (_enforceOneIrregularity)
     mesh->enforceOneIrregularity();
@@ -152,7 +156,6 @@ void RefinementStrategy::refineCells(vector<int> &cellIDs) {
 void RefinementStrategy::pRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
   mesh->pRefine(cellIDs);  
 }
-
 
 void RefinementStrategy::hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs) {
   vector<int> triangleCellsToRefine;
