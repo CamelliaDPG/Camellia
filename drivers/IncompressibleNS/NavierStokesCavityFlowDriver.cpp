@@ -441,7 +441,7 @@ int main(int argc, char *argv[]) {
                                      streamBF, H1Order+pToAddForStreamFunction,
                                      H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
-    mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+    mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
     
     Teuchos::RCP<Solution> overkillSolution;
     map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -821,8 +821,8 @@ int main(int argc, char *argv[]) {
       cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
       cout << "solving for approximate stream function...\n";
     }
-    //  mesh->unregisterMesh(streamMesh);
-    //  streamMesh->registerMesh(mesh);
+    //  mesh->unregisterObserver(streamMesh);
+    //  streamMesh->registerObserver(mesh);
     //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
     //  for (int refIndex=0; refIndex < 3; refIndex++) {
     //    streamSolution->solve(false);

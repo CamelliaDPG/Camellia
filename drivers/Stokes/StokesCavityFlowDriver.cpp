@@ -474,7 +474,7 @@ int main(int argc, char *argv[]) {
     //    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
   }
   
-  mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -902,8 +902,8 @@ int main(int argc, char *argv[]) {
   streamIP->addTerm(v_s->div());
   SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
   
-  //  mesh->unregisterMesh(streamMesh);
-  //  streamMesh->registerMesh(mesh);
+  //  mesh->unregisterObserver(streamMesh);
+  //  streamMesh->registerObserver(mesh);
   //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
   //  for (int refIndex=0; refIndex < 3; refIndex++) {
   //    streamSolution->solve(false);

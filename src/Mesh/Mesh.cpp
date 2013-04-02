@@ -1692,8 +1692,8 @@ void Mesh::hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> r
 
 void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->hRefine(cellIDs,refPattern);
   }
   
@@ -1823,8 +1823,8 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
 void Mesh::hUnrefine(const set<int> &cellIDs) {
   // TODO: implement this
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->hUnrefine(cellIDs);
   }
   
@@ -2384,23 +2384,23 @@ void Mesh::rebuildLookups() {
   //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
-void Mesh::registerMesh(Teuchos::RCP<Mesh> mesh) {
-  _registeredMeshes.push_back(mesh);
+void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
+  _registeredObservers.push_back(observer);
 }
 
 void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
   _registeredSolutions.push_back( solution );
 }
 
-void Mesh::unregisterMesh(Teuchos::RCP<Mesh> mesh) {
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     if ( (*meshIt).get() == mesh.get() ) {
-      _registeredMeshes.erase(meshIt);
+      _registeredObservers.erase(meshIt);
       return;
     }
   }
-  cout << "Mesh::unregisterMesh: Mesh not found.\n";
+  cout << "Mesh::unregisterObserver: Mesh not found.\n";
 }
 
 void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
@@ -2425,8 +2425,8 @@ void Mesh::pRefine(const vector<int> &cellIDsForPRefinements) {
 
 void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->pRefine(cellIDsForPRefinements);
   }
   

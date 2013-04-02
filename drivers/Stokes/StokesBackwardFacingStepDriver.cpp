@@ -516,7 +516,7 @@ int main(int argc, char *argv[]) {
   
   streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC ) );
   
-  mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
   
   ////////////////////   CREATE BCs   ///////////////////////
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0 );

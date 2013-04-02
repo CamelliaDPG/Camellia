@@ -58,6 +58,8 @@
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
 
+#include "RefinementObserver.h"
+
 #include "Function.h"
 #include "ParametricCurve.h"
 
@@ -96,7 +98,7 @@ public:
 
 typedef Teuchos::RCP<MeshGeometry> MeshGeometryPtr;
 
-class Mesh {
+class Mesh : public RefinementObserver {
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.
@@ -150,7 +152,7 @@ class Mesh {
   vector< set<int> > _partitionedGlobalDofIndices;
   
   vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
-  vector< Teuchos::RCP<Mesh> > _registeredMeshes; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
+  vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
@@ -318,7 +320,7 @@ public:
   
   void rebuildLookups();
   
-  void registerMesh(Teuchos::RCP<Mesh> mesh);
+  void registerObserver(Teuchos::RCP<RefinementObserver> observer);
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
@@ -342,7 +344,7 @@ public:
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
 
-  void unregisterMesh(Teuchos::RCP<Mesh> mesh);
+  void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
   void unregisterSolution(Teuchos::RCP<Solution> solution);
   
   void writeMeshPartitionsToFile(const string & fileName);
