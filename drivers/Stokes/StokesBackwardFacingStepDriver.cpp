@@ -23,6 +23,8 @@
 #else
 #endif
 
+#include "RefinementHistory.h"
+
 #include "StreamDriverUtil.h"
 
 using namespace std;
@@ -516,7 +518,7 @@ int main(int argc, char *argv[]) {
   
   streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC ) );
   
-  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
+//  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
   
   ////////////////////   CREATE BCs   ///////////////////////
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0 );
@@ -543,6 +545,9 @@ int main(int argc, char *argv[]) {
   
   // just an experiment:
   //  refinementStrategy.setEnforceOneIrregurity(false);
+
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  mesh->registerObserver(refHistory);
   
   int uniformRefinements = 0;
   for (int refIndex=0; refIndex<uniformRefinements; refIndex++){
@@ -725,13 +730,15 @@ int main(int argc, char *argv[]) {
   }
   
   ///////// SET UP & SOLVE STREAM SOLUTION /////////
+  streamSolution->setIP(streamIP);
+  streamSolution->setRHS(streamRHS);
+  
+  refHistory->playback(streamMesh);
+  
   if (rank == 0) {
     cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
     cout << "solving for approximate stream function...\n";
   }
-  
-  streamSolution->setIP(streamIP);
-  streamSolution->setRHS(streamRHS);
   
   streamSolution->solve(false);
   energyErrorTotal = streamSolution->energyErrorTotal();

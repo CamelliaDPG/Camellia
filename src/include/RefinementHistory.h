@@ -10,6 +10,7 @@
 #define Camellia_debug_RefinementHistory_h
 
 #include "RefinementObserver.h"
+#include "Mesh.h"
 
 using namespace std;
 
@@ -22,9 +23,15 @@ class RefinementHistory : public RefinementObserver {
   vector< Refinement > _refinements;
 public:
   void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void pRefine(const set<int> &cellIDs);
   void hUnrefine(const set<int> &cellIDs);
+  
+  void pRefine(const set<int> &cellIDs);
+  
+  void playback(MeshPtr mesh);
+  
+  // file I/O
+  void saveToFile(string fileName);
+  void loadFromFile(string fileName);
 };
-
 
 #endif
