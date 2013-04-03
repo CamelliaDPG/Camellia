@@ -24,6 +24,7 @@
 #endif
 
 #include "RefinementHistory.h"
+#include "PenaltyConstraints.h"
 
 #include "StreamDriverUtil.h"
 
@@ -523,17 +524,31 @@ int main(int argc, char *argv[]) {
   ////////////////////   CREATE BCs   ///////////////////////
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0 );
   FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
-  bc->addDirichlet(u1hat, nonOutflowBoundary, u1_0);
-  bc->addDirichlet(u2hat, nonOutflowBoundary, u2_0);
-  // for now, prescribe same thing on the outflow boundary
-  // TODO: replace with zero-traction condition
-  // THIS IS A GUESS AT THE ZERO-TRACTION CONDITION
-  cout << "SHOULD CONFIRM THAT THE ZERO-TRACTION CONDITION IS RIGHT!!\n";
-  FunctionPtr zero = Function::zero();
-  bc->addDirichlet(t1n, outflowBoundary, zero);
-  bc->addDirichlet(t2n, outflowBoundary, zero);
-  // hypothesis: when we impose the no-traction condition, not allowed to impose zero-mean pressure
-//  bc->addZeroMeanConstraint(p);
+  
+  if (false) {
+    cout << "EXPERIMENTING: replacing Dirichlet with penalty constraints.\n";
+    
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(u1hat==u1_0,nonOutflowBoundary);
+    pc->addConstraint(u2hat==u2_0,nonOutflowBoundary);
+    
+    pc->addConstraint(t1n==Function::zero(),outflowBoundary);
+    pc->addConstraint(t2n==Function::zero(),outflowBoundary);
+    
+    solution->setFilter(pc);
+  } else {
+    bc->addDirichlet(u1hat, nonOutflowBoundary, u1_0);
+    bc->addDirichlet(u2hat, nonOutflowBoundary, u2_0);
+    // for now, prescribe same thing on the outflow boundary
+    // TODO: replace with zero-traction condition
+    // THIS IS A GUESS AT THE ZERO-TRACTION CONDITION
+  //  cout << "SHOULD CONFIRM THAT THE ZERO-TRACTION CONDITION IS RIGHT!!\n";
+    FunctionPtr zero = Function::zero();
+    bc->addDirichlet(t1n, outflowBoundary, zero);
+    bc->addDirichlet(t2n, outflowBoundary, zero);
+    // hypothesis: when we impose the no-traction condition, not allowed to impose zero-mean pressure
+  //  bc->addZeroMeanConstraint(p);
+  }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   if (enforceLocalConservation) {
