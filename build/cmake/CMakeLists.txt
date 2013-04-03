@@ -148,6 +148,10 @@ set( NEW_CONFUSION_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewConfusionDriver.cpp"
 )
 
+set( STOKES_CONSERVATION_EXPERIMENT
+  "${STOKES_DIR}/StokesConservationExperiment.cpp"
+  )
+
 set( STOKES_BACKWARD_FACING_STEP_DRIVER
   "${STOKES_DIR}/StokesBackwardFacingStepDriver.cpp"
   )
@@ -260,6 +264,7 @@ add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
+add_executable(StokesConservationExperiment ${STOKES_SOURCES} ${STOKES_CONSERVATION_EXPERIMENT})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE})
 add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
@@ -328,6 +333,11 @@ target_link_libraries(StokesCavityFlowDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(StokesBackwardFacingStepDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(StokesConservationExperiment
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

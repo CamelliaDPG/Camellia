@@ -500,13 +500,13 @@ class VGPStokesFormulation : public StokesFormulation {
     _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
     _bf->addTerm(- mu * sigma12,v1->dy());
     _bf->addTerm( p, v1->dx() );
-    _bf->addTerm( t1n, v1);
+    _bf->addTerm( -t1n, v1);
     
     // v2:
     _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
     _bf->addTerm(- mu * sigma22,v2->dy());
     _bf->addTerm(p, v2->dy());
-    _bf->addTerm( t2n, v2);
+    _bf->addTerm( -t2n, v2);
     
     // q:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)
@@ -571,13 +571,13 @@ public:
     compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
     compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
     compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
-    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
-    compliantGraphNorm->addTerm( h * tau1->div() - q->dx() ); // u1 --the q's have been scaled by 1/h
-    compliantGraphNorm->addTerm( h * tau2->div() - q->dy());  // u2
+    compliantGraphNorm->addTerm( _mu * v1->dx() + _mu * v2->dy() );       // pressure
+    compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy());  // u2
     
-    compliantGraphNorm->addTerm( v1 );
-    compliantGraphNorm->addTerm( v2 );
-    compliantGraphNorm->addTerm( q ); // should be q / h, but we're allowed to scale this term as we like
+    compliantGraphNorm->addTerm( (_mu / h) * v1 );
+    compliantGraphNorm->addTerm( (_mu / h) * v2 );
+    compliantGraphNorm->addTerm( q ); 
     compliantGraphNorm->addTerm( tau1 );
     compliantGraphNorm->addTerm( tau2 );
     return compliantGraphNorm;

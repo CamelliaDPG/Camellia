@@ -394,7 +394,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
+  ExactSolutionChoice exactSolnChoice = HDGSingular;
   
   bool reportConditionNumber = false; // we don't believe Solution's condition number estimate anyhow
   
@@ -404,7 +404,7 @@ int main(int argc, char *argv[]) {
   
   bool dontImposeZeroMeanPressure = false;
   
-  bool writeGlobalStiffnessMatrixToFile = false;
+  bool writeGlobalStiffnessMatrixToFile = true;
   
   bool useCG = false;
   bool useMumps = true;

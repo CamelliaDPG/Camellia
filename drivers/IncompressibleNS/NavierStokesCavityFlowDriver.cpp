@@ -21,6 +21,8 @@
 
 #include "ParameterFunction.h"
 
+#include "RefinementHistory.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -250,6 +252,9 @@ int main(int argc, char *argv[]) {
     bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
     bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "enforce local conservation using Lagrange constraints", false);
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
+    double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
+    string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
+    string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
     
     args.Process();
     
@@ -325,8 +330,6 @@ int main(int argc, char *argv[]) {
     bool useTriangles = false;
     bool meshHasTriangles = useTriangles;
     
-    double minL2Increment = 3e-8;
-
     // get variable definitions:
     VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
     u1 = varFactory.fieldVar(VGP_U1_S);
@@ -379,6 +382,15 @@ int main(int argc, char *argv[]) {
     mesh->registerSolution(solution);
     mesh->registerSolution(solnIncrement);
 
+    Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+    mesh->registerObserver(refHistory);
+    
+    if (replayFile.length() > 0) {
+      RefinementHistory refHistory;
+      refHistory.loadFromFile(replayFile);
+      refHistory.playback(mesh);
+    }
+    
   //  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
   //    // add time marching terms for momentum equations (v1 and v2):
     if (artificialTimeStepping) {
@@ -442,7 +454,7 @@ int main(int argc, char *argv[]) {
                                      streamBF, H1Order+pToAddForStreamFunction,
                                      H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
-    mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+    mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
     
     Teuchos::RCP<Solution> overkillSolution;
     map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -474,6 +486,12 @@ int main(int argc, char *argv[]) {
         cout << "Enforcing 1-irregularity.\n";
       } else {
         cout << "NOT enforcing 1-irregularity.\n";
+      }
+      if (saveFile.length() > 0) {
+        cout << "will save refinement history to file " << saveFile << endl;
+      }
+      if (replayFile.length() > 0) {
+        cout << "will replay refinements from file " << replayFile << endl;
       }
     }
     
@@ -650,6 +668,12 @@ int main(int argc, char *argv[]) {
         
         refinementStrategy->refine(false); //rank==0); // print to console on rank 0
         
+        if (saveFile.length() > 0) {
+          if (rank == 0) {
+            refHistory->saveToFile(saveFile);
+          }
+        }
+        
         // find top corner cells:
         vector< Teuchos::RCP<Element> > topCorners = mesh->elementsForPoints(topCornerPoints);
         if (rank==0) {// print out top corner cellIDs
@@ -822,8 +846,8 @@ int main(int argc, char *argv[]) {
       cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
       cout << "solving for approximate stream function...\n";
     }
-    //  mesh->unregisterMesh(streamMesh);
-    //  streamMesh->registerMesh(mesh);
+    //  mesh->unregisterObserver(streamMesh);
+    //  streamMesh->registerObserver(mesh);
     //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
     //  for (int refIndex=0; refIndex < 3; refIndex++) {
     //    streamSolution->solve(false);

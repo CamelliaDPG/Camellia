@@ -354,7 +354,7 @@ int main(int argc, char *argv[]) {
                                    streamBF, H1Order+pToAddForStreamFunction,
                                    H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
   
-  mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
   
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
   vector< VarPtr > fields;
