@@ -20,6 +20,10 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _min_h = min_h;
 }
 
+void RefinementStrategy::setMinH(double value){
+  _min_h = value;
+}
+
 void RefinementStrategy::setAnisotropicThreshhold(double value){
   _anisotropicThreshhold = value;
 }
@@ -308,18 +312,20 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     bool doYAnisotropy = ratio < 1.0/thresh;
     double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
     double maxAspect = _maxAspectRatio; // the conservative aspect ratio from LD's DPG III: Adaptivity paper is 100. 
-    if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      xCells.push_back(cellID); // cut along y-axis
-    }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
-      yCells.push_back(cellID); // cut along x-axis
-    }else{
-      regCells.push_back(cellID);
-    }        
+    // don't refine if h is already too small
+    if (min_h>_min_h){
+      if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
+	xCells.push_back(cellID); // cut along y-axis
+      }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
+	yCells.push_back(cellID); // cut along x-axis
+      }else{
+	regCells.push_back(cellID);
+      }        
+    }
   }
 }
 
 // enforcing one-irregularity with anisotropy - ONLY FOR QUADS RIGHT NOW.  ALSO NOT PARALLELIZED
-
 bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells){
   bool success = true;
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
