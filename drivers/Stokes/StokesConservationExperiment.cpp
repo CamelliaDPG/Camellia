@@ -21,6 +21,19 @@
 
 using namespace std;
 
+MeshPtr mesh;
+
+double integralOverMesh(LinearTermPtr testTerm, VarPtr testVar, FunctionPtr fxnToSubstitute) {
+  map<int, FunctionPtr > varAsFunction;
+  varAsFunction[testVar->ID()] = fxnToSubstitute;
+  
+  FunctionPtr substituteOnBoundary = testTerm->evaluate(varAsFunction, true);
+  FunctionPtr substituteOnInterior = testTerm->evaluate(varAsFunction, false);
+  double integral = substituteOnBoundary->integrate(mesh);
+  integral += substituteOnInterior->integrate(mesh);
+  return integral;
+}
+
 int main(int argc, char *argv[]) {
   // TODO: figure out the right thing to do here...
   // may want to modify argc and argv before we make the following call:
@@ -109,14 +122,15 @@ int main(int argc, char *argv[]) {
   stokesBF->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
   stokesBF->addTerm(mu * sigma12,v1->dy());
   stokesBF->addTerm( - p, v1->dx() );
-  stokesBF->addTerm( t1n, v1);
+  stokesBF->addTerm( -t1n, v1);
   
   // v2:
   stokesBF->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
   stokesBF->addTerm(mu * sigma22,v2->dy());
   stokesBF->addTerm( -p, v2->dy());
-  stokesBF->addTerm( t2n, v2);
+  stokesBF->addTerm( -t2n, v2);
   
+  // q:
   stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
   stokesBF->addTerm(-u2,q->dy());
   stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
@@ -126,7 +140,7 @@ int main(int argc, char *argv[]) {
   
   stokesBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
 
-  MeshPtr mesh = MeshFactory::quadMesh(stokesBF, H1Order, pToAdd);
+  mesh = MeshFactory::quadMesh(stokesBF, H1Order, pToAdd);
   
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -222,5 +236,16 @@ int main(int argc, char *argv[]) {
   VTKExporter exporter(soln, mesh, varFactory);
   exporter.exportSolution("conservationPreimage", H1Order*2);
 
+  cout << "Checking that the soln_functional is what I expect:\n";
+  
+  FunctionPtr xyVector = Function::vectorize(x, y);
+  
+  cout << "With v1 = x, integral: " << integralOverMesh(soln_functional, v1, x) << endl;
+  cout << "With v2 = y, integral: " << integralOverMesh(soln_functional, v2, y) << endl;
+  cout << "With tau1=(x,y), integral: " << integralOverMesh(soln_functional, tau1, xyVector) << endl;
+  cout << "With tau2=(x,y), integral: " << integralOverMesh(soln_functional, tau2, xyVector) << endl;
+  cout << "With q   =x, integral: " << integralOverMesh(soln_functional, q, x) << endl;
+  
+  cout << "(Expect 0s all around, except for q, where we expect (1,x) == 0.5.)\n";
   return 0;
 }
