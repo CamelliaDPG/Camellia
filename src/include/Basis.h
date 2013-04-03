@@ -39,6 +39,8 @@ namespace Camellia {
      */
     mutable std::vector<std::vector<int> > _ordinalToTag;
     
+    shards::CellTopology _domainTopology;
+    
     /** \brief  DoF tag to ordinal lookup table.
      
      Rank-3 array with dimensions (maxScDim + 1, maxScOrd + 1, maxDfOrd + 1), i.e., the
@@ -56,7 +58,7 @@ namespace Camellia {
     virtual int getDegree() const;
     
     // domain info on which the basis is defined:
-    virtual shards::CellTopology domainTopology() const = 0;
+    virtual shards::CellTopology domainTopology() const;
     
     // dof ordinal subsets:
     virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;

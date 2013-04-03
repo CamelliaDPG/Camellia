@@ -54,6 +54,7 @@ public:
   static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
   static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
   void getCellsAboveErrorThreshhold(vector<int> &cellsToRefine);
+  void setMinH(double value);
   void setReportPerCellErrors(bool value);
 };
 
