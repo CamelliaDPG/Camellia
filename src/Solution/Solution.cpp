@@ -108,12 +108,13 @@ double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   AztecOOConditionNumber conditionEstimator;
   conditionEstimator.initialize(*problem.GetOperator());
   
-  cout << "WARNING: Solution::conditionNumberEstimate(): At least for small matrices, condition number estimates appear to be off by quite a bit.\n";
+  //  cout << "WARNING: Solution::conditionNumberEstimate(): At least for small matrices, condition number estimates appear to be off by quite a bit.\n";
   
   int maxIters = 40000;
   double tol = 1e-10;
   int status = conditionEstimator.computeConditionNumber(maxIters, tol);
-  cout << "status result from computeConditionNumber(): " << status << endl;
+  if (status!=0)
+    cout << "status result from computeConditionNumber(): " << status << endl;
   double condest = conditionEstimator.getConditionNumber();
   
   return condest;
@@ -2692,10 +2693,6 @@ void Solution::condensedSolve(bool saveMemory){
     condensedToGlobalMap[i] = globalFluxInd;
     i++;
   }
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time to build dof maps = " << timer.ElapsedTime() << endl;
-  }
-  timer.ResetStartTime();
 
   // create partitioning - CAN BE MORE EFFICIENT if necessary
   set<int> myGlobalDofInds = _mesh->globalDofIndicesForPartition(rank);
@@ -2708,19 +2705,10 @@ void Solution::condensedSolve(bool saveMemory){
       //      cout << "global flux ind = " << globalToCondensedMap[ind] << endl;
     }
   }
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time to form dof partitions = " << timer.ElapsedTime() << endl;
-  }  
-  timer.ResetStartTime();
 
   int numGlobalFluxDofs = _mesh->numFluxDofs();
   Epetra_Map fluxPartMap = getPartitionMap(rank, myGlobalFluxInds, numGlobalFluxDofs, 0, &Comm);
  
-  if (_reportTimingResults){
-    cout << "on rank " << rank << ", time to form partition maps = " << timer.ElapsedTime() << endl;
-  }  
-  timer.ResetStartTime();
-
   // size/create stiffness matrix
   int maxNnzPerRow = min(_mesh->condensedRowSizeUpperBound(),numGlobalFluxDofs);
   Epetra_FECrsMatrix K_cond(Copy, fluxPartMap, maxNnzPerRow); // condensed system
@@ -2728,7 +2716,7 @@ void Solution::condensedSolve(bool saveMemory){
   Epetra_FEVector lhs_cond(fluxPartMap, true);
   
   if (_reportTimingResults){
-    cout << "on rank " << rank << ", time to init condensed stiffness matrices = " << timer.ElapsedTime() << endl;
+    cout << "on rank " << rank << ", time to form dof partition maps/init condensed stiffness matrices = " << timer.ElapsedTime() << endl;
   }
   timer.ResetStartTime();
 

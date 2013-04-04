@@ -13,7 +13,10 @@
 #include "Function.h"
 #include "BF.h"
 #include "MeshFactory.h"
-#include "MeshUtilities.h";
+#include "MeshUtilities.h"
+
+#include "Legendre.hpp"
+#include "Lobatto.hpp"
 
 enum TestType {
   L2Part,
@@ -98,5 +101,28 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  
+//  int polyOrder = 20;
+//  FieldContainer<double> values(polyOrder+1), dvalues(polyOrder+1);
+//  double x = 0.5;
+//  Legendre<>::values(values,dvalues,x,polyOrder);
+//  cout << "Legendre values at x=0.5:\n";
+//  for (int i=0; i<values.size(); i++) {
+//    cout << i << ": " << values[i] << endl;
+//  }
+//  cout << "Legendre derivatives at x=0.5:\n";
+//  for (int i=0; i<dvalues.size(); i++) {
+//    cout << i << ": " << dvalues[i] << endl;
+//  }
+//  
+//  Lobatto<>::values(values,dvalues,x,polyOrder);
+//  cout << "Lobatto values at x=0.5:\n";
+//  for (int i=0; i<values.size(); i++) {
+//    cout << i << ": " << values[i] << endl;
+//  }
+//  cout << "Lobatto derivatives at x=0.5:\n";
+//  for (int i=0; i<dvalues.size(); i++) {
+//    cout << i << ": " << dvalues[i] << endl;
+//  }
   return 0;
 }

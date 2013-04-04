@@ -20,7 +20,7 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _min_h = min_h;
 }
 
-void RefinementStrategy::setMinH(double value){
+void RefinementStrategy::setMinH(double value) {
   _min_h = value;
 }
 

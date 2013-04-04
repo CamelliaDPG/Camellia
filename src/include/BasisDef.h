@@ -39,6 +39,11 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
+  shards::CellTopology Basis<Scalar,ArrayScalar>::domainTopology() const {
+    return _domainTopology;
+  }
+  
+  template<class Scalar, class ArrayScalar>
   int Basis<Scalar,ArrayScalar>::getCardinality() const {
     return this->_basisCardinality;
   }
