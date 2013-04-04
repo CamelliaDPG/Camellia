@@ -39,7 +39,6 @@ public:
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   void setMaxAspectRatio(double value);
-  void setMinH(double value);
 
   virtual void refine(bool printToConsole=false);
   virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
