@@ -4,18 +4,16 @@
 #include "ZoltanMeshPartitionPolicy.h"
 #include "LagrangeConstraints.h"
 
+#include "RefinementHistory.h"
+#include "RefinementPattern.h"
 #include "RefinementStrategy.h"
+
 #include "NonlinearStepSize.h"
 #include "NonlinearSolveStrategy.h"
 
 // Trilinos includes
 #include "Epetra_Time.h"
 #include "Intrepid_FieldContainer.hpp"
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -26,7 +24,6 @@
 
 #include "InnerProductScratchPad.h"
 #include "TestSuite.h"
-#include "RefinementPattern.h"
 #include "PenaltyConstraints.h"
 
 #include "ElementType.h"
@@ -37,6 +34,7 @@
 
 #include "StandardAssembler.h"
 #include "SerialDenseWrapper.h"
+
 
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
@@ -525,6 +523,7 @@ int main(int argc, char *argv[]) {
 
   // solver
   int nCells = args.Input<int>("--nCells", "num cells",2);  
+  int polyOrder = args.Input<int>("--p","order of approximation",2);
   int pToAdd = args.Input<int>("--pToAdd", "test space enrichment",2); 
   double time_tol_orig = args.Input<double>("--timeTol", "time step tolerance",1e-8);
   bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",false); // default to zero
@@ -547,11 +546,20 @@ int main(int argc, char *argv[]) {
   bool useConditioningCFL = args.Input<bool>("--useConditioningCFL","option to use a CFL limit for conditioning",false); 
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
 
+  // IO stuff
+  string replayFile = args.Input<string>("--loadFile", "file with refinement history to replay", "");
+  string saveFile = args.Input<string>("--saveFile", "file to which to save refinement history", "");
+  bool reportTimingResults = args.Input<bool>("--reportTimings", "flag to report timings of solve", false);
+  if (rank==0)
+    cout << "saveFile is " << saveFile << endl;
+
+  if (rank==0)
+    cout << "loadFile is " << replayFile << endl;
+
   ///////////////////////////////////////////////////////////////////////////////////////////////
   //                            END OF INPUT ARGUMENTS
   ///////////////////////////////////////////////////////////////////////////////////////////////
 
-  int polyOrder = 2;
   if (useHigherOrderForU){
     polyOrder = 1;
   }
@@ -564,6 +572,7 @@ int main(int argc, char *argv[]) {
     cout << "Running with polynomial order " << polyOrder << ", delta p = " << pToAdd << endl;
     cout << "Running with parameters Re = " << Re << ", Mach = " << Ma << ", and dt = " << dt << " with time tol = " << time_tol_orig << endl;
     cout << "AnisotropyFlag = " << useAnisotropy << ", and aniso thresh = " << anisotropicThresh << endl;
+    cout << "Conditioning CFL = " << useConditioningCFL << endl;
   }
   
   bool useTriangles = false;  
@@ -638,8 +647,21 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(domainPoints, horizontalCells, 
                                                 verticalCells, bf, H1Order, 
                                                 H1Order+pToAdd, useTriangles);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  //  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("REFTREE")));
   MeshInfo meshInfo(mesh); // gets info like cell measure, etc
+
+  // for writing ref history to file
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory ); 
+  mesh->registerObserver(refHistory);
+  
+  // for loading refinement history
+  if (replayFile.length() > 0) {
+    RefinementHistory refHistory;
+    refHistory.loadFromFile(replayFile);
+    refHistory.playback(mesh);
+  }
+  
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -799,6 +821,7 @@ int main(int argc, char *argv[]) {
     cout << "Timestep dt = " << dt << endl;
   }
   FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+  FunctionPtr sqrtInvDt = Teuchos::rcp(new ScalarParamFunction(sqrt(1.0/dt)));    
 
   // mass d(rho)/dt
   A_time[v1->ID()][rho->ID()] = invDt*one; 
@@ -1046,6 +1069,9 @@ int main(int argc, char *argv[]) {
     break;
   }
 
+  FunctionPtr timeScaling = Function::constant(1.0);
+  timeScaling = sqrtInvDt; // legal with first order term
+
   ////////////////////////////////////////////////////////////////////
   // Timestep L2 portion of V
   ////////////////////////////////////////////////////////////////////
@@ -1066,7 +1092,7 @@ int main(int argc, char *argv[]) {
   // adds dual test portion to IP
   for (map<int, LinearTermPtr>::iterator vTimeIt = vTime.begin();vTimeIt != vTime.end();vTimeIt++){
     LinearTermPtr ipSum = vTimeIt->second;
-    ip->addTerm(ipSum);
+    ip->addTerm(l2HScale*ipSum);
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -1133,16 +1159,16 @@ int main(int argc, char *argv[]) {
   map<int, LinearTermPtr>::iterator vEpsIt;
   for (vEpsIt = vEpsVec.begin();vEpsIt != vEpsVec.end();vEpsIt++){
     LinearTermPtr ipSum = vEpsIt->second;
-    ip->addTerm(SqrtReInv*ipSum);
+    ip->addTerm(timeScaling*SqrtReInv*ipSum);
   }
   // for anisotropic bits - x and y contributions to erro
   for (vEpsIt = vEpsX.begin();vEpsIt != vEpsX.end();vEpsIt++){
     LinearTermPtr lt = vEpsIt->second;
-    vVecLTx->addTerm(SqrtReInv*lt);
+    vVecLTx->addTerm(timeScaling*SqrtReInv*lt);
   }
   for (vEpsIt = vEpsY.begin();vEpsIt != vEpsY.end();vEpsIt++){
     LinearTermPtr lt = vEpsIt->second;
-    vVecLTy->addTerm(SqrtReInv*lt);
+    vVecLTy->addTerm(timeScaling*SqrtReInv*lt);
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -1297,7 +1323,9 @@ int main(int argc, char *argv[]) {
   if (rank==0)
     cout << "enriching cubature by " << enrichDegree << endl;
   solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
-
+  if (reportTimingResults){
+    solution->setReportTimingResults(true);
+  }
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
   mesh->registerSolution(prevTimeFlow); // u_t(i-1)
@@ -1307,8 +1335,9 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
+  //  refinementStrategy->setMinH(.5/Re); // 1/2 length of diffusion scale
 
-  int numTimeSteps = 250; // max time steps
+  int numTimeSteps = 150; // max time steps
 
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
@@ -1417,7 +1446,7 @@ int main(int argc, char *argv[]) {
       while (newtonNorm > 1e-6 && nriter < maxNRIter){
 	solution->condensedSolve(false);  // don't save memory (maybe turn on if ndofs > maxDofs?)      
 	if (k==numRefs){
-	  solution->setReportConditionNumber(true);
+	//	  solution->setReportConditionNumber(true);
 	}
 	alpha = 1.0; 
 	/*
@@ -1466,7 +1495,7 @@ int main(int argc, char *argv[]) {
       double timeRes = rieszTimeResidual->getNorm();
       L2_time_residual = timeRes;
 
-      bool writeTimestepFiles = (k==10);
+      bool writeTimestepFiles = (k>7);
       std::ostringstream oss;
       oss << k << "_" << i ;
       if (writeTimestepFiles){
@@ -1539,6 +1568,7 @@ int main(int argc, char *argv[]) {
 	  std::ostringstream testIDstream;
 	  testIDstream << testID;
 	  string dofIndicesName = string("dofInds_")+oss.str()+string("_testID_")+testIDstream.str()+string(".txt");
+	  /*
 	  ofstream dofIndsFile;    
 	  dofIndsFile.open(dofIndicesName.c_str());	
 	  vector<int> dofInds = mapIt->second;
@@ -1546,6 +1576,7 @@ int main(int argc, char *argv[]) {
 	    dofIndsFile << dofInds[i] << endl;
 	  }
 	  dofIndsFile.close();
+	  */
 	}      
       }
     }
@@ -1642,10 +1673,11 @@ int main(int argc, char *argv[]) {
       // prevent conditioning issues (and keep robustness under control by scaling)
       if (useConditioningCFL){	
 	double minSideLength = meshInfo.getMinCellSideLength();	
-	double CFL = 75.0;//50.0;
-	double newDt = min(1.0/(minSideLength*CFL),dt); // take orig dt if smaller (so dt doesn't get too large)
+	double CFL = 50.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
+	double newDt = min(minSideLength*CFL,dt); // take orig dt if smaller (so dt doesn't get too large)
 	if (newDt<dt){
-	  ((ScalarParamFunction*)invDt.get())->set_param(newDt);
+	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+	  ((ScalarParamFunction*)sqrtInvDt.get())->set_param(sqrt(1.0/newDt));
 	  if (rank==0)
 	    cout << "setting timestep to " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
 	}
@@ -1656,11 +1688,19 @@ int main(int argc, char *argv[]) {
       //      prevTimeFlow->projectOntoMesh(functionMap);
 
     } else {
+
+      // save mesh to file
+      if (saveFile.length() > 0) {
+	if (rank == 0) {
+	  refHistory->saveToFile(saveFile);
+	}
+      }
+
       time_tol = time_tol_orig; // return to original time tolerance for final solve
       if (rank==0){
 	cout << "Finishing it off with the final solve" << endl;
       }
-      //      solution->setReportTimingResults(true);
+
     }
     
   }
