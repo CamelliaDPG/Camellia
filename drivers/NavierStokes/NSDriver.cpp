@@ -1425,7 +1425,21 @@ int main(int argc, char *argv[]) {
   double time_tol = time_tol_orig;
 
   // time steps
-  for (int k = 0;k <= numRefs+1;k++){    
+  for (int k = 0;k < numRefs+1;k++){    
+
+    // prevent conditioning issues (and keep robustness under control by increasing 1/dt in problem)
+    if (useConditioningCFL){	
+      double minSideLength = meshInfo.getMinCellSideLength();	
+      double CFL = 50.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
+      double newDt = min(minSideLength*CFL,dt); // take orig dt if smaller (so dt doesn't get too large)
+      if (newDt<dt){
+	((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+	((ScalarParamFunction*)sqrtInvDt.get())->set_param(sqrt(1.0/newDt));
+	if (rank==0)
+	  cout << "setting timestep to " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
+      }
+    }      
+
 
     ofstream residualFile;      
     if (rank==0){
@@ -1449,7 +1463,6 @@ int main(int argc, char *argv[]) {
 	//	  solution->setReportConditionNumber(true);
 	}
 	alpha = 1.0; 
-	/*
 	if (useLineSearch){ // to enforce positivity of density rho
 	  double lineSearchFactor = .75; double eps = 1e-7;
 	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
@@ -1465,8 +1478,7 @@ int main(int argc, char *argv[]) {
 	  if (rank==0 && alpha < 1.0){
 	    cout << "line search factor alpha = " << alpha << endl;
 	  }      
-	}
-	*/
+	}	
 	backgroundFlow->addSolution(solution,alpha); // update with dU
 	nriter++;
 
@@ -1669,33 +1681,24 @@ int main(int argc, char *argv[]) {
       if (rank==0){
 	cout << "Done with  refinement number " << k << endl;
       }  
-
-      // prevent conditioning issues (and keep robustness under control by scaling)
-      if (useConditioningCFL){	
-	double minSideLength = meshInfo.getMinCellSideLength();	
-	double CFL = 50.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
-	double newDt = min(minSideLength*CFL,dt); // take orig dt if smaller (so dt doesn't get too large)
-	if (newDt<dt){
-	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
-	  ((ScalarParamFunction*)sqrtInvDt.get())->set_param(sqrt(1.0/newDt));
-	  if (rank==0)
-	    cout << "setting timestep to " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
-	}
-      }      
       
       // RESET solution every refinement - make sure discretization error doesn't creep in
       //      backgroundFlow->projectOntoMesh(functionMap);
       //      prevTimeFlow->projectOntoMesh(functionMap);
 
-    } else {
-
-      // save mesh to file
-      if (saveFile.length() > 0) {
-	if (rank == 0) {
-	  refHistory->saveToFile(saveFile);
+      if (k==numRefs-1){
+	// save mesh to file
+	if (saveFile.length() > 0) {
+	  if (rank == 0) {
+	    cout << "saving mesh file to " << saveFile << " on refinement " << k << endl;
+	    refHistory->saveToFile(saveFile);
+	  }
 	}
       }
 
+    } else {
+
+   
       time_tol = time_tol_orig; // return to original time tolerance for final solve
       if (rank==0){
 	cout << "Finishing it off with the final solve" << endl;
