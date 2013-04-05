@@ -25,10 +25,16 @@ namespace Camellia {
 
     double factor = 1 - x*x;
     for (int i=2; i<=n; i++) {
-      double i_factor = (i-1)*i;
-      valuesArray(i) = -factor * legendreDerivatives(i-1) / i_factor;
+      double i_factor = (i+1)*i; // corrected from LD's code, which had (i-1)*i
+      valuesArray(i) = -factor * legendreDerivatives(i) / i_factor; // corrected from LD's code, which had legendreDerivatives(i-1)
       derivativeValuesArray(i) = legendreValues(i-1);
     }
+//    if ((n>=2) && (x==0.5)) {
+//      cout << "For x= " << x << ", l2(x) = " << valuesArray(2) << endl;
+//      cout << "L2(x) = " << legendreDerivatives(2) << endl;
+//      cout << "i_factor for i=2 : " << (2+1)*2 << endl;
+//      cout << "factor: " << factor << endl;
+//    }
   }
   
   template<class Scalar, class ArrayScalar>

@@ -10,6 +10,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void Legendre<Scalar,ArrayScalar>::values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n) {
     valuesArray(0) = 1;
+    if (n==0) return;
     valuesArray(1) = x;
     
     derivativeValuesArray(0) = 0;

@@ -68,6 +68,7 @@
 #include "HConvergenceStudyTests.h"
 #include "IncompressibleFormulationsTests.h"
 #include "LinearTermTests.h"
+#include "LobattoBasisTests.h"
 #include "MeshRefinementTests.h"
 #include "MPIWrapperTests.h"
 #include "MultiBasisTests.h"
@@ -161,6 +162,7 @@ void DPGTests::runTests() {
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
   //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );

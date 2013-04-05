@@ -56,6 +56,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   void LobattoHGRAD_Quad<Scalar,ArrayScalar>::initializeTags() const {
     // TODO: implement this
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "initializeTags() unimplemented");
   }
   
   template<class Scalar, class ArrayScalar>
@@ -97,7 +98,6 @@ namespace Camellia {
         }
       }
     }
-    // TODO: implement this
     
   }
 } // namespace Camellia

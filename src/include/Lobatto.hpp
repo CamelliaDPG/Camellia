@@ -25,16 +25,30 @@ namespace Camellia {
     int _polyOrder;
     FieldContainer<double> _values;
     FieldContainer<double> _derivatives;
+    
+    bool _derivative; // whether this is the derivative of the Lobatto function
   public:
-    LobattoFunction(int polyOrder) {
+    LobattoFunction(int polyOrder, bool derivative = false) {
       _polyOrder = polyOrder;
       _values.resize(_polyOrder+1);
       _derivatives.resize(_polyOrder+1);
+      _derivative = derivative;
     }
     double value(double x) {
       Lobatto<double>::values(_values,_derivatives,x,_polyOrder);
 //      cout << "Lobatto values:\n" << _values;
-      return _values[_polyOrder];
+      if (! _derivative) {
+        return _values[_polyOrder];
+      } else {
+        return _derivatives[_polyOrder];
+      }
+    }
+    
+    FunctionPtr dx() {
+      if (_derivative) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoFunction only supports first derivatives...");
+      }
+      return Teuchos::rcp( new LobattoFunction(_polyOrder,true) );
     }
   };
 }
