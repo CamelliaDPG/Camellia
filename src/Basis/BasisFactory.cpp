@@ -43,6 +43,8 @@
 
 #include "VectorizedBasis.h"
 
+#include "LobattoHGRAD_Quad.h"
+
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
 map< Camellia::Basis<>*, int > BasisFactory::_polyOrders; // allows lookup of poly order used to create basis
@@ -54,6 +56,8 @@ map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr > BasisFactory::_p
 set< Camellia::Basis<>* > BasisFactory::_patchBasisSet;
 
 bool BasisFactory::_useEnrichedTraces = true;
+
+bool BasisFactory::_useLobattoForQuadH1 = false;
 
 using namespace Camellia;
 
@@ -108,8 +112,12 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             //if (polyOrder==0) {
             //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
             //} else {
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
-                                    spaceDim, scalarRank) );
+            if (! _useLobattoForQuadH1) {
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                      spaceDim, scalarRank) );
+            } else {
+              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder) );
+            }
             //}
             basisRank = 0;
           break;

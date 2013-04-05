@@ -551,7 +551,6 @@ public:
   }
 };
 
-
 class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:
@@ -559,6 +558,5 @@ public:
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
 };
-
 
 #endif

@@ -151,11 +151,21 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
+  int Basis<Scalar,ArrayScalar>::rangeDimension() const {
+    return _rangeDimension;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  int Basis<Scalar,ArrayScalar>::rangeRank() const {
+    return _rangeRank;
+  }
+  
+  template<class Scalar, class ArrayScalar>
   IntrepidBasisWrapper<Scalar,ArrayScalar>::IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis,
                                                                  int rangeDimension, int rangeRank) {
     _intrepidBasis = intrepidBasis;
-    _rangeDimension = rangeDimension;
-    _rangeRank = rangeRank;
+    this->_rangeDimension = rangeDimension;
+    this->_rangeRank = rangeRank;
   }
 
   template<class Scalar, class ArrayScalar>
@@ -250,15 +260,6 @@ namespace Camellia {
     // we leave tag initialization to the _intrepidBasis object.
   }
   
-  // range info for basis values:
-  template<class Scalar, class ArrayScalar>
-  int IntrepidBasisWrapper<Scalar,ArrayScalar>::rangeDimension() const {
-    return _rangeDimension;
-  }
-  template<class Scalar, class ArrayScalar>
-  int IntrepidBasisWrapper<Scalar,ArrayScalar>::rangeRank() const {
-    return _rangeRank;
-  }
   template<class Scalar, class ArrayScalar>
   void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
