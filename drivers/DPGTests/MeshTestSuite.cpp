@@ -883,7 +883,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }
   
   // Several of these tests assert that indices are laid out in the same order in trialOrdering(), pRefine(), matchSides()
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, 0); // don't really refine
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, 0); // don't really refine
   
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: conformingOrdering with pRefine==0 differs from original." << endl;
@@ -892,7 +892,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   int pToAdd = 3;  
   
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, pToAdd);
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, pToAdd);
   
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
 
@@ -972,14 +972,14 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }  
   
   // final test: take the upgraded ordering, and increase its polynomial order so that it matches that of the higher-degree guy.  Check that this is the same Ordering as a fresh one with that polynomial order.
-  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefine(nonConformingOrderingLowerOrder, quad_4, pToAdd);
+  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(nonConformingOrderingLowerOrder, quad_4, pToAdd);
   nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
   if ( nonConformingOrderingLowerOrder.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;    
   }
   
-  conformingOrderingLowerOrder = dofOrderingFactory.pRefine(conformingOrderingLowerOrder, quad_4, pToAdd);
+  conformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(conformingOrderingLowerOrder, quad_4, pToAdd);
   conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
   if ( conformingOrderingLowerOrder.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
