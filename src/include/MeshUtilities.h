@@ -51,7 +51,8 @@
 
 class MeshUtilities {
  public:
-  
+  static MeshPtr buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+
   static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
   
   static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
