@@ -127,6 +127,7 @@ bool LobattoBasisTests::testLobattoValues() {
   lobattoFunctionsExpected.push_back( Function::constant(1.0) );
   lobattoFunctionsExpected.push_back( x );
   
+  lobattoFunctionsExpected.push_back( (x*x - 1) / 2);
   lobattoFunctionsExpected.push_back( (x*x - 1) * x / 2);
   lobattoFunctionsExpected.push_back( (x*x - 1) * (5 * x * x - 1) / 8);
   lobattoFunctionsExpected.push_back( (x*x - 1) * (7 * x * x - 3) * x / 8);

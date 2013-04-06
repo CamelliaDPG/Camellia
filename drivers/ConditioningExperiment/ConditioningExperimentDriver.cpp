@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
       VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
-      for (int testOrder=1; testOrder<=10; testOrder++) {
+      for (int testOrder=1; testOrder<=20; testOrder++) {
         MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";

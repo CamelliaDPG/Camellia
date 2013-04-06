@@ -25,8 +25,8 @@ namespace Camellia {
 
     double factor = 1 - x*x;
     for (int i=2; i<=n; i++) {
-      double i_factor = (i+1)*i; // corrected from LD's code, which had (i-1)*i
-      valuesArray(i) = -factor * legendreDerivatives(i) / i_factor; // corrected from LD's code, which had legendreDerivatives(i-1)
+      double i_factor = (i-1)*i;
+      valuesArray(i) = -factor * legendreDerivatives(i-1) / i_factor;
       derivativeValuesArray(i) = legendreValues(i-1);
     }
 //    if ((n>=2) && (x==0.5)) {
@@ -39,11 +39,11 @@ namespace Camellia {
   
   template<class Scalar, class ArrayScalar>
   void Lobatto<Scalar, ArrayScalar >::l2norms(ArrayScalar &valuesArray, int n) {
-    int maxOrder = n + 1; // n + 1 because Lobatto functions have 1 higher degree than the corresponding Legendre polynomial
+    int maxOrder = n;
     
     // TODO: eliminate the assumption that Scalar == double here...
     
-    int cubDegree = maxOrder * maxOrder;
+    int cubDegree = 2 * (maxOrder + 1);
     BasisCachePtr basisCache = BasisCache::basisCache1D(-1,1,cubDegree);
     
     for (int i=0; i<=n; i++) {

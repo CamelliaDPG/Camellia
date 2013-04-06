@@ -14,7 +14,7 @@ namespace Camellia {
   void LobattoHGRAD_Quad<Scalar,ArrayScalar>::initializeL2normValues() {
     _legendreL2normsSquared.resize(this->_basisDegree+1);
     _lobattoL2normsSquared.resize(this->_basisDegree+1);
-    _legendreL2normsSquared[0] = (0.25) * 2; // not actually Legendre: the squared L^2 norm of the derivative of the first Lobatto polynomial...
+    _legendreL2normsSquared[0] = 0; // not actually Legendre: the squared L^2 norm of the derivative of the first Lobatto polynomial...
     for (int i=1; i<=this->_basisDegree; i++) {
       _legendreL2normsSquared[i] = 2.0 / (2*i-1); // the squared L^2 norm of the (i-1)th Legendre polynomial...
     }
@@ -78,7 +78,8 @@ namespace Camellia {
         for (int j=0; j<_degree_y+1; j++) {
           double scalingFactor = _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
                                + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i);
-          cout << i << " " << j << ": " << scalingFactor << endl;
+//          cout << "scaling factor squared for " << i << " " << j << ": " << scalingFactor << endl;
+          if (scalingFactor==0) scalingFactor = 1; // the (0,0) scaling factor will be 0 because we're scaling according to (grad e_ij, grad e_ij)--and e_00 = 1.
           scalingFactor = sqrt(scalingFactor);
           
           switch (operatorType) {
