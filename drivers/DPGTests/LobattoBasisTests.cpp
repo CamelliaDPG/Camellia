@@ -33,6 +33,13 @@ void LobattoBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
+  
+  setup();
+  if (testH1Classifications()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
 }
 
 bool LobattoBasisTests::testLegendreValues() {  
@@ -155,6 +162,35 @@ bool LobattoBasisTests::testLobattoValues() {
       success = false;
     }
   }
+  
+  return success;
+}
+
+bool testBasisClassifications(BasisPtr basis) {
+  bool success = true;
+  
+  shards::CellTopology cellTopo = basis->domainTopology();
+  
+  int numVertices = cellTopo.getVertexCount();
+  int numEdges = cellTopo.getEdgeCount();
+  
+  int degree = basis->getDegree();
+  
+  // TODO: finish this
+  
+  // get the points in reference space for each vertex
+  
+  // test that the points are correctly classified
+  
+  return success;
+}
+
+bool LobattoBasisTests::testH1Classifications() {
+  // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
+  bool success = true;
+  
+  // TODO: implement this
+  cout << "Warning: testH1Classification unimplemented.\n";
   
   return success;
 }

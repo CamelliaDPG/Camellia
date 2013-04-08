@@ -17,6 +17,7 @@ public:
   bool testLobattoValues();
   bool testLobattoDerivativeValues();
   
+  bool testH1Classifications(); // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
   
   std::string testSuiteName();
 };

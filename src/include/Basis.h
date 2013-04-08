@@ -70,6 +70,9 @@ namespace Camellia {
     virtual std::set<int> dofOrdinalsForInterior() const;
     virtual std::set<int> dofOrdinalsForVertices() const;
     
+    int dofOrdinalForVertex(int vertexIndex) const;
+    std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
+    
     virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
     virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     virtual const std::vector<int>& getDofTag(int dofOrd) const;

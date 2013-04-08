@@ -99,6 +99,20 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdge(int edgeIndex) const {
+    int edgeDim = 1;
+    std::set<int> dofOrdinals;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished method");
+    // TODO: figure out how best to set numDofsForEdge
+    int numDofsForEdge;
+    for (int edgeDofIndex=0; edgeDofIndex<numDofsForEdge; edgeDofIndex++) {
+      int dofOrdinal = this->getDofOrdinal(edgeDim,edgeIndex,edgeDofIndex);
+      dofOrdinals.insert(dofOrdinal);
+    }
+    return dofOrdinals;
+  }
+
+  template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdges(bool includeVertices) const {
     std::set<int> dofOrdinals = includeVertices ? this->dofOrdinalsForVertices() : std::set<int>();
     int numEdges = this->domainTopology().getEdgeCount();
@@ -139,6 +153,12 @@ namespace Camellia {
     // (or use tags, like intrepid does)
   }
 
+  template<class Scalar, class ArrayScalar>
+  int Basis<Scalar,ArrayScalar>::dofOrdinalForVertex(int vertexIndex) const {
+    int dofOrdinal = this->getDofOrdinal(0,vertexIndex,0);
+    return dofOrdinal;
+  }
+  
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForVertices() const {
     std::set<int> dofOrdinals;
