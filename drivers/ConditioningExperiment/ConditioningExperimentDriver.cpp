@@ -59,7 +59,34 @@ void setupHGradTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPt
   }
 }
 
+void setupHGradStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  var = varFactory.testVar("q", HGRAD);
+  ip = Teuchos::rcp( new IP );
+  ip->addTerm(var->grad());
+}
+
+void printLobattoL2norm() {
+  VarFactory varFactory;
+  VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  
+  int maxOrder = 20;
+  int pToAdd = 0;
+  MeshPtr mesh = MeshFactory::quadMesh(bf, maxOrder, pToAdd, 2.0, 2.0); // width = 2, height = 2: shifted reference element
+  
+  cout << setprecision(15);
+  
+  cout << "L^2 norm squared of Lobatto polynomials:\n";
+  for (int i=0; i<maxOrder; i++) {
+    FunctionPtr lobatto = Teuchos::rcp(new LobattoFunction(i) );
+    cout << i << ": " << (lobatto * lobatto)->integrate(mesh) << endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
+  
+//  printLobattoL2norm();
+  
   vector< Space > spaces;
   spaces.push_back(HGRAD);
   spaces.push_back(HDIV);
@@ -91,8 +118,8 @@ int main(int argc, char *argv[]) {
       VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
-      for (int testOrder=1; testOrder<=10; testOrder++) {
-        MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd);
+      for (int testOrder=1; testOrder<=20; testOrder++) {
+        MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
@@ -100,6 +127,32 @@ int main(int argc, char *argv[]) {
         cout << maxConditionNumber << endl;
       }
     }
+    
+    // finally, write out the HGrad stiffness matrix to disk:
+    VarFactory varFactory;
+    VarPtr var;
+    IPPtr ip;
+    setupHGradStiffness(varFactory, var, ip);
+    VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    
+    int testOrder = 5;
+    int pToAdd = 0;
+    MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
+
+    bool testVsTest = true; int cellID = 0;
+    BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
+    
+    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    int testDofs = testSpace->totalDofs();
+    int numCells = 1;
+    FieldContainer<double> innerProductMatrix(numCells,testDofs,testDofs);
+    ip->computeInnerProductMatrix(innerProductMatrix, testSpace, cellBasisCache);
+    // reshape:
+    innerProductMatrix.resize(testDofs,testDofs);
+    string fileName = "HGRAD_stiffness.dat";
+    MeshUtilities::writeMatrixToSparseDataFile(innerProductMatrix, fileName);
+    cout << "Wrote HGRAD stiffness to " << fileName << endl;
   }
   
 //  int polyOrder = 20;

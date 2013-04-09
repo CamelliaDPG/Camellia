@@ -57,7 +57,9 @@ typedef Teuchos::RCP< Camellia::Basis<> > BasisPtr;
 class BasisFactory {
 private:
   static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
-              _existingBasis; // keys are ((polyOrder,cellTopoKey),fs))
+              _existingBases; // keys are ((polyOrder,cellTopoKey),fs))
+  static map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr >
+              _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
   
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
@@ -71,9 +73,12 @@ private:
   static set< Camellia::Basis<>* > _patchBasisSet;
   
   static bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
+  static bool _useLobattoForQuadH1;
 public:
   static BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
-  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
+//  static BasisPtr getBasis(int &basisRank, int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs);
+  static BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs );
+  
   static MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
   static PatchBasisPtr getPatchBasis(BasisPtr parent, FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 

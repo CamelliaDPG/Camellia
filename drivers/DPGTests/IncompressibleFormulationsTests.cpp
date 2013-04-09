@@ -169,6 +169,13 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
   
   setup();
+  if (testVGPNavierStokesFormulationCorrectness()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if ( testVGPNavierStokesLocalConservation() ) {
     numTestsPassed++;
   }
@@ -198,13 +205,6 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   
   setup();
   if (testVGPNavierStokesFormulationKovasnayConvergence()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testVGPNavierStokesFormulationCorrectness()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -766,6 +766,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   double tol = 1e-11;
   
   bool useLineSearch = false;
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   vector<bool> useHessianList;
   useHessianList.push_back(false);
@@ -812,7 +813,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                     horizontalCells, verticalCells,
                                                                     H1Order, pToAdd,
-                                                                    u1_exact, u2_exact, p_exact);
+                                                                    u1_exact, u2_exact, p_exact, enrichVelocity);
             
             
             SolutionPtr solnIncrement = problem.solutionIncrement();
@@ -949,6 +950,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   int horizontalCells = 2, verticalCells = 2;
   
   bool useLineSearch = false;
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
        exactIt != polyExactFunctions.end(); exactIt++) {
@@ -981,7 +983,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                horizontalCells, verticalCells,
                                                                H1Order, pToAdd,
-                                                               u1_exact, u2_exact, p_exact);
+                                                               u1_exact, u2_exact, p_exact, enrichVelocity);
       SolutionPtr backgroundFlow = problem.backgroundFlow();
       SolutionPtr solnIncrement = problem.solutionIncrement();
       RHSPtr rhs = problem.exactSolution()->rhs();
@@ -1379,6 +1381,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
 //  double nonlinear_step_weight = 1.0;
   
   bool useLineSearch = false; // we don't converge nearly as quickly (if at all) when using line search (a problem!)
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
        useHessianIt != useHessianList.end(); useHessianIt++) {
@@ -1401,14 +1404,14 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                       horizontalCells, verticalCells,
                                                                       H1Order, pToAdd,
-                                                                      zero, zero, zero);
+                                                                      zero, zero, zero, enrichVelocity);
           
           NavierStokesFormulation::setKovasznay( Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact );
           
           VGPNavierStokesProblem kProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                    horizontalCells, verticalCells,
                                                                    H1Order, pToAdd,
-                                                                   u1_exact, u2_exact, p_exact);
+                                                                   u1_exact, u2_exact, p_exact, enrichVelocity);
           
           if (printToConsole) {
             cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;

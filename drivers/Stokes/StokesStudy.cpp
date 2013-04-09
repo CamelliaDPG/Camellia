@@ -7,7 +7,6 @@
  *
  */
 
-#include "StokesStudy.h"
 #include "StokesManufacturedSolution.h"
 #include "StokesBilinearForm.h"
 
@@ -394,7 +393,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = HDGSingular;
+  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
   bool reportConditionNumber = false; // we don't believe Solution's condition number estimate anyhow
   
@@ -706,7 +705,7 @@ int main(int argc, char *argv[]) {
     
     ip = myIP;
   } else if (normChoice==UnitCompliantGraphNorm) {
-    ip = dynamic_cast< VGPStokesFormulation* >(stokesForm.get())->unitCompliantGraphNorm();
+    ip = dynamic_cast< VGPStokesFormulation* >(stokesForm.get())->scaleCompliantGraphNorm();
   }
   
   if (rank==0) 

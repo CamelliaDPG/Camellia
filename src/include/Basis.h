@@ -21,6 +21,10 @@ namespace Camellia {
     Basis();
     int _basisCardinality;
     int _basisDegree;
+    
+    int _rangeDimension;
+    int _rangeRank;
+    
     virtual void initializeTags() const = 0;
     /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized
      */
@@ -66,14 +70,21 @@ namespace Camellia {
     virtual std::set<int> dofOrdinalsForInterior() const;
     virtual std::set<int> dofOrdinalsForVertices() const;
     
+    int dofOrdinalForVertex(int vertexIndex) const;
+    std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
+    
     virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
     virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     virtual const std::vector<int>& getDofTag(int dofOrd) const;
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
-      
+    
+    // methods identifying the type of basis:
+    virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
+    virtual bool isNodal() const; // defaults to false (true for the Intrepid bases)
+    
     // range info for basis values:
-    virtual int rangeDimension() const = 0;
-    virtual int rangeRank() const = 0;
+    virtual int rangeDimension() const;
+    virtual int rangeRank() const;
     
     virtual void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const = 0;
     
@@ -85,8 +96,6 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar> class IntrepidBasisWrapper : public Basis<Scalar,ArrayScalar> {
   private:
     Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > _intrepidBasis;
-    int _rangeDimension;
-    int _rangeRank;
     
     std::set<int> getSubcellDofs(int subcellDimStart, int subcellDimEnd) const;
   protected:
@@ -111,9 +120,8 @@ namespace Camellia {
     const std::vector<int>& getDofTag(int dofOrd) const;
     const std::vector<std::vector<int> > & getAllDofTags() const;
     
-    // range info for basis values:
-    int rangeDimension() const;
-    int rangeRank() const;
+    virtual bool isConforming() const; // true for Intrepid bases
+    virtual bool isNodal() const;      // true for the Intrepid bases
     
     void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };

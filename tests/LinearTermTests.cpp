@@ -284,6 +284,14 @@ TEST_F(LinearTermTests, TestBoundaryPlusVolumeTerms)
     //            Therefore, the sum of the entries in the integrals_*_two_term matrices will should match
     //            the function integral.  Whichever doesn't match is wrong.
 
+    // first, let's confirm that the v1 basis *is* nodal:
+    BasisPtr v1Basis = testOrder->getBasis(v1->ID());
+    if (! v1Basis->isNodal()) {
+      cout << "testBoundaryPlusVolumeTerms: final part of test relies on a nodal basis, but the basis is not nodal.";
+      cout << "  Exiting test early (with whatever success value we have thus far).\n";
+      return success;
+    }
+    
     map< int, FunctionPtr > v1_equals_one;
     v1_equals_one[v1->ID()] = Function::constant(1.0);
 

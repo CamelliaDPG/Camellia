@@ -341,6 +341,11 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         
         DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
         BasisPtr basis = trialOrderingPtr->getBasis(trialID,0);
+        if (! basis->isNodal()) {
+          // could we relax this to just requiring a conforming basis?  I think any conforming basis will be "nodal"
+          // with respect to the vertices.  (I.e. each vertex has exactly one basis function on each element that is non-zero there.)
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "single-point BC imposition requires a nodal basis");
+        }
         int basisCardinality = basis->getCardinality();
         FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
         CellTools<double>::mapToReferenceFrame(refPoints,physicalCellNodes,physicalCellNodes,cellTopo);

@@ -518,6 +518,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     // impose zero mean constraints:
     for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
       int trialID = *trialIt;
+      
+      // sample an element to make sure that the basis used for trialID is nodal
+      // (this is assumed in our imposition mechanism)
+      ElementTypePtr elemTypePtr = _mesh->getActiveElement(0)->elementType();
+      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      if (!trialBasis->isNodal()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+      }
+      
       int zmcIndex = partMap.GID(localRowIndex);
 //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
       FieldContainer<double> basisIntegrals;
