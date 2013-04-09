@@ -97,7 +97,7 @@ bool LobattoBasisTests::testLobattoDerivativeValues() {
   
   int n_max = 4;
   for (int n=0; n<=n_max+1; n++) {
-    lobattoDerivatives.push_back( Teuchos::rcp( new LobattoFunction(n,true) ) );
+    lobattoDerivatives.push_back( Teuchos::rcp( new LobattoFunction<>(n,true) ) );
   }
   
   VarFactory varFactory;
@@ -143,7 +143,7 @@ bool LobattoBasisTests::testLobattoValues() {
   
   int n_max = 4;
   for (int n=0; n<=n_max; n++) {
-    lobattoFunctions.push_back( Teuchos::rcp( new LobattoFunction(n,false) ) );
+    lobattoFunctions.push_back( Teuchos::rcp( new LobattoFunction<>(n,false) ) );
   }
   
   VarFactory varFactory;

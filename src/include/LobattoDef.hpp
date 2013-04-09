@@ -41,13 +41,11 @@ namespace Camellia {
   void Lobatto<Scalar, ArrayScalar >::l2norms(ArrayScalar &valuesArray, int n) {
     int maxOrder = n;
     
-    // TODO: eliminate the assumption that Scalar == double here...
-    
     int cubDegree = 2 * (maxOrder + 1);
     BasisCachePtr basisCache = BasisCache::basisCache1D(-1,1,cubDegree);
     
     for (int i=0; i<=n; i++) {
-      FunctionPtr lobatto = Teuchos::rcp( new LobattoFunction(i) ); // this assumes Scalar == double...
+      FunctionPtr lobatto = Teuchos::rcp( new LobattoFunction<Scalar>(i) );
       valuesArray(i) = sqrt((lobatto*lobatto)->integrate(basisCache));
     }
   }
