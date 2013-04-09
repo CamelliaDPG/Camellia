@@ -77,7 +77,11 @@ namespace Camellia {
     virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     virtual const std::vector<int>& getDofTag(int dofOrd) const;
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
-      
+    
+    // methods identifying the type of basis:
+    virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
+    virtual bool isNodal() const; // defaults to false (true for the Intrepid bases)
+    
     // range info for basis values:
     virtual int rangeDimension() const;
     virtual int rangeRank() const;
@@ -115,6 +119,9 @@ namespace Camellia {
     const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     const std::vector<int>& getDofTag(int dofOrd) const;
     const std::vector<std::vector<int> > & getAllDofTags() const;
+    
+    virtual bool isConforming() const; // true for Intrepid bases
+    virtual bool isNodal() const;      // true for the Intrepid bases
     
     void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };

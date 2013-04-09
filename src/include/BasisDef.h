@@ -169,6 +169,16 @@ namespace Camellia {
     }
     return dofOrdinals;
   }
+  
+  template<class Scalar, class ArrayScalar>
+  bool Basis<Scalar,ArrayScalar>::isConforming() const {
+    return false;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  bool Basis<Scalar,ArrayScalar>::isNodal() const {
+    return false;
+  }
 
   template<class Scalar, class ArrayScalar>
   int Basis<Scalar,ArrayScalar>::rangeDimension() const {
@@ -178,6 +188,16 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   int Basis<Scalar,ArrayScalar>::rangeRank() const {
     return _rangeRank;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  bool IntrepidBasisWrapper<Scalar,ArrayScalar>::isConforming() const {
+    return true;
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  bool IntrepidBasisWrapper<Scalar,ArrayScalar>::isNodal() const {
+    return true;
   }
   
   template<class Scalar, class ArrayScalar>
