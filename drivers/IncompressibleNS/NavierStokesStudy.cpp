@@ -42,19 +42,19 @@ int main(int argc, char *argv[]) {
   int minPolyOrder = 0;
   int maxPolyOrder = 1;
   
-  int pToAdd = 5; // for optimal test function approximation
+  int pToAdd = 2; // for optimal test function approximation
   bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
   
   // parse args:
-  bool useTriangles = false, useOptimalNorm = true;
+  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false;
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
-    cout << "useOptimalNorm = "  << (useOptimalNorm ? "true" : "false") << "\n";
+    cout << "useGraphNorm = "  << (useGraphNorm ? "true" : "false") << "\n";
   }
   
   // define Kovasznay domain:
@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
                                                               H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero);
+                                                              zero, zero, zero, useCompliantNorm);
   
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
@@ -130,11 +130,13 @@ int main(int argc, char *argv[]) {
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
                                                               numCells1D,numCells1D,
                                                               H1Order, pToAdd,
-                                                              u1_exact, u2_exact, p_exact);
+                                                              u1_exact, u2_exact, p_exact, useCompliantNorm);
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problems.push_back(problem);
-      if ( !useOptimalNorm ) {
+      if ( useCompliantNorm ) {
+        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+      } else if (! useGraphNorm ) {
         // then use the naive:
         problem.setIP(problem.bf()->naiveNorm());
       }
@@ -180,15 +182,23 @@ int main(int argc, char *argv[]) {
         RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
         rieszRep.computeRieszRep();
         double costFunction = rieszRep.getNorm();
+        double incr_norm = sqrt(l2_incr->integrate(problem->mesh()));
         
         if (rank==0) {
-          cout << setprecision(6) << scientific;
-          cout << "Took " << weight << "-weighted step for " << numCells1D;
-          cout << " x " << numCells1D << " mesh: " << problem->iterationCount();
-          cout << setprecision(6) << fixed;
-          cout << " iterations; cost function " << costFunction << endl;
+          cout << "\x1B[2K"; // Erase the entire current line.
+          cout << "\x1B[0E"; // Move to the beginning of the current line.
+          cout << "Iteration: " << problem->iterationCount() << "; L^2(incr) = " << incr_norm;
+          flush(cout);
+//          cout << setprecision(6) << scientific;
+//          cout << "Took " << weight << "-weighted step for " << numCells1D;
+//          cout << " x " << numCells1D << " mesh: " << problem->iterationCount();
+//          cout << setprecision(6) << fixed;
+//          cout << " iterations; cost function " << costFunction << endl;
         }
       } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters) && (weight != 0));
+      
+      if (rank==0) cout << endl;
+      
       solutions.push_back( problem->backgroundFlow() );
       
       // set the IP to the naive norm for clearer comparison with the best approximation energy error

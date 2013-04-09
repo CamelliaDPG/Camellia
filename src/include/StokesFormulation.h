@@ -564,19 +564,21 @@ public:
   IPPtr graphNorm() {
     return _graphNorm;
   }
-  IPPtr unitCompliantGraphNorm() {
+  IPPtr scaleCompliantGraphNorm() {
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+    FunctionPtr scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
+    
     compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
     compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
     compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
     compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
-    compliantGraphNorm->addTerm( _mu * v1->dx() + _mu * v2->dy() );       // pressure
+    compliantGraphNorm->addTerm( scaled_mu * v1->dx() + scaled_mu * v2->dy() ); // pressure
     compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
     compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy());  // u2
     
-    compliantGraphNorm->addTerm( (_mu / h) * v1 );
-    compliantGraphNorm->addTerm( (_mu / h) * v2 );
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v1 );
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v2 );
     compliantGraphNorm->addTerm( q ); 
     compliantGraphNorm->addTerm( tau1 );
     compliantGraphNorm->addTerm( tau2 );
