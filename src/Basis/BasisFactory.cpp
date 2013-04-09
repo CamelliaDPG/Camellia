@@ -248,10 +248,10 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   int scalarRank = 0, vectorRank = 1;
   
   if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
-    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
   } else if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
-    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+    BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
   } else {
     switch (cellTopoKey) {
@@ -462,7 +462,11 @@ BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd) {
   int polyOrder = _polyOrders[basis.get()] + pToAdd;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
-  return getBasis(polyOrder, cellTopoKey, fs);
+  if (basis->isConforming()) {
+    return getConformingBasis(polyOrder, cellTopoKey, fs);
+  } else {
+    return getBasis(polyOrder, cellTopoKey, fs);
+  }
 }
 
 BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
@@ -482,7 +486,11 @@ BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
   }
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
-  return getBasis(pToSet, cellTopoKey, fs);
+  if (basis->isConforming()) {
+    return getConformingBasis(pToSet, cellTopoKey, fs);
+  } else {
+    return getBasis(pToSet, cellTopoKey, fs);
+  }
 }
 
 int BasisFactory::getBasisRank(BasisPtr basis) {
