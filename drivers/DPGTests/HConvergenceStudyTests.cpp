@@ -28,6 +28,8 @@ void HConvergenceStudyTests::runTests(int &numTestsRun, int &numTestsPassed) {
 bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   bool success = true;
 
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
+  
   int minLogElements = 0, maxLogElements = minLogElements;
   int numCells1D = pow(2.0,minLogElements);
   int H1Order = 1;
@@ -67,7 +69,7 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
                                                               H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero);
+                                                              zero, zero, zero, enrichVelocity);
   
   FunctionPtr u1_exact, u2_exact, p_exact;
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
@@ -76,7 +78,7 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
                                                           numCells1D,numCells1D,
                                                           H1Order, pToAdd,
-                                                          u1_exact, u2_exact, p_exact);
+                                                          u1_exact, u2_exact, p_exact, enrichVelocity);
 
   HConvergenceStudy study(problem.exactSolution(),
                           problem.mesh()->bilinearForm(),

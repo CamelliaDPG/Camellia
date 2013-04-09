@@ -64,9 +64,9 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
     int testID = *testIterator;
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
     BasisPtr basis;
-    int basisRank;
     int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
-    basis = BasisFactory::getBasis( basisRank, testIDPolyOrder, cellTopo.getKey(), fs);
+    basis = BasisFactory::getBasis( testIDPolyOrder, cellTopo.getKey(), fs);
+    int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
   
@@ -95,7 +95,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
       int numSides = cellTopo.getSideCount();
-      basis = BasisFactory::getBasis( basisRank, trialIDPolyOrder, shards::Line<2>::key, fs);
+      basis = BasisFactory::getBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
+      basisRank = basis->rangeRank();
       for (int j=0; j<numSides; j++) {
         trialOrder->addEntry(trialID,basis,basisRank,j);
       }
@@ -106,7 +107,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
         addConformingVertexPairings(trialID, trialOrder, cellTopo);
       }
     } else {
-      basis = BasisFactory::getBasis( basisRank, trialIDPolyOrder, cellTopo.getKey(), fs);
+      basis = BasisFactory::getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
+      basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
     }
   }

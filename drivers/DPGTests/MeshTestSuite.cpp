@@ -288,7 +288,6 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
 }
 
 bool MeshTestSuite::testBasisRefinement() {
-  int basisRank;
   int initialPolyOrder = 3;
   
   bool success = true;
@@ -297,7 +296,7 @@ bool MeshTestSuite::testBasisRefinement() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  BasisPtr basis = BasisFactory::getBasis(basisRank, initialPolyOrder, quad_4.getKey(), hgrad);
+  BasisPtr basis = BasisFactory::getBasis(initialPolyOrder, quad_4.getKey(), hgrad);
   if (basis->getDegree() != initialPolyOrder) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: initial BasisFactory call returned a different-degree basis than expected..." << endl;

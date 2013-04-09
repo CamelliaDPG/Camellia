@@ -46,7 +46,8 @@
 #include "LobattoHGRAD_Quad.h"
 
 //define the static maps:
-map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBasis;
+map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
+map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBases;
 map< Camellia::Basis<>*, int > BasisFactory::_polyOrders; // allows lookup of poly order used to create basis
 map< Camellia::Basis<>*, IntrepidExtendedTypes::EFunctionSpaceExtended > BasisFactory::_functionSpaces; // allows lookup of function spaces
 map< Camellia::Basis<>*, int > BasisFactory::_cellTopoKeys; // allows lookup of cellTopoKeys
@@ -62,13 +63,6 @@ bool BasisFactory::_useLobattoForQuadH1 = false;
 using namespace Camellia;
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
-  int basisRank; // to discard
-  return getBasis(basisRank,polyOrder,cellTopoKey,fs);
-}
-
-BasisPtr BasisFactory::getBasis(int &basisRank,
-                                int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs) {
-
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
@@ -76,9 +70,8 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
   BasisPtr basis;
   pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
   
-  if ( _existingBasis.find(key) != _existingBasis.end() ) {
-    basis = _existingBasis[key];
-    basisRank = basis->rangeRank();
+  if ( _existingBases.find(key) != _existingBases.end() ) {
+    basis = _existingBases[key];
     return basis;
   }
   
@@ -96,14 +89,11 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
   int scalarRank = 0, vectorRank = 1;
   
   if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
-    BasisPtr componentBasis = BasisFactory::getBasis(basisRank, polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
-    
-    basisRank = 1;
   } else if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
-    BasisPtr componentBasis = BasisFactory::getBasis(basisRank, polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
-    basisRank = 1;
   } else { 
     switch (cellTopoKey) {
       case shards::Quadrilateral<4>::key:
@@ -119,25 +109,21 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
               basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder) );
             }
             //}
-            basisRank = 0;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                   spaceDim, vectorRank)
                                  );
-            basisRank = 1;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                                               spaceDim, vectorRank)
                                                              );
-            basisRank = 1;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
                                   spaceDim, scalarRank)
                                  );
-            basisRank = 0;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_ONE):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
@@ -159,25 +145,21 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank)
                                  ) ;
-            basisRank = 0;
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
                                                              spaceDim, vectorRank)
                                  );
-            basisRank = 1;
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
                                                              spaceDim, vectorRank)
                                  );
-            basisRank = 1;
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank)
                                  );
-            basisRank = 0;
             break;
           default:
             TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
@@ -200,13 +182,11 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
                                                                spaceDim, scalarRank)
                                    );
             }
-            basisRank = 0;
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
                                                              spaceDim, scalarRank)
                                  );
-            basisRank = 0;
           break;
           default:        
             TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
@@ -224,11 +204,169 @@ BasisPtr BasisFactory::getBasis(int &basisRank,
 
      }
   }
-  _existingBasis[key] = basis;
+  _existingBases[key] = basis;
   _polyOrders[basis.get()] = polyOrder;
   _functionSpaces[basis.get()] = fs;
   _cellTopoKeys[basis.get()] = cellTopoKey;
-//  _ranks[basis.get()] = basisRank;
+  return basis;
+}
+
+BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
+  // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
+  // required.
+  
+  if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
+    TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
+  }
+  
+  BasisPtr basis;
+  pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
+  
+  // First, we call getBasis(), and if the one that it returns is conforming, we just use that.
+  BasisPtr standardBasis = getBasis(polyOrder, cellTopoKey, fs);
+  if (standardBasis->isConforming()) {
+    _conformingBases[key] = standardBasis;
+    return standardBasis;
+  }
+  
+  if ( _conformingBases.find(key) != _conformingBases.end() ) {
+    basis = _conformingBases[key];
+    return basis;
+  }
+  
+  int spaceDim;
+  bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
+  bool oneD = (cellTopoKey == shards::Line<2>::key);
+  if (oneD) {
+    spaceDim = 1;
+  } else if (twoD) {
+    spaceDim = 2;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+  }
+  
+  int scalarRank = 0, vectorRank = 1;
+  
+  if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
+    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
+  } else if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
+    BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
+    basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
+  } else {
+    switch (cellTopoKey) {
+      case shards::Quadrilateral<4>::key:
+        switch(fs) {
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
+            //if (polyOrder==0) {
+            //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
+            //} else {
+            if (! _useLobattoForQuadH1) {
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                               spaceDim, scalarRank) );
+            } else {
+              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder) );
+            }
+            //}
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, vectorRank)
+                                 );
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, vectorRank)
+                                 );
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, scalarRank)
+                                 );
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_ONE):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                             spaceDim, scalarRank)
+                                 ) ;
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
+                                       std::invalid_argument,
+                                       "Unhandled function space for quad_4. Please use HGRAD, HDIV, HCURL, or HVOL.");
+        }
+        break;
+      case shards::Triangle<3>::key:
+        switch(fs) {
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, scalarRank)
+                                 ) ;
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, vectorRank)
+                                 );
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, vectorRank)
+                                 );
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
+                                                             spaceDim, scalarRank)
+                                 );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HCURL) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
+                                       std::invalid_argument,
+                                       "Unhandled function space for tri_3. Please use HGRAD, HDIV, HCURL, or HVOL.");
+        }
+        break;
+      case shards::Line<2>::key:
+        switch(fs) {
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
+            if (_useEnrichedTraces) {
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                               spaceDim, scalarRank)
+                                   );
+            } else {
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+                                                               spaceDim, scalarRank)
+                                   );
+            }
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, scalarRank)
+                                 );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
+                                         (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
+                                       std::invalid_argument,
+                                       "Unhandled function space for line_2. Please use HGRAD or HVOL.");
+        }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION( ( (cellTopoKey != shards::Quadrilateral<4>::key)        &&
+                                     (cellTopoKey != shards::Triangle<3>::key)             &&
+                                     (cellTopoKey != shards::Line<2>::key) ),
+                                   std::invalid_argument,
+                                   "Unknown cell topology for basis selction. Please use Line_2, Quadrilateral_4, or Triangle_3.");
+        
+    }
+  }
+  _conformingBases[key] = basis;
+  _polyOrders[basis.get()] = polyOrder;
+  _functionSpaces[basis.get()] = fs;
+  _cellTopoKeys[basis.get()] = cellTopoKey;
   return basis;
 }
 
@@ -245,7 +383,6 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   int polyOrder = 0;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs;
   unsigned cellTopoKey;
-  int basisRank;
   
   if (numBases != 2) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
@@ -259,7 +396,6 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
     polyOrder = max(polyOrder,_polyOrders[bases[i].get()]);
     fs = _functionSpaces[bases[i].get()];
     cellTopoKey = _cellTopoKeys[bases[i].get()];
-    basisRank = bases[i]->rangeRank();//_ranks[bases[i].get()];
   }
   
   if ((_cellTopoKeys[bases[0].get()] != shards::Line<2>::key)
@@ -280,7 +416,6 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   _polyOrders[multiBasis.get()] = polyOrder;
   _functionSpaces[multiBasis.get()] = fs;
   _cellTopoKeys[multiBasis.get()] = cellTopoKey;
-//  _ranks[multiBasis.get()] = basisRank;
   
   return multiBasis;
 }
@@ -307,7 +442,6 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
   _polyOrders[patchBasis.get()] = _polyOrders[parent.get()];
   _functionSpaces[patchBasis.get()] = _functionSpaces[parent.get()];
   _cellTopoKeys[patchBasis.get()] = cellTopoKey;
-//  _ranks[patchBasis.get()] = _ranks[parent.get()];
   
   return patchBasis;
 }
@@ -315,22 +449,20 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
 
 void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
   pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
-  if ( _existingBasis.find(key) != _existingBasis.end() ) {
+  if ( _existingBases.find(key) != _existingBases.end() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "Can't register a basis for which there's already an entry...");
   }
-  _existingBasis[key] = basis;
+  _existingBases[key] = basis;
   _polyOrders[basis.get()] = polyOrder;
   _functionSpaces[basis.get()] = fs;
   _cellTopoKeys[basis.get()] = cellTopoKey;
-//  _ranks[basis.get()] = basisRank;
 }
 
 BasisPtr BasisFactory::addToPolyOrder(BasisPtr basis, int pToAdd) {
   int polyOrder = _polyOrders[basis.get()] + pToAdd;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
-  int rank;
-  return getBasis(rank, polyOrder, cellTopoKey, fs);
+  return getBasis(polyOrder, cellTopoKey, fs);
 }
 
 BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
@@ -350,8 +482,7 @@ BasisPtr BasisFactory::setPolyOrder(BasisPtr basis, int pToSet) {
   }
   IntrepidExtendedTypes::EFunctionSpaceExtended fs = _functionSpaces[basis.get()];
   int cellTopoKey = _cellTopoKeys[basis.get()];
-  int rank;
-  return getBasis(rank, pToSet, cellTopoKey, fs);
+  return getBasis(pToSet, cellTopoKey, fs);
 }
 
 int BasisFactory::getBasisRank(BasisPtr basis) {

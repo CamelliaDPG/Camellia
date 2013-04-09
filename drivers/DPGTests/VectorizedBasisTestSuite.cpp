@@ -88,8 +88,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   int vertexDim = 0;
   
   for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
-    int basisRank;
-    BasisPtr hgradBasis =  BasisFactory::getBasis(basisRank,polyOrder,
+    BasisPtr hgradBasis =  BasisFactory::getBasis(polyOrder,
                                                   quad_4.getKey(), 
                                                   IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     BasisPtr vectorHGradBasis = BasisFactory::getBasis( polyOrder,
@@ -121,11 +120,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   
   int polyOrder = 3, numPoints = 5, spaceDim = 2;
   
-  int basisRank;
-  BasisPtr hgradBasis
-  = 
-  BasisFactory::getBasis(basisRank,polyOrder,
-                         quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr hgradBasis = BasisFactory::getBasis(polyOrder, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   // first test: make a single-component vector basis.  This should agree in every entry with the basis itself, but its field container will have one higher rank...
   VectorizedBasis<> oneComp(hgradBasis, 1);
