@@ -300,6 +300,7 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
 
 // anisotropy with variable threshholding
 void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap){  
+  map<int,double> energyError = _solution->energyError();  
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
   vector<int> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);
@@ -311,15 +312,23 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
     
     double thresh = threshMap[cellID];
     double ratio = xErr[cellID]/yErr[cellID];
+
+    /*
+    double anisoErr = xErr[cellID] + yErr[cellID];
+    double energyErr = energyError[cellID];
+    double anisoPercentage = anisoErr/energyErr;
+    cout << "aniso percentage = " << anisoPercentage << endl;
+    */
     bool doXAnisotropy = ratio > thresh;
     bool doYAnisotropy = ratio < 1.0/thresh;
-    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-stretched* element (just skewed)
+    double aspectRatio = max(h1/h2,h2/h1); // WARNING: this assumes a *non-squashed/stretched* element (just skewed)
     double maxAspect = _maxAspectRatio; // the conservative aspect ratio from LD's DPG III: Adaptivity paper is 100. 
     // don't refine if h is already too small
+    bool doAnisotropy = (aspectRatio < maxAspect);
     if (min_h>_min_h){
-      if (doXAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
+      if (doXAnisotropy && doAnisotropy){ // if ratio is small = y err bigger than xErr
 	xCells.push_back(cellID); // cut along y-axis
-      }else if (doYAnisotropy && aspectRatio < maxAspect){ // if ratio is small = y err bigger than xErr
+      }else if (doYAnisotropy && doAnisotropy){ // if ratio is small = y err bigger than xErr
 	yCells.push_back(cellID); // cut along x-axis
       }else{
 	regCells.push_back(cellID);
