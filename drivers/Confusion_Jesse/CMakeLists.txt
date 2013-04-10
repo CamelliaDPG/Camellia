@@ -48,3 +48,24 @@ add_executable(Convection ConvectionTest.cpp)
 target_link_libraries(Convection
   Camellia
 )
+
+add_executable(Units UnitScalingTest.cpp)
+target_link_libraries(Units
+  Camellia
+)
+
+add_executable(TraceTest TraceBLTest.cpp)
+target_link_libraries(TraceTest
+  Camellia
+)
+
+add_executable(FrontStep FrontFacingStep.cpp)
+target_link_libraries(FrontStep
+  Camellia
+)
+
+add_executable(Ramp RampTest.cpp)
+target_link_libraries(Ramp
+  Camellia
+)
+

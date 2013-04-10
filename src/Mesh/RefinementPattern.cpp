@@ -398,7 +398,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
   return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
 }
 
-// cuts a quad vertically
+// cuts a quad vertically (x-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
   // order of the sub-elements is CCW starting at bottom left
   FieldContainer<double> quadPoints(2,4,2);
@@ -423,7 +423,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
   return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
 }
 
-// cuts a quad horizontally
+// cuts a quad horizontally (y-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPatternQuad() {
   // order of the sub-elements is CCW starting at bottom left
   FieldContainer<double> quadPoints(2,4,2);
