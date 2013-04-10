@@ -65,12 +65,14 @@ namespace Camellia {
     virtual shards::CellTopology domainTopology() const;
     
     // dof ordinal subsets:
-    virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
-    virtual std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-    virtual std::set<int> dofOrdinalsForInterior() const;
-    virtual std::set<int> dofOrdinalsForVertices() const;
+    std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
+    std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
+    std::set<int> dofOrdinalsForInterior() const;
+    std::set<int> dofOrdinalsForVertices() const;
+    std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
     
-    int dofOrdinalForVertex(int vertexIndex) const;
+    std::set<int> dofOrdinalsForSubcell(int subcellDim, int edgeIndex) const;
+    std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
     std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
     
     virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;

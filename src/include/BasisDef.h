@@ -99,75 +99,81 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const {
+    if (!_basisTagsAreSet) {
+      initializeTags();
+      _basisTagsAreSet = true;
+    }
+    std::set<int> dofOrdinals;
+    // Use .at() for bounds checking
+    int firstDofOrdinal = this->_tagToOrdinal.at(subcellDim).at(subcellIndex).at(0);
+    if (firstDofOrdinal == -1) { // no matching dof ordinals
+      return dofOrdinals;
+    }
+    int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
+
+    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+      int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
+      if (dofOrdinal >= 0) {
+        dofOrdinals.insert(dofOrdinal);
+      }
+    }
+    return dofOrdinals;
+  }
+  
+  template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdge(int edgeIndex) const {
     int edgeDim = 1;
+    return dofOrdinalsForSubcell(edgeDim, edgeIndex);
+  }
+
+  
+  template<class Scalar, class ArrayScalar>
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const {
     std::set<int> dofOrdinals;
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished method");
-    // TODO: figure out how best to set numDofsForEdge
-    int numDofsForEdge;
-    for (int edgeDofIndex=0; edgeDofIndex<numDofsForEdge; edgeDofIndex++) {
-      int dofOrdinal = this->getDofOrdinal(edgeDim,edgeIndex,edgeDofIndex);
-      dofOrdinals.insert(dofOrdinal);
+    if ((subcellDim > 0) && includeLesserDimensions) {
+      dofOrdinals = dofOrdinalsForSubcells(subcellDim-1,true);
+    }
+    if (this->_tagToOrdinal.size() < subcellDim+1) { // none of dimension subcellDim
+      return dofOrdinals;
+    }
+    
+    int numSubcells = this->_tagToOrdinal[subcellDim].size();
+    for (int subcellIndex=0; subcellIndex<numSubcells; subcellIndex++) {
+      std::set<int> dofOrdinalsForSubcell = this->dofOrdinalsForSubcell(subcellDim,subcellIndex);
+      dofOrdinals.insert(dofOrdinalsForSubcell.begin(), dofOrdinalsForSubcell.end());
     }
     return dofOrdinals;
   }
-
+  
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdges(bool includeVertices) const {
-    std::set<int> dofOrdinals = includeVertices ? this->dofOrdinalsForVertices() : std::set<int>();
-    int numEdges = this->domainTopology().getEdgeCount();
     int edgeDim = 1;
-    for (int edgeIndex=0; edgeIndex<numEdges; edgeIndex++) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished method");
-      // TODO: figure out how best to set numDofsForEdge
-      int numDofsForEdge;
-      for (int edgeDofIndex=0; edgeDofIndex<numDofsForEdge; edgeDofIndex++) {
-        int dofOrdinal = this->getDofOrdinal(edgeDim,edgeIndex,edgeDofIndex);
-        dofOrdinals.insert(dofOrdinal);
-      }
-    }
-    return dofOrdinals;
+    return dofOrdinalsForSubcells(edgeDim,includeVertices);
   }
+  
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForFaces(bool includeVerticesAndEdges) const {
-    std::set<int> dofOrdinals = includeVerticesAndEdges ? this->dofOrdinalsForEdges(true) : std::set<int>();
-    int numFaces = this->domainTopology().getFaceCount();
     int faceDim = 2;
-    for (int faceIndex=0; faceIndex<numFaces; faceIndex++) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unfinished method");
-      // TODO: figure out how best to set numDofsForFace
-      int numDofsForFace;
-      for (int faceDofIndex=0; faceDofIndex<numDofsForFace; faceDofIndex++) {
-        int dofOrdinal = this->getDofOrdinal(faceDim,faceIndex,faceDofIndex);
-        dofOrdinals.insert(dofOrdinal);
-      }
-    }
-    return dofOrdinals;
+    return dofOrdinalsForSubcells(faceDim,includeVerticesAndEdges);
   }
+  
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const {
-    std::set<int> dofOrdinals;
     int interiorDim = this->domainTopology().getDimension();
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method");
-    // TODO: figure out the number of dofOrdinals for the interior, and use getDofOrdinal() to look them up.
-    // (or use tags, like intrepid does)
+    return dofOrdinalsForSubcells(interiorDim, false);
   }
 
   template<class Scalar, class ArrayScalar>
-  int Basis<Scalar,ArrayScalar>::dofOrdinalForVertex(int vertexIndex) const {
-    int dofOrdinal = this->getDofOrdinal(0,vertexIndex,0);
-    return dofOrdinal;
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForVertex(int vertexIndex) const {
+    int vertexDim = 0;
+    return this->dofOrdinalsForSubcell(vertexDim, vertexIndex);
   }
   
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForVertices() const {
-    std::set<int> dofOrdinals;
-    int numVertices = this->domainTopology().getVertexCount();
-    for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
-      int dofOrdinal = this->getDofOrdinal(0,vertexIndex,0);
-      dofOrdinals.insert(dofOrdinal);
-    }
-    return dofOrdinals;
+    int vertexDim = 0;
+    return this->dofOrdinalsForSubcells(vertexDim, false);
   }
   
   template<class Scalar, class ArrayScalar>

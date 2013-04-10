@@ -227,7 +227,10 @@ bool testBasisClassifications(BasisPtr basis) {
   // TODO: finish this
   vector<int> vertexOrdinals;
   for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
-    vertexOrdinals.push_back(basis->dofOrdinalForVertex(vertexIndex));
+    set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexIndex);
+    if (dofOrdinals.size() == 0) TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No dofOrdinal for vertex...");
+    if (dofOrdinals.size() > 1) TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "More than one dofOrdinal per vertex...");
+    vertexOrdinals.push_back(*(dofOrdinals.begin()));
   }
   
   if (! checkVertexOrdinalsQuad(basis, vertexOrdinals) ) {
