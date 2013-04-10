@@ -55,7 +55,7 @@ namespace Camellia {
     _conforming = conforming;
     
     this->_rangeDimension = 2; // 2 space dim
-    this->_rangeRank = 1; // scalar
+    this->_rangeRank = 0; // scalar
     this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
     this->_basisCardinality = (_degree_x + 1) * (_degree_y + 1);
     initializeL2normValues();
