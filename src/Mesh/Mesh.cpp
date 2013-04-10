@@ -54,8 +54,12 @@
 
 using namespace Intrepid;
 
+map<int,int> Mesh::_emptyIntIntMap;
+
 Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces) : _dofOrderingFactory(bilinearForm) {
+           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
+: _dofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) {
   _vertices = vertices;
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;

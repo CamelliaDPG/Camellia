@@ -180,9 +180,11 @@ class Mesh : public RefinementObserver {
   // simple utility functions:
   static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);
   static double distance(double x0, double y0, double x1, double y1);
+  static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
+       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
   //,
   //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
 
