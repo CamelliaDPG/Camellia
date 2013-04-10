@@ -43,7 +43,7 @@
 
 #include "VectorizedBasis.h"
 
-#include "LobattoHGRAD_Quad.h"
+#include "LobattoHGRAD_QuadBasis.h"
 
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
@@ -107,7 +107,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
                                       spaceDim, scalarRank) );
             } else {
               bool conformingFalse = false;
-              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
+              basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
             }
             //}
           break;
@@ -267,7 +267,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                                                spaceDim, scalarRank) );
             } else {
               bool conformingTrue = true;
-              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+              basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
             }
             //}
             break;

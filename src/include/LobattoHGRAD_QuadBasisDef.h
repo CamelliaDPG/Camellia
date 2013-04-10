@@ -11,13 +11,13 @@
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
-  int LobattoHGRAD_Quad<Scalar,ArrayScalar>::dofOrdinalMap(int i, int j) const { // i the xDofOrdinal, j the yDofOrdinal
+  int LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::dofOrdinalMap(int i, int j) const { // i the xDofOrdinal, j the yDofOrdinal
     int yCardinality = _degree_y + 1;
     return i * yCardinality + j;
   }
   
   template<class Scalar, class ArrayScalar>
-  void LobattoHGRAD_Quad<Scalar,ArrayScalar>::initializeL2normValues() {
+  void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::initializeL2normValues() {
     _legendreL2normsSquared.resize(this->_basisDegree+1);
     _lobattoL2normsSquared.resize(this->_basisDegree+1);
     _legendreL2normsSquared[0] = 0; // not actually Legendre: the squared L^2 norm of the derivative of the first Lobatto polynomial...
@@ -34,7 +34,7 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
-  LobattoHGRAD_Quad<Scalar,ArrayScalar>::LobattoHGRAD_Quad(int degree, bool conforming) {
+  LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::LobattoHGRAD_QuadBasis(int degree, bool conforming) {
     _degree_x = degree;
     _degree_y = degree;
     this->_basisDegree = degree;
@@ -48,7 +48,7 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
-  LobattoHGRAD_Quad<Scalar,ArrayScalar>::LobattoHGRAD_Quad(int degree_x, int degree_y, bool conforming) {
+  LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::LobattoHGRAD_QuadBasis(int degree_x, int degree_y, bool conforming) {
     this->_basisDegree = max(degree_x, degree_y);
     _degree_x = degree_x;
     _degree_y = degree_y;
@@ -62,7 +62,7 @@ namespace Camellia {
   }
 
   template<class Scalar, class ArrayScalar>
-  void LobattoHGRAD_Quad<Scalar,ArrayScalar>::initializeTags() const {
+  void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::initializeTags() const {
     if (!_conforming) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "initializeTags() called for non-conforming Lobatto basis.");
     }
@@ -148,7 +148,7 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
-  void LobattoHGRAD_Quad<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const {
+  void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
     
     ArrayScalar lobattoValues_x(_degree_x+1), lobattoValues_y(_degree_y+1);

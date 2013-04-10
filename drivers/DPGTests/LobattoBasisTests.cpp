@@ -6,7 +6,7 @@
 
 #include "Lobatto.hpp"
 
-#include "LobattoHGRAD_Quad.h"
+#include "LobattoHGRAD_QuadBasis.h"
 
 #include "BF.h"
 
@@ -255,7 +255,7 @@ bool LobattoBasisTests::testH1Classifications() {
   bool success = true;
   bool conformingTrue = true;
   for (int polyOrder=1; polyOrder<20; polyOrder++) {
-    BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_Quad<>(polyOrder,conformingTrue) );
+    BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<>(polyOrder,conformingTrue) );
     if (! testBasisClassifications(lobattoBasis) ) {
       cout << "LobattoBasisTests::testH1Classifications() failed for polyOrder " << polyOrder << endl;
     }
