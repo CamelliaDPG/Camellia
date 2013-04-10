@@ -32,30 +32,14 @@
 // @HEADER
 
 /*
- *  Solution.h
+ *  Assembler.h
  *
  *  Created by Nathan Roberts on 6/27/11.
  *
  */
 
-#include "Intrepid_FieldContainer.hpp"
-#include "Solution.h"
-#include "Mesh.h"
-#include "ElementType.h"
-#include "DPGInnerProduct.h"
-#include "RHS.h"
-#include "BC.h"
-#include "BasisCache.h"
-#include "AbstractFunction.h"
-#include "LocalStiffnessMatrixFilter.h"
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseVector.h"
-#include "MPIWrapper.h"
-#include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
 #include "Epetra_LinearProblem.h"
-
-using namespace Intrepid;
 
 class Assembler {
 public:  

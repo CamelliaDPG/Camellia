@@ -8,6 +8,7 @@
 #include "Teuchos_TestForException.hpp"
 
 #include "Intrepid_Basis.hpp"
+//#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
@@ -319,4 +320,5 @@ namespace Camellia {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
     return _intrepidBasis->getValues(values,refPoints,operatorType);
   }
+  
 } // namespace Camellia
