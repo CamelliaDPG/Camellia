@@ -9,7 +9,11 @@ template<class Scalar, class ArrayScalar>
 VectorizedBasis<Scalar,ArrayScalar>::VectorizedBasis(BasisPtr basis, int numComponents) {
   _componentBasis = basis;
   _numComponents = numComponents;
-  this->_functionSpace = basis->functionSpace();
+  if (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) {
+    this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD;
+  } else if (basis->functionSpace() == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {
+    this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
+  } else this->_functionSpace = basis->functionSpace();
 }
 
 template<class Scalar, class ArrayScalar>

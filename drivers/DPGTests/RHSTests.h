@@ -28,7 +28,7 @@ class RHSTests : public TestSuite {
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
   
-//  bool testComputeRHSLegacy(); // test copied from DPGTests
+  bool testComputeRHSLegacy(); // test copied from DPGTests
   bool testIntegrateAgainstStandardBasis();
   bool testRHSEasy();
   bool testTrivialRHS();
