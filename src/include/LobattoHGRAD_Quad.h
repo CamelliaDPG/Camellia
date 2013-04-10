@@ -17,12 +17,14 @@ namespace Camellia {
   protected:
     void initializeTags() const;
     int _degree_x, _degree_y;
+    bool _conforming;
     
     FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
     void initializeL2normValues();
+    int dofOrdinalMap(int xDofOrdinal, int yDofOrdinal) const;
   public:
-    LobattoHGRAD_Quad(int degree);
-    LobattoHGRAD_Quad(int degree_x, int degree_y);
+    LobattoHGRAD_Quad(int degree, bool conforming = false); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
+    LobattoHGRAD_Quad(int degree_x, int degree_y, bool conforming = false);
     
     void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };

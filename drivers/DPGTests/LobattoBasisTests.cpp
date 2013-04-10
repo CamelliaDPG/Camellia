@@ -6,6 +6,8 @@
 
 #include "Lobatto.hpp"
 
+#include "LobattoHGRAD_Quad.h"
+
 #include "BF.h"
 
 void LobattoBasisTests::setup() {}
@@ -95,9 +97,11 @@ bool LobattoBasisTests::testLobattoDerivativeValues() {
   legendreFunctions.push_back( (1.0 / 8.0) * (35 * x * x * x * x - 30 * x * x + 3) );
   legendreFunctions.push_back( (1.0 / 8.0) * (63 * x * x * x * x * x - 70 * x * x * x + 15 * x) );
   
+  bool conformingFalse = false;
+  
   int n_max = 4;
   for (int n=0; n<=n_max+1; n++) {
-    lobattoDerivatives.push_back( Teuchos::rcp( new LobattoFunction<>(n,true) ) );
+    lobattoDerivatives.push_back( Teuchos::rcp( new LobattoFunction<>(n,conformingFalse,true) ) );
   }
   
   VarFactory varFactory;
@@ -141,9 +145,11 @@ bool LobattoBasisTests::testLobattoValues() {
   
   vector< FunctionPtr > lobattoFunctions;
   
+  bool conformingFalse = false;
+  
   int n_max = 4;
   for (int n=0; n<=n_max; n++) {
-    lobattoFunctions.push_back( Teuchos::rcp( new LobattoFunction<>(n,false) ) );
+    lobattoFunctions.push_back( Teuchos::rcp( new LobattoFunction<>(n,conformingFalse,false) ) );
   }
   
   VarFactory varFactory;
@@ -166,6 +172,48 @@ bool LobattoBasisTests::testLobattoValues() {
   return success;
 }
 
+bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals) {
+  // check that the given indices are exactly the vertex basis functions:
+  // a) these are (1,0) or (0,1) at the corresponding vertices
+  // b) others are (0,0) at the vertices
+  
+  int numVertices = 4;
+  
+  FieldContainer<double> refCellPoints(numVertices,2); // vertices, in order
+  refCellPoints(0,0) = -1;
+  refCellPoints(0,1) = -1;
+  refCellPoints(1,0) =  1;
+  refCellPoints(1,1) = -1;
+  refCellPoints(2,0) =  1;
+  refCellPoints(2,1) =  1;
+  refCellPoints(3,0) = -1;
+  refCellPoints(3,1) =  1;
+  
+  // assume scalar basis for now -- we'll throw an exception if not...
+  FieldContainer<double> values(basis->getCardinality(), numVertices); // F, P
+  basis->getValues(values, refCellPoints, OPERATOR_VALUE);
+  
+  double tol = 1e-14;
+  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
+    int vertexOrdinal = vertexOrdinals[vertexIndex];
+    for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
+      double value = values(fieldIndex,vertexIndex);
+      if (fieldIndex==vertexOrdinal) {
+        // expect non-zero
+        if (value < tol) {
+          return false;
+        }
+      } else {
+        // expect zero
+        if (value > tol) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 bool testBasisClassifications(BasisPtr basis) {
   bool success = true;
   
@@ -177,6 +225,20 @@ bool testBasisClassifications(BasisPtr basis) {
   int degree = basis->getDegree();
   
   // TODO: finish this
+  vector<int> vertexOrdinals;
+  for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+    vertexOrdinals.push_back(basis->dofOrdinalForVertex(vertexIndex));
+  }
+  
+  if (! checkVertexOrdinalsQuad(basis, vertexOrdinals) ) {
+    success = false;
+    cout << "vertex dof ordinals don't match expected\n";
+    cout << "ordinals: ";
+    for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+      cout << vertexOrdinals[vertexIndex] << " ";
+    }
+    cout << endl;
+  }
   
   // get the points in reference space for each vertex
   
@@ -188,9 +250,15 @@ bool testBasisClassifications(BasisPtr basis) {
 bool LobattoBasisTests::testH1Classifications() {
   // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
   bool success = true;
-  
+  bool conformingTrue = true;
+  for (int polyOrder=1; polyOrder<20; polyOrder++) {
+    BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_Quad<>(polyOrder,conformingTrue) );
+    if (! testBasisClassifications(lobattoBasis) ) {
+      cout << "LobattoBasisTests::testH1Classifications() failed for polyOrder " << polyOrder << endl;
+    }
+  }
   // TODO: implement this
-  cout << "Warning: testH1Classification unimplemented.\n";
+  cout << "Warning: testH1Classification unfinished.\n";
   
   return success;
 }

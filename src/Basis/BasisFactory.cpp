@@ -106,7 +106,8 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                       spaceDim, scalarRank) );
             } else {
-              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder) );
+              bool conformingFalse = false;
+              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
             }
             //}
           break;
@@ -265,7 +266,8 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                                                spaceDim, scalarRank) );
             } else {
-              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder) );
+              bool conformingTrue = true;
+              basis = Teuchos::rcp( new LobattoHGRAD_Quad<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
             }
             //}
             break;

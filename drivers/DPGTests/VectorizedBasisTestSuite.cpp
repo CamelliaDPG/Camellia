@@ -65,14 +65,27 @@ bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
     for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
       double xValue = values(fieldIndex,ptIndex,0);
       double yValue = values(fieldIndex,ptIndex,1);
-      double xExpected = 0, yExpected = 0;
       if (fieldIndex==xNodeIndex) {
-        xExpected = 1;
-      } else if (fieldIndex==yNodeIndex) {
-        yExpected = 1;
+        // expect non-zero
+        if (xValue < tol) {
+          return false;
+        }
+      } else {
+        // expect zero
+        if (xValue > tol) {
+          return false;
+        }
       }
-      if ((abs(xExpected-xValue) > tol) || (abs(yExpected-yValue)>tol)) {
-        return false;
+      if (fieldIndex==yNodeIndex) {
+        // expect non-zero
+        if (yValue < tol) {
+          return false;
+        }
+      } else {
+        // expect zero
+        if (yValue > tol) {
+          return false;
+        }
       }
     }
   }
@@ -88,23 +101,25 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   int vertexDim = 0;
   
   for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
-    BasisPtr hgradBasis =  BasisFactory::getBasis(polyOrder,
-                                                  quad_4.getKey(), 
-                                                  IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-    BasisPtr vectorHGradBasis = BasisFactory::getBasis( polyOrder,
-                                                       quad_4.getKey(), 
-                                                       IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    BasisPtr hgradBasis =  BasisFactory::getConformingBasis(polyOrder,
+                                                            quad_4.getKey(),
+                                                            IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr vectorHGradBasis = BasisFactory::getConformingBasis( polyOrder,
+                                                                 quad_4.getKey(),
+                                                                 IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
     vector<int> vertexNodeFieldIndices;
     for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
       for (int comp=0; comp<numComponents; comp++) {
         int vertexNodeFieldIndex = vectorHGradBasis->getDofOrdinal(vertexDim, vertexIndex, comp);
         vertexNodeFieldIndices.push_back(vertexNodeFieldIndex);
+//        cout << "vertexNodeFieldIndex for vertex index " << vertexIndex << ", comp " << comp;
+//        cout << " = " << vertexNodeFieldIndex << endl;
       }
     }
     if (!checkVertexNodalIndicesQuad(vectorHGradBasis, vertexNodeFieldIndices) ) {
       success = false;
       cout << "testVectorizedBasisTags: Vertex tags for vectorized HGRAD basis";
-      cout << "of order " << polyOrder << " are incorrect.\n";
+      cout << " of order " << polyOrder << " are incorrect.\n";
     }
   }
   
