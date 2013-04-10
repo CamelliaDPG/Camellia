@@ -46,6 +46,7 @@ MultiBasis<Scalar, ArrayScalar>::MultiBasis(vector< Teuchos::RCP< Camellia::Basi
   this -> _bases = bases;
   this -> _subRefNodes = subRefNodes;
   this -> _cellTopo = cellTopo;
+  this -> _functionSpace = bases[0]->functionSpace();
   
   if (_cellTopo.getKey() != shards::Line<2>::key ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MultiBasis only supports lines right now.");

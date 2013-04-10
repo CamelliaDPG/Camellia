@@ -9,6 +9,7 @@ template<class Scalar, class ArrayScalar>
 VectorizedBasis<Scalar,ArrayScalar>::VectorizedBasis(BasisPtr basis, int numComponents) {
   _componentBasis = basis;
   _numComponents = numComponents;
+  this->_functionSpace = basis->functionSpace();
 }
 
 template<class Scalar, class ArrayScalar>

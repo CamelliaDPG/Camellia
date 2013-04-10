@@ -135,16 +135,19 @@ void DPGTests::createBases() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr basis;
   int rangeDimension = 2, scalarRank = 0, vectorRank = 1;
-  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank ) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank ) );
-  BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank ) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >()), rangeDimension, vectorRank ) );
-  BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+  IntrepidExtendedTypes::EFunctionSpaceExtended hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  IntrepidExtendedTypes::EFunctionSpaceExtended hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >()), rangeDimension, vectorRank, hdiv ) );
+  BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), hdiv);
 }
 
 void DPGTests::runTests() {
@@ -161,6 +164,7 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
@@ -176,7 +180,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
-  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   

@@ -13,6 +13,8 @@
 #include "Intrepid_FieldContainer.hpp"
 #include "Shards_CellTopology.hpp"
 
+#include "CamelliaIntrepidExtendedTypes.h"
+
 namespace Camellia {
   template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Basis;
   
@@ -24,6 +26,8 @@ namespace Camellia {
     
     int _rangeDimension;
     int _rangeRank;
+    
+    IntrepidExtendedTypes::EFunctionSpaceExtended _functionSpace;
     
     virtual void initializeTags() const = 0;
     /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized
@@ -80,6 +84,8 @@ namespace Camellia {
     virtual const std::vector<int>& getDofTag(int dofOrd) const;
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
     
+    IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace() const;
+    
     // methods identifying the type of basis:
     virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
     virtual bool isNodal() const; // defaults to false (true for the Intrepid bases)
@@ -103,7 +109,8 @@ namespace Camellia {
   protected:
     void initializeTags() const;
   public:
-    IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis, int rangeDimension, int rangeRank);
+    IntrepidBasisWrapper(Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis, int rangeDimension, int rangeRank,
+                         IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace);
     
     int getCardinality() const;
     int getDegree() const;

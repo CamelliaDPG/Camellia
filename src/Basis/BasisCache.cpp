@@ -300,11 +300,6 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   } else {
     cubPoints = _cubPoints;
   }
-  // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
-  if (! BasisFactory::basisKnown(basis) ) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                       "Unknown basis.  BasisCache only works for bases created by BasisFactory");
-  }
   // first, let's check whether the exact request is already known
   pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
   
@@ -313,7 +308,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
   
   pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = key;
@@ -354,7 +349,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
   }
   
   int componentOfInterest;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
   
   pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = make_pair(basis.get(),(EOperatorExtended) relatedOp);

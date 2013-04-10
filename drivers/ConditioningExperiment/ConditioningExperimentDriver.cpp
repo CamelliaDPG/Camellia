@@ -76,9 +76,9 @@ void printLobattoL2norm() {
   
   cout << setprecision(15);
   
-  cout << "L^2 norm squared of Lobatto polynomials:\n";
+  cout << "L^2 norm squared of (non-conforming) Lobatto polynomials:\n";
   for (int i=0; i<maxOrder; i++) {
-    FunctionPtr lobatto = Teuchos::rcp(new LobattoFunction(i) );
+    FunctionPtr lobatto = Teuchos::rcp(new LobattoFunction<>(i, false) );
     cout << i << ": " << (lobatto * lobatto)->integrate(mesh) << endl;
   }
 }
@@ -88,8 +88,8 @@ int main(int argc, char *argv[]) {
 //  printLobattoL2norm();
   
   vector< Space > spaces;
-  spaces.push_back(HGRAD);
   spaces.push_back(HDIV);
+  spaces.push_back(HGRAD);
   spaces.push_back(HCURL);
   vector< TestType > testTypes;
   testTypes.push_back(L2Part);

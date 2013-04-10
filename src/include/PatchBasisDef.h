@@ -43,6 +43,7 @@ PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &p
   this -> _patchNodesInParentRefCell = patchNodesInParentRefCell;
   this -> _patchCellTopo = patchCellTopo;
   this -> _parentTopo = parentBasis->domainTopology();
+  this -> _functionSpace = parentBasis->functionSpace();
   
   if (_patchCellTopo.getKey() != shards::Line<2>::key ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis only supports lines right now.");

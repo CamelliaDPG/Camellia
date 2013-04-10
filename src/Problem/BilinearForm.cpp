@@ -175,6 +175,7 @@ int BilinearForm::optimalTestWeights(FieldContainer<double> &optimalTestWeights,
   
   // RHS:
   this->stiffnessMatrix(stiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
+//  cout << "trialOrdering:\n" << *trialOrdering;
   
   BilinearFormUtility::transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
   
