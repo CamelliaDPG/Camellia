@@ -59,7 +59,8 @@ set< Camellia::Basis<>* > BasisFactory::_patchBasisSet;
 
 bool BasisFactory::_useEnrichedTraces = true;
 
-bool BasisFactory::_useLobattoForQuads = false;
+bool BasisFactory::_useLobattoForQuadHGRAD = true;
+bool BasisFactory::_useLobattoForQuadHDIV = false;
 
 using namespace Camellia;
 
@@ -103,7 +104,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
             //if (polyOrder==0) {
             //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
             //} else {
-            if (! _useLobattoForQuads) {
+            if (! _useLobattoForQuadHGRAD) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                       spaceDim, scalarRank, fs) );
             } else {
@@ -113,7 +114,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
             //}
           break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
-            if (! _useLobattoForQuads ) {
+            if (! _useLobattoForQuadHDIV ) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                     spaceDim, vectorRank, fs)
                                    );
@@ -268,7 +269,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
             //if (polyOrder==0) {
             //  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >() ) ;
             //} else {
-            if (! _useLobattoForQuads) {
+            if (! _useLobattoForQuadHGRAD) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                                                spaceDim, scalarRank, fs) );
             } else {
@@ -278,7 +279,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
             //}
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
-            if (! _useLobattoForQuads) {
+            if (! _useLobattoForQuadHDIV) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                                              spaceDim, vectorRank, fs)
                                  );
