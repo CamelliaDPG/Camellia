@@ -1493,7 +1493,7 @@ bool MeshTestSuite::testPRefinement() {
         double diff = abs(actualSolnDofs(i)-expectedSolnDofs(i));
         if (diff > tol * 10 ) { // * 10 because we can be a little more tolerant of the Dof values than, say, the overall L2 error.
           cout << "FAILURE: In cellID " << cellID << ", p-refined mesh differs in phi solution from expected ";
-          cout << "in basis ordinal " << i << "(diff=" << diff << ")" << endl;
+          cout << "in basis ordinal " << i << " (diff=" << diff << ")" << endl;
         }
       }
     }
