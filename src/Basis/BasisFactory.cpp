@@ -59,7 +59,7 @@ set< Camellia::Basis<>* > BasisFactory::_patchBasisSet;
 
 bool BasisFactory::_useEnrichedTraces = true;
 
-bool BasisFactory::_useLobattoForQuadHGRAD = true;
+bool BasisFactory::_useLobattoForQuadHGRAD = false;
 bool BasisFactory::_useLobattoForQuadHDIV = false;
 
 using namespace Camellia;
