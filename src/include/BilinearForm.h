@@ -114,11 +114,13 @@ public:
   void setUseSPDSolveForOptimalTestFunctions(bool value);
   void setUseIterativeRefinementsWithSPDSolve(bool value);
   void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
+  void setWarnAboutZeroRowsAndColumns(bool value);
 protected:
  
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
   bool _useSPDSolveForOptimalTestFunctions, _useIterativeRefinementsWithSPDSolve, _useExtendedPrecisionSolveForOptimalTestFunctions;
+  bool _warnAboutZeroRowsAndColumns;
 };
 
 typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;

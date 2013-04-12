@@ -169,6 +169,13 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
   
   setup();
+  if (testVVPStokesFormulationGraphNorm()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testVGPNavierStokesFormulationCorrectness()) {
     numTestsPassed++;
   }
@@ -184,13 +191,6 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   
   setup();
   if (testVGPStokesFormulationGraphNorm()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testVVPStokesFormulationGraphNorm()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -1015,7 +1015,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       Teuchos::RCP<Mesh> mesh = problem.mesh();
       
-      double tol = 1e-14;
+      double tol = 1e-13;
       if (maxPolyOrder >= 10) {
         // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
         tol = 1e-10;        

@@ -180,7 +180,10 @@ namespace Camellia {
               values(fieldIndex,pointIndex,0) = lobattoValues_dx(i) * lobattoValues_y(j) / scalingFactor;
               values(fieldIndex,pointIndex,1) = lobattoValues_x(i) * lobattoValues_dy(j) / scalingFactor;
               break;
-              
+            case Intrepid::OPERATOR_CURL:
+              values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / scalingFactor;
+              values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / scalingFactor;
+              break;
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
               break;

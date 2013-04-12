@@ -10,11 +10,23 @@
 
 #include "BF.h"
 
+#include "doubleBasisConstruction.h"
+
+// Shards includes
+#include "Shards_CellTopology.hpp"
+
 void LobattoBasisTests::setup() {}
 
 void LobattoBasisTests::teardown() {}
 
 void LobattoBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testSimpleStiffnessMatrix()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testLegendreValues()) {
     numTestsPassed++;
@@ -262,6 +274,76 @@ bool LobattoBasisTests::testH1Classifications() {
   }
   // TODO: implement this
   cout << "Warning: testH1Classification unfinished.\n";
+  
+  return success;
+}
+
+bool LobattoBasisTests::testSimpleStiffnessMatrix() {
+  bool success = true;
+  
+  VarFactory varFactory;
+  VarPtr u = varFactory.fieldVar("u");
+  VarPtr un = varFactory.fluxVar("un_hat");
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+  vector<double> beta;
+  beta.push_back(1);
+  beta.push_back(1);
+  bf->addTerm(beta * u, v->grad());
+  bf->addTerm(un, v);
+  
+  DofOrderingPtr trialSpace = Teuchos::rcp( new DofOrdering );
+  DofOrderingPtr testSpace = Teuchos::rcp( new DofOrdering );
+  
+  const int numSides = 4;
+  const int spaceDim = 2;
+  
+  int fieldOrder = 3;
+  int testOrder = fieldOrder+2;
+  BasisPtr fieldBasis = Camellia::intrepidQuadHGRAD(fieldOrder);
+  BasisPtr fluxBasis = Camellia::intrepidLineHGRAD(fieldOrder);
+  trialSpace->addEntry(u->ID(), fieldBasis, fieldBasis->rangeRank());
+  for (int i=0; i<numSides; i++) {
+    trialSpace->addEntry(un->ID(), fluxBasis, fluxBasis->rangeRank(), i);
+  }
+  
+  BasisPtr testBasis = Camellia::lobattoQuadHGRAD(testOrder+1,false); // +1 because it lives in HGRAD
+  testSpace->addEntry(v->ID(), testBasis, testBasis->rangeRank());
+  
+  int numTrialDofs = trialSpace->totalDofs();
+  int numTestDofs = testSpace->totalDofs();
+  int numCells = 1;
+  
+  FieldContainer<double> cellNodes(numCells,numSides,spaceDim);
+  cellNodes(0,0,0) = 0;
+  cellNodes(0,0,1) = 0;
+  cellNodes(0,1,0) = 1;
+  cellNodes(0,1,1) = 0;
+  cellNodes(0,2,0) = 1;
+  cellNodes(0,2,1) = 1;
+  cellNodes(0,3,0) = 0;
+  cellNodes(0,3,1) = 1;
+  
+  FieldContainer<double> stiffness(numCells,numTestDofs,numTrialDofs);
+  
+  FieldContainer<double> cellSideParities(numCells,numSides);
+  cellSideParities.initialize(1.0);
+  
+  Teuchos::RCP<shards::CellTopology> quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+  Teuchos::RCP<ElementType> elemType = Teuchos::rcp( new ElementType(trialSpace, testSpace, quad_4));
+  
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
+  vector<int> cellIDs;
+  cellIDs.push_back(0);
+  basisCache->setPhysicalCellNodes(cellNodes, cellIDs, true);
+  bf->stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache);
+
+  // TODO: finish this test
+  
+//  cout << stiffness;
+ 
+  cout << "Warning: testSimpleStiffnessMatrix() unfinished.\n";
   
   return success;
 }

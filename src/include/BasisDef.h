@@ -312,7 +312,9 @@ namespace Camellia {
 
   template<class Scalar, class ArrayScalar>
   void IntrepidBasisWrapper<Scalar,ArrayScalar>::initializeTags() const {
-    // we leave tag initialization to the _intrepidBasis object.
+    // we leave tag initialization to the _intrepidBasis object, but we'll keep a copy ourselves:
+    this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
+    this->_ordinalToTag = _intrepidBasis->getAllDofTags();
   }
   
   template<class Scalar, class ArrayScalar>

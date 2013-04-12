@@ -19,6 +19,8 @@ public:
   
   bool testH1Classifications(); // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
   
+  bool testSimpleStiffnessMatrix();
+  
   std::string testSuiteName();
 };
 

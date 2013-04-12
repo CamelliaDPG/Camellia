@@ -80,6 +80,7 @@ BilinearForm::BilinearForm() {
   _useSPDSolveForOptimalTestFunctions = false;
   _useIterativeRefinementsWithSPDSolve = false;
   _useExtendedPrecisionSolveForOptimalTestFunctions = false;
+  _warnAboutZeroRowsAndColumns = true;
 }
 
 const vector< int > & BilinearForm::trialIDs() {
@@ -562,9 +563,15 @@ void BilinearForm::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::R
       }
     }
   }
-  //cout << "trialOrdering: \n" << *trialOrdering;
-  //cout << "testOrdering: \n" << *testOrdering;
-  BilinearFormUtility::checkForZeroRowsAndColumns("pre-stiffness", stiffness);
+  if (_warnAboutZeroRowsAndColumns) {
+    bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
+    bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+    if (! BilinearFormUtility::checkForZeroRowsAndColumns("pre-stiffness", stiffness, checkRows, checkCols) ) {
+      cout << "pre-stiffness matrix in which zero columns were found:\n";
+      cout << stiffness;
+      cout << "trialOrdering: \n" << *trialOrdering;
+    }
+  }
 }
 
 vector<int> BilinearForm::trialVolumeIDs() {
@@ -891,4 +898,8 @@ void BilinearForm::setUseIterativeRefinementsWithSPDSolve(bool value) {
 
 void BilinearForm::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value) {
   _useExtendedPrecisionSolveForOptimalTestFunctions = value;
+}
+
+void BilinearForm::setWarnAboutZeroRowsAndColumns(bool value) {
+  _warnAboutZeroRowsAndColumns = value;
 }

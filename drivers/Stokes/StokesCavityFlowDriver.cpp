@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
-  bool symmetricRefinements = true; // symmetric across the horizontal midline
+  bool symmetricRefinements = false; // symmetric across the horizontal midline
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;

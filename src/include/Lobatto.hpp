@@ -10,6 +10,7 @@
 #define Camellia_debug_Lobatto_hpp
 
 #include "Intrepid_FieldContainer.hpp"
+#include "Function.h"
 
 namespace Camellia {
   template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar> > class Lobatto;
