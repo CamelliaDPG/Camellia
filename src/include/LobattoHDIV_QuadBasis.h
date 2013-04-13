@@ -21,7 +21,7 @@ namespace Camellia {
     
     FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
     void initializeL2normValues();
-    int dofOrdinalMap(int xDofOrdinal, int yDofOrdinal) const;
+    int dofOrdinalMap(int xDofOrdinal, int yDofOrdinal, bool divFree) const;
   public:
     LobattoHDIV_QuadBasis(int degree, bool conforming = false); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
     LobattoHDIV_QuadBasis(int degree_x, int degree_y, bool conforming = false);

@@ -11,13 +11,29 @@
 
 namespace Camellia {
   template<class Scalar, class ArrayScalar>
-  int LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::dofOrdinalMap(int i, int j) const { // i the xDofOrdinal, j the yDofOrdinal
-    int yCardinality = _degree_y + 1;
-    return i * yCardinality + j - 1; // -1 because of the null space of the curl
+  int LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::dofOrdinalMap(int i, int j, bool divFree) const { // i the xDofOrdinal, j the yDofOrdinal
+    // ordering:
+    // i = 1..k, j = 0, where k := _degree_x  (ordinals 0 to k-1)
+    // i = 0, j = 1..l, where l := _degree_y  (ordinals k to k+l-1)
+    // i = 1..k, j = 1..l : divFree           (ordinals k+l to k+l + kl -1)
+    // i = 1..k, j = 1..l : not divFree       (ordinals k+l + kl to k + l + 2kl)
+    if ((j==0) && (i==0)) return -1; // no such basis function
+    if (j==0) {
+      return i-1;
+    }
+    if (i==0) {
+      return _degree_x + j-1;
+    }
+    if (divFree) {
+      return _degree_x + _degree_y + i * _degree_y - 1;
+    } else {
+      return _degree_x + _degree_y + _degree_x * _degree_y + i * _degree_y - 1;
+    }
   }
   
   template<class Scalar, class ArrayScalar>
   void LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::initializeL2normValues() {
+    // NOTE: could speed things up by statically storing the lobatto L^2 norms (lazily adding higher degrees when they're required)
     _legendreL2normsSquared.resize(this->_basisDegree+1);
     _lobattoL2normsSquared.resize(this->_basisDegree+1);
     _legendreL2normsSquared[0] = 0; // not actually Legendre: the squared L^2 norm of the derivative of the first Lobatto polynomial...
@@ -42,7 +58,7 @@ namespace Camellia {
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // vector
     this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-    this->_basisCardinality = (_degree_x + 1) * (_degree_y + 1) - 1; // -1 because null space of curl has dimension 1
+    this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
     initializeL2normValues();
   }
   
@@ -57,7 +73,7 @@ namespace Camellia {
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // scalar
     this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-    this->_basisCardinality = (_degree_x + 1) * (_degree_y + 1) - 1; // -1 because null space of curl has dimension 1
+    this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
     initializeL2normValues();
   }
 
@@ -66,28 +82,33 @@ namespace Camellia {
     if (!_conforming) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "initializeTags() called for non-conforming Lobatto basis.");
     }
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LobattoHDIV_QuadBasis: conforming basis not supported yet");
     cout << "LobattoHDIV_QuadBasis::initializeTags(): untested method!  It might be that the conforming basis itself is wrong.  See notes in edgeOrdinals[] initialization...\n";
-    
-    const int numEdges = 4;
+ 
+    // the following is a plausible first effort, but I really haven't thought this through carefully.
+    // hence the exception thrown above, and the code commented out below.
+/*    const int numEdges = 4;
     // ordering of edges: 0 south, 1 east, 2 north, 3 west
     // normal continuity: south and north care about y component, east and west about x
     vector<int> edgeOrdinals[numEdges];
     for (int i=1; i<_degree_x+1; i++) {
-      edgeOrdinals[0].push_back(dofOrdinalMap(i,0));
+      edgeOrdinals[0].push_back(dofOrdinalMap(i,0,true)); // all j=0 terms are div-free
       // would have a non-zero for (0,0), but we're not including that in the basis
     }
     for (int j=1; j<_degree_y+1; j++) {
       // I'm confused here: in terms of where the non-zeros are, we should have (1,0) as well,
       // but that's already taken by edgeOrdinals[0]
-      edgeOrdinals[1].push_back(dofOrdinalMap(1,j));
+      edgeOrdinals[1].push_back(dofOrdinalMap(1,j,true));
+      edgeOrdinals[1].push_back(dofOrdinalMap(1,j,false));
     }
     for (int i=1; i<_degree_x+1; i++) {
       // I'm confused here: in terms of where the non-zeros are, we should have (0,1) as well,
       // but that's taken by edgeOrdinals[3], below
-      edgeOrdinals[2].push_back(dofOrdinalMap(i,1));
+      edgeOrdinals[2].push_back(dofOrdinalMap(i,1,true));
+      edgeOrdinals[2].push_back(dofOrdinalMap(i,1,false));
     }
     for (int j=1; j<_degree_y+1; j++) {
-      edgeOrdinals[3].push_back(dofOrdinalMap(0,j));
+      edgeOrdinals[3].push_back(dofOrdinalMap(0,j,true)); // all i=0 terms are div-free
       // would have a non-zero for (0,0), but we're not including that in the basis.
     }
     
@@ -135,7 +156,7 @@ namespace Camellia {
                                 tagSize,
                                 posScDim,
                                 posScOrd,
-                                posDfOrd);
+                                posDfOrd);*/
   }
   
   template<class Scalar, class ArrayScalar>
@@ -154,26 +175,49 @@ namespace Camellia {
       Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy, y,_degree_y,_conforming);
       for (int i=0; i<_degree_x+1; i++) {
         for (int j=0; j<_degree_y+1; j++) {
-          int fieldIndex = dofOrdinalMap(i,j);
-          if (fieldIndex<0) continue; // (0,0) --> -1 to eliminate the null space
-          double scalingFactor = _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
-                               + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i);
-//          cout << "scaling factor squared for " << i << " " << j << ": " << scalingFactor << endl;
-          if (scalingFactor==0) scalingFactor = 1; // the (0,0) scaling factor will be 0 because we're scaling according to (grad e_ij, grad e_ij)--and e_00 = 1.
-          scalingFactor = sqrt(scalingFactor);
-          
+          if ((j==0) && (i==0)) continue; // no (0,0) basis function
+          // first, set the divergence-free basis values
+          int fieldIndex = dofOrdinalMap(i,j,true);
+
           switch (operatorType) {
             case Intrepid::OPERATOR_VALUE:
-              values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / scalingFactor;
-              values(fieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / scalingFactor;
+            {
+              double divFreeScalingFactor = 2 * (  _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
+                                                 + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i) );
+              divFreeScalingFactor = sqrt(divFreeScalingFactor);
+
+              values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / divFreeScalingFactor;
+              values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / divFreeScalingFactor;
+            }
               break;
             case Intrepid::OPERATOR_DIV:
-              values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / scalingFactor;
+              values(fieldIndex,pointIndex) = 0;
               break;
               
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
               break;
+          }
+          
+          // now, set the non-divergence-free basis values:
+          if ((i > 0) && (j > 0)) { // then there will be some non-divergence-free members
+            fieldIndex = dofOrdinalMap(i,j,false);
+            double nonDivFreeScalingFactor = 2 * (  _legendreL2normsSquared(i) * _legendreL2normsSquared(j)
+                                                  + _legendreL2normsSquared(j) * _legendreL2normsSquared(i) );
+            nonDivFreeScalingFactor = sqrt(nonDivFreeScalingFactor);
+            switch (operatorType) {
+              case Intrepid::OPERATOR_VALUE:
+                values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
+                values(fieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / nonDivFreeScalingFactor;
+                break;
+              case Intrepid::OPERATOR_DIV:
+                values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / nonDivFreeScalingFactor;
+                break;
+                
+              default:
+                TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
+                break;
+            }
           }
         }
       }
