@@ -304,8 +304,7 @@ void BilinearFormUtility::computeOptimalStiffnessMatrix(FieldContainer<double> &
   vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int>::iterator trialIterator;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trialBasis;
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > testBasis;
+  BasisPtr trialBasis,testBasis;
   
   stiffness.initialize(0.0);
   

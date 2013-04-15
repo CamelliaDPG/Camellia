@@ -199,7 +199,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDeg
   if ( ! BasisFactory::isMultiBasis(maxDegreeBasis) ) {
     sideCub->getCubature(_cubPoints, _cubWeights);
   } else {
-    MultiBasis* multiBasis = (MultiBasis*) maxDegreeBasis.get();
+    MultiBasis<>* multiBasis = (MultiBasis<>*) maxDegreeBasis.get();
     multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree);
     numCubPointsSide = _cubPoints.dimension(0);
   }
@@ -300,23 +300,18 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   } else {
     cubPoints = _cubPoints;
   }
-  // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
-  if (! BasisFactory::basisKnown(basis) ) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                       "Unknown basis.  BasisCache only works for bases created by BasisFactory");
-  }
   // first, let's check whether the exact request is already known
-  pair< Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
+  pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
   
   if (_knownValues.find(key) != _knownValues.end() ) {
     return _knownValues[key];
   }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
   
-  pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = key;
+  pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = key;
   if ((EOperatorExtended)relatedOp != op) {
     relatedKey = make_pair(basis.get(), (IntrepidExtendedTypes::EOperatorExtended) relatedOp);
     if (_knownValues.find(relatedKey) == _knownValues.end() ) {
@@ -348,21 +343,21 @@ constFCPtr BasisCache::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
 
 constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                             bool useCubPointsSideRefCell) {
-  pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
+  pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end()) {
     return _knownValuesTransformed[key];
   }
   
   int componentOfInterest;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
   
-  pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = make_pair(basis.get(),(EOperatorExtended) relatedOp);
+  pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> relatedKey = make_pair(basis.get(),(EOperatorExtended) relatedOp);
   if (_knownValuesTransformed.find(relatedKey) == _knownValuesTransformed.end()) {
     constFCPtr transformedValues;
     bool vectorizedBasis = functionSpaceIsVectorized(fs);
     if ( (vectorizedBasis) && (relatedOp ==  Intrepid::OPERATOR_VALUE)) {
-      VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *) basis.get(), false );
+      VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<double, FieldContainer<double> > *) basis.get(), false );
       BasisPtr componentBasis = vectorBasis->getComponentBasis();
       constFCPtr componentReferenceValuesTransformed = getTransformedValues(componentBasis, IntrepidExtendedTypes::OP_VALUE,
                                                                             useCubPointsSideRefCell);
@@ -424,7 +419,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, IntrepidExtendedType
 
 constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op, 
                                                     bool useCubPointsSideRefCell) {
-  pair<Basis<double,FieldContainer<double> >*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
+  pair<Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended> key = make_pair(basis.get(), op);
   if (_knownValuesTransformedWeighted.find(key) != _knownValuesTransformedWeighted.end()) {
     return _knownValuesTransformedWeighted[key];
   }

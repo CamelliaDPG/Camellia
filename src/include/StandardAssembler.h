@@ -35,6 +35,9 @@
 #include "Epetra_FECrsMatrix.h"
 #include "Epetra_FEVector.h"
 #include "BF.h" // to compute stiffness
+
+#include "Element.h"
+
 class StandardAssembler : public Assembler {
   SolutionPtr _solution;  
 public:  

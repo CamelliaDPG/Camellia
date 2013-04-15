@@ -114,8 +114,12 @@ public:
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
+//    scriptOut << "replot\n";
+//    scriptOut << "set terminal png\n";
+//    scriptOut << "set out '" << filePath << ".png'\n";
     scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -172,8 +176,12 @@ public:
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
+//    scriptOut << "replot\n";
+//    scriptOut << "set terminal png\n";
+//    scriptOut << "set out '" << filePath << ".png'\n";
     scriptOut << "replot\n";
     scriptOut << "set term pop\n";
+    scriptOut << "replot\n";
     scriptOut.close();
   }
   
@@ -222,7 +230,7 @@ public:
   }
   
   static void writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
-                                     const string &outputFile) {
+                                     const string &outputFile, double xTics=-1, double yTics=-1) {
     ofstream fout((outputFile).c_str());
     ostringstream splotLine;
     splotLine << "splot ";
@@ -250,11 +258,21 @@ public:
     fout << "unset clabel" << endl;
     fout << "set cntrparam bspline" << endl;
     fout << "set size ratio -1" << endl;
+    if (xTics > 0) {
+      fout << "set xtics " << xTics << endl;
+    }
+    if (yTics > 0) {
+      fout << "set ytics" << yTics << endl;
+    }
     fout << "set style data lines" << endl;
     fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     fout << "set out '" << outputFile << ".eps'\n";
-    fout << "replot" << endl;
+//    fout << "replot" << endl;
+//    fout << "set terminal png\n";
+//    fout << "set out '" << outputFile << ".png'\n";
+    fout << "replot\n";
     fout << "set term pop\n";
+    fout << "replot" << endl;
     
     fout.close();
   }

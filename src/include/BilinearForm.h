@@ -36,12 +36,12 @@
 
 #include "CamelliaIntrepidExtendedTypes.h" // defined by us
 
+#include "DofOrdering.h"
+
 class BasisCache;
 class ElementType;
-class DofOrdering;
 typedef Teuchos::RCP< BasisCache > BasisCachePtr;
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
-typedef Teuchos::RCP< DofOrdering > DofOrderingPtr;
 
 using namespace std;
 using namespace Intrepid;
@@ -112,11 +112,15 @@ public:
   static const set<int> & normalOperators(); // the set of all operators that use the normal
   
   void setUseSPDSolveForOptimalTestFunctions(bool value);
+  void setUseIterativeRefinementsWithSPDSolve(bool value);
+  void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
+  void setWarnAboutZeroRowsAndColumns(bool value);
 protected:
  
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
-  bool _useSPDSolveForOptimalTestFunctions;
+  bool _useSPDSolveForOptimalTestFunctions, _useIterativeRefinementsWithSPDSolve, _useExtendedPrecisionSolveForOptimalTestFunctions;
+  bool _warnAboutZeroRowsAndColumns;
 };
 
 typedef Teuchos::RCP<BilinearForm> BilinearFormPtr;

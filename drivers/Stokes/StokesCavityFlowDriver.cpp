@@ -18,10 +18,11 @@
 //#include "CGSolver.h"
 #include "MPIWrapper.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
+
+#include "StreamDriverUtil.h"
+#include "GnuPlotUtil.h"
+#include "MeshUtilities.h"
 
 using namespace std;
 
@@ -159,48 +160,6 @@ public:
   }
 };
 
-void writePatchValues(double xMin, double xMax, double yMin, double yMax,
-                      SolutionPtr solution, VarPtr u1, string filename) {
-  vector<double> points1D_x, points1D_y;
-  int numPoints = 100;
-  for (int i=0; i<numPoints; i++) {
-    points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
-    points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
-  }
-  int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      points(pointIndex,0) = points1D_x[i];
-      points(pointIndex,1) = points1D_y[j];
-    }
-  }
-  FieldContainer<double> values1(numPoints*numPoints);
-  FieldContainer<double> values2(numPoints*numPoints);
-  solution->solutionValues(values1, u1->ID(), points);
-  ofstream fout(filename.c_str());
-  fout << setprecision(15);
-  
-  fout << "X = zeros(" << numPoints << ",1);\n";
-  //    fout << "Y = zeros(numPoints);\n";
-  fout << "U = zeros(" << numPoints << "," << numPoints << ");\n";
-  for (int i=0; i<numPoints; i++) {
-    fout << "X(" << i+1 << ")=" << points1D_x[i] << ";\n";
-  }
-  for (int i=0; i<numPoints; i++) {
-    fout << "Y(" << i+1 << ")=" << points1D_y[i] << ";\n";
-  }
-  
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      fout << "U("<<i+1<<","<<j+1<<")=" << values1(pointIndex) << ";" << endl;
-    }
-  }
-  fout.close();
-}
-
 void writeStreamlines(double xMin, double xMax, double yMin, double yMax,
                       SolutionPtr solution, VarPtr u1, VarPtr u2, string filename) {
   vector<double> points1D_x, points1D_y;
@@ -255,6 +214,7 @@ int main(int argc, char *argv[]) {
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
+  bool symmetricRefinements = false; // symmetric across the horizontal midline
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
@@ -262,13 +222,16 @@ int main(int argc, char *argv[]) {
   bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = false;
-  bool weightTestNormDerivativesByH = false;
+  bool useWeightedGraphNorm = false;
+  bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
   int overkillPolyOrder = 7; // H1 order
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
+  double energyThreshold = 0.20; // for mesh refinements
+
 //  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
   
   if (usePenaltyConstraintsForDiscontinuousBC) {
@@ -278,14 +241,17 @@ int main(int argc, char *argv[]) {
   
   // usage: polyOrder [numRefinements]
   // parse args:
-  if ((argc != 3) && (argc != 2)) {
-    cout << "Usage: StokesCavityFlowDriver fieldPolyOrder [numRefinements=10]\n";
+  if ((argc != 3) && (argc != 2) && (argc != 4)) {
+    cout << "Usage: StokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [adaptThresh=0.20]\n";
     return -1;
   }
   int polyOrder = atoi(argv[1]);
   int numRefs = 10;
-  if ( argc == 3) {
+  if ( ( argc == 3 ) || (argc == 4)) {
     numRefs = atoi(argv[2]);
+  }
+  if (argc == 4) {
+    energyThreshold = atof(argv[3]);
   }
   if (rank == 0)
     cout << "numRefinements = " << numRefs << endl;
@@ -302,8 +268,15 @@ int main(int argc, char *argv[]) {
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
   VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
-  VarPtr u1 = varFactory.fieldVar("u_1");
-  VarPtr u2 = varFactory.fieldVar("u_2");
+  VarPtr u1, u2;
+  if (!useWeightedGraphNorm) {
+    u1 = varFactory.fieldVar("u_1");
+    u2 = varFactory.fieldVar("u_2");
+  } else {
+    u1 = varFactory.fieldVar("u_1", HGRAD);
+    u2 = varFactory.fieldVar("u_2", HGRAD);
+  }
+  
   VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
   VarPtr sigma12 = varFactory.fieldVar("\\sigma_12");
   VarPtr sigma21 = varFactory.fieldVar("\\sigma_21");
@@ -342,6 +315,8 @@ int main(int argc, char *argv[]) {
   stokesBFMath->addTerm(-u2,q->dy());
   stokesBFMath->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
   
+  stokesBFMath->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
+  
   ///////////////////////////////////////////////////////////////////////////
   
   // define bilinear form for stream function:
@@ -362,6 +337,8 @@ int main(int argc, char *argv[]) {
   streamBF->addTerm(psi_2, v_s->y());
   streamBF->addTerm(phi, v_s->div());
   streamBF->addTerm(-phi_hat, v_s->dot_normal());
+  
+  streamBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
   
   // define meshes:
   int H1Order = polyOrder + 1;
@@ -386,7 +363,7 @@ int main(int argc, char *argv[]) {
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                     streamBF, H1Order+pToAddForStreamFunction, H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
+                                     streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
     FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
     // top (left to right):
@@ -457,7 +434,7 @@ int main(int argc, char *argv[]) {
 //    elementVertices.push_back(el5);
     
     mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
-    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order+pToAddForStreamFunction, pToAdd) );
+    streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
     
     // trapezoidal singularity-avoiding mesh below.  (triangular above)
     //    FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
@@ -497,7 +474,7 @@ int main(int argc, char *argv[]) {
     //    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
   }
   
-  mesh->registerMesh(streamMesh); // will refine streamMesh in the same way as mesh.
+  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -523,11 +500,14 @@ int main(int argc, char *argv[]) {
     if (useTriangles) {
       cout << "Using triangles.\n";
     }
-    if (weightTestNormDerivativesByH) {
-      cout << "Weighting test norm derivatives by h.\n";
+    if (useWeightedGraphNorm) {
+      cout << "Using h-weighted graph norm.\n";
     }
     if (induceCornerRefinements) {
       cout << "Artificially inducing refinements in bottom corners.\n";
+    }
+    if (symmetricRefinements) {
+      cout << "Imposing symmetric refinements on top and bottom of mesh.\n";
     }
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
@@ -552,7 +532,7 @@ int main(int argc, char *argv[]) {
   double beta = 1.0;
   FunctionPtr h = Teuchos::rcp( new hFunction() );
   
-  if (weightTestNormDerivativesByH) {
+  if (useWeightedGraphNorm) {
     qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
     qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
@@ -560,6 +540,11 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( h * tau1->div() - q->dx() ); // u1
     qoptIP->addTerm( h * tau2->div() - q->dy() ); // u2
+    qoptIP->addTerm( v1 );
+    qoptIP->addTerm( v2 );
+    qoptIP->addTerm(  q );
+    qoptIP->addTerm( tau1 );
+    qoptIP->addTerm( tau2 );
   } else {
     qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
@@ -568,14 +553,22 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
     qoptIP->addTerm( tau1->div() - q->dx() );     // u1
     qoptIP->addTerm( tau2->div() - q->dy() );     // u2
+    qoptIP->addTerm( sqrt(beta) * v1 );
+    qoptIP->addTerm( sqrt(beta) * v2 );
+    qoptIP->addTerm( sqrt(beta) * q );
+    qoptIP->addTerm( sqrt(beta) * tau1 );
+    qoptIP->addTerm( sqrt(beta) * tau2 );
   }
-  qoptIP->addTerm( sqrt(beta) * v1 );
-  qoptIP->addTerm( sqrt(beta) * v2 );
-  qoptIP->addTerm( sqrt(beta) * q );
-  qoptIP->addTerm( sqrt(beta) * tau1 );
-  qoptIP->addTerm( sqrt(beta) * tau2 );
   
   ip = qoptIP;
+  
+  if (rank==0) {
+    int cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true);
+    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    double conditionNumber = qoptIP->computeMaxConditionNumber(testSpace,basisCache);
+    cout << "Gram matrix cond # for cell 0: " << conditionNumber << endl;
+  }
   
   if (rank==0) 
     ip->printInteractions();
@@ -633,12 +626,17 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
   
-  double energyThreshold = 0.20; // for mesh refinements
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
     refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-  else
+  else if (symmetricRefinements) {
+    // we again use the problem-specific LidDrivenFlowRefinementStrategy, but now with hMin = 0, and maxP = H1Order-1 (i.e. never refine in p)
+    Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 0,
+                                                                                                                            H1Order-1, rank==0 ));
+    lidRefinementStrategy->setSymmetricRefinements(true);
+    refinementStrategy = lidRefinementStrategy;
+  } else
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
   
   // just an experiment:
@@ -717,7 +715,7 @@ int main(int argc, char *argv[]) {
         cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
       dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
     }
-    refinementStrategy->refine(rank==0); // print to console on rank 0
+    refinementStrategy->refine(false);//rank==0); // print to console on rank 0
     if (! MeshTestUtility::checkMeshConsistency(mesh)) {
       if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
     }
@@ -782,10 +780,13 @@ int main(int argc, char *argv[]) {
     dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
   }
   
+  double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, "cavity_maxConditionIPMatrix.dat");
+  
   double energyErrorTotal = solution->energyErrorTotal();
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
+    cout << "Max Gram matrix condition number: " << maxConditionNumber << endl;
   }
   
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
@@ -901,8 +902,8 @@ int main(int argc, char *argv[]) {
   streamIP->addTerm(v_s->div());
   SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
   
-  //  mesh->unregisterMesh(streamMesh);
-  //  streamMesh->registerMesh(mesh);
+  //  mesh->unregisterObserver(streamMesh);
+  //  streamMesh->registerObserver(mesh);
   //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
   //  for (int refIndex=0; refIndex < 3; refIndex++) {
   //    streamSolution->solve(false);
@@ -944,10 +945,34 @@ int main(int argc, char *argv[]) {
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
     
-    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
-    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
-    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+//    writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
+//    writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
+//    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
+//    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+    
+    map<double,string> scaleToName;
+    scaleToName[1]   = "cavityPatch";
+    scaleToName[0.1] = "cavityPatchEddy1";
+    scaleToName[0.01] = "cavityPatchEddy2";
+    scaleToName[0.002] = "cavityPatchEddy3";
+    scaleToName[0.0002] = "cavityPatchEddy4";
+    
+    for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
+      double scale = entryIt->first;
+      string name = entryIt->second;
+      ostringstream fileNameStream;
+      fileNameStream << name << ".dat";
+      FieldContainer<double> patchPoints = pointGrid(0, scale, 0, scale, 100);
+      FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
+      ostringstream scriptNameStream;
+      scriptNameStream << name << ".p";
+      set<double> contourLevels = diagonalContourLevels(patchPointData,4);
+      vector<string> dataPaths;
+      dataPaths.push_back(fileNameStream.str());
+      GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
+    }
+    GnuPlotUtil::writeComputationalMeshSkeleton("cavityMesh", mesh);
 }
   
   if (compareWithOverkillMesh) {

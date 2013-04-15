@@ -31,14 +31,20 @@ protected:
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;  
   double _anisotropicThreshhold;
+  double _maxAspectRatio;
   vector< RefinementResults > _results;
+  double _min_h;
 public:
-  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold);
+  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0);
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
+  void setMaxAspectRatio(double value);
+
   virtual void refine(bool printToConsole=false);
   virtual void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr);
   void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap);
+  void refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap);
+
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells);
   void getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap);
   bool enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells);
@@ -48,6 +54,7 @@ public:
   static void hRefineCells(Teuchos::RCP<Mesh> mesh, const vector<int> &cellIDs);
   static void hRefineUniformly(Teuchos::RCP<Mesh> mesh);
   void getCellsAboveErrorThreshhold(vector<int> &cellsToRefine);
+  void setMinH(double value);
   void setReportPerCellErrors(bool value);
 };
 

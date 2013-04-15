@@ -299,7 +299,11 @@ void ParametricCurve::projectionBasedInterpolant(FieldContainer<double> &basisCo
   int cubatureDegree = max(basisDegree*2,15);
   BasisCachePtr basisCache = BasisCache::basisCache1D(0, lengthScale, cubatureDegree);
   
-  // determine indices for the vertices (we want to project onto the space spanned by the basis \ {vertex nodal functions})
+  // confirm that the basis *is* conforming:
+  if (! basis1D->isConforming()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis1D is not a conforming basis.");
+  }
+  
   set<int> vertexNodeFieldIndices;
   int vertexDim = 0;
   int numVertices = 2;

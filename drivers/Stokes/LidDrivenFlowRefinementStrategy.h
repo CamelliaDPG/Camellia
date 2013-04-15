@@ -16,10 +16,18 @@ class LidDrivenFlowRefinementStrategy : public RefinementStrategy {
   double _hmin;
   int _maxPolyOrder;
   bool _printToConsole;
+  bool _symmetricRefinements; // any refinement done on the top, do on the bottom as well
+  set<int> symmetricCellIDs(set<int> &cellIDs); // utility method for finding the symmetric counterparts for a set of cells
 public:
   LidDrivenFlowRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin, int maxPolyOrder, bool printToConsole=false) 
-  : RefinementStrategy(solution,  relativeEnergyThreshold) { _hmin = hmin; _maxPolyOrder = maxPolyOrder; _printToConsole = printToConsole;}
+  : RefinementStrategy(solution,relativeEnergyThreshold) {
+    _hmin = hmin;
+    _maxPolyOrder = maxPolyOrder;
+    _printToConsole = printToConsole;
+    _symmetricRefinements = false;
+  }
   virtual void refineCells(vector<int> &cellsToRefine);
+  void setSymmetricRefinements(bool value);
 };
 
 

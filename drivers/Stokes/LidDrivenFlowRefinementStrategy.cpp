@@ -10,11 +10,39 @@
 
 #include "LidDrivenFlowRefinementStrategy.h"
 
+set<int> LidDrivenFlowRefinementStrategy::symmetricCellIDs(set<int> &cellIDs) {
+  // find the
+  set<int> symmetricCellIDs;
+  int spaceDim = 2;
+  FieldContainer<double> cellPoints(cellIDs.size(), spaceDim);
+  int i=0;
+  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++, i++) {
+    int cellID = *cellIt;
+    vector<double> centroid = _solution->mesh()->getCellCentroid(cellID);
+    double x = centroid[0];
+    double y = centroid[1];
+    // we're in [0,1]^2, and we want symmetry across the horizontal midline:
+    cellPoints(i,0) = x;
+    cellPoints(i,1) = 1-y;
+  }
+  vector< ElementPtr > elements = _solution->mesh()->elementsForPoints(cellPoints);
+  for (vector< ElementPtr >::iterator elementIt = elements.begin();
+       elementIt != elements.end(); elementIt++) {
+    int cellID = (*elementIt)->cellID();
+    symmetricCellIDs.insert(cellID);
+  }
+  return symmetricCellIDs;
+}
+
+void LidDrivenFlowRefinementStrategy::setSymmetricRefinements(bool value) {
+  _symmetricRefinements = value;
+}
+
 void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
   Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  vector<int> triangleCellsToRefine;
-  vector<int> quadCellsToRefine;
-  vector<int> pCellsToRefine;
+  set<int> triangleCellsToRefine;
+  set<int> quadCellsToRefine;
+  set<int> pCellsToRefine;
   
   int spaceDim = 2;
   FieldContainer<double> triangleVertices(3,spaceDim);
@@ -56,7 +84,7 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
     
     int polyOrder = mesh->cellPolyOrder(cellID);
     if ((!cornerCell || (h - tol <= _hmin)) && (polyOrder < _maxPolyOrder) ) {
-      pCellsToRefine.push_back(cellID);
+      pCellsToRefine.insert(cellID);
       if (_printToConsole)
         cout << "p-refining " << cellID << " (polyOrder prior to refinement: " << polyOrder << ")" << endl;
     } else if (h - tol > _hmin) {
@@ -65,14 +93,25 @@ void LidDrivenFlowRefinementStrategy::refineCells(vector<int> &cellIDs) {
       //cout << "cornerCell: " << cornerCell << endl;
       //cout << "polyOrder: " << polyOrder << endl;
       if (mesh->getElement(cellID)->numSides()==3) {
-        triangleCellsToRefine.push_back(cellID);
+        triangleCellsToRefine.insert(cellID);
       } else if (mesh->getElement(cellID)->numSides()==4) {
-        quadCellsToRefine.push_back(cellID);
+        quadCellsToRefine.insert(cellID);
       }
     } else {
       if (_printToConsole)
         cout << "Skipping refinement of cellID " << cellID << " because min h " << h << " and max p " << polyOrder << " have been attained.\n";
     }
+  }
+  
+  if (_symmetricRefinements) {
+    set<int> symmetricTriangleCells = symmetricCellIDs(triangleCellsToRefine);
+    triangleCellsToRefine.insert(symmetricTriangleCells.begin(),symmetricTriangleCells.end());
+    
+    set<int> symmetricQuadCells = symmetricCellIDs(quadCellsToRefine);
+    quadCellsToRefine.insert(symmetricQuadCells.begin(),symmetricQuadCells.end());
+    
+    set<int> symmetricPCells = symmetricCellIDs(pCellsToRefine);
+    pCellsToRefine.insert(symmetricPCells.begin(),symmetricPCells.end());
   }
   
   mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());

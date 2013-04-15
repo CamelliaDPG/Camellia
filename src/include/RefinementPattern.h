@@ -43,6 +43,9 @@ public:
   
   vector< vector< pair< int, int> > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   map< int, int > parentSideLookupForChild(int childIndex); // inverse of childrenForSides
+  
+  int numChildren();
+  const FieldContainer<double> & refinedNodes();
 };
 
 #endif

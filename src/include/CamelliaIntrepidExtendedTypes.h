@@ -42,7 +42,7 @@ namespace IntrepidExtendedTypes {
     FUNCTION_SPACE_VECTOR_HVOL,
     FUNCTION_SPACE_TENSOR_HVOL,
     FUNCTION_SPACE_ONE,
-    CURL_HGRAD_FOR_CONSERVATION
+    FUNCTION_SPACE_UNKNOWN
   };
   
   bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);

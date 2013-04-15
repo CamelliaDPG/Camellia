@@ -58,6 +58,8 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
+#include "doubleBasisConstruction.h"
+
 #include "DPGTests.h"
 
 // test suite includes
@@ -68,6 +70,7 @@
 #include "HConvergenceStudyTests.h"
 #include "IncompressibleFormulationsTests.h"
 #include "LinearTermTests.h"
+#include "LobattoBasisTests.h"
 #include "MeshRefinementTests.h"
 #include "MPIWrapperTests.h"
 #include "MultiBasisTests.h"
@@ -81,8 +84,11 @@
 #include "Projector.h"
 #include "BasisCache.h"
 
+#include "Basis.h"
+
 using namespace std;
 using namespace Intrepid;
+using namespace Camellia;
 
 ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, shards::CellTopology &cellTopo) {
   Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology(cellTopo));
@@ -129,17 +135,21 @@ void DPGTests::createBases() {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis;
-  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >() );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >() );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL) );
-  BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL) );
-  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-  basis = Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >() );
-  BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
+  BasisPtr basis;
+  int rangeDimension = 2, scalarRank = 0, vectorRank = 1;
+  IntrepidExtendedTypes::EFunctionSpaceExtended hgrad = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
+  IntrepidExtendedTypes::EFunctionSpaceExtended hdiv = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, quad_4.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double,FieldContainer<double> >()), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, tri_3.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(3,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C3_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_LINE_Cn_FEM<double,FieldContainer<double> >(1,POINTTYPE_SPECTRAL)), rangeDimension, scalarRank, hgrad ) );
+  BasisFactory::registerBasis(basis,0, C1_FAKE_POLY_ORDER, line_2.getKey(), hgrad);
+  basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HDIV_QUAD_I1_FEM<double,FieldContainer<double> >()), rangeDimension, vectorRank, hdiv ) );
+  BasisFactory::registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), hdiv);
 }
 
 void DPGTests::runTests() {
@@ -149,6 +159,7 @@ void DPGTests::runTests() {
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
+  bool skipSlowTests = true;
   
   // set up a few special entries for BasisFactory first:
   createBases();
@@ -156,27 +167,33 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
-  //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-  testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
-  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
-  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
-  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
+  //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
+  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new RHSTests ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
+  testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   
-  // slow tests: keep at the end, except when debugging these...
-  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
-  
+  if (skipSlowTests) {
+    if (rank==0) {
+      cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
+    }
+  } else {
+    testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
+  }
+
   for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin();
        testSuiteIt != testSuites.end(); testSuiteIt++) {
     Teuchos::RCP< TestSuite > testSuite = *testSuiteIt;
@@ -422,10 +439,9 @@ bool DPGTests::testDofOrdering() {
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis
+  BasisPtr traceBasis
   = 
-  BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
+  BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -526,9 +542,8 @@ bool DPGTests::testComputeStiffnessDx() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis 
-  = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
+  BasisPtr basis
+  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
@@ -659,10 +674,9 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis
+  BasisPtr traceBasis
   = 
-  BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
+  BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
                          line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -673,9 +687,9 @@ bool DPGTests::testComputeStiffnessFlux() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > testBasis
+  BasisPtr testBasis
   = 
-  BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
+  BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);  
   testOrdering->addEntry(0,testBasis,0);
   
   int numTests = 1;  // 1. ref quad
@@ -785,9 +799,8 @@ bool DPGTests::testComputeStiffnessTrace() {
   Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp(new DofOrdering());
   
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > traceBasis 
-  = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
+  BasisPtr traceBasis 
+  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
                            line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   int numSides = 4;
@@ -797,8 +810,8 @@ bool DPGTests::testComputeStiffnessTrace() {
   }
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > testBasis 
-  = BasisFactory::getBasis(basisRank,C1_FAKE_POLY_ORDER,
+  BasisPtr testBasis 
+  = BasisFactory::getBasis(C1_FAKE_POLY_ORDER,
                            quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HDIV);
   
   testOrdering->addEntry(0,testBasis,1,0);
@@ -957,8 +970,7 @@ bool DPGTests::testMathInnerProductDx() {
   
   DofOrdering lowestOrderHGRADOrdering;
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering.addEntry(0,basis,0);
   
@@ -1111,31 +1123,14 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   bool success = true;
   Teuchos::RCP<DofOrdering> trialOrdering;
   
-  Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormAnalyticBoundaryIntegral() );
+  BFPtr bilinearForm = TestBilinearFormAnalyticBoundaryIntegral::bf();
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  DofOrderingFactory dofOrderingFactory(bilinearForm);
-  Teuchos::RCP<DofOrdering> cubicHGradOrdering = dofOrderingFactory.testOrdering(order, quad_4);
+  Teuchos::RCP<DofOrdering> cubicHGradOrdering = TestBilinearFormAnalyticBoundaryIntegral::testOrdering(order);
   
   // construct conforming or non-conforming trial basis:
-  if ( ! conforming ) {
-    shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-    int basisRank;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis 
-    = BasisFactory::getBasis(basisRank,C3_FAKE_POLY_ORDER,
-                             line_2.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-    
-    trialOrdering = Teuchos::rcp(new DofOrdering());
-    
-    trialOrdering->addEntry(0,basis,0,0);//one for each side in the quad
-    trialOrdering->addEntry(0,basis,0,1);
-    trialOrdering->addEntry(0,basis,0,2);
-    trialOrdering->addEntry(0,basis,0,3);
-  } else {
-    // exercise the factory, which will choose a conforming basis for the H(GRAD) trace....
-    trialOrdering = dofOrderingFactory.trialOrdering(order, quad_4);
-  }
+  trialOrdering = TestBilinearFormAnalyticBoundaryIntegral::trialOrdering(order, 4, conforming);
   
   FieldContainer<double> stiffnessExpected(numTests,cubicHGradOrdering->totalDofs(),
                                            trialOrdering->totalDofs() );
@@ -1148,9 +1143,10 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   FieldContainer<double> cellSideParities(numTests,numSides);
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
   
-  BilinearFormUtility::computeStiffnessMatrix(stiffnessActual, bilinearForm,
-                                              trialOrdering, cubicHGradOrdering,
-                                              quad_4, quadPoints, cellSideParities);
+  ElementTypePtr elemType = makeElemType(trialOrdering, cubicHGradOrdering, quad_4);
+  BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,quadCellIDs);
+  
+  bilinearForm->stiffnessMatrix(stiffnessActual, elemType, cellSideParities, basisCache);
   
   string myNameStiffness = "testAnalyticBoundaryIntegral.stiffness";
   
@@ -1185,8 +1181,6 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   
   TestBilinearFormAnalyticBoundaryIntegral::expectedOptTestWeightsForCubicsOnQuad(ipWeightsExpected,conforming);
   
-  ElementTypePtr elemType = makeElemType(trialOrdering, cubicHGradOrdering, quad_4);
-  BasisCachePtr basisCache = makeBasisCache(elemType,quadPoints,quadCellIDs);
   int optSuccess = bilinearForm->optimalTestWeights(ipWeightsActual, ipMatrixExpected,
                                                     elemType, cellSideParities, basisCache);
   
@@ -1229,45 +1223,47 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
     cout << myNameFinalByMultiplying << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
   }
   
-  BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsExpected,
-                                                     bilinearForm,
-                                                     trialOrdering, cubicHGradOrdering,
-                                                     quad_4, quadPoints, cellSideParities);
+  // commenting out these last couple tests: they exercise deprecated code, and I don't see the point...
   
-  string myNameFinalByIntegrating = "testAnalyticBoundaryIntegral.finalStiffnessByIntegrating";
-  successLocal = fcsAgree(myNameFinalByIntegrating, finalStiffnessExpected, finalStiffnessActual2, tol);
-  
-  if (! successLocal) {
-    success = false;
-    cout << myNameFinalByIntegrating << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
-  }
-  
-  //cout << "ipMatrixActual:" << endl << ipMatrixActual;
-  //cout << "ipWeightsActual:" << endl << ipWeightsActual;
-  
-  // now recompute the "final" matrices, but with the *actual* rather than expected ipMatrix and stiffness
-  BilinearFormUtility::computeStiffnessMatrix(finalStiffnessActual1,ipMatrixActual,ipWeightsActual);
-  
-  string myNameFinalByMultiplyingUsingActual = "testAnalyticBoundaryIntegral.finalStiffnessByMultiplyingUsingActual";
-  successLocal = fcsAgree(myNameFinalByMultiplyingUsingActual, finalStiffnessExpected, finalStiffnessActual1, tol);
-  
-  if (! successLocal) {
-    success = false;
-    cout << myNameFinalByMultiplyingUsingActual << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
-  }
-  
-  BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsActual,
-                                                     bilinearForm,
-                                                     trialOrdering, cubicHGradOrdering,
-                                                     quad_4, quadPoints, cellSideParities);
-  
-  string myNameFinalByIntegratingUsingActual = "testAnalyticBoundaryIntegral.finalStiffnessByIntegratingUsingActual";
-  successLocal = fcsAgree(myNameFinalByIntegratingUsingActual, finalStiffnessExpected, finalStiffnessActual2, tol);
-  
-  if (! successLocal) {
-    success = false;
-    cout << myNameFinalByIntegratingUsingActual << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
-  }
+//  BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsExpected,
+//                                                     bilinearForm,
+//                                                     trialOrdering, cubicHGradOrdering,
+//                                                     quad_4, quadPoints, cellSideParities);
+//  
+//  string myNameFinalByIntegrating = "testAnalyticBoundaryIntegral.finalStiffnessByIntegrating";
+//  successLocal = fcsAgree(myNameFinalByIntegrating, finalStiffnessExpected, finalStiffnessActual2, tol);
+//  
+//  if (! successLocal) {
+//    success = false;
+//    cout << myNameFinalByIntegrating << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
+//  }
+//  
+//  //cout << "ipMatrixActual:" << endl << ipMatrixActual;
+//  //cout << "ipWeightsActual:" << endl << ipWeightsActual;
+//  
+//  // now recompute the "final" matrices, but with the *actual* rather than expected ipMatrix and stiffness
+//  BilinearFormUtility::computeStiffnessMatrix(finalStiffnessActual1,ipMatrixActual,ipWeightsActual);
+//  
+//  string myNameFinalByMultiplyingUsingActual = "testAnalyticBoundaryIntegral.finalStiffnessByMultiplyingUsingActual";
+//  successLocal = fcsAgree(myNameFinalByMultiplyingUsingActual, finalStiffnessExpected, finalStiffnessActual1, tol);
+//  
+//  if (! successLocal) {
+//    success = false;
+//    cout << myNameFinalByMultiplyingUsingActual << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
+//  }
+//  
+//  BilinearFormUtility::computeOptimalStiffnessMatrix(finalStiffnessActual2, ipWeightsActual,
+//                                                     bilinearForm,
+//                                                     trialOrdering, cubicHGradOrdering,
+//                                                     quad_4, quadPoints, cellSideParities);
+//  
+//  string myNameFinalByIntegratingUsingActual = "testAnalyticBoundaryIntegral.finalStiffnessByIntegratingUsingActual";
+//  successLocal = fcsAgree(myNameFinalByIntegratingUsingActual, finalStiffnessExpected, finalStiffnessActual2, tol);
+//  
+//  if (! successLocal) {
+//    success = false;
+//    cout << myNameFinalByIntegratingUsingActual << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
+//  }
   
   return success;
 }
@@ -1300,17 +1296,18 @@ bool DPGTests::testLowOrderTrialCubicTest() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis
+  BasisPtr basis
   = 
-  BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisFactory::getBasis(C1_FAKE_POLY_ORDER, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   lowestOrderHGRADOrdering->addEntry(0,basis,0);
   
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
   
-  DofOrderingFactory dofOrderingFactory(bilinearForm);
-  Teuchos::RCP<DofOrdering> cubicHGradOrdering = dofOrderingFactory.testOrdering(order, quad_4);
+  DofOrderingPtr cubicHGradOrdering = Teuchos::rcp( new DofOrdering );
+  BasisPtr testBasis = Camellia::intrepidQuadHGRAD(order);
+  const int testID = 0;
+  cubicHGradOrdering->addEntry(testID, testBasis, testBasis->rangeRank());
   
   FieldContainer<double> stiffnessExpected(numTests,cubicHGradOrdering->totalDofs(),
                                            lowestOrderHGRADOrdering->totalDofs() );
@@ -2129,10 +2126,9 @@ bool DPGTests::testComputeOptimalTest() {
       nodePoints = quadPoints;
     }
     
-    int basisRank;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis
+    BasisPtr basis
     = 
-    BasisFactory::getBasis(basisRank, C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisFactory::getBasis(C1_FAKE_POLY_ORDER, cellTopo.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     
     DofOrdering lowestOrderHGRADOrdering;
     Teuchos::RCP<DofOrdering> lowestOrderHGRADOrderingPtr = Teuchos::rcp(&lowestOrderHGRADOrdering,false);
@@ -2146,6 +2142,8 @@ bool DPGTests::testComputeOptimalTest() {
     FieldContainer<double> actualStiffness(numTests, numTrialDofs, numTestDofs);
     
     Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
+    
+    bilinearForm->setWarnAboutZeroRowsAndColumns(false); // we *expect* zero columns for constant basis functions (which we can have with non-conforming bases)
     
     Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( new MathInnerProduct(bilinearForm) );
     
@@ -2367,11 +2365,11 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   TestBilinearFormAnalyticBoundaryIntegral::expectedPreStiffnessForCubicsOnQuad(preStiffnessConforming,true);
   TestBilinearFormAnalyticBoundaryIntegral::expectedPreStiffnessForCubicsOnQuad(preStiffnessNonConforming,false);
   
-  TestBilinearFormAnalyticBoundaryIntegral bilinearForm;
+  Teuchos::RCP<BilinearForm> bilinearForm = TestBilinearFormAnalyticBoundaryIntegral::bf();
   
   Teuchos::RCP<DofOrdering> conformingOrdering, nonConformingOrdering;
   
-  DofOrderingFactory dofOrderingFactory(Teuchos::rcp(&bilinearForm,false));
+  DofOrderingFactory dofOrderingFactory(bilinearForm);
   
   int polyOrder = 3;
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
@@ -2379,7 +2377,10 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, true);
   nonConformingOrdering = dofOrderingFactory.trialOrdering(polyOrder, quad_4, false);
   
-  Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(polyOrder, quad_4);
+  Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering );
+  int testID = 0;
+  BasisPtr testBasis = Camellia::intrepidQuadHGRAD(polyOrder);
+  testOrdering->addEntry(testID, testBasis, testBasis->rangeRank());
   
   int numSides = 4;
   int numDofsPerSide = 4;
@@ -2525,18 +2526,13 @@ bool DPGTests::testProjection(){
 
   physicalCellNodes(0,3,0) = -1.0;
   physicalCellNodes(0,3,1) = 1.0;
-
-  EFunctionSpaceExtended fs = IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  BasisFactory basisFactory;
-  unsigned cellTopoKey = shards::Quadrilateral<4>::key;
-
+  
   FieldContainer<double> basisCoefficients;
-
   int polyOrder = 5; // some large number
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = basisFactory.getBasis( polyOrder, cellTopoKey, fs);  
+  BasisPtr basis = Camellia::intrepidQuadHGRAD(polyOrder);
 
   // creating basisCache to compute values at certain points
-  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  shards::CellTopology cellTopo = basis->domainTopology();
   int basisRank = BasisFactory::getBasisRank(basis);
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   int ID = 0; // fake ID 

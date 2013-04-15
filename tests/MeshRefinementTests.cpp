@@ -26,6 +26,19 @@ void MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   // determine expected values:
   multiBrokenSides(brokenSideSet,elem);
   ElementTypePtr elemType = elem->elementType();
+  { // check that the test can proceed:
+    DofOrderingPtr testOrder = elemType->testOrderPtr;
+    int testID  =  *(testOrder->getVarIDs().begin()); // just grab the first one
+    BasisPtr testBasis = testOrder->getBasis(testID);
+    if (! testBasis->isConforming()) {
+      static bool haveWarned = false;
+      if (! haveWarned ) {
+        cout << "checkMultiElementStiffness(): test relies on conforming test basis, but we don't have one.  Skipping test with a PASS.\n";
+        haveWarned = true;
+      }
+      return;
+    }
+  }
   sideParities = mesh->cellSideParitiesForCell(cellID);
   preStiffnessExpectedMulti(expectedValues,h,brokenSideSet,elemType,sideParities);
   
@@ -528,6 +541,15 @@ TEST_F(MeshRefinementTests, TestUniformMeshStiffnessMatrices)
   // determine expected values:
   ElementTypePtr elemType = _B1multi->elementType();
   sideParities = _multiB->cellSideParitiesForCell(_B1multi->cellID());
+  { // check that the test can proceed:
+    DofOrderingPtr testOrder = elemType->testOrderPtr;
+    int testID  =  *(testOrder->getVarIDs().begin()); // just grab the first one
+    BasisPtr testBasis = testOrder->getBasis(testID);
+    if (! testBasis->isConforming()) {
+      cout << "checkPatchElementStiffness(): test relies on conforming test basis, but we don't have one.  Skipping test with a PASS.\n";
+      return;
+    }
+  }
   preStiffnessExpectedUniform(expectedValues,_h,elemType,sideParities);
   // get actual values:
   physicalCellNodes = _multiB->physicalCellNodesForCell(_B1multi->cellID());
@@ -584,7 +606,7 @@ TEST_F(MeshRefinementTests, TestUniformMeshStiffnessMatrices)
 
 TEST_F(MeshRefinementTests, TestMultiBasisStiffnessMatrices)
 {
-  checkMultiElementStiffness(_multiA);
+  	Stiffness(_multiA);
   checkMultiElementStiffness(_multiB);
   checkMultiElementStiffness(_multiC);
 }

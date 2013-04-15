@@ -2,6 +2,8 @@
 
 #include "HessianFilter.h"
 #include "RieszRep.h"
+#include "ParameterFunction.h"
+#include "LagrangeConstraints.h"
 
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
@@ -167,14 +169,28 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
   
   setup();
-  if (testVGPStokesFormulationGraphNorm()) {
+  if (testVVPStokesFormulationGraphNorm()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   
   setup();
-  if (testVVPStokesFormulationGraphNorm()) {
+  if (testVGPNavierStokesFormulationCorrectness()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if ( testVGPNavierStokesLocalConservation() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testVGPStokesFormulationGraphNorm()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -189,13 +205,6 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   
   setup();
   if (testVGPNavierStokesFormulationKovasnayConvergence()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testVGPNavierStokesFormulationCorrectness()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -757,6 +766,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   double tol = 1e-11;
   
   bool useLineSearch = false;
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   vector<bool> useHessianList;
   useHessianList.push_back(false);
@@ -803,7 +813,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                     horizontalCells, verticalCells,
                                                                     H1Order, pToAdd,
-                                                                    u1_exact, u2_exact, p_exact);
+                                                                    u1_exact, u2_exact, p_exact, enrichVelocity);
             
             
             SolutionPtr solnIncrement = problem.solutionIncrement();
@@ -940,6 +950,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   int horizontalCells = 2, verticalCells = 2;
   
   bool useLineSearch = false;
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
        exactIt != polyExactFunctions.end(); exactIt++) {
@@ -972,7 +983,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                horizontalCells, verticalCells,
                                                                H1Order, pToAdd,
-                                                               u1_exact, u2_exact, p_exact);
+                                                               u1_exact, u2_exact, p_exact, enrichVelocity);
       SolutionPtr backgroundFlow = problem.backgroundFlow();
       SolutionPtr solnIncrement = problem.solutionIncrement();
       RHSPtr rhs = problem.exactSolution()->rhs();
@@ -1004,7 +1015,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       Teuchos::RCP<Mesh> mesh = problem.mesh();
       
-      double tol = 1e-14;
+      double tol = 1e-13;
       if (maxPolyOrder >= 10) {
         // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
         tol = 1e-10;        
@@ -1147,6 +1158,87 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   return success;
 }
 
+// U1_0: used in lid-driven cavity flow BCs (for local conservation test below)
+class U1_0 : public SimpleFunction {
+  double _eps;
+public:
+  U1_0(double eps) {
+    _eps = eps;
+  }
+  double value(double x, double y) {
+    double tol = 1e-14;
+    if (abs(y-1.0) < tol) { // top boundary
+      if ( (abs(x) < _eps) ) { // top left
+        return x / _eps;
+      } else if ( abs(1.0-x) < _eps) { // top right
+        return (1.0-x) / _eps;
+      } else { // top middle
+        return 1;
+      }
+    } else { // not top boundary: 0.0
+      return 0.0;
+    }
+  }
+};
+
+bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
+  bool success = true;
+  
+  // really just checking against a single bug right now: getting 0 rows and columns
+  // in the second iterate for Navier-Stokes when local conservation is turned on...
+  
+  int pToAdd = 3; // for optimal test function approximation
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC
+  bool enforceLocalConservation = true;
+  int horizontalCells = 3, verticalCells = 3;
+  
+  int polyOrder = 1;
+  double Re = 400;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+  
+  // define meshes:
+  int H1Order = polyOrder + 1;
+  
+  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
+  FunctionPtr u2_0 = Function::zero();
+  FunctionPtr zero = Function::zero();
+  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+                                                          horizontalCells,verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_0, u2_0,  // BC for u
+                                                          zero, zero); // zero forcing function
+  SolutionPtr solution = problem.backgroundFlow();
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  
+  // get variable definitions:
+  VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+  VarPtr u1hat = varFactory.traceVar(VGP_U1HAT_S);
+  VarPtr u2hat = varFactory.traceVar(VGP_U2HAT_S);
+  
+  if (enforceLocalConservation) {
+    solution     ->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+    solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+  }
+  
+  bool useLineSearch = false;
+  problem.iterate(useLineSearch);
+  
+  problem.iterate(useLineSearch); // get zero rows and column warnings here
+  
+  return success;
+}
+
 map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
                                                                        double Re) {
   
@@ -1174,6 +1266,88 @@ map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionP
   solnMap[ t2n_vgp->ID() ] = t2 * n * sgn_n;
   
   return solnMap;
+}
+
+bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConservation() {
+  bool success = true;
+  
+  int pToAdd = 2; // for optimal test function approximation
+  double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
+  bool enforceLocalConservation = false;
+  
+  int horizontalCells = 2, verticalCells = 2;
+  int polyOrder = 1;
+
+  double Re = 1;
+  
+  FieldContainer<double> quadPoints(4,2);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+  
+  // define meshes:
+  int H1Order = polyOrder + 1;
+  
+  // get variable definitions:
+  VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+  VarPtr u1hat = varFactory.traceVar(VGP_U1HAT_S);
+  VarPtr u2hat = varFactory.traceVar(VGP_U2HAT_S);
+  
+  FunctionPtr zero = Function::zero();
+  FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
+  FunctionPtr u2_0 = zero;
+  ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+                                                          horizontalCells,verticalCells,
+                                                          H1Order, pToAdd,
+                                                          u1_0, u2_0,  // BC for u
+                                                          zero, zero); // zero forcing function
+  SolutionPtr solution = problem.backgroundFlow();
+  SolutionPtr solnIncrement = problem.solutionIncrement();
+  
+  // see if we do better with naive norm, which is better conditioned:
+  solution->setIP(problem.bf()->naiveNorm());
+  solnIncrement->setIP(problem.bf()->naiveNorm());
+  
+  Teuchos::RCP<Mesh> mesh = problem.mesh();
+  mesh->registerSolution(solution);
+  mesh->registerSolution(solnIncrement);
+  
+  if (enforceLocalConservation) {
+    FunctionPtr zero = Function::zero();
+    solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+    solnIncrement->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
+  }
+  
+  set<int> cellIDs = mesh->getActiveCellIDs();
+  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
+    int cellID = *cellIt;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    double stokesConditionNumber = problem.stokesBF()->graphNorm()->computeMaxConditionNumber(testSpace, basisCache);
+    cout << "Gram matrix condition number of stokes graph norm for cell " << cellID << ": " << stokesConditionNumber << endl;
+//    double conditionNumber = problem.bf()->graphNorm()->computeMaxConditionNumber(testSpace, basisCache);
+//    cout << "Gram matrix condition number of Navier-Stokes graph norm for cell " << cellID << ": " << conditionNumber << endl;
+    double naiveStokesConditionNumber = problem.stokesBF()->naiveNorm()->computeMaxConditionNumber(testSpace, basisCache);
+    cout << "Gram matrix condition number of stokes naive norm for cell " << cellID << ": " << naiveStokesConditionNumber << endl;
+//    double naiveConditionNumber = problem.bf()->naiveNorm()->computeMaxConditionNumber(testSpace, basisCache);
+//    cout << "Gram matrix condition number of Navier-Stokes naive norm for cell " << cellID << ": " << naiveConditionNumber << endl;
+    
+    double l2ConditionNumber = problem.bf()->l2Norm()->computeMaxConditionNumber(testSpace, basisCache);
+    cout << "Gram matrix condition number of stokes L^2 norm for cell " << cellID << ": " << l2ConditionNumber << endl;
+  }
+  
+  bool useLineSearch = false;
+  problem.iterate(useLineSearch);
+  problem.iterate(useLineSearch);
+  
+  return success;
 }
 
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConvergence() {
@@ -1207,6 +1381,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
 //  double nonlinear_step_weight = 1.0;
   
   bool useLineSearch = false; // we don't converge nearly as quickly (if at all) when using line search (a problem!)
+  bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
        useHessianIt != useHessianList.end(); useHessianIt++) {
@@ -1229,14 +1404,14 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                       horizontalCells, verticalCells,
                                                                       H1Order, pToAdd,
-                                                                      zero, zero, zero);
+                                                                      zero, zero, zero, enrichVelocity);
           
           NavierStokesFormulation::setKovasznay( Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact );
           
           VGPNavierStokesProblem kProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                    horizontalCells, verticalCells,
                                                                    H1Order, pToAdd,
-                                                                   u1_exact, u2_exact, p_exact);
+                                                                   u1_exact, u2_exact, p_exact, enrichVelocity);
           
           if (printToConsole) {
             cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;

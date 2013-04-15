@@ -248,7 +248,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
         for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
           int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,basis->getCardinality());
           if (BasisFactory::isMultiBasis(neighborBasis)) {
-            neighborDofOrdinal = ((MultiBasis*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
+            neighborDofOrdinal = ((MultiBasis<>*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
           }
           for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
             double diff = abs(neighborValues(neighborDofOrdinal,pointIndex) - values(dofOrdinal,pointIndex));
@@ -288,7 +288,6 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
 }
 
 bool MeshTestSuite::testBasisRefinement() {
-  int basisRank;
   int initialPolyOrder = 3;
   
   bool success = true;
@@ -297,7 +296,7 @@ bool MeshTestSuite::testBasisRefinement() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  Teuchos::RCP<Basis<double,FieldContainer<double> > > basis = BasisFactory::getBasis(basisRank, initialPolyOrder, quad_4.getKey(), hgrad);
+  BasisPtr basis = BasisFactory::getBasis(initialPolyOrder, quad_4.getKey(), hgrad);
   if (basis->getDegree() != initialPolyOrder) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: initial BasisFactory call returned a different-degree basis than expected..." << endl;
@@ -883,7 +882,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }
   
   // Several of these tests assert that indices are laid out in the same order in trialOrdering(), pRefine(), matchSides()
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, 0); // don't really refine
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, 0); // don't really refine
   
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: conformingOrdering with pRefine==0 differs from original." << endl;
@@ -892,7 +891,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   int pToAdd = 3;  
   
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, pToAdd);
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, pToAdd);
   
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
 
@@ -972,14 +971,14 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }  
   
   // final test: take the upgraded ordering, and increase its polynomial order so that it matches that of the higher-degree guy.  Check that this is the same Ordering as a fresh one with that polynomial order.
-  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefine(nonConformingOrderingLowerOrder, quad_4, pToAdd);
+  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(nonConformingOrderingLowerOrder, quad_4, pToAdd);
   nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
   if ( nonConformingOrderingLowerOrder.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;    
   }
   
-  conformingOrderingLowerOrder = dofOrderingFactory.pRefine(conformingOrderingLowerOrder, quad_4, pToAdd);
+  conformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(conformingOrderingLowerOrder, quad_4, pToAdd);
   conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
   if ( conformingOrderingLowerOrder.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
@@ -1494,7 +1493,7 @@ bool MeshTestSuite::testPRefinement() {
         double diff = abs(actualSolnDofs(i)-expectedSolnDofs(i));
         if (diff > tol * 10 ) { // * 10 because we can be a little more tolerant of the Dof values than, say, the overall L2 error.
           cout << "FAILURE: In cellID " << cellID << ", p-refined mesh differs in phi solution from expected ";
-          cout << "in basis ordinal " << i << "(diff=" << diff << ")" << endl;
+          cout << "in basis ordinal " << i << " (diff=" << diff << ")" << endl;
         }
       }
     }

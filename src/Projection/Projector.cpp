@@ -29,7 +29,7 @@ typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, FunctionPtr fxn, 
                                          BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                          set<int> fieldIndicesToSkip) {
-  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  shards::CellTopology cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
   
   if (! fxn.get()) {
@@ -183,7 +183,7 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   
   /*
   // TODO: rewrite this to use the version above (define L2 inner product for a dummy variable, then pass in this ip and varPtr)
-  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  shards::CellTopology cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
 
   // assume only L2 projections
@@ -270,9 +270,10 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   }*/
 }
 
-void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, const FieldContainer<double> &physicalCellNodes) {
+void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, BasisPtr basis,
+                                         const FieldContainer<double> &physicalCellNodes) {
 
-  shards::CellTopology cellTopo = basis->getBaseCellTopology();
+  shards::CellTopology cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering());
 
   int basisRank = BasisFactory::getBasisRank(basis);

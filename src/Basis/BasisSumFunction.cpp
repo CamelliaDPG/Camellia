@@ -18,7 +18,7 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
 
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   typedef CellTools<double>  CellTools;
-  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->getBaseCellTopology());
+  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->domainTopology());
   refElemPoints.resize(numPoints,spaceDim); // reshape for the single set of ref cell points
   
   int numDofs = _basis->getCardinality();
@@ -55,7 +55,7 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
   
   bool basisIsVolumeBasis = true;
   if (spaceDim==2) {
-    basisIsVolumeBasis = (_basis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+    basisIsVolumeBasis = (_basis->domainTopology().getBaseKey() != shards::Line<2>::key);
   } else if (spaceDim==3) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
   }
@@ -130,7 +130,7 @@ FunctionPtr NewBasisSumFunction::dz() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
   // a bit of a hack: if the topology defined in 3D, then we'll define a derivative there...
-  if (_basis->getBaseCellTopology().getDimension() > 2) {
+  if (_basis->domainTopology().getDimension() > 2) {
     return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
   } else {
     return Function::null();

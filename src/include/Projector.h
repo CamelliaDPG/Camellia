@@ -5,6 +5,8 @@
 #include "AbstractFunction.h"
 #include "IP.h"
 
+#include "Basis.h"
+
 class Function;
 
 using namespace Intrepid;
@@ -15,18 +17,15 @@ class Projector{
 
   // newest version:
   static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<Function> fxn, 
-                                       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, 
-                                       BasisCachePtr basisCache, IPPtr ip, VarPtr v,
+                                       BasisPtr basis, BasisCachePtr basisCache, IPPtr ip, VarPtr v,
                                        set<int>fieldIndicesToSkip = set<int>());
   
   // new version:
   static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<Function> fxn, 
-                                       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, 
-                                       BasisCachePtr basisCache);
+                                       BasisPtr basis, BasisCachePtr basisCache);
   
   // old version:
-  static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn, 
-                                       Teuchos::RCP< Basis<double,FieldContainer<double> > > basis, 
-                                       const FieldContainer<double> &physicalCellNodes);
+  static void projectFunctionOntoBasis(FieldContainer<double> &basisCoefficients, Teuchos::RCP<AbstractFunction> fxn,
+                                       BasisPtr basis, const FieldContainer<double> &physicalCellNodes);
 };
 #endif

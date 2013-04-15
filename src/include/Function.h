@@ -316,6 +316,7 @@ class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  string displayString();
 };
 
 class UnitNormalFunction : public Function {
@@ -550,7 +551,6 @@ public:
   }
 };
 
-
 class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:
@@ -558,6 +558,5 @@ public:
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
 };
-
 
 #endif

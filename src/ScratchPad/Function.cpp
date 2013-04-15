@@ -686,7 +686,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   return MPIWrapper::sum(integral);
 }
 
-double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) { // the total cubature degree (i.e. exact for 10th-degree polynomials)
+double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
   FunctionPtr thisPtr = Teuchos::rcp( this, false );
   return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment) );
 }
@@ -1386,6 +1386,10 @@ FunctionPtr SumFunction::div() {
   } else {
     return _f1->div() + _f2->div();
   }
+}
+
+string hFunction::displayString() {
+  return "h";
 }
 
 double hFunction::value(double x, double y, double h) {

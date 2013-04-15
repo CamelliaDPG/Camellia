@@ -21,6 +21,12 @@ else()
   link_libraries(vtkHybrid)
 endif()
 
+# adding boost    
+FIND_PACKAGE(Boost)
+if (Boost_FOUND)
+  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+endif()
+
 # Find Trilinos
 find_package(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos
   ${TRILINOS_PATH} $ENV{TRILINOS_DIR})
@@ -91,12 +97,6 @@ include_directories(
   TPL/choice
 )
 
-#link_directories(
-#  ${TRILINOS_PATH}/lib
-#  ${Trilinos_TPL_LIBRARY}
-#  ${MUMPS_PATH}/lib
-#  ${SCALAPACK_PATH}
-#)
 link_directories(
   ${Trilinos_LIBRARY_DIRS}
   ${Trilinos_TPL_LIBRARY_DIRS}
@@ -105,16 +105,6 @@ link_directories(
 
 add_library(Camellia ${LIB_SOURCES} ${HEADERS})
 
-#link_libraries(
-#  Camellia
-#  ${Trilinos_LIBRARIES} 
-#  dmumps
-#  mumps_common
-#  pord
-#  lapack
-#  blas
-#  pthread
-#)
 link_libraries(
   Camellia
   ${Trilinos_LIBRARIES}

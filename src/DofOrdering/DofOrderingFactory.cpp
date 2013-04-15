@@ -39,12 +39,22 @@
 
 #include "BilinearForm.h"
 
+#include "Basis.h"
+
 DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
   _bilinearForm = bilinearForm;
 }
 
+DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
+                                       map<int,int> trialOrderEnhancements,
+                                       map<int,int> testOrderEnhancements) {
+  _bilinearForm = bilinearForm;
+  _trialOrderEnhancements = trialOrderEnhancements;
+  _testOrderEnhancements = testOrderEnhancements;
+}
+
 DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder, 
-                                                           const shards::CellTopology &cellTopo) {
+                                               const shards::CellTopology &cellTopo) {
   vector<int> testIDs = _bilinearForm->testIDs();
   vector<int>::iterator testIterator;
   
@@ -53,9 +63,10 @@ DofOrderingPtr DofOrderingFactory::testOrdering(int polyOrder,
   for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
     int testID = *testIterator;
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTest(testID);
-    Teuchos::RCP< Intrepid::Basis<double,FieldContainer<double> > > basis;
-    int basisRank;
-    basis = BasisFactory::getBasis( basisRank, polyOrder, cellTopo.getKey(), fs);
+    BasisPtr basis;
+    int testIDPolyOrder = polyOrder + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
+    basis = BasisFactory::getBasis( testIDPolyOrder, cellTopo.getKey(), fs);
+    int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
   
@@ -74,6 +85,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
   
   for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
     int trialID = *trialIterator;
+    int trialIDPolyOrder = polyOrder + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
     
     IntrepidExtendedTypes::EFunctionSpaceExtended fs = _bilinearForm->functionSpaceForTrial(trialID);
     
@@ -83,7 +95,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
       int numSides = cellTopo.getSideCount();
-      basis = BasisFactory::getBasis( basisRank, polyOrder, shards::Line<2>::key, fs);
+      basis = BasisFactory::getBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
+      basisRank = basis->rangeRank();
       for (int j=0; j<numSides; j++) {
         trialOrder->addEntry(trialID,basis,basisRank,j);
       }
@@ -94,7 +107,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
         addConformingVertexPairings(trialID, trialOrder, cellTopo);
       }
     } else {
-      basis = BasisFactory::getBasis( basisRank, polyOrder, cellTopo.getKey(), fs);
+      basis = BasisFactory::getBasis(trialIDPolyOrder, cellTopo.getKey(), fs);
+      basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
     }
   }
@@ -153,7 +167,7 @@ void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr d
   }
 }
 
-int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
+int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrdering) {
   set<int> varIDs = dofOrdering->getVarIDs();
   set<int>::iterator idIt;
   int interiorVariable;
@@ -162,13 +176,14 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
+    int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[varID] : _trialOrderEnhancements[varID];
     if (numSides == 1) {
       interiorVariable = varID;
       interiorVariableFound = true;
       break;
     } else {
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        int polyOrder = BasisFactory::basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) );
+        int polyOrder = BasisFactory::basisPolyOrder( dofOrdering->getBasis(varID,sideIndex) ) - varIDEnhancement;
         minSidePolyOrder = min(minSidePolyOrder,polyOrder);
       }
     }
@@ -182,8 +197,9 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering) {
                        "DofOrdering appears not to have any interior (volume) varIDs--DofOrderingFactory cannot pRefine.");
     return minSidePolyOrder;
   }
+  int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[interiorVariable] : _trialOrderEnhancements[interiorVariable];
   BasisPtr interiorBasis = dofOrdering->getBasis(interiorVariable);
-  return BasisFactory::basisPolyOrder(interiorBasis);
+  return BasisFactory::basisPolyOrder(interiorBasis) - varIDEnhancement;
 }
 
 map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide) {
@@ -291,7 +307,7 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
         if (! BasisFactory::isMultiBasis(basis) ) {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
         }
-        MultiBasis* multiBasis = (MultiBasis*) basis.get();
+        MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
         varIDsToUpgrade[varID] = multiBasis->getSubBasis(childIndexInParentSide);
       }
     }
@@ -310,7 +326,7 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
                                     DofOrderingPtr &secondOrdering, int secondSideIndex,
                                     const shards::CellTopology &secondCellTopo) {
   // upgrades the lesser-order basis 
-  map<int, BasisPtr> varIDsToUpgrade;
+  map<int, BasisPtr > varIDsToUpgrade;
   int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
   set<int> varIDs = firstOrdering->getVarIDs();
   set<int>::iterator idIt;
@@ -403,11 +419,11 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
 }
 
 DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
-                                           const shards::CellTopology &cellTopo, int pToAdd) {
+                                           const shards::CellTopology &cellTopo, int pToAdd, bool isTestOrdering) {
   // could consider adding a cache that lets you go from (DofOrdering*,pToAdd) --> enrichedDofOrdering...
   // (since likely we'll be upgrading the same DofOrdering a bunch of times)
   set<int> varIDs = dofOrdering->getVarIDs();
-  int interiorPolyOrder = polyOrder(dofOrdering); // rule is, any bases with polyOrder < interiorPolyOrder+pToAdd get upgraded 
+  int interiorPolyOrder = polyOrder(dofOrdering, isTestOrdering); // rule is, any bases with polyOrder < interiorPolyOrder+pToAdd get upgraded
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering());
@@ -415,15 +431,21 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
     int varID = *idIt;
     int numSides = dofOrdering->getNumSidesForVarID(varID);
     IntrepidExtendedTypes::EFunctionSpaceExtended fs;
+    int newPolyOrderForVarID;
+    if (isTestOrdering) {
+      newPolyOrderForVarID = newPolyOrder + _testOrderEnhancements[varID];
+    } else {
+      newPolyOrderForVarID = newPolyOrder + _trialOrderEnhancements[varID];
+    }
     for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::getBasisRank(basis);
-      if (BasisFactory::basisPolyOrder(basis) >= newPolyOrder) {
+      if (BasisFactory::basisPolyOrder(basis) >= newPolyOrderForVarID) {
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       } else {
         // upgrade basis
-        basis = BasisFactory::setPolyOrder(basis, newPolyOrder);
+        basis = BasisFactory::setPolyOrder(basis, newPolyOrderForVarID);
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       }
     }
@@ -436,6 +458,25 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering,
   newOrdering = *(_trialOrderings.insert(newOrdering).first);
   _isConforming[newOrdering.get()] = conforming;
   return newOrdering;
+}
+
+
+DofOrderingPtr DofOrderingFactory::pRefineTest(DofOrderingPtr testOrdering,
+                                               const shards::CellTopology &cellTopo, int pToAdd) {
+  return pRefine(testOrdering, cellTopo, pToAdd, true);
+}
+
+DofOrderingPtr DofOrderingFactory::pRefineTrial(DofOrderingPtr trialOrdering,
+                                               const shards::CellTopology &cellTopo, int pToAdd) {
+  return pRefine(trialOrdering, cellTopo, pToAdd, false);
+}
+
+int DofOrderingFactory::testPolyOrder(DofOrderingPtr testOrdering) {
+  return polyOrder(testOrdering,true);
+}
+
+int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering) {
+  return polyOrder(trialOrdering,false);
 }
 
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
@@ -453,7 +494,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       if (replacePatchBasis) {
         if (BasisFactory::isPatchBasis(basis)) {
           // if we have a PatchBasis, then we want to get the underlying basis...
-          basis = ((PatchBasis*)basis.get())->nonPatchAncestorBasis();
+          basis = ((PatchBasis<>*)basis.get())->nonPatchAncestorBasis();
         }
       }
       fs = BasisFactory::getBasisFunctionSpace(basis);
