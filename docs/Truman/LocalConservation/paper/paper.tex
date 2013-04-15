@@ -141,12 +141,12 @@ Austin, TX 78712}
 \end{abstract}
 
 \section{Intoduction}
-The discontinuous Petrov-Galerkin (DPG) methd with optimal test functions has
+The discontinuous Petrov-Galerkin (DPG) method with optimal test functions has
 been under active development for convection-diffusion type systems
 \cite{DPG1, DPG2, DPG3, DPG5, DemkowiczHeuer, ChanHeuerThanhDemkowicz2012,
-MoroNguyenPeraire11}. In this paper, we develop a locally conservative
+MoroNguyenPeraire11}. In this paper, we develop a theory for the locally conservative
 formulation of DPG for convection-diffusion type equations and supplement this
-with numerical results. 
+with extensive numerical results.
 
 \subsection{Importance of Local Conservation}
 Locally conservative methods hold a special place for numerical analysts in
@@ -167,12 +167,12 @@ solution.
 
 The discontinuous Petrov-Galerkin finite element method has been described as
 least squares finite elements with a twist. The key difference is that least
-square methods seek to minimize the residual of the solution in some Hilbert
-space norm, while DPG seeks the minimization in a dual norm through the
+square methods seek to minimize the residual of the solution in the $L^2$
+norm, while DPG seeks the minimization in a dual norm realized through the
 inverse Riesz map. Exact mass conservation has been an issue that has plagued
 least squares finite elements for a long time. Several approaches have been
 used to try to adress this. Chang and Nelson\cite{ChangNelson1997} developed
-the 'restricted LSFEM'\cite{ChangNelson1997} by augmenting the least squares
+the \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
 equations with a Lagrange multiplier explicitly enforcing mass conservation
 element-wise. Our conservative formulation of DPG takes a similar approach and
 both methods share similar negative of transforming a minimization method to a
@@ -194,7 +194,7 @@ by
 \[
 \LRa{R_Vv,\delta v}=\LRp{v,\delta v}_V,\quad\forall\delta v\in V,
 \]
-we can use the Riesz inverse to minimize on $V$ rather than its dual:
+we can use the Riesz inverse to minimize in the $V$-norm rather than its dual:
 \begin{equation}
 \frac{1}{2}\norm{Bu_h-l}^2_{V'}=\frac{1}{2}\norm{R_V^{-1}(Bu_h-l)}^2_V
 =\frac{1}{2}\LRp{R_V^{-1}(Bu_h-l),R_V^{-1}(Bu_h-l)}_V\,.
@@ -212,7 +212,7 @@ By definition of the Riesz operator, this is equivalent to
 \label{eq:DPGbilinearform}
 \end{equation}
 Now, we can identify $v_{\delta u_h}\coloneqq R_V^{-1}B\delta u_h$ as the
-optimal test function for trial function $u_h$ and we can rewrite
+optimal test function for trial function $\delta u_h$. Define $T:=R_V^{-1}B:U_h\rightarrow V$ as the trial-to-test operator. Now we can rewrite
 \eqnref{DPGbilinearform} as
 \begin{equation}
 b(u_h,v_{\delta u_h})=l(v_{\delta u_h}).
@@ -229,7 +229,7 @@ Using a continuous test basis would result in a global solve for every optimal
 test function. Therefore DPG uses a discontinuous test basis which makes each
 solve element-local and much more computationally tractable. Of course,
 \eqnref{optimaltestproblem} still requires the inversion of the
-infinite-dimensional Riesz map, but approximating $V$ by finite
+infinite-dimensional Riesz map, but approximating $V$ by a finite
 dimensional $V_h$ which is of a higher polynomial degree than $U_h$ (hence
 ``enriched space'') works well in practice.
 
@@ -318,47 +318,49 @@ Find
 $\bs u:=(u,\bsigma,\hat u,\hat t)
 \in\bs U:=L^2(\Omega_h)\times \bs L^2(\Omega_h)\times H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$ 
 such that
-\begin{equation}
+\begin{align}
 \label{eq:variationalFormulation}
--(\bbeta u-\bsigma,\nabla v)_K+(\hat t,v)_{\partial K}
+\underbrace{-(\bbeta u-\bsigma,\nabla v)_K+(\hat t,v)_{\partial K}
 + \frac{1}{\epsilon}(\bsigma,\btau)_K
 +(u,\nabla\cdot\btau)_K
--(\hat u,\tau_n)_{\partial K}=(f,v)_K \\
-\end{equation}
+-(\hat u,\tau_n)_{\partial K}}_{b(\mathbf{u}, \mathbf{v})}
+&=\underbrace{\:(f,v)_K\genfrac{}{}{0pt}{}{}{}}_{l(\mathbf{v})} &\text{in }\Omega \\
+u&=0 &\text{on }\Gamma\\
+\end{align}
 for all $\bs v:=(v,\btau)\in
-\bs V:=H^1(\Omega_h)\times\bfH(\text{div},\Omega_h)$. Thus, our bilinear form
-is $b(\bs u,\bs v)=l(\bs v)$.
+\bs V:=H^1(\Omega_h)\times\bfH(\text{div},\Omega_h)$.
 
-Let $\bs U_h:=U_h\times\bs S_h\times\hat U\times\hat F\subset L^2(\Omega_h)\times\bs
+Let $\bs U_h:=U_h\times\bs S_h\times\hat U_h\times\hat F_h\subset L^2(\Omega_h)\times\bs
 L^2(\Omega_h)\times H^{\frac{1}{2}}(\Gamma_h)\times H^{-\frac{1}{2}}(\Gamma_h)$
 be a finite-dimensional subspace, and let $\bs u_h:=(u_h.\bsigma_h,\hat
 u_h\hat t_h)\in\bs U_h$ be a group variable. The element conservative DPG scheme is
 derived from the Lagrangian:
 \begin{equation}
 L(\bs u_h,\lambda_k)=\frac{1}{2}\norm{R_V^{-1}(b(\bs
-u_h,\cdot)-(f,\cdot))}^2_{\bs V}-\sum_K\lambda_K(b(\bs u_h,1_K)-l(1_K))\,.
+u_h,\cdot)-(f,\cdot))}^2_{\bs V}-\sum_K\lambda_K(b(\bs u_h,(1_K,\bs0))-l((1_K,\bs0)))\,,
 \label{eq:lagrangian}
 \end{equation}
+where $(1_K,\bs0)$ is the test function in which $v=1$ on element $K$ and 0 elsewhere and $\btau=\bs0$ everywhere.
 
-Taking the G\^ateaux derivative as before, we arrive at the following system
+Taking the G\^ateaux derivatives as before, we arrive at the following system
 of equations:
 \begin{equation}
 \left\{
 \begin{array}[c]{rll}
-b(\bs u_h,T(\delta\bs u_h))-\sum_K\lambda_K b(\bs u_h,1_K)
+b(\bs u_h,T(\delta\bs u_h))-\sum_K\lambda_K b(\bs u_h,(1_K,\bs0))
 &=(f,T(\delta\bs u_h)) & \forall\delta\bs u_h\in\bs U_h\\
-b(\bs u_h,1_K) &=(f,1_K) & \forall K\,,
+b(\bs u_h,(1_K,\bs0)) &=(f,(1_K,\bs0)) & \forall K\,,
 \end{array}
 \right.
 \label{eq:conservativeSystem}
 \end{equation}
-where $T:=R_V^{-1}B:\bs U_h\rightarrow\bs V$ is the trial-to-test operator.
+where $T:=R_V^{-1}B:\bs U_h\rightarrow\bs V$ is the same trial-to-test operator as in the original formulation.
 
 Since the trial-to-test operator selectively produces test functions in
 $H^1(\Omega_h)$ and $\bs H(\text{div},\Omega_h)$, denote the result
 $v_{\delta\bs u_h}$ when $T(\delta u_h)\in H^1(\Omega_h)$ and
 $\btau_{\delta\bs u_h}$ when $T(\delta u_h)\in \bs H(\text{div},\Omega_h)$.
-Then, putting \ref{eq:conservativeSystem} into more concrete terms for
+Then, putting \eqref{eq:conservativeSystem} into more concrete terms for
 convection-diffusion, we get:
 \begin{equation}
 \left\{
@@ -367,9 +369,9 @@ convection-diffusion, we get:
 + \frac{1}{\epsilon}(\bsigma,\taudeltau)
 +(u,\nabla\cdot\taudeltau)
 -\langle\hat u,\taudeltau\cdot\bs n\rangle\\
--\sum_K\lambda_K (\delta\hat t,1_K)
+-\sum_K\lambda_K (\delta\hat t,(1_K,\bs0))
 &=(f,\vdeltau) & \forall\delta\bs u_h\in\bs U_h\\
-b(\bs u_h,1_K) &=(f,1_K) & \forall K\,.
+\langle\hat t,(1_K,\bs0)\rangle &=(f,(1_K,\bs0)) & \forall K\,.
 \end{array}
 \right.
 \label{eq:conservativeConfusionSystem}
@@ -382,11 +384,12 @@ choice, we get our local problem:
 
 Find $\vdeltau\in\HOneK,\,\taudeltau\in\HdivK$ such that:
 \begin{align}
-(\nabla\cdot\taudeltau,\nabla\cdot\delta\btau)_K
-&+\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
+(\nabla\cdot\taudeltau,&\nabla\cdot\delta\btau)_K
++\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
 +\epsilon(\nabla\vdeltau,\nabla \delta v)_K
-+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\\
++(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber\\
 &+\alpha\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}(\vdeltau,\delta v)_K
+=b(\delta\bs u_h,(\delta v,\delta\btau))
 \quad\quad\forall\delta v\in\HOneK,\,\delta\btau\in\HdivK\,,
 \label{eq:localSolve}
 \end{align}
@@ -396,21 +399,47 @@ We can decompose the discrete flux space $\hat F_h$ into element conserving
 fluxes and some algebraic complement:
 \begin{equation}
 \hat F_h=\hat F_h^c\oplus\hat F_h^{nc}\,,\quad\hat 
-F_h^{c}:=\{\hat t:\langle\hat t,1_K\rangle=0\quad\forall K\}\,.
+F_h^{c}:=\{\hat t:\langle\hat t,(1_K,\bs0)\rangle=0\quad\forall K\}\,.
 \label{eq:decomposition}
 \end{equation}
 This may be accomplished by employing for fluxes in $\hat F_h^{c}$ traces of
-curls, $\nabla\times\phi$. Restricting ourselves to $\delta\hat t\in\hat
+curls, $\nabla\times\phi$. 
+
+In practice, we solve \eqref{eq:conservativeConfusionSystem} as a fully 
+coupled system of equations, but for didactic purposes, we can examine it 
+one piece at a time. If we restrict \eqref{eq:conservativeConfusionSystem}$_1$
+to $\delta\hat t\in\hat F_h^{nc}$, the Lagrange multiplier term drops out and we 
+left with a system that we can solve for $u_h$, $\bsigma_h$, $\hat u_h$, and 
+$\hat t_h^c\in\hat F^c_h$.
+
+Restricting ourselves to $\delta\hat t\in\hat
 F_h^{c}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a system  of
 equations that can be solved for $u_h$, $\bsigma_h$, $\hat u$, and $\hat
 t\in\hat F_h^c$. The remaining fluxes, $\hat t\in\hat F_h^{nc}$ are determined
 from \eqref{eq:conservativeConfusionSystem}$_2$. Finally, testing with $\hat
 t\in\hat F_h^{nc}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a
 system of equations that can be solved for Lagrange multipliers $\lambda_K$.
+
 Additionally, we can pass in local problem \eqref{eq:localSolve} with
 $\alpha\rightarrow0$. The fact that the test functions will be determined then
 up to a constant does not matter, for $\delta\hat t\in\hat F_h^c$, equation
 \eqref{eq:conservativeConfusionSystem}$_1$ is orthogonal to constants. 
+Mathematically, we are dealing with equivalence classes of functions, but in order 
+to obtain a single function that we can deal with numerically, we replace the alpha 
+term with a zero mean scaling condition to obtain the new test norm,
+\begin{align}
+(\nabla\cdot\taudeltau,&\nabla\cdot\delta\btau)_K
++\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
+\nonumber\\
+&+\epsilon(\nabla\vdeltau,\nabla \delta v)_K
++(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K
++\frac{1}{|K|^2}\int_K\vdeltau\delta v\,,
+\label{eq:localSolveMod}
+\end{align}
+where the $\frac{1}{|K|^2}$ coefficient is needed to make the zero mean term 
+scale correctly with $h$. Numerically this helps a good deal with the condition
+numbers of the local solve.
+
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
 
