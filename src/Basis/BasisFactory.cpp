@@ -112,17 +112,24 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
               basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
             }
             //}
-          break;
+            break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV):
             if (! _useLobattoForQuadHDIV ) {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
-                                    spaceDim, vectorRank, fs)
+                                                               spaceDim, vectorRank, fs)
                                    );
             } else {
-                bool conformingFalse = false;
-                basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
+              bool conformingFalse = false;
+              basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse) );
             }
-          break;
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE):
+          {
+            bool conformingFalse = false;
+            bool divFreeTrue = true;
+            basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse,divFreeTrue) );
+          }
+            break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
                                                               spaceDim, vectorRank, fs)
@@ -287,6 +294,13 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
               bool conformingTrue = true;
               basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
             }
+            break;
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE):
+          {
+            bool conformingTrue = true;
+            bool divFreeTrue = true;
+            basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue,divFreeTrue) );
+          }
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):
             basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),

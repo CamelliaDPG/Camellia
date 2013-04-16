@@ -19,6 +19,7 @@ namespace Camellia {
   public:
     // n: poly order; valuesArray should have n+2 entries...
     static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n, bool conforming);
+    static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, ArrayScalar &secondDerivativesArray, Scalar x, int n, bool conforming);
     static void l2norms(ArrayScalar &normValues, int n, bool conforming);  // should normValues be ArrayScalar, or hard-coded FieldContainer<double>?  I think the latter, actually...
   };
   

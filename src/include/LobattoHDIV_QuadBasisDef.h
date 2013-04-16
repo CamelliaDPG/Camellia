@@ -25,9 +25,9 @@ namespace Camellia {
       return _degree_x + j-1;
     }
     if (divFree) {
-      return _degree_x + _degree_y + i * _degree_y - 1;
+      return _degree_x + _degree_y + (i-1) * _degree_y + j - 1;
     } else {
-      return _degree_x + _degree_y + _degree_x * _degree_y + i * _degree_y - 1;
+      return _degree_x + _degree_y + _degree_x * _degree_y + (i-1) * _degree_y + j - 1;
     }
   }
   
@@ -45,35 +45,62 @@ namespace Camellia {
     for (int i=0; i<=this->_basisDegree; i++) {
       _lobattoL2normsSquared[i] = _lobattoL2normsSquared[i] * _lobattoL2normsSquared[i];
     }
+    
+//    // DEBUGGING code:
+//    set<int> reachableIndices;
+//    for (int i=0; i<=_degree_x; i++) {
+//      for (int j=0; j<=_degree_y; j++) {
+//        reachableIndices.insert(dofOrdinalMap(i,j,false));
+//        reachableIndices.insert(dofOrdinalMap(i,j,true));
+//      }
+//    }
+//    cout << "Basis cardinality is " << this -> _basisCardinality << endl;
+//    cout << "Reachable indices:\n";
+//    for (set<int>::iterator indexIt=reachableIndices.begin(); indexIt != reachableIndices.end(); indexIt++) {
+//      cout << *indexIt << endl;
+//    }
+//    cout << "****\n";
   }
 
   template<class Scalar, class ArrayScalar>
-  LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::LobattoHDIV_QuadBasis(int degree, bool conforming) {
+  LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::LobattoHDIV_QuadBasis(int degree, bool conforming, bool onlyDivFreeFunctions) {
     _degree_x = degree;
     _degree_y = degree;
     this->_basisDegree = degree;
     _conforming = conforming;
+    _onlyDivFreeFunctions = onlyDivFreeFunctions;
   
-    this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // vector
     this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-    this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
+    if (this->_onlyDivFreeFunctions) {
+      this->_basisCardinality = _degree_x * _degree_y + _degree_x + _degree_y;
+      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+    } else {
+      this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
+      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+    }
     initializeL2normValues();
   }
   
   template<class Scalar, class ArrayScalar>
-  LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::LobattoHDIV_QuadBasis(int degree_x, int degree_y, bool conforming) {
+  LobattoHDIV_QuadBasis<Scalar,ArrayScalar>::LobattoHDIV_QuadBasis(int degree_x, int degree_y, bool conforming, bool onlyDivFreeFunctions) {
     this->_basisDegree = max(degree_x, degree_y);
     _degree_x = degree_x;
     _degree_y = degree_y;
     _conforming = conforming;
+    _onlyDivFreeFunctions = onlyDivFreeFunctions;
 
-    this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
     this->_rangeDimension = 2; // 2 space dim
     this->_rangeRank = 1; // scalar
     this->_domainTopology = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-    this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
+    if (this->_onlyDivFreeFunctions) {
+      this->_basisCardinality = _degree_x * _degree_y + _degree_x + _degree_y;
+      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
+    } else {
+      this->_basisCardinality = 2 * _degree_x * _degree_y + _degree_x + _degree_y;
+      this->_functionSpace = IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+    }
     initializeL2normValues();
   }
 
@@ -165,27 +192,34 @@ namespace Camellia {
     
     ArrayScalar lobattoValues_x(_degree_x+1), lobattoValues_y(_degree_y+1);
     ArrayScalar lobattoValues_dx(_degree_x+1), lobattoValues_dy(_degree_y+1);
+    ArrayScalar lobattoValues_dx_dx(_degree_x+1), lobattoValues_dy_dy(_degree_y+1);
     
     int numPoints = refPoints.dimension(0);
     for (int pointIndex=0; pointIndex < numPoints; pointIndex++) {
       double x = refPoints(pointIndex,0);
       double y = refPoints(pointIndex,1);
       
-      Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx, x,_degree_x,_conforming);
-      Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy, y,_degree_y,_conforming);
+      if (operatorType == Intrepid::OPERATOR_CURL) { // want second derivatives
+        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx,lobattoValues_dx_dx, x,_degree_x,_conforming);
+        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy,lobattoValues_dy_dy, y,_degree_y,_conforming);
+      } else { // first derivatives suffice
+        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx, x,_degree_x,_conforming);
+        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy, y,_degree_y,_conforming);
+      }
       for (int i=0; i<_degree_x+1; i++) {
         for (int j=0; j<_degree_y+1; j++) {
           if ((j==0) && (i==0)) continue; // no (0,0) basis function
           // first, set the divergence-free basis values
           int fieldIndex = dofOrdinalMap(i,j,true);
 
+          
+          double divFreeScalingFactor = (  _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
+                                         + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i) );
+          divFreeScalingFactor = sqrt(divFreeScalingFactor);
+          
           switch (operatorType) {
             case Intrepid::OPERATOR_VALUE:
             {
-              double divFreeScalingFactor = 2 * (  _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
-                                                 + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i) );
-              divFreeScalingFactor = sqrt(divFreeScalingFactor);
-
               values(fieldIndex,pointIndex,0) =  lobattoValues_x(i) * lobattoValues_dy(j) / divFreeScalingFactor;
               values(fieldIndex,pointIndex,1) = -lobattoValues_dx(i) * lobattoValues_y(j) / divFreeScalingFactor;
             }
@@ -193,35 +227,46 @@ namespace Camellia {
             case Intrepid::OPERATOR_DIV:
               values(fieldIndex,pointIndex) = 0;
               break;
+            case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
+            {
+              values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
+                                               -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / divFreeScalingFactor;
+            }
+              break;
               
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
               break;
           }
           
-          // now, set the non-divergence-free basis values:
-          if ((i > 0) && (j > 0)) { // then there will be some non-divergence-free members
-            fieldIndex = dofOrdinalMap(i,j,false);
-            double nonDivFreeScalingFactor = 2 * (  _legendreL2normsSquared(i) * _legendreL2normsSquared(j)
-                                                  + _legendreL2normsSquared(j) * _legendreL2normsSquared(i) );
-            nonDivFreeScalingFactor = sqrt(nonDivFreeScalingFactor);
-            switch (operatorType) {
-              case Intrepid::OPERATOR_VALUE:
-                values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
-                values(fieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / nonDivFreeScalingFactor;
-                break;
-              case Intrepid::OPERATOR_DIV:
-                values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / nonDivFreeScalingFactor;
-                break;
-                
-              default:
-                TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-                break;
+          if ( ! _onlyDivFreeFunctions ) {
+            // now, set the non-divergence-free basis values:
+            if ((i > 0) && (j > 0)) { // then there will be some non-divergence-free members
+              fieldIndex = dofOrdinalMap(i,j,false);
+              double nonDivFreeScalingFactor = 8 *  (  _legendreL2normsSquared(i) * _legendreL2normsSquared(j)
+                                                     + _legendreL2normsSquared(j) * _legendreL2normsSquared(i) );
+              nonDivFreeScalingFactor = sqrt(nonDivFreeScalingFactor);
+              switch (operatorType) {
+                case Intrepid::OPERATOR_VALUE:
+                  values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
+                  values(fieldIndex,pointIndex,1) = lobattoValues_dx(i) * lobattoValues_y(j) / nonDivFreeScalingFactor;
+                  break;
+                case Intrepid::OPERATOR_DIV:
+                  values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / nonDivFreeScalingFactor;
+                  break;
+                  
+                case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
+                  values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
+                                                   -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / nonDivFreeScalingFactor;
+                  break;
+                default:
+                  TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
+                  break;
+              }
             }
           }
         }
       }
     }
-    
   }
 } // namespace Camellia

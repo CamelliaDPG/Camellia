@@ -164,6 +164,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           fst::HCURLtransformVALUE<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
@@ -243,6 +244,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
     case(IntrepidExtendedTypes::OP_DIV):
       switch(fs) {
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformDIV<double>(*transformedValues,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:
