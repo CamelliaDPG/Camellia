@@ -17,7 +17,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar> class Legendre {
   public:
     // n: poly order; valuesArray should have n+2 entries...
-    static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n); 
+    static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n, bool conforming = false); 
   };
   
   class LegendreFunction : public SimpleFunction {
