@@ -1149,7 +1149,8 @@ void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePt
   }
 }
 
-ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID) : Function(0) {
+ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
+: Function(exactSolution->exactFunctions().find(trialID)->second->rank()) {
   _exactSolution = exactSolution;
   _trialID = trialID;
 }
