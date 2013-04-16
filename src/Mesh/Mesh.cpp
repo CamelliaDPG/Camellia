@@ -240,7 +240,9 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
-                                       int H1Order, int pTest, bool triangulate, bool useConformingTraces) {
+                                       int H1Order, int pTest, bool triangulate, bool useConformingTraces,
+                                       map<int,int> trialOrderEnhancements,
+                                       map<int,int> testOrderEnhancements) {
 //  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -325,7 +327,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
       }
     }
   }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
+  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces,
+                                trialOrderEnhancements,testOrderEnhancements));
 }
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
