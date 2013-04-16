@@ -97,7 +97,7 @@ namespace Camellia {
   void LegendreHVOL_LineBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
     
-    ArrayScalar legendreValues_x( _degree + 1 );
+    ArrayScalar  legendreValues_x( _degree + 1 );
     ArrayScalar legendreValues_dx( _degree + 1);
     
     int numPoints = refPoints.dimension(0);
