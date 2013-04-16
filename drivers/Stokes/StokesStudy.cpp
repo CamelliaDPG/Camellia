@@ -185,7 +185,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
      StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
    
    where:
-   formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
+   formulationTypeStr = {"vgp"|"vgpf"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
    normChoice = {"opt"|"naive"|"l2"|"h1"|"compliant"}
    
    */
@@ -241,6 +241,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
+  } else if (formulationTypeStr == "vgpf") {
+    formulationType = VGPF;
   } else if (formulationTypeStr == "vvp") {
     formulationType = VVP;
   } else if (formulationTypeStr == "dds") {
@@ -393,7 +395,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
+  ExactSolutionChoice exactSolnChoice = HDGSingular;
   
   bool reportConditionNumber = false; // we don't believe Solution's condition number estimate anyhow
   
@@ -500,9 +502,12 @@ int main(int argc, char *argv[]) {
       break;        
     case DDSP:
       stokesForm = Teuchos::rcp(new DDSPStokesFormulation(mu));
-      break;        
+      break;
     case VGP:
       stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu, normChoice==UnitCompliantGraphNorm));
+      break;
+    case VGPF:
+      stokesForm = Teuchos::rcp(new VGPFStokesFormulation(mu));
       break;
     case VVP:
       stokesForm = Teuchos::rcp(new VVPStokesFormulation(mu, useTrueTracesForVVP));
@@ -876,13 +881,17 @@ int main(int argc, char *argv[]) {
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
       }
       
-      for (int i=minLogElements; i<=maxLogElements; i++) {
-        ostringstream filePath;
-        int numElements = pow(2.0,i);
-        filePath << "stokes/soln" << numElements << "x";
-        filePath << numElements << "_p" << polyOrder << ".vtk";
-        cout << "writing VTK for " << numElements << " x " << numElements << " mesh.\n";
-        study.getSolution(i)->writeToVTK(filePath.str());
+      if (formulationType != VGPF) {
+        for (int i=minLogElements; i<=maxLogElements; i++) {
+          ostringstream filePath;
+          int numElements = pow(2.0,i);
+          filePath << "stokes/soln" << numElements << "x";
+          filePath << numElements << "_p" << polyOrder << ".vtk";
+          cout << "writing VTK for " << numElements << " x " << numElements << " mesh.\n";
+          study.getSolution(i)->writeToVTK(filePath.str());
+        }
+      } else {
+        cout << "formulationType = VGPF, so skipping VTK output (vector-valued fields not yet supported there).\n";
       }
       
       filePathPrefix.str("");

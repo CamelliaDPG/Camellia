@@ -24,6 +24,10 @@
 #include "GnuPlotUtil.h"
 #include "MeshUtilities.h"
 
+#include "RefinementHistory.h"
+
+#include "MeshFactory.h"
+
 using namespace std;
 
 //// just testing the mass flux integration
@@ -214,7 +218,7 @@ int main(int argc, char *argv[]) {
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
-  bool symmetricRefinements = false; // symmetric across the horizontal midline
+  bool symmetricRefinements = true; // symmetric across the horizontal midline
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
@@ -222,15 +226,21 @@ int main(int argc, char *argv[]) {
   bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = false;
-  bool useWeightedGraphNorm = false;
+  bool useDivergenceFreeVelocity = false;
+  bool useWeightedGraphNorm = true;
   bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   int overkillMeshSize = 64;
   int overkillPolyOrder = 7; // H1 order
+  
+  
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
   double energyThreshold = 0.20; // for mesh refinements
+  
+  string saveFile = "stokesCavityReplay.replay";
+  string replayFile = "stokesCavityReplay.replay";
 
 //  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
   
@@ -253,8 +263,16 @@ int main(int argc, char *argv[]) {
   if (argc == 4) {
     energyThreshold = atof(argv[3]);
   }
-  if (rank == 0)
+  
+  
+  double minH = 1.0 / 1024.0;
+  int maxPolyOrder = 15;
+  
+  if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
+    cout << "polyOrder = " << polyOrder << endl;
+    cout << "maxPolyOrder = " << maxPolyOrder << endl;
+  }
   
   /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
   VarFactory varFactory; 
@@ -268,13 +286,14 @@ int main(int argc, char *argv[]) {
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr sigma1n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{1n}}");
   VarPtr sigma2n = varFactory.fluxVar("\\widehat{P - \\mu \\sigma_{2n}}");
-  VarPtr u1, u2;
-  if (!useWeightedGraphNorm) {
+  VarPtr u1, u2, u;
+  if (useDivergenceFreeVelocity) {
+    u = varFactory.fieldVar("u", HDIV_FREE);
+    u1 = u->x();
+    u2 = u->y();
+  } else {
     u1 = varFactory.fieldVar("u_1");
     u2 = varFactory.fieldVar("u_2");
-  } else {
-    u1 = varFactory.fieldVar("u_1", HGRAD);
-    u2 = varFactory.fieldVar("u_2", HGRAD);
   }
   
   VarPtr sigma11 = varFactory.fieldVar("\\sigma_11");
@@ -358,10 +377,22 @@ int main(int argc, char *argv[]) {
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
   
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  
+  map< int, int > trialEnhancements;
+  if (useWeightedGraphNorm) {
+    if (useDivergenceFreeVelocity) {
+      trialEnhancements[u->ID()] = 1;
+    } else {
+      trialEnhancements[u1->ID()] = 1;
+      trialEnhancements[u2->ID()] = 1;
+    }
+  }
+  
   if ( ! singularityAvoidingInitialMesh ) {
     // create a pointer to a new mesh:
     mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                               stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces);
+                               stokesBFMath, H1Order, H1Order+pToAdd, useTriangles, nonConformingTraces, trialEnhancements);
     streamMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                      streamBF, H1Order, H1Order+pToAddForStreamFunction, useTriangles);
   } else {
@@ -474,13 +505,40 @@ int main(int argc, char *argv[]) {
     //    mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBFMath, H1Order, pToAdd) );
   }
   
+  // for divergence-free solutions, we need to project onto a standard L2 space so that we can take derivatives
+  // and solve for the streamfunction
+  SolutionPtr L2VelocitySolution;
+  VarPtr u1_L2, u2_L2;
+  if (useDivergenceFreeVelocity) {
+    VarFactory velocityVarFactory;
+    u1_L2 = velocityVarFactory.fieldVar("u1");
+    u2_L2 = velocityVarFactory.fieldVar("u2");
+    VarPtr dummyFlux = velocityVarFactory.fluxVar("un");
+    VarPtr dummyTest = velocityVarFactory.testVar("v", HGRAD);
+    BFPtr velocityBF = Teuchos::rcp( new BF(velocityVarFactory) );
+    MeshPtr velocityMesh = MeshFactory::quadMesh(velocityBF, H1Order, pToAdd, 1.0, 1.0, horizontalCells, verticalCells);
+    mesh->registerObserver(velocityMesh);
+    L2VelocitySolution = Teuchos::rcp( new Solution(velocityMesh) );
+  }
+  
   mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
+  mesh->registerObserver(refHistory);
+  
+  if (replayFile.length() > 0) {
+    RefinementHistory refHistory;
+    refHistory.loadFromFile(replayFile);
+    refHistory.playback(mesh);
+  }
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
   vector< VarPtr > fields;
-  fields.push_back(u1);
-  fields.push_back(u2);
+  if (useDivergenceFreeVelocity) {
+    fields.push_back(u);
+  } else {
+    fields.push_back(u1);
+    fields.push_back(u2);
+  }
   fields.push_back(sigma11);
   fields.push_back(sigma12);
   fields.push_back(sigma21);
@@ -489,7 +547,7 @@ int main(int argc, char *argv[]) {
   
   if (rank == 0) {
     if ( ! singularityAvoidingInitialMesh )
-      cout << "Starting mesh has " << horizontalCells << " x " << verticalCells << " elements and ";
+      cout << "Starting mesh has " << mesh->activeElements().size() << " elements and ";
     else
       cout << "Using singularity-avoiding initial mesh: 5 elements and ";
     cout << mesh->numGlobalDofs() << " total dofs.\n";
@@ -523,6 +581,9 @@ int main(int argc, char *argv[]) {
     if (usePenaltyConstraintsForDiscontinuousBC) {
       cout << "Using penalty constraints for discontinuous BC (==> NO RAMP).\n";
     }
+    if (useDivergenceFreeVelocity) {
+      cout << "Using divergence-free velocity.\n";
+    }
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;
@@ -538,10 +599,10 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
     qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
     qoptIP->addTerm( v1->dx() + v2->dy() );       // pressure
-    qoptIP->addTerm( h * tau1->div() - q->dx() ); // u1
-    qoptIP->addTerm( h * tau2->div() - q->dy() ); // u2
-    qoptIP->addTerm( v1 );
-    qoptIP->addTerm( v2 );
+    qoptIP->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    qoptIP->addTerm( h * tau2->div() - h * q->dy() ); // u2
+    qoptIP->addTerm( (mu / h) * v1 );
+    qoptIP->addTerm( (mu / h) * v2 );
     qoptIP->addTerm(  q );
     qoptIP->addTerm( tau1 );
     qoptIP->addTerm( tau2 );
@@ -563,11 +624,11 @@ int main(int argc, char *argv[]) {
   ip = qoptIP;
   
   if (rank==0) {
-    int cellID = 0;
+    int cellID = mesh->activeElements()[0]->cellID(); // just sample the first active element
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true);
     DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
     double conditionNumber = qoptIP->computeMaxConditionNumber(testSpace,basisCache);
-    cout << "Gram matrix cond # for cell 0: " << conditionNumber << endl;
+    cout << "Gram matrix cond # for cell " << cellID << " : " << conditionNumber << endl;
   }
   
   if (rank==0) 
@@ -611,7 +672,12 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+  FunctionPtr vorticity;
+  if (useDivergenceFreeVelocity) {
+    vorticity = Teuchos::rcp( new PreviousSolutionFunction(L2VelocitySolution, - u1_L2->dy() + u2_L2->dx() ) );
+  } else {
+    vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+  }
 //  solution->setReportConditionNumber(true);
   if (usePenaltyConstraintsForDiscontinuousBC) {
     Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
@@ -632,12 +698,12 @@ int main(int argc, char *argv[]) {
     refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
   else if (symmetricRefinements) {
     // we again use the problem-specific LidDrivenFlowRefinementStrategy, but now with hMin = 0, and maxP = H1Order-1 (i.e. never refine in p)
-    Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 0,
-                                                                                                                            H1Order-1, rank==0 ));
+    Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, minH,
+                                                                                                                            maxPolyOrder, rank==0 ));
     lidRefinementStrategy->setSymmetricRefinements(true);
     refinementStrategy = lidRefinementStrategy;
   } else
-    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold, minH ));
   
   // just an experiment:
   refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
@@ -665,6 +731,18 @@ int main(int argc, char *argv[]) {
       cout << "WARNING: cgSolver unset.\n";
 //    solution->solve(cgSolver);
   }
+  
+  if (useDivergenceFreeVelocity) {
+    FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u->x()) );
+    FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u->y()) );
+    map<int, FunctionPtr > projectionMap;
+    projectionMap[u1_L2->ID()] = u1_prev;
+    projectionMap[u2_L2->ID()] = u2_prev;
+    ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
+    ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+    L2VelocitySolution->projectOntoMesh(projectionMap);
+  }
+  
   polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders_0.m");
   FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
   ten->writeBoundaryValuesToMATLABFile(mesh, "skeleton_0.dat");
@@ -746,6 +824,18 @@ int main(int argc, char *argv[]) {
       cout << "WARNING: cgSolver unset.\n";
 //      solution->solve(cgSolver);
     }
+    
+    if (useDivergenceFreeVelocity) {
+      FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u->x()) );
+      FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u->y()) );
+      map<int, FunctionPtr > projectionMap;
+      projectionMap[u1_L2->ID()] = u1_prev;
+      projectionMap[u2_L2->ID()] = u2_prev;
+      ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+      L2VelocitySolution->projectOntoMesh(projectionMap);
+    }
+    
     // report vorticity value that's often reported in the literature
     double vort_x = 0.0, vort_y = 0.95;
     double vorticityValue = Function::evaluate(vorticity, vort_x, vort_y);
@@ -789,13 +879,19 @@ int main(int argc, char *argv[]) {
     cout << "Max Gram matrix condition number: " << maxConditionNumber << endl;
   }
   
-  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
-  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u2) );
+  FunctionPtr u_prev, u_div;
+  if (useDivergenceFreeVelocity) {
+    u_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u) );
+    u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u->div() ) );
+  } else {
+    FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u1) );
+    FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,u2) );
+    u_prev = Function::vectorize(u1_prev, u2_prev);
+    u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
+  }
 
-  FunctionPtr u1_sq = u1_prev * u1_prev;
-  FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
+  FunctionPtr u_dot_u = u_prev * u_prev;
   FunctionPtr u_mag = Teuchos::rcp( new SqrtFunction( u_dot_u ) );
-  FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
   FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
   
   // check that the zero mean pressure is being correctly imposed:
@@ -886,8 +982,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
-  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
   
   Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0) );
@@ -922,10 +1016,12 @@ int main(int argc, char *argv[]) {
       massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
       u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
       u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
-      solution->writeFieldsToFile(u1->ID(), "u1.m");
-      solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-      solution->writeFieldsToFile(u2->ID(), "u2.m");
-      solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+      if (!useDivergenceFreeVelocity) {
+        solution->writeFieldsToFile(u1->ID(), "u1.m");
+        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+        solution->writeFieldsToFile(u2->ID(), "u2.m");
+        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+      }
       solution->writeFieldsToFile(p->ID(), "p.m");
       streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
       
@@ -953,9 +1049,9 @@ int main(int argc, char *argv[]) {
     map<double,string> scaleToName;
     scaleToName[1]   = "cavityPatch";
     scaleToName[0.1] = "cavityPatchEddy1";
-    scaleToName[0.01] = "cavityPatchEddy2";
-    scaleToName[0.002] = "cavityPatchEddy3";
-    scaleToName[0.0002] = "cavityPatchEddy4";
+    scaleToName[0.006] = "cavityPatchEddy2";
+    scaleToName[0.0004] = "cavityPatchEddy3";
+    scaleToName[0.00003] = "cavityPatchEddy4";
     
     for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
       double scale = entryIt->first;
@@ -973,7 +1069,13 @@ int main(int argc, char *argv[]) {
       GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
     }
     GnuPlotUtil::writeComputationalMeshSkeleton("cavityMesh", mesh);
-}
+  }
+  
+  if (saveFile.length() > 0) {
+    if (rank == 0) {
+      refHistory->saveToFile(saveFile);
+    }
+  }
   
   if (compareWithOverkillMesh) {
     cout << "******* Adaptivity Convergence Report *******\n";

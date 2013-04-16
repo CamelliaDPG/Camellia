@@ -60,18 +60,21 @@ void setupHGradTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPt
 }
 
 void setupHGradStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HGRAD);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->grad());
 }
 
 void setupHDivStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->div());
 }
 
 void setupHDivMass(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var);
@@ -96,7 +99,7 @@ void printLobattoL2norm() {
 }
 
 int main(int argc, char *argv[]) {
-  
+  const int maxTestOrder = 25;
 //  printLobattoL2norm();
   
   vector< Space > spaces;
@@ -130,7 +133,7 @@ int main(int argc, char *argv[]) {
       VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
-      for (int testOrder=1; testOrder<=20; testOrder++) {
+      for (int testOrder=1; testOrder<=maxTestOrder; testOrder++) {
         MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";

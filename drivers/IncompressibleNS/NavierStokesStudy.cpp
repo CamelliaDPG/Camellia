@@ -5,6 +5,10 @@
  *
  */
 
+
+#include "choice.hpp"
+#include "mpi_choice.hpp"
+
 #include "HConvergenceStudy.h"
 
 #include "InnerProductScratchPad.h"
@@ -17,30 +21,35 @@
 
 #include "CGSolver.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 #include "NavierStokesFormulation.h"
+
+#include "MeshUtilities.h"
 
 using namespace std;
 
 int main(int argc, char *argv[]) {
-  int rank = 0, numProcs = 1;
-#ifdef HAVE_MPI
-  // TODO: figure out the right thing to do here...
-  // may want to modify argc and argv before we make the following call:
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  rank=mpiSession.getRank();
-  numProcs=mpiSession.getNProc();
+  int rank=mpiSession.getRank();
+  int numProcs=mpiSession.getNProc();
+#ifdef HAVE_MPI
+  choice::MpiArgs args( argc, argv );
 #else
+  choice::Args args(argc, argv );
 #endif
-  int minLogElements = 0;
-  int maxLogElements = 4;
-
-  int minPolyOrder = 0;
-  int maxPolyOrder = 1;
+  int minPolyOrder = args.Input<int>("--minPolyOrder", "L^2 (field) minimum polynomial order",0);
+  int maxPolyOrder = args.Input<int>("--maxPolyOrder", "L^2 (field) maximum polynomial order",1);
+  int minLogElements = args.Input<int>("--minLogElements", "base 2 log of the minimum number of elements in one mesh direction", 0);
+  int maxLogElements = args.Input<int>("--maxLogElements", "base 2 log of the maximum number of elements in one mesh direction", 4);
+  double Re = args.Input<double>("--Re", "Reynolds number", 40);
+  bool longDoubleGramInversion = args.Input<bool>("--longDoubleGramInversion", "use long double Cholesky factorization for Gram matrix", false);
+//  bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
+  bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
+  int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
+  double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-12);
+//  string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
+//  string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
   
   int pToAdd = 2; // for optimal test function approximation
   bool useLineSearch = false;
@@ -49,12 +58,16 @@ int main(int argc, char *argv[]) {
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
   
   // parse args:
-  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false;
+  bool useTriangles = false, useGraphNorm = false, useCompliantNorm = true, useStokesCompliantNorm = false, useStokesGraphNorm = false;
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useGraphNorm = "  << (useGraphNorm ? "true" : "false") << "\n";
+    cout << "useCompliantNorm = "  << (useCompliantNorm ? "true" : "false") << "\n";
+    cout << "useStokesGraphNorm = "  << (useStokesGraphNorm ? "true" : "false") << "\n";
+    cout << "useStokesCompliantNorm = "  << (useStokesCompliantNorm ? "true" : "false") << "\n";
+    cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
   
   // define Kovasznay domain:
@@ -80,7 +93,7 @@ int main(int argc, char *argv[]) {
   quadPointsKovasznay(3,1) =  0.5;
 
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
-  double Re = 40.0; // Evans Hughes Navier-Stokes
+//  double Re = 40.0; // Evans Hughes Navier-Stokes
 //  double Re = 1000.0;
   
   string formulationTypeStr = "vgp";
@@ -94,7 +107,7 @@ int main(int argc, char *argv[]) {
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
                                                               H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero, useCompliantNorm);
+                                                              zero, zero, zero, useCompliantNorm || useStokesCompliantNorm);
   
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
@@ -111,8 +124,6 @@ int main(int argc, char *argv[]) {
 
   map< string, string > convergenceDataForMATLAB; // key: field file name
   
-  int maxIters = 25; // max nonlinear steps
-  double minL2Increment = 1e-12;
   for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++) {
     int H1Order = polyOrder + 1;
     
@@ -130,12 +141,21 @@ int main(int argc, char *argv[]) {
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
                                                               numCells1D,numCells1D,
                                                               H1Order, pToAdd,
-                                                              u1_exact, u2_exact, p_exact, useCompliantNorm);
+                                                              u1_exact, u2_exact, p_exact, useCompliantNorm || useStokesCompliantNorm);
+      
+      problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
+      
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problems.push_back(problem);
       if ( useCompliantNorm ) {
         problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+      } else if (useStokesCompliantNorm) {
+        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
+        problem.setIP(stokesForm.scaleCompliantGraphNorm());
+      } else if (useStokesGraphNorm) {
+        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
+        problem.setIP(stokesForm.graphNorm());
       } else if (! useGraphNorm ) {
         // then use the naive:
         problem.setIP(problem.bf()->naiveNorm());
@@ -185,6 +205,7 @@ int main(int argc, char *argv[]) {
         double incr_norm = sqrt(l2_incr->integrate(problem->mesh()));
         
         if (rank==0) {
+          cout << setprecision(6) << scientific;
           cout << "\x1B[2K"; // Erase the entire current line.
           cout << "\x1B[0E"; // Move to the beginning of the current line.
           cout << "Iteration: " << problem->iterationCount() << "; L^2(incr) = " << incr_norm;
@@ -271,6 +292,19 @@ int main(int argc, char *argv[]) {
       filePathPrefix.str("");
       filePathPrefix << "navierStokes/" << formulationTypeStr << "_p" << polyOrder << "_numDofs";
       cout << study.TeXNumGlobalDofsTable();
+    }
+    if (computeMaxConditionNumber) {
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        SolutionPtr soln = study.getSolution(i);
+        ostringstream fileNameStream;
+        fileNameStream << "nsStudy_maxConditionIPMatrix_" << i << ".dat";
+        IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), fileNameStream.str());
+        if (rank==0) {
+          cout << "max Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
+          cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
+        }
+      }
     }
   }
   if (rank==0) {

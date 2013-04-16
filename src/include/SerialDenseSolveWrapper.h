@@ -180,6 +180,13 @@ public:
       
     double rcond=0;
     double result = solver.ReciprocalConditionEstimate(rcond);
+    
+//    // experimental code: try equilibriating first.  Just output that result to console for now.
+//    solver.EquilibrateMatrix();
+//    double rcond2;
+//    double result2 = solver.ReciprocalConditionEstimate(rcond2);
+//    cout << "1/rcond2 = " << 1.0 / rcond2 << endl;
+    
     if (result == 0) // success
       return 1.0 / rcond;
     else
