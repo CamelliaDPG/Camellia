@@ -46,6 +46,7 @@
 #include "LobattoHGRAD_QuadBasis.h"
 #include "LobattoHDIV_QuadBasis.h"
 #include "LegendreHVOL_LineBasis.h"
+#include "LobattoHGRAD_LineBasis.h"
 
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
@@ -62,7 +63,7 @@ bool BasisFactory::_useEnrichedTraces = true;
 
 bool BasisFactory::_useLobattoForQuadHGRAD = false;
 bool BasisFactory::_useLobattoForQuadHDIV = false;
-bool BasisFactory::_useLegendreForLineHVOL = false;
+bool BasisFactory::_useLegendreForLineHVOL = false; // also Lobatto for LineHGRAD
 
 using namespace Camellia;
 
@@ -199,7 +200,8 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
               // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
               // return value: the Intrepid guys will always say HGRAD, and the Legendre HVOL.  Need to look at the
               // way this gets used to see if the conflation will make a difference in e.g. p-refinements.
-              basis = Teuchos::rcp( new LegendreHVOL_LineBasis<>(basisPolyOrder) );
+              bool conformingFalse = false;
+              basis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(basisPolyOrder, false) );
             } else {
               basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,POINTTYPE_SPECTRAL)),
                                                                spaceDim, scalarRank, fs)
@@ -373,20 +375,32 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       case shards::Line<2>::key:
         switch(fs) {
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
-            if (_useEnrichedTraces) {
-              basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
-                                                               spaceDim, scalarRank, fs)
-                                   );
+          {
+            int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
+            
+            if (_useLegendreForLineHVOL) {
+              // we use Legendre for HGRAD and HVOL both on the line--since we don't actually
+              // take derivatives of traces, this makes sense.
+              // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
+              // return value: the Intrepid guys will always say HGRAD, and the Legendre HVOL.  Need to look at the
+              // way this gets used to see if the conflation will make a difference in e.g. p-refinements.
+              bool conformingTrue = true;
+              basis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(basisPolyOrder, conformingTrue) );
             } else {
-              basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,POINTTYPE_SPECTRAL)),
                                                                spaceDim, scalarRank, fs)
                                    );
             }
+          }
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HVOL):
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
-                                                             spaceDim, scalarRank, fs)
-                                 );
+            if (_useLegendreForLineHVOL) { // not actually conforming, except in the L^2 sense...
+              basis = Teuchos::rcp( new LegendreHVOL_LineBasis<>(polyOrder-1) );
+            } else {
+              basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+                                                               spaceDim, scalarRank, fs)
+                                   );
+            }
             break;
           default:
             TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&

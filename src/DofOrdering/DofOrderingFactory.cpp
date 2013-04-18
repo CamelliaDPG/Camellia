@@ -95,7 +95,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
       int numSides = cellTopo.getSideCount();
-      basis = BasisFactory::getBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
+      basis = BasisFactory::getConformingBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
       basisRank = basis->rangeRank();
       for (int j=0; j<numSides; j++) {
         trialOrder->addEntry(trialID,basis,basisRank,j);

@@ -18,12 +18,11 @@ namespace Camellia {
   protected:
     void initializeTags() const;
     int _degree;
-    bool _conforming;
     
     Intrepid::FieldContainer<double> _legendreL2norms;
     void initializeL2normValues();
   public:
-    LegendreHVOL_LineBasis(int degree, bool conforming = false); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
+    LegendreHVOL_LineBasis(int degree); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
     
     void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   };

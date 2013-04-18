@@ -18,6 +18,8 @@
 #include "Legendre.hpp"
 #include "Lobatto.hpp"
 
+#include "SerialDenseSolveWrapper.h"
+
 enum TestType {
   L2Part,
   FullNorm
@@ -102,6 +104,14 @@ int main(int argc, char *argv[]) {
   const int maxTestOrder = 25;
 //  printLobattoL2norm();
   
+  FieldContainer<double> conditionTest(2,2);
+  conditionTest(0,0) = 1;
+  conditionTest(1,1) = 1e-17;
+  SerialDenseSolveWrapper::jacobiScaleMatrix(conditionTest);
+  
+  double condest = SerialDenseSolveWrapper::estimate1NormConditionNumber(conditionTest);
+  cout << "condest for diagonal matrix: " << condest << endl;
+  
   vector< Space > spaces;
   spaces.push_back(HDIV);
   spaces.push_back(HGRAD);
@@ -138,10 +148,12 @@ int main(int argc, char *argv[]) {
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, fileName);
+        bool jacobiScalingTrue = true;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScalingTrue, fileName);
         cout << maxConditionNumber << endl;
       }
     }
+    
     
     // finally, write out the HGrad stiffness matrix to disk:
     

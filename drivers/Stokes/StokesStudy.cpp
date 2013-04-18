@@ -397,7 +397,7 @@ int main(int argc, char *argv[]) {
   
   ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
-  bool reportConditionNumber = false; // we don't believe Solution's condition number estimate anyhow
+  bool reportConditionNumber = true; // 2-norm condition number
   
   bool computeMaxGramConditionNumber = true; // for Gram matrices
   
@@ -405,7 +405,7 @@ int main(int argc, char *argv[]) {
   
   bool dontImposeZeroMeanPressure = false;
   
-  bool writeGlobalStiffnessMatrixToFile = true;
+  bool writeGlobalStiffnessMatrixToFile = false;
   
   bool useCG = false;
   bool useMumps = true;
@@ -844,10 +844,20 @@ int main(int argc, char *argv[]) {
         ostringstream fileNameStream;
         fileNameStream << "stokesStudy_maxConditionIPMatrix_" << i << ".dat";
         IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), fileNameStream.str());
+        bool jacobiScalingTrue = true;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), jacobiScalingTrue, fileNameStream.str());
         if (rank==0) {
-          cout << "max Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
+          cout << "max jacobi-scaled Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
           cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
+        }
+      }
+    }
+    
+    if (writeGlobalStiffnessMatrixToFile) {
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        double globalCondNum = study.computeJacobiPreconditionedConditionNumber(i);
+        if (rank==0) {
+          cout << "Jacobi-scaled global system matrix condition number for logElements " << i << ": " << globalCondNum << endl;
         }
       }
     }

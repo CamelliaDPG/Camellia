@@ -85,7 +85,11 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testHUnrefinementForConfusion() ) {
     numTestsPassed++;
   }
-  */
+   */
+  numTestsRun++;
+  if ( testPRefinement() ) {
+    numTestsPassed++;
+  }
   numTestsRun++;
   if (testMeshSolvePointwise() ) {
     numTestsPassed++;
@@ -139,10 +143,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if ( testSolutionForMultipleElementTypes() ) {
     numTestsPassed++;
   }
-  numTestsRun++;
-  if ( testPRefinement() ) {
-    numTestsPassed++;
-  }  
   numTestsRun++;
   if (testDofOrderingFactory() ) {
     numTestsPassed++;

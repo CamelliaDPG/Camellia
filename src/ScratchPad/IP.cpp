@@ -119,7 +119,7 @@ double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr bas
   cellIP_dim.push_back(testDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
-    double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(cellIP);
+    double conditionNumber = SerialDenseSolveWrapper::estimate2NormConditionNumber(cellIP);
     maxConditionNumber = max(maxConditionNumber,conditionNumber);
   }
   return maxConditionNumber;

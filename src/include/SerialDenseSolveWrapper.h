@@ -14,6 +14,7 @@
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 #include "Epetra_SerialDenseSolver.h"
+#include "Epetra_SerialDenseSVD.h"
 #include "Epetra_DataAccess.h"
 
 class SerialDenseSolveWrapper {
@@ -158,7 +159,54 @@ public:
     }
   }
   
-  static double estimateConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
+  static void jacobiScaleMatrix(FieldContainer<double> &A) {
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    for (int i=0; i<N; i++) {
+      double diag = A(i,i);
+      double *val = &A(i,0);
+      for (int j=0; j<N; j++) {
+        *val /= diag;
+        val++;
+      }
+    }
+  }
+
+  static double estimate2NormConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
+    Epetra_SerialDenseSVD svd;
+    
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    
+    if (! useATranspose) {
+      transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
+    }
+    
+    Epetra_SerialDenseMatrix AMatrix(Copy,
+                                     &A(0,0),
+                                     A.dimension(0),
+                                     A.dimension(1),
+                                     A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)
+    
+    svd.SetMatrix(AMatrix);
+    int result = svd.Factor();
+    
+    
+    if (result == 0) { // success
+      // then the singular values are stored in svd.S_
+      double maxSingularValue = svd.S_[0];
+      double minSingularValue = svd.S_[N-1];
+      return maxSingularValue / minSingularValue;
+    } else
+      return -1.0;
+  }
+  
+  
+  static double estimate1NormConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);
