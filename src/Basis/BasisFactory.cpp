@@ -63,7 +63,8 @@ bool BasisFactory::_useEnrichedTraces = true;
 
 bool BasisFactory::_useLobattoForQuadHGRAD = false;
 bool BasisFactory::_useLobattoForQuadHDIV = false;
-bool BasisFactory::_useLegendreForLineHVOL = false; // also Lobatto for LineHGRAD
+bool BasisFactory::_useLobattoForLineHGRAD = false;
+bool BasisFactory::_useLegendreForLineHVOL = false;
 
 using namespace Camellia;
 
@@ -194,7 +195,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
           {
             int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
             
-            if (_useLegendreForLineHVOL) {
+            if (_useLobattoForLineHGRAD) {
               // we use Legendre for HGRAD and HVOL both on the line--since we don't actually 
               // take derivatives of traces, this makes sense.
               // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
@@ -378,7 +379,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
           {
             int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
             
-            if (_useLegendreForLineHVOL) {
+            if (_useLobattoForLineHGRAD) {
               // we use Legendre for HGRAD and HVOL both on the line--since we don't actually
               // take derivatives of traces, this makes sense.
               // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
