@@ -1,5 +1,5 @@
 #include "MeshUtilities.h"
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 
 //static const double RAMP_HEIGHT = 0.0;
 
@@ -192,9 +192,9 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
     // reshape:
     innerProductMatrix.resize(testDofs,testDofs);
     if (jacobiScaling)
-      SerialDenseSolveWrapper::jacobiScaleMatrix(innerProductMatrix);
-//    double conditionNumber = SerialDenseSolveWrapper::estimate1NormConditionNumber(innerProductMatrix);
-    double conditionNumber = SerialDenseSolveWrapper::estimate2NormConditionNumber(innerProductMatrix);
+      SerialDenseMatrixUtility::jacobiScaleMatrix(innerProductMatrix);
+//    double conditionNumber = SerialDenseMatrixUtility::estimate1NormConditionNumber(innerProductMatrix);
+    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(innerProductMatrix);
     if (conditionNumber > maxConditionNumber) {
       maxConditionNumber = conditionNumber;
       maxConditionNumberIPMatrix = innerProductMatrix;

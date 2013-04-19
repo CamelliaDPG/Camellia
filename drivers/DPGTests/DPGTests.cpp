@@ -78,7 +78,7 @@
 #include "ParametricCurveTests.h"
 #include "RHSTests.h"
 #include "ScratchPadTests.h"
-#include "SerialDenseSolveWrapperTests.h"
+#include "SerialDenseMatrixUtilityTests.h"
 #include "SolutionTests.h"
 
 #include "Projector.h"
@@ -184,7 +184,7 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   

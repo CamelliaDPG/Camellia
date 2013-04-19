@@ -14,7 +14,7 @@
 #include "Element.h"
 #include "BasisFactory.h"
 #include "Intrepid_FunctionSpaceTools.hpp"
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
 

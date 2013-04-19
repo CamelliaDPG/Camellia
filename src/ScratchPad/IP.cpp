@@ -8,7 +8,7 @@
 
 #include "IP.h"
 
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
@@ -119,7 +119,7 @@ double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr bas
   cellIP_dim.push_back(testDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
-    double conditionNumber = SerialDenseSolveWrapper::estimate2NormConditionNumber(cellIP);
+    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(cellIP);
     maxConditionNumber = max(maxConditionNumber,conditionNumber);
   }
   return maxConditionNumber;
