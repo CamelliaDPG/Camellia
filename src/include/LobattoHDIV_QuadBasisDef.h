@@ -192,27 +192,28 @@ namespace Camellia {
     
     ArrayScalar lobattoValues_x(_degree_x+1), lobattoValues_y(_degree_y+1);
     ArrayScalar lobattoValues_dx(_degree_x+1), lobattoValues_dy(_degree_y+1);
-    ArrayScalar lobattoValues_dx_dx(_degree_x+1), lobattoValues_dy_dy(_degree_y+1);
+//    ArrayScalar lobattoValues_dx_dx(_degree_x+1), lobattoValues_dy_dy(_degree_y+1);
     
     int numPoints = refPoints.dimension(0);
     for (int pointIndex=0; pointIndex < numPoints; pointIndex++) {
       double x = refPoints(pointIndex,0);
       double y = refPoints(pointIndex,1);
       
-      if (operatorType == Intrepid::OPERATOR_CURL) { // want second derivatives
-        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx,lobattoValues_dx_dx, x,_degree_x,_conforming);
-        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy,lobattoValues_dy_dy, y,_degree_y,_conforming);
-      } else { // first derivatives suffice
-        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx, x,_degree_x,_conforming);
-        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy, y,_degree_y,_conforming);
-      }
+//      if (operatorType == Intrepid::OPERATOR_CURL) { // want second derivatives
+//        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx,lobattoValues_dx_dx, x,_degree_x,_conforming);
+//        Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy,lobattoValues_dy_dy, y,_degree_y,_conforming);
+//      } else { // first derivatives suffice
+      Lobatto<Scalar,ArrayScalar>::values(lobattoValues_x,lobattoValues_dx, x,_degree_x,_conforming);
+      Lobatto<Scalar,ArrayScalar>::values(lobattoValues_y,lobattoValues_dy, y,_degree_y,_conforming);
+//      }
       for (int i=0; i<_degree_x+1; i++) {
         for (int j=0; j<_degree_y+1; j++) {
           if ((j==0) && (i==0)) continue; // no (0,0) basis function
           // first, set the divergence-free basis values
           int fieldIndex = dofOrdinalMap(i,j,true);
 
-          
+//          double divFreeScalingFactor = 2 * sqrt(_legendreL2normsSquared(i) * _legendreL2normsSquared(j));
+//          if (divFreeScalingFactor == 0) divFreeScalingFactor = 1;
           double divFreeScalingFactor = (  _legendreL2normsSquared(i) * _lobattoL2normsSquared(j)
                                          + _legendreL2normsSquared(j) * _lobattoL2normsSquared(i) );
           divFreeScalingFactor = sqrt(divFreeScalingFactor);
@@ -227,12 +228,12 @@ namespace Camellia {
             case Intrepid::OPERATOR_DIV:
               values(fieldIndex,pointIndex) = 0;
               break;
-            case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
-            {
-              values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
-                                               -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / divFreeScalingFactor;
-            }
-              break;
+//            case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
+//            {
+//              values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
+//                                               -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / divFreeScalingFactor;
+//            }
+//              break;
               
             default:
               TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
@@ -243,9 +244,10 @@ namespace Camellia {
             // now, set the non-divergence-free basis values:
             if ((i > 0) && (j > 0)) { // then there will be some non-divergence-free members
               fieldIndex = dofOrdinalMap(i,j,false);
-              double nonDivFreeScalingFactor = 8 *  (  _legendreL2normsSquared(i) * _legendreL2normsSquared(j)
-                                                     + _legendreL2normsSquared(j) * _legendreL2normsSquared(i) );
+              double nonDivFreeScalingFactor = 4 *  ( _legendreL2normsSquared(i) * _legendreL2normsSquared(j) );
               nonDivFreeScalingFactor = sqrt(nonDivFreeScalingFactor);
+              // TODO: change back to the nonDivFreeScalingFactor--trying the divFreeScalingFactor to see if it affects mass matrix conditioning
+//              nonDivFreeScalingFactor = divFreeScalingFactor;
               switch (operatorType) {
                 case Intrepid::OPERATOR_VALUE:
                   values(fieldIndex,pointIndex,0) = lobattoValues_x(i) * lobattoValues_dy(j) / nonDivFreeScalingFactor;
@@ -255,10 +257,10 @@ namespace Camellia {
                   values(fieldIndex,pointIndex) = ( lobattoValues_dx(i) * lobattoValues_dy(j) + lobattoValues_dx(i) * lobattoValues_dy(j) ) / nonDivFreeScalingFactor;
                   break;
                   
-                case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
-                  values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
-                                                   -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / nonDivFreeScalingFactor;
-                  break;
+//                case Intrepid::OPERATOR_CURL: // the "2D" curl operator, with scalar range
+//                  values(fieldIndex,pointIndex) = (-lobattoValues_x(i) * lobattoValues_dy_dy(j)
+//                                                   -lobattoValues_dx_dx(i) * lobattoValues_y(j)) / nonDivFreeScalingFactor;
+//                  break;
                 default:
                   TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
                   break;

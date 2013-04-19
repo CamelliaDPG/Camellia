@@ -18,46 +18,53 @@
 #include "Legendre.hpp"
 #include "Lobatto.hpp"
 
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 
 enum TestType {
-  L2Part,
+  Mass,
+  Stiffness,
   FullNorm
 };
 
 void setupHCurlTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("\\omega", HCURL);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->curl());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->curl());
   }
 }
 
 void setupHDivTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("\\tau", HDIV);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->div());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->div());
   }
 }
 
 void setupHGradTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("q", HGRAD);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->grad());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->grad());    
   }
 }
 
@@ -100,16 +107,33 @@ void printLobattoL2norm() {
   }
 }
 
+string testTypeName(TestType testType) {
+  switch (testType) {
+    case Mass:
+      return "Mass";
+      break;
+    case FullNorm:
+      return "Full Norm";
+      break;
+    case Stiffness:
+      return "Stiffness";
+      break;
+      
+    default:
+      break;
+  }
+}
+
 int main(int argc, char *argv[]) {
-  const int maxTestOrder = 25;
+  const int maxTestOrder = 8;
 //  printLobattoL2norm();
   
   FieldContainer<double> conditionTest(2,2);
   conditionTest(0,0) = 1;
   conditionTest(1,1) = 1e-17;
-  SerialDenseSolveWrapper::jacobiScaleMatrix(conditionTest);
+  SerialDenseMatrixUtility::jacobiScaleMatrix(conditionTest);
   
-  double condest = SerialDenseSolveWrapper::estimate1NormConditionNumber(conditionTest);
+  double condest = SerialDenseMatrixUtility::estimate1NormConditionNumber(conditionTest);
   cout << "condest for diagonal matrix: " << condest << endl;
   
   vector< Space > spaces;
@@ -117,11 +141,12 @@ int main(int argc, char *argv[]) {
   spaces.push_back(HGRAD);
   spaces.push_back(HCURL);
   vector< TestType > testTypes;
-  testTypes.push_back(L2Part);
+  testTypes.push_back(Stiffness);
+  testTypes.push_back(Mass);
   testTypes.push_back(FullNorm);
   for (vector<TestType>::iterator typeIt = testTypes.begin(); typeIt != testTypes.end(); typeIt++) {
     TestType testType = *typeIt;
-    string typeName = (testType==L2Part) ? "L2" : "fullNorm";
+    string typeName = testTypeName(testType);
     cout << "*************** " << typeName << " tests ***************\n";
     for (vector< Space >::iterator spaceIt = spaces.begin(); spaceIt != spaces.end(); spaceIt++) {
       Space space = *spaceIt;
@@ -148,8 +173,8 @@ int main(int argc, char *argv[]) {
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
-        bool jacobiScalingTrue = true;
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScalingTrue, fileName);
+        bool jacobiScalingFalse = false;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScalingFalse, fileName);
         cout << maxConditionNumber << endl;
       }
     }
