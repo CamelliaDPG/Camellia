@@ -2430,7 +2430,11 @@ void Mesh::pRefine(const vector<int> &cellIDsForPRefinements) {
   pRefine(cellSet);
 }
 
-void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements){
+  pRefine(cellIDsForPRefinements,1);
+}
+
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
   // refine any registered meshes
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++) {
@@ -2456,7 +2460,7 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
     currentTrialOrdering = elem->elementType()->trialOrderPtr;
     currentTestOrdering  = elem->elementType()->testOrderPtr;
     Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory.pRefineTrial(currentTrialOrdering,
-                                                                                  cellTopo);
+                                                                                  cellTopo,pToAdd);
     Teuchos::RCP<DofOrdering> newTestOrdering;
     // determine what newTestOrdering should be:
     int trialPolyOrder = _dofOrderingFactory.trialPolyOrder(newTrialOrdering);
