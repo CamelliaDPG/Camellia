@@ -1,22 +1,23 @@
 //
-//  SerialDenseSolveWrapper.h
+//  SerialDenseMatrixUtility.h
 //  Camellia-debug
 //
 //  Created by Nathan Roberts on 1/19/13.
 //
 //
 
-#ifndef Camellia_debug_SerialDenseSolveWrapper_h
-#define Camellia_debug_SerialDenseSolveWrapper_h
+#ifndef Camellia_debug_SerialDenseMatrixUtility_h
+#define Camellia_debug_SerialDenseMatrixUtility_h
 
 #include "Intrepid_FieldContainer.hpp"
 
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 #include "Epetra_SerialDenseSolver.h"
+#include "Epetra_SerialDenseSVD.h"
 #include "Epetra_DataAccess.h"
 
-class SerialDenseSolveWrapper {
+class SerialDenseMatrixUtility {
   static void transposeSquareMatrix(FieldContainer<double> &A) {
     int rows = A.dimension(0), cols = A.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(rows != cols, std::invalid_argument, "matrix not square");
@@ -158,7 +159,64 @@ public:
     }
   }
   
-  static double estimateConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
+  static void jacobiScaleMatrix(FieldContainer<double> &A) {
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    for (int i=0; i<N; i++) {
+      double diag = A(i,i);
+      double *val = &A(i,0);
+      for (int j=0; j<N; j++) {
+        *val /= diag;
+        val++;
+      }
+    }
+  }
+
+  static double estimate2NormConditionNumber(FieldContainer<double> &A, bool ignoreZeroEigenvalues = true) {
+    Epetra_SerialDenseSVD svd;
+    
+    int N = A.dimension(0);
+    if ((N != A.dimension(1)) || (A.rank() != 2)) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "badly shaped matrix");
+    }
+    
+    transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
+    
+    Epetra_SerialDenseMatrix AMatrix(Copy,
+                                     &A(0,0),
+                                     A.dimension(0),
+                                     A.dimension(1),
+                                     A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)
+    
+    svd.SetMatrix(AMatrix);
+    int result = svd.Factor();
+    
+    if (result == 0) {
+      // then the singular values are stored in svd.S_
+      double maxSingularValue = svd.S_[0];
+      double minSingularValue = svd.S_[N-1];
+      double tol = 1e-14;
+      if (ignoreZeroEigenvalues) {
+        int index = N-1;
+        while ((abs(minSingularValue) < tol) && (index > 0)) {
+          index--;
+          minSingularValue = svd.S_[index];
+        }
+      }
+      if (maxSingularValue < tol) {
+        cout << "maxSingularValue is zero for matrix:\n" << A;
+      }
+      return maxSingularValue / minSingularValue;
+    } else {
+      cout << "SVD failed for matrix:\n" << A;
+      return -1.0;
+    }
+  }
+  
+  
+  static double estimate1NormConditionNumber(FieldContainer<double> &A, bool useATranspose = false) {
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);
@@ -180,6 +238,13 @@ public:
       
     double rcond=0;
     double result = solver.ReciprocalConditionEstimate(rcond);
+    
+//    // experimental code: try equilibriating first.  Just output that result to console for now.
+//    solver.EquilibrateMatrix();
+//    double rcond2;
+//    double result2 = solver.ReciprocalConditionEstimate(rcond2);
+//    cout << "1/rcond2 = " << 1.0 / rcond2 << endl;
+    
     if (result == 0) // success
       return 1.0 / rcond;
     else

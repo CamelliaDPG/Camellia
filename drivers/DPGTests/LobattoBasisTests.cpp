@@ -6,6 +6,7 @@
 
 #include "Lobatto.hpp"
 
+#include "LobattoHGRAD_LineBasis.h"
 #include "LobattoHGRAD_QuadBasis.h"
 
 #include "BF.h"
@@ -50,6 +51,13 @@ void LobattoBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testH1Classifications()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testLobattoLineClassifications()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -244,20 +252,86 @@ bool testBasisClassifications(BasisPtr basis) {
     if (dofOrdinals.size() > 1) TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "More than one dofOrdinal per vertex...");
     vertexOrdinals.push_back(*(dofOrdinals.begin()));
   }
-  
-  if (! checkVertexOrdinalsQuad(basis, vertexOrdinals) ) {
-    success = false;
-    cout << "vertex dof ordinals don't match expected\n";
-    cout << "ordinals: ";
-    for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
-      cout << vertexOrdinals[vertexIndex] << " ";
-    }
-    cout << endl;
-  }
+//  
+//  if (! checkVertexOrdinalsQuad(basis, vertexOrdinals) ) {
+//    success = false;
+//    cout << "vertex dof ordinals don't match expected\n";
+//    cout << "ordinals: ";
+//    for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+//      cout << vertexOrdinals[vertexIndex] << " ";
+//    }
+//    cout << endl;
+//  }
   
   // get the points in reference space for each vertex
+  FieldContainer<double> points;
+  if (numVertices == 2) { // line
+    points.resize(2,1);
+    points(0,0) = -1;
+    points(1,0) = 1;
+  } else if (numVertices == 3) { // triangle
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "triangles not yet supported");
+  } else if (numVertices == 4) { // quad
+    points.resize(4,2);
+    points(0,0) = -1;
+    points(0,1) = -1;
+    points(1,0) =  1;
+    points(1,1) = -1;
+    points(2,0) =  1;
+    points(2,1) =  1;
+    points(3,0) = -1;
+    points(3,1) =  1;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported topology");
+  }
+  
+  FieldContainer<double> vertexValues;
+  if (basis->rangeRank() > 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "rank > 0 bases not yet supported");
+  } else {
+    vertexValues.resize(basis->getCardinality(),numVertices);
+  }
+  
+  basis->getValues(vertexValues, points, Intrepid::OPERATOR_VALUE);
   
   // test that the points are correctly classified
+  for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
+    for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
+      int dofOrdinalForPoint = vertexOrdinals[ptIndex];
+      bool expectZero = (dofOrdinalForPoint != fieldIndex);
+      if (expectZero) {
+        if (vertexValues(fieldIndex,ptIndex) != 0) {
+          success = false;
+          cout << "Expected 0 for fieldIndex " << fieldIndex << " and ptIndex " << ptIndex;
+          cout << ", but got " << vertexValues(fieldIndex,ptIndex) << endl;
+        }
+      } else {
+        if (vertexValues(fieldIndex,ptIndex) == 0) {
+          cout << "Expected nonzero for fieldIndex " << fieldIndex << " and ptIndex " << ptIndex << endl;
+          success = false;
+        }
+      }
+    }
+  }
+  
+  if (!success) {
+    cout << "Failed testBasisClassifications; vertexValues:\n" << vertexValues;
+  }
+  
+  return success;
+}
+
+bool LobattoBasisTests::testLobattoLineClassifications() {
+  bool success = true;
+  bool conformingTrue = true;
+  for (int polyOrder=1; polyOrder<20; polyOrder++) {
+    BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(polyOrder,conformingTrue) );
+    if (! testBasisClassifications(lobattoBasis) ) {
+      cout << "LobattoBasisTests::testLobattoLineClassifications() failed for polyOrder " << polyOrder << endl;
+    }
+  }
+  // TODO: implement this
+//  cout << "Warning: testLegendreLineClassifications unfinished.\n";
   
   return success;
 }

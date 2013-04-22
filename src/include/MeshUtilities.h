@@ -62,9 +62,11 @@ class MeshUtilities {
   
   static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
-  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, string sparseFileToWriteTo="");
+  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
   
-  static void writeMatrixToSparseDataFile(FieldContainer<double> &matrix, string filename); // really belongs elsewhere
+  static void readMatrixFromSparseDataFile(FieldContainer<double> &matrix, string filename); // really belongs elsewhere
+  static void writeMatrixToSparseDataFile(const FieldContainer<double> &matrix, string filename); // really belongs elsewhere
+  
 };
 
 #endif

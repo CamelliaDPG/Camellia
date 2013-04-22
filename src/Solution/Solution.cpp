@@ -105,12 +105,11 @@
 #include "AztecOO_ConditionNumber.h"
 
 double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
+  // estimates the 2-norm condition number
   AztecOOConditionNumber conditionEstimator;
   conditionEstimator.initialize(*problem.GetOperator());
   
-  //  cout << "WARNING: Solution::conditionNumberEstimate(): At least for small matrices, condition number estimates appear to be off by quite a bit.\n";
-  
-  int maxIters = 40000;
+  int maxIters = 100000;
   double tol = 1e-10;
   int status = conditionEstimator.computeConditionNumber(maxIters, tol);
   if (status!=0)
@@ -657,9 +656,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   
   rhsVector.GlobalAssemble();
 
-  timer.ResetStartTime();
-  solver->setProblem(problem);
-  
   if (_reportConditionNumber) {
     //    double oneNorm = globalStiffMatrix.NormOne();
     double condest = conditionNumberEstimate(*problem);
@@ -669,6 +665,9 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     }
     _globalSystemConditionEstimate = condest;
   }
+  
+  timer.ResetStartTime();
+  solver->setProblem(problem);
   
   int solveSuccess = solver->solve();
 

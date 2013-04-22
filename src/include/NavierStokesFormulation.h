@@ -129,6 +129,12 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
     _bf->addTerm(- sigma21_prev * u1 - sigma22_prev * u2 - u1_prev * sigma21 - u2_prev * sigma22, v2);
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
+    
+    // EXPERIMENT! :
+    // when _mu is small, we lose control of the gradient of v, which we need control of for the
+    // equivalence to the optimal test norm.  So here we add it back in:
+//    _graphNorm->addTerm(v1->grad());
+//    _graphNorm->addTerm(v2->grad());
   }
 public:
   static BFPtr stokesBF(FunctionPtr mu) {
@@ -175,8 +181,10 @@ public:
     compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() - h * sigma11_prev * v1 - h * sigma12_prev * v2);  // u1
     compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy() - h * sigma21_prev * v1 - h * sigma22_prev * v2);  // u2
     
-    compliantGraphNorm->addTerm( (scaled_mu / h) * v1 );
-    compliantGraphNorm->addTerm( (scaled_mu / h) * v2 );
+//    compliantGraphNorm->addTerm( (scaled_mu / h) * v1 );
+//    compliantGraphNorm->addTerm( (scaled_mu / h) * v2 );
+    compliantGraphNorm->addTerm( v1 / h );
+    compliantGraphNorm->addTerm( v2 / h);
     compliantGraphNorm->addTerm( q );
     compliantGraphNorm->addTerm( tau1 );
     compliantGraphNorm->addTerm( tau2 );

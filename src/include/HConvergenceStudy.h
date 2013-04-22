@@ -136,6 +136,7 @@ public:
   map< int, double > exactSolutionNorm();
 
   void computeErrors();
+  double computeJacobiPreconditionedConditionNumber(int logElements);
   string convergenceDataMATLAB(int trialID, int minPolyOrder = 1);
   string TeXErrorRateTable(const string &filePathPrefix="");
   string TeXErrorRateTable(const vector<int> &trialIDs, const string &filePathPrefix="");

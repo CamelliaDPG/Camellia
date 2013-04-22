@@ -78,7 +78,7 @@
 #include "ParametricCurveTests.h"
 #include "RHSTests.h"
 #include "ScratchPadTests.h"
-#include "SerialDenseSolveWrapperTests.h"
+#include "SerialDenseMatrixUtilityTests.h"
 #include "SolutionTests.h"
 
 #include "Projector.h"
@@ -167,6 +167,8 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
@@ -174,15 +176,15 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-  testSuites.push_back( Teuchos::rcp( new SerialDenseSolveWrapperTests) );
+  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   

@@ -1,5 +1,5 @@
 #include "MeshUtilities.h"
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 
 //static const double RAMP_HEIGHT = 0.0;
 
@@ -117,7 +117,47 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm 
   return MeshUtilities::buildUnitQuadMesh(nCells,nCells, bilinearForm, H1Order, pTest);
 }
 
-void MeshUtilities::writeMatrixToSparseDataFile(FieldContainer<double> &matrix, string filename) {
+void MeshUtilities::readMatrixFromSparseDataFile(FieldContainer<double> &matrix, string filename) {
+  ifstream fin(filename.c_str());
+  
+  long rows, cols;
+  if (fin.good()) {
+    // get first line, which says how big the matrix is
+    string line;
+    do {
+      std::getline(fin, line, '\n');
+    } while (line.c_str()[0] == '%'); // skip over comment lines
+    
+    std::istringstream firstlinestream(line);
+    firstlinestream >> rows;
+    firstlinestream >> cols;
+
+    if (rows * cols > 35000 * 35000) { // about 10 GB in memory--that's too big...
+      cout << "Warning: can't form dense matrix from sparse data file: memory limit would be exceeded.  Exiting...\n";
+      matrix.resize(1,1);
+      matrix(0,0) = -1;
+      return;
+    }
+//    cout << "resizing matrix to " << rows << " x " << cols << endl;
+    
+    matrix.resize(rows,cols);
+    
+    while (fin.good()) {
+      int row, col;
+      double value;
+      std::getline(fin, line, '\n');
+      std::istringstream linestream(line);
+      linestream >> row >> col >> value;
+      matrix(row-1,col-1) = value;
+    }
+  } else {
+    // better design would be to return with an error code
+    cout << "Warning: readMatrix failed.\n";
+  }
+  fin.close();
+}
+
+void MeshUtilities::writeMatrixToSparseDataFile(const FieldContainer<double> &matrix, string filename) {
   // matlab-friendly format (use spconvert)
   int rows = matrix.dimension(0);
   int cols = matrix.dimension(1);
@@ -135,7 +175,7 @@ void MeshUtilities::writeMatrixToSparseDataFile(FieldContainer<double> &matrix, 
   fout.close();
 }
 
-double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, string sparseFileToWriteTo) {
+double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling, string sparseFileToWriteTo) {
   set<int> cellIDs = mesh->getActiveCellIDs();
   FieldContainer<double> maxConditionNumberIPMatrix;
   int maxCellID = -1;
@@ -151,7 +191,10 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, str
     ip->computeInnerProductMatrix(innerProductMatrix, testSpace, cellBasisCache);
     // reshape:
     innerProductMatrix.resize(testDofs,testDofs);
-    double conditionNumber = SerialDenseSolveWrapper::estimateConditionNumber(innerProductMatrix);
+    if (jacobiScaling)
+      SerialDenseMatrixUtility::jacobiScaleMatrix(innerProductMatrix);
+//    double conditionNumber = SerialDenseMatrixUtility::estimate1NormConditionNumber(innerProductMatrix);
+    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(innerProductMatrix);
     if (conditionNumber > maxConditionNumber) {
       maxConditionNumber = conditionNumber;
       maxConditionNumberIPMatrix = innerProductMatrix;

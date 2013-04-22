@@ -169,7 +169,13 @@ void Projector::projectFunctionOntoBasis(FieldContainer<double> &basisCoefficien
   VarFactory varFactory;
   VarPtr var;
   if (! basisCache->isSideCache()) {
-    var = varFactory.fieldVar("dummyField");
+    if (fxn->rank()==0) {
+      var = varFactory.fieldVar("dummyField");
+    } else if (fxn->rank()==1) {
+      var = varFactory.fieldVar("dummyField",VECTOR_L2);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "projectFunctionOntoBasis does not yet support functions of rank > 1.");
+    }
   } else {
     // for present purposes, distinction between trace and flux doesn't really matter,
     // except that parities come into the IP computation for fluxes (even though they'll cancel),

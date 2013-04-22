@@ -18,60 +18,72 @@
 #include "Legendre.hpp"
 #include "Lobatto.hpp"
 
+#include "SerialDenseMatrixUtility.h"
+
 enum TestType {
-  L2Part,
+  Mass,
+  Stiffness,
   FullNorm
 };
 
 void setupHCurlTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("\\omega", HCURL);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->curl());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->curl());
   }
 }
 
 void setupHDivTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("\\tau", HDIV);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->div());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->div());
   }
 }
 
 void setupHGradTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
   var = varFactory.testVar("q", HGRAD);
   ip = Teuchos::rcp( new IP );
-  if (testType==L2Part) {
+  if (testType==Mass) {
     ip->addTerm(var);
-  } else {
+  } else if (testType==FullNorm) {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
     ip->addTerm(h * var->grad());
+  } else if (testType==Stiffness) {
+    ip->addTerm(var->grad());    
   }
 }
 
 void setupHGradStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HGRAD);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->grad());
 }
 
 void setupHDivStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->div());
 }
 
 void setupHDivMass(VarFactory &varFactory, VarPtr &var, IPPtr &ip) {
+  varFactory = VarFactory();
   var = varFactory.testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var);
@@ -95,20 +107,46 @@ void printLobattoL2norm() {
   }
 }
 
+string testTypeName(TestType testType) {
+  switch (testType) {
+    case Mass:
+      return "Mass";
+      break;
+    case FullNorm:
+      return "Full Norm";
+      break;
+    case Stiffness:
+      return "Stiffness";
+      break;
+      
+    default:
+      break;
+  }
+}
+
 int main(int argc, char *argv[]) {
-  
+  const int maxTestOrder = 8;
 //  printLobattoL2norm();
+  
+  FieldContainer<double> conditionTest(2,2);
+  conditionTest(0,0) = 1;
+  conditionTest(1,1) = 1e-17;
+  SerialDenseMatrixUtility::jacobiScaleMatrix(conditionTest);
+  
+  double condest = SerialDenseMatrixUtility::estimate1NormConditionNumber(conditionTest);
+  cout << "condest for diagonal matrix: " << condest << endl;
   
   vector< Space > spaces;
   spaces.push_back(HDIV);
   spaces.push_back(HGRAD);
   spaces.push_back(HCURL);
   vector< TestType > testTypes;
-  testTypes.push_back(L2Part);
+  testTypes.push_back(Stiffness);
+  testTypes.push_back(Mass);
   testTypes.push_back(FullNorm);
   for (vector<TestType>::iterator typeIt = testTypes.begin(); typeIt != testTypes.end(); typeIt++) {
     TestType testType = *typeIt;
-    string typeName = (testType==L2Part) ? "L2" : "fullNorm";
+    string typeName = testTypeName(testType);
     cout << "*************** " << typeName << " tests ***************\n";
     for (vector< Space >::iterator spaceIt = spaces.begin(); spaceIt != spaces.end(); spaceIt++) {
       Space space = *spaceIt;
@@ -130,15 +168,17 @@ int main(int argc, char *argv[]) {
       VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
-      for (int testOrder=1; testOrder<=20; testOrder++) {
+      for (int testOrder=1; testOrder<=maxTestOrder; testOrder++) {
         MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, fileName);
+        bool jacobiScalingFalse = false;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScalingFalse, fileName);
         cout << maxConditionNumber << endl;
       }
     }
+    
     
     // finally, write out the HGrad stiffness matrix to disk:
     

@@ -39,12 +39,42 @@ namespace Camellia {
       valuesArray(i) = -factor * legendreDerivatives(i-1) / i_factor;
       derivativeValuesArray(i) = legendreValues(i-1);
     }
-//    if ((n>=2) && (x==0.5)) {
-//      cout << "For x= " << x << ", l2(x) = " << valuesArray(2) << endl;
-//      cout << "L2(x) = " << legendreDerivatives(2) << endl;
-//      cout << "i_factor for i=2 : " << (2+1)*2 << endl;
-//      cout << "factor: " << factor << endl;
-//    }
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  void Lobatto<Scalar,ArrayScalar>::values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, ArrayScalar &secondDerivativeValuesArray, Scalar x, int n, bool conforming) {
+    if (! conforming) {
+      valuesArray(0) = 1;
+      derivativeValuesArray(0) = 0;
+      secondDerivativeValuesArray(0) = 0;
+      
+      if (n==0) return;
+      
+      valuesArray(1) = x;
+      derivativeValuesArray(1) = 1;
+      secondDerivativeValuesArray(1) = 0;
+    } else {
+      valuesArray(0) = (1-x)/2.0;
+      derivativeValuesArray(0) = -0.5;
+      secondDerivativeValuesArray(0) = 0;
+      
+      if (n==0) return;
+      
+      valuesArray(1) = (1+x)/2.0;
+      derivativeValuesArray(1) = 0.5;
+      secondDerivativeValuesArray(1) = 0;
+    }
+    
+    ArrayScalar legendreValues(n+1), legendreDerivatives(n+1);
+    Legendre<>::values(legendreValues,legendreDerivatives, x,n);
+    
+    double factor = 1 - x*x;
+    for (int i=2; i<=n; i++) {
+      double i_factor = (i-1)*i;
+      valuesArray(i) = -factor * legendreDerivatives(i-1) / i_factor;
+      derivativeValuesArray(i) = legendreValues(i-1);
+      secondDerivativeValuesArray(i) = legendreDerivatives(i);
+    }
   }
   
   template<class Scalar, class ArrayScalar>

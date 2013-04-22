@@ -50,7 +50,7 @@ void PreviousSolutionFunction::values(FieldContainer<double> &values, BasisCache
   } else {
     static bool warningIssued = false;
     if (!warningIssued) {
-      cout << "NOTE: In PreviousSolutionFunction, basisCache's mesh doesn't match solution's.  If this is not what you intended, would be a good idea to make sure that the mesh is passed in on BasisCache construction; the evaluation will be a lot slower without it...\n";
+      cout << "NOTE: In PreviousSolutionFunction, basisCache's mesh doesn't match solution's.  If this is not what you intended, it would be a good idea to make sure that the mesh is passed in on BasisCache construction; the evaluation will be a lot slower without it...\n";
       warningIssued = true;
     }
     // get the physicalPoints, and make a basisCache for each...

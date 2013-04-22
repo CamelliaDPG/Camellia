@@ -196,7 +196,9 @@ public:
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm, 
-                                          int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true);
+                                          int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
+                                          map<int,int> trialOrderEnhancements=_emptyIntIntMap,
+                                          map<int,int> testOrderEnhancements=_emptyIntIntMap);
   static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
                                                 int horizontalElements, int verticalElements,
                                                 Teuchos::RCP< BilinearForm > bilinearForm, 

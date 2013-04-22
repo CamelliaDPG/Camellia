@@ -1,23 +1,23 @@
 //
-//  SerialDenseSolveWrapperTests.cpp
+//  SerialDenseMatrixUtilityTests.cpp
 //  Camellia-debug
 //
 //  Created by Nathan Roberts on 1/19/13.
 //
 //
 
-#include "SerialDenseSolveWrapperTests.h"
+#include "SerialDenseMatrixUtilityTests.h"
 #include "SerialDenseWrapper.h"
 
-void SerialDenseSolveWrapperTests::setup() {
+void SerialDenseMatrixUtilityTests::setup() {
   
 }
 
-void SerialDenseSolveWrapperTests::teardown() {
+void SerialDenseMatrixUtilityTests::teardown() {
   
 }
 
-void SerialDenseSolveWrapperTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void SerialDenseMatrixUtilityTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testMultiplyMatrices()) {
     numTestsPassed++;
@@ -47,7 +47,7 @@ void SerialDenseSolveWrapperTests::runTests(int &numTestsRun, int &numTestsPasse
   teardown();
 }
 
-bool SerialDenseSolveWrapperTests::testAddMatrices() {
+bool SerialDenseMatrixUtilityTests::testAddMatrices() {
   bool success = true;
   
   double tol = 1e-16;
@@ -96,7 +96,7 @@ bool SerialDenseSolveWrapperTests::testAddMatrices() {
   
   return success;
 }
-bool SerialDenseSolveWrapperTests::testMultiplyMatrices() {
+bool SerialDenseMatrixUtilityTests::testMultiplyMatrices() {
   bool success = true;
   
   double tol = 1e-16;
@@ -164,7 +164,7 @@ bool SerialDenseSolveWrapperTests::testMultiplyMatrices() {
   return success;
 }
 
-bool SerialDenseSolveWrapperTests::testSimpleSolve() {
+bool SerialDenseMatrixUtilityTests::testSimpleSolve() {
   bool success = true;
   
   double tol = 1e-16;
@@ -203,7 +203,7 @@ bool SerialDenseSolveWrapperTests::testSimpleSolve() {
   return success;
 }
 
-bool SerialDenseSolveWrapperTests::testSolveMultipleRHS() {
+bool SerialDenseMatrixUtilityTests::testSolveMultipleRHS() {
   bool success = true;
   
   double tol = 1e-16;
@@ -255,6 +255,6 @@ bool SerialDenseSolveWrapperTests::testSolveMultipleRHS() {
   return success;
 }
 
-std::string SerialDenseSolveWrapperTests::testSuiteName() {
-  return "SerialDenseSolveWrapperTests";
+std::string SerialDenseMatrixUtilityTests::testSuiteName() {
+  return "SerialDenseMatrixUtilityTests";
 }
