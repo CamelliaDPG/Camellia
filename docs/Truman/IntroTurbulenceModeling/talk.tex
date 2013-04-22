@@ -83,7 +83,11 @@ We still need a model for $\nu_T$ and $k$.
 \begin{itemize}
 	\item Model the eddy viscosity
 	\item Assume $k$ is negligible
-	\item Surprisingly decent for the types of flows it was designed for (external aerodynamics)
+	\item Surprisingly decent for the types of flows it was designed for 
+  \begin{itemize}
+  \item External aerodynamics with minimal flow separation
+  \end{itemize}
+  \item Highly nonlinear equation
 \end{itemize}
 \begin{align*}
 \pd{\nut}{t}+\bar u_j\pd{\nut}{x_j}&=C_{b1}[1-f_{t2}]\tilde S\nut+\frac{1}{\sigma}
@@ -209,6 +213,42 @@ D_\epsilon\approx\pd{}{x_i}\LRp{\frac{\nu_T}{\sigma_\epsilon}\pd{\epsilon}{x_i}}
 \end{columns}
 \end{frame}
 
+\begin{frame}\frametitle{Channel Flow Predictions}
+\begin{figure}[t]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{Mean2000.pdf}
+  \end{center}
+  \caption{Time averaged velocity profile $Re=2000$}
+\end{figure}
+\end{frame}
+
+\begin{frame}\frametitle{Channel Flow Predictions}
+\begin{figure}[t]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{Mean10000.pdf}
+  \end{center}
+  \caption{Time averaged velocity profile $Re=10000$}
+\end{figure}
+\end{frame}
+
+\begin{frame}\frametitle{Channel Flow Predictions}
+\begin{figure}[t]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{k2000.pdf}
+  \end{center}
+  \caption{Turbulence kinetic energy profile $Re=2000$}
+\end{figure}
+\end{frame}
+
+\begin{frame}\frametitle{Channel Flow Predictions}
+\begin{figure}[t]
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{eps2000.pdf}
+  \end{center}
+  \caption{Dissipation profile $Re=2000$}
+\end{figure}
+\end{frame}
+
 \begin{frame}\frametitle{Notes on $k-\epsilon$}
 \begin{block}{Fixes near the wall}
 \begin{itemize}
@@ -230,6 +270,24 @@ D_\epsilon\approx\pd{}{x_i}\LRp{\frac{\nu_T}{\sigma_\epsilon}\pd{\epsilon}{x_i}}
 	\item Physically motivated derivation
 	\item Insensitive to freestream conditions on $k$ and $\epsilon$
 \end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}\frametitle{Typical Solution Procedure}
+\begin{block}{From a presentation by a Fluent engineer}
+\begin{itemize}
+  \item Start calculations by performing 100 iterations or so with standard
+  $k-\epsilon$ model and first order upwind differencing. For very simple
+  flows (no swirl or separation) converge with second order upwind and
+  $k-\epsilon$ model.
+  \item If the flow involves jets, separation, or moderate swirl, converge
+  solution with the realizable $k-\epsilon$ model and second order
+  differencing.
+  \item If the flow is dominated by swirl converge solution deeply using RSM
+  and a second order differencing scheme. If the solution will not converge,
+  use first order differencing instead.
+\end{itemize}
+
 \end{block}
 \end{frame}
 
@@ -257,12 +315,12 @@ D_\epsilon\approx\pd{}{x_i}\LRp{\frac{\nu_T}{\sigma_\epsilon}\pd{\epsilon}{x_i}}
 \begin{frame}\frametitle{Notes on $k-\omega$}
 \begin{block}{Wall Treatment}
 \begin{itemize}
-	\item Produces decent results at the wall
 	\item Formally, $\omega$ is singular at a perfectly smooth wall
 	\item Numerically, this is fixed by assuming a finite roughness
 	\begin{itemize}
 		\item $\omega_{wall}=\frac{40000\nu_{wall}}{k_s^2}$, need $\frac{u_\tau k_s}{\nu}<5$
 	\end{itemize}
+	\item Produces decent results at the wall
 	\item Can perform the same trick with two BCs on $k$
 \end{itemize}
 \end{block}
@@ -270,7 +328,7 @@ D_\epsilon\approx\pd{}{x_i}\LRp{\frac{\nu_T}{\sigma_\epsilon}\pd{\epsilon}{x_i}}
 \begin{block}{Other Notes}
 \begin{itemize}
 	\item Early models were very sensitive to freestream conditions on $\omega$
-	\item Menter propsed \emph{shear stress transport} model to overcome this shortcoming
+	\item Menter proposed SST model to overcome this shortcoming
 	\item Possible to write a $k-\epsilon$ model with $k-\omega$ ``physics''
 \end{itemize}
 \end{block}
