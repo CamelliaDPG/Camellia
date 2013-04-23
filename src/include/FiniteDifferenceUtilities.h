@@ -53,6 +53,7 @@
 class FiniteDifferenceUtilities {
  public:
  static double finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, SolutionPtr backgroundSoln, int dofIndex);
+ static FieldContainer<double> getDPGGradient(); // assumes you only linearize in the field variables
 };
 
 #endif
