@@ -251,10 +251,15 @@ int main(int argc, char *argv[]) {
     bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
     bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
     bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "enforce local conservation using Lagrange constraints", false);
+    bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
+    bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
+
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
     string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
     string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
+    
+    double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
     
     args.Process();
     
@@ -367,14 +372,17 @@ int main(int argc, char *argv[]) {
     FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
     FunctionPtr zero = Function::zero();
     ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-    VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+    ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
+    VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
                                                             horizontalCells,verticalCells,
                                                             H1Order, pToAdd,
                                                             u1_0, u2_0,  // BC for u
                                                             zero, zero); // zero forcing function
     
     SolutionPtr solution = problem.backgroundFlow();
+    solution->setReportConditionNumber(reportConditionNumber);
     SolutionPtr solnIncrement = problem.solutionIncrement();
+    solnIncrement->setReportConditionNumber(reportConditionNumber);
     
     problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
     
@@ -385,22 +393,23 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
     mesh->registerObserver(refHistory);
     
-    if (replayFile.length() > 0) {
-      RefinementHistory refHistory;
-      refHistory.loadFromFile(replayFile);
-      refHistory.playback(mesh);
-    }
-    
   //  if ( ! usePicardIteration ) { // we probably could afford to do pseudo-time with Picard, but choose not to
   //    // add time marching terms for momentum equations (v1 and v2):
+    ParameterFunctionPtr dt_inv = ParameterFunction::parameterFunction(1.0 / dt); //Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
     if (artificialTimeStepping) {
-      FunctionPtr dt_inv = Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
   //    // LHS gets u_inc / dt:
       BFPtr bf = problem.bf();
-      bf->addTerm(-dt_inv * u1, v1);
-      bf->addTerm(-dt_inv * u2, v2);
-      problem.setIP( bf->graphNorm() );
+      FunctionPtr dt_inv_fxn = Teuchos::rcp(dynamic_cast< Function* >(dt_inv.get()), false);
+      bf->addTerm(-dt_inv_fxn * u1, v1);
+      bf->addTerm(-dt_inv_fxn * u2, v2);
+      problem.setIP( bf->graphNorm() ); // graph norm has changed...
     }
+    
+    if (useCompliantGraphNorm) {
+      problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
+      // (otherwise, will use graph norm)
+    }
+    
   //  }
     
   //  if (rank==0) {
@@ -455,6 +464,12 @@ int main(int argc, char *argv[]) {
                                      H1Order+pToAdd+pToAddForStreamFunction, useTriangles);
 
     mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
+    
+    if (replayFile.length() > 0) {
+      RefinementHistory refHistory;
+      refHistory.loadFromFile(replayFile);
+      refHistory.playback(mesh);
+    }
     
     Teuchos::RCP<Solution> overkillSolution;
     map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
@@ -644,10 +659,23 @@ int main(int argc, char *argv[]) {
           problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
         
+        if (computeMaxConditionNumber) {
+          IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(problem.solutionIncrement()->ip().get()), false );
+          bool jacobiScalingTrue = true;
+          double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, problem.solutionIncrement()->mesh(), jacobiScalingTrue);
+          if (rank==0) {
+            cout << "max jacobi-scaled Gram matrix condition number estimate with zero background flow: " << maxConditionNumber << endl;
+          }
+        }
+        
         double incr_norm;
         do {
           problem.iterate(useLineSearch);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+//          // update time step
+//          double new_dt = min(1.0/incr_norm, 1000.0);
+//          dt_inv->setValue(1/new_dt);
+          
           if (rank==0) {
             cout << "\x1B[2K"; // Erase the entire current line.
             cout << "\x1B[0E"; // Move to the beginning of the current line.
@@ -658,6 +686,15 @@ int main(int argc, char *argv[]) {
 
         if (rank==0)
           cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
+        
+        if (computeMaxConditionNumber) {
+          IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(problem.solutionIncrement()->ip().get()), false );
+          bool jacobiScalingTrue = true;
+          double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, problem.solutionIncrement()->mesh(), jacobiScalingTrue);
+          if (rank==0) {
+            cout << "max jacobi-scaled Gram matrix condition number estimate with nonzero background flow: " << maxConditionNumber << endl;
+          }
+        }
         
         // reset iteration count to 1 (for the background flow):
         problem.setIterationCount(1);
@@ -700,13 +737,14 @@ int main(int argc, char *argv[]) {
           cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
           flush(cout);
         }
-      } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+      } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
       if (rank==0) cout << endl;
       
       if (computeMaxConditionNumber) {
         string fileName = "nsCavity_maxConditionIPMatrix.dat";
         IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(problem.solutionIncrement()->ip().get()), false );
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, problem.solutionIncrement()->mesh(), fileName);
+        bool jacobiScalingTrue = true;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, problem.solutionIncrement()->mesh(), jacobiScalingTrue, fileName);
         if (rank==0) {
           cout << "max Gram matrix condition number estimate: " << maxConditionNumber << endl;
           cout << "putative worst-conditioned Gram matrix written to: " << fileName << "." << endl;

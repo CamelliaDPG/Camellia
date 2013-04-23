@@ -51,6 +51,8 @@ int main(int argc, char *argv[]) {
 //  string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
 //  string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
   
+  args.Process();
+  
   int pToAdd = 2; // for optimal test function approximation
   bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
@@ -58,7 +60,7 @@ int main(int argc, char *argv[]) {
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
   
   // parse args:
-  bool useTriangles = false, useGraphNorm = false, useCompliantNorm = true, useStokesCompliantNorm = false, useStokesGraphNorm = false;
+  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false, useStokesCompliantNorm = false, useStokesGraphNorm = false;
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
@@ -299,7 +301,8 @@ int main(int argc, char *argv[]) {
         ostringstream fileNameStream;
         fileNameStream << "nsStudy_maxConditionIPMatrix_" << i << ".dat";
         IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), fileNameStream.str());
+        bool jacobiScalingTrue = true;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), jacobiScalingTrue, fileNameStream.str());
         if (rank==0) {
           cout << "max Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
           cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
