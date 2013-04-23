@@ -54,11 +54,6 @@ target_link_libraries(Units
   Camellia
 )
 
-add_executable(TraceTest TraceBLTest.cpp)
-target_link_libraries(TraceTest
-  Camellia
-)
-
 add_executable(FrontStep FrontFacingStep.cpp)
 target_link_libraries(FrontStep
   Camellia
@@ -66,6 +61,11 @@ target_link_libraries(FrontStep
 
 add_executable(Ramp RampTest.cpp)
 target_link_libraries(Ramp
+  Camellia
+)
+
+add_executable(Plate PlateTest.cpp)
+target_link_libraries(Plate
   Camellia
 )
 
