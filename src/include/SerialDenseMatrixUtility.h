@@ -167,6 +167,7 @@ public:
     for (int i=0; i<N; i++) {
       double diag = A(i,i);
       double *val = &A(i,0);
+      if (diag == 0) diag = 1.0; // simply omit rescaling of 0 diagonal entries
       for (int j=0; j<N; j++) {
         *val /= diag;
         val++;
