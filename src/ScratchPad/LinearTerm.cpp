@@ -1250,6 +1250,7 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
   if (_rank == -1) { // we're empty -- adopt rhs's rank
     _rank = a.rank();
   }
+  if (a.isZero()) return; // we can skip the actual adding in this case
   if (_rank != a.rank()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "attempting to add terms of unlike rank.");
   }
@@ -1264,7 +1265,6 @@ void LinearTerm::addTerm(const LinearTerm &a, bool overrideTypeCheck) {
     }
   }
   _varIDs.insert( a.varIDs().begin(), a.varIDs().end() );
-  if (a.isZero()) return; // we can skip the actual adding in this case
   _summands.insert(_summands.end(), a.summands().begin(), a.summands().end());
 }
 
