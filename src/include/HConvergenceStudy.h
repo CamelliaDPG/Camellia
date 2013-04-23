@@ -97,6 +97,7 @@ class HConvergenceStudy {
   vector< DerivedVariable > _derivedVariables;
   
   Teuchos::RCP<Solver> _solver;
+  bool _useCondensedSolve;
   
   int minNumElements();
   
@@ -151,6 +152,8 @@ public:
   void setSolutions( vector< SolutionPtr > &solutions); // must be in the right order, from minLogElements to maxLogElements
   
   void setSolver( Teuchos::RCP<Solver> solver);
+  
+  void setUseCondensedSolve(bool value);
   
   void setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix);
 };

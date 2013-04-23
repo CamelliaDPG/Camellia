@@ -173,8 +173,8 @@ int main(int argc, char *argv[]) {
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
-        bool jacobiScalingFalse = false;
-        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScalingFalse, fileName);
+        bool jacobiScaling = true; // (testType != Stiffness);
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScaling, fileName);
         cout << maxConditionNumber << endl;
       }
     }

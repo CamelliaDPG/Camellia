@@ -144,6 +144,14 @@ set( CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/ConditioningExperimentDriver.cpp"
 )
 
+set( LOBPCG_CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/LOBPCGEpetraExFile.cpp"
+)
+
+set( LSQR_CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/LSQREpetraExFile.cpp"
+)
+
 set( NEW_CONFUSION_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewConfusionDriver.cpp"
 )
@@ -186,6 +194,10 @@ set( STOKES_STUDY
   
 set( INCOMP_NS_STUDY
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesStudy.cpp"
+  )
+
+set( OSEEN_STUDY
+  "${INCOMPRESSIBLE_NS_DIR}/OseenStudy.cpp"
   )
 
 set( uBLAS_CHOLESKY_TEST
@@ -260,9 +272,12 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
+add_executable(OseenStudy ${OSEEN_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(StokesConservationExperiment ${STOKES_SOURCES} ${STOKES_CONSERVATION_EXPERIMENT})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
@@ -283,6 +298,16 @@ add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 #
 
 target_link_libraries(ConditioningExperimentDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(LOBPCGConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(LSQRConditioningDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
@@ -348,6 +373,11 @@ target_link_libraries(StokesStudy
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NavierStokesStudy
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(OseenStudy
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

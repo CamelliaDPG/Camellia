@@ -48,10 +48,13 @@ int main(int argc, char *argv[]) {
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
   double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-12);
-//  string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
-//  string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
   
-  args.Process();
+  try {
+    args.Process();
+  } catch ( choice::ArgException& e )
+  {
+    exit(1);
+  }
   
   int pToAdd = 2; // for optimal test function approximation
   bool useLineSearch = false;
@@ -59,40 +62,37 @@ int main(int argc, char *argv[]) {
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
   
-  // parse args:
-  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false, useStokesCompliantNorm = false, useStokesGraphNorm = false;
+  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false;
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useGraphNorm = "  << (useGraphNorm ? "true" : "false") << "\n";
     cout << "useCompliantNorm = "  << (useCompliantNorm ? "true" : "false") << "\n";
-    cout << "useStokesGraphNorm = "  << (useStokesGraphNorm ? "true" : "false") << "\n";
-    cout << "useStokesCompliantNorm = "  << (useStokesCompliantNorm ? "true" : "false") << "\n";
     cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
   
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
   // domain from Cockburn Kanschat for Stokes:
-//  quadPointsKovasznay(0,0) = -0.5; // x1
-//  quadPointsKovasznay(0,1) =  0.0; // y1
-//  quadPointsKovasznay(1,0) =  1.5;
-//  quadPointsKovasznay(1,1) =  0.0;
-//  quadPointsKovasznay(2,0) =  1.5;
-//  quadPointsKovasznay(2,1) =  2.0;
-//  quadPointsKovasznay(3,0) = -0.5;
-//  quadPointsKovasznay(3,1) =  2.0;
+  quadPointsKovasznay(0,0) = -0.5; // x1
+  quadPointsKovasznay(0,1) =  0.0; // y1
+  quadPointsKovasznay(1,0) =  1.5;
+  quadPointsKovasznay(1,1) =  0.0;
+  quadPointsKovasznay(2,0) =  1.5;
+  quadPointsKovasznay(2,1) =  2.0;
+  quadPointsKovasznay(3,0) = -0.5;
+  quadPointsKovasznay(3,1) =  2.0;
   
   // Domain from Evans Hughes for Navier-Stokes:
-  quadPointsKovasznay(0,0) =  0.0; // x1
-  quadPointsKovasznay(0,1) = -0.5; // y1
-  quadPointsKovasznay(1,0) =  1.0;
-  quadPointsKovasznay(1,1) = -0.5;
-  quadPointsKovasznay(2,0) =  1.0;
-  quadPointsKovasznay(2,1) =  0.5;
-  quadPointsKovasznay(3,0) =  0.0;
-  quadPointsKovasznay(3,1) =  0.5;
+//  quadPointsKovasznay(0,0) =  0.0; // x1
+//  quadPointsKovasznay(0,1) = -0.5; // y1
+//  quadPointsKovasznay(1,0) =  1.0;
+//  quadPointsKovasznay(1,1) = -0.5;
+//  quadPointsKovasznay(2,0) =  1.0;
+//  quadPointsKovasznay(2,1) =  0.5;
+//  quadPointsKovasznay(3,0) =  0.0;
+//  quadPointsKovasznay(3,1) =  0.5;
 
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
 //  double Re = 40.0; // Evans Hughes Navier-Stokes
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
                                                               H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero, useCompliantNorm || useStokesCompliantNorm);
+                                                              zero, zero, zero, useCompliantNorm);
   
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
@@ -140,10 +140,10 @@ int main(int argc, char *argv[]) {
 
     vector< VGPNavierStokesProblem > problems;
     do {
-      VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                                              numCells1D,numCells1D,
+      VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
+                                                              numCells1D, numCells1D,
                                                               H1Order, pToAdd,
-                                                              u1_exact, u2_exact, p_exact, useCompliantNorm || useStokesCompliantNorm);
+                                                              u1_exact, u2_exact, p_exact, useCompliantNorm);
       
       problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
       
@@ -152,12 +152,6 @@ int main(int argc, char *argv[]) {
       problems.push_back(problem);
       if ( useCompliantNorm ) {
         problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
-      } else if (useStokesCompliantNorm) {
-        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
-        problem.setIP(stokesForm.scaleCompliantGraphNorm());
-      } else if (useStokesGraphNorm) {
-        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
-        problem.setIP(stokesForm.graphNorm());
       } else if (! useGraphNorm ) {
         // then use the naive:
         problem.setIP(problem.bf()->naiveNorm());
@@ -224,15 +218,6 @@ int main(int argc, char *argv[]) {
       
       solutions.push_back( problem->backgroundFlow() );
       
-      // set the IP to the naive norm for clearer comparison with the best approximation energy error
-//      problem->backgroundFlow()->setIP(problem->bf()->naiveNorm());
-      
-//      double energyError = problem->backgroundFlow()->energyErrorTotal();
-//      if (rank==0) {
-//        cout << setprecision(6) << fixed;
-//        cout << numCells1D << " x " << numCells1D << ": " << problem->iterationCount();
-//        cout << " iterations; actual energy error " << energyError << endl;
-//      }
       numCells1D *= 2;
     }
     
