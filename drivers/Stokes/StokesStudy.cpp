@@ -397,7 +397,7 @@ int main(int argc, char *argv[]) {
   
   ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
-  bool reportConditionNumber = true; // 2-norm condition number
+  bool reportConditionNumber = false; // 2-norm condition number
   
   bool computeMaxGramConditionNumber = true; // for Gram matrices
   
@@ -405,7 +405,7 @@ int main(int argc, char *argv[]) {
   
   bool dontImposeZeroMeanPressure = false;
   
-  bool writeGlobalStiffnessMatrixToFile = false;
+  bool writeGlobalStiffnessMatrixToFile = true;
   
   bool useCG = false;
   bool useMumps = true;
@@ -661,7 +661,8 @@ int main(int argc, char *argv[]) {
   if (dontImposeZeroMeanPressure) {
     vector<int> fieldIDs;
     stokesForm->primaryTrialIDs(fieldIDs);
-    int pressureID = fieldIDs[2];
+    int pressureIDIndex = (formulationType==VGPF) ? 1 : 2;
+    int pressureID = fieldIDs[pressureIDIndex];
     dynamic_cast< BCEasy* >(bc.get())->removeZeroMeanConstraint(pressureID);
     // instead, use a single-point BC on pressure
     dynamic_cast< BCEasy* >(bc.get())->addSinglePointBC(pressureID, p_exact);
@@ -820,7 +821,8 @@ int main(int argc, char *argv[]) {
       // then we need to adjust the solutions by subtracting off the mean of the pressure
       vector<int> fieldIDs;
       stokesForm->primaryTrialIDs(fieldIDs);
-      int pressureID = fieldIDs[2];
+      int pressureIDIndex = (formulationType==VGPF) ? 1 : 2;
+      int pressureID = fieldIDs[pressureIDIndex];
       VarPtr pressure = Var::varForTrialID(pressureID, stokesForm->bf());
       double pressure_L2norm = p_exact->l2norm(study.getSolution(maxLogElements)->mesh(),cubatureEnrichment);
 
