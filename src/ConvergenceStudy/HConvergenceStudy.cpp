@@ -68,6 +68,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _cubatureDegreeForExact = 10; // an enrichment degree
   _cubatureEnrichmentForSolutions = 0;
   _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
+  _useCondensedSolve = false;
 //  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -420,9 +421,18 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
     if ( _solver.get() == NULL )
-      (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
-    else
-      (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
+      if (_useCondensedSolve) {
+        (*solutionIt)->condensedSolve(); // defaults to KLU
+      } else {
+        (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
+      }
+      else {
+        if (_useCondensedSolve) {
+          (*solutionIt)->condensedSolve(_solver); // Use whatever Solver the user specified
+        } else {
+          (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
+        }
+      }
   }
   computeErrors();
 }
@@ -738,6 +748,9 @@ void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {
   _solver = solver;
 }
 
+void HConvergenceStudy::setUseCondensedSolve(bool value) {
+  _useCondensedSolve = value;
+}
 
 void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix) {
   _writeGlobalStiffnessToDisk = value;
