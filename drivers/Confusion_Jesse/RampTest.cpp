@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
   int order = args.Input<int>("--order","order of approximation",2);
   double eps = args.Input<double>("--epsilon","diffusion parameter",1e-2);
   double energyThreshold = args.Input<double>("-energyThreshold","energy thresh for adaptivity", .5);
-  double rampHeight = args.Input<double>("--rampHeight","ramp height at x = 2", .1);
+  double rampHeight = args.Input<double>("--rampHeight","ramp height at x = 2", 0.0);
   bool useAnisotropy = args.Input<bool>("--useAnisotropy","aniso flag ", false);
 
   FunctionPtr zero = Function::constant(0.0);
@@ -212,7 +212,7 @@ int main(int argc, char *argv[]) {
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
 
   // first order term with magnitude alpha
-  double alpha = 1.0;
+  double alpha = 0.0;
   confusionBF->addTerm(alpha * u, v);
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -236,6 +236,12 @@ int main(int argc, char *argv[]) {
   vVecLT->addTerm(sqrt(eps)*v->grad());
   tauVecLT->addTerm(C_h/sqrt(eps)*tau);
 
+  LinearTermPtr restLT = Teuchos::rcp(new LinearTerm);
+  restLT->addTerm(alpha*v);
+  restLT->addTerm(invSqrtH*v);
+  restLT = restLT + beta * v->grad();
+  restLT = restLT + tau->div();
+
   ////////////////////   SPECIFY RHS   ///////////////////////
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -256,7 +262,7 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr freeStream = Teuchos::rcp(new FreeStreamBoundary);
   SpatialFilterPtr outflowBoundary = Teuchos::rcp(new OutflowBoundary);
   bc->addDirichlet(uhat, rampBoundary, one);
-  bc->addDirichlet(uhat, outflowBoundary, one);
+  //  bc->addDirichlet(uhat, outflowBoundary, one);
   bc->addDirichlet(beta_n_u_minus_sigma_n, rampInflow, zero);
   bc->addDirichlet(beta_n_u_minus_sigma_n, freeStream, zero);
 
@@ -287,11 +293,12 @@ int main(int argc, char *argv[]) {
   errRepMap[tau->ID()] = e_tau;
   FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
   FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
+  FunctionPtr errRest = restLT->evaluate(errRepMap,false);
   FunctionPtr xErr = (errTau->x())*(errTau->x()) + (errV->dx())*(errV->dx());
   FunctionPtr yErr = (errTau->y())*(errTau->y()) + (errV->dy())*(errV->dy());
+  FunctionPtr restErr = errRest*errRest;
 
-  RefinementStrategy refinementStrategy( solution, energyThreshold );  
-
+  RefinementStrategy refinementStrategy( solution, energyThreshold );    
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //                     PRE REFINEMENTS 
@@ -334,8 +341,18 @@ int main(int argc, char *argv[]) {
 
     vector<int> cellIDs;
     refinementStrategy.getCellsAboveErrorThreshhold(cellIDs);
+
+    map<int,double> energyError = solution->energyError();  
+
     map<int,double> xErrMap = xErr->cellIntegrals(cellIDs,mesh,5,true);
     map<int,double> yErrMap = yErr->cellIntegrals(cellIDs,mesh,5,true);
+    map<int,double> restErrMap = restErr->cellIntegrals(cellIDs,mesh,5,true);    
+    for (vector<ElementPtr>::iterator elemIt = mesh->activeElements().begin();elemIt!=mesh->activeElements().end();elemIt++){
+      int cellID = (*elemIt)->cellID();
+      double err = xErrMap[cellID]+ yErrMap[cellID] + restErrMap[cellID];
+      if (rank==0)
+      cout << "err thru LT = " << sqrt(err) << ", while energy err = " << energyError[cellID] << endl;
+    }
 
     map<int,double> ratio,xErr,yErr;
     vector<ElementPtr> elems = mesh->activeElements();
@@ -367,6 +384,9 @@ int main(int argc, char *argv[]) {
 
     solution->condensedSolve();
   }
+
+  // final solve on final mesh
+  solution->condensedSolve();
 
   ////////////////////   print to file   ///////////////////////
 

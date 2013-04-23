@@ -11,7 +11,7 @@
 
 #include "TestSuite.h"
 
-class SerialDenseSolveWrapperTests : public TestSuite {
+class SerialDenseMatrixUtilityTests : public TestSuite {
   void setup();
   void teardown();
 public:

@@ -318,7 +318,8 @@ public:
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
   void pRefine(const vector<int> &cellIDsForPRefinements);
-  void pRefine(const set<int> &cellIDsForPRefinements);
+  void pRefine(const set<int> &cellIDsForPRefinements); // added by jesse
+  void pRefine(const set<int> &cellIDsForPRefinements, int pToAdd); // added by jesse
   void printLocalToGlobalMap(); // for debugging
   void printVertices(); // for debugging
   
