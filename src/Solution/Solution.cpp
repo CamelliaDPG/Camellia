@@ -109,7 +109,7 @@ double Solution::conditionNumberEstimate( Epetra_LinearProblem & problem ) {
   AztecOOConditionNumber conditionEstimator;
   conditionEstimator.initialize(*problem.GetOperator());
   
-  int maxIters = 100000;
+  int maxIters = 40000;
   double tol = 1e-10;
   int status = conditionEstimator.computeConditionNumber(maxIters, tol);
   if (status!=0)
@@ -2595,13 +2595,7 @@ void Solution::setWriteMatrixToMatrixMarketFile(bool value, const string &filePa
 // Jesse's additions below:
 
 // =================================== CONDENSED SOLVE ======================================
-
-void Solution::condensedSolve(){
-  bool saveMemory = false;
-  condensedSolve(saveMemory);
-}
-void Solution::condensedSolve(bool saveMemory){
- 
+void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory) {
   int numProcs=1;
   int rank=0;
   
@@ -2926,25 +2920,28 @@ void Solution::condensedSolve(bool saveMemory){
   Teuchos::RCP<Epetra_LinearProblem> problem_cond = Teuchos::rcp( new Epetra_LinearProblem(&K_cond, &lhs_cond, &rhs_cond));
   rhs_cond.GlobalAssemble();
 
-  bool useIterativeSolver = false;
-  if (!useIterativeSolver){
-    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
-    solver->setProblem(problem_cond);    
-    solver->solve();
-  }else{
-    // create the preconditioner object and compute hierarchy
-    ML_Epetra::MultiLevelPreconditioner * MLPrec = 
-      new ML_Epetra::MultiLevelPreconditioner(K_cond, true);
-
-    AztecOO Solver((*problem_cond));
-    Solver.SetPrecOperator(MLPrec);
-    Solver.SetAztecOption(AZ_solver,AZ_cg);
-    Solver.SetAztecOption(AZ_output,AZ_last);
-    //    Solver.SetAztecOption(AZ_precond, AZ_Jacobi);
-    int maxIter = round(numGlobalFluxDofs/4);
-    Solver.Iterate(maxIter,1E-9); 
-  }
-  lhs_cond.GlobalAssemble();  
+  globalSolver->setProblem(problem_cond);
+  globalSolver->solve();
+  
+//  bool useIterativeSolver = false;
+//  if (!useIterativeSolver){
+//    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
+//    solver->setProblem(problem_cond);    
+//    solver->solve();
+//  }else{
+//    // create the preconditioner object and compute hierarchy
+//    ML_Epetra::MultiLevelPreconditioner * MLPrec = 
+//      new ML_Epetra::MultiLevelPreconditioner(K_cond, true);
+//
+//    AztecOO Solver((*problem_cond));
+//    Solver.SetPrecOperator(MLPrec);
+//    Solver.SetAztecOption(AZ_solver,AZ_cg);
+//    Solver.SetAztecOption(AZ_output,AZ_last);
+//    //    Solver.SetAztecOption(AZ_precond, AZ_Jacobi);
+//    int maxIter = round(numGlobalFluxDofs/4);
+//    Solver.Iterate(maxIter,1E-9); 
+//  }
+  lhs_cond.GlobalAssemble();
 
   if (_reportTimingResults){
     cout << "on rank " << rank << ", time for solve = " << timer.ElapsedTime() << endl;
