@@ -77,6 +77,7 @@ public:
   // added by Jesse
   static bool testMultiBasisCrash();
   static bool testAnisotropicCrash();
+  static bool testPRefinementCrash();
 };
 
 #endif
