@@ -1213,7 +1213,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
   FunctionPtr u2_0 = Function::zero();
   FunctionPtr zero = Function::zero();
   ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+  ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u
@@ -1303,7 +1304,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
   FunctionPtr u2_0 = zero;
   ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
+  ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u

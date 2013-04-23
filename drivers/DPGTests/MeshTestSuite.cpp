@@ -79,6 +79,20 @@
 using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
+  // next three added by Jesse
+  numTestsRun++;
+  if (testPRefinementAdjacentCells() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testMultiBasisCrash() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testAnisotropicCrash() ) {
+    numTestsPassed++;
+  }
+  
   cout << "WARNING: skipping unrefinement test.\n";
   /*
   numTestsRun++;
@@ -108,20 +122,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   if (testHRefinement() ) {
-    numTestsPassed++;
-  }
-
-  // added by Jesse
-  numTestsRun++;
-  if (testMultiBasisCrash() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testAnisotropicCrash() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testPRefinementCrash() ) {
     numTestsPassed++;
   }
 
@@ -2233,7 +2233,7 @@ bool MeshTestSuite::testAnisotropicCrash(){
 }
 
 // test a second crash that is observed in anisotropic NavierStokes refinement
-bool MeshTestSuite::testPRefinementCrash(){
+bool MeshTestSuite::testPRefinementAdjacentCells(){
   bool success = true;
   int order = 1;
 

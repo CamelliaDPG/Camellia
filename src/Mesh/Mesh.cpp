@@ -2450,10 +2450,15 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
   // 1. Loop through cellIDsForPRefinements:
   set<int> upgradedCellsWithCurves;
   set<int>::const_iterator cellIt;
+  map<int, ElementTypePtr > oldTypes;
+  for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
+    int cellID = *cellIt;
+    oldTypes[cellID] = _elements[cellID]->elementType();
+  }
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
-    ElementTypePtr oldElemType = elem->elementType();
+    ElementTypePtr oldElemType = oldTypes[cellID];
     const shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr.get());
     //   a. create new DofOrderings for trial and test
     Teuchos::RCP<DofOrdering> currentTrialOrdering, currentTestOrdering;
