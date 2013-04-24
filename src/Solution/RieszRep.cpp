@@ -334,3 +334,75 @@ void RieszRep::computeRepresentationValues(FieldContainer<double> &values, int t
     }
   }
 }
+
+map<int,double> RieszRep::computeAlternativeNormSqOnCells(IPPtr ip, vector<int> cellIDs){
+  map<int,double> altNorms;
+  int numCells = cellIDs.size();
+  for (int i = 0;i<numCells;i++){
+    altNorms[cellIDs[i]] = computeAlternativeNormSqOnCell(ip, _mesh->elements()[cellIDs[i]]);
+  }
+  return altNorms;
+  /*
+  // distribute norms as well
+  int numElems = _mesh->activeElements().size();    
+  int numMyElems = _mesh->elementsInPartition(rank).size();
+  int myElems[numMyElems];
+  // build cell index
+  int cellIndex = 0;
+  int myCellIndex = 0;
+
+  vector<ElementPtr> elemsInPartition = _mesh->elementsInPartition(rank);
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
+      myElems[myCellIndex] = cellIndex;
+      myCellIndex++;
+    }
+    cellIndex++;
+  }
+  Epetra_Map normMap(numElems,numMyElems,myElems,0,Comm);
+
+  Epetra_Vector distributedRieszNorms(normMap);
+  cellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
+      int ind = cellIndex;
+      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);      
+    }
+    cellIndex++;
+  }
+
+  Epetra_Map normImportMap(numElems,numElems,0,Comm);
+  Epetra_Import normImporter(normImportMap,normMap); 
+  Epetra_Vector globalNorms(normImportMap);
+  globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
+
+  cellIndex = 0;
+  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellIndex];          
+    cellIndex++;
+  }
+  */
+}
+
+double RieszRep::computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem){
+  int cellID = elem->cellID();
+  Teuchos::RCP<DofOrdering> testOrdering= elem->elementType()->testOrderPtr;
+  bool testVsTest = true;
+  Teuchos::RCP<BasisCache> basisCache =   BasisCache::basisCacheForCell(_mesh, cellID, testVsTest,1);
+
+  int numDofs = testOrdering->totalDofs();
+  FieldContainer<double> ipMat(1,numDofs,numDofs);
+  ip->computeInnerProductMatrix(ipMat,testOrdering,basisCache);
+
+  double sum = 0.0;
+  for (int i = 0;i<numDofs;i++){
+    for (int j = 0;j<numDofs;j++){
+      sum += _rieszRepDofsGlobal[cellID](i)*_rieszRepDofsGlobal[cellID](j)*ipMat(0,i,j);
+    }
+  }
+  
+  return sum;
+}

@@ -56,9 +56,10 @@
 #include "Element.h"
 #include "Function.h"
 
-#include "DPGInnerProduct.h"
+//#include "DPGInnerProduct.h"
 #include "LinearTerm.h"
 #include "BasisCache.h"
+#include "IP.h"
 
 class RieszRep;
 typedef Teuchos::RCP<RieszRep> RieszRepPtr;
@@ -108,6 +109,9 @@ class RieszRep {
 
   void computeRepresentationValues(FieldContainer<double> &values, int testID, IntrepidExtendedTypes::EOperatorExtended op, BasisCachePtr basisCache);
 
+  double computeAlternativeNormSqOnCell(IPPtr ip, ElementPtr elem);
+  map<int,double> computeAlternativeNormSqOnCells(IPPtr ip, vector<int> cellIDs);
+  
 };
 
 class RepFunction : public Function {
