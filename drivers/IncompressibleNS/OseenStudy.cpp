@@ -1,5 +1,5 @@
 /*
- *  NavierStokesStudy.cpp
+ *  OseenStudy.cpp
  *
  *  Created by Nathan Roberts on 11/15/12.
  *
@@ -22,6 +22,8 @@
 #include "CGSolver.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
+
+#include "OseenFormulations.h"
 
 #include "NavierStokesFormulation.h"
 
@@ -46,8 +48,6 @@ int main(int argc, char *argv[]) {
   bool longDoubleGramInversion = args.Input<bool>("--longDoubleGramInversion", "use long double Cholesky factorization for Gram matrix", false);
 //  bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
-  int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
-  double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-12);
   
   try {
     args.Process();
@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
   }
   
   int pToAdd = 2; // for optimal test function approximation
-  bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
@@ -106,10 +105,10 @@ int main(int argc, char *argv[]) {
   int H1OrderFineMesh = 5;
 
   FunctionPtr zero = Function::zero();
-  VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
-                                                              numCellsFineMesh, numCellsFineMesh,
-                                                              H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero, useCompliantNorm);
+  VGPOseenProblem zeroProblem = VGPOseenProblem(Re, quadPointsKovasznay,
+                                                numCellsFineMesh, numCellsFineMesh,
+                                                H1OrderFineMesh, pToAdd,
+                                                zero, zero, zero, useCompliantNorm);
   
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
@@ -138,20 +137,20 @@ int main(int argc, char *argv[]) {
     
     int kovasznayCubatureEnrichment = 10;
 
-    vector< VGPNavierStokesProblem > problems;
+    vector< VGPOseenProblem > problems;
     do {
-      VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
-                                                              numCells1D, numCells1D,
-                                                              H1Order, pToAdd,
-                                                              u1_exact, u2_exact, p_exact, useCompliantNorm);
+      VGPOseenProblem problem = VGPOseenProblem(Re, quadPointsKovasznay,
+                                                numCells1D, numCells1D,
+                                                H1Order, pToAdd,
+                                                u1_exact, u2_exact, p_exact, useCompliantNorm);
       
       problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
       
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
-      problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+      problem.solution()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problems.push_back(problem);
       if ( useCompliantNorm ) {
-        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+        problem.setIP(problem.vgpOseenFormulation()->scaleCompliantGraphNorm());
       } else if (! useGraphNorm ) {
         // then use the naive:
         problem.setIP(problem.bf()->naiveNorm());
@@ -176,57 +175,34 @@ int main(int argc, char *argv[]) {
     
     vector< SolutionPtr > solutions;
     numCells1D = pow(2.0,minLogElements);
-    for (vector< VGPNavierStokesProblem >::iterator problem = problems.begin();
+    for (vector< VGPOseenProblem >::iterator problem = problems.begin();
          problem != problems.end(); problem++) {
-      SolutionPtr solnIncrement = problem->solutionIncrement();
-      FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
-      FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
-      FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
-      FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, solnIncrement);
-      FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, solnIncrement);
-      FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
-      FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
+      SolutionPtr soln = problem->solution();
+      FunctionPtr u1_incr = Function::solution(u1_vgp, soln);
+      FunctionPtr u2_incr = Function::solution(u2_vgp, soln);
+      FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, soln);
+      FunctionPtr sigma12_incr = Function::solution(sigma12_vgp, soln);
+      FunctionPtr sigma21_incr = Function::solution(sigma21_vgp, soln);
+      FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, soln);
+      FunctionPtr p_incr = Function::solution(p_vgp, soln);
       
       FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
                           + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
                           + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
-      double weight = 1.0;
-      do {
-        weight = problem->iterate(useLineSearch);
+      soln->solve();
         
-        LinearTermPtr rhsLT = ((RHSEasy*) problem->backgroundFlow()->rhs().get())->linearTerm();
-        RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
-        rieszRep.computeRieszRep();
-        double costFunction = rieszRep.getNorm();
-        double incr_norm = sqrt(l2_incr->integrate(problem->mesh()));
-        
-        if (rank==0) {
-          cout << setprecision(6) << scientific;
-          cout << "\x1B[2K"; // Erase the entire current line.
-          cout << "\x1B[0E"; // Move to the beginning of the current line.
-          cout << "Iteration: " << problem->iterationCount() << "; L^2(incr) = " << incr_norm;
-          flush(cout);
-//          cout << setprecision(6) << scientific;
-//          cout << "Took " << weight << "-weighted step for " << numCells1D;
-//          cout << " x " << numCells1D << " mesh: " << problem->iterationCount();
-//          cout << setprecision(6) << fixed;
-//          cout << " iterations; cost function " << costFunction << endl;
-        }
-      } while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters) && (weight != 0));
-      
       if (rank==0) cout << endl;
       
-      solutions.push_back( problem->backgroundFlow() );
+      solutions.push_back( soln );
       
       numCells1D *= 2;
     }
     
     study.setSolutions(solutions);
 
-
     for (int i=0; i<=maxLogElements-minLogElements; i++) {
       SolutionPtr bestApproximation = study.bestApproximations()[i];
-      VGPNavierStokesFormulation nsFormBest = VGPNavierStokesFormulation(Re, bestApproximation);
+      VGPOseenFormulation nsFormBest = VGPOseenFormulation(Re, bestApproximation);
       SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
       Teuchos::RCP<ExactSolution> exact = nsFormBest.exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
 //      bestApproximation->setIP( nsFormBest.bf()->naiveNorm() );

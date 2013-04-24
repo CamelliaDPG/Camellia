@@ -9,7 +9,7 @@
 #ifndef Camellia_debug_OseenFormulations_h
 #define Camellia_debug_OseenFormulations_h
 
-#include "StokesFormulations.h"
+#include "StokesFormulation.h"
 
 class OseenFormulation {
 protected:
@@ -77,10 +77,6 @@ class VGPOseenFormulation : public OseenFormulation {
     sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
     p = varFactory.fieldVar(VGP_P_S);
     
-    sigma11_prev = Function::solution(sigma11, _soln);
-    sigma12_prev = Function::solution(sigma12, _soln);
-    sigma21_prev = Function::solution(sigma21, _soln);
-    sigma22_prev = Function::solution(sigma22, _soln);
     u1_prev = Function::solution(u1,_soln);
     u2_prev = Function::solution(u2,_soln);
   }
@@ -123,10 +119,6 @@ public:
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2, bool excludeFluxesAndTraces) {
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
     rhs->addTerm( f1 * v1 + f2 * v2 );
-    
-    // add the u sigma term:
-    rhs->addTerm( (u1_prev * sigma11_prev + u2_prev * sigma12_prev) * v1 );
-    rhs->addTerm( (u1_prev * sigma21_prev + u2_prev * sigma22_prev) * v2 );
     
     return rhs;
   }
@@ -227,7 +219,6 @@ class VGPOseenProblem {
   void init(FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    _neglectFluxesOnRHS = false; // main reason we don't neglect fluxes is because exact solution isn't yet set up to handle that
     FunctionPtr Re = sqrtRe * sqrtRe;
     FunctionPtr mu = 1/Re;
     
@@ -245,20 +236,19 @@ class VGPOseenProblem {
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
     
     _backgroundFlow = Teuchos::rcp( new Solution(_mesh) );
-    int u1_ID, u2_ID;
+    VarFactory vf = VGPStokesFormulation::vgpVarFactory();
+    VarPtr u1 = vf.fieldVar(VGP_U1_S);
+    VarPtr u2 = vf.fieldVar(VGP_U2_S);
     map<int, FunctionPtr > velocities;
-    velocities[u1_ID] = u1_exact;
-    velocities[u2_ID] = u2_exact;
+    velocities[u1->ID()] = u1_exact;
+    velocities[u2->ID()] = u2_exact;
     
     _backgroundFlow->projectOntoMesh(velocities);
     
-    // the incremental solutions have zero BCs enforced:
-    FunctionPtr zero = Function::zero();
-    BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
-    _solnIncrement = Teuchos::rcp( new Solution(_mesh, zeroBC) );
+    _solnIncrement = Teuchos::rcp( new Solution(_mesh, vgpBC) );
     _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
     
-    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, sqrtRe, _backgroundFlow));
+    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, sqrtRe, _backgroundFlow) );
     
     _exactSolution = _vgpOseenFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
     _backgroundFlow->setRHS( _exactSolution->rhs() );
