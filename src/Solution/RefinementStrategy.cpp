@@ -227,11 +227,12 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
 }
 
 void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap) {
-  map<int,double> hRefMap;
+  map<int,bool> hRefMap;
   vector<ElementPtr> elems = _solution->mesh()->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){    
     hRefMap[(*elemIt)->cellID()] = true; // default to h-refinement
   }
+  refine(printToConsole,xErr,yErr,threshMap,hRefMap);
 }
 
 // with variable anisotropic threshholding and p-refinement specification
