@@ -9,20 +9,17 @@
 #ifndef Camellia_debug_OseenFormulations_h
 #define Camellia_debug_OseenFormulations_h
 
-#include "StokesFormulations.h"
+#include "StokesFormulation.h"
 
 class OseenFormulation {
 protected:
   FunctionPtr _Re;
-  SolutionPtr _soln;
 public:
-  OseenFormulation(double Reynolds, SolutionPtr soln) {
+  OseenFormulation(double Reynolds) {
     _Re = Function::constant(Reynolds);
-    _soln = soln;
   }
-  OseenFormulation(FunctionPtr Reynolds, SolutionPtr soln) {
+  OseenFormulation(FunctionPtr Reynolds) {
     _Re = Reynolds;
-    _soln = soln;
   }
   
   virtual BFPtr bf() = 0;
@@ -52,9 +49,9 @@ class VGPOseenFormulation : public OseenFormulation {
   IPPtr _graphNorm;
   FunctionPtr _mu, _sqrt_mu;
   
-  // previous solution Functions:
-  FunctionPtr u1_prev;
-  FunctionPtr u2_prev;
+  // background flow Functions:
+  FunctionPtr _U1;
+  FunctionPtr _U2;
   
   void initVars() {
     varFactory = VGPStokesFormulation::vgpVarFactory();
@@ -76,18 +73,14 @@ class VGPOseenFormulation : public OseenFormulation {
     sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
     sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
     p = varFactory.fieldVar(VGP_P_S);
-    
-    sigma11_prev = Function::solution(sigma11, _soln);
-    sigma12_prev = Function::solution(sigma12, _soln);
-    sigma21_prev = Function::solution(sigma21, _soln);
-    sigma22_prev = Function::solution(sigma22, _soln);
-    u1_prev = Function::solution(u1,_soln);
-    u2_prev = Function::solution(u2,_soln);
   }
   
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, SolutionPtr soln) {
+  void init(FunctionPtr Re, FunctionPtr sqrtRe, FunctionPtr U1, FunctionPtr U2) {
     _mu = 1.0 / Re;
     _sqrt_mu = 1.0 / sqrtRe;
+    
+    _U1 = U1;
+    _U2 = U2;
     
     initVars();
     
@@ -96,8 +89,8 @@ class VGPOseenFormulation : public OseenFormulation {
     // construct bilinear form:
     _bf = stokesBF(_mu);
     
-    _bf->addTerm(- u1_prev * sigma11 - u2_prev * sigma12, v1);
-    _bf->addTerm(- u1_prev * sigma21 - u2_prev * sigma22, v2);
+    _bf->addTerm(- _U1 * sigma11 - _U2 * sigma12, v1);
+    _bf->addTerm(- _U1 * sigma21 - _U2 * sigma22, v2);
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
   }
@@ -107,13 +100,12 @@ public:
     return stokesFormulation.bf();
   }
   
-  VGPOseenFormulation(double Re, SolutionPtr soln) : OseenFormulation(Re, soln) {
-    init(Function::constant(Re), Function::constant(sqrt(Re)), soln);
+  VGPOseenFormulation(double Re, FunctionPtr U1, FunctionPtr U2) : OseenFormulation(Re) {
+    init(Function::constant(Re), Function::constant(sqrt(Re)),U1,U2);
   }
-  VGPOseenFormulation(FunctionPtr Re, FunctionPtr sqrtRe, SolutionPtr soln) : OseenFormulation(Re, soln) {
-    init(Re,sqrtRe,soln);
+  VGPOseenFormulation(FunctionPtr Re, FunctionPtr sqrtRe, FunctionPtr U1, FunctionPtr U2) : OseenFormulation(Re) {
+    init(Re,sqrtRe,U1,U2);
   }
-  
   BFPtr bf() {
     return _bf;
   }
@@ -124,10 +116,6 @@ public:
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
     rhs->addTerm( f1 * v1 + f2 * v2 );
     
-    // add the u sigma term:
-    rhs->addTerm( (u1_prev * sigma11_prev + u2_prev * sigma12_prev) * v1 );
-    rhs->addTerm( (u1_prev * sigma21_prev + u2_prev * sigma22_prev) * v2 );
-    
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm() {
@@ -137,10 +125,10 @@ public:
     
     FunctionPtr sqrt_mu_inv = 1.0 / _sqrt_mu;
     
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + sqrt_mu_inv * ( tau1->x() - u1_prev * v1 ) ); // sigma11
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dy() + sqrt_mu_inv * ( tau1->y() - u1_prev * v2 ) ); // sigma12
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dx() + sqrt_mu_inv * ( tau2->x() - u2_prev * v1 ) ); // sigma21
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dy() + sqrt_mu_inv * ( tau2->y() - u2_prev * v2 ) ); // sigma22
+    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + sqrt_mu_inv * ( tau1->x() - _U1 * v1 ) ); // sigma11
+    compliantGraphNorm->addTerm( _sqrt_mu * v1->dy() + sqrt_mu_inv * ( tau1->y() - _U1 * v2 ) ); // sigma12
+    compliantGraphNorm->addTerm( _sqrt_mu * v2->dx() + sqrt_mu_inv * ( tau2->x() - _U2 * v1 ) ); // sigma21
+    compliantGraphNorm->addTerm( _sqrt_mu * v2->dy() + sqrt_mu_inv * ( tau2->y() - _U2 * v2 ) ); // sigma22
     compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + _sqrt_mu * v2->dy() );          // pressure
     compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau1->div() - q->dx()) );  // u1
     compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau2->div() - q->dy()) );  // u2
@@ -216,9 +204,8 @@ public:
 };
 
 class VGPOseenProblem {
-  SolutionPtr _backgroundFlow, _solnIncrement;
+  SolutionPtr _soln;
   Teuchos::RCP<Mesh> _mesh;
-  Teuchos::RCP<BC> _bc, _bcForIncrement;
   Teuchos::RCP< ExactSolution > _exactSolution;
   Teuchos::RCP<BF> _bf;
   
@@ -227,7 +214,6 @@ class VGPOseenProblem {
   void init(FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    _neglectFluxesOnRHS = false; // main reason we don't neglect fluxes is because exact solution isn't yet set up to handle that
     FunctionPtr Re = sqrtRe * sqrtRe;
     FunctionPtr mu = 1/Re;
     
@@ -243,31 +229,17 @@ class VGPOseenProblem {
     
     _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+        
+    _soln = Teuchos::rcp( new Solution(_mesh, vgpBC) );
+    _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
     
-    _backgroundFlow = Teuchos::rcp( new Solution(_mesh) );
-    int u1_ID, u2_ID;
-    map<int, FunctionPtr > velocities;
-    velocities[u1_ID] = u1_exact;
-    velocities[u2_ID] = u2_exact;
-    
-    _backgroundFlow->projectOntoMesh(velocities);
-    
-    // the incremental solutions have zero BCs enforced:
-    FunctionPtr zero = Function::zero();
-    BCPtr zeroBC = vgpStokesFormulation->bc(zero, zero, entireBoundary);
-    _solnIncrement = Teuchos::rcp( new Solution(_mesh, zeroBC) );
-    _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
-    
-    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, sqrtRe, _backgroundFlow));
+    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, sqrtRe, u1_exact, u2_exact) );
     
     _exactSolution = _vgpOseenFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
-    _backgroundFlow->setRHS( _exactSolution->rhs() );
-    _backgroundFlow->setIP( _vgpOseenFormulation->graphNorm() );
     
     _mesh->setBilinearForm(_vgpOseenFormulation->bf());
-    
-    _solnIncrement->setRHS( _exactSolution->rhs() );
-    _solnIncrement->setIP( _vgpOseenFormulation->graphNorm() );
+    _soln->setRHS( _exactSolution->rhs() );
+    _soln->setIP( _vgpOseenFormulation->graphNorm() );
   }
 public:
   VGPOseenProblem(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
@@ -283,9 +255,6 @@ public:
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
   
-  SolutionPtr backgroundFlow() {
-    return _backgroundFlow;
-  }
   BFPtr bf() {
     return _vgpOseenFormulation->bf();
   }
@@ -293,18 +262,16 @@ public:
     return _exactSolution;
   }
   SolutionPtr solution() {
-    return _solnIncrement;
+    return _soln;
   }
   Teuchos::RCP<Mesh> mesh() {
     return _mesh;
   }
   void setBC( Teuchos::RCP<BCEasy> bc ) {
-    _backgroundFlow->setBC(bc);
-    _solnIncrement->setBC(bc->copyImposingZero());
+    _soln->setBC(bc);
   }
   void setIP( IPPtr ip ) {
-    _backgroundFlow->setIP( ip );
-    _solnIncrement->setIP( ip );
+    _soln->setIP( ip );
   }
   BFPtr stokesBF() {
     FunctionPtr mu =  1.0 / _vgpOseenFormulation->Re();

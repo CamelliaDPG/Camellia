@@ -61,7 +61,8 @@ public:
     
     p_exact = 0.5 * exp_2lambda_x;
     // adjust p to have zero average:
-    double pMeasure = p_exact->integrate(mesh);
+    int cubatureEnrichment = 10;
+    double pMeasure = p_exact->integrate(mesh, cubatureEnrichment);
     p_exact = p_exact - Function::constant(pMeasure / meshMeasure);
   }
 };
