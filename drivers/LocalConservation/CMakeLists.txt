@@ -10,6 +10,8 @@ add_executable(SkewedInnerLayer SkewedInnerLayer.cpp)
 
 add_executable(DiscontinuousSource DiscontinuousSource.cpp)
 
+add_executable(TinyMesh TinyMesh.cpp)
+
 add_executable(SimpleConfusion SimpleConfusion.cpp)
 
 add_executable(DoubleGlazingDriver DoubleGlazingDriver.cpp)

@@ -72,7 +72,7 @@ void DPGInnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerPro
   vector<int>::iterator testIterator1;
   vector<int>::iterator testIterator2;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > test1Basis, test2Basis;
+  BasisPtr test1Basis, test2Basis;
 
   innerProduct.initialize(0.0);
   

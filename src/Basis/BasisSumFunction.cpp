@@ -3,17 +3,23 @@
 
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
 
-void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints){
-  
+BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes){
+  _coefficients = basisCoefficients;
+  _basis = basis; // note - _basis->getBaseCellTopology
+  _physicalCellNodes = physicalCellNodes; // note - rank 3, but dim(0) = 1
+  TEUCHOS_TEST_FOR_EXCEPTION(_coefficients.dimension(0)!=basis->getCardinality(),std::invalid_argument,"BasisSumFunction: coefficients passed in do not match cardinality of basis.");
+}
+
+void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints) {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  TEUCHOS_TEST_FOR_EXCEPTION(numCells!=1,std::invalid_argument,"BasisSumFunction only projects on cell at a time (allowing for differing bases per cell)");
+  TEUCHOS_TEST_FOR_EXCEPTION(numCells != 1,std::invalid_argument,"BasisSumFunction only projects one cell at a time (allowing for differing bases per cell)");
 
   FieldContainer<double> refElemPoints(numCells, numPoints, spaceDim);
   typedef CellTools<double>  CellTools;
-  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->getBaseCellTopology());
-  refElemPoints.resize(numPoints,spaceDim); // to reduce down - numCells = 1 anyways
+  CellTools::mapToReferenceFrame(refElemPoints,physicalPoints,_physicalCellNodes,_basis->domainTopology());
+  refElemPoints.resize(numPoints,spaceDim); // reshape for the single set of ref cell points
   
   int numDofs = _basis->getCardinality();
 
@@ -23,11 +29,23 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
   functionValues.resize(numCells,numPoints);
   functionValues.initialize(0.0);
   int cellIndex = 0;
-  for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+  for (int ptIndex=0;ptIndex<numPoints;ptIndex++) {
     for (int i=0;i<numDofs;i++){
       functionValues(cellIndex,ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
     }
   }
+}
+
+NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
+                    EOperatorExtended op, bool boundaryValueOnly) : Function( BasisFactory::getBasisRank(basis) ) {
+  _coefficients = basisCoefficients;
+  _boundaryValueOnly = boundaryValueOnly;
+  _basis = basis; // note - _basis->getBaseCellTopology
+  _op = op;
+  int cardinality = basis->getCardinality();
+  TEUCHOS_TEST_FOR_EXCEPTION( _coefficients.dimension(0) != cardinality,
+                             std::invalid_argument,
+                             "BasisSumFunction: coefficients passed in do not match cardinality of basis.");
 }
 
 void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -37,7 +55,7 @@ void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr b
   
   bool basisIsVolumeBasis = true;
   if (spaceDim==2) {
-    basisIsVolumeBasis = (_basis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+    basisIsVolumeBasis = (_basis->domainTopology().getBaseKey() != shards::Line<2>::key);
   } else if (spaceDim==3) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
   }
@@ -112,7 +130,7 @@ FunctionPtr NewBasisSumFunction::dz() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "derivatives only supported for NewBasisSumFunction with op = OP_VALUE");
   }
   // a bit of a hack: if the topology defined in 3D, then we'll define a derivative there...
-  if (_basis->getBaseCellTopology().getDimension() > 2) {
+  if (_basis->domainTopology().getDimension() > 2) {
     return Teuchos::rcp( new NewBasisSumFunction(_basis, _coefficients, OP_DZ));
   } else {
     return Function::null();

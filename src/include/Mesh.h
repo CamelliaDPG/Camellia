@@ -58,11 +58,14 @@
 #include "RefinementPattern.h"
 #include "MeshPartitionPolicy.h"
 
+#include "RefinementObserver.h"
+
 #include "Function.h"
 #include "ParametricCurve.h"
 
 class Solution;
 class MeshTransformationFunction;
+class MeshPartitionPolicy;
 
 typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
 typedef pair<int,int> Edge;
@@ -95,7 +98,7 @@ public:
 
 typedef Teuchos::RCP<MeshGeometry> MeshGeometryPtr;
 
-class Mesh {
+class Mesh : public RefinementObserver {
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.
@@ -149,7 +152,7 @@ class Mesh {
   vector< set<int> > _partitionedGlobalDofIndices;
   
   vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
-  vector< Teuchos::RCP<Mesh> > _registeredMeshes; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
+  vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
   
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
   
@@ -177,9 +180,11 @@ class Mesh {
   // simple utility functions:
   static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);
   static double distance(double x0, double y0, double x1, double y1);
+  static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
   Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces=true);
+       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
   //,
   //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
 
@@ -191,7 +196,9 @@ public:
   static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                           int horizontalElements, int verticalElements,
                                           Teuchos::RCP< BilinearForm > bilinearForm, 
-                                          int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true);
+                                          int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
+                                          map<int,int> trialOrderEnhancements=_emptyIntIntMap,
+                                          map<int,int> testOrderEnhancements=_emptyIntIntMap);
   static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
                                                 int horizontalElements, int verticalElements,
                                                 Teuchos::RCP< BilinearForm > bilinearForm, 
@@ -311,13 +318,15 @@ public:
   FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemType );
 
   void pRefine(const vector<int> &cellIDsForPRefinements);
-  void pRefine(const set<int> &cellIDsForPRefinements);
+  void pRefine(const vector<int> &cellIDsForPRefinements, int pToAdd);
+  void pRefine(const set<int> &cellIDsForPRefinements); 
+  void pRefine(const set<int> &cellIDsForPRefinements, int pToAdd); // added by jesse
   void printLocalToGlobalMap(); // for debugging
   void printVertices(); // for debugging
   
   void rebuildLookups();
   
-  void registerMesh(Teuchos::RCP<Mesh> mesh);
+  void registerObserver(Teuchos::RCP<RefinementObserver> observer);
   
   void registerSolution(Teuchos::RCP<Solution> solution);
   
@@ -341,7 +350,7 @@ public:
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
 
-  void unregisterMesh(Teuchos::RCP<Mesh> mesh);
+  void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
   void unregisterSolution(Teuchos::RCP<Solution> solution);
   
   void writeMeshPartitionsToFile(const string & fileName);

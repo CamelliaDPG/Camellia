@@ -37,7 +37,10 @@
 
 #include "BasisEvaluation.h"
 #include "BasisFactory.h"
-#include "Vectorized_Basis.hpp"
+
+#include "Intrepid_CellTools.hpp"
+#include "Intrepid_DefaultCubatureFactory.hpp"
+#include "Intrepid_FunctionSpaceTools.hpp"
 
 typedef Teuchos::RCP< FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const FieldContainer<double> > constFCPtr;
@@ -49,13 +52,9 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   int basisCardinality = basis->getCardinality();
   int spaceDimOut = spaceDim; // for now, we assume basis values are in the same spaceDim as points (e.g. vector 1D has just 1 component)
   // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
-  if (! BasisFactory::basisKnown(basis) ) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                       "Unknown basis.  BasisCache only works for bases created by BasisFactory");
-  }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
   
   if ((EOperatorExtended)relatedOp != op) {
@@ -80,7 +79,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
   Teuchos::Array<int> dimensions;
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
-  int basisRank = BasisFactory::getBasisRank(basis);
+  int basisRank = basis->rangeRank();
   if ( ( ( basisRank == 1) && (op ==  IntrepidExtendedTypes::OP_VALUE) ) ){
     dimensions.push_back(spaceDimOut);
   } else if (
@@ -89,7 +88,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, IntrepidExtendedTypes::EOperato
       ( ( basisRank == 0) && (op == IntrepidExtendedTypes::OP_CURL) ) )
   {
     dimensions.push_back(spaceDim);
-  } else if ( (BasisFactory::getBasisRank(basis) == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
+  } else if ( (basis->rangeRank() == 1) && (op == IntrepidExtendedTypes::OP_GRAD) ) {
     // grad of vector: a tensor
     dimensions.push_back(spaceDim);
     dimensions.push_back(spaceDimOut);
@@ -104,7 +103,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
                                             const FieldContainer<double> &cellJacobian, 
                                             const FieldContainer<double> &cellJacobianInv,
                                             const FieldContainer<double> &cellJacobianDet) {
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   int componentOfInterest;
   Intrepid::EOperator relatedOp;
   relatedOp = relatedOperator(op, fs, componentOfInterest);
@@ -115,7 +114,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, IntrepidExtendedType
 
 FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(VectorBasisPtr basis, IntrepidExtendedTypes::EOperatorExtended op,
                                                                           constFCPtr componentReferenceValuesTransformed) {
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   bool vectorizedBasis = (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) || (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL);
   if ( !vectorizedBasis || 
       ((op !=  IntrepidExtendedTypes::OP_VALUE) && (op != IntrepidExtendedTypes::OP_CROSS_NORMAL) )) {
@@ -142,7 +141,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
   int numCells = cellJacobian.dimension(0);
   int spaceDim = cellJacobian.dimension(2);
   int componentOfInterest;
-  IntrepidExtendedTypes::EFunctionSpaceExtended fs = BasisFactory::getBasisFunctionSpace(basis);
+  IntrepidExtendedTypes::EFunctionSpaceExtended fs = basis->functionSpace();
   Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
@@ -165,15 +164,12 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
           fst::HCURLtransformVALUE<double>(*transformedValues,cellJacobianInv,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
           // for the moment, use the fact that we know the HVOL basis is always an HGRAD basis:
           fst::HGRADtransformVALUE<double>(*transformedValues,*referenceValues);
-          break;
-        case IntrepidExtendedTypes::CURL_HGRAD_FOR_CONSERVATION:
-          // TODO: figure out the right thing here...
-          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
@@ -247,8 +243,8 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
       break;
     case(IntrepidExtendedTypes::OP_DIV):
       switch(fs) {
-        case IntrepidExtendedTypes::CURL_HGRAD_FOR_CONSERVATION: // these live in HDIV...
         case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
           fst::HDIVtransformDIV<double>(*transformedValues,cellJacobianDet,*referenceValues);
           break;
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL:

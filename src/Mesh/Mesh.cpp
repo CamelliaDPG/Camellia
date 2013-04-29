@@ -54,8 +54,12 @@
 
 using namespace Intrepid;
 
+map<int,int> Mesh::_emptyIntIntMap;
+
 Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
-           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces) : _dofOrderingFactory(bilinearForm) {
+           Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
+: _dofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) {
   _vertices = vertices;
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
@@ -236,7 +240,9 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
 Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
                                        int horizontalElements, int verticalElements,
                                        Teuchos::RCP< BilinearForm > bilinearForm, 
-                                       int H1Order, int pTest, bool triangulate, bool useConformingTraces) {
+                                       int H1Order, int pTest, bool triangulate, bool useConformingTraces,
+                                       map<int,int> trialOrderEnhancements,
+                                       map<int,int> testOrderEnhancements) {
 //  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
@@ -321,7 +327,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
       }
     }
   }
-  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
+  return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces,
+                                trialOrderEnhancements,testOrderEnhancements));
 }
 
 Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
@@ -538,7 +545,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   
   // work out the correct ElementTypePtr for each child.
   Teuchos::RCP< DofOrdering > parentTrialOrdering = parent->elementType()->trialOrderPtr;
-  int pTrial = _dofOrderingFactory.polyOrder(parentTrialOrdering);
+  int pTrial = _dofOrderingFactory.trialPolyOrder(parentTrialOrdering);
   shards::CellTopology parentTopo = * ( parent->elementType()->cellTopoPtr );
   Teuchos::RCP<shards::CellTopology> triTopoPtr, quadTopoPtr;
   quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
@@ -1055,7 +1062,7 @@ vector< int > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr) {
 }
 
 int Mesh::cellPolyOrder(int cellID) {
-  return _dofOrderingFactory.polyOrder(_elements[cellID]->elementType()->trialOrderPtr);
+  return _dofOrderingFactory.trialPolyOrder(_elements[cellID]->elementType()->trialOrderPtr);
 }
 
 bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
@@ -1146,7 +1153,7 @@ void Mesh::determineDofPairings() {
               // marry the last node from one MB leaf to first node from the next
               // note that we're doing this for both traces and fluxes, but with traces this is redundant
               BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID,sideIndex);
-              MultiBasis* multiBasis = (MultiBasis *) basis.get();
+              MultiBasis<>* multiBasis = (MultiBasis<> *) basis.get(); // Dynamic cast would be better
               vector< pair<int,int> > adjacentDofOrdinals = multiBasis->adjacentVertexOrdinals();
               for (vector< pair<int,int> >::iterator dofPairIt = adjacentDofOrdinals.begin();
                    dofPairIt != adjacentDofOrdinals.end(); dofPairIt++) {
@@ -1692,8 +1699,8 @@ void Mesh::hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> r
 
 void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) {
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->hRefine(cellIDs,refPattern);
   }
   
@@ -1823,8 +1830,8 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
 void Mesh::hUnrefine(const set<int> &cellIDs) {
   // TODO: implement this
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->hUnrefine(cellIDs);
   }
   
@@ -1994,8 +2001,8 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           DofOrderingPtr nonParentTrialOrdering = nonParent->elementType()->trialOrderPtr;
           DofOrderingPtr    parentTrialOrdering =    parent->elementType()->trialOrderPtr;
           
-          int    parentPolyOrder = _dofOrderingFactory.polyOrder(   parentTrialOrdering);
-          int nonParentPolyOrder = _dofOrderingFactory.polyOrder(nonParentTrialOrdering);
+          int    parentPolyOrder = _dofOrderingFactory.trialPolyOrder(   parentTrialOrdering);
+          int nonParentPolyOrder = _dofOrderingFactory.trialPolyOrder(nonParentTrialOrdering);
           
           if (maxPolyOrder > nonParentPolyOrder) {
             // upgrade p along the side in non-parent
@@ -2066,7 +2073,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != neighborSidePolyOrder,
                        std::invalid_argument,
                        "After matchSides(), the appropriate sides don't have the same order.");
-    int testPolyOrder = _dofOrderingFactory.polyOrder(elemTestOrdering);
+    int testPolyOrder = _dofOrderingFactory.testPolyOrder(elemTestOrdering);
     if (testPolyOrder < mySidePolyOrder + _pToAddToTest) {
       elemTestOrdering = _dofOrderingFactory.testOrdering( mySidePolyOrder + _pToAddToTest, cellTopo);
     }
@@ -2090,7 +2097,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     TEUCHOS_TEST_FOR_EXCEPTION(mySidePolyOrder != sidePolyOrder,
                        std::invalid_argument,
                        "After matchSides(), the appropriate sides don't have the same order.");
-    int testPolyOrder = _dofOrderingFactory.polyOrder(neighborTestOrdering);
+    int testPolyOrder = _dofOrderingFactory.testPolyOrder(neighborTestOrdering);
     if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
       neighborTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, neighborTopo);
     }
@@ -2110,15 +2117,15 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     
     // So what we need to do is figure out the right p-order for the side and set both bases accordingly.
     // determine polyOrder for each side--take the maximum
-    int neighborPolyOrder = _dofOrderingFactory.polyOrder(neighborTrialOrdering);
-    int myPolyOrder = _dofOrderingFactory.polyOrder(elemTrialOrdering);
+    int neighborPolyOrder = _dofOrderingFactory.trialPolyOrder(neighborTrialOrdering);
+    int myPolyOrder = _dofOrderingFactory.trialPolyOrder(elemTrialOrdering);
     
     int polyOrder = max(neighborPolyOrder,myPolyOrder); // "maximum" rule
     
     // upgrade element
     elemTrialOrdering = _dofOrderingFactory.setSidePolyOrder(elemTrialOrdering,sideIndex,polyOrder,true);
     int sidePolyOrder = BasisFactory::basisPolyOrder(elemTrialOrdering->getBasis(boundaryVarID,mySideIndexInNeighbor));
-    int testPolyOrder = _dofOrderingFactory.polyOrder(elemTestOrdering);
+    int testPolyOrder = _dofOrderingFactory.testPolyOrder(elemTestOrdering);
     if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
       elemTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, cellTopo );
     }
@@ -2128,7 +2135,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     
     // upgrade neighbor
     neighborTrialOrdering = _dofOrderingFactory.setSidePolyOrder(neighborTrialOrdering,mySideIndexInNeighbor,polyOrder,true);
-    testPolyOrder = _dofOrderingFactory.polyOrder(neighborTestOrdering);
+    testPolyOrder = _dofOrderingFactory.testPolyOrder(neighborTestOrdering);
     if (testPolyOrder < sidePolyOrder + _pToAddToTest) {
       neighborTestOrdering = _dofOrderingFactory.testOrdering( sidePolyOrder + _pToAddToTest, neighborTopo);
     }
@@ -2147,14 +2154,14 @@ void Mesh::maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem
   int mySideIndexInNeighbor;
   ElementPtr neighbor = ancestralNeighborForSide(elem, sideIndex, mySideIndexInNeighbor);
   if ((neighbor.get() == NULL) || (neighbor->cellID() < 0)) { // as presently implemented, neighbor won't be NULL, but an "empty" elementPtr, _nullPtr, with cellID -1.  I'm a bit inclined to think a NULL would be better.  The _nullPtr conceit comes from the early days of the Mesh class, and seems a bit weird now.
-    minPolyOrder = _dofOrderingFactory.polyOrder(elem->elementType()->trialOrderPtr);
+    minPolyOrder = _dofOrderingFactory.trialPolyOrder(elem->elementType()->trialOrderPtr);
     maxPolyOrder = minPolyOrder;
     return;
   }
-  maxPolyOrder = max(_dofOrderingFactory.polyOrder(neighbor->elementType()->trialOrderPtr),
-                     _dofOrderingFactory.polyOrder(elem->elementType()->trialOrderPtr));
-  minPolyOrder = min(_dofOrderingFactory.polyOrder(neighbor->elementType()->trialOrderPtr),
-                     _dofOrderingFactory.polyOrder(elem->elementType()->trialOrderPtr));
+  maxPolyOrder = max(_dofOrderingFactory.trialPolyOrder(neighbor->elementType()->trialOrderPtr),
+                     _dofOrderingFactory.trialPolyOrder(elem->elementType()->trialOrderPtr));
+  minPolyOrder = min(_dofOrderingFactory.trialPolyOrder(neighbor->elementType()->trialOrderPtr),
+                     _dofOrderingFactory.trialPolyOrder(elem->elementType()->trialOrderPtr));
   int ancestorSideIndex;
   Element* ancestor;
   neighbor->getNeighbor(ancestor,ancestorSideIndex,mySideIndexInNeighbor);
@@ -2172,7 +2179,7 @@ void Mesh::maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem
     vector< pair< int, int> >::iterator sideIt;
     for (sideIt = descendantSides.begin(); sideIt != descendantSides.end(); sideIt++) {
       int descendantID = sideIt->first;
-      int descOrder = _dofOrderingFactory.polyOrder(_elements[descendantID]->elementType()->trialOrderPtr);
+      int descOrder = _dofOrderingFactory.trialPolyOrder(_elements[descendantID]->elementType()->trialOrderPtr);
       maxPolyOrder = max(maxPolyOrder,descOrder);
       minPolyOrder = min(minPolyOrder,descOrder);
     }
@@ -2184,7 +2191,7 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     // assumption is that we're at the top level: so parent's neighbor on sideIndex exists/is a peer
     int bigNeighborCellID = parent->getNeighborCellID(sideIndex);
     ElementPtr bigNeighbor = getElement(bigNeighborCellID);
-    bigNeighborPolyOrder = _dofOrderingFactory.polyOrder( bigNeighbor->elementType()->trialOrderPtr );
+    bigNeighborPolyOrder = _dofOrderingFactory.trialPolyOrder( bigNeighbor->elementType()->trialOrderPtr );
   }
   vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(sideIndex);
   map< int, BasisPtr > varIDsToUpgrade;
@@ -2207,7 +2214,7 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     } else {
       DofOrderingPtr childTrialOrder = childCell->elementType()->trialOrderPtr;
       
-      int childPolyOrder = _dofOrderingFactory.polyOrder( childTrialOrder );
+      int childPolyOrder = _dofOrderingFactory.trialPolyOrder( childTrialOrder );
       
       if (bigNeighborPolyOrder > childPolyOrder) {
         // upgrade child p along side
@@ -2384,23 +2391,23 @@ void Mesh::rebuildLookups() {
   //cout << "Mesh.numGlobalDofs: " << numGlobalDofs() << endl;
 }
 
-void Mesh::registerMesh(Teuchos::RCP<Mesh> mesh) {
-  _registeredMeshes.push_back(mesh);
+void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
+  _registeredObservers.push_back(observer);
 }
 
 void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
   _registeredSolutions.push_back( solution );
 }
 
-void Mesh::unregisterMesh(Teuchos::RCP<Mesh> mesh) {
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     if ( (*meshIt).get() == mesh.get() ) {
-      _registeredMeshes.erase(meshIt);
+      _registeredObservers.erase(meshIt);
       return;
     }
   }
-  cout << "Mesh::unregisterMesh: Mesh not found.\n";
+  cout << "Mesh::unregisterObserver: Mesh not found.\n";
 }
 
 void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
@@ -2423,10 +2430,14 @@ void Mesh::pRefine(const vector<int> &cellIDsForPRefinements) {
   pRefine(cellSet);
 }
 
-void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements){
+  pRefine(cellIDsForPRefinements,1);
+}
+
+void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
   // refine any registered meshes
-  for (vector< Teuchos::RCP<Mesh> >::iterator meshIt = _registeredMeshes.begin();
-       meshIt != _registeredMeshes.end(); meshIt++) {
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
+       meshIt != _registeredObservers.end(); meshIt++) {
     (*meshIt)->pRefine(cellIDsForPRefinements);
   }
   
@@ -2439,21 +2450,26 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements) {
   // 1. Loop through cellIDsForPRefinements:
   set<int> upgradedCellsWithCurves;
   set<int>::const_iterator cellIt;
+  map<int, ElementTypePtr > oldTypes;
+  for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
+    int cellID = *cellIt;
+    oldTypes[cellID] = _elements[cellID]->elementType();
+  }
   for (cellIt=cellIDsForPRefinements.begin(); cellIt != cellIDsForPRefinements.end(); cellIt++) {
     int cellID = *cellIt;
     ElementPtr elem = _elements[cellID];
-    ElementTypePtr oldElemType = elem->elementType();
+    ElementTypePtr oldElemType = oldTypes[cellID];
     const shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr.get());
     //   a. create new DofOrderings for trial and test
     Teuchos::RCP<DofOrdering> currentTrialOrdering, currentTestOrdering;
     currentTrialOrdering = elem->elementType()->trialOrderPtr;
     currentTestOrdering  = elem->elementType()->testOrderPtr;
-    Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory.pRefine(currentTrialOrdering,
-                                                                             cellTopo);
+    Teuchos::RCP<DofOrdering> newTrialOrdering = _dofOrderingFactory.pRefineTrial(currentTrialOrdering,
+                                                                                  cellTopo,pToAdd);
     Teuchos::RCP<DofOrdering> newTestOrdering;
     // determine what newTestOrdering should be:
-    int trialPolyOrder = _dofOrderingFactory.polyOrder(newTrialOrdering);
-    int testPolyOrder = _dofOrderingFactory.polyOrder(currentTestOrdering);
+    int trialPolyOrder = _dofOrderingFactory.trialPolyOrder(newTrialOrdering);
+    int testPolyOrder = _dofOrderingFactory.testPolyOrder(currentTestOrdering);
     if (testPolyOrder < trialPolyOrder + _pToAddToTest) {
       newTestOrdering = _dofOrderingFactory.testOrdering( trialPolyOrder + _pToAddToTest, cellTopo);
     } else {

@@ -8,7 +8,7 @@
 #endif
 
 #include <Teuchos_GlobalMPISession.hpp>
-#include "BilinearFormUtility.h"
+//#include "BilinearFormUtility.h"
 #include "SerialDenseWrapper.h"
 #include "ml_epetra_utils.h"
 #include "ml_epetra_preconditioner.h"
@@ -19,6 +19,9 @@
 #include "Solver.h"
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
+
+#include "Mesh.h"
+#include "Solution.h"
 
 Epetra_Map StandardAssembler::getPartMap(){
   int numProcs=1;
@@ -38,7 +41,8 @@ Epetra_Map StandardAssembler::getPartMap(){
 }
 
 Epetra_FECrsMatrix StandardAssembler::initializeMatrix(){
-  Epetra_FECrsMatrix matrix(Copy, getPartMap(),_solution->mesh()->rowSizeUpperBound());
+  Epetra_DataAccess copy = (Epetra_DataAccess) 0;
+  Epetra_FECrsMatrix matrix(copy, getPartMap(),_solution->mesh()->rowSizeUpperBound());
   return matrix;
 }
 Epetra_FEVector StandardAssembler::initializeVector(){

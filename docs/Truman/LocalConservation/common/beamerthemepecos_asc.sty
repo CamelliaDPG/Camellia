@@ -1,0 +1,319 @@
+\ProvidesPackage{beamerthemepecos_asc} 
+% this style was stolen from David Vilar and heavily modified
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\selectcolormodel{rgb}
+\mode<presentation>
+
+\usepackage{textcase}
+\usepackage{color}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Everyone's institute and date are the same
+
+\institute{\begin{Large}Predictive Engineering and Computational Science\end{Large}}
+\date[Feb. 8th, 2010]{Feb. 8th, 2010}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% custom style commands
+
+\newcommand{\dummytext}{ \textcolor{pecos3}{blahQ} }
+
+\newcommand{\pecostitleoneline}[1]{\title{{\uppercase{#1}}\\[0.1in]
+                                   {\uppercase{\dummytext}} }}
+
+\newcommand{\pecostitletwolines}[2]{\title{{\uppercase{#1}} \\[0.1in] 
+                                   {\uppercase{#2}} }}
+\newcommand{\pecosauthor}[1]{\author{{#1}}}
+\newcommand{\pecosemailaddr}[1]{\newcommand{\insertemailaddr}{#1}}
+\newcommand{\pecosbold}[1]{{\color{pecos2}{#1}}}
+\newcommand{\pecosreallybold}[1]{{\color{pecos6}{#1}}}
+
+
+\newcommand{\pecostransblock}[2]{
+\setbeamercolor*{block title}{fg=pecos2,bg=pecos5}
+\setbeamercolor*{block body}{fg=black,bg=pecos5}
+\begin{block}{\begin{flushleft}\begin{Large}#1\end{Large}\end{flushleft}}
+                                  #2\end{block}
+\setbeamercolor*{block body}{fg=black,bg=white}
+\setbeamercolor*{block title}{fg=black,bg=white}
+}
+
+
+\newcommand{\pecosctblock}[3]{
+\setbeamercolor*{block title}{fg=white,bg=pecos3}
+\setbeamercolor*{block body}{fg=black,bg=pecos5}
+\begin{block}{\begin{flushleft}\begin{Large}#1\end{Large}\end{flushleft}}
+                                  #2\end{block}
+\setbeamercolor*{block body}{fg=black,bg=white}
+\setbeamercolor*{block title}{fg=black,bg=white}
+}
+
+\newcommand{\pecoscfblock}[3]{
+\setbeamercolor*{block title}{fg=pecos2,bg=pecos5}
+\setbeamercolor*{block body}{fg=white,bg=pecos3}
+\setbeamercolor{itemize item}{fg=pecos6}
+\setbeamercolor{itemize subitem}{fg=pecos6}
+\setbeamercolor{itemize subsubitem}{fg=pecos6}
+\begin{block}{\begin{flushleft}\begin{Large}#1\end{Large}\end{flushleft}}
+                                  #2\end{block}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+}
+
+\newcommand{\pecosctfblock}[3]{
+\setbeamercolor*{block title}{fg=white,bg=pecos3}
+\setbeamercolor*{block body}{fg=white,bg=pecos3}
+\setbeamercolor{itemize item}{fg=pecos6}
+\setbeamercolor{itemize subitem}{fg=pecos6}
+\setbeamercolor{itemize subsubitem}{fg=pecos6}
+\begin{block}{\begin{flushleft}\begin{Large}#1\end{Large}\end{flushleft}}
+                                  #2\end{block}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+}
+
+\newcommand{\pecosinnerblock}[2]{
+\setbeamercolor*{block body}{bg=threesome,fg=mare}
+\setbeamercolor*{block title}{fg=mare,bg=nosur}
+\setbeamercolor*{itemize item}{fg=mare}
+\setbeamercolor*{itemize subitem}{fg=mare}
+\setbeamercolor*{itemize subsubitem}{fg=mare}
+\begin{block}{\begin{flushleft}#1\end{flushleft}}
+              #2\end{block}
+\setbeamercolor*{normal text}{fg=black}
+\setbeamercolor*{itemize item}{fg=wine}
+\setbeamercolor*{itemize subitem}{fg=wine}
+\setbeamercolor*{itemize subsubitem}{fg=wine}
+}
+
+
+\newcommand{\pecosblock}[2]{\pecostransblock{\centerline{#1}}{#2}}
+
+\newcommand{\pecosaltblock}[2]{\pecosctblock{\centerline{#1}}{#2}}
+
+\newcommand{\pecoscolorblock}[2]{\pecoscfblock{\centerline{#1}}{#2}}
+
+\newcommand{\pecosaltcolorblock}[2]{\pecosctfblock{\centerline{#1}}{#2}}
+
+\newcommand{\pecosreferencesblock}{\pecostransblock{\centerline{References}}{
+                                   \bibliographystyle{alpha}\bibliography{poster.bib}}}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% custom colors
+
+% darkgreen must be extra dark to stand out on our background
+\definecolor{darkgreen}{RGB}{0,63,0}
+\definecolor{darkblue}{RGB}{0,0,127}
+\definecolor{darkred}{RGB}{127,0,0}
+
+% dark background versions
+%\iffalse
+\definecolor{creamybold}{RGB}{247,244,202}
+\definecolor{mare}{named}{lightgray}
+
+% pecos blessed colors 
+\definecolor{pecos1}{RGB}{5,28,61}
+\definecolor{pecos2}{RGB}{0,75,145}
+\definecolor{pecos3}{RGB}{11,48,84}
+\definecolor{pecos4}{RGB}{51,51,51}
+\definecolor{pecos5}{RGB}{194,207,202}
+\definecolor{pecos6}{RGB}{255,153,0}
+\definecolor{pecos7}{RGB}{252,245,235}
+
+\definecolor{wine}{RGB}{48,24,0}
+\definecolor{problems}{RGB}{21,41,48}
+\definecolor{threesome}{RGB}{24,72,72}
+
+%\definecolor{pecos1}{cmyk}{0.99,0.86,0.44,0.55}
+%\definecolor{pecos2}{cmyk}{1.0000,0.80,0.14,0.02}
+%\definecolor{pecos3}{cmyk}{1.0,0.84,0.4000,0.35}
+%\definecolor{pecos4}{cmyk}{0.69,0.63,0.62,0.58}
+%\definecolor{pecos5}{cmyk}{0.24,0.11,0.19,0.}
+%\definecolor{pecos6}{cmyk}{0.0000,0.47,1.0,0.0000}
+%\definecolor{pecos7}{cmyk}{0.01,0.03,0.06,0.0}
+
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{itemize subsubitem}{fg=black}
+
+
+% headline colors and fonts
+\setbeamercolor{headline}{fg=white,bg=pecos3}
+%\setbeamerfont{title in headline}{size*={40}{1},fg=white,family=\sffamily}
+%\setbeamerfont{title in headline}{size*={40}{1},fg=white,family=\rmfamily}
+\setbeamerfont{title in headline}{size*={40}{10},fg=white}
+\setbeamercolor{author in headline}{fg=white}
+%\setbeamerfont{author in headline}{size*={40}{1},fg=white,family=\rmfamily}
+\setbeamerfont{author in headline}{size*={40}{1},fg=white}
+\setbeamercolor{institute in headline}{fg=white}
+\setbeamercolor{logo in headline}{fg=black,bg=white}
+\setbeamercolor{separation line}{bg=pecos2}
+
+% footline colors and fonts
+\setbeamercolor{footline}{fg=white,bg=pecos3}
+\setbeamerfont{footline}{fg=black, size=\normalsize}
+
+% body colors and fonts
+\setbeamercolor*{normal text}{fg=black,bg=pecos5}
+
+% block environment
+\setbeamercolor*{block body}{bg=white,fg=black}
+\setbeamercolor*{block title}{fg=black,bg=white}
+\setbeamerfont{block title}{series=\bf}
+
+% example environment
+\setbeamercolor*{example title}{fg=white,bg=pecos1}
+\setbeamerfont{example title}{size=\large,series=\bf,bg=pecos1,fg=white}
+
+% bibliography
+\setbeamercolor*{bibliography entry author}{fg=black}
+\setbeamercolor*{bibliography entry title}{fg=pecos2}
+\setbeamercolor*{bibliography entry location}{fg=black}
+\setbeamercolor*{bibliography entry note}{fg=black}
+\setbeamertemplate{bibliography item}[text]
+\setbeamercolor*{bibliography item}{fg=pecos2}
+
+
+
+
+\setbeamercolor{alerted text}{fg=pecos2}
+
+
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{navigation symbols}{}  % no navigation on a poster
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\iffalse
+\setbeamertemplate{block begin}{
+  \vskip.75ex
+  \begin{beamercolorbox}[leftskip=.6cm,colsep*=.75ex]{block title}%
+    \usebeamerfont*{block title}\insertblocktitle
+  \end{beamercolorbox}%
+  {\ifbeamercolorempty[bg]{block body}{}{\nointerlineskip\vskip-0.5pt}}%
+  \usebeamerfont{block body}%
+  \begin{beamercolorbox}[colsep*=.75ex,sep=.75ex,vmode]{block body}%
+    \ifbeamercolorempty[bg]{block body}{\vskip-.25ex}{\vskip-.75ex}\vbox{}%
+  }
+  \setbeamertemplate{block end}{
+  \end{beamercolorbox}
+}
+\fi
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\setbeamertemplate{headline}{  
+  \leavevmode
+  \begin{beamercolorbox}[wd=\paperwidth]{headline}
+    \begin{columns}[T]
+      \begin{column}{.03\paperwidth}
+      \end{column}
+      \begin{column}{.15\paperwidth}
+        \begin{flushleft}
+        %  \includegraphics[scale=.75]{logo_reverse_blue}
+          \includegraphics[scale=.65]{grand_logo_reverse}
+        \end{flushleft}
+        \vskip1ex
+      \end{column}
+      \begin{column}{.79\paperwidth}
+        \vskip4ex
+\vspace{0.3cm}
+        \raggedleft
+\setstretch{10}
+        \usebeamerfont{title in headline}{\color{fg}\textbf{\inserttitle}}\\
+       % \usebeamerfont{title in headline}{\color{fg}{\fontencoding{OT1}\fontfamily{ppl}\textbf{\inserttitle}}}\\
+      % \usebeamerfont{title in headline}{\color{fg}{\fontfamily{iwona}\textbf{\inserttitle}}}\\
+	\vspace{.9cm}
+
+       %\usebeamerfont{author in headline}{\color{fg}\textbf{\insertauthor}}\\
+        \usebeamerfont{author in headline}{\color{fg}{\fontfamily{iwona}\insertauthor}}\\
+%\vspace{0.3cm}
+     \end{column}
+%     \begin{column}{.15\paperwidth}
+%       \vskip.6cm
+%       \begin{flushright}
+%         \includegraphics[scale=1]{ices_logo}
+%        \end{flushright}
+%%        \vskip.9cm
+%      \end{column}
+      \begin{column}{.03\paperwidth}
+      \end{column}
+    \end{columns}
+  \end{beamercolorbox}
+  
+  
+  \begin{beamercolorbox}[wd=\paperwidth]{lower separation line head}
+    \rule{0pt}{2pt}
+  \end{beamercolorbox}
+}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\setbeamertemplate{footline}{  
+  \leavevmode
+  \begin{beamercolorbox}[wd=\paperwidth]{upper separation line foot}
+    \rule{0pt}{2pt}
+  \end{beamercolorbox}
+
+  \begin{beamercolorbox}[wd=\paperwidth]{footline}
+    \begin{columns}[T]
+      \begin{column}{.03\paperwidth}
+      \end{column}
+      \begin{column}{.21\paperwidth}
+       \vskip.6cm
+        \begin{flushleft}
+          \includegraphics[height=.05\paperwidth]{nnsa_logo}
+          \includegraphics[height=.05\paperwidth]{asc_logo}
+        \end{flushleft}
+        \vskip1ex
+      \end{column}
+      \begin{column}{.62\paperwidth}
+       \vskip.6cm
+	\begin{center}
+	\texttt{\Large \insertemailaddr}
+
+	\texttt{\Large http://pecos.ices.utexas.edu}
+	\end{center}
+     \end{column}
+     \begin{column}{.21\paperwidth}
+       \vskip.6cm
+%       {\fontfamily{iwona}\textbf{
+%    Institute for Computational Engineering and Sciences (ICES)}}
+          \includegraphics[height=.05\paperwidth]{ices_logo}
+      \end{column}
+      \begin{column}{.03\paperwidth}
+      \end{column}
+    \end{columns}
+  \end{beamercolorbox}
+  
+  
+  \begin{beamercolorbox}[wd=\paperwidth]{lower separation line head}
+    \rule{0pt}{2pt}
+  \end{beamercolorbox}
+}
+
+\mode<all>
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "poster"
+%%% TeX-PDF-mode: t
+%%% End: 

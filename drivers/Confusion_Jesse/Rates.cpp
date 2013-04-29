@@ -9,7 +9,9 @@
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
 #else
+#include "choice.hpp"
 #endif
 
 bool enforceLocalConservation = false;
@@ -28,6 +30,13 @@ public:
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
+  }
+};
+
+class ZeroMeanScaling : public hFunction {
+  public:
+  double value(double x, double y, double h) {
+    return 1.0/(h*h);
   }
 };
 
@@ -107,12 +116,13 @@ public:
 	double u = C0;
 	double u_x = 0.0;
 	double u_y = 0.0;  	
-	bool useDiscontinuous = false; // use discontinuous soln
-	int numTerms = 20;
+	bool useDiscontinuous = true; // use discontinuous soln
+	int numTerms = 25;
 	if (!useDiscontinuous)
 	  numTerms = 1;
+	
 	for (int n = 1;n<numTerms+1;n++){
-
+	  
 	  double lambda = n*n*pi*pi*_eps;
 	  double d = sqrt(1.0+4.0*_eps*lambda);
 	  double r1 = (1.0+d)/(2.0*_eps);
@@ -179,6 +189,13 @@ public:
   }
 };
 
+class InvSqrtHScaling : public hFunction {
+public:
+  double value(double x, double y, double h) {
+    return sqrt(1.0/h);
+  }
+};
+
 // inflow values for u
 class l2NormOfVector : public Function {
   FunctionPtr _beta;
@@ -212,37 +229,22 @@ public:
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  choice::MpiArgs args( argc, argv );
   int rank=mpiSession.getRank();
   int numProcs=mpiSession.getNProc();
 #else
+  choice::Args args( argc, argv );
   int rank = 0;
   int numProcs = 1;
 #endif
 
-  int numRefs = 0;
-  if ( argc > 1) {
-    numRefs = atoi(argv[1]);
-    if (rank==0){
-      cout << "numRefs = " << numRefs << endl;
-    }
+  int nCells = args.Input<int>("--nCells", "num cells",2);  
+  int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0); 
+  double eps = args.Input<double>("--epsilon","diffusion parameter",1e-2);
+  double energyThreshold = args.Input<double>("--energyThreshold","adaptivity thresh",.5);
+  if (rank==0){
+    cout << "nCells = " << nCells << ", numRefs = " << numRefs << ", eps = " << eps << endl;
   }
-  
-  double eps = 1e-3;
-  if ( argc > 2) {
-    eps = atof(argv[2]);    
-    if (rank==0){
-      cout << "eps = " << eps << endl;
-    }
-  }
-
-  int nCells = 2;
-  if ( argc > 3) {
-    nCells = atof(argv[3]);    
-    if (rank==0){
-      cout << "nCells = " << nCells << endl;
-    }
-  }
-
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -286,17 +288,22 @@ int main(int argc, char *argv[]) {
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  //  FunctionPtr ip_scaling = Teuchos::rcp( new ConstantScalarFunction(1.0));
+  FunctionPtr invSqrtH = Teuchos::rcp(new InvSqrtHScaling);
 
+  
   robIP->addTerm( ip_scaling * v);
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
-
-  //  robIP->addTerm( v );
-  //  robIP->addTerm( 1.0/sqrt(eps) * tau );
-
   robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( beta * v->grad() );
   robIP->addTerm( tau->div() );  
+  /*
+  robIP->addTerm(v);
+  robIP->addTerm(v->grad());
+  robIP->addTerm(tau->div());
+  robIP->addTerm(invSqrtH*tau);  
+  */
+  FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); // see what effect this has
+  //  robIP->addZeroMeanTerm( h2_scaling*v );
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -331,7 +338,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 3, pToAdd = 5;
+  int H1Order = 2, pToAdd = 3;
   
   int horizontalCells = nCells, verticalCells = nCells;
   
@@ -349,26 +356,26 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
   
-  double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
    
   ofstream convOut;
   stringstream convOutFile;
   convOutFile << "erickson_conv_" << round(-log(eps)/log(10.0)) <<".txt";
   convOut.open(convOutFile.str().c_str());
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
+  for (int refIndex=0; refIndex < numRefs; refIndex++){    
     solution->condensedSolve(false);
     //    solution->solve(false);
 
     double quadTol = 1e-7;
+    int cubEnrich = 25;
     FunctionPtr u_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, u) );
     FunctionPtr sigma1_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma1) );
     FunctionPtr sigma2_soln = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma2) );
     FunctionPtr u_diff = (u_soln - u_exact)*(u_soln - u_exact);
     FunctionPtr sig1_diff = (sigma1_soln - sig1_exact)*(sigma1_soln - sig1_exact);
     FunctionPtr sig2_diff = (sigma2_soln - sig2_exact)*(sigma2_soln - sig2_exact);
-    double u_L2_error = u_diff->integrate(mesh,quadTol);
-    double sigma_L2_error = sig1_diff->integrate(mesh,quadTol) + sig2_diff->integrate(mesh,quadTol);
+    double u_L2_error = u_diff->integrate(mesh,cubEnrich);
+    double sigma_L2_error = sig1_diff->integrate(mesh,cubEnrich) + sig2_diff->integrate(mesh,cubEnrich);
     double L2_error = sqrt(u_L2_error + sigma_L2_error);
     double energy_error = solution->energyErrorTotal();
     u_soln->writeValuesToMATLABFile(mesh, "u_soln.m");

@@ -65,14 +65,27 @@ bool checkVertexNodalIndicesQuad(BasisPtr basis, vector<int> &vertexIndices) {
     for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
       double xValue = values(fieldIndex,ptIndex,0);
       double yValue = values(fieldIndex,ptIndex,1);
-      double xExpected = 0, yExpected = 0;
       if (fieldIndex==xNodeIndex) {
-        xExpected = 1;
-      } else if (fieldIndex==yNodeIndex) {
-        yExpected = 1;
+        // expect non-zero
+        if (xValue < tol) {
+          return false;
+        }
+      } else {
+        // expect zero
+        if (xValue > tol) {
+          return false;
+        }
       }
-      if ((abs(xExpected-xValue) > tol) || (abs(yExpected-yValue)>tol)) {
-        return false;
+      if (fieldIndex==yNodeIndex) {
+        // expect non-zero
+        if (yValue < tol) {
+          return false;
+        }
+      } else {
+        // expect zero
+        if (yValue > tol) {
+          return false;
+        }
       }
     }
   }
@@ -88,24 +101,25 @@ bool VectorizedBasisTestSuite::testVectorizedBasisTags() {
   int vertexDim = 0;
   
   for (int polyOrder = 1; polyOrder<10; polyOrder++) {    
-    int basisRank;
-    BasisPtr hgradBasis =  BasisFactory::getBasis(basisRank,polyOrder,
-                                                  quad_4.getKey(), 
-                                                  IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
-    BasisPtr vectorHGradBasis = BasisFactory::getBasis( polyOrder,
-                                                       quad_4.getKey(), 
-                                                       IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
+    BasisPtr hgradBasis =  BasisFactory::getConformingBasis(polyOrder,
+                                                            quad_4.getKey(),
+                                                            IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+    BasisPtr vectorHGradBasis = BasisFactory::getConformingBasis( polyOrder,
+                                                                 quad_4.getKey(),
+                                                                 IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
     vector<int> vertexNodeFieldIndices;
     for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
       for (int comp=0; comp<numComponents; comp++) {
         int vertexNodeFieldIndex = vectorHGradBasis->getDofOrdinal(vertexDim, vertexIndex, comp);
         vertexNodeFieldIndices.push_back(vertexNodeFieldIndex);
+//        cout << "vertexNodeFieldIndex for vertex index " << vertexIndex << ", comp " << comp;
+//        cout << " = " << vertexNodeFieldIndex << endl;
       }
     }
     if (!checkVertexNodalIndicesQuad(vectorHGradBasis, vertexNodeFieldIndices) ) {
       success = false;
       cout << "testVectorizedBasisTags: Vertex tags for vectorized HGRAD basis";
-      cout << "of order " << polyOrder << " are incorrect.\n";
+      cout << " of order " << polyOrder << " are incorrect.\n";
     }
   }
   
@@ -121,14 +135,10 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
   
   int polyOrder = 3, numPoints = 5, spaceDim = 2;
   
-  int basisRank;
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > hgradBasis
-  = 
-  BasisFactory::getBasis(basisRank,polyOrder,
-                         quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
+  BasisPtr hgradBasis = BasisFactory::getBasis(polyOrder, quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
   
   // first test: make a single-component vector basis.  This should agree in every entry with the basis itself, but its field container will have one higher rank...
-  Vectorized_Basis<double, FieldContainer<double> > oneComp(hgradBasis, 1);
+  VectorizedBasis<> oneComp(hgradBasis, 1);
   
   FieldContainer<double> linePoints(numPoints, spaceDim);
   for (int i=0; i<numPoints; i++) {
@@ -155,15 +165,15 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
     }
   }
   
-  vector< Teuchos::RCP< Basis<double, FieldContainer<double> > > > twoComps;
-  twoComps.push_back( Teuchos::rcp( new Vectorized_Basis<double, FieldContainer<double> >(hgradBasis, 2) ) );
+  vector< BasisPtr > twoComps;
+  twoComps.push_back( Teuchos::rcp( new VectorizedBasis<>(hgradBasis, 2) ) );
   twoComps.push_back( BasisFactory::getBasis( polyOrder,
                                              quad_4.getKey(), IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) );
   
   
-  vector< Teuchos::RCP< Basis<double, FieldContainer<double> > > >::iterator twoCompIt;
+  vector< BasisPtr >::iterator twoCompIt;
   for (twoCompIt = twoComps.begin(); twoCompIt != twoComps.end(); twoCompIt++) {
-    Teuchos::RCP< Basis<double, FieldContainer<double> > > twoComp = *twoCompIt;
+    BasisPtr twoComp = *twoCompIt;
     
     int componentCardinality = hgradBasis->getCardinality();
     
@@ -193,7 +203,7 @@ bool VectorizedBasisTestSuite::testVectorizedBasis() {
     }
     
     // test the mapping from oneComp dofOrdinal to twoComp:
-    Vectorized_Basis<double, FieldContainer<double> >* twoCompAsVectorBasis = (Vectorized_Basis<double, FieldContainer<double> >  *) twoComp.get();
+    VectorizedBasis<>* twoCompAsVectorBasis = (VectorizedBasis<>  *) twoComp.get();
     
     for (int compDofOrdinal=0; compDofOrdinal<oneComp.getCardinality(); compDofOrdinal++) {
       int dofOrdinal_0 = twoCompAsVectorBasis->getDofOrdinalFromComponentDofOrdinal(compDofOrdinal, 0);

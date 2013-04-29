@@ -18,6 +18,8 @@
 #include "TestRHSLinear.h"
 #include "BilinearFormUtility.h"
 
+#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
+
 #include "ConfusionBilinearForm.h"
 #include "ConfusionProblemLegacy.h"
 
@@ -93,7 +95,7 @@ bool RHSTests::testComputeRHSLegacy() {
   bool success = true;
   int numTests = 1;
   double tol = 1e-14;
-  int testOrder = 3; 
+  int testOrder = 3;
   
   //cout << myName << ": testing with testOrder=" << testOrder << endl;
   Teuchos::RCP<BilinearForm> bilinearForm = Teuchos::rcp( new TestBilinearFormDx() );
@@ -132,6 +134,13 @@ bool RHSTests::testComputeRHSLegacy() {
     
     DofOrderingFactory dofOrderingFactory(bilinearForm);
     Teuchos::RCP<DofOrdering> testOrdering = dofOrderingFactory.testOrdering(testOrder, cellTopo);
+    
+    if (numSides == 4) {
+      // now that we have a Lobatto basis, we need to hard-code the basis for which we have precomputed these values...
+      testOrdering = Teuchos::rcp( new DofOrdering );
+      BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(testOrder,POINTTYPE_SPECTRAL)), 2, 0, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) );
+      testOrdering->addEntry(0, basis, 0);
+    }
     
     int numTrialDofs = testOrdering->totalDofs(); // suppose we're symmetric: numTrial = numTest
     

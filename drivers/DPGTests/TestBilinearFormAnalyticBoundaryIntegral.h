@@ -56,48 +56,47 @@
 
 using namespace Intrepid;
 
-class TestBilinearFormAnalyticBoundaryIntegral : public BilinearForm {
-private:
-  static const string & S_TEST;
-  static const string & S_TRIAL;
-  
+#include "VarFactory.h"
+#include "BF.h"
+#include "DofOrdering.h"
+#include "Basis.h"
+#include "doubleBasisConstruction.h"
+
+class TestBilinearFormAnalyticBoundaryIntegral {
 public:
-  TestBilinearFormAnalyticBoundaryIntegral() {
-    _testIDs.push_back(0);
-    _trialIDs.push_back(0);
+  static BFPtr bf() {
+    VarFactory varFactory;
+    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarPtr uhat = varFactory.traceVar("uhat");
+    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    bf->addTerm(uhat->times_normal(), v->grad());
+    return bf;
   }
   
-  // implement the virtual methods declared in super:
-  const string & testName(int testID) {
-    return S_TEST;
+  static DofOrderingPtr testOrdering(int polyOrder) {
+    Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering );
+    int testID = 0;
+    BasisPtr testBasis = Camellia::intrepidQuadHGRAD(polyOrder);
+    testOrdering->addEntry(testID, testBasis, testBasis->rangeRank());
+    return testOrdering;
   }
-  const string & trialName(int trialID) {
-    return S_TRIAL;
-  }
-  
-  bool trialTestOperator(int trialID, int testID, 
-                         EOperatorExtended &trialOperator, EOperatorExtended &testOperator) {
-    trialOperator = IntrepidExtendedTypes::OP_TIMES_NORMAL;
-    testOperator  = IntrepidExtendedTypes::OP_GRAD;
-    return true;
-  }
-  
-  void applyBilinearFormData(int trialID, int testID,
-                           FieldContainer<double> &trialValues, FieldContainer<double> &testValues,  
-                           const FieldContainer<double> &points) {
-    // leave values as they are...             
-  }
-  
-  EFunctionSpaceExtended functionSpaceForTest(int testID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  }
-  
-  EFunctionSpaceExtended functionSpaceForTrial(int trialID) {
-    return IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD;
-  }
-  
-  bool isFluxOrTrace(int trialID) {
-    return true;
+  static DofOrderingPtr trialOrdering(int polyOrder, int numSides, bool conforming) {
+    Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering );
+    int trialID = 0;
+    BasisPtr trialBasis = Camellia::intrepidLineHGRAD(polyOrder);
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      trialOrdering->addEntry(trialID, trialBasis, trialBasis->rangeRank(), sideIndex);
+    }
+    if (conforming) {
+      int firstVertexOrdinal = *(trialBasis->dofOrdinalsForVertex(0).begin());
+      int lastVertexOrdinal = *(trialBasis->dofOrdinalsForVertex(1).begin());
+      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+        int otherSideIndex = (sideIndex+1) % numSides;
+        trialOrdering->addIdentification(trialID, sideIndex, lastVertexOrdinal, otherSideIndex, firstVertexOrdinal);
+      }
+    }
+    trialOrdering->rebuildIndex();
+    return trialOrdering;
   }
   
   static void expectedPreStiffnessForCubicsOnQuad(FieldContainer<double> &stiffnessExpected, bool conformingTraces) {
@@ -555,7 +554,6 @@ public:
       stiffnessExpected(0,15,11) = 0.026619856874997586;
     }
   }
-  
   static void expectedIPMatrixForCubicsOnQuad(FieldContainer<double> &ipMatrixExpected) {
     ipMatrixExpected.resize(1,16,16);
     ipMatrixExpected(0,0,0) = 0.6394557823129254;
@@ -815,7 +813,6 @@ public:
     ipMatrixExpected(0,14,15) = -0.22550006385415985;
     ipMatrixExpected(0,15,15) = 0.639455782312925;
   }
-  
   static void expectedOptTestWeightsForCubicsOnQuad(FieldContainer<double> & optTestWeights, bool conformingTraces) {
     if (! conformingTraces) {
       optTestWeights.resize(1,16,16);
@@ -1271,7 +1268,6 @@ public:
       optTestWeights(0,11,15) = 0.016928873660665398;
     }
   }
-  
   static void expectedFinalStiffnessForCubicsOnQuad(FieldContainer<double> & finalStiffnessExpected, bool conformingTraces) {
     if (! conformingTraces) {
       finalStiffnessExpected.resize(1,16,16);
@@ -1679,8 +1675,4 @@ public:
       finalStiffnessExpected(0,11,11) = 2.768471070769951;    }
   }
 };
-
-const string & TestBilinearFormAnalyticBoundaryIntegral::S_TEST  = "test";
-const string & TestBilinearFormAnalyticBoundaryIntegral::S_TRIAL = "trace";
-
 #endif

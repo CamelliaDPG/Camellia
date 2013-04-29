@@ -70,9 +70,12 @@ class IncompressibleFormulationsTests : public TestSuite {
   bool testVGPStokesFormulationConsistency();
   bool testVGPStokesFormulationCorrectness();
   
+  bool testVGPNavierStokesLocalConservation();
+  
   bool testVGPNavierStokesFormulationConsistency();
   bool testVGPNavierStokesFormulationCorrectness();
   bool testVGPNavierStokesFormulationKovasnayConvergence();
+  bool testVGPNavierStokesFormulationLocalConservation();
   
 public:
   IncompressibleFormulationsTests(bool thorough = true);

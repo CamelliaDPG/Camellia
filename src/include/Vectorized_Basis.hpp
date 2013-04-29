@@ -1,6 +1,5 @@
 
 //
-//  Basis_HGRAD_C0_FEM.h
 //  DPGTrilinos
 //
 //  Created by Nate Roberts on 8/9/11.

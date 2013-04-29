@@ -58,11 +58,11 @@
 #include "LocalStiffnessMatrixFilter.h"
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
+#include "Solver.h"
 
 class Function;
 typedef Teuchos::RCP<Function> FunctionPtr;
 
-class Solver;
 class LagrangeConstraints;
 class Epetra_LinearProblem;
 class Solution;
@@ -218,14 +218,9 @@ public:
 
   void writeToFile(int trialID, const string &filePath);
   void writeQuadSolutionToFile(int trialID, const string &filePath);
-  void setWriteMatrixToFile(bool value,const string &filePath){
-    _writeMatrixToMatlabFile = value;
-    _matrixFilePath = filePath;
-  }
-  void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath){
-    _writeMatrixToMatrixMarketFile = value;
-    _matrixFilePath = filePath;
-  }
+  
+  void setWriteMatrixToFile(bool value,const string &filePath);
+  void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath);
   
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;
@@ -238,8 +233,7 @@ public:
   void setIP( Teuchos::RCP<DPGInnerProduct>);
   
   // Jesse's additions:
-  void condensedSolve();
-  void condensedSolve(bool saveMemory);
+  void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new KluSolver()), bool saveMemory = false);
   void getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector);  
   void getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K,Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
   void getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);

@@ -264,7 +264,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
     double expectedPerimeter = 6 + 2 * sqrt(2);
     
     // since our map from straight edges is the identity,
-    // the expected jacobian function along the side is
+    // the expected jacobian function everywhere, including along the side, is
     // [  1  0 ]
     // [  0  1 ]
     FunctionPtr expectedTransformation, expectedJacobian;
@@ -280,7 +280,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
       // need sideCache not to retransform things so we can test the transformationFxn itself:
       // TODO: think through this carefully, and/or try with basisCache to confirm that the interior works
       //       the way we're asking the edge to.  We have reason to think the interior is working...
-      basisCache->setTransformationFunction(Function::null());
+//      basisCache->setTransformationFunction(Function::null());
       sideCache->setTransformationFunction(Function::null());
       
       int numCells = 1;
@@ -292,6 +292,18 @@ bool CurvilinearMeshTests::testEdgeLength() {
       FunctionPtr transformationFxn = quadMesh->getTransformationFunction();
       FunctionPtr transformationJacobian = transformationFxn->grad();
       transformationJacobian->values(jacobianValues,sideCache);
+      
+      if (! expectedTransformation->equals(transformationFxn, basisCache) ) {
+        success = false;
+        cout << "transformationFxn and expectedTransformation differ on interior of the element.\n";
+        reportFunctionValueDifferences(transformationFxn, expectedTransformation, basisCache, tol);
+      }
+      
+      if (! expectedJacobian->equals(transformationJacobian, basisCache) ) {
+        success = false;
+        cout << "transformationJacobian and expectedJacobian differ on interior of the element.\n";
+        reportFunctionValueDifferences(transformationJacobian, expectedJacobian, basisCache, tol);
+      }
       
       double maxDiff = 0;
       
@@ -745,7 +757,7 @@ bool CurvilinearMeshTests::testH1Projection() {
                                      values, tol);
     }
     
-    VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+    VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false);
     
     // For H1Order > 1, we don't expect that the edge interpolant will match the TFI on the element interior; we expect that only on the edges.
     

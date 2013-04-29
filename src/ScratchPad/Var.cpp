@@ -44,6 +44,8 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
     return IntrepidExtendedTypes::FUNCTION_SPACE_HCURL;
   if (space == HDIV)
     return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV;
+  if (space == HDIV_FREE)
+    return IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE;
   if (space == L2)
     return IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
   if (space == CONSTANT_SCALAR)
@@ -94,6 +96,10 @@ VarPtr Var::varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf) {
   }
   if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV) {
     space = HDIV;
+    rank = 1;
+  }
+  if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE) {
+    space = HDIV_FREE;
     rank = 1;
   }
   if (efs == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) {

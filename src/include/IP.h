@@ -38,6 +38,8 @@ public:
                                  Teuchos::RCP<DofOrdering> dofOrdering, 
                                  Teuchos::RCP<BasisCache> basisCache);
 
+  double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
+  
   // added by Jesse
   LinearTermPtr evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart);
   //  FunctionPtr evaluate(map< int, FunctionPtr> &varFunctions1, map< int, FunctionPtr> &varFunctions2, bool boundaryPart);

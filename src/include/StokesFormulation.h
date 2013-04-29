@@ -19,7 +19,7 @@
 // implementation of some standard Stokes Formulations.
 
 enum StokesFormulationChoice {
-  VSP, VVP, VGP, DDS, DDSP
+  VSP, VVP, VGP, VGPF, DDS, DDSP, CE
 };
 
 // StokesFormulation class: a prototype which I hope to reuse elsewhere once it's ready
@@ -391,13 +391,13 @@ public:
     if (!_trueTraces)
       correspondingTraceIDs.push_back(u1hat->ID());
     else
-      correspondingTraceIDs.push_back(-1);
+      correspondingTraceIDs.push_back(NONE);
     fieldIDs.push_back(u2->ID());
     fileFriendlyNames.push_back("u2");
     if (!_trueTraces)
       correspondingTraceIDs.push_back(u2hat->ID());
     else
-      correspondingTraceIDs.push_back(-1);
+      correspondingTraceIDs.push_back(NONE);
     fieldIDs.push_back(p->ID());
     fileFriendlyNames.push_back("pressure");
     correspondingTraceIDs.push_back(p_hat->ID());
@@ -436,40 +436,12 @@ class VGPStokesFormulation : public StokesFormulation {
   VarPtr tau1, tau2, q, v1, v2;
   BFPtr _bf;
   IPPtr _graphNorm;
-  double _mu;
-  
-public:
-  static VarFactory vgpVarFactory() {
-    // sets the order of the variables in a canonical way
-    // uses the publicly accessible strings from above, so that VarPtrs
-    // can be looked up...
-    
-    VarFactory varFactory;
-    VarPtr myVar;
-    myVar = varFactory.testVar(VGP_V1_S, HGRAD);
-    myVar = varFactory.testVar(VGP_V2_S, HGRAD);
-    myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
-    myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
-    myVar = varFactory.testVar(VGP_Q_S, HGRAD);
-    
-    myVar = varFactory.traceVar(VGP_U1HAT_S);
-    myVar = varFactory.traceVar(VGP_U2HAT_S);
-    
-    myVar = varFactory.fluxVar(VGP_T1HAT_S);
-    myVar = varFactory.fluxVar(VGP_T2HAT_S);
-    myVar = varFactory.fieldVar(VGP_U1_S);
-    myVar = varFactory.fieldVar(VGP_U2_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA11_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA12_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA21_S);
-    myVar = varFactory.fieldVar(VGP_SIGMA22_S);
-    myVar = varFactory.fieldVar(VGP_P_S);
-    return varFactory;
-  }
+  FunctionPtr _mu;
+  bool _enriched_velocity;
   
   void initVars() {
     // create the VarPtrs:
-    varFactory = vgpVarFactory();
+    varFactory = vgpVarFactory(_enriched_velocity);
     
     // look up the created VarPtrs:
     v1 = varFactory.testVar(VGP_V1_S, HGRAD);
@@ -483,8 +455,14 @@ public:
     
     t1n = varFactory.fluxVar(VGP_T1HAT_S);
     t2n = varFactory.fluxVar(VGP_T2HAT_S);
-    u1 = varFactory.fieldVar(VGP_U1_S);
-    u2 = varFactory.fieldVar(VGP_U2_S);
+    if (! _enriched_velocity) {
+      u1 = varFactory.fieldVar(VGP_U1_S);
+      u2 = varFactory.fieldVar(VGP_U2_S);
+    } else {
+      u1 = varFactory.fieldVar(VGP_U1_S, HGRAD);
+      u2 = varFactory.fieldVar(VGP_U2_S, HGRAD);
+    }
+    
     sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
     sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
     sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
@@ -492,8 +470,9 @@ public:
     p = varFactory.fieldVar(VGP_P_S);
   }
   
-  VGPStokesFormulation(double mu) {
+  void init(FunctionPtr mu, bool enriched_velocity) {
     _mu = mu;
+    _enriched_velocity = enriched_velocity;
     
     initVars();
     
@@ -516,7 +495,7 @@ public:
     _bf->addTerm(-u2hat, tau2->dot_normal());
     
     // v1:
-    _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+    _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1)
     _bf->addTerm(- mu * sigma12,v1->dy());
     _bf->addTerm( p, v1->dx() );
     _bf->addTerm( t1n, v1);
@@ -524,36 +503,84 @@ public:
     // v2:
     _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
     _bf->addTerm(- mu * sigma22,v2->dy());
-    _bf->addTerm(p, v2->dy());
+    _bf->addTerm( p, v2->dy());
     _bf->addTerm( t2n, v2);
     
     // q:
     _bf->addTerm(-u1,q->dx()); // (-u, grad q)
     _bf->addTerm(-u2,q->dy());
     _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-
+    
     _graphNorm = _bf->graphNorm();
-//    _graphNorm = Teuchos::rcp( new IP );
-//    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-//    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-//    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-//    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-//    _graphNorm->addTerm( v1->dx() + v2->dy() );     // pressure
-//    _graphNorm->addTerm( tau1->div() - q->dx() );    // u1
-//    _graphNorm->addTerm( tau2->div() - q->dy() );    // u2
-//    
-//    // L^2 terms:
-//    _graphNorm->addTerm( v1 );
-//    _graphNorm->addTerm( v2 );
-//    _graphNorm->addTerm( q );
-//    _graphNorm->addTerm( tau1 );
-//    _graphNorm->addTerm( tau2 );
   }
+  
+public:
+  static VarFactory vgpVarFactory(bool enriched_velocity = false) {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+    
+    VarFactory varFactory;
+    VarPtr myVar;
+    myVar = varFactory.testVar(VGP_V1_S, HGRAD);
+    myVar = varFactory.testVar(VGP_V2_S, HGRAD);
+    myVar = varFactory.testVar(VGP_TAU1_S, HDIV);
+    myVar = varFactory.testVar(VGP_TAU2_S, HDIV);
+    myVar = varFactory.testVar(VGP_Q_S, HGRAD);
+    
+    myVar = varFactory.traceVar(VGP_U1HAT_S);
+    myVar = varFactory.traceVar(VGP_U2HAT_S);
+    
+    myVar = varFactory.fluxVar(VGP_T1HAT_S);
+    myVar = varFactory.fluxVar(VGP_T2HAT_S);
+    if (! enriched_velocity) {
+      myVar = varFactory.fieldVar(VGP_U1_S);
+      myVar = varFactory.fieldVar(VGP_U2_S);
+    } else {
+      myVar = varFactory.fieldVar(VGP_U1_S, HGRAD);
+      myVar = varFactory.fieldVar(VGP_U2_S, HGRAD);
+    }
+    myVar = varFactory.fieldVar(VGP_SIGMA11_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA12_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA21_S);
+    myVar = varFactory.fieldVar(VGP_SIGMA22_S);
+    myVar = varFactory.fieldVar(VGP_P_S);
+    return varFactory;
+  }
+  
+  VGPStokesFormulation(FunctionPtr mu, bool enriched_velocity = false) {
+    init(mu, enriched_velocity);
+  }
+  
+  VGPStokesFormulation(double mu, bool enriched_velocity = false) {
+    init(Function::constant(mu), enriched_velocity);
+  }
+  
   BFPtr bf() {
     return _bf;
   }
   IPPtr graphNorm() {
     return _graphNorm;
+  }
+  IPPtr scaleCompliantGraphNorm() {
+    FunctionPtr h = Teuchos::rcp( new hFunction() );
+    IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+    FunctionPtr scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
+    
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
+    compliantGraphNorm->addTerm( scaled_mu * v1->dx() + scaled_mu * v2->dy() ); // pressure
+    compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy());  // u2
+    
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v1 );
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v2 );
+    compliantGraphNorm->addTerm( q ); 
+    compliantGraphNorm->addTerm( tau1 );
+    compliantGraphNorm->addTerm( tau2 );
+    return compliantGraphNorm;
   }
   VarPtr ui(int i) {
     if (i==0) return u1;
@@ -631,6 +658,247 @@ public:
     fieldIDs.push_back(u2->ID());
     fileFriendlyNames.push_back("u2");
     correspondingTraceIDs.push_back(u2hat->ID());
+    fieldIDs.push_back(p->ID());
+    fileFriendlyNames.push_back("pressure");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(sigma11->ID());
+    fileFriendlyNames.push_back("sigma11");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(sigma12->ID());
+    fileFriendlyNames.push_back("sigma12");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(sigma21->ID());
+    fileFriendlyNames.push_back("sigma21");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(sigma22->ID());
+    fileFriendlyNames.push_back("sigma22");
+    correspondingTraceIDs.push_back(NONE);
+  }
+};
+
+const static string VGPF_V1_S = "v_1";
+const static string VGPF_V2_S = "v_2";
+const static string VGPF_TAU1_S = "\\tau_1";
+const static string VGPF_TAU2_S = "\\tau_2";
+const static string VGPF_Q_S = "q";
+
+const static string VGPF_U1HAT_S = "\\widehat{u}_1";
+const static string VGPF_U2HAT_S = "\\widehat{u}_2";
+const static string VGPF_T1HAT_S = "\\boldsymbol{t}_{1n}";
+const static string VGPF_T2HAT_S = "\\boldsymbol{t}_{2n}";
+
+const static string VGPF_U_S = "u";
+const static string VGPF_SIGMA11_S = "\\sigma_{11}";
+const static string VGPF_SIGMA12_S = "\\sigma_{12}";
+const static string VGPF_SIGMA21_S = "\\sigma_{21}";
+const static string VGPF_SIGMA22_S = "\\sigma_{22}";
+const static string VGPF_P_S = "p";
+
+class VGPFStokesFormulation : public StokesFormulation {
+  VarFactory varFactory;
+  // fields:
+  VarPtr u, p, sigma11, sigma12, sigma21, sigma22;
+  // fluxes & traces:
+  VarPtr u1hat, u2hat, t1n, t2n;
+  // tests:
+  VarPtr tau1, tau2, q, v1, v2;
+  BFPtr _bf;
+  IPPtr _graphNorm;
+  FunctionPtr _mu;
+  
+  void initVars() {
+    // create the VarPtrs:
+    varFactory = vgpfVarFactory();
+    
+    // look up the created VarPtrs:
+    v1 = varFactory.testVar(VGPF_V1_S, HGRAD);
+    v2 = varFactory.testVar(VGPF_V2_S, HGRAD);
+    tau1 = varFactory.testVar(VGPF_TAU1_S, HDIV);
+    tau2 = varFactory.testVar(VGPF_TAU2_S, HDIV);
+    q = varFactory.testVar(VGPF_Q_S, HGRAD);
+    
+    u1hat = varFactory.traceVar(VGPF_U1HAT_S);
+    u2hat = varFactory.traceVar(VGPF_U2HAT_S);
+    
+    t1n = varFactory.fluxVar(VGPF_T1HAT_S);
+    t2n = varFactory.fluxVar(VGPF_T2HAT_S);
+    u = varFactory.fieldVar(VGPF_U_S, HDIV_FREE);
+    
+    sigma11 = varFactory.fieldVar(VGPF_SIGMA11_S);
+    sigma12 = varFactory.fieldVar(VGPF_SIGMA12_S);
+    sigma21 = varFactory.fieldVar(VGPF_SIGMA21_S);
+    sigma22 = varFactory.fieldVar(VGPF_SIGMA22_S);
+    p = varFactory.fieldVar(VGPF_P_S);
+  }
+  
+  void init(FunctionPtr mu) {
+    _mu = mu;
+    
+    initVars();
+    
+    // tau1 is the first *row* of tau
+    // (i.e. it's the components of tau that interact with u1
+    //  in the tensor product (grad u, tau))
+    
+    // construct bilinear form:
+    _bf = Teuchos::rcp( new BF(varFactory) );
+    // tau1 terms:
+    _bf->addTerm(u->x(),tau1->div());
+    _bf->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+    _bf->addTerm(sigma12,tau1->y());
+    _bf->addTerm(-u1hat, tau1->dot_normal());
+    
+    // tau2 terms:
+    _bf->addTerm(u->y(), tau2->div());
+    _bf->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+    _bf->addTerm(sigma22,tau2->y());
+    _bf->addTerm(-u2hat, tau2->dot_normal());
+    
+    // v1:
+    _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1)
+    _bf->addTerm(- mu * sigma12,v1->dy());
+    _bf->addTerm( p, v1->dx() );
+    _bf->addTerm( t1n, v1);
+    
+    // v2:
+    _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+    _bf->addTerm(- mu * sigma22,v2->dy());
+    _bf->addTerm( p, v2->dy());
+    _bf->addTerm( t2n, v2);
+    
+    // q:
+    _bf->addTerm(-u->x(),q->dx()); // (-u, grad q)
+    _bf->addTerm(-u->y(),q->dy());
+    _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
+    
+    _graphNorm = Teuchos::rcp( new IP );
+    
+    // because the automatic graph norm doesn't support things like u->x(),
+    // we implement the graph norm here manually:
+    _graphNorm->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    _graphNorm->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    _graphNorm->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    _graphNorm->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    _graphNorm->addTerm( v1->dx() + v2->dy() );       // pressure
+    _graphNorm->addTerm( tau1->div() - q->dx() );     // u1
+    _graphNorm->addTerm( tau2->div() - q->dy() );     // u2
+    _graphNorm->addTerm( v1 );
+    _graphNorm->addTerm( v2 );
+    _graphNorm->addTerm( q );
+    _graphNorm->addTerm( tau1 );
+    _graphNorm->addTerm( tau2 );
+    
+  }
+  
+public:
+  static VarFactory vgpfVarFactory() {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+    
+    VarFactory varFactory;
+    VarPtr myVar;
+    myVar = varFactory.testVar(VGPF_V1_S, HGRAD);
+    myVar = varFactory.testVar(VGPF_V2_S, HGRAD);
+    myVar = varFactory.testVar(VGPF_TAU1_S, HDIV);
+    myVar = varFactory.testVar(VGPF_TAU2_S, HDIV);
+    myVar = varFactory.testVar(VGPF_Q_S, HGRAD);
+    
+    myVar = varFactory.traceVar(VGPF_U1HAT_S);
+    myVar = varFactory.traceVar(VGPF_U2HAT_S);
+    
+    myVar = varFactory.fluxVar(VGPF_T1HAT_S);
+    myVar = varFactory.fluxVar(VGPF_T2HAT_S);
+    
+    myVar = varFactory.fieldVar(VGPF_U_S, HDIV_FREE);
+    myVar = varFactory.fieldVar(VGPF_SIGMA11_S);
+    myVar = varFactory.fieldVar(VGPF_SIGMA12_S);
+    myVar = varFactory.fieldVar(VGPF_SIGMA21_S);
+    myVar = varFactory.fieldVar(VGPF_SIGMA22_S);
+    myVar = varFactory.fieldVar(VGPF_P_S);
+    return varFactory;
+  }
+  
+  VGPFStokesFormulation(FunctionPtr mu) {
+    init(mu);
+  }
+  
+  VGPFStokesFormulation(double mu) {
+    init(Function::constant(mu));
+  }
+  
+  BFPtr bf() {
+    return _bf;
+  }
+  IPPtr graphNorm() {
+    return _graphNorm;
+  }
+  IPPtr scaleCompliantGraphNorm() {
+    FunctionPtr h = Teuchos::rcp( new hFunction() );
+    IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+    FunctionPtr scaled_mu = _mu; // for experimenting: this is the factor that comes from the energy norm on the pressure
+    
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
+    compliantGraphNorm->addTerm( scaled_mu * v1->dx() + scaled_mu * v2->dy() ); // pressure
+    compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() ); // u1
+    compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy());  // u2
+    
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v1 );
+    compliantGraphNorm->addTerm( (scaled_mu / h) * v2 );
+    compliantGraphNorm->addTerm( q );
+    compliantGraphNorm->addTerm( tau1 );
+    compliantGraphNorm->addTerm( tau2 );
+    return compliantGraphNorm;
+  }
+  RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    return rhs;
+  }
+  BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
+    bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
+    bc->addZeroMeanConstraint(p);
+    return bc;
+  }
+  Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
+                                            SpatialFilterPtr entireBoundary) {
+    FunctionPtr f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
+    
+    RHSPtr rhs = this->rhs(f1,f2);
+    Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
+    mySolution->setSolutionFunction(u, Function::vectorize(u1_exact,u2_exact));
+    
+    mySolution->setSolutionFunction(p, p_exact);
+    
+    mySolution->setSolutionFunction(sigma11, u1_exact->dx());
+    mySolution->setSolutionFunction(sigma12, u1_exact->dy());
+    mySolution->setSolutionFunction(sigma21, u2_exact->dx());
+    mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+    
+    return mySolution;
+  }
+  
+  void primaryTrialIDs(vector<int> &fieldIDs) {
+    // (u,p)
+    fieldIDs.clear();
+    fieldIDs.push_back(u->ID());
+    fieldIDs.push_back(p->ID());
+  }
+  void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) {
+    // corr. ID == -1 if there isn't one
+    int NONE = -1;
+    fieldIDs.clear();  correspondingTraceIDs.clear();  fileFriendlyNames.clear();
+    fieldIDs.push_back(u->ID());
+    fileFriendlyNames.push_back("u");
+    correspondingTraceIDs.push_back(NONE); // really, there are two...
     fieldIDs.push_back(p->ID());
     fileFriendlyNames.push_back("pressure");
     correspondingTraceIDs.push_back(NONE);
@@ -944,6 +1212,219 @@ public:
     correspondingTraceIDs.push_back(NONE);
     fieldIDs.push_back(sigma22->ID());
     fileFriendlyNames.push_back("sigma22");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(p->ID());
+    fileFriendlyNames.push_back("pressure");
+    correspondingTraceIDs.push_back(NONE);
+  }
+};
+
+/***
+ 
+ Cheap experimental Stokes formulation:
+ Essentially rewrites VGP formulation to put velocity in H^1, and 
+ therefore eliminates the sigma variables.  But it's still discontinuous
+ in all fields (including velocity).
+ 
+ ***/
+
+const static string CE_V1_S = "v_1";
+const static string CE_V2_S = "v_2";
+const static string CE_Q_S = "q";
+const static string CE_TAU1_S = "\\tau_1";
+const static string CE_TAU2_S = "\\tau_2";
+
+const static string CE_U1HAT_S = "\\widehat{u}_1";
+const static string CE_U2HAT_S = "\\widehat{u}_2";
+const static string CE_T1HAT_S = "\\boldsymbol{t}_{1n}";
+const static string CE_T2HAT_S = "\\boldsymbol{t}_{2n}";
+
+const static string CE_U1_S = "u_1";
+const static string CE_U2_S = "u_2";
+const static string CE_P_S = "p";
+
+class CEStokesFormulation : public StokesFormulation {
+  VarFactory varFactory;
+  // fields:
+  VarPtr u1, u2, p;
+  // fluxes & traces:
+  VarPtr u1hat, u2hat, t1n, t2n;
+  // tests:
+  VarPtr tau1, tau2, q, v1, v2;
+  BFPtr _bf;
+  IPPtr _graphNorm;
+  FunctionPtr _mu;
+  
+  void initVars() {
+    // create the VarPtrs:
+    varFactory = ceVarFactory();
+    
+    // look up the created VarPtrs:
+    v1 = varFactory.testVar(CE_V1_S, HGRAD);
+    v2 = varFactory.testVar(CE_V2_S, HGRAD);
+    q = varFactory.testVar(CE_Q_S, HGRAD);
+    tau1 = varFactory.testVar(CE_TAU1_S, HDIV);
+    tau2 = varFactory.testVar(CE_TAU2_S, HDIV);
+    
+    u1hat = varFactory.traceVar(CE_U1HAT_S);
+    u2hat = varFactory.traceVar(CE_U2HAT_S);
+    
+    t1n = varFactory.fluxVar(CE_T1HAT_S);
+    t2n = varFactory.fluxVar(CE_T2HAT_S);
+    
+    u1 = varFactory.fieldVar(CE_U1_S, HGRAD);
+    u2 = varFactory.fieldVar(CE_U2_S, HGRAD);
+    p = varFactory.fieldVar(CE_P_S);
+  }
+  
+  void init(FunctionPtr mu) {
+    _mu = mu;
+    
+    initVars();
+    _bf = Teuchos::rcp( new BF(varFactory) );
+    
+    // v1:
+    _bf->addTerm(- mu * u1->dx(),v1->dx()); // (mu sigma1, grad v1) 
+    _bf->addTerm(- mu * u1->dy(),v1->dy());
+    _bf->addTerm( p, v1->dx() );
+    _bf->addTerm( t1n, v1);
+    
+    // v2:
+    _bf->addTerm(- mu * u2->dx(),v2->dx()); // (mu sigma2, grad v2)
+    _bf->addTerm(- mu * u2->dy(),v2->dy());
+    _bf->addTerm(p, v2->dy());
+    _bf->addTerm( t2n, v2);
+    
+    // q:
+    _bf->addTerm(-u1,q->dx()); // (-u, grad q)
+    _bf->addTerm(-u2,q->dy());
+    _bf->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
+    
+    // tau1 terms:
+    _bf->addTerm(u1,tau1->div());
+    _bf->addTerm(u1->dx(),tau1->x()); // (sigma1, tau1)
+    _bf->addTerm(u1->dy(),tau1->y());
+    _bf->addTerm(-u1hat, tau1->dot_normal());
+    
+    // tau2 terms:
+    _bf->addTerm(u2, tau2->div());
+    _bf->addTerm(u2->dx(),tau2->x()); // (sigma2, tau2)
+    _bf->addTerm(u2->dy(),tau2->y());
+    _bf->addTerm(-u2hat, tau2->dot_normal());
+        
+    // since BF only supports L^2 in fields, we have to construct
+    // the "graph" norm manually:
+    _graphNorm = Teuchos::rcp( new IP );
+    // pressure:
+    _graphNorm->addTerm(v1->grad());
+    _graphNorm->addTerm(v2->grad());
+    
+    // grad u:
+    _graphNorm->addTerm(mu * v1->grad() + tau1); // grad u1
+    _graphNorm->addTerm(mu * v2->grad() + tau2); // grad u2
+
+    // u:
+    _graphNorm->addTerm(q->dx() + tau1->div());
+    _graphNorm->addTerm(q->dy() + tau2->div());
+    
+    // L^2 terms:
+    _graphNorm->addTerm(q);
+    _graphNorm->addTerm(v1);
+    _graphNorm->addTerm(v2);
+    _graphNorm->addTerm(tau1);
+    _graphNorm->addTerm(tau2);
+  }
+  
+public:
+  static VarFactory ceVarFactory() {
+    // sets the order of the variables in a canonical way
+    // uses the publicly accessible strings from above, so that VarPtrs
+    // can be looked up...
+    
+    VarFactory varFactory;
+    VarPtr myVar;
+    // tests:
+    myVar = varFactory.testVar(CE_V1_S, HGRAD);
+    myVar = varFactory.testVar(CE_V2_S, HGRAD);
+    myVar = varFactory.testVar(CE_Q_S, HGRAD);
+    myVar = varFactory.testVar(CE_TAU1_S, HDIV);
+    myVar = varFactory.testVar(CE_TAU2_S, HDIV);
+    
+    // traces:
+    myVar = varFactory.traceVar(CE_U1HAT_S);
+    myVar = varFactory.traceVar(CE_U2HAT_S);
+    
+    // fluxes:
+    myVar = varFactory.fluxVar(CE_T1HAT_S);
+    myVar = varFactory.fluxVar(CE_T2HAT_S);
+    
+    // fields:
+    myVar = varFactory.fieldVar(CE_U1_S, HGRAD);
+    myVar = varFactory.fieldVar(CE_U2_S, HGRAD);
+    myVar = varFactory.fieldVar(CE_P_S);
+    return varFactory;
+  }
+  
+  CEStokesFormulation(FunctionPtr mu) {
+    init(mu);
+  }
+  
+  CEStokesFormulation(double mu) {
+    init(Function::constant(mu));
+  }
+  
+  BFPtr bf() {
+    return _bf;
+  }
+  IPPtr graphNorm() {
+    return _graphNorm;
+  }
+  RHSPtr rhs(FunctionPtr f1, FunctionPtr f2) {
+    Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+    rhs->addTerm( f1 * v1 + f2 * v2 );
+    return rhs;
+  }
+  BCPtr bc(FunctionPtr u1_fxn, FunctionPtr u2_fxn, SpatialFilterPtr entireBoundary) {
+    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+    FunctionPtr n = Function::normal();
+    bc->addDirichlet(u1hat, entireBoundary, u1_fxn);
+    bc->addDirichlet(u2hat, entireBoundary, u2_fxn);
+    bc->addZeroMeanConstraint(p);
+    return bc;
+  }
+  Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact,
+                                            SpatialFilterPtr entireBoundary) {
+    FunctionPtr f1 = -p_exact->dx() + _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
+    FunctionPtr f2 = -p_exact->dy() + _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
+    
+    BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
+    
+    RHSPtr rhs = this->rhs(f1,f2);
+    Teuchos::RCP<ExactSolution> mySolution = Teuchos::rcp( new ExactSolution(_bf, bc, rhs) );
+    mySolution->setSolutionFunction(u1, u1_exact);
+    mySolution->setSolutionFunction(u2, u2_exact);
+    
+    mySolution->setSolutionFunction(p, p_exact);
+    
+    return mySolution;
+  }
+  
+  void primaryTrialIDs(vector<int> &fieldIDs) {
+    // (u1,u2,p) 
+    fieldIDs.clear();
+    fieldIDs.push_back(u1->ID());
+    fieldIDs.push_back(u2->ID());
+    fieldIDs.push_back(p->ID());
+  }
+  void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) {
+    // corr. ID == -1 if there isn't one
+    int NONE = -1;
+    fieldIDs.clear();  correspondingTraceIDs.clear();  fileFriendlyNames.clear();
+    fieldIDs.push_back(u1->ID());
+    fileFriendlyNames.push_back("u1");
+    correspondingTraceIDs.push_back(NONE);
+    fieldIDs.push_back(u2->ID());
+    fileFriendlyNames.push_back("u2");
     correspondingTraceIDs.push_back(NONE);
     fieldIDs.push_back(p->ID());
     fileFriendlyNames.push_back("pressure");

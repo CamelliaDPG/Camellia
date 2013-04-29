@@ -40,6 +40,9 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 
+#include "MeshUtilities.h"
+#include "SerialDenseMatrixUtility.h"
+
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
                                      Teuchos::RCP<BilinearForm> bilinearForm,
                                      Teuchos::RCP<RHS> rhs,
@@ -65,6 +68,7 @@ HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
   _cubatureDegreeForExact = 10; // an enrichment degree
   _cubatureEnrichmentForSolutions = 0;
   _solver = Teuchos::rcp( (Solver*) NULL ); // redundant code, but I like to be explicit
+  _useCondensedSolve = false;
 //  vector<int> trialIDs = bilinearForm->trialIDs();
   vector<int> trialIDs = bilinearForm->trialVolumeIDs(); // so far, we don't have a good analytic way to measure flux and trace errors.
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
@@ -187,9 +191,38 @@ map< int, double > HConvergenceStudy::exactSolutionNorm() {
   return _exactSolutionNorm;
 }
 
+double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElements) {
+  // in so many ways, this is not the best way to do this: it's slow both because
+  // we do the disk I/O and because we form a sparse matrix using a dense construct
+  // (the FieldContainer), but this allows us to use a condition number computation that
+  // I actually trust...
+  if ((logElements < _minLogElements) || (logElements > _maxLogElements)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "logElements argument out of range");
+  }
+  if (!_writeGlobalStiffnessToDisk) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "computeConditionNumber only supported when writeGlobalStiffnessToDisk == true");
+  }
+  if (_solutions.size()==0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "computeConditionNumber only supported after the solve is complete");
+  }
+  ostringstream fileName;
+  fileName << _globalStiffnessFilePrefix << "_" << logElements << ".dat";
+  FieldContainer<double> globalStiffnessMatrix;
+  MeshUtilities::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
+  SerialDenseMatrixUtility::jacobiScaleMatrix(globalStiffnessMatrix);
+  return SerialDenseMatrixUtility::estimate2NormConditionNumber(globalStiffnessMatrix);
+}
+
 void HConvergenceStudy::computeErrors() {
   SolutionPtr solution = _solutions[0];
   vector<int> trialIDs = _bilinearForm->trialVolumeIDs();
+  
+  // clear all the data structures:
+  _solutionErrors.clear();
+  _solutionRates.clear();
+  _bestApproximationErrors.clear();
+  _bestApproximationRates.clear();
+  
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     vector< Teuchos::RCP<Solution> >::iterator solutionIt;
@@ -313,6 +346,11 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    if (_writeGlobalStiffnessToDisk) {
+      ostringstream fileName;
+      fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
+      solution->setWriteMatrixToMatrixMarketFile(true, fileName.str());
+    }
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
     solution->setReportConditionNumber(_reportConditionNumber);
@@ -359,6 +397,11 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
       randomlyRefine(mesh);
     }
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, _ip) );
+    if (_writeGlobalStiffnessToDisk) {
+      ostringstream fileName;
+      fileName << _globalStiffnessFilePrefix << "_" << i << ".dat";
+      solution->setWriteMatrixToMatrixMarketFile(true, fileName.str());
+    }
     if (_lagrangeConstraints.get())
       solution->setLagrangeConstraints(_lagrangeConstraints);
     solution->setCubatureEnrichmentDegree(_cubatureEnrichmentForSolutions);
@@ -378,9 +421,18 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
   // now actually compute all the solutions:
   for (solutionIt = _solutions.begin(); solutionIt != _solutions.end(); solutionIt++) {
     if ( _solver.get() == NULL )
-      (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
-    else
-      (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
+      if (_useCondensedSolve) {
+        (*solutionIt)->condensedSolve(); // defaults to KLU
+      } else {
+        (*solutionIt)->solve(false);   // False: don't use mumps (use KLU)
+      }
+      else {
+        if (_useCondensedSolve) {
+          (*solutionIt)->condensedSolve(_solver); // Use whatever Solver the user specified
+        } else {
+          (*solutionIt)->solve(_solver); // Use whatever Solver the user specified
+        }
+      }
   }
   computeErrors();
 }
@@ -694,4 +746,13 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
 
 void HConvergenceStudy::setSolver(Teuchos::RCP<Solver> solver) {
   _solver = solver;
+}
+
+void HConvergenceStudy::setUseCondensedSolve(bool value) {
+  _useCondensedSolve = value;
+}
+
+void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix) {
+  _writeGlobalStiffnessToDisk = value;
+  _globalStiffnessFilePrefix = globalStiffnessFilePrefix;
 }

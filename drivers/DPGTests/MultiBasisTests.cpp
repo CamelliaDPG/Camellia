@@ -503,7 +503,7 @@ bool MultiBasisTests::refinementsHaveNotIncreasedError(Teuchos::RCP<Solution> so
 
 
 void MultiBasisTests::teardown() {
-  _parentBasis = Teuchos::rcp((DoubleBasis *)NULL);
+  _parentBasis = Teuchos::rcp((Camellia::Basis<> *)NULL);
   
   _mesh = Teuchos::rcp((Mesh *)NULL);
   _sw = Teuchos::rcp((Element *)NULL);
@@ -585,7 +585,7 @@ bool MultiBasisTests::testMultiBasisLegacyTest() {
         FieldContainer<double> values = (childIndex == 0) ? values1 : values2;
         int permutedFieldIndex = Mesh::neighborDofPermutation(fieldIndex,numFields); // within the subbasis
         int mbPointIndex = childIndex*numPoints + pointIndex;
-        MultiBasis* multiBasis = (MultiBasis*) mbTrialOrdering->getBasis(trialID,parentSideIndexInNeighbor).get();
+        MultiBasis<>* multiBasis = (MultiBasis<>*) mbTrialOrdering->getBasis(trialID,parentSideIndexInNeighbor).get();
         //      TODO: figure out which of the following is right, and fix whatever bug(s) are implied--
         //        the uncommented one is the one that (mostly) works--only failure is on the shared dof, and we know
         //        whats up with that one--we need to allow it to be nonzero on the second side...

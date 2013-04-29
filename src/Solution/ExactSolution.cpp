@@ -85,7 +85,7 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
-  Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = dofOrdering.getBasis(trialID,sideIndex);
+  BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
   
   bool boundaryIntegral = solution.mesh()->bilinearForm()->isFluxOrTrace(trialID);
   
@@ -147,23 +147,17 @@ void ExactSolution::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, S
 //  cout << "ExactSolution: exact values:\n" << exactValues;
 //  cout << "ExactSolution: computed values:\n" << computedValues;
   
-  FieldContainer<double> errorSquared(dimensions);
+  FieldContainer<double> errorSquared(numCells,numCubPoints);
   
   squaredDifference(errorSquared,computedValues,exactValues);
   
-  weightedErrorSquared.resize(dimensions);
+  weightedErrorSquared.resize(numCells,numCubPoints);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
-      if (basisRank==0) {
-        // following two lines for viewing in the debugger:
-        double weight = weightedMeasure(cellIndex,ptIndex);
-        double errorSquaredVal = errorSquared(cellIndex,ptIndex);
-        weightedErrorSquared(cellIndex,ptIndex) = errorSquared(cellIndex,ptIndex) * weightedMeasure(cellIndex,ptIndex);
-      } else {
-        for (int i=0; i<spaceDim; i++){
-          weightedErrorSquared(cellIndex,ptIndex,i) = errorSquared(cellIndex,ptIndex,i) * weightedMeasure(cellIndex,ptIndex);            
-        }
-      }
+      // following two lines for viewing in the debugger:
+      double weight = weightedMeasure(cellIndex,ptIndex);
+      double errorSquaredVal = errorSquared(cellIndex,ptIndex);
+      weightedErrorSquared(cellIndex,ptIndex) = errorSquared(cellIndex,ptIndex) * weightedMeasure(cellIndex,ptIndex);
     }
   }
   

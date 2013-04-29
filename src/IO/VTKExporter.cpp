@@ -323,7 +323,10 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     FieldContainer<double> refPoints(num1DPts,1);
     for (int i=0; i < num1DPts; i++)
     {
-      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+      //      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+      double a = -.99;
+      double b = .99; 
+      double x = a + (b-a)*(double(i)/double(num1DPts-1));
       refPoints(i,0) = x;
     }
 

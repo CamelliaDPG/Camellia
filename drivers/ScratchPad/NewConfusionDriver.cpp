@@ -10,6 +10,8 @@
 
 #include "Solution.h"
 
+#include "MeshUtilities.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -103,6 +105,12 @@ public:
   }
 };
 
+string fileNameForRefinement(string fileName, int refinementNumber) {
+  ostringstream fileNameStream;
+  fileNameStream << fileName << "_r" << refinementNumber << ".dat";
+  return fileNameStream.str();
+}
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -112,6 +120,29 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
+  bool useCompliantGraphNorm = true;
+  bool enforceOneIrregularity = true;
+  bool writeStiffnessMatrices = true;
+  bool writeWorstCaseGramMatrices = true;
+  int numRefs = 0;
+  
+  int H1Order = 3, pToAdd = 2;
+  int horizontalCells = 1, verticalCells = 1;
+  
+  // problem parameters:
+  double eps = 1e-4;
+  vector<double> beta_const;
+  beta_const.push_back(2.0);
+  beta_const.push_back(1.0);
+  
+  if (rank==0) {
+    string normChoice = useCompliantGraphNorm ? "unit-compliant graph norm" : "standard graph norm";
+    cout << "Using " << normChoice << "." << endl;
+    cout << "eps = " << eps << endl;
+    cout << "numRefs = " << numRefs << endl;
+    cout << "p = " << H1Order-1 << endl;
+  }
+  
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory; 
@@ -121,16 +152,15 @@ int main(int argc, char *argv[]) {
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory.fieldVar("u");
+  VarPtr u;
+  if (useCompliantGraphNorm) {
+    u = varFactory.fieldVar("u",HGRAD);
+  } else {
+    u = varFactory.fieldVar("u");
+  }
+  
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
-  
-  vector<double> beta_const;
-  beta_const.push_back(2.0);
-  beta_const.push_back(1.0);
-//  FunctionPtr beta = Teuchos::rcp(new Beta());
-  
-  double eps = 1e-2;
   
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -157,9 +187,22 @@ int main(int argc, char *argv[]) {
 
   // quasi-optimal norm
   IPPtr qoptIP = Teuchos::rcp(new IP);
-  qoptIP->addTerm( v );
-  qoptIP->addTerm( tau / eps + v->grad() );
-  qoptIP->addTerm( beta_const * v->grad() - tau->div() );
+  
+  if (!useCompliantGraphNorm) {
+    qoptIP->addTerm( tau / eps + v->grad() );
+    qoptIP->addTerm( beta_const * v->grad() - tau->div() );
+    
+    qoptIP->addTerm( v );
+  } else {
+    FunctionPtr h = Teuchos::rcp( new hFunction );
+    
+    // here, we're aiming at optimality in 1/h^2 |u|^2 + 1/eps^2 |sigma|^2
+    
+    qoptIP->addTerm( tau + eps * v->grad() );
+    qoptIP->addTerm( h * beta_const * v->grad() - tau->div() );
+    qoptIP->addTerm(v);
+    qoptIP->addTerm(tau);
+  }
   
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -190,9 +233,7 @@ int main(int argc, char *argv[]) {
   quadPoints(2,1) = 1.0;
   quadPoints(3,0) = 0.0;
   quadPoints(3,1) = 1.0;
-  
-  int H1Order = 3, pToAdd = 2;
-  int horizontalCells = 2, verticalCells = 1;
+
   
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
@@ -204,12 +245,35 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
   
-  int numRefs = 6;
-    
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
+  for (int refIndex=0; refIndex<numRefs; refIndex++){
+    if (writeStiffnessMatrices) {
+      string stiffnessFile = fileNameForRefinement("confusion_stiffness", refIndex);
+      solution->setWriteMatrixToFile(true, stiffnessFile);
+    }
     solution->solve();
+    if (writeWorstCaseGramMatrices) {
+      string gramFile = fileNameForRefinement("confusion_gram", refIndex);
+      double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, gramFile);
+      if (rank==0) {
+        cout << "estimated worst-case Gram matrix condition number: " << condNum << endl;
+        cout << "putative worst-case Gram matrix written to file " << gramFile << endl;
+      }
+    }
     refinementStrategy.refine(rank==0); // print to console on rank 0
+  }
+  if (writeStiffnessMatrices) {
+    string stiffnessFile = fileNameForRefinement("confusion_stiffness", numRefs);
+    solution->setWriteMatrixToFile(true, stiffnessFile);
+  }
+  if (writeWorstCaseGramMatrices) {
+    string gramFile = fileNameForRefinement("confusion_gram", numRefs);
+    double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, gramFile);
+    if (rank==0) {
+      cout << "estimated worst-case Gram matrix condition number: " << condNum << endl;
+      cout << "putative worst-case Gram matrix written to file " << gramFile << endl;
+    }
   }
   // one more solve on the final refined mesh:
   solution->solve();

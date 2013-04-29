@@ -48,13 +48,25 @@
 
 #include "Mesh.h"
 #include "BilinearForm.h"
+#include "SpatialFilter.h"
 
 class MeshUtilities {
  public:
+
+  static SpatialFilterPtr rampBoundary(double rampHeight);
+  static MeshPtr buildRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+
+  static MeshPtr buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+
   static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
   
   static MeshPtr buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
+  static double computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, bool jacobiScaling=true, string sparseFileToWriteTo="");
+  
+  static void readMatrixFromSparseDataFile(FieldContainer<double> &matrix, string filename); // really belongs elsewhere
+  static void writeMatrixToSparseDataFile(const FieldContainer<double> &matrix, string filename); // really belongs elsewhere
+  
 };
 
 #endif

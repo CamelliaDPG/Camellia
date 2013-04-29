@@ -57,6 +57,16 @@ void Boundary::addElement( int cellID, int sideIndex ) {
   _boundaryElements.insert( make_pair(cellID,sideIndex) );
 }
 
+bool Boundary::boundaryElement(int cellID) {
+  int numSides = _mesh->getElement(cellID)->numSides();
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    if (boundaryElement(cellID,sideIndex)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Boundary::boundaryElement( int cellID, int sideIndex ) {
   pair<int,int> key = make_pair(cellID,sideIndex);  
   return _boundaryElements.find(key) != _boundaryElements.end();
@@ -251,7 +261,7 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
       bool impositionReported = false;
       // 2. Determine global dof indices and values, in one pass per side
       for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis = trialOrderingPtr->getBasis(trialID,sideIndex);
+        BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideIndex);
         int numDofs = basis->getCardinality();
         
         int numCells = physicalCellNodesPerSide[sideIndex].dimension(0);
@@ -330,7 +340,12 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
         int spaceDim = physicalCellNodes.dimension(2);
         
         DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
-        Teuchos::RCP < Basis<double,FieldContainer<double> > > basis = trialOrderingPtr->getBasis(trialID,0);
+        BasisPtr basis = trialOrderingPtr->getBasis(trialID,0);
+        if (! basis->isNodal()) {
+          // could we relax this to just requiring a conforming basis?  I think any conforming basis will be "nodal"
+          // with respect to the vertices.  (I.e. each vertex has exactly one basis function on each element that is non-zero there.)
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "single-point BC imposition requires a nodal basis");
+        }
         int basisCardinality = basis->getCardinality();
         FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
         CellTools<double>::mapToReferenceFrame(refPoints,physicalCellNodes,physicalCellNodes,cellTopo);

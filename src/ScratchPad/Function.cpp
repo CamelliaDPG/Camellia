@@ -332,6 +332,68 @@ double Function::integrate(BasisCachePtr basisCache) {
   return sum;
 }
 
+// added by Jesse to check positivity of a function
+bool Function::isPositive(BasisCachePtr basisCache){
+  bool isPositive = true;
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);  
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);  
+  FieldContainer<double> fxnValues(numCells,numPoints);
+  this->values(fxnValues, basisCache);  
+  
+  for (int i = 0;i<fxnValues.size();i++){
+    if (fxnValues[i] <= 0.0){
+      isPositive=false;
+      break;
+    }
+  }
+  return isPositive;  
+}
+
+bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTest){
+  bool isPositive = true;
+  bool isPositiveOnPartition = true;
+  int myPartition = Teuchos::GlobalMPISession::getRank();
+  vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    int cellID = (*elemIt)->cellID();
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubEnrich);    					   
+    
+    // if we want to check positivity on uniformly spaced points
+    if ((*elemIt)->numSides()==4){ // tensor product structure only works with quads
+      FieldContainer<double> origPts = basisCache->getRefCellPoints();      
+      int numPts1D = ceil(sqrt(origPts.dimension(0)));
+      int numPts = numPts1D*numPts1D;
+      FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
+      double h = 1.0/(numPts1D-1); 
+      int iter = 0;
+      for (int i = 0;i<numPts1D;i++){
+	for (int j = 0;j<numPts1D;j++){
+	  uniformSpacedPts(iter,0) = 2*h*i-1.0;
+	  uniformSpacedPts(iter,1) = 2*h*j-1.0;
+	  iter++;
+	}	
+      }
+      basisCache->setRefCellPoints(uniformSpacedPts);
+    }
+
+    bool isPositiveOnCell = this->isPositive(basisCache);
+    if (!isPositiveOnCell){
+      isPositiveOnPartition = false;
+      break;
+    }
+  }
+  int numPositivePartitions = 1;
+  if (!isPositiveOnPartition){
+    numPositivePartitions = 0;
+  }
+  int totalPositivePartitions = MPIWrapper::sum(numPositivePartitions);
+  if (totalPositivePartitions<Teuchos::GlobalMPISession::getNProc())
+    isPositive=false;
+
+  return isPositive;
+}
+
+
 // added by Jesse - integrate over only one cell
 double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
@@ -348,7 +410,6 @@ map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDe
   return cellIntegrals(cellIDs,mesh,cubatureDegreeEnrichment,testVsTest);
 }
 
-// PARALLELIZE
 map<int, double> Function::cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){
   int myPartition = Teuchos::GlobalMPISession::getRank();
 
@@ -625,7 +686,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
   return MPIWrapper::sum(integral);
 }
 
-double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) { // the total cubature degree (i.e. exact for 10th-degree polynomials)
+double Function::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment) {
   FunctionPtr thisPtr = Teuchos::rcp( this, false );
   return sqrt( (thisPtr * thisPtr)->integrate(mesh, cubatureDegreeEnrichment) );
 }
@@ -1088,7 +1149,8 @@ void ConstantVectorFunction::values(FieldContainer<double> &values, BasisCachePt
   }
 }
 
-ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID) : Function(0) {
+ExactSolutionFunction::ExactSolutionFunction(Teuchos::RCP<ExactSolution> exactSolution, int trialID)
+: Function(exactSolution->exactFunctions().find(trialID)->second->rank()) {
   _exactSolution = exactSolution;
   _trialID = trialID;
 }
@@ -1325,6 +1387,10 @@ FunctionPtr SumFunction::div() {
   } else {
     return _f1->div() + _f2->div();
   }
+}
+
+string hFunction::displayString() {
+  return "h";
 }
 
 double hFunction::value(double x, double y, double h) {
@@ -1766,17 +1832,18 @@ FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
 }
 
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor) {
-  if ( (f1->rank() == 0) ) {
-    // TODO: work out how to do this for other ranks?
-    if ( f1->isZero() ) {
-      return Function::zero();
-    }
+  if ( f1->isZero() ) {
+    return Function::zero(f1->rank());
   }
   return Teuchos::rcp( new QuotientFunction(f1,scalarDivisor) );
 }
 
 FunctionPtr operator/(FunctionPtr f1, double divisor) {
   return f1 / Teuchos::rcp( new ConstantScalarFunction(divisor) );
+}
+
+FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
+  return Function::constant(value) / scalarDivisor;
 }
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {

@@ -1,0 +1,1004 @@
+\documentclass[mathserif]{beamer}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{courier}
+\usepackage{bibentry}
+\usepackage{comment}
+\usepackage{multirow}
+\nobibliography*
+\definecolor{lightlightgray}{gray}{0.95}
+\definecolor{lightlightblue}{rgb}{0.4,0.4,0.95}
+\definecolor{lightlightgreen}{rgb}{0.8,1,0.8}
+\usetheme[secheader]{pecostalk}
+\graphicspath{{figs/}}                                                                                                                              
+
+
+\date{March 8-9, 2013}
+\author[T. E. Ellis]{Truman E. Ellis\\\medskip
+\small{Advisors: Leszek Demkowicz, Robert Moser\\
+Collaborators: Jesse Chan, Nate Roberts}}
+\institute{The University of Texas at Austin}
+\title[Locally Conservative DPG]{Locally Conservative Discontinuous 
+Petrov-Galerkin for Convection-Diffusion}
+% \\subtitle{With A Subtitle If Necessary}
+
+\def\btau{\boldsymbol\tau}
+\def\bsigma{\boldsymbol\sigma}
+\def\bbeta{\boldsymbol\beta}
+\def\blambda{\boldsymbol\lambda}
+
+% defines newblock as null, giving compile issues otherwise
+\let\newblock\relax 
+
+\newcommand{\eqdef}{\stackrel{\text{\tiny def}}{=}}
+
+\newcommand{\NVRvect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\NVRtensor}[1]{\NVRvect{#1}}
+%\newcommand{\NVRtensor}[1]{\underline{\NVRvect{#1}}}
+\newcommand{\NVRnorm}[1]{\left|\left|#1\right|\right|}
+\newcommand{\norm}[1]{\left|\left|#1\right|\right|}
+\newcommand{\NVRgrad}{\nabla}
+\newcommand{\NVRdiv}{\NVRgrad \cdot}
+\newcommand{\NVRpd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\NVRpdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+\newcommand{\NVReqdef}{\stackrel{\text{\tiny def}}{=}}
+
+\newcommand{\NVRHgrad}{H(\text{grad})}
+\newcommand{\NVRHdiv}{H(\text{div})}
+\newcommand{\NVRsumm}[2]{\ensuremath\displaystyle\sum\limits_{#1}^{#2}}
+ 
+\newcommand{\NVRcurl}{\nabla \times}
+\newcommand{\NVRHcurl}{\ensuremath H(\text{curl})}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\deal}{\code{deal.II}\,}
+
+\newcommand{\pecosbold}[1]{{\color{pecos2}{#1}}}
+\newcommand{\pecosreallybold}[1]{{\color{pecos6}{#1}}}
+
+\newcommand{\FootSize}{\scriptsize}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\renewcommand{\arraystretch}{1.2}
+
+\begin{document}
+\begin{frame}
+\begin{center}
+\includegraphics[width=.8\linewidth]{grand_logo}\\
+\end{center}
+\titlepage
+\begin{flushright}
+\includegraphics[scale=0.1]{asc_logo}\\
+\end{flushright}
+\end{frame}
+\begin{comment}
+My name is Truman Ellis, and I am also working in Dr. Demkowicz's group on the
+discontinuous Petrov-Galerkin method. My background is in aerospace
+engineering and CFD, and my goal is to help develop DPG into an attractive
+method for realistic problems in computational fluid dynamics. So the goal is
+to work on the Euler equations and then build on Nate and Jesse's work on
+laminar Navier-Stokes with some turbulence modeling.  But before I got into
+that, we thought it would be useful to study a topic that keeps coming up from
+the CFD community. Is DPG locally conservative?
+
+This is a numerical characteristic close to the heart of many CFD
+practitioners, and in order for DPG to gain a certain level of acceptance
+among these circles, we need to address some of these concerns. There are also
+some mathematically attractive reasons to pursue local conservation. The
+Lax-Wendroff theorem guarantees that a convergent numerical solution to a
+system of hyperbolic conservation laws will converge to the correct weak
+solution. Also, we are focusing on local conservation on the
+convection-diffusion equation as a proof of concept. We are working on
+extending this work to more realistic flow simulations.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{A Summary of DPG}
+Overview of Features
+\begin{itemize}
+\item Robust for singularly perturbed problems
+\item Stable in the preasymptotic regime
+\item Designed for adaptive mesh refinement
+\end{itemize}
+\bigskip
+
+DPG is a minimum residual method:
+\[
+u_{h} = \underset{w_{h} \in U_{h}} \argmin \,\, \frac{1}{2} 
+\norm{Bw_{h}-l}_{V'}^{2}
+\]
+\vspace{-1em}
+\[
+\scalebox{1.8}{\ensuremath{\Updownarrow}}
+\]
+\vspace{-1em}
+\[
+b(u_h,R_V^{-1}B\delta u_h)
+=l(R_V^{-1}B\delta u_h)
+\quad\forall\delta u_h\in U_h
+\]
+where $v_{\delta u_h}:=R_V^{-1}B\delta u_h$ are the 
+\pecosbold{optimal test functions}.
+\end{frame}
+\begin{comment}
+For the sake of avoiding a lot of repetition and making sure we all finish on
+time, I'm going to offer an extremely condensed summary of DPG. Nate and Jesse
+already covered this stuff with more rigor. So what are DPG's main selling
+points? Why are we interested in applying it to complicated fluid problems
+(eventually). 
+For one, DPG has proven very robust in the face of singularly
+perturbed problems which holds promise for high Reynolds number flows.
+You do not need a domain expert to craft well designed meshes for each new
+problem. We are mathematically guaranteed to remain stable under very coarse
+meshes while adaptively refining toward a solution.
+
+And mathematically, how can we classify DPG? By derivations, it is a minimum
+residual method. This means that through the choice of specific optimal test
+functions we automatically minimize the residual in the dual norm of a
+Hilbert space V. We also have a well-defined process to generate the optimal
+test functions which is computationally feasible.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{DPG for Convection-Diffusion}
+Start with the strong-form PDE.
+\[
+\nabla\cdot(\bbeta u)-\epsilon\Delta u = g
+\]
+Rewrite as a system of first-order equations.
+\begin{align*}
+\nabla\cdot(\bbeta u-\bsigma)&=g\\
+\frac{1}{\epsilon}\bsigma-\nabla u&=\boldsymbol0
+\end{align*}
+Multiply by test functions and integrate by parts over each element, $K$.
+\begin{align*}
+-(\bbeta u-\bsigma,\nabla v)_K+((\bbeta
+u-\bsigma)\cdot\mathbf{n},v)_{\partial K}&=(g,v)_K\\
+\frac{1}{\epsilon}(\bsigma,\btau)_K+(u,\nabla\cdot\btau)_K
+-(u,\tau_n)_{\partial K}&=0
+\end{align*}
+Use the ultraweak (DPG) formulation to obtain bilinear form $b(u,v)=l(v)$.
+\begin{align*}
+-(\bbeta u-\bsigma,\nabla v)_K&+(\hat f,v)_{\partial K}
++ \frac{1}{\epsilon}(\bsigma,\btau)_K\\
+&+(u,\nabla\cdot\btau)_K
+-(\hat u,\tau_n)_{\partial K}=(g,v)_K
+\end{align*}
+\end{frame}
+\begin{comment}
+With that ultra-brief refresher, we can now apply DPG to the
+convection-diffusion equation. We prefer to work with systems of first order
+equations. Then, multiplying the top equation by a scalar valued test
+function, v, and the second by a vector valued test function tau, we can
+integrate by parts over each element, K. Combining the two equations, we get
+our bilinear form for convection diffusion. We seek the field variable, u and
+sigma in L2, but that leaves their traces undefined. So, in a manner similar
+to the hybridized DG method, we define new unknowns for our traces and fluxes,
+u hat and f hat.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Local Conservation}
+The local conservation law in convection diffusion is 
+\[
+\int_{\partial K}\hat f=\int_K g\,,
+\]
+which is equivalent to having $\mathbf{v}_K:=\{v,\btau\}=\{1_K,\boldsymbol0\}$ in the test space.
+In general, this is not satisfied by the optimal test functions. 
+Following Moro et al\footnote{\FootSize \bibentry{MoroNguyenPeraire11}}, we
+can enforce this condition with Lagrange multipliers:
+\begin{align*}
+L(u_h,\blambda) = \frac{1}{2}\norm{R_V^{-1}(Bu_h-l)}_V^2
+-\sum_K\lambda_K\underbrace{\langle Bu_h-l,\mathbf{v}_K\rangle}_
+{\langle\hat f, 1_K\rangle_{\partial K}-\langle g,1_K\rangle_K}\,,
+\end{align*}
+where $\blambda=\{\lambda_1,\cdots,\lambda_N\}$. 
+\end{frame}
+\begin{comment}
+So what does local conservation mean for the convection-diffusion equation. We
+want the integral of our fluxes over the element faces to be balanced by any
+source terms in the RHS. This is equivalent to having one in the test space.
+You can see this if you look at the bilinear form on the previous slide and
+plug one and zero in as test functions. Unfortunately the optimal test
+functions do not always span constants. It turns out we can augment our test
+space with constants through the use of Lagrange multipliers. So taking a
+couple of steps backward in the abstract form, we can augment our system with
+the Lagrange multipliers enforcing local conservation.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Local Conservation}
+Finding the critical points of $L(u,\blambda)$, we get the following
+equations.
+\begin{align*}
+\frac{\partial L(u_h,\blambda)}{\partial u_h}&=b(u_h,R_V^{-1}B\delta u_h)
+-l(R_V^{-1}B\delta u_h)\\
+&{\color{red}-\sum_K\lambda_K b(\delta
+u_h,\mathbf{v}_K)}=0\quad\forall\delta u_h\in U_h
+\end{align*}
+\[
+\frac{\partial
+L(u_h,\blambda)}{\partial\lambda_K}=-b(u_h,\mathbf{v}_K)+l(\mathbf{v}_K)=0\quad\forall
+K
+\]
+A few consequences:
+\begin{itemize}
+\item We've turned our minimization problem into a saddlepoint problem.
+% \item New $\lambda_K$ DOFs can be statically condensed out.
+\item Only need to find the optimal test function in the orthogonal complement
+of constants. % Backup slide
+\end{itemize}
+\end{frame}
+\begin{comment}
+Now, proceeding forward again and setting the derivatives to zero, we have
+turned our minimization problem into a saddle point problem. Note that we have
+added extra DOFs equal to the number of mesh elements, but the structure of
+the problem allows these to be statically condensed out. The most interesting
+consequence of this modification (apart from enforcing local conservation) is
+that we can modify the search space for our optimal test functions to be
+the orthogonal complement of constants.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Optimal Test Functions}
+For each $\mathbf{u}=\{u,\bsigma,\hat u,\hat f\}\in\mathbf{U}_h$, find
+$\mathbf{v}_{\mathbf{u}}=\{v_\mathbf{u},\btau_\mathbf{u}\}\in\mathbf{V}$ such that
+\[
+(\mathbf{v_u},\mathbf{w})_\mathbf{V}=b(\mathbf{u},\mathbf{w})\quad\forall\mathbf{w}\in\mathbf{V}
+\]
+where $\mathbf{V}$ becomes $\mathbf{V}_{p+\Delta p}$ in order to make this
+computationally tractable.
+
+Chan et al\footnote{\FootSize \bibentry{ChanHeuerThanhDemkowicz2012}}
+developed the following robust norm for convection-diffusion.
+\begin{minipage}[t][1.5in]{\textwidth}
+\begin{align*}
+\norm{(v,\btau)}^2_{\mathbf{V},\Omega_h}&=
+\norm{\nabla\cdot\btau}^2+\norm{\min\left\{\frac{1}{\sqrt{\epsilon}},\frac{1}{\sqrt{|K|}}\right\}\btau}^2\\
+&+\epsilon\norm{\nabla v}^2+\norm{\bbeta\cdot\nabla v}^2
+\makebox[1.5in][l]{$
+\only<1>{\underbrace{\color{red}{
++\norm{\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}v}^2
+}}_{\text{no longer necessary to make this a norm}}}
+\only<2>{\underbrace{\color{red}{
++\left(\frac{1}{|K|}\int_Kv\right)^2
+}}_{\text{zero mean term}}}
+$}
+\end{align*}
+\end{minipage}
+\end{frame}
+\begin{comment}
+So how does this affect our search for optimal test functions? The process to
+compute optimal test functions is as follows. For each trial function we are
+considering, we want to find the test function in an enriched space that
+satisfies the following relation - that the inner product of vu with w equals
+the bilinear form acting on u and w for all w in V.
+
+The choice of norm on V can significantly affect the robustness of the
+solution. Unfortunately, the optimal test norm is not localizable, and for
+convection diffusion, the quasi-optimal test norm has boundary layers arising
+from the adjoint and thus has approximability issues. Fortunately a
+couple of collaborators developed a robust test norm for convection-diffusion.
+Sadly, this norm also has its issues as the final zero order term in the
+expression is somewhat troublesome. (???)
+
+Why can we replace the L2 term with the zero mean term?
+Why is zero mean more friendly than L2?
+- Not mesh dependent
+- No boundary layers
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Erickson-Johnson Problem}
+On domain $\Omega=[0,1]^2$, with $\beta=(1,0)^T$, $f=0$ and boundary
+conditions
+\[
+\hat f=u_0,\quad\beta_n\le0\,,\quad\quad\hat u=0,\quad\beta_n > 0
+\]
+Separation of variabes gives an analytic solution
+\[
+u(x,y)=C_0+\sum_{n=1}^\infty C_n
+\frac{\exp(r_2(x-1))-\exp(r_1(x-1))}{r_1\exp(-r_2)-r_2\exp(-r_1)}
+\cos(n\pi y)
+\]
+\vspace{-5ex}
+\begin{columns}[b]
+\begin{column}{0.5\textwidth}
+\begin{figure}[t]
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Erickson/robustError.pdf}
+
+\end{figure}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{figure}[t]
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Erickson/robustFlux.pdf}
+
+\end{figure}
+\end{column}
+\end{columns}
+\end{frame}
+\begin{comment}
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Skewed Convection-Diffusion Problem}
+\only<1>{
+After 8 refinement steps, $\epsilon=10^{-4}$, $\bbeta=(1,0)^T$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Confusion/robust8nc.png}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Confusion/robust8c_mesh.png}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/Confusion/robustFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Double Glazing Problem}
+\only<1>{
+After 6 refinement steps, $\epsilon=10^{-2}$, $\bbeta=\left( 
+\begin{array}{c}
+2(2y-1)(1-(2x-1)^2) \\
+-2(2x-1)(1-(2y-1)^2) \\
+\end{array}\right)$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/DoubleGlazing/robust6nc.png}
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/DoubleGlazing/robust6c.png}
+\caption*{With local conservation}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/DoubleGlazing/robustFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Vortex Problem}
+\only<1>{
+After 6 refinement steps, $\epsilon=10^{-4}$, $\bbeta=(-y,x)^T$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Vortex/robust6nc.png}
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Vortex/robust6c.png}
+\caption*{With local conservation}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/Vortex/robustFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+We have some promising theoretical reasons to explicitly enforce local
+conservation, but does it really make a difference in numerical experiments?
+This is a vortex problem with rotating flow. The inside is relatively
+constant, so we shouldn't expect the refinement routine to focus too much on
+this region. 
+However, without strict enforcement of local conservation, the zero order term
+in the test norm causes almost uniform refinements to happen in this region.
+We expect this happens because beta decays to zero in the center.
+
+Explain theory???
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Wedge Problem}
+\only<1>{
+After 16 refinement steps, $\epsilon=10^{-2}$, $\bbeta=(1,0)^T$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/robust16c2.png}
+\end{subfigure}
+\begin{subfigure}[t]{0.4\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/robust16c_mesh2.png}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/graph16nc_zoom.png}
+\caption*{Nonconservative graph norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/robust16nc_zoom.png}
+\caption*{Nonconservative robust norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/graph16c_zoom.png}
+\caption*{Conservative graph norm}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{../figs/Wedge/robust16c_zoom.png}
+\caption*{Conservative robust norm}
+\end{subfigure}
+\end{figure}
+}
+\only<3>{
+\begin{columns}[b]
+\begin{column}{0.5\textwidth}
+\begin{figure}[t]
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Wedge/graphFlux.pdf}
+\caption*{Graph norm}
+\end{figure}
+\end{column}
+\begin{column}{0.5\textwidth}
+\begin{figure}[t]
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Wedge/robustFlux.pdf}
+\caption*{Robust norm}
+\end{figure}
+\end{column}
+\end{columns}
+}
+\end{frame}
+\begin{comment}
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Discontinuous Source Problem}
+\only<1>{
+After 8 refinement steps, $\epsilon=10^{-3}$,
+$\bbeta=(0.5/\sqrt{1.25},1/\sqrt{1.25})^T$, $f=\pm 1$
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Discontinuous/robust8nc.png}
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.49\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Discontinuous/robust8c.png}
+\caption*{With local conservation}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/Discontinuous/robustFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Inviscid Burgers' Equation}
+\only<1>{
+\vspace{-0.5em}
+\[
+\frac{\partial u}{\partial t}+u\frac{\partial u}{\partial
+x}=0
+\quad\Leftrightarrow\quad
+\nabla_{x,t}\cdot\left(\begin{array}{c}
+\frac{u^2}{2}\\
+u
+\end{array}\right)=0
+\]
+\vspace{-1.5em}
+\begin{figure}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Burgers/graph8nc.png}
+\caption*{Without local conservation}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=1.0\textwidth]{../figs/Burgers/graph8c.png}
+\caption*{With local conservation}
+\end{subfigure}
+\end{figure}
+}
+\only<2>{
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{../figs/Burgers/graphFlux.pdf}
+\end{figure}
+}
+\end{frame}
+\begin{comment}
+This problem is slightly off-topic in that we are no longer dealing with the
+convection-diffusion equation. Instead we consider the inviscid Burgers
+equation which can be formulated as a nonlinear hyperbolic conservation law,
+letting us relate directly to the Lax-Wendroff theorem. A common argument for
+local conservation is that shock speed can be off if we don't have a
+conservative method, and the Burgers' equation is often given as an example.
+We choose to work with a space-time formulation where x follows the x axis and
+time the y. So without going through the DPG derivation, let's just see how
+our two methods behave. Apart from some slight differences in refinement
+pattern, the two methods appear nearly identical.
+\end{comment}
+
+
+%===============================================================================
+% NEW SLIDE
+%===============================================================================
+\begin{frame}
+\frametitle{Summary}
+What have we done?
+\begin{itemize}
+\item We've turned our minimization problem into a saddlepoint problem.
+\item The change is computationally feasible.
+\item Mathematically, it gets rid of troublesome term.
+\end{itemize}
+
+\vspace{2ex}
+Does it make a difference?
+\begin{itemize}
+\item Enforcement changes refinement strategy.
+\item Standard DPG is nearly conservative in practice.
+\item Usually we get the same results with better conservation.
+\item Some improvement on condition number for local solves.
+\end{itemize}
+\vspace{2ex}
+\visible<2->{\pecosbold{We need to study the effect on real fluid dynamics.}}
+\end{frame}
+
+
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Vortex Problem}
+% Does enforcing local conservation make a difference?
+% \begin{columns}[b]
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/nl_vortex_c0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/nl_vortex_c1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/nl_vortex_c2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/nl_vortex_c3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/nl_vortex_c4.png}
+% 
+% With Local Conservation
+% \end{figure}
+% \end{column}
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/nl_vortex_nc0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/nl_vortex_nc1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/nl_vortex_nc2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/nl_vortex_nc3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/nl_vortex_nc4.png}
+% 
+% Without Local Conservation
+% \end{figure}
+% \end{column}
+% \end{columns}
+% \end{frame}
+% \begin{comment}
+% We have some promising theoretical reasons to explicitly enforce local
+% conservation, but does it really make a difference in numerical experiments?
+% This is a vortex problem with rotating flow. The inside is relatively
+% constant, so we shouldn't expect the refinement routine to focus too much on
+% this region. 
+% However, without strict enforcement of local conservation, the zero order term
+% in the test norm causes almost uniform refinements to happen in this region.
+% We expect this happens because beta decays to zero in the center.
+% 
+% Explain theory???
+% \end{comment}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Hemker Problem}
+% \begin{columns}[b]
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/hemker_c0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/hemker_c1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/hemker_c2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/hemker_c3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/hemker_c4.png}
+% \end{figure}
+% \vspace{-1em}
+% \begin{figure}[t]
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/hemkermesh_c0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/hemkermesh_c1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/hemkermesh_c2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/hemkermesh_c3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/hemkermesh_c4.png}
+% 
+% With Local Conservation
+% \end{figure}
+% \end{column}
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/hemker_nc0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/hemker_nc1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/hemker_nc2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/hemker_nc3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/hemker_nc4.png}
+% \end{figure}
+% \vspace{-1em}
+% \begin{figure}[t]
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/hemkermesh_nc0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/hemkermesh_nc1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/hemkermesh_nc2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/hemkermesh_nc3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/hemkermesh_nc4.png}
+% 
+% Without Local Conservation
+% \end{figure}
+% \end{column}
+% \end{columns}
+% \end{frame}
+% \begin{comment}
+% This is the Hemker problem. We have a circle with a boundary condition of u=1
+% and a flow field which convects downstream. You will notice that we are able
+% to achieve a pretty decent solution with a very coarse mesh. However, as we
+% refine, we don't see any visible difference between standard DPG and the
+% locally conservative version. In fact, if you look at error outputs, the
+% locally conservative version registers higher absolute error at each
+% refinement step which reflects the fact that we are now minimizing the
+% residual with constraints rather than purely minimizing.
+% \end{comment}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{High Lift Airfoil}
+% \begin{columns}[b]
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=0.85\textwidth]{rawfigs/highlift_c0.png}
+% \includegraphics<2>[width=0.85\textwidth]{rawfigs/highlift_c1.png}
+% \includegraphics<3>[width=0.85\textwidth]{rawfigs/highlift_c2.png}
+% \includegraphics<4>[width=0.85\textwidth]{rawfigs/highlift_c3.png}
+% \includegraphics<5>[width=0.85\textwidth]{rawfigs/highlift_c4.png}
+% \includegraphics<6>[width=0.85\textwidth]{rawfigs/highlift_c5.png}
+% \includegraphics<7>[width=0.85\textwidth]{rawfigs/highlift_c6.png}
+% \end{figure}
+% \vspace{-2em}
+% \begin{figure}[t]
+% \includegraphics<1>[width=0.85\textwidth]{rawfigs/highlift_mesh_c0.png}
+% \includegraphics<2>[width=0.85\textwidth]{rawfigs/highlift_mesh_c1.png}
+% \includegraphics<3>[width=0.85\textwidth]{rawfigs/highlift_mesh_c2.png}
+% \includegraphics<4>[width=0.85\textwidth]{rawfigs/highlift_mesh_c3.png}
+% \includegraphics<5>[width=0.85\textwidth]{rawfigs/highlift_mesh_c4.png}
+% \includegraphics<6>[width=0.85\textwidth]{rawfigs/highlift_mesh_c5.png}
+% \includegraphics<7>[width=0.85\textwidth]{rawfigs/highlift_mesh_c6.png}
+% 
+% With Local Conservation
+% \end{figure}
+% \end{column}
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=0.85\textwidth]{rawfigs/highlift_nc0.png}
+% \includegraphics<2>[width=0.85\textwidth]{rawfigs/highlift_nc1.png}
+% \includegraphics<3>[width=0.85\textwidth]{rawfigs/highlift_nc2.png}
+% \includegraphics<4>[width=0.85\textwidth]{rawfigs/highlift_nc3.png}
+% \includegraphics<5>[width=0.85\textwidth]{rawfigs/highlift_nc4.png}
+% \includegraphics<6>[width=0.85\textwidth]{rawfigs/highlift_nc5.png}
+% \includegraphics<7>[width=0.85\textwidth]{rawfigs/highlift_nc6.png}
+% \end{figure}
+% \vspace{-2em}
+% \begin{figure}[t]
+% \includegraphics<1>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc0.png}
+% \includegraphics<2>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc1.png}
+% \includegraphics<3>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc2.png}
+% \includegraphics<4>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc3.png}
+% \includegraphics<5>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc4.png}
+% \includegraphics<6>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc5.png}
+% \includegraphics<7>[width=0.85\textwidth]{rawfigs/highlift_mesh_nc6.png}
+% 
+% Without Local Conservation
+% \end{figure}
+% \end{column}
+% \end{columns}
+% \end{frame}
+% \begin{comment}
+% This is a problem that I initially started working on for fun. I had just
+% finished writing a triangular mesh reader and I was homesick for airfoil
+% problems. So we got this high lift airfoil profile from some folks at Boeing
+% and I thought I would mesh it up and just run it as a variation of the Hemker
+% problem. I know this is not a very realistic problem since there is no
+% interaction between the geometry and the flow field, but I noticed an
+% interesting difference between the conservative and nonconservative solutions
+% that was worth pointing out.
+% It appears that the locally conservative method is much more reluctant to
+% apply refinements. We use a greedy refinement algorithm which means we tag the
+% element with the highest energy error and refine all elements within say 20\%
+% of this error. This means that we can not do a DOF comparison between these
+% two plots. It is very obvious by the end that the nonconservative version has
+% a lot much nicer solution after 6 refinement steps but clearly a much greater
+% number of DOFs as well. It appears that the locally conservative version
+% interprets the maximum error element to be much higher than any surrounding
+% elements and thus fewer elements fall under the selection threshold. 
+% \end{comment}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Double Glazing Problem}
+% \begin{columns}[b]
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/doubleglazing_c0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/doubleglazing_c1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/doubleglazing_c2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/doubleglazing_c3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/doubleglazing_c4.png}
+% \includegraphics<6>[width=1.0\textwidth]{rawfigs/doubleglazing_c5.png}
+% \includegraphics<7>[width=1.0\textwidth]{rawfigs/doubleglazing_c6.png}
+% \includegraphics<8>[width=1.0\textwidth]{rawfigs/doubleglazing_c7.png}
+% \includegraphics<9>[width=1.0\textwidth]{rawfigs/doubleglazing_c8.png}
+% 
+% With Local Conservation
+% \end{figure}
+% \end{column}
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/doubleglazing_nc0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/doubleglazing_nc1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/doubleglazing_nc2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/doubleglazing_nc3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/doubleglazing_nc4.png}
+% \includegraphics<6>[width=1.0\textwidth]{rawfigs/doubleglazing_nc5.png}
+% \includegraphics<7>[width=1.0\textwidth]{rawfigs/doubleglazing_nc6.png}
+% \includegraphics<8>[width=1.0\textwidth]{rawfigs/doubleglazing_nc7.png}
+% \includegraphics<9>[width=1.0\textwidth]{rawfigs/doubleglazing_nc8.png}
+% 
+% Without Local Conservation
+% \end{figure}
+% \end{column}
+% \end{columns}
+% \end{frame}
+% \begin{comment}
+% Finally, we have the double glazing problem. We are starting with a single
+% element because we can. There are slight differences in refinement pattern
+% between the two options, but not very significant.
+% \end{comment}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Inviscid Burgers' Equation}
+% \vspace{-0.5em}
+% \[
+% \frac{\partial u}{\partial t}+u\frac{\partial u}{\partial
+% x}=0
+% \quad\Leftrightarrow\quad
+% \nabla_{x,t}\cdot\left(\begin{array}{c}
+% \frac{u^2}{2}\\
+% u
+% \end{array}\right)=0
+% \]
+% \vspace{-1.5em}
+% \begin{columns}[b]
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/inviscidburgers_c0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/inviscidburgers_c1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/inviscidburgers_c2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/inviscidburgers_c3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/inviscidburgers_c4.png}
+% \includegraphics<6>[width=1.0\textwidth]{rawfigs/inviscidburgers_c5.png}
+% \includegraphics<7>[width=1.0\textwidth]{rawfigs/inviscidburgers_c6.png}
+% \includegraphics<8>[width=1.0\textwidth]{rawfigs/inviscidburgers_c7.png}
+% \includegraphics<9>[width=1.0\textwidth]{rawfigs/inviscidburgers_c8.png}
+% 
+% With Local Conservation
+% \end{figure}
+% \end{column}
+% \begin{column}{0.5\textwidth}
+% \begin{figure}[t]
+% \centering
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc0.png}
+% \includegraphics<2>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc1.png}
+% \includegraphics<3>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc2.png}
+% \includegraphics<4>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc3.png}
+% \includegraphics<5>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc4.png}
+% \includegraphics<6>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc5.png}
+% \includegraphics<7>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc6.png}
+% \includegraphics<8>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc7.png}
+% \includegraphics<9>[width=1.0\textwidth]{rawfigs/inviscidburgers_nc8.png}
+% 
+% Without Local Conservation
+% \end{figure}
+% \end{column}
+% \end{columns}
+% \end{frame}
+% \begin{comment}
+% This problem is slightly off-topic in that we are no longer dealing with the
+% convection-diffusion equation. Instead we consider the inviscid Burgers
+% equation which can be formulated as a nonlinear hyperbolic conservation law,
+% letting us relate directly to the Lax-Wendroff theorem. A common argument for
+% local conservation is that shock speed can be off if we don't have a
+% conservative method, and the Burgers' equation is often given as an example.
+% We choose to work with a space-time formulation where x follows the x axis and
+% time the y. So without going through the DPG derivation, let's just see how
+% our two methods behave. Apart from some slight differences in refinement
+% pattern, the two methods appear nearly identical.
+% \end{comment}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Summary}
+% What have we done?
+% \begin{itemize}
+% \item We've turned our minimization problem into a saddlepoint problem.
+% \item The change is computationally feasible.
+% \item Mathematically, it gets rid of troublesome term.
+% \end{itemize}
+% Does it make a difference?
+% \begin{itemize}
+% \item Enforcement changes refinement strategy.
+% \item Standard DPG is nearly conservative in practice.
+% \begin{table}
+% \centering
+% \footnotesize
+% \begin{tabular}{l|c|c|c|c|}
+% \cline{2-5}
+% ~ & \multicolumn{2}{|c|}{Local Flux Imbalance} & \multicolumn{2}{|c|}{Global Flux Imbalance} \\
+% \cline{2-5}
+% ~ & Before & After & Before & After \\
+% \hline
+% \multicolumn{1}{|c|}{Vortex} & $10^{-8}$ & $10^{-15}$ & $10^{-5}$ & $10^{-16}$ \\
+% \hline
+% \multicolumn{1}{|c|}{Hemker} & $10^{-6}$ & $10^{-14}$ & $10^{-4}$ & $10^{-14}$ \\
+% \hline
+% \multicolumn{1}{|c|}{High Lift Airfoil} & $10^{-7}$ & $10^{-14}$ & $10^{-5}$ & $10^{-14}$ \\
+% \hline
+% \multicolumn{1}{|c|}{Double Glazing} & $10^{-8}$ & $10^{-15}$ & $10^{-9}$ & $10^{-15}$ \\
+% \hline
+% \multicolumn{1}{|c|}{Inviscid Burgers} & $10^{-7}$ & $10^{-17}$ & $10^{-6}$ & $10^{-16}$ \\
+% \hline
+% \end{tabular}
+% \end{table}
+% % \begin{itemize}
+% % \item Hemker gives maximum flux inbalance of order $10^{-6}$ in a single
+% % element and $10^{-4}$ globally.
+% % \end{itemize}
+% \end{itemize}
+% \visible<2->{\pecosbold{We need to study the effect on real fluid dynamics.}}
+% \end{frame}
+% 
+% 
+% %===============================================================================
+% % NEW SLIDE
+% %===============================================================================
+% \begin{frame}
+% \frametitle{Questions?}
+% % \begin{block}{}
+% % \center{Thank you!} \\
+% % \center{Questions?}
+% % \end{block}
+% \begin{figure}
+% \centering
+% % \includegraphics<1>[width=0.8\textwidth]{rawfigs/highlift_black_nc6.png}
+% \includegraphics<1>[width=1.0\textwidth]{rawfigs/highlift_gray_nc6.png}
+% \end{figure}
+% \end{frame}
+
+\bibliographystyle{plain}
+{\scriptsize
+\bibliography{DPG}
+}
+ 
+\end{document}

@@ -14,7 +14,7 @@
 #include "Element.h"
 #include "BasisFactory.h"
 #include "Intrepid_FunctionSpaceTools.hpp"
-#include "SerialDenseSolveWrapper.h"
+#include "SerialDenseMatrixUtility.h"
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
 
@@ -26,7 +26,7 @@ VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
   int polyOrder = max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
   
   BasisPtr basis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD);
-  VectorBasisPtr vectorBasis = Teuchos::rcp( (Vectorized_Basis<double, FieldContainer<double> > *)basis.get(),false);
+  VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false); // dynamic cast would be better
   return vectorBasis;
 }
 
@@ -128,7 +128,7 @@ public:
     
     bool basisIsVolumeBasis = true;
     if (spaceDim==2) {
-      basisIsVolumeBasis = (_basis->getBaseCellTopology().getBaseKey() != shards::Line<2>::key);
+      basisIsVolumeBasis = (_basis->domainTopology().getBaseKey() != shards::Line<2>::key);
     } else if (spaceDim==3) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim==3 not yet supported in basisIsVolumeBasis determination.");
     }

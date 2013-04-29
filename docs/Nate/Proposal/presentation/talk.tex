@@ -572,7 +572,7 @@ The naive norm is \pecosbold{stronger}---e.g. it requires $\NVRdiv \NVRtensor{\t
 
 \begin{frame}
 \frametitle{Lid-Driven Cavity Flow Problem}
-A classic test case for Stokes flow is the \pecosbold{lid-driven cavity flow problem}.  Consider a square cavity with an incompressible, viscous fluid, with a lid that moves at a constant rate.  The resulting flow will be vorticular; there will be \pecosbold{Moffat eddies} at the corners; in fact, the exact solution will have an infinite number of such eddies, visible at progressively finer scales.\footnote{\FootSize \bibentry{Moffat}}
+A classic test case for Stokes flow is the \pecosbold{lid-driven cavity flow problem}.  Consider a square cavity with an incompressible, viscous fluid, with a lid that moves at a constant rate.  The resulting flow will be vorticular; there will be \pecosbold{Moffatt eddies} at the corners; in fact, the exact solution will have an infinite number of such eddies, visible at progressively finer scales.\footnote{\FootSize \bibentry{Moffatt}}
 \begin{center}
 {\includegraphics[scale=0.40]{../figures/cavity_flow_cartoon.pdf}}
 \end{center}
@@ -613,16 +613,16 @@ Since the exact solution is unknown, we compare an overkill mesh to a series of 
 \begin{center}
 {\setlength{\fboxsep}{1pt}\colorbox{pecos2}{\includegraphics[scale=0.25]{../figures/streamlines_p2_r7.pdf}}} \hspace{5mm} {\setlength{\fboxsep}{1pt}\colorbox{pecos2}{\includegraphics[scale=0.25]{../figures/streamlines_detail_p2_r7.pdf}}}
 \end{center}
-Streamlines for the full cavity and for the lower-left corner, on a quadratic mesh after 7 adaptive refinements.  The lower-left corner shows the first Moffat eddy.  The final mesh has 124 elements and 11,202 dofs.
+Streamlines for the full cavity and for the lower-left corner, on a quadratic mesh after 7 adaptive refinements.  The lower-left corner shows the first Moffatt eddy.  The final mesh has 124 elements and 11,202 dofs.
 \end{frame}
 
 \begin{frame}
 \frametitle{Lid-Driven Cavity Flow: Streamlines}
-Using a cubic mesh and running 11 refinement steps, we can resolve the second Moffat eddy:
+Using a cubic mesh and running 11 refinement steps, we can resolve the second Moffatt eddy:
 \begin{center}
 {\setlength{\fboxsep}{1pt}\colorbox{pecos2}{\includegraphics[scale=.35]{../figures/streamlines_minute_detail_p3_r11.pdf}}}
 \end{center}
-Streamlines for the lower-left corner on a cubic mesh after 11 adaptive refinements: the second Moffat eddy.  The final mesh has 298 elements and 44,206 dofs.
+Streamlines for the lower-left corner on a cubic mesh after 11 adaptive refinements: the second Moffatt eddy.  The final mesh has 298 elements and 44,206 dofs.
 \end{frame}
 
 

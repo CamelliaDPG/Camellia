@@ -22,6 +22,8 @@
 
 #include "ExactSolution.h"
 
+#include "GnuPlotUtil.h"
+
 #include "BC.h"
 
 #include "MeshUtilities.h"
@@ -210,6 +212,13 @@ void SolutionTests::teardown() {
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testHRefinementInitialization()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testNewProjectFunction()) {
     numTestsPassed++;
   }
@@ -260,13 +269,6 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testEnergyError()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-  setup();
-  if (testHRefinementInitialization()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -633,8 +635,8 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
   bool success = true;
   double tol = 1e-14;
   _poissonSolution_1x1->projectFieldVariablesOntoOtherSolution(_poissonSolution);
-  _poissonSolution_1x1->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1.m");
-  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1_projected.m");
+//  _poissonSolution_1x1->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1.m");
+//  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI, "phi_1x1_projected.m");
   _poissonSolution->projectFieldVariablesOntoOtherSolution(_poissonSolution_1x1_unsolved);
   // difference should be zero:
   _poissonSolution_1x1_unsolved->addSolution(_poissonSolution_1x1,-1.0);
@@ -652,6 +654,7 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
       success = false;
     }
   }
+  
   return success;
 }
 
@@ -709,7 +712,7 @@ bool SolutionTests::testEnergyError(){
     int cellID = current_element->cellID();
     totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
   }
-  if (totalEnergyErrorSquared>tol){
+  if (totalEnergyErrorSquared > tol) {
     success = false;
     cout << "testEnergyError failed: energy error is " << totalEnergyErrorSquared << endl;
   }
@@ -799,14 +802,28 @@ bool SolutionTests::testEnergyError(){
 }
 
 
-bool SolutionTests::testHRefinementInitialization(){
+bool SolutionTests::testHRefinementInitialization() {
 
   double tol = 2e-14;
 
   bool success = true;
   Teuchos::RCP< Mesh > mesh = _poissonSolution->mesh();
   
-  _poissonSolution->solve(false);
+  //_poissonSolution->solve(false);
+  
+  // for now, instead of using a true solution, let's just project some known functions onto the mesh
+  // start with an exactly representable polynomial, but this should work for arbitrary functions...
+  FunctionPtr x = Function::xn();
+  FunctionPtr y = Function::yn();
+  FunctionPtr phiFxn = x;// * x * x + x * y;
+  FunctionPtr psiFxn = phiFxn->grad();
+  map< int, FunctionPtr > fxnMap;
+  fxnMap[ PoissonBilinearForm::PHI ] = phiFxn;
+  fxnMap[ PoissonBilinearForm::PSI_1 ] = psiFxn->x();
+  fxnMap[ PoissonBilinearForm::PSI_2 ] = psiFxn->y();
+  
+  _poissonSolution->projectOntoMesh(fxnMap);
+  
 //  int trialIDToWrite = PoissonBilinearForm::PHI;
   string filePrefix = "phi";
   string fileSuffix = ".m";
@@ -833,6 +850,8 @@ bool SolutionTests::testHRefinementInitialization(){
 //  vector< Teuchos::RCP<Solution> > solutions;
 //  solutions.push_back(_poissonSolution);
   mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
+  
+  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/poissonRefinedMesh",mesh);
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postRef.m");
   
 //  _poissonSolution->writeFieldsToFile(trialIDToWrite, filePrefix + "AfterRefinement" + fileSuffix);
@@ -840,15 +859,24 @@ bool SolutionTests::testHRefinementInitialization(){
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(actualValues,fieldID,_testPoints);
-    double maxDiff;
+    double maxDiff = 0;
     if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
       success = false;
       cout << "testHRefinementInitialization failed: max difference in " 
            << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
+      
+      FieldContainer<double> points = _testPoints;
+      int numPoints = _testPoints.dimension(0);
+      points.resize(1,numPoints,_testPoints.dimension(1));
+      FieldContainer<double> expected = expectedMap[fieldID];
+      expected.resize(1,numPoints);
+      FieldContainer<double> actual = actualValues;
+      actual.resize(1,numPoints);
+      reportFunctionValueDifferences(points, expected, actual, tol);
     }
   }
 
-  _poissonSolution->solve(false);
+//  _poissonSolution->solve(false);
 //  _poissonSolution->writeFieldsToFile(PoissonBilinearForm::PHI,"phi_postSolve.m");
   
   return success;

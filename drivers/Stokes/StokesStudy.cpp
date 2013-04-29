@@ -7,7 +7,6 @@
  *
  */
 
-#include "StokesStudy.h"
 #include "StokesManufacturedSolution.h"
 #include "StokesBilinearForm.h"
 
@@ -27,6 +26,8 @@
 #include "LagrangeConstraints.h"
 
 #include "BasisFactory.h"
+
+#include "MeshUtilities.h"
 
 #include "Solver.h"
 #include "CGSolver.h"
@@ -148,7 +149,7 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
 }
 
 enum NormChoice {
-  GraphNorm, NaiveNorm, L2Norm
+  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm, UnitCompliantGraphNorm
 };
 
 enum ExactSolutionChoice {
@@ -184,8 +185,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
      StokesStudy normChoice formulationTypeStr polyOrder minLogElements maxLogElements {"quad"|"tri"}
    
    where:
-   formulationTypeStr = {"vgp"|"vvp"|"vsp"|"dds"|"ddsp"}
-   normChoice = {"opt"|"naive"}
+   formulationTypeStr = {"vgp"|"vgpf"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
+   normChoice = {"opt"|"naive"|"l2"|"h1"|"compliant"}
    
    */
   
@@ -233,15 +234,23 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     normChoice = NaiveNorm;
   } else if (normChoiceStr == "l2") {
     normChoice = L2Norm;
+  } else if (normChoiceStr == "h1") {
+    normChoice = H1ExperimentalNorm;
+  } else if (normChoiceStr == "compliant") {
+    normChoice = UnitCompliantGraphNorm;
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
+  } else if (formulationTypeStr == "vgpf") {
+    formulationType = VGPF;
   } else if (formulationTypeStr == "vvp") {
     formulationType = VVP;
   } else if (formulationTypeStr == "dds") {
     formulationType = DDS;
   } else if (formulationTypeStr == "ddsp") {
     formulationType = DDSP;
+  } else if (formulationTypeStr == "ce") {
+    formulationType = CE;
   } else {
     formulationType = VSP;
     formulationTypeStr = "vsp";
@@ -386,11 +395,17 @@ int main(int argc, char *argv[]) {
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   
-  ExactSolutionChoice exactSolnChoice = HDGSingular;
+  ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
-  bool reportConditionNumber = false;
+  bool reportConditionNumber = false; // 2-norm condition number
+  
+  bool computeMaxGramConditionNumber = true; // for Gram matrices
   
   bool useTrueTracesForVVP = true;
+  
+  bool dontImposeZeroMeanPressure = false;
+  
+  bool writeGlobalStiffnessMatrixToFile = true;
   
   bool useCG = false;
   bool useMumps = true;
@@ -421,6 +436,8 @@ int main(int argc, char *argv[]) {
   if (normChoice == NaiveNorm) normChoiceStr = "naive";
   else if (normChoice == GraphNorm) normChoiceStr = "graph";
   else if (normChoice == L2Norm) normChoiceStr = "l2";
+  else if (normChoice == H1ExperimentalNorm) normChoiceStr = "H^1 Experimental";
+  else if (normChoice == UnitCompliantGraphNorm) normChoiceStr = "unit-compliant graph";
   else normChoiceStr = "unknownNorm";
   
   string exactSolnChoiceStr;
@@ -434,7 +451,7 @@ int main(int argc, char *argv[]) {
     pToAdd = 3;
   }
 //  if (formulationType==VVP) {
-//    // for at least the singular solution and VVP on quads, find that we get much better results 
+//    // for at least the singular solution and VVP on quads, find that we get much better results
 //    // with 3 than 2...
 //    pToAdd = 3;
 //  }
@@ -446,11 +463,12 @@ int main(int argc, char *argv[]) {
 //  }
   
   bool useConformingTraces = true;
-  if (exactSolnChoice == HDGSingular) {
-    useConformingTraces = false;
-  }
+//  if (exactSolnChoice == HDGSingular) {
+//    useConformingTraces = false;
+//  }
   
   if (rank == 0) {
+    cout << "polyOrder = " << polyOrder << endl;
     cout << "pToAdd = " << pToAdd << endl;
     cout << "formulationType = " << formulationTypeStr                  << "\n";
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
@@ -460,6 +478,14 @@ int main(int argc, char *argv[]) {
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
     cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
     cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
+    cout << "dontImposeZeroMeanPressure = " << (dontImposeZeroMeanPressure ? "true" : "false") << endl;
+    cout << "writeGlobalStiffnessMatrixToFile = " << (writeGlobalStiffnessMatrixToFile ? "true" : "false") << endl;
+    cout << "computeMaxGramConditionNumber = " << (computeMaxGramConditionNumber ? "true" : "false") << endl;
+  }
+  
+  if ((normChoice == UnitCompliantGraphNorm) && (formulationType != VGP)) {
+    cout << "Error: unit-compliant graph norm only supported for VGP right now.\n";
+    exit(1);
   }
   
   double mu = 1.0;
@@ -476,9 +502,12 @@ int main(int argc, char *argv[]) {
       break;        
     case DDSP:
       stokesForm = Teuchos::rcp(new DDSPStokesFormulation(mu));
-      break;        
+      break;
     case VGP:
-      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu));
+      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu, normChoice==UnitCompliantGraphNorm));
+      break;
+    case VGPF:
+      stokesForm = Teuchos::rcp(new VGPFStokesFormulation(mu));
       break;
     case VVP:
       stokesForm = Teuchos::rcp(new VVPStokesFormulation(mu, useTrueTracesForVVP));
@@ -486,6 +515,8 @@ int main(int argc, char *argv[]) {
     case VSP:
       stokesForm = Teuchos::rcp(new VSPStokesFormulation(mu));
       break;
+    case CE:
+      stokesForm = Teuchos::rcp(new CEStokesFormulation(mu));
     default:
       break;
   }
@@ -625,6 +656,17 @@ int main(int argc, char *argv[]) {
     
     mySolution = stokesForm->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
   }
+
+  BCPtr bc = mySolution->bc();
+  if (dontImposeZeroMeanPressure) {
+    vector<int> fieldIDs;
+    stokesForm->primaryTrialIDs(fieldIDs);
+    int pressureIDIndex = (formulationType==VGPF) ? 1 : 2;
+    int pressureID = fieldIDs[pressureIDIndex];
+    dynamic_cast< BCEasy* >(bc.get())->removeZeroMeanConstraint(pressureID);
+    // instead, use a single-point BC on pressure
+    dynamic_cast< BCEasy* >(bc.get())->addSinglePointBC(pressureID, p_exact);
+  }
   
   Teuchos::RCP<DPGInnerProduct> ip;
   if (normChoice == GraphNorm) {
@@ -641,6 +683,35 @@ int main(int argc, char *argv[]) {
     }
   } else if (normChoice == L2Norm) {
     ip = stokesForm->bf()->l2Norm();
+  } else if (normChoice == H1ExperimentalNorm) {
+    if (formulationType != VGP) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "only VGP supported for the H^1 experimental norm right now.");
+    }
+    
+    IPPtr myIP = Teuchos::rcp( new IP );
+    VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+    
+    VarPtr v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+    VarPtr v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+    VarPtr tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
+    VarPtr tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
+    VarPtr q = varFactory.testVar(VGP_Q_S, HGRAD);
+
+    myIP->addTerm( mu * v1->grad() + tau1 ); // sigma11, sigma12
+    myIP->addTerm( mu * v2->grad() + tau2 ); // sigma21, sigma22
+    myIP->addTerm( v1->dx() + v2->dy() );     // pressure
+    myIP->addTerm( tau1->div() );    // u1
+    myIP->addTerm( tau2->div() );    // u2
+    
+    myIP->addTerm(v1);
+    myIP->addTerm(v2);
+    myIP->addTerm(tau1);
+    myIP->addTerm(tau2);
+    myIP->addTerm(q);
+    
+    ip = myIP;
+  } else if (normChoice==UnitCompliantGraphNorm) {
+    ip = dynamic_cast< VGPStokesFormulation* >(stokesForm.get())->scaleCompliantGraphNorm();
   }
   
   if (rank==0) 
@@ -690,11 +761,12 @@ int main(int argc, char *argv[]) {
     HConvergenceStudy study(mySolution,
                             mySolution->bilinearForm(),
                             mySolution->ExactSolution::rhs(),
-                            mySolution->bc(), ip,  
+                            bc, ip,  
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setReportConditionNumber(reportConditionNumber);
+    study.setWriteGlobalStiffnessToDisk(writeGlobalStiffnessMatrixToFile,"stokes_study_stiffness");
     int maxTestDegree = polyOrder + 1 + pToAdd;
     int cubatureDegreeInMesh = polyOrder + maxTestDegree;
     
@@ -715,6 +787,9 @@ int main(int argc, char *argv[]) {
         
     if ( exactSolnChoice != HDGSingular ) {
       study.solve(quadPoints,useConformingTraces);
+      // debug code:
+//      DofOrderingPtr trialSpace = study.getSolution(0)->mesh()->getElement(0)->elementType()->trialOrderPtr;
+//      cout << "trial space for cell 0 on 1x1 mesh: \n" << *trialSpace;
     } else {
       // L-shaped domain
       vector<FieldContainer<double> > vertices;
@@ -731,20 +806,10 @@ int main(int argc, char *argv[]) {
 //                              minLogElements, maxLogElements, 
 //                              polyOrder+1, pToAdd, false, useTriangles, false);
       
-      // DEBUGGING: as a test, remove the reentrant corner:
-      // immediate motivation is simply that my MATLAB plotters don't handle the L-shape well.
-//      quadPoints(0,0) = -1.0; // x1
-//      quadPoints(0,1) =  0.0; // y1
-//      quadPoints(1,0) =  1.0;
-//      quadPoints(1,1) =  0.0;
-//      quadPoints(2,0) =  1.0;
-//      quadPoints(2,1) =  1.0;
-//      quadPoints(3,0) = -1.0;
-//      quadPoints(3,1) =  1.0;
-//      
-//      study.solve(quadPoints);
-      
-      study.solve(vertices,elementVertices,useConformingTraces);
+//      cout << "WARNING: commented out the HDG singular solve (need to fix call to study).\n";
+      const map< Edge, ParametricCurvePtr > edgeToCurveMap; //no curves
+      MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
+      study.solve(geometry,useConformingTraces);
       
       // don't enrich cubature if using triangles, since the cubature factory for triangles can only go so high...
       // (could be more precise about this; I'm not sure exactly where the limit is: we could enrich some)
@@ -752,8 +817,55 @@ int main(int argc, char *argv[]) {
     int cubatureEnrichment = useTriangles ? 0 : 15;
     double p_integral = p_exact->integrate(study.getSolution(maxLogElements)->mesh(), cubatureEnrichment);
     
+    if (dontImposeZeroMeanPressure) {
+      // then we need to adjust the solutions by subtracting off the mean of the pressure
+      vector<int> fieldIDs;
+      stokesForm->primaryTrialIDs(fieldIDs);
+      int pressureIDIndex = (formulationType==VGPF) ? 1 : 2;
+      int pressureID = fieldIDs[pressureIDIndex];
+      VarPtr pressure = Var::varForTrialID(pressureID, stokesForm->bf());
+      double pressure_L2norm = p_exact->l2norm(study.getSolution(maxLogElements)->mesh(),cubatureEnrichment);
+
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        SolutionPtr soln = study.getSolution(i);
+        FunctionPtr pressure_soln = Function::solution(pressure, soln);
+        double pressure_integral = pressure_soln->integrate(soln->mesh());
+        map<int, FunctionPtr > functionMap;
+        functionMap[pressureID] = pressure_soln - pressure_integral;
+        soln->projectOntoMesh(functionMap);
+        double relativeError = (pressure_soln - pressure_integral - p_exact)->l2norm(soln->mesh()) / pressure_L2norm;
+        cout << "relative pressure error for logElements " << i << ": "  << relativeError << endl;
+      }
+      // now have study recompute the errors
+      study.computeErrors();
+    }
+    
+    if (computeMaxGramConditionNumber) {
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        SolutionPtr soln = study.getSolution(i);
+        ostringstream fileNameStream;
+        fileNameStream << "stokesStudy_maxConditionIPMatrix_" << i << ".dat";
+        IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
+        bool jacobiScalingTrue = true;
+        double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), jacobiScalingTrue, fileNameStream.str());
+        if (rank==0) {
+          cout << "max jacobi-scaled Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
+          cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
+        }
+      }
+    }
+    
+    if (writeGlobalStiffnessMatrixToFile) {
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        double globalCondNum = study.computeJacobiPreconditionedConditionNumber(i);
+        if (rank==0) {
+          cout << "Jacobi-scaled global system matrix condition number for logElements " << i << ": " << globalCondNum << endl;
+        }
+      }
+    }
+    
     if (rank == 0) {
-      cout << "Integral of pressure: " << setprecision(15) << p_integral << endl;
+      cout << "Integral of exact pressure: " << setprecision(15) << p_integral << endl;
 
       cout << study.TeXErrorRateTable();
       vector<int> primaryVariables;
@@ -781,13 +893,17 @@ int main(int argc, char *argv[]) {
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID);
       }
       
-      for (int i=minLogElements; i<=maxLogElements; i++) {
-        ostringstream filePath;
-        int numElements = pow(2.0,i);
-        filePath << "stokes/soln" << numElements << "x";
-        filePath << numElements << "_p" << polyOrder << ".vtk";
-        cout << "writing VTK for " << numElements << " x " << numElements << " mesh.\n";
-        study.getSolution(i)->writeToVTK(filePath.str());
+      if (formulationType != VGPF) {
+        for (int i=minLogElements; i<=maxLogElements; i++) {
+          ostringstream filePath;
+          int numElements = pow(2.0,i);
+          filePath << "stokes/soln" << numElements << "x";
+          filePath << numElements << "_p" << polyOrder << ".vtk";
+          cout << "writing VTK for " << numElements << " x " << numElements << " mesh.\n";
+          study.getSolution(i)->writeToVTK(filePath.str());
+        }
+      } else {
+        cout << "formulationType = VGPF, so skipping VTK output (vector-valued fields not yet supported there).\n";
       }
       
       filePathPrefix.str("");

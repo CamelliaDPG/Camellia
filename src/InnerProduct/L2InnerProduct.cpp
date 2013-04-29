@@ -84,7 +84,7 @@ void L2InnerProduct::computeInnerProductMatrix(FieldContainer<double> &innerProd
   vector<int>::iterator trialIterator1;
   vector<int>::iterator trialIterator2;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trial1Basis, trial2Basis;
+  BasisPtr trial1Basis, trial2Basis;
 
   innerProduct.initialize(0.0);
   FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();
@@ -182,7 +182,7 @@ void L2InnerProduct::computeInnerProductVector(FieldContainer<double> &innerProd
   vector<int>::iterator trialIterator1;
   vector<int>::iterator trialIterator2;
   
-  Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > trial1Basis, trial2Basis;
+  BasisPtr trial1Basis, trial2Basis;
 
   innerProduct.initialize(0.0);
   FieldContainer<double> physicalCubaturePoints = basisCache.getPhysicalCubaturePoints();

@@ -8,6 +8,8 @@
 
 #include "IP.h"
 
+#include "SerialDenseMatrixUtility.h"
+
 // to satisfy the compiler, call the DPGInnerProduct constructor with a null argument:
 IP::IP() : DPGInnerProduct( Teuchos::rcp( (BilinearForm*) NULL ) ) {}
 // if the terms are a1, a2, ..., then the inner product is (a1,a1) + (a2,a2) + ... 
@@ -106,6 +108,23 @@ void IP::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
   }
 }
 
+double IP::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache) {
+  int testDofs = testSpace->totalDofs();
+  int numCells = basisCache->cellIDs().size();
+  FieldContainer<double> innerProduct(numCells,testDofs,testDofs);
+  this->computeInnerProductMatrix(innerProduct, testSpace, basisCache);
+  double maxConditionNumber = -1;
+  Teuchos::Array<int> cellIP_dim;
+  cellIP_dim.push_back(testDofs);
+  cellIP_dim.push_back(testDofs);
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    FieldContainer<double> cellIP = FieldContainer<double>(cellIP_dim,&innerProduct(cellIndex,0,0) );
+    double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(cellIP);
+    maxConditionNumber = max(maxConditionNumber,conditionNumber);
+  }
+  return maxConditionNumber;
+}
+
 // compute IP vector when var==fxn
 void IP::computeInnerProductVector(FieldContainer<double> &ipVector, 
                                    VarPtr var, FunctionPtr fxn,
@@ -188,7 +207,7 @@ bool IP::hasBoundaryTerms() {
 //    set<int>::iterator testIt1;
 //    set<int>::iterator testIt2;
 //    
-//    Teuchos::RCP < Intrepid::Basis<double,FieldContainer<double> > > test1Basis, test2Basis;
+//    BasisPtr test1Basis, test2Basis;
 //    
 //    for (testIt1= testIDs.begin(); testIt1 != testIDs.end(); testIt1++) {
 //      int testID1 = *testIt1;

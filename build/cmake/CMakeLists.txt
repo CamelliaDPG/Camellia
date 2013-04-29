@@ -13,6 +13,13 @@ cmake_minimum_required(VERSION 2.8)
 # You do _not_ need to edit this line.
 FIND_PACKAGE(Trilinos PATHS ${TRILINOS_PATH}/lib/cmake/Trilinos ${TRILINOS_PATH})
 
+SET(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "/usr/local/")
+
+FIND_PACKAGE(Boost)
+if (Boost_FOUND)
+  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+endif()
+
 find_package(VTK REQUIRED)
 include(${VTK_USE_FILE})
 if(VTK_LIBRARIES)
@@ -133,9 +140,25 @@ set( NEW_BURGERS_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewBurgersDriver.cpp"
 )
 
+set( CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/ConditioningExperimentDriver.cpp"
+)
+
+set( LOBPCG_CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/LOBPCGEpetraExFile.cpp"
+)
+
+set( LSQR_CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/LSQREpetraExFile.cpp"
+)
+
 set( NEW_CONFUSION_DRIVER
   "${SCRATCHPAD_DRIVER_DIR}/NewConfusionDriver.cpp"
 )
+
+set( STOKES_CONSERVATION_EXPERIMENT
+  "${STOKES_DIR}/StokesConservationExperiment.cpp"
+  )
 
 set( STOKES_BACKWARD_FACING_STEP_DRIVER
   "${STOKES_DIR}/StokesBackwardFacingStepDriver.cpp"
@@ -143,6 +166,14 @@ set( STOKES_BACKWARD_FACING_STEP_DRIVER
   
 set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowDriver.cpp"
+  )
+
+set( NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowContinuationFixedMesh.cpp"
+  )
+
+set( NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesCavityFlowContinuationAdaptive.cpp"
   )
 
 set( LAPLACE_CURVILINEAR_DRIVER
@@ -164,6 +195,14 @@ set( STOKES_STUDY
 set( INCOMP_NS_STUDY
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesStudy.cpp"
   )
+
+set( OSEEN_STUDY
+  "${INCOMPRESSIBLE_NS_DIR}/OseenStudy.cpp"
+  )
+
+set( uBLAS_CHOLESKY_TEST
+  "${DRIVERS_DIR}/uBLAS/cholesky_test.cpp"
+)
 
 set( STOKES_SOURCES
   "${STOKES_DIR}/StokesManufacturedSolution.cpp"
@@ -232,16 +271,24 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 #
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
+add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
+add_executable(OseenStudy ${OSEEN_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
+add_executable(StokesConservationExperiment ${STOKES_SOURCES} ${STOKES_CONSERVATION_EXPERIMENT})
 add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
+add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE})
+add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
 add_executable(NavierStokesHemkerDriver ${NAVIER_STOKES_HEMKER_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
+add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 
 #
 # EDIT HERE: Change trilinosExample to the name of the executable
@@ -250,6 +297,21 @@ add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
 # (TPLs) with which Trilinos was built.
 #
 
+target_link_libraries(ConditioningExperimentDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(LOBPCGConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(LSQRConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
 target_link_libraries(NewBurgersDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
@@ -266,6 +328,16 @@ target_link_libraries(DPGTests
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NavierStokesCavityFlowDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesCavityFlowContinuationAdaptive
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesCavityFlowContinuationFixedMesh
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
@@ -290,12 +362,22 @@ target_link_libraries(StokesBackwardFacingStepDriver
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
+target_link_libraries(StokesConservationExperiment
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
 target_link_libraries(StokesStudy
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NavierStokesStudy
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(OseenStudy
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

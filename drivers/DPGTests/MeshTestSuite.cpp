@@ -61,19 +61,49 @@
 #include <sstream>
 
 #include "MeshUtilities.h"
-
+#include "ZoltanMeshPartitionPolicy.h"
 #include "GnuPlotUtil.h"
+#include "RefinementStrategy.h"
+
+// just for the test to close a mesh anisotropically
+#include "SolutionExporter.h"
+#include "Solution.h"
+#include "VarFactory.h"
+#include "BCEasy.h"
+#include "RHSEasy.h"
+#include "RHS.h"
+#include "BC.h"
+#include "BF.h"
+
 
 using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
+  // next three added by Jesse
+  numTestsRun++;
+  if (testPRefinementAdjacentCells() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testMultiBasisCrash() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testAnisotropicCrash() ) {
+    numTestsPassed++;
+  }
+  
   cout << "WARNING: skipping unrefinement test.\n";
   /*
   numTestsRun++;
   if (testHUnrefinementForConfusion() ) {
     numTestsPassed++;
   }
-  */
+   */
+  numTestsRun++;
+  if ( testPRefinement() ) {
+    numTestsPassed++;
+  }
   numTestsRun++;
   if (testMeshSolvePointwise() ) {
     numTestsPassed++;
@@ -92,12 +122,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   if (testHRefinement() ) {
-    numTestsPassed++;
-  }
-
-  // added by Jesse
-  numTestsRun++;
-  if (testMultiBasisCrash() ) {
     numTestsPassed++;
   }
 
@@ -121,10 +145,6 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if ( testSolutionForMultipleElementTypes() ) {
     numTestsPassed++;
   }
-  numTestsRun++;
-  if ( testPRefinement() ) {
-    numTestsPassed++;
-  }  
   numTestsRun++;
   if (testDofOrderingFactory() ) {
     numTestsPassed++;
@@ -230,7 +250,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
         for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
           int neighborDofOrdinal = mesh->neighborDofPermutation(dofOrdinal,basis->getCardinality());
           if (BasisFactory::isMultiBasis(neighborBasis)) {
-            neighborDofOrdinal = ((MultiBasis*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
+            neighborDofOrdinal = ((MultiBasis<>*) neighborBasis.get())->relativeToAbsoluteDofOrdinal(neighborDofOrdinal,subSideIndexInNeighbor);
           }
           for (int pointIndex = 0; pointIndex < numPoints; pointIndex++) {
             double diff = abs(neighborValues(neighborDofOrdinal,pointIndex) - values(dofOrdinal,pointIndex));
@@ -270,7 +290,6 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
 }
 
 bool MeshTestSuite::testBasisRefinement() {
-  int basisRank;
   int initialPolyOrder = 3;
   
   bool success = true;
@@ -279,7 +298,7 @@ bool MeshTestSuite::testBasisRefinement() {
   
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   
-  Teuchos::RCP<Basis<double,FieldContainer<double> > > basis = BasisFactory::getBasis(basisRank, initialPolyOrder, quad_4.getKey(), hgrad);
+  BasisPtr basis = BasisFactory::getBasis(initialPolyOrder, quad_4.getKey(), hgrad);
   if (basis->getDegree() != initialPolyOrder) {  // since it's hgrad, that's a problem (hvol would be initialPolyOrder-1)
     success = false;
     cout << "testBasisRefinement: initial BasisFactory call returned a different-degree basis than expected..." << endl;
@@ -865,7 +884,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }
   
   // Several of these tests assert that indices are laid out in the same order in trialOrdering(), pRefine(), matchSides()
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, 0); // don't really refine
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, 0); // don't really refine
   
   if (conformingOrderingCopy.get() != conformingOrdering.get() ) {
     cout << "testDofOrderingFactory: conformingOrdering with pRefine==0 differs from original." << endl;
@@ -874,7 +893,7 @@ bool MeshTestSuite::testDofOrderingFactory() {
   
   int pToAdd = 3;  
   
-  conformingOrderingCopy = dofOrderingFactory.pRefine(conformingOrdering, quad_4, pToAdd);
+  conformingOrderingCopy = dofOrderingFactory.pRefineTrial(conformingOrdering, quad_4, pToAdd);
   
   conformingOrdering = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
 
@@ -954,14 +973,14 @@ bool MeshTestSuite::testDofOrderingFactory() {
   }  
   
   // final test: take the upgraded ordering, and increase its polynomial order so that it matches that of the higher-degree guy.  Check that this is the same Ordering as a fresh one with that polynomial order.
-  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefine(nonConformingOrderingLowerOrder, quad_4, pToAdd);
+  nonConformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(nonConformingOrderingLowerOrder, quad_4, pToAdd);
   nonConformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, false);
   if ( nonConformingOrderingLowerOrder.get() != nonConformingOrderingHigherOrder.get() ) {
     success = false;
     cout << "FAILURE: After p-refinement of upgraded Ordering (non-conforming), DofOrdering doesn't match a fresh one with that p-order." << endl;    
   }
   
-  conformingOrderingLowerOrder = dofOrderingFactory.pRefine(conformingOrderingLowerOrder, quad_4, pToAdd);
+  conformingOrderingLowerOrder = dofOrderingFactory.pRefineTrial(conformingOrderingLowerOrder, quad_4, pToAdd);
   conformingOrderingHigherOrder = dofOrderingFactory.trialOrdering(polyOrder+pToAdd, quad_4, true);
   if ( conformingOrderingLowerOrder.get() != conformingOrderingHigherOrder.get() ) {
     success = false;
@@ -1476,7 +1495,7 @@ bool MeshTestSuite::testPRefinement() {
         double diff = abs(actualSolnDofs(i)-expectedSolnDofs(i));
         if (diff > tol * 10 ) { // * 10 because we can be a little more tolerant of the Dof values than, say, the overall L2 error.
           cout << "FAILURE: In cellID " << cellID << ", p-refined mesh differs in phi solution from expected ";
-          cout << "in basis ordinal " << i << "(diff=" << diff << ")" << endl;
+          cout << "in basis ordinal " << i << " (diff=" << diff << ")" << endl;
         }
       }
     }
@@ -2137,5 +2156,141 @@ bool MeshTestSuite::testMultiBasisCrash(){
     mesh->hRefine(rC, RefinementPattern::regularRefinementPatternQuad());        
     mesh->enforceOneIrregularity();
   }
+  return success;
+}
+
+// test a second crash that is observed in anisotropic NavierStokes refinement
+bool MeshTestSuite::testAnisotropicCrash(){
+  int order = 1;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+   // robust test norm
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+
+  ////////////////////   CREATE BCs   ///////////////////////
+
+  int pToAdd = 1;
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  ////////////////////////////////////////////////////////////////////
+  // REFINE MESH TO TRIGGER EXCEPTION
+  ////////////////////////////////////////////////////////////////////
+  vector<ElementPtr> elems = mesh->activeElements();
+  
+  // create "swastika" mesh
+  vector<int> xC,yC;
+  yC.push_back(1);yC.push_back(2);
+  xC.push_back(0);xC.push_back(3);
+  
+  mesh->hRefine(xC, RefinementPattern::xAnisotropicRefinementPatternQuad());    
+  mesh->hRefine(yC, RefinementPattern::yAnisotropicRefinementPatternQuad());        
+  elems = mesh->activeElements();
+ 
+  // trigger naive algorithm infinite loop (deadlock?)
+  xC.clear();yC.clear();
+  xC.push_back(6);
+  mesh->hRefine(xC,RefinementPattern::xAnisotropicRefinementPatternQuad());
+  //  mesh->hRefine(xC,RefinementPattern::regularRefinementPatternQuad());
+  //  mesh->enforceOneIrregularity();
+
+  RefinementStrategy refinementStrategy(solution,.2);
+  bool success = refinementStrategy.enforceAnisotropicOneIrregularity(xC,yC);
+
+  
+  return success;
+}
+
+// test a second crash that is observed in anisotropic NavierStokes refinement
+bool MeshTestSuite::testPRefinementAdjacentCells(){
+  bool success = true;
+  int order = 1;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory; 
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr beta_n_u = varFactory.fluxVar("\\widehat{\\beta \\cdot n }");
+  VarPtr u = varFactory.fieldVar("u");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr convectionBF = Teuchos::rcp( new BF(varFactory) );  
+  // v terms:
+  convectionBF->addTerm( -u, beta * v->grad() );
+  convectionBF->addTerm( beta_n_u, v);
+  
+  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+
+  IPPtr ip = Teuchos::rcp(new IP);
+  ip->addTerm(v);
+  ip->addTerm(beta*v->grad());
+  
+  ////////////////////   SPECIFY RHS   ///////////////////////
+
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+
+  ////////////////////   CREATE BCs   ///////////////////////
+
+  int pToAdd = 1;
+  MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
+  Teuchos::RCP<Solution> solution;
+  solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+
+  ////////////////////////////////////////////////////////////////////
+  // REFINE MESH TO TRIGGER EXCEPTION
+  ////////////////////////////////////////////////////////////////////
+
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL); RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL); IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  mesh->registerSolution(backgroundFlow); // to trigger issue with p-refinements
+  map<int, Teuchos::RCP<Function> > functionMap; functionMap[u->ID()] = Function::constant(3.14);
+  backgroundFlow->projectOntoMesh(functionMap);
+
+  vector<int> ids;  
+  ids.push_back(1);
+  ids.push_back(3);
+  mesh->pRefine(ids); 
+  
   return success;
 }

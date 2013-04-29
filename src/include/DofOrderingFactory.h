@@ -103,16 +103,25 @@ private:
   set<DofOrderingPtr, Comparator > _trialOrderings;
   Teuchos::RCP<BilinearForm> _bilinearForm;
   map<DofOrdering*,bool> _isConforming;
+  map<int, int> _testOrderEnhancements;
+  map<int, int> _trialOrderEnhancements;
   void addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering,
                                    const shards::CellTopology &cellTopo);
+  int polyOrder(DofOrderingPtr dofOrdering, bool isTestOrdering);
+  DofOrderingPtr pRefine(DofOrderingPtr dofOrdering,
+                         const shards::CellTopology &cellTopo, int pToAdd, bool isTestOrdering);
 public:
   DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm);
-  int polyOrder(DofOrderingPtr dofOrdering);
+  DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm,
+                     map<int,int> trialOrderEnhancements,
+                     map<int,int> testOrderEnhancements);
   DofOrderingPtr testOrdering(int polyOrder, const shards::CellTopology &cellTopo); // NOTE: for now only handles 2D/quads (lines in 1D for sides, too)
   DofOrderingPtr trialOrdering(int polyOrder, const shards::CellTopology &cellTopo,
                                bool conformingVertices = true);
-  DofOrderingPtr pRefine(DofOrderingPtr dofOrdering, 
-                         const shards::CellTopology &cellTopo, int pToAdd = 1);
+  int testPolyOrder(DofOrderingPtr testOrdering);
+  int trialPolyOrder(DofOrderingPtr trialOrdering);
+  DofOrderingPtr pRefineTest(DofOrderingPtr testOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
+  DofOrderingPtr pRefineTrial(DofOrderingPtr trialOrdering, const shards::CellTopology &cellTopo, int pToAdd = 1);
   DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
   DofOrderingPtr getTrialOrdering(DofOrdering &ordering);
   DofOrderingPtr getTestOrdering(DofOrdering &ordering);

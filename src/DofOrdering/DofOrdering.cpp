@@ -140,7 +140,7 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
     if ( ! BasisFactory::isMultiBasis(basis) ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
     }
-    MultiBasis* multiBasis = (MultiBasis*) basis.get();
+    MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
     //cout << "(basisDofOrdinal, subSideIndex) : (" << basisDofOrdinal << ", " << subSideIndex << ") --> ";
     basisDofOrdinal = multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal,subSideIndex);
     //cout << basisDofOrdinal << endl;
@@ -201,13 +201,13 @@ bool DofOrdering::hasSideVarIDs() {
 }
 
 int DofOrdering::maxBasisDegree() {
-  map< pair<int,int>, Teuchos::RCP< Basis<double,FieldContainer<double> > > >::iterator basisIterator;
+  map< pair<int,int>, BasisPtr >::iterator basisIterator;
   
   int maxBasisDegree = 0;
   
   for (basisIterator = bases.begin(); basisIterator != bases.end(); basisIterator++) {
-    //pair< const pair<int,int>, Teuchos::RCP< Basis<double,FieldContainer<double> > > > basisPair = *basisIterator;
-    Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = (*basisIterator).second;
+    //pair< const pair<int,int>, BasisPtr > basisPair = *basisIterator;
+    BasisPtr basis = (*basisIterator).second;
     if (maxBasisDegree < basis->getDegree() ) {
       maxBasisDegree = basis->getDegree();
     }
@@ -244,10 +244,10 @@ void DofOrdering::rebuildIndex() {
     int varID = *varIDIterator;
     //cout << "rebuildIndex: varID=" << varID << endl;
     for (int sideIndex=0; sideIndex<numSidesForVarID[varID]; sideIndex++) {
-      Teuchos::RCP< Basis<double,FieldContainer<double> > > basis = getBasis(varID,sideIndex);
+      BasisPtr basis = getBasis(varID,sideIndex);
       int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
       if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() ) {
-        Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology( basis->getBaseCellTopology() ));
+        Teuchos::RCP< shards::CellTopology > cellTopoPtr = Teuchos::rcp(new shards::CellTopology( basis->domainTopology() ));
         _cellTopologyForSide[cellTopoSideIndex] = cellTopoPtr;
       }
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {

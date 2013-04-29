@@ -84,6 +84,9 @@ public:
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
+
+  bool isPositive(BasisCachePtr basisCache);
+  bool isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich = 0, bool testVsTest = false);
   
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   
@@ -313,6 +316,7 @@ class hFunction : public Function {
 public:
   virtual double value(double x, double y, double h);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  string displayString();
 };
 
 class UnitNormalFunction : public Function {
@@ -370,6 +374,7 @@ public:
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2);
 FunctionPtr operator/(FunctionPtr f1, FunctionPtr scalarDivisor);
 FunctionPtr operator/(FunctionPtr f1, double divisor);
+FunctionPtr operator/(double value, FunctionPtr scalarDivisor);
 
 //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2);
 //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2);
@@ -546,7 +551,6 @@ public:
   }
 };
 
-
 class PhysicalPointCache : public BasisCache {
   FieldContainer<double> _physCubPoints;
 public:
@@ -554,6 +558,5 @@ public:
   const FieldContainer<double> & getPhysicalCubaturePoints();
   FieldContainer<double> & writablePhysicalCubaturePoints();
 };
-
 
 #endif
