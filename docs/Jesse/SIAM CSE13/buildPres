@@ -1,0 +1,4 @@
+pdflatex pres.tex
+bibtex pres
+pdflatex pres
+pdflatex pres
