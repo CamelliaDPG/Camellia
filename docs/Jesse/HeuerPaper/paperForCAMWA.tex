@@ -1,3 +1,4 @@
+%&pdflatex
 \documentclass[11pt,onecolumn]{scrartcl}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
@@ -672,7 +673,7 @@ In the application of DPG in \cite{DPG1,DPG2,DPG3,DPG4}, the approximation of op
 
 \begin{figure}[!h]
 \centering
-\includegraphics[scale=.25]{figs/opt.png}
+\includegraphics[scale=.25]{opt.png}
 \caption{$v$ and $\tau$ components of the 1D optimal test functions corresponding to the flux $\widehat{f}_n$ on the right-hand side of a unit element for $\epsilon = 0.01$. The solution has been obtained using automatic $hp$-adaptivity driven by the test norm with the error tolerance set at 1\%.}
 \label{fig:optTestBoundary}
 \end{figure}
@@ -916,8 +917,8 @@ L_{\rm \beta^\perp} \coloneqq v - \epsilon \Delta v,
 and can develop boundary layers in those directions. The presence of boundary layers has been verified through numerical computation as well; using an $H^1$-conforming finite element code with $hp$-adaptivity \cite{demkowicz2006computing}, the solution to the variational problem defining the optimal test function under the above test norm was computed. Figure~\ref{fig:boundaryTest} shows the result of such a computation for the $v$ component of an optimal test function under the above test norm. 
 \begin{figure}[!h]
 \centering
-\subfigure{\includegraphics[scale=.22]{figs/mesh1.png}}
-\subfigure{\includegraphics[scale=.22]{figs/sol1.png}}
+\subfigure{\includegraphics[scale=.22]{mesh1.png}}
+\subfigure{\includegraphics[scale=.22]{sol1.png}}
 \caption{The $v$ component of the optimal test function corresponding to flux $\widehat{u} = x(1-x)$ on the bottom side of a unit element for $\epsilon = 0.01$. The corresponding $hp$-mesh used to compute the solution is displayed to the left.}
 \label{fig:boundaryTest}
 \end{figure}
@@ -1180,7 +1181,7 @@ implying that
 Let us restrict ourselves to the cases where $v_1$ is sufficiently smooth for $v'(0)$ to be well defined.  Taking $g=1$ (corresponding to a piecewise constant approximation) we can solve \eqref{adjoint_1D} exactly. 
 \begin{figure}
 \centering
-\includegraphics[scale=.5]{figs/testBoundary1D.eps}
+\includegraphics[scale=.5]{testBoundary1D.pdf}
 \caption{$v_1(x) = \frac{e^{-\frac{x}{\epsilon}}}{e^{\frac{1}{\epsilon}}-1}\left(e^{\frac{1}{\epsilon}}\left(e^{\frac{x}{\epsilon}}-1\right) + \left(e^{\frac{1}{\epsilon}}-1\right)e^{\frac{x}{\epsilon}}x\right)$, the solution to the adjoint equation for $f=0$ and constant $\beta$ and load $g$ for $\epsilon = .01$.}
 \label{fig:testBoundary1D}
 \end{figure}
@@ -1193,10 +1194,10 @@ where $\|\cdot \|_{w+\epsilon}$ is a weighted $L^2$ norm, where the weight $w \i
 
 \begin{figure}
 \centering
-\subfigure[Primal problem, Dirichlet inflow BC]{\includegraphics[scale=.375]{figs/primalDir.eps}}
-\subfigure[Adjoint problem, Dirichlet inflow BC]{\includegraphics[scale=.375]{figs/adjointDir.eps}}
-\subfigure[Primal problem, new inflow BC]{\includegraphics[scale=.375]{figs/primal.eps}}
-\subfigure[Adjoint problem, new inflow BC]{\includegraphics[scale=.375]{figs/adjoint.eps}}
+\subfigure[Primal problem, Dirichlet inflow BC]{\includegraphics[scale=.375]{primalDir.pdf}}
+\subfigure[Adjoint problem, Dirichlet inflow BC]{\includegraphics[scale=.375]{adjointDir.pdf}}
+\subfigure[Primal problem, new inflow BC]{\includegraphics[scale=.375]{primal.pdf}}
+\subfigure[Adjoint problem, new inflow BC]{\includegraphics[scale=.375]{adjoint.pdf}}
 \caption{Comparison of primal and adjoint problems under both the standard Dirichlet and the new inflow boundary condition. The outflow boundary for each problem is denoted in red. For the Dirichlet inflow condition, adjoint solutions can develop boundary layers at the outflow of the adjoint problem. Under the new inflow conditions, the wall-stop boundary condition is relaxed to a zero-stress condition at the adjoint outflow.}
 \end{figure}
 
@@ -1208,8 +1209,8 @@ Recall our strategy for analysis was to decompose of $(v,\tau)$ into continuous 
 
 %\begin{figure}[h]
 %\centering
-%\subfigure[Primal problem]{\includegraphics[scale=.3]{figs/primal.png}}
-%\subfigure[Adjoint problem]{\includegraphics[scale=.3]{figs/adjoint.png}}
+%\subfigure[Primal problem]{\includegraphics[scale=.3]{primal.png}}
+%\subfigure[Adjoint problem]{\includegraphics[scale=.3]{adjoint.png}}
 %\caption{Comparison of primal and adjoint problems for convection-diffusion under the standard Dirichlet outflow boundary condition and the new inflow boundary condition. Notice the replacement of a wall-stop boundary condition with a Neumann stress boundary condition at the outflow boundary of the adjoint problem. }
 %\end{figure}
 
@@ -1255,13 +1256,13 @@ We begin with the solution taken to be the first non-constant term of the above 
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.37]{figs/wallBC_exact_u.png}
+\includegraphics[scale=.37]{wallBC_exact_u.png}
 }
 \subfigure{
-\includegraphics[scale=.37]{figs/wallBC_exact_sigx.png}
+\includegraphics[scale=.37]{wallBC_exact_sigx.png}
 }
 \subfigure{
-\includegraphics[scale=.37]{figs/wallBC_exact_sigy.png}
+\includegraphics[scale=.37]{wallBC_exact_sigy.png}
 }
 \caption{Solution for $u$, $\sigma_x$, and $\sigma_y$ for $\epsilon = .01$, $C_1 = 1$, $C_n=0$, $n\neq 1$}
 \end{figure}
@@ -1269,7 +1270,7 @@ In each case, we begin with a square 2 by 2 mesh of quadrilateral elements with 
 
 \begin{figure}[h!]
 \centering
-\includegraphics[scale=.4]{figs/u_pointdiff_wallBC.png}
+\includegraphics[scale=.4]{u_pointdiff_wallBC.png}
 \caption{Adapted mesh and pointwise error for $\epsilon=.01$}
 \end{figure}
 We are especially interested in the ratio of energy error and total $L^2$ error in both $\sigma$ and $u$, which we denote as $\|u-u_h\|_{L^2}$.  The bounds on $\nor{\cdot}_E$ presented in Section~\ref{sec:main_bounds} imply that, using the above test norm, $\|u-u_h\|_{L^2} / \|u-u_h\|_E \leq C$ independent of $\epsilon$.  Figure~\ref{ratios_simple}, which plots the ratio of $L^2$ to energy error, seems to imply that (at least for this model problem) $C=O(1)$.  Additionally, while we do not have a robust lower bound ($\|u-u_h\|_{L^2} / \|u-u_h\|_E$ can approach $0$ as $\epsilon \rightarrow 0$), our numerical results appear to indicate the existence of an $\epsilon$-independent lower bound. 
@@ -1277,10 +1278,10 @@ We are especially interested in the ratio of energy error and total $L^2$ error 
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/errorrates_wallBC.eps}
+\includegraphics[scale=.38]{errorrates_wallBC.pdf}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/L2energyratio_wallBC.eps}
+\includegraphics[scale=.38]{L2energyratio_wallBC.pdf}
 }
 \caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$}
 \label{ratios_simple}
@@ -1292,10 +1293,10 @@ We examined how small $\epsilon$ needed to be in order to encounter roundoff eff
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/roundoff_rates.eps}
+\includegraphics[scale=.38]{roundoff_rates.pdf}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/roundoff_ratio.eps}
+\includegraphics[scale=.38]{roundoff_ratio.pdf}
 }
 \caption{Energy error and $L^2$/energy error ratio for $\epsilon=1e-5$, $\epsilon=1e-6$, $\epsilon=1e-7$. Non-monotonic behavior of the energy error indicates conditioning issues and roundoff effects.}
 \label{roundoff_figures}
@@ -1313,10 +1314,10 @@ In practice, we will not have prior knowledge of $\sigma_n$ at the inflow, and w
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/rates_noSigma.eps}
+\includegraphics[scale=.38]{rates_noSigma.pdf}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/ratio_noSigma.eps}
+\includegraphics[scale=.38]{ratio_noSigma.pdf}
 }
 \caption{$L^2$ and energy errors and their ratio when neglecting $\sigma_n$ at the inflow.}
 \label{ratios_noSigma}
@@ -1336,10 +1337,10 @@ as an example of a more difficult test case.
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/disc_hat.png}
+\includegraphics[scale=.38]{disc_hat.png}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/disc_hat_surf.png}
+\includegraphics[scale=.38]{disc_hat_surf.png}
 }
 \caption{Solution variables $u$ and $\widehat{u}$ with discontinuous inflow data $u_0$ for $\epsilon = .01$.}
 \label{disc_sol}
@@ -1349,10 +1350,10 @@ Figure~\ref{disc_sol} shows the solution $u$ and overlaid trace variable $\wideh
 \begin{figure}[h!]
 \centering
 \subfigure{
-\includegraphics[scale=.38]{figs/rates_disc.eps}
+\includegraphics[scale=.38]{rates_disc.pdf}
 }
 \subfigure{
-\includegraphics[scale=.38]{figs/ratio_disc.eps}
+\includegraphics[scale=.38]{ratio_disc.pdf}
 }
 \caption{$L^2$ and energy errors, and their ratio for $\epsilon=.01$, $\epsilon=.001$, $\epsilon=.0001$, with discontinuous $u_0$ approximated by a Fourier expansion. }
 \label{disc_sol_fourier}

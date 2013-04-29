@@ -1,0 +1,274 @@
+%\documentclass[11pt,onecolumn]{scrartcl}
+\documentclass{letter}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[top=2cm,bottom=3cm,left=2.5cm,right=2cm]{geometry}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{letterbib}
+\usepackage{tikz}
+%\usepackage{subfigure}
+\usepackage[normalem]{ulem}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\Delta}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\signature{Jesse Chan, Norbert Heuer, Tan Bui-Thanh, and Leszek Demkowicz}
+\address{201 East 24th St, Stop C0200\\
+Austin, Texas 78712-1229}
+\begin{document}
+\begin{letter}{Dr Alexey Chernov\\CAMWA Guest Editor\\Special Issue: HONAPDE 2012}
+
+%\tableofcontents
+%\maketitle
+
+\opening{Dear Dr Chernov,}
+
+The authors are very grateful for the feedback, comments and suggestions provided by both reviewers.  Please accept the attached revised version of our paper: 
+
+\begin{center}
+Jesse Chan, Norbert Heuer, Tan Bui-Thanh, and Leszek Demkowicz\\
+\textit{A robust DPG method for convection-dominated diffusion problems II: adjoint boundary conditions and mesh-dependent test norms.}
+\end{center}
+
+In addition to the changes requested by the reviewers, we have made a few additional corrections in the manuscript.  The title has been changed to match the submitted title, and a citation has been added in Section 1.4 for Dr Wolfgang Dahmen's work, which we discovered after submission.  His work is equivalent to the DPG method for alternative variational formulations.  Additionally, the following changes have been made to the manuscript
+\begin{enumerate}
+\item On page 2, the SUPG method is mentioned to be $H^1$ optimal.  We have added the specification ``in the 1D case", as this claim does not hold in 2 and 3 dimensions.
+\item We have removed part of Section 1.5, previously titled ``Canonical energy norm pairings for the ultra-weak formulation".  Previously, the quasi-optimal/graph test norm was stated to induce a norm on the trial space $U$ of a specific form; it was discovered that this proof was incorrect, and the exact form of the induced energy norm under the graph test norm is unknown.  The section has been rewritten to correct this.  Figure 1 was also removed.  
+\item In Section 2 near the second half of page 8, we have changed the description of the broken $H^1\times H({\rm div})$ test norm to be the ``canonical norm on this test space" as opposed to simply ``the canonical test norm", which could be confused with the \textit{quasi-optimal/graph test norm} described as the canonical norm in the previous section.  
+\item In Section 3.5, in replacing the image with a higher quality eps version, we plot a solution to the 1D adjoint equation with a given load.  The function plotted was inconsistent with the load described; this is fixed.  
+\item In Section 4.1 and onwards, some images have been replaced with higher quality image files.  A typo is corrected on p24, concerning the greedy adaptive strategy used (we refine elements who satisfy $e_K^2 \leq \alpha^2 \max e_K^2$, but had neglected to square the factor $\alpha$ in the original manuscript).  
+
+\end{enumerate}
+
+
+We thank the reviewers for their insightful comments, recommendations, and favorable reviews.  Attached are details on the revisions made as requested from each reviewer, as well as the authors responses to each revision request.  
+
+\textbf{Reviewer 1}
+
+%The paper is concerned with DGP methods applied to linear convection-diffusion equations in the small-diffusion limit for the inflow boundary conditions of [13]. The authors identify a non-canonical and mesh-dependent test norm, which is explicitly computable and uniformly equivalent to the energy norm (cf. Lemma 1). The performance of the methods is then tested in a set of numerical examples using h-adaptivity. The tests confirm the robustness of the methods, as expected. Additionally, it is observed that the ratios of $L^2$ errors and energy errors are uniformly bounded in the Peclet number.
+%
+%Assessment:
+%DGP methods have emerged as robust discretization methods for convection-diffusion problems (as well as for other singularly perturbed problems). They are based on the local computation of so-called optimal test functions, which by construction yield stability and quasi-optimality in the norms considered. In this paper, DGP methods are extended to the inflow conditions of [13] while earlier papers address only Dirichlet conditions. It turns out that the effects of the different boundary conditions may be quite dramatic due to the different structure of the adjoint problems, and indeed require different test norms, as illustrated in Section 3.5. As such, this is an interesting contribution to the theory of DGP methods.
+
+%Although I didn't check all details, the results of the paper appear correct and new. The paper is well written; its introduction also nicely surveys the main ideas of DGP methods. I recommend the paper for publication in CAMWA. 
+
+%However, I would like to authors to address the following minor suggestions/comments/typos:
+\begin{enumerate}
+\item \textcolor{red}{After equation (1): $U$ should be $U_h$.}  Corrected.
+
+\item \textcolor{red}{Page 7, last line: A period is missing at the end of the last sentence.}   We fixed the issue on equation (10), where there was a comma instead of a period, but I could not find this typo.  
+
+\item \textcolor{red}{The new boundary conditions should be discussed in a few more details. What do they model physically? What happens on $\Gamma_0$? Discussion of weak formulation and well-posedness of the continuous problem?}.  Certainly - we've added a short explanation.  In summary, the boundary condition models physically the conserved flux corresponding to the conservation law.  However, though the boundary condition holds physical meaning, this boundary condition is chosen instead because it approximates, for small enough $\epsilon$ and $\beta_n > 0$ on $\Gamma_0$, the standard boundary condition $u = u_0$ on $\Gamma_0$.  
+
+Due to the nature of the ultra-weak variational formulation, the weak formulation for both standard boundary conditions on $u$ and the new boundary condition on $\Gamma_0$ are the same.  For convection-diffusion, the variational form is
+\[
+b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{v,\tau}} = \LRa{\fnh,v} - \LRa{\uh,\tau_n} + \text{field/interior terms}
+\]
+
+The application of boundary conditions is equivalent to the imposition of a natural boundary condition in both cases, where either $\LRa{\fnh,v}_{\Gamma_0}$ or $\LRa{\uh,\tau_n}_{\Gamma_0}$ are given data and become forcing terms.  
+
+
+Regarding the well-posedness of the variational problem, we refer the reviewer to \cite{analysisDPG}, whose analysis also covers the case of these boundary conditions (assuming well-posedness of the continuous problem), or \cite{Bui-ThanhDemkowiczGhattas11b}, where both the standard inflow boundary condition on $u$ and the proposed Robin boundary condition can be analyzed in the framework of Friedrichs systems.  
+
+Regarding the well-posedness of the continuous problem, we refer the reviewer to \cite{Hesthaven96astable}, the paper of Dr Jan Hesthaven, where he proves well-posedness of both the transient case and the case as $\epsilon \rightarrow 0$.  
+
+\item \textcolor{red}{Page 10, mid page: There is a latex error regarding the reference to Figure 2, and the label in Figure 2 needs to be fixed.}  Corrected.  
+
+\item \textcolor{red}{Page 12: Several sentences are in boldface, for no obvious reasons. This should be changed. }  Corrected.
+
+\item \textcolor{red}{Assumptions (19)-(21): It should be discussed how restrictive these assumptions are.} Corrected; a footnote has been added discussing the physical interpretation of such assumptions.  
+
+A few comments on the assumptions: 
+\begin{enumerate}
+\item These assumptions are only sufficient conditions - these conditions have been introduced only to ensure a robust bound exists for solutions to the adjoint equations.  For example, the condition $\div \beta = 0$ is only a sufficient condition to ensure the well-posedness of an auxiliary problem related to the proof of a lemma.  The lemma can still hold without this condition
+\item These assumptions are strictly for the steady-state case with no first-order term.  In the case when there is a first-order term, it is easy to prove Lemma 3 without the aid of the condition $\curl \beta = 0$.  
+\item Several numerical experiments (to be reported in an upcoming report on locally-conservative DPG) do not indicate a loss of robustness even when these conditions are violated.  For example, experiments with the viscous Burgers' equation 
+\[
+u_{,t} + \LRp{\frac{u^2}{2}}_{,x} - \epsilon \nabla u = 0
+\]
+yield a solution with a shock from $(x,y) = (.5,.5)$ to $(.5,1)$ for initial condition $u(x,0) = 1-2x$.  The linearized equation is a convection-diffusion equation with $\beta = (u,1)$.  When $u$ has a shock, $\grad \beta + \grad \beta^T - \div \beta I = O(\epsilon^{-1})$, and condition (19) is violated, but there was no observable degeneration in solution quality as $\epsilon$ decreased.  
+\end{enumerate}
+
+\item \textcolor{red}{Page 15, last line: change "proper" to "these", "the robust bounds" to "the following robust bounds".}  Corrected.
+
+\item \textcolor{red}{Lemma 1: the equivalence bounds appear not be p-robust. These should be mentioned explicitly in the statement of the lemma.}  The bounds in Lemma 1 should hold under any mesh and arbitrary $p$ - there were only regularity assumptions made in the proof.  Could we request a more detailed explanation into why the bounds appear to not be $p$-robust?
+
+\item \textcolor{red}{Shouldn't the curves in Figure 8 (left) be on top of each other to indicate robustness? Please comment. Also: Please indicate the orders of the convergence which are observed?} Noted - we have expanded the paragraph discussing Figures 7 and 11, (the figures have been renumbered).  
+
+As both reviewers have expressed concern over the ratio curves in Figure 8, I have discussed this in a section at the end of this letter explaining the interpretation of the ratio curves for various values of $\epsilon$.  
+
+Concerning the orders of convergence - 
+\begin{enumerate}
+\item We are mostly in the pre-asymptotic range for most of our problems, and thus do not expect to observe optimal rates in our setup for small values of $\epsilon$.  For this reason, we believe that reporting convergence rates would not add much meaningful information.  
+\item We have verified that we do indeed achieve optimal rates asymptotically under uniform refinements for $\epsilon = 1$, $1e-1$, and $1e-2$.  However, the mesh size at which the optimal rate is achieved becomes smaller and smaller as $\epsilon$ shrinks; we reach the optimal rate immediately for $\epsilon = 1$, but for $\epsilon = 1e-2$, our rates of convergence between $h = 1/128$ and $h = 256$ changed from 2.5255 to 2.8292.  We expect an optimal rate of $3$, but as this example shows, it may not be computationally feasible to get to that asymptotic range and demonstrate robustness for very small $\epsilon$ at the same time.  
+\item Adaptivity should restore the optimal rate of convergence with respect to degrees of freedom; however, for strongly anisotropic solutions (such as boundary layer solutions), this optimal rate is achieved only through the use of anisotropic refinements, which we have not yet implemented.  
+\end{enumerate}
+
+\item \textcolor{red}{Page 24: How is the estimator $e_K^2$ defined? Please provide some details.}  Corrected.  
+
+Specifically, at the top of page 5, a paragraph is dedicated to the definition of the \textit{error representation function}, which is the inverse Riesz image of the residual of the variational equation (in $V'$) - in other words, the solution of
+\[
+(e,\delta v)_V = l(\delta v) - b(u_h,\delta v), \quad \forall v\in V.
+\]
+Under this, $\nor{e}_V = \nor{Bu-Bu_h}_{V'} = \nor{u-u_h}_E$ - the norm of the error representation function returns the norm of the error in the energy norm.  We note that, under a localizable norm and discontinuous test basis, this error representation function can be computed locally and used as a local error indicator.  $e_K^2$ is defined to be the squared energy norm of the error representation function over a single element $\nor{e}_{V(K)}^2$.  Summing together these elementwise contributions recovers the actual squared energy error over the domain.
+
+\end{enumerate}
+
+\textbf{Reviewer 2}
+
+%The authors continue the analysis of the Discontinuous Petrov-Galerkin method for a singularly perturbed convection-diffusion problem initiated in [10].  The paper starts with an introduction to the abstract setting of the DPG. The core of the paper studies the DPG for the (scalar) convection-diffusion problem. Two issues are studied: first, the choice of the norm on the test space and second the impact of this choice on the ``energy norm", i.e., the norm on the trial space. The norm on the test space should fulfill several requirements: firstly, it should be localizable so that the test functions (which have to be computed) can be computed locally and secondly it should avoid test functions that have boundary layers, which are difficult to resolve. In this paper, these two issues are addressed by using the mesh-dependent norm given in Lemma 1 on p. 17. Lemma 1 also shows that the ``energy norm" induced by this norm on the test space allows for control of the field variables, in particular, the primal variable u.
+%%The paper reads very well, is of topical interest and very well suited for CAMWA. The referee recommends publication after the following issues are addressed.
+
+\begin{enumerate}
+\item \textcolor{red}{The authors are encouraged to carefully proof-read the proof of Lemma 1.}  Noted.  Shortly after submitting, the authors did go through the proof of Lemma 1 again with a careful read-through.
+\item \textcolor{red}{The notation $\nor{\cdot}_{V,K}$ is used in the proof of Lemma 1 repeatedly and the referee did not find a definition.}  Corrected.  The definition of $\nor{\cdot}_{V,K}$ is included on the end of page 4 in the footnote on localizable norms, as well as on p18, right before the definition is used.  Additionally, to be consistent with the notation $L^2(K)$, we have changed the notation from $\nor{\cdot}_{V,K}$ to $\nor{\cdot}_{V(K)}$ 
+\item \textcolor{red}{Towards the end of the proof of Lemma 1, the notation $\nor{\eta} + \nor{w}$ appears. The context suggest that $\eta$ and $w$ are measured in the $L^2$-norm, but $H^1$ and $H({\rm div})$ seem more likely from the context.}  Corrected.  The reviewer is correct, the proper setting was indeed $H^1$/$H({\rm div})$.  
+\item \textcolor{red}{The numerical results show an $\epsilon$-dependence in the approximation (cf. Figs. 8, 10, 12) although the error measure is rather weak (the $L^2$-norm of the field variable $u$ doesn't ``see" the boundary layer). The referee feels that the readers would appreciate some comments.}  Additional comments describing the ratios have been added on p25.  Figure 10 (now Figure 9) largely addresses the issue of modeling error in the inflow condition.  
+
+As both reviewers have expressed concern over the ratio curves in Figure 8, please see the section below on the interpretation of the ratio curves for various values of $\epsilon$.  
+
+\item \textcolor{red}{p. 21, just below (22): integrate $\rightarrow$ integrating}.  Corrected.
+\item \textcolor{red}{p. 23, last formula: $r2 \rightarrow r_2$}.  Corrected.  There was also the same error in $r1$, which was also corrected.
+\end{enumerate}
+
+\textbf{Author remark: on the ratio curves for various values of $\epsilon$}
+
+A few reasons why the curves in these figures are not guaranteed to lie on top of each other 
+\begin{enumerate}
+\item The proofs only guarantee that the ratio of $L^2$ to energy error is bounded by some constant independent of $\epsilon$.  Changing $\epsilon$ changes the problem, and the curves are not guaranteed to be similar.  The curves are not guaranteed even to be bounded away from zero; this is simply an observed phenomenon.  
+\item The test norm used is mesh-dependent.  In this work, the constants placed in front of the $L^2$ portions of the test functions $v$ and $\tau$ are scaled by a mesh-dependent value, which takes two asymptotic values.  In the far-underresolved limit $h \gg \epsilon$, this value is $\epsilon$ for $\nor{v}_{L^2}$ and $1$ for $\nor{\tau}_{L^2}$ - these help guarantee that the optimal test functions do not contain boundary layers, which may introduce approximation error, which our analysis does not account for.  In the fully-resolved limit $h\approx \epsilon$, the values in front of $\nor{v}_{L^2}$ and $\nor{\tau}_{L^2}$ are $1$ and $\epsilon^{-1}$, respectively.  These are to help account for the fact that the $\nor{v}$ and $\nor{\tau}$ scale differently from $\nor{\grad v}$ and $\nor{\div \tau}$.  
+
+For the first example, the ratio curves each have a clear ``transition point", where the mesh introduces elements where $h \approx \epsilon$.  This transition occurs later as $\epsilon$ shrinks, simply due to the fact that it takes more degrees of freedom to introduce elements of size $\epsilon$ on a 1-irregular constrained mesh.  
+
+In the second example, a discontinuous boundary condition is approximated by a 20 term Fourier series.  As refinements are introduced, the problem itself changes due to the improved resolution of the boundary condition at the inflow (the ``moving target" issue).  This further complicates the matter, and the ratio is consequentially more ``messy"; however, it is still very close to 1 for every $\epsilon$ we tested.  
+\item The scale can be misleading; we show the $y$-axis from $0$ to $2$.  In cases where there is \textit{not} a robust bound, these ratios scale with $\epsilon^{-1}$ - in other words, to show the ratios for $\epsilon$ up to $1e-4$, we would require a scale with $y \in [0,1e4]$, or a logarithmic scale from $0$ to $1e4$.  Under these scales, the curves would appear to lie more on top of one another.
+\end{enumerate}
+
+
+\closing{Best regards}
+
+
+
+\bibliographystyle{plain}
+\bibliography{paper}
+
+\end{letter}
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
