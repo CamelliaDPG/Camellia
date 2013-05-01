@@ -92,22 +92,23 @@ class VGPOseenFormulation : public OseenFormulation {
     // construct bilinear form:
     _bf = stokesBF(_mu,dontEnrichVelocity,scaleSigmaByMu);
 
-    // new formulation (not yet working!):
-//    // (-u_i, v_i,j U_j) + < u_hat_i, (U_j n_j) v_i >
-//    _bf->addTerm(- u1, U1 * v1->dx() + U2 * v1->dy());
-//    _bf->addTerm(- u2, U1 * v2->dx() + U2 * v2->dy());
-//    FunctionPtr n = Function::normal();
-//    FunctionPtr Un = U1 * n->x() + U2 * n->y();
-//    _bf->addTerm( u1hat, Un * v1);
-//    _bf->addTerm( u2hat, Un * v2);
+    // new formulation:
+//    // (u_i, v_i,j U_j) + < -u_hat_i, (U_j n_j) v_i >
+    _bf->addTerm( u1, U1 * v1->dx() + U2 * v1->dy());
+    _bf->addTerm( u2, U1 * v2->dx() + U2 * v2->dy());
+    FunctionPtr n = Function::normal();
+    FunctionPtr Un = U1 * n->x() + U2 * n->y();
+    _bf->addTerm( -u1hat, Un * v1);
+    _bf->addTerm( -u2hat, Un * v2);
     
-    if (! scaleSigmaByMu) {
-      _bf->addTerm(- _U1 * sigma11 - _U2 * sigma12, v1);
-      _bf->addTerm(- _U1 * sigma21 - _U2 * sigma22, v2);
-    } else {
-      _bf->addTerm(- Re * _U1 * sigma11 - Re * _U2 * sigma12, v1);
-      _bf->addTerm(- Re * _U1 * sigma21 - Re * _U2 * sigma22, v2);
-    }
+    // old formulation:
+//    if (! scaleSigmaByMu) {
+//      _bf->addTerm(- _U1 * sigma11 - _U2 * sigma12, v1);
+//      _bf->addTerm(- _U1 * sigma21 - _U2 * sigma22, v2);
+//    } else {
+//      _bf->addTerm(- Re * _U1 * sigma11 - Re * _U2 * sigma12, v1);
+//      _bf->addTerm(- Re * _U1 * sigma21 - Re * _U2 * sigma22, v2);
+//    }
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
   }
@@ -147,7 +148,7 @@ public:
     //    FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
     
-//    cout << "Warning: compliant graph norm outdated (since first equation has a u hat, etc.)\n";
+    cout << "Warning: compliant graph norm outdated (since first equation has a u hat, etc.)\n";
     
     if (_scale_sigma_by_mu) {
       compliantGraphNorm->addTerm( h * v1->dx() + (h / _mu) * ( tau1->x() - _U1 * v1 ) ); // sigma11
@@ -261,27 +262,41 @@ class VGPOseenProblem {
             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     FunctionPtr mu = 1/Re;
     
-    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, enrichVelocity, scaleSigmaByMu) );
-    
-    // create a new mesh:
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+    bool dontEnrichVelocity = false; // handle velocity enrichment through mesh "enhancements" instead of by implementing as HGRAD
+    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, dontEnrichVelocity,
+                                                                                                       scaleSigmaByMu) );
     
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
     
     BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
-    
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-    
-    _soln = Teuchos::rcp( new Solution(_mesh, vgpBC) );
-    _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
-    
+            
     _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, u1_exact, u2_exact, scaleSigmaByMu) );
     
     _exactSolution = _vgpOseenFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
     
+    { // create mesh:
+      bool triangulate=false;
+      bool useConformingTraces=true;
+      
+      VarFactory vgpVarFactory = VGPStokesFormulation::vgpVarFactory();
+      VarPtr u1 = vgpVarFactory.fieldVar(VGP_U1_S);
+      VarPtr u2 = vgpVarFactory.fieldVar(VGP_U2_S);
+      
+      map<int, int> trialSpaceEnhancements;
+      if (enrichVelocity) {
+        trialSpaceEnhancements[u1->ID()] = 1;
+        trialSpaceEnhancements[u2->ID()] = 1;
+      }
+      
+      _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                  _vgpOseenFormulation->bf(), H1Order, H1Order+pToAdd, 
+                                  triangulate, useConformingTraces, trialSpaceEnhancements);
+    }
+    
     _mesh->setBilinearForm(_vgpOseenFormulation->bf());
+    _soln = Teuchos::rcp( new Solution(_mesh, vgpBC) );
+    _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
+
     _soln->setRHS( _exactSolution->rhs() );
     _soln->setIP( _vgpOseenFormulation->graphNorm() );
   }
@@ -327,6 +342,5 @@ public:
     return _vgpOseenFormulation;
   }
 };
-
 
 #endif

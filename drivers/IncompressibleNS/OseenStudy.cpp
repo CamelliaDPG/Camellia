@@ -80,14 +80,14 @@ int main(int argc, char *argv[]) {
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
   // domain from Cockburn Kanschat for Stokes:
-//  quadPointsKovasznay(0,0) = -0.5; // x1
-//  quadPointsKovasznay(0,1) =  0.0; // y1
-//  quadPointsKovasznay(1,0) =  1.5;
-//  quadPointsKovasznay(1,1) =  0.0;
-//  quadPointsKovasznay(2,0) =  1.5;
-//  quadPointsKovasznay(2,1) =  2.0;
-//  quadPointsKovasznay(3,0) = -0.5;
-//  quadPointsKovasznay(3,1) =  2.0;
+  quadPointsKovasznay(0,0) = -0.5; // x1
+  quadPointsKovasznay(0,1) =  0.0; // y1
+  quadPointsKovasznay(1,0) =  1.5;
+  quadPointsKovasznay(1,1) =  0.0;
+  quadPointsKovasznay(2,0) =  1.5;
+  quadPointsKovasznay(2,1) =  2.0;
+  quadPointsKovasznay(3,0) = -0.5;
+  quadPointsKovasznay(3,1) =  2.0;
   
   // Domain from Evans Hughes for Navier-Stokes:
 //  quadPointsKovasznay(0,0) =  0.0; // x1
@@ -99,15 +99,15 @@ int main(int argc, char *argv[]) {
 //  quadPointsKovasznay(3,0) =  0.0;
 //  quadPointsKovasznay(3,1) =  0.5;
 
-  // symmetric domain to make it simple to construct zero-mean pressure (choose any odd function)
-  quadPointsKovasznay(0,0) = -1.0; // x1
-  quadPointsKovasznay(0,1) = -1.0; // y1
-  quadPointsKovasznay(1,0) =  1.0;
-  quadPointsKovasznay(1,1) = -1.0;
-  quadPointsKovasznay(2,0) =  1.0;
-  quadPointsKovasznay(2,1) =  1.0;
-  quadPointsKovasznay(3,0) = -1.0;
-  quadPointsKovasznay(3,1) =  1.0;
+//  // symmetric domain to make it simple to construct zero-mean pressure (choose any odd function)
+//  quadPointsKovasznay(0,0) = -1.0; // x1
+//  quadPointsKovasznay(0,1) = -1.0; // y1
+//  quadPointsKovasznay(1,0) =  1.0;
+//  quadPointsKovasznay(1,1) = -1.0;
+//  quadPointsKovasznay(2,0) =  1.0;
+//  quadPointsKovasznay(2,1) =  1.0;
+//  quadPointsKovasznay(3,0) = -1.0;
+//  quadPointsKovasznay(3,1) =  1.0;
   
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
 //  double Re = 40.0; // Evans Hughes Navier-Stokes
@@ -140,10 +140,10 @@ int main(int argc, char *argv[]) {
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
   // test:
-  u1_exact = Function::xn(1); // Function::xn(2); // 2 * Function::xn(1) * Function::yn(1); //Function::xn(1);
-  u2_exact = -Function::yn(1); // -2 * Function::xn(1) * Function::yn(1); //- Function::yn(2); //-Function::yn(1);
-  p_exact  = Function::zero(); //Function::xn(5); // odd function
-  computeRelativeErrors = false;
+//  u1_exact = Function::xn(1); // Function::xn(2); // 2 * Function::xn(1) * Function::yn(1); //Function::xn(1);
+//  u2_exact = -Function::yn(1); // -2 * Function::xn(1) * Function::yn(1); //- Function::yn(2); //-Function::yn(1);
+//  p_exact  = Function::zero(); //Function::xn(5); // odd function
+//  computeRelativeErrors = false;
   
   map< string, string > convergenceDataForMATLAB; // key: field file name
   
