@@ -1,0 +1,346 @@
+%&pdflatex
+\documentclass[11pt,onecolumn]{scrartcl}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[top=2cm,bottom=3cm,left=2.5cm,right=2cm]{geometry}
+\usepackage{amssymb}
+\usepackage{amscd}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage{subfigure}
+\usepackage[normalem]{ulem}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\LRb}[1]{\left| #1 \right|}
+
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\!\left[#1\right]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\Delta}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\newtheorem{remark}{Remark}
+
+%\title{$\epsilon$-explicit analysis of DPG for convection-dominated diffusion}
+\title{Notes on convection-diffusion}
+\date{}
+\begin{document}
+
+\maketitle
+
+\section{Boundary layers in robust norm test functions and global/local test spaces}
+
+In \cite{DPGrobustness, ChanHeuerBui-ThanhDemkowicz12}, we introduced the test norm
+\[
+\nor{v,\tau}_V^2 \coloneqq \alpha\nor{v}_{\L}^2 + \nor{\beta\grad v}_{\L}^2 + \epsilon \nor{\grad v}_{\L}^2 + {\min}\LRc{\frac{1}{\epsilon},\frac{1}{\LRb{K}}}\nor{\tau}_{\L}^2 + \nor{\div \tau}_{\L}^2
+\]
+where $\alpha \in [\epsilon,1]$ was selected in such a way that optimal test functions over a single element did not contain boundary layers\footnote{Boundary layers can appear in the cross-stream direction if $\alpha$ is not the same order as $\epsilon/h^2$, where $h$ is the element size.  This is explained in more detail in \cite{ChanHeuerBui-ThanhDemkowicz12}} which are difficult to approximate using our enriched space.  
+
+However, in \cite{globalLocalDPG}, it was shown that the global test space made up of the union of local test spaces contains the test subspace of weakly conforming test functions that are the result of solving for optimal test functions globally using a weakly conforming enriched space (which we refer to as the \textit{global test space}).  Furthermore, the field solutions for the DPG method are dependent only upon the properties of the global test space.  
+
+In other words, the resolution of boundary layers that occur at element boundaries is not important unless these boundary layers appear in globally determined test functions too (boundary layers that appear on element boundaries but not at a global level can be considered a negligible side-effect of the ``localization" of problems for optimal test functions).  Numerical experiments indicate
+
+For these problems, we consider the Erikkson-Johnson model problem setup - the domain is a unit square in 2D, with $\beta = \LRp{1,0}$.  We computed global test functions corresponding to global field basis functions $1, xy, x(1-x)y(1-y)$ - a constant basis function, a bilinear basis function, and a quadratic bubble - as well as basis functions restricted to a small element in the middle of the domain for both $\alpha = \epsilon$ (where $\epsilon = .01$) and $\alpha = 1$.  No boundary layers were observed in either case, and the test functions under both test norms are very similar. 
+
+\begin{figure}
+\centering
+\subfigure[$\alpha = \epsilon$]{\includegraphics[scale=.475]{figs/aEpsConstant.png}}
+\subfigure[$\alpha = 1$]{\includegraphics[scale=.475]{figs/aOneConstant.png}}
+\caption{Optimal test functions for a $u=1$.}
+\end{figure}
+
+\begin{figure}
+\centering
+\subfigure[$\alpha = \epsilon$]{\includegraphics[scale=.475]{figs/aEpsBilinear.png}}
+\subfigure[$\alpha = 1$]{\includegraphics[scale=.475]{figs/aOneBilinear.png}}
+\caption{Optimal test functions for a $u=xy$.}
+\end{figure}
+
+\begin{figure}
+\centering
+\subfigure[$\alpha = \epsilon$]{\includegraphics[scale=.475]{figs/aEpsBubble.png}}
+\subfigure[$\alpha = 1$]{\includegraphics[scale=.475]{figs/aOneBubble.png}}
+\caption{Optimal test functions for a $u=x(1-x)y(1-y)$.}
+\end{figure}
+
+\begin{figure}
+\centering
+\subfigure[$\alpha = \epsilon$]{\includegraphics[scale=.475]{figs/aEpsElement.png}}
+\subfigure[$\alpha = 1$]{\includegraphics[scale=.475]{figs/aOneElement.png}}
+\caption{Optimal test functions for a $u=\left.1\right|_K$, where $K = [.5,.7]\times[.4,.6]$.}
+\end{figure}
+\newpage
+\section{Convection-diffusion equation with first-order term}
+
+Very often, the convection-diffusion equation includes a first-order term, such that the form of the equation is
+\[
+\div\LRp{\beta u - \epsilon \grad u} + \alpha v = f
+\]
+where $\alpha$ is some constant or function.
+%The form of the first order system is 
+%\begin{align*}
+%\div\LRp{\beta u - \sigma} + \alpha v &= f\\
+%\frac{1}{\epsilon}\tau - \grad u &= 0.
+%\end{align*}
+This first-order term represents a reaction term, modeling production of the solvent $u$.  Most commonly, however, this first order term appears in context of implicit time-stepping methods for the transient convection-diffusion equation
+\[
+\pd{u}{t}+\div\LRp{\beta u - \epsilon \grad u} = f.
+\]
+For implicit time-stepping methods, we solve for the solution at the current timestep $u_{t_i} \coloneqq u$ under some approximation of the time derivative: for example, implict Euler uses the first order approximation $\pd{u}{t} \approx \frac{u-u_{t_{i-1}}}{dt}$, introducing a reaction term $u/dt$
+\[
+\frac{u}{dt}+\div\LRp{\beta u - \epsilon \grad u} = f + \frac{u_{t_{i-1}}}{dt}.
+\]
+Under this version of the convection-diffusion equation, we modify our test norm to match the magnitude of the first order term $u/dt$
+\[
+\nor{v,\tau}_V^2 \coloneqq \frac{1}{dt}\nor{v}_{\L}^2 + \nor{\beta\grad v}_{\L}^2 + \epsilon \nor{\grad v}_{\L}^2 + \nor{\tau}_{\L}^2 + \nor{\div \tau}_{\L}^2.
+\]
+Noting that, according to the previous numerical experiments, the magnitude of the $\L$ term does not appear to create boundary layers in test functions for field variables.  Thus, so long as the $\frac{1}{dt}$ is $O(h)$, the mesh size, we should expect (by a transformation to the unit element) optimal test functions to be locally resolvable using our enriched space.
+
+Recall that proving robustness involves showing energy estimates on the following adjoint equation
+\[
+\frac{1}{dt}v - \beta\cdot \grad v - \epsilon\del v = u - \epsilon\div \sigma
+\]
+where $u, \sigma \in \L$ represent functions from the trial space.  
+\begin{lemma}
+$\frac{1}{dt}\nor{v}_{\L}^2 + \epsilon \nor{\grad v}_{\L}^2 \lesssim \nor{u}_{\L}^2 + \nor{\sigma}_{\L}^2.$
+\end{lemma}
+\begin{proof}
+Multiplying the equation by $v$ and integrating gives
+\[
+\int \frac{1}{dt} v^2 - \int \beta \cdot \grad v v -  \int \epsilon \del v v = \int u v -  \int \epsilon \div \sigma v.
+\]
+Integration by parts gives
+\[
+\frac{1}{dt} \nor{v}^2 + \int \frac{\div \beta}{2} v^2 - \int_\Gamma \frac{\beta_n}{2}v^2 + \epsilon \nor{\grad v}^2 - \epsilon \int_\Gamma v\pd{v}{n}  = \int uv + \int \sigma \epsilon \grad v  - \epsilon \int_\Gamma \sigma_n v
+\]
+Applying adjoint boundary conditions 
+\begin{align*}
+v &= 0, \quad \text{on } \Gamma_{\rm out}\\
+\pd{v}{n} &= \sigma_n, \quad \text{on } \Gamma_{\rm in}
+\end{align*}
+reduces this to
+\[
+\frac{1}{dt} \nor{v}^2 + \int \frac{\div \beta}{2} v^2 + \int_{\Gamma_{\rm in}} \frac{|\beta_n|}{2}v^2 + \epsilon \nor{\grad v}^2 = \int uv + \int \sigma \epsilon \grad v.
+\]
+An application of Young's inequality on the right hand side completes the proof.  
+\end{proof}
+If we multiply by $\frac{1}{dt}v$ instead of $v$, we can derive a slightly different bound
+\begin{lemma}
+$\nor{\frac{1}{dt}v}_{\L}^2 + \frac{\epsilon}{dt} \nor{\grad v}_{\L}^2 \lesssim \nor{u}_{\L}^2 + \nor{\sigma}_{\L}^2$.
+\end{lemma}
+\begin{proof}
+The proof is very similar to the above case. 
+\end{proof}
+\section{Non-robustness in traces}
+
+In \cite{DPGrobustness}, both the graph norm and the constructed test norm (which we refer to as the \textit{robust} test norm) are shown to satisfy the robust bound
+\[
+\LRp{\nor{u}_{\L}^2 + \nor{\sigma}_{\L}^2 + \epsilon^2\nor{\uh}_{H^{1/2}(\Gh)} + \epsilon\nor{\fnh}_{H^{-1/2}(\Gh)}}^{1/2} \lesssim \nor{\LRp{u,\sigma,\uh,\fnh}}_E
+\]
+where $\nor{\cdot}_E$ is the energy norm in which DPG is optimal.  The focus of this bound is the $\epsilon$ independence of the $\L$ norms on $u$ and $\sigma$; however, we have not addressed the issue of robustness of the traces $\uh$ and flux $\fnh$ and how it manifests in practice.  
+
+We examine a test problem, with $\Omega = [0,1]^2$.  Inflow conditions\footnote{$u-\epsilon\pd{u}{n}$ approximates $u$ for $\epsilon\ll 1$.  These conditions are set such that we are able to use the robust test norm described in \cite{ChanHeuerBui-ThanhDemkowicz12}.} are set such that
+\begin{align*}
+u \approx u-\epsilon\pd{u}{n} &= 0,\quad x = 0,\quad y \in [0,1],
+\end{align*}
+and wall boundary conditions are set to mimic a flat plate problem such that
+\begin{align*}
+%u &= 0,\quad x = 1,\quad y \in [.5,1],\\
+u &= 0,\quad y = 0,\quad x \in [.5,1].
+\end{align*}
+Boundary conditions in the rest of the domain are set such that
+\begin{align*}
+\pd{u}{n} &= 0,\quad y = 1,\\
+\pd{u}{n} &= 0,\quad y = 0,\quad x \in [0,.5].
+\end{align*}
+We examine the traces along $y=0$.  Recall that traces are discretized as traces of $H^1$-conforming trial functions; thus, whereas we expect convergence in the $\L$ norm for field variables, this is not true for the traces.  In particular, we observe, in the propagation of error, evidence of non-robustness in the trace variables.  
+\begin{figure}
+\centering
+\includegraphics[scale=.4]{figs/CrossTraces.png}
+%\subfigure[Cross-stream traces]{\includegraphics[scale=.3]{figs/CrossTraces.png}}
+%\subfigure[Outflow traces]{\includegraphics[scale=.3]{figs/OutflowTraces.png}}
+%\caption{Difference between outflow and cross-stream traces.}
+\caption{$H^1$-type propagation of error along $y = 0$.}
+\end{figure}
+
+\section{Zero-mean scaling}
+
+In \cite{DPGrobustness, ChanHeuerBui-ThanhDemkowicz12}, we proved the energy estimate
+\[
+\nor{v}^2_{\L} \lesssim \nor{u}^2_{\L} + \nor{\sigma}^2_{\L}
+\]
+which implied that including $\nor{v}$ could be included in the test norm $\nor{v,\tau}_V$ and produce a robust DPG method for convection-diffusion.  However, it is also possible to replace the $\L$ term with the first-order term 
+\[
+\frac{1}{h^2}\LRb{\int_K v}^2
+\]
+which is a scaled measure of the average of $v$ over an element.  By Holder's inequality, we have that 
+\[
+\LRb{\int_K v} \leq \LRb{\int_K v^2}^{\frac{1}{2}} \LRb{h^2}^{\frac{1}{2}}, 
+\]
+implying that 
+\[
+\frac{1}{h^2}\LRb{\int_K v}^2 \leq \nor{v}^2_{\L}
+\]
+For the locally conservative version of DPG, we were able to replace $\nor{v}^2_{\L}$ in the test norm with $\frac{1}{h^4}\LRb{\int_K v}^2$, because in context of local conservation (enforced by Lagrange multipliers), elementwise constants are already enforced to be in the test space, so the addition of the mean-squared term to the test norm is solely to enforce a scaling condition enforcing a zero-mean condition on the remainder of the test functions.
+
+\section{Anisotropic refinement}
+
+Isotropic adaptive mesh refinement has shown itself to be an effective way to resolve isolated solution features with large gradients, such as point singularities \cite{FindBabuskaPaper}; however, for the resolution of phenomena such as shocks or boundary layers, anisotropic mesh refinement can resolve solution features for a much lower cost per degree-of-freedom, due to the fact that boundary layers in $n$-dimensions are primarily phenomena supported over $n-1$ dimensions.  
+
+As a least squares method, DPG already includes a natural error indicator with which to drive adaptive mesh refinement.  To introduce anisotropic refinements, we need to introduce an anisotropy indicator in order to detect in which direction solution features are aligned.  In general, a test norm can be expressed as the sum of normed quantities, both scalar and vector valued.  If we restrict ourselves to quadrilateral elements for the moment, a general anisotropy indicator for DPG can be constructed by evaluating the $\L$ norms of the individual components of vector valued terms in the test norm.  
+
+Under the test norm discussed in \cite{ChanHeuerBui-ThanhDemkowicz12} for the convection-dominated diffusion problem, we can define $x$ and $y$ error contributions over a single element
+\begin{align*}
+e_{x,K} &= \epsilon \nor{\pd{v}{x}}_{L^2(K)}^2 + \nor{\tau_x}_{L^2(K)}^2 \\
+e_{y,K} &= \epsilon \nor{\pd{v}{y}}_{L^2(K)}^2 + \nor{\tau_y}_{L^2(K)}^2.
+\end{align*}
+We define the anisotropy indicator as the ratio $r_K = \frac{e_{x,K}}{e_{y,K}}$, and implement a simple refinement scheme following \cite{DPG3}.  Given some anisotropic threshold $\epsilon_r$, if $r_K>\epsilon_r$, then we can conclude that the error in the $x$ direction is large compared to the $y$ direction, and we anisotropically refine the element along the $x$-axis.  Likewise, if $r_K < \frac{1}{\epsilon_r}$, this implies that the opposite is true, and we refine the element anisotropically along the $y$-axis.  
+
+We note that it is possible to compute the discrete system without needing much additional integration.  Recall that if we let $G$ be the SPD Gram matrix representing the inner product $\LRp{v,\delta v}_V$ on $V_h$, we solve for degrees of freedom $c_e$ representing our error representation function $e$.  
+
+For both the graph and robust test norms, we can decompose the inner product that induces the test norm into 
+\[
+\LRp{v,\delta v}_V = \sum_i \LRp{v,\delta v}_{V,x_i} + \LRp{v,\delta v}_{V,{\rm scalar}}
+\]
+such that $\LRp{v,\delta v}_{V,x_i}$ is a seminorm containing the $i$th coordinate component of a vector-valued test term, and $\LRp{v,\delta v}_{V,{\rm scalar}}$ is simply the non-vector portions of the test norm.  For example, if we take the $H^1(\Omega)$ Sobolev norm
+\[
+\LRp{v,\delta v}_V = \LRp{v,\delta v}_{\L} + \LRp{\grad v,\grad \delta v}_{\L}
+\]
+then $\LRp{v,\delta v}_{V,x_i} = \LRp{\pd{v}{x_i},\pd{\delta v}{x_i}}_{\L}$, and $\LRp{v,\delta v}_{V,{\rm scalar}} = \LRp{v,\delta v}_{\L}$.  Each bilinear term $\LRp{v,\delta v}_{V,x_i}$ induces a symmetric positive-semidefinite matrix $G_{x_i}$, such that 
+\[
+c_e^TG_{x_i}c_e = \nor{e}^2_{V,x_i}.
+\]
+By storing $G$ as the sum of $G_{\rm scalar}$ and $G_{x_i}$, we can then cheaply compute the anisotropic error indicators once we have the degrees of freedom corresponding to our error representation function.  
+
+
+
+%\section{Conditioning}
+%
+%Our test norm for convection-diffusion has been
+%\[
+%\nor{v,\tau}_V^2 \coloneqq \alpha\nor{v}_{\L}^2 + \nor{\beta\grad v}_{\L}^2 + \epsilon \nor{\grad v}_{\L}^2 + {\min}\LRc{\frac{1}{\epsilon},\frac{1}{\LRb{K}}}\nor{\tau}_{\L}^2 + \nor{\div \tau}_{\L}^2
+%\]
+%We can see that, when forming the Gram matrix (the discrete Riesz operator) associated with the inner product generating this norm, the $v$ and $\tau$ terms decouple.  
+%\begin{align*}
+%\nor{v}_V^2 &\coloneqq \alpha\nor{v}_{\L}^2 + \nor{\beta\grad v}_{\L}^2 + \epsilon \nor{\grad v}_{\L}^2 = O(h) + O(1) + O(\epsilon)\\
+%\nor{\tau}_V^2 &\coloneqq{\min}\LRc{\frac{1}{\epsilon},\frac{1}{\LRb{K}}}\nor{\tau}_{\L}^2 + \nor{\div \tau}_{\L}^2 = O(
+%\end{align*}
+
+\section{Plate problem}
+\begin{itemize}
+\item Non-local behavior: refinements away from plate edge affect downstream values
+\item Singularities under robust norm: at $h = O(\epsilon)$, for smaller $\epsilon$, singularities in the field variables (even for $u$) develop at the plate edge (loss of control over $\sigma$?)  
+\item Graph norm avoids the above issues with singularity in field solutions.  
+\item Can we mix graph norm + robust norm somehow?  Maybe smoothly mix as $h\rightarrow h_{\min}$?
+\item Flux limiters at singularity?
+\end{itemize}
+
+
+
+\bibliographystyle{plain}
+\bibliography{paper}
+
+
+\end{document}

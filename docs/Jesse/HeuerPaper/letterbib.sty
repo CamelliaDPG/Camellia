@@ -1,0 +1,22 @@
+\setlength \labelsep {.5em} 
+\newcommand\newblock{\hskip
+  .11em\@plus.33em\@minus.07em} \let\@openbib@code\@empty
+\newcommand\refname{References} 
+\newcommand\section{\@startsection
+  {section}{1}{\z@}%
+  {-3.5ex \@plus -1ex \@minus -.2ex}%
+  {2.3ex \@plus.2ex}%
+  {\normalfont\Large\bfseries}} 
+\newenvironment{thebibliography}[1]
+{\section*{\refname}%
+  \@mkboth{\MakeUppercase\refname}{\MakeUppercase\refname}%
+  \list{\@biblabel{\@arabic\c@enumiv}}%
+  {\settowidth\labelwidth{\@biblabel{#1}}%
+    \leftmargin\labelwidth \advance\leftmargin\labelsep \@openbib@code
+    \usecounter{enumiv}%
+    \let\p@enumiv\@empty \renewcommand\theenumiv{\@arabic\c@enumiv}}%
+  \sloppy \clubpenalty4000 \@clubpenalty \clubpenalty
+  \widowpenalty4000%
+  \sfcode`\.\@m} {\def\@noitemerr {\@latex@warning{Empty
+      `thebibliography' environment}}%
+      \endlist}

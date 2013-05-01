@@ -1,0 +1,190 @@
+%\documentclass[11pt,onecolumn]{scrartcl}
+\documentclass{letter}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[top=2cm,bottom=3cm,left=2.5cm,right=2cm]{geometry}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{graphicx}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{letterbib}
+\usepackage{tikz}
+%\usepackage{subfigure}
+\usepackage[normalem]{ulem}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\Delta}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\signature{Jesse Chan, Norbert Heuer, Tan Bui-Thanh, and Leszek Demkowicz}
+\address{201 East 24th St, Stop C0200\\
+Austin, Texas 78712-1229}
+\begin{document}
+\begin{letter}{Dr Alexey Chernov\\CAMWA Guest Editor\\Special Issue: HONAPDE 2012}
+
+%\tableofcontents
+%\maketitle
+
+\opening{Dear Dr Chernov,}
+
+The authors are very grateful for the feedback, comments and suggestions provided by both reviewers in this revision.  Please accept the attached second revised version of our paper. 
+
+\textbf{Reviewer 2}
+
+\begin{enumerate}
+\item \textcolor{red}{p. 4, footnote: given that the authors are in a Hilbert space setting, the authors probably mean $\nor{v}_{V(\Oh)}^2 = \sum_{K\in \Oh} \nor{v}_{V(K)}^2$.}  Corrected -- the authors thank the reviewer for noting this.
+\item \textcolor{red}{Section 1.3: the claim about the relation between the norms $\nor{\cdot}_U$ and $\nor{\cdot}_{V,U}$ is not completely clear to the referee--the authors are encouraged to add a few clarifying words:}
+\begin{enumerate}
+\item \textcolor{red}{please give a precise reference to a theorem in [5].} Clarified.  The theorem is specified to be Lemma 2.5 in \cite{Bui-ThanhDemkowiczGhattas11a}.  
+\item \textcolor{red}{please be more specific as to what ``definite" means for the bilinear form.} Clarified.  We have added a footnote clarifying the ``definiteness" of the bilinear form as meaning 
+\[
+b(u,v) = 0, \forall v\in V \Rightarrow u = 0
+\]
+and
+\[
+b(u,v)=0, \forall u\in U \Rightarrow v = 0,
+\]
+ which imply injectivity of the bilinear operator $B$ and its transpose $B'$, defined such that $\LRa{Bu,v} = \LRa{u,B'v}.$  These conditions in turn guarantee (through the Banach closed range theorem) solvability of the variational problem.
+\item \textcolor{red}{the discussion in Section $1.3$ suggests that for any norm $\nor{\cdot}_U$ one has an induced norm $\nor{\cdot}_{V,U}$ on $V$ . The referee doesn't see this. For example, taking $U = V = H_0^1(\Omega)$ and $b(u, v) \coloneqq \LRp{\grad u,\grad v}_{L^2(\Omega)}$ but equipping $U$ with $\nor{\cdot}_U \coloneqq \nor{\cdot}_{L^2(\Omega)}$ does not lead to a norm on $V$ via $\nor{\cdot}_{V,U}$ , since for smooth $v$ one obtains $\nor{v}_{V,U} = \nor{\del v}_{L^2(\Omega)}$.}  
+\begin{enumerate}
+\item At a very broad level, from Lemma 2.5 in \cite{Bui-ThanhDemkowiczGhattas11a}, the duality between trial and test norms is a consequence of $M/\gamma = 1$, where $M$ is the continuity constant such that $b(u,v)\leq M \nor{u}_U\nor{v}_V$, and $\gamma$ is the inf-sup/boundedness below constant such that 
+\[
+0<\gamma \leq \inf_{u\in U}\sup_{v\in V}\frac{b(u,v)}{\nor{u}_U\nor{v}_V}.
+\]
+If the problem is posed such that $U = H_0^1$ but $\nor{\cdot}_U = \nor{\cdot}_{\L}$, then this problem is ill-posed and we no longer have duality between trial and test norms.  
+
+\item The reason for the loss of well-posedness if we choose $U = H_0^1$ and $\nor{\cdot}_U = \nor{\cdot}_{\L}$ is that the space $U = H_0^1$ is not complete under the norm $\nor{\cdot}_U = \nor{\cdot}_{\L}$.  In other words, the space $U$ is smaller than the $\L$ norm would imply - a weaker norm $\nor{\cdot}_U$ implies a large space $U$.  Under the perspective that the spaces $U$ and $V$ are defined by their respective norms, if we set $\nor{\cdot}_U = \nor{\cdot}_{\L}$, this would imply $U = \L$. Since the definitions of the spaces $U$ and $V$ are incorporated in the definition of definiteness of $b(u,v)$, we would lose definiteness of the bilinear form as well, a prerequisite for Lemma 2.5.  
+\item We note that it is still possible to specify $\nor{\cdot}_U = \nor{\cdot}_{\L}$.  If we do not require $U = V = H_0^1$, and simply specify $\nor{\cdot}_U = \nor{\cdot}_{\L}$, then the space induced by $\nor{\cdot}_U$ is $U = \L$.  If, then, we rewrite the bilinear form such that $b(u,v) = -\LRp{u,\del v}_{\L}$ (to satisfy regularity constraints), then we do indeed induce the norm $\nor{v}_V \coloneqq \nor{\del v}_{\L}$, which then induces the definition of the test space $V = \LRc{v\in \L, \del v\in \L}$.  Under these conditions, we can show that both well-posedness and duality of norms hold.  
+
+\end{enumerate}
+There are two main responses to this question - the first is that the definition of a space cannot be divorced from the definition of the norm on the space (by choosing a norm on $U$, we are simultaneously choosing the space $U$).  The second Lemma 2.5 in \cite{Bui-ThanhDemkowiczGhattas11a} gives that three conditions are equivalent - 
+\begin{itemize}
+\item $\frac{M}{\gamma} = 1$
+\item $\nor{\cdot}_U = \sup_{v\in V}\frac{b(u,v)}{\nor{v}_V}$
+\item $\nor{\cdot}_{V,U} = \sup_{u\in U}\frac{b(u,v)}{\nor{u}_U}$.
+\end{itemize}
+These three conditions are all related to the inf-sup condition.  The starting point of DPG is to require from the start that $\frac{M}{\gamma} = 1$.  By specifying a test norm, the trial norm  (and consequentially the space $U$) are defined such that we can guarantee that $\frac{M}{\gamma} = 1$ by construction.  
+
+\end{enumerate}
+\end{enumerate}
+\closing{Best regards}
+
+\bibliographystyle{plain}
+\bibliography{paper}
+
+\end{letter}
+\end{document}
+
+
+
+
+
+
+
+
+
+
+
