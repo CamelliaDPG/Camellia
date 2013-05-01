@@ -286,30 +286,31 @@ int main(int argc, char *argv[]) {
     }
 
     if (refIndex < numRefs)
-    {
-      // refinementStrategy.refine(commRank==0); // print to console on commRank 0
-      vector<int> cellsToRefine;
-      vector<int> cells_h;
-      vector<int> cells_p;
-      refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
-      for (int i=0; i < cellsToRefine.size(); i++)
-        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-4)
-        {
-          int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
-          if (allQuads)
-            cells_p.push_back(cellsToRefine[i]);
-          else
-            if (pOrder < 8)
-              cells_p.push_back(cellsToRefine[i]);
-            else
-              cout << "Reached cell size and polynomial order limits" << endl;
-          //   cells_h.push_back(cellsToRefine[i]);
-        }
-        else
-          cells_h.push_back(cellsToRefine[i]);
-      refinementStrategy.pRefineCells(mesh, cells_p);
-      refinementStrategy.hRefineCells(mesh, cells_h);
-    }
+      refinementStrategy.refine(commRank==0); // print to console on commRank 0
+    // {
+    //   // refinementStrategy.refine(commRank==0); // print to console on commRank 0
+    //   vector<int> cellsToRefine;
+    //   vector<int> cells_h;
+    //   vector<int> cells_p;
+    //   refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
+    //   for (int i=0; i < cellsToRefine.size(); i++)
+    //     if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-4)
+    //     {
+    //       int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
+    //       if (allQuads)
+    //         cells_p.push_back(cellsToRefine[i]);
+    //       else
+    //         if (pOrder < 8)
+    //           cells_p.push_back(cellsToRefine[i]);
+    //         else
+    //           cout << "Reached cell size and polynomial order limits" << endl;
+    //       //   cells_h.push_back(cellsToRefine[i]);
+    //     }
+    //     else
+    //       cells_h.push_back(cellsToRefine[i]);
+    //   refinementStrategy.pRefineCells(mesh, cells_p);
+    //   refinementStrategy.hRefineCells(mesh, cells_h);
+    // }
   }
   if (commRank == 0)
     errOut.close();

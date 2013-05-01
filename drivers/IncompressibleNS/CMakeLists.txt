@@ -30,6 +30,6 @@ target_link_libraries(NavierStokesCavityFlowContinuationFixedMesh
 target_link_libraries(NavierStokesStudy
   Camellia
 )
-target_link_libraries(OseenStudy
+target_link_libraries(OseenStudyDriver
   Camellia
 )
