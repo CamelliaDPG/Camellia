@@ -147,26 +147,29 @@ public:
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     //    FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+
+    // old version (where the convective term had a sigma):
+//    compliantGraphNorm->addTerm( _mu * _mu * v1->dx() + _mu * ( tau1->x() - _U1 * v1 ) ); // sigma11
+//    compliantGraphNorm->addTerm( _mu * _mu * v1->dy() + _mu * ( tau1->y() - _U1 * v2 ) ); // sigma12
+//    compliantGraphNorm->addTerm( _mu * _mu * v2->dx() + _mu * ( tau2->x() - _U2 * v1 ) ); // sigma21
+//    compliantGraphNorm->addTerm( _mu * _mu * v2->dy() + _mu * ( tau2->y() - _U2 * v2 ) ); // sigma22
     
-    cout << "Warning: compliant graph norm outdated (since first equation has a u hat, etc.)\n";
+//    compliantGraphNorm->addTerm( ( h * tau1->div() - h * q->dx()) );  // u1
+//    compliantGraphNorm->addTerm( ( h * tau2->div() - h * q->dy()) );  // u2
     
-    if (_scale_sigma_by_mu) {
-      compliantGraphNorm->addTerm( h * v1->dx() + (h / _mu) * ( tau1->x() - _U1 * v1 ) ); // sigma11
-      compliantGraphNorm->addTerm( h * v1->dy() + (h / _mu) * ( tau1->y() - _U1 * v2 ) ); // sigma12
-      compliantGraphNorm->addTerm( h * v2->dx() + (h / _mu) * ( tau2->x() - _U2 * v1 ) ); // sigma21
-      compliantGraphNorm->addTerm( h * v2->dy() + (h / _mu) * ( tau2->y() - _U2 * v2 ) ); // sigma22
-    } else {
-      compliantGraphNorm->addTerm( h * _mu * v1->dx() + h * ( tau1->x() - _U1 * v1 ) ); // sigma11
-      compliantGraphNorm->addTerm( h * _mu * v1->dy() + h * ( tau1->y() - _U1 * v2 ) ); // sigma12
-      compliantGraphNorm->addTerm( h * _mu * v2->dx() + h * ( tau2->x() - _U2 * v1 ) ); // sigma21
-      compliantGraphNorm->addTerm( h * _mu * v2->dy() + h * ( tau2->y() - _U2 * v2 ) ); // sigma22
-    }
-    compliantGraphNorm->addTerm( (_mu / h) * v1->dx() + (_mu / h) * v2->dy() );          // pressure
-    compliantGraphNorm->addTerm( ( tau1->div() - q->dx()) );  // u1
-    compliantGraphNorm->addTerm( ( tau2->div() - q->dy()) );  // u2
+    // new version:
+    compliantGraphNorm->addTerm( _mu * _mu * v1->dx() + _mu * tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * _mu * v1->dy() + _mu * tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * _mu * v2->dx() + _mu * tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * _mu * v2->dy() + _mu * tau2->y() ); // sigma22
+
+    compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() + h * _U1 * v1->dx() + h * _U2 * v1->dy() );  // u1
+    compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy() + h * _U1 * v2->dx() + h * _U2 * v2->dy() );  // u2
     
-    compliantGraphNorm->addTerm( (_mu / h) * v1 );
-    compliantGraphNorm->addTerm( (_mu / h) * v2 );
+    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
+    
+    compliantGraphNorm->addTerm( (1 / h) * v1 );
+    compliantGraphNorm->addTerm( (1 / h) * v2 );
     compliantGraphNorm->addTerm( q );
     compliantGraphNorm->addTerm( tau1 );
     compliantGraphNorm->addTerm( tau2 );
