@@ -335,6 +335,21 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    map< int, double > energyNormWeights;
+    energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[p_vgp->ID()] = 1.0;
+    vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
+    vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
+    cout << "Solution Energy Error: " << setw(30) << "Best Energy Error:" << endl;
+    cout << scientific << setprecision(1);
+    for (int i=0; i<bestEnergy.size(); i++) {
+      cout << solnEnergy[i] << setw(30) << bestEnergy[i] << endl;
+    }
   }
   if (rank==0) {
     ostringstream filePathPrefix;

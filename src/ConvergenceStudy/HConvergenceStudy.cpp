@@ -756,3 +756,29 @@ void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalS
   _writeGlobalStiffnessToDisk = value;
   _globalStiffnessFilePrefix = globalStiffnessFilePrefix;
 }
+
+vector<double> HConvergenceStudy::weightedL2Error(map<int, double> &weights, bool bestApproximation, bool relativeErrors) {
+  map< int, vector<double> > errors = bestApproximation ? bestApproximationErrors() : solutionErrors();
+  
+  vector<double> weightedError(_solutions.size());
+  double weightedSolutionNorm = 0;
+  
+  for (map<int, double>::iterator weightIt = weights.begin(); weightIt != weights.end(); weightIt++) {
+    int trialID = weightIt->first;
+    double weight = weightIt->second;
+    for (int i=0; i < errors[trialID].size(); i++) {
+      double err = errors[trialID][i];
+      weightedError[i] += err * err * weight * weight;
+    }
+    weightedSolutionNorm += _exactSolutionNorm[trialID] * _exactSolutionNorm[trialID] * weight * weight;
+  }
+  // take square roots:
+  weightedSolutionNorm = sqrt(weightedSolutionNorm);
+  for (int i=0; i<weightedError.size(); i++) {
+    weightedError[i] = sqrt(weightedError[i]);
+    if (relativeErrors) {
+      weightedError[i] /= weightedSolutionNorm;
+    }
+  }
+  return weightedError;
+}
