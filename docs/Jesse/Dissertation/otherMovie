@@ -1,0 +1,78 @@
+
+
+\frame{
+\frametitle{Refinement level 0}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u10.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T0.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh0.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 1}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u11.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T1.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh1.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 2}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u12.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T2.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh2.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 3}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u13.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T3.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh3.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 4}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u14.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T4.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh4.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 5}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u15.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T5.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh5.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
+
+\frame{
+\frametitle{Refinement level 6}
+\begin{figure}
+\centering
+\subfigure[$u_1$]{\includegraphics[scale = .23]{figs/Re1000p2/u16.png}}
+\subfigure[$T$]{\includegraphics[scale = .23]{figs/Re1000p2/T6.png}}
+\subfigure{\includegraphics[scale = .35]{figs/Re1000p2/mesh6.png}}
+\end{figure}
+}
+\setcounter{subfigure}{0}
