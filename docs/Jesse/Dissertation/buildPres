@@ -1,0 +1,4 @@
+pdflatex proposalPres.tex
+bibtex proposalPres
+pdflatex proposalPres
+pdflatex proposalPres

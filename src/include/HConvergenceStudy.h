@@ -135,6 +135,8 @@ public:
   map< int, vector<double> > solutionRates();
   
   map< int, double > exactSolutionNorm();
+  
+  vector<double> weightedL2Error(map<int, double> &weights, bool bestApproximation=false, bool relativeErrors=true);
 
   void computeErrors();
   double computeJacobiPreconditionedConditionNumber(int logElements);
