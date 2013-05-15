@@ -1678,19 +1678,20 @@ void Solution::computeErrorRepresentation() {
     
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     FieldContainer<double> errorRepresentation(numCells,numTestDofs);
-   
-    Epetra_SerialSpdDenseSolver solver;
+
+    bool useSPD = false; 
+    //    Epetra_SerialSpdDenseSolver solver; // uncomment if useSPD = true
+    Epetra_SerialDenseSolver solver;
     
     for (int localCellIndex=0; localCellIndex<numCells; localCellIndex++ ) {
       
-      //      cout << "In compute error rep local cell ind = " << localCellIndex << ", and global cell ind = " << elemsInPartition[localCellIndex]->globalCellIndex() << endl;
       // changed to Copy from View for debugging...
       Epetra_SerialDenseMatrix ipMatrixT_nonsym(Copy, &ipMatrix(localCellIndex,0,0),
                                          ipMatrix.dimension(2), // stride -- fc stores in row-major order (a.o.t. SDM)
                                          ipMatrix.dimension(2),ipMatrix.dimension(1));
 
       // sym matrix format for Cholesky
-      Epetra_SerialSymDenseMatrix ipMatrixT(Copy, ipMatrixT_nonsym.A(), ipMatrixT_nonsym.LDA(), numTestDofs);    
+      Epetra_SerialSymDenseMatrix ipMatrixT(Copy, ipMatrixT_nonsym.A(), ipMatrixT_nonsym.LDA(), numTestDofs);
       
       Epetra_SerialDenseMatrix rhs(Copy, & (_residualForElementType[elemTypePtr.get()](localCellIndex,0)),
                                    _residualForElementType[elemTypePtr.get()].dimension(1), // stride
@@ -1698,44 +1699,45 @@ void Solution::computeErrorRepresentation() {
       
       Epetra_SerialDenseMatrix representationMatrix(numTestDofs,1);
       
-      solver.SetMatrix(ipMatrixT);
+      if (useSPD){
+	solver.SetMatrix(ipMatrixT);
+      }else{
+	solver.SetMatrix(ipMatrixT_nonsym);
+      }
       int success = solver.SetVectors(representationMatrix, rhs);      
       if (success != 0) {
         cout << "computeErrorRepresentation: failed to SetVectors with error " << success << endl;
       }
       
       bool equilibrated = false;
+      if ( solver.ShouldEquilibrate() ) {
+	if (useSPD){
+	  solver.FactorWithEquilibration(true);
+	  solver.SolveToRefinedSolution(false);
+	}else{
+	  solver.EquilibrateMatrix();
+	  solver.EquilibrateRHS();
+	}
+	equilibrated = true;
+      }
 
-      if ( solver.ShouldEquilibrate() ) {
-        solver.FactorWithEquilibration(true);
-        solver.SolveToRefinedSolution(false);
-        equilibrated = true;
+      if (useSPD){
+	success = solver.Factor();
+	if (success!=0){
+	  cout << "computeErrorRepresentation: Solver failed to factor with error: " << success << endl;
+	}
       }
-      /*
-      if ( solver.ShouldEquilibrate() ) {
-	solver.EquilibrateMatrix();
-	solver.EquilibrateRHS();
-        equilibrated = true;
-      }
-      */
-      success = solver.Factor();
-      if (success!=0){
-	cout << "computeErrorRepresentation: Solver failed to factor with error: " << success << endl;
-      }
-      success = solver.Solve();
-      
+      success = solver.Solve();	
       if (success != 0) {
-        cout << "computeErrorRepresentation: Solve FAILED with error: " << success << endl;
+	cout << "computeErrorRepresentation: Solve FAILED with error: " << success << endl;
       }
       
-      /*
       if (equilibrated) {
-        success = solver.UnequilibrateLHS();
-        if (success != 0) {
-          cout << "computeErrorRepresentation: unequilibration FAILED with error: " << success << endl;
-        }
+	success = solver.UnequilibrateLHS();
+	if (success != 0) {
+	  cout << "computeErrorRepresentation: unequilibration FAILED with error: " << success << endl;
+	}
       }
-      */
       
       for (int i=0; i<numTestDofs; i++) {
         errorRepresentation(localCellIndex,i) = representationMatrix(i,0);

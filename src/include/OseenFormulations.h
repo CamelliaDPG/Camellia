@@ -47,7 +47,9 @@ class VGPOseenFormulation : public OseenFormulation {
   VarPtr tau1, tau2, q, v1, v2;
   BFPtr _bf, _stokesBF;
   IPPtr _graphNorm;
-  FunctionPtr _mu, _sqrt_mu;
+  FunctionPtr _mu;
+  
+  bool _scale_sigma_by_mu;
   
   // background flow Functions:
   FunctionPtr _U1;
@@ -75,36 +77,52 @@ class VGPOseenFormulation : public OseenFormulation {
     p = varFactory.fieldVar(VGP_P_S);
   }
   
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, FunctionPtr U1, FunctionPtr U2) {
+  void init(FunctionPtr Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu) {
     _mu = 1.0 / Re;
-    _sqrt_mu = 1.0 / sqrtRe;
+    _scale_sigma_by_mu = scaleSigmaByMu;
     
     _U1 = U1;
     _U2 = U2;
     
     initVars();
     
-    _stokesBF = stokesBF(_mu);
+    bool dontEnrichVelocity = false;
+    _stokesBF = stokesBF(_mu,dontEnrichVelocity,scaleSigmaByMu);
     
     // construct bilinear form:
-    _bf = stokesBF(_mu);
+    _bf = stokesBF(_mu,dontEnrichVelocity,scaleSigmaByMu);
+
+    // new formulation:
+//    // (u_i, v_i,j U_j) + < -u_hat_i, (U_j n_j) v_i >
+    _bf->addTerm( u1, U1 * v1->dx() + U2 * v1->dy());
+    _bf->addTerm( u2, U1 * v2->dx() + U2 * v2->dy());
+    FunctionPtr n = Function::normal();
+    FunctionPtr Un = U1 * n->x() + U2 * n->y();
+    _bf->addTerm( -u1hat, Un * v1);
+    _bf->addTerm( -u2hat, Un * v2);
     
-    _bf->addTerm(- _U1 * sigma11 - _U2 * sigma12, v1);
-    _bf->addTerm(- _U1 * sigma21 - _U2 * sigma22, v2);
+    // old formulation:
+//    if (! scaleSigmaByMu) {
+//      _bf->addTerm(- _U1 * sigma11 - _U2 * sigma12, v1);
+//      _bf->addTerm(- _U1 * sigma21 - _U2 * sigma22, v2);
+//    } else {
+//      _bf->addTerm(- Re * _U1 * sigma11 - Re * _U2 * sigma12, v1);
+//      _bf->addTerm(- Re * _U1 * sigma21 - Re * _U2 * sigma22, v2);
+//    }
     
     _graphNorm = _bf->graphNorm(); // just use the automatic for now
   }
 public:
-  static BFPtr stokesBF(FunctionPtr mu) {
-    VGPStokesFormulation stokesFormulation(mu);
+  static BFPtr stokesBF(FunctionPtr mu, bool velocityAsH1, bool scaleSigmaByMu) {
+    VGPStokesFormulation stokesFormulation(mu, velocityAsH1, scaleSigmaByMu);
     return stokesFormulation.bf();
   }
   
-  VGPOseenFormulation(double Re, FunctionPtr U1, FunctionPtr U2) : OseenFormulation(Re) {
-    init(Function::constant(Re), Function::constant(sqrt(Re)),U1,U2);
+  VGPOseenFormulation(double Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
+    init(Function::constant(Re),U1,U2, scaleSigmaByMu);
   }
-  VGPOseenFormulation(FunctionPtr Re, FunctionPtr sqrtRe, FunctionPtr U1, FunctionPtr U2) : OseenFormulation(Re) {
-    init(Re,sqrtRe,U1,U2);
+  VGPOseenFormulation(FunctionPtr Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
+    init(Re,U1,U2,scaleSigmaByMu);
   }
   BFPtr bf() {
     return _bf;
@@ -114,30 +132,47 @@ public:
   }
   RHSPtr rhs(FunctionPtr f1, FunctionPtr f2, bool excludeFluxesAndTraces) {
     Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-    rhs->addTerm( f1 * v1 + f2 * v2 );
+    LinearTermPtr lt = f1 * v1 + f2 * v2;
+//    if (lt->isZero() ) {
+//      cout << "RHS lt is identically zero.\n";
+//    } else {
+//      cout << "RHS lt is not identically zero.\n";
+//    }
+    rhs->addTerm( lt );
     
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm() {
     // messing around: at any given time this may or may not correspond to "scale compliance", whatever that means
     FunctionPtr h = Teuchos::rcp( new hFunction() );
+    //    FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
+
+    // old version (where the convective term had a sigma):
+//    compliantGraphNorm->addTerm( _mu * _mu * v1->dx() + _mu * ( tau1->x() - _U1 * v1 ) ); // sigma11
+//    compliantGraphNorm->addTerm( _mu * _mu * v1->dy() + _mu * ( tau1->y() - _U1 * v2 ) ); // sigma12
+//    compliantGraphNorm->addTerm( _mu * _mu * v2->dx() + _mu * ( tau2->x() - _U2 * v1 ) ); // sigma21
+//    compliantGraphNorm->addTerm( _mu * _mu * v2->dy() + _mu * ( tau2->y() - _U2 * v2 ) ); // sigma22
     
-    FunctionPtr sqrt_mu_inv = 1.0 / _sqrt_mu;
+//    compliantGraphNorm->addTerm( ( h * tau1->div() - h * q->dx()) );  // u1
+//    compliantGraphNorm->addTerm( ( h * tau2->div() - h * q->dy()) );  // u2
     
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + sqrt_mu_inv * ( tau1->x() - _U1 * v1 ) ); // sigma11
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dy() + sqrt_mu_inv * ( tau1->y() - _U1 * v2 ) ); // sigma12
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dx() + sqrt_mu_inv * ( tau2->x() - _U2 * v1 ) ); // sigma21
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dy() + sqrt_mu_inv * ( tau2->y() - _U2 * v2 ) ); // sigma22
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + _sqrt_mu * v2->dy() );          // pressure
-    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau1->div() - q->dx()) );  // u1
-    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau2->div() - q->dy()) );  // u2
+    // new version:
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
+
+    compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() + h * _U1 * v1->dx() + h * _U2 * v1->dy() );  // u1
+    compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy() + h * _U1 * v2->dx() + h * _U2 * v2->dy() );  // u2
     
-    compliantGraphNorm->addTerm( (_sqrt_mu / h) * v1 );
-    compliantGraphNorm->addTerm( (_sqrt_mu / h) * v2 );
-    compliantGraphNorm->addTerm( sqrt_mu_inv * q );
-    compliantGraphNorm->addTerm( sqrt_mu_inv * tau1 );
-    compliantGraphNorm->addTerm( sqrt_mu_inv * tau2 );
+    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
+    
+    compliantGraphNorm->addTerm( (1 / h) * v1 );
+    compliantGraphNorm->addTerm( (1 / h) * v2 );
+    compliantGraphNorm->addTerm( q );
+    compliantGraphNorm->addTerm( tau1 );
+    compliantGraphNorm->addTerm( tau2 );
     return compliantGraphNorm;
   }
   
@@ -157,6 +192,13 @@ public:
     FunctionPtr f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy())
     - u1_exact * u2_exact->dx() - u2_exact * u2_exact->dy();
     
+//    if (f1->isZero() ) {
+//      cout << "f1 is zero.\n";
+//    }
+//    if (f2->isZero() ) {
+//      cout << "f2 is zero.\n";
+//    }
+    
     BCPtr bc = this->bc(u1_exact, u2_exact, entireBoundary);
     
     RHSPtr rhs = this->rhs(f1,f2,false);
@@ -166,10 +208,17 @@ public:
     
     mySolution->setSolutionFunction(p, p_exact);
     
-    FunctionPtr sigma11_exact = u1_exact->dx();
-    FunctionPtr sigma12_exact = u1_exact->dy();
-    FunctionPtr sigma21_exact = u2_exact->dx();
-    FunctionPtr sigma22_exact = u2_exact->dy();
+    FunctionPtr sigma_weight;
+    if (_scale_sigma_by_mu) {
+      sigma_weight = _mu;
+    } else {
+      sigma_weight = Function::constant(1);
+    }
+    
+    FunctionPtr sigma11_exact = sigma_weight * u1_exact->dx();
+    FunctionPtr sigma12_exact = sigma_weight * u1_exact->dy();
+    FunctionPtr sigma21_exact = sigma_weight * u2_exact->dx();
+    FunctionPtr sigma22_exact = sigma_weight * u2_exact->dy();
     
     mySolution->setSolutionFunction(sigma11, sigma11_exact);
     mySolution->setSolutionFunction(sigma12, sigma12_exact);
@@ -211,47 +260,61 @@ class VGPOseenProblem {
   
   Teuchos::RCP< VGPOseenFormulation > _vgpOseenFormulation;
   
-  void init(FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
-            FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    FunctionPtr Re = sqrtRe * sqrtRe;
+            FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     FunctionPtr mu = 1/Re;
     
-    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, enrichVelocity) );
-    
-    // create a new mesh:
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+    bool dontEnrichVelocity = false; // handle velocity enrichment through mesh "enhancements" instead of by implementing as HGRAD
+    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, dontEnrichVelocity,
+                                                                                                       scaleSigmaByMu) );
     
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
     
     BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
-    
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-        
-    _soln = Teuchos::rcp( new Solution(_mesh, vgpBC) );
-    _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
-    
-    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, sqrtRe, u1_exact, u2_exact) );
+            
+    _vgpOseenFormulation = Teuchos::rcp( new VGPOseenFormulation(Re, u1_exact, u2_exact, scaleSigmaByMu) );
     
     _exactSolution = _vgpOseenFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
     
+    { // create mesh:
+      bool triangulate=false;
+      bool useConformingTraces=true;
+      
+      VarFactory vgpVarFactory = VGPStokesFormulation::vgpVarFactory();
+      VarPtr u1 = vgpVarFactory.fieldVar(VGP_U1_S);
+      VarPtr u2 = vgpVarFactory.fieldVar(VGP_U2_S);
+      
+      map<int, int> trialSpaceEnhancements;
+      if (enrichVelocity) {
+        trialSpaceEnhancements[u1->ID()] = 1;
+        trialSpaceEnhancements[u2->ID()] = 1;
+      }
+      
+      _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                                  _vgpOseenFormulation->bf(), H1Order, H1Order+pToAdd, 
+                                  triangulate, useConformingTraces, trialSpaceEnhancements);
+    }
+    
     _mesh->setBilinearForm(_vgpOseenFormulation->bf());
+    _soln = Teuchos::rcp( new Solution(_mesh, vgpBC) );
+    _soln->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
+
     _soln->setRHS( _exactSolution->rhs() );
     _soln->setIP( _vgpOseenFormulation->graphNorm() );
   }
 public:
-  VGPOseenProblem(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
-                         int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(sqrtRe,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity);
+  VGPOseenProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
+                  int verticalCells, int H1Order, int pToAdd,
+                  FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
+    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, scaleSigmaByMu);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
   VGPOseenProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
-                         int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(Function::constant(sqrt(Re)),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity);
+                  int verticalCells, int H1Order, int pToAdd,
+                  FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
+    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity, 
+         scaleSigmaByMu);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
   
@@ -273,14 +336,14 @@ public:
   void setIP( IPPtr ip ) {
     _soln->setIP( ip );
   }
-  BFPtr stokesBF() {
+  BFPtr stokesBF(bool scaleSigmaByMu) {
     FunctionPtr mu =  1.0 / _vgpOseenFormulation->Re();
-    return VGPOseenFormulation::stokesBF( mu );
+    bool dontEnrichVelocity = false;
+    return VGPOseenFormulation::stokesBF( mu, dontEnrichVelocity, scaleSigmaByMu );
   }
   Teuchos::RCP< VGPOseenFormulation > vgpOseenFormulation() {
     return _vgpOseenFormulation;
   }
 };
-
 
 #endif

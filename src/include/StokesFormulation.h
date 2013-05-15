@@ -438,6 +438,7 @@ class VGPStokesFormulation : public StokesFormulation {
   IPPtr _graphNorm;
   FunctionPtr _mu;
   bool _enriched_velocity;
+  bool _scale_sigma_by_mu; // true: sigma = mu * grad u; false: sigma = grad u
   
   void initVars() {
     // create the VarPtrs:
@@ -470,9 +471,10 @@ class VGPStokesFormulation : public StokesFormulation {
     p = varFactory.fieldVar(VGP_P_S);
   }
   
-  void init(FunctionPtr mu, bool enriched_velocity) {
+  void init(FunctionPtr mu, bool enriched_velocity, bool scaleSigmaByMu) {
     _mu = mu;
     _enriched_velocity = enriched_velocity;
+    _scale_sigma_by_mu = scaleSigmaByMu;
     
     initVars();
     
@@ -484,25 +486,45 @@ class VGPStokesFormulation : public StokesFormulation {
     _bf = Teuchos::rcp( new BF(varFactory) );
     // tau1 terms:
     _bf->addTerm(u1,tau1->div());
-    _bf->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
-    _bf->addTerm(sigma12,tau1->y());
+    if (_scale_sigma_by_mu ) {
+      _bf->addTerm((1 / _mu) * sigma11,tau1->x()); // (sigma1, tau1)
+      _bf->addTerm((1 / _mu) * sigma12,tau1->y());
+    } else {
+      _bf->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+      _bf->addTerm(sigma12,tau1->y());
+    }
     _bf->addTerm(-u1hat, tau1->dot_normal());
     
     // tau2 terms:
     _bf->addTerm(u2, tau2->div());
-    _bf->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
-    _bf->addTerm(sigma22,tau2->y());
+    if (_scale_sigma_by_mu) {
+      _bf->addTerm((1 / _mu) * sigma21,tau2->x()); // (sigma2, tau2)
+      _bf->addTerm((1 / _mu) * sigma22,tau2->y());
+    } else {
+      _bf->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+      _bf->addTerm(sigma22,tau2->y());
+    }
     _bf->addTerm(-u2hat, tau2->dot_normal());
     
     // v1:
-    _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1)
-    _bf->addTerm(- mu * sigma12,v1->dy());
+    if (_scale_sigma_by_mu) {      
+      _bf->addTerm(- sigma11,v1->dx()); // ( sigma1, grad v1)
+      _bf->addTerm(- sigma12,v1->dy());
+    } else {
+      _bf->addTerm(- mu * sigma11,v1->dx()); // (mu sigma1, grad v1)
+      _bf->addTerm(- mu * sigma12,v1->dy());
+    }
     _bf->addTerm( p, v1->dx() );
     _bf->addTerm( t1n, v1);
     
     // v2:
-    _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-    _bf->addTerm(- mu * sigma22,v2->dy());
+    if (_scale_sigma_by_mu) {
+      _bf->addTerm(- sigma21,v2->dx()); // ( sigma2, grad v2)
+      _bf->addTerm(- sigma22,v2->dy());
+    } else {
+      _bf->addTerm(- mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+      _bf->addTerm(- mu * sigma22,v2->dy());
+    }
     _bf->addTerm( p, v2->dy());
     _bf->addTerm( t2n, v2);
     
@@ -548,12 +570,12 @@ public:
     return varFactory;
   }
   
-  VGPStokesFormulation(FunctionPtr mu, bool enriched_velocity = false) {
-    init(mu, enriched_velocity);
+  VGPStokesFormulation(FunctionPtr mu, bool enriched_velocity = false, bool scaleSigmaByMu = true) {
+    init(mu, enriched_velocity, scaleSigmaByMu);
   }
   
-  VGPStokesFormulation(double mu, bool enriched_velocity = false) {
-    init(Function::constant(mu), enriched_velocity);
+  VGPStokesFormulation(double mu, bool enriched_velocity = false, bool scaleSigmaByMu = true) {
+    init(Function::constant(mu), enriched_velocity, scaleSigmaByMu);
   }
   
   BFPtr bf() {
@@ -633,10 +655,17 @@ public:
     
     mySolution->setSolutionFunction(p, p_exact);
     
-    mySolution->setSolutionFunction(sigma11, u1_exact->dx());
-    mySolution->setSolutionFunction(sigma12, u1_exact->dy());
-    mySolution->setSolutionFunction(sigma21, u2_exact->dx());
-    mySolution->setSolutionFunction(sigma22, u2_exact->dy());
+    FunctionPtr sigma_weight;
+    if (_scale_sigma_by_mu) {
+      sigma_weight = _mu;
+    } else {
+      sigma_weight = Function::constant(1);
+    }
+    
+    mySolution->setSolutionFunction(sigma11, sigma_weight * u1_exact->dx());
+    mySolution->setSolutionFunction(sigma12, sigma_weight * u1_exact->dy());
+    mySolution->setSolutionFunction(sigma21, sigma_weight * u2_exact->dx());
+    mySolution->setSolutionFunction(sigma22, sigma_weight * u2_exact->dy());
     
     return mySolution;
   }

@@ -65,6 +65,7 @@ int main(int argc, char *argv[]) {
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
+  bool scaleSigmaByMu = true;
   
   bool useTriangles = false;
   
@@ -98,6 +99,16 @@ int main(int argc, char *argv[]) {
 //  quadPointsKovasznay(3,0) =  0.0;
 //  quadPointsKovasznay(3,1) =  0.5;
 
+//  // symmetric domain to make it simple to construct zero-mean pressure (choose any odd function)
+//  quadPointsKovasznay(0,0) = -1.0; // x1
+//  quadPointsKovasznay(0,1) = -1.0; // y1
+//  quadPointsKovasznay(1,0) =  1.0;
+//  quadPointsKovasznay(1,1) = -1.0;
+//  quadPointsKovasznay(2,0) =  1.0;
+//  quadPointsKovasznay(2,1) =  1.0;
+//  quadPointsKovasznay(3,0) = -1.0;
+//  quadPointsKovasznay(3,1) =  1.0;
+  
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
 //  double Re = 40.0; // Evans Hughes Navier-Stokes
 //  double Re = 1000.0;
@@ -113,7 +124,7 @@ int main(int argc, char *argv[]) {
   VGPOseenProblem zeroProblem = VGPOseenProblem(Re, quadPointsKovasznay,
                                                 numCellsFineMesh, numCellsFineMesh,
                                                 H1OrderFineMesh, pToAdd,
-                                                zero, zero, zero, useCompliantNorm);
+                                                zero, zero, zero, useCompliantNorm, scaleSigmaByMu);
   
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
@@ -124,10 +135,16 @@ int main(int argc, char *argv[]) {
   VarPtr sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   VarPtr p_vgp = varFactory.fieldVar(VGP_P_S);
     
-  VGPStokesFormulation stokesForm(1/Re);
+  VGPStokesFormulation stokesForm(1/Re,false,true);
   
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
+  // test:
+//  u1_exact = Function::xn(1); // Function::xn(2); // 2 * Function::xn(1) * Function::yn(1); //Function::xn(1);
+//  u2_exact = -Function::yn(1); // -2 * Function::xn(1) * Function::yn(1); //- Function::yn(2); //-Function::yn(1);
+//  p_exact  = Function::zero(); //Function::xn(5); // odd function
+//  computeRelativeErrors = false;
+  
   map< string, string > convergenceDataForMATLAB; // key: field file name
   
   for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++) {
@@ -147,7 +164,10 @@ int main(int argc, char *argv[]) {
       VGPOseenProblem problem = VGPOseenProblem(Re, quadPointsKovasznay,
                                                 numCells1D, numCells1D,
                                                 H1Order, pToAdd,
-                                                u1_exact, u2_exact, p_exact, useCompliantNorm);
+                                                u1_exact, u2_exact, p_exact, useCompliantNorm, scaleSigmaByMu);
+      
+//      cout << "problem.bf():\n";
+//      problem.bf()->printTrialTestInteractions();
       
       problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
       
@@ -164,6 +184,62 @@ int main(int argc, char *argv[]) {
       }
       numCells1D *= 2;
     } while (pow(2.0,maxLogElements) >= numCells1D);
+    
+    /*{ // DEBUGGING CODE:
+      FunctionPtr u1_exact_fxn = problems[0].exactSolution()->exactFunctions().find(u1_vgp->ID())->second;
+      FunctionPtr u2_exact_fxn = problems[0].exactSolution()->exactFunctions().find(u2_vgp->ID())->second;
+      FunctionPtr p_exact_fxn = problems[0].exactSolution()->exactFunctions().find(p_vgp->ID())->second;
+      
+      double u1_err = (u1_exact_fxn - u1_exact)->l2norm(problems[0].mesh());
+      double u2_err = (u2_exact_fxn - u2_exact)->l2norm(problems[0].mesh());
+      double p_err = (p_exact_fxn - p_exact)->l2norm(problems[0].mesh());
+      
+      cout << "u1 err: " << u1_err << endl;
+      cout << "u2 err: " << u2_err << endl;
+      cout << "p err: "  << p_err << endl;
+      
+      FunctionPtr sigma11_exact = problems[0].exactSolution()->exactFunctions().find(sigma11_vgp->ID())->second;
+      FunctionPtr sigma12_exact = problems[0].exactSolution()->exactFunctions().find(sigma12_vgp->ID())->second;
+      FunctionPtr sigma21_exact = problems[0].exactSolution()->exactFunctions().find(sigma21_vgp->ID())->second;
+      FunctionPtr sigma22_exact = problems[0].exactSolution()->exactFunctions().find(sigma22_vgp->ID())->second;
+      
+      double sigma11_err = (sigma11_exact - 1.0 / Re)->l2norm(problems[0].mesh());
+      double sigma12_err = ( sigma12_exact )->l2norm(problems[0].mesh());
+      double sigma21_err = ( sigma21_exact )->l2norm(problems[0].mesh());
+      double sigma22_err = ( sigma22_exact + 1.0 / Re)->l2norm(problems[0].mesh());
+      
+      cout << "sigma11 err: " << sigma11_err << endl;
+      cout << "sigma12 err: " << sigma12_err << endl;
+      cout << "sigma21 err: " << sigma21_err << endl;
+      cout << "sigma22 err: " << sigma22_err << endl;
+      
+      RHSEasy* rhs = dynamic_cast< RHSEasy* >( problems[0].exactSolution()->rhs().get() );
+      LinearTermPtr rhsLT = rhs->linearTerm();
+      cout << "rhsLT has " << rhsLT->summands().size() << " summands.\n";
+      cout << "rhsLT: " << rhsLT->displayString() << endl;
+      if (rhsLT->isZero()) {
+        cout << "RHS is identically zero.\n";
+      } else {
+        cout << "RHS is not identically zero.\n";
+        FunctionPtr f1 = rhsLT->summands()[0].first;
+        double tol = 1e-12;
+        FunctionPtr x = Function::xn(1);
+        FunctionPtr y = Function::yn(1);
+        double l2norm = (f1+x)->l2norm(problems[0].mesh());
+        if ( l2norm < tol) {
+          cout << "f1 = -x.\n";
+        } else {
+          cout << "(f1 + x), l2 norm: " << l2norm << endl;
+        }
+        FunctionPtr f2 = rhsLT->summands()[1].first;
+        l2norm = (f2+y)->l2norm(problems[0].mesh());
+        if ( l2norm < tol) {
+          cout << "f2 = -y.\n";
+        } else {
+          cout << "(f2 + y), l2 norm: " << l2norm << endl;
+        }
+      }
+    }*/
     
     HConvergenceStudy study(problems[0].exactSolution(),
                             problems[0].mesh()->bilinearForm(),
@@ -258,6 +334,21 @@ int main(int argc, char *argv[]) {
           cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
         }
       }
+    }
+    map< int, double > energyNormWeights;
+    energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[p_vgp->ID()] = 1.0;
+    vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
+    vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
+    cout << "Solution Energy Error: " << setw(30) << "Best Energy Error:" << endl;
+    cout << scientific << setprecision(1);
+    for (int i=0; i<bestEnergy.size(); i++) {
+      cout << solnEnergy[i] << setw(30) << bestEnergy[i] << endl;
     }
   }
   if (rank==0) {
