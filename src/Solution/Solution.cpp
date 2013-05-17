@@ -344,7 +344,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
+      // hard-coding creating side cache for IP for now, since _ip->hasBoundaryTerms() only recognizes terms explicitly passed in as boundary terms:
+      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
       
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
@@ -3612,10 +3613,15 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
   
   for (map<int, FunctionPtr >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++){
     int trialID = functionIt->first;
+    
     bool fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
     FunctionPtr function = functionIt->second;
     ElementPtr element = _mesh->getElement(cellID);
     ElementTypePtr elemTypePtr = element->elementType();
+    
+//    if (trialID == 10) {
+//      cout << "Projecting function " << function->displayString() << " onto variable ID " << trialID << endl;
+//    }
     
     bool testVsTest = false; // in fact it's more trial vs trial, but this just means we'll over-integrate a bit
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr,_mesh,testVsTest,_cubatureEnrichmentDegree) );
@@ -3631,6 +3637,10 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
         lastSide = side;
       }
       for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++) {
+        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) {
+          continue;
+        }
+        
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         FieldContainer<double> basisCoefficients(1,basis->getCardinality());
         Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
@@ -3638,11 +3648,17 @@ void Solution::projectOntoCell(const map<int, FunctionPtr > &functionMap, int ce
       }
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(side != -1, std::invalid_argument, "sideIndex for fields must = -1");
+      if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, 0)) { // DofOrdering uses side 0 for fields...
+        continue;
+      }
+      
       BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       FieldContainer<double> basisCoefficients(1,basis->getCardinality());
       Projector::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache);
-      //      cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
-      //      cout << basisCoefficients;
+//      if (trialID == 10) {
+//        cout << "setting solnCoeffs for cellID " << cellID << " and trialID " << trialID << endl;
+//        cout << basisCoefficients;
+//      }
       setSolnCoeffsForCellID(basisCoefficients,cellID,trialID);
     }
   }
