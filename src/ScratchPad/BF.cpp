@@ -216,7 +216,7 @@ IPPtr BF::naiveNorm() {
   return ip;  
 }
 
-LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms) {
+LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {
   LinearTermPtr functional = Teuchos::rcp(new LinearTerm());
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
        btIt != _terms.end(); btIt++) {
@@ -224,6 +224,7 @@ LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundary
     LinearTermPtr trialTerm = btIt->first;
     LinearTermPtr testTerm = btIt->second;
     FunctionPtr trialValue = Teuchos::rcp( new PreviousSolutionFunction(trialSolution, trialTerm) );
+    static_cast< PreviousSolutionFunction* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
     if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) ) {
       functional = functional + trialValue * testTerm;
     }
