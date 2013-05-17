@@ -40,7 +40,7 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 
-#include "MeshUtilities.h"
+#include "DataIO.h"
 #include "SerialDenseMatrixUtility.h"
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
@@ -208,7 +208,7 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
   ostringstream fileName;
   fileName << _globalStiffnessFilePrefix << "_" << logElements << ".dat";
   FieldContainer<double> globalStiffnessMatrix;
-  MeshUtilities::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
+  DataIO::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
   SerialDenseMatrixUtility::jacobiScaleMatrix(globalStiffnessMatrix);
   return SerialDenseMatrixUtility::estimate2NormConditionNumber(globalStiffnessMatrix);
 }
