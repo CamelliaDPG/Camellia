@@ -347,7 +347,7 @@ void LinearTerm::integrate(FieldContainer<double> &values,
         }
         // now, test again, and throw an exception if the issue wasn't corrected:
         if (! vOrdering->hasBasisEntry(vID, vSideIndex) ) {
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no entry for uSideIndex");
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no entry for vSideIndex");
         }
       }
       
@@ -1304,6 +1304,10 @@ LinearTermPtr operator+(LinearTermPtr a, VarPtr v) {
 
 LinearTermPtr operator*(FunctionPtr f, VarPtr v) {
   return Teuchos::rcp( new LinearTerm(f, v) );
+}
+
+LinearTermPtr operator*(VarPtr v, FunctionPtr f) {
+  return f * v;
 }
 
 LinearTermPtr operator*(double weight, VarPtr v) {
