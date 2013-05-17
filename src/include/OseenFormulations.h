@@ -143,7 +143,6 @@ public:
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm() {
-    // messing around: at any given time this may or may not correspond to "scale compliance", whatever that means
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     //    FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
@@ -158,10 +157,10 @@ public:
 //    compliantGraphNorm->addTerm( ( h * tau2->div() - h * q->dy()) );  // u2
     
     // new version:
-    compliantGraphNorm->addTerm( _mu * _mu * v1->dx() + _mu * tau1->x() ); // sigma11
-    compliantGraphNorm->addTerm( _mu * _mu * v1->dy() + _mu * tau1->y() ); // sigma12
-    compliantGraphNorm->addTerm( _mu * _mu * v2->dx() + _mu * tau2->x() ); // sigma21
-    compliantGraphNorm->addTerm( _mu * _mu * v2->dy() + _mu * tau2->y() ); // sigma22
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() ); // sigma22
 
     compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() + h * _U1 * v1->dx() + h * _U2 * v1->dy() );  // u1
     compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy() + h * _U1 * v2->dx() + h * _U2 * v2->dy() );  // u2

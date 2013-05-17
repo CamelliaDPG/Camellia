@@ -119,7 +119,12 @@ int main(int argc, char *argv[]) {
   VarPtr sigma21_vgp = varFactory.fieldVar(VGP_SIGMA21_S);
   VarPtr sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   VarPtr p_vgp = varFactory.fieldVar(VGP_P_S);
-    
+  
+  if (rank==0) {
+    cout << "bilinear form with zero background flow:\n";
+    zeroProblem.bf()->printTrialTestInteractions();
+  }
+  
   VGPStokesFormulation stokesForm(1/Re);
   
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);

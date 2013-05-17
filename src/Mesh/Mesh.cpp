@@ -1991,8 +1991,10 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
           setElementType(nonParent->cellID(), nonParentType, true); // true: only a side upgrade
           //nonParent->setElementType(nonParentType);
           // debug code:
-          if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
+          if ( nonParentTrialOrdering->hasSideVarIDs() ) { // then we can check whether there is a multi-basis
+            if ( ! _dofOrderingFactory.sideHasMultiBasis(nonParentTrialOrdering, parentSideIndexInNeighbor) ) {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "failed to add multi-basis to neighbor");
+            }
           }
         } else { // PatchBasis
           // check to see if non-parent needs a p-upgrade

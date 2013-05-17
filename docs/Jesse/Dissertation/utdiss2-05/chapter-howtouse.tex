@@ -1,0 +1,243 @@
+\chapter{How to Use the utdiss2 Package}
+\index{How to Use the utdiss2 Package%
+@\emph{How to Use the utdiss2 Package}}%
+
+\section{Preamble}
+\index{Preamble@\emph{Preamble}}%
+
+The preamble of the document starts like this:
+\begin{verbatim}
+     \documentclass[12pt]{report}
+     \usepackage{utdiss2}
+\end{verbatim}
+\index{commands!documentclass@\cn{documentclass}}%
+\index{commands!usepackage@\cn{usepackage}}%
+
+The first line declares ``\texttt{report}'' as the document 
+class, 
+\index{document class}%
+with an option of 12pt for the character size, 
+which is slightly greater that usual (the default is 10pt), but is
+what the Office of the Graduate School (OGS) recommends.
+You may include other options, as in any other \LaTeX{} document.
+
+The second line loads the \texttt{utdiss2} package, 
+\index{utdiss2 package@{\texttt{utdiss2} package}}%
+which contains a set of commands intended to produce a document fulfilling
+the official requirements for a doctoral dissertation or master's thesis or
+report. Besides that, you may include other packages. 
+For instance:
+\begin{verbatim}
+     \usepackage{amsmath,amsthm,amsfonts,amscd}
+\end{verbatim}
+for mathematical symbols, or,
+\begin{verbatim}
+     \usepackage{draftcopy}
+\end{verbatim}
+to have a large ``watermark'' across each page of your document that
+says, ``DRAFT.''
+
+
+The next few commands in the preamble are required.
+
+\cn{author\{Craig William McCluskey\}}
+\index{commands!author@\cn{author}}%
+Replace my name in the command by your
+full, official University name.  Make it combination of lower and uppercases.
+
+\cn{address\{9905 Chukar Circle\bslash\bslash\ Austin, Texas 78758\}}
+\index{commands!address@\cn{address}}%
+Replace my address with your *permanent* (not local) address. Use
+\texttt{\bslash\bslash} to separate address lines.
+
+\cn{title\{Writing a Doctoral Dissertation with \cn{LaTeX\{\}} at
+the University of Texas at Austin\} }
+\index{commands!title@\cn{title}}%
+Replace the name of this document
+in this command by your dissertation title. If the title consists of more
+than one line, it should be in inverted pyramid form. You may have to specify
+the line breakings by \texttt{\bslash\bslash} commands.
+
+\cn{supervisor[Isaac Newton]\{Johannes Kepler\} }
+\index{commands!supervisor@\cn{supervisor}}%
+This document has two supervisors listed. See the source file
+(disstemplate.tex) for information on how to have only one supervisor.
+This command can be broken across lines as it is in the source file and
+as the \cn{committeemembers} command is shown below.
+
+\begin{verbatim}
+\committeemembers
+        [Erwin Schr\"odinger]
+        [Albert Einstein]
+        [Charles Townes]
+        {Arthur Schawlow}
+\end{verbatim}
+\index{commands!committeemembers@\cn{committeemembers}}%
+This document shows four non-supervisor committee members. See the source
+file (disstemplate.tex) for information on how to have a different number.
+
+\cn{previousdegrees\{B.S.\} } Replace B.S. with your previous degree.
+
+The next few commands in the preamble are optional.
+\begin{verbatim}
+%\graduationmonth{...}
+%\graduationyear{...}
+%\typist{...}
+\end{verbatim}
+Their use is documented in the source file.
+
+At this point, if you are writing a master thesis or report
+you must use the optional \cn{degree} and \cn{degreeabbr} commands
+and specify
+\index{master}
+\index{master!master thesis}
+\index{commands!masterthesis@\cn{masterthesis}}
+\index{master!master report}
+\index{commands!masterreport@\cn{masterreport}}
+\begin{verbatim}
+%\degree{MASTER OF ARTS}
+%\degreeabbr{M.A.}
+%\masterreport
+%\masterthesis
+\end{verbatim}
+as documented in the source file. By default the document is formated
+as a \emph{dissertation}%
+\footnote{The command \cn{dissertation} is also provided for symmetry.}%
+\index{commands!dissertation@\cn{dissertation}}
+
+
+The default spacing for both text and quoted text is doublespaced.
+That can be changed with the following self-explanatory commands: 
+\begin{verbatim}
+\oneandonehalfspacing 
+\singlespacing
+\oneandonehalfspacequote
+\singlespacequote
+\end{verbatim}
+\index{commands!oneandonehalfspacing@\cn{oneandonehalfspacing}}%
+\index{commands!singlespacing@\cn{singlespacing}}%
+\index{commands!oneandonehalfspacequote@\cn{oneandonehalfspacequote}}%
+\index{commands!singlespacequote@\cn{singlespacequote}}%
+
+Some versions of LaTeX in combination with some types of printers
+produce printed output that has incorrect vertical margins.
+The command \cn{topmargin 0.125} is provided to allow easy adjustment
+if it's needed.
+
+If there are 10 or more sections, 10 or more subsections for a section,
+etc., you need to make an adjustment to the Table of Contents with the
+command \cn{longtocentry}.
+\index{commands!longtocentry@\cn{longtocentry}}%
+This command allocates the proper horizontal space for double-digit
+numbers.
+
+
+\section{Document}
+\index{Document@\emph{Document}}%
+
+Next comes the actual text. It could be a sequence of chapters divided
+into sections, subsections, etc., all in the main file:
+\begin{verbatim}
+\chapter{...}     % The first chapter. The
+                  % \chapter command is of the form
+                  % \chapter[..]{..} or \chapter{..} where
+    ... text ...  % [...] is the entry in table of contents
+                  % and {...} is the chapter heading printed
+                  % in the body of the document.
+\section{...}     %
+                  % IMPORTANT: If your chapter heading consists
+                  % of more than one line, it will be auto-
+    ... text ...  % matically broken into separate lines.
+                  % If you don't like the way LaTeX breaks the
+                  % chapter heading into lines, however, use
+\section{...}     % `\newheadline' command to break lines.
+                  % NEVER USE \\ IN SECTIONAL (E.G., CHAPTER,
+    ... text ...  % SECTION, SUBSECTION, SUBSUBSECTION) HEADINGS!
+                  %
+\chapter{...}     % This is Chapter 2.
+    ... text ...
+\section{...}
+    ... text...
+\subsection{...}
+    ... more text ...
+\subsubsection{...}
+    ... more text ...
+\appendix         % The appendix begins here.
+% \appendices     % If more than one appendix chapters,
+                  % use \appendices instead of \appendix
+\chapter{...}     % First appendix chapter, i.e., Appendix A.
+\section{...}     % This is appendix section A.1.
+    .................
+\end{verbatim}
+\index{commands!chapter@\cn{chapter}}%
+\index{commands!section@\cn{section}}%
+\index{commands!subsection@\cn{subsection}}%
+\index{commands!appendix@\cn{appendix}}%
+\index{commands!appendices@\cn{appendices}}%
+
+Or, the chapters can be written in different files like this document
+and be loaded by \cn{include} commands:
+\begin{verbatim}
+\include{chapter-introduction}
+\include{chapter-instructions}
+\include{chapter-howtouse}
+\include{chapter-makingbib}
+\include{chapter-tables+figs}
+\include{chapter-math}
+\appendices
+\index{Appendices@\emph{Appendices}}%
+\include{chapter-appendix1}
+\include{chapter-appendix2}
+\include{chapter-appendix3}
+\end{verbatim}
+\index{commands!include@\cn{include}}%
+Having the chapters in separate files makes the main .tex file simpler
+and allows chapters to be easily re-ordered (just swap the order of the
+include commands) or left (commented) out for draft copies.
+
+Note: If you have only one appendix, in addition to using
+\cn{appendix} instead of \cn{appendices}, you must leave out the
+\cn{chapter} definition at the start of the appendix's text. Putting
+it in will cause the insertion of an extra page with only the word
+Appendix on it and will cause the appendix to be labeled Appendix 1,
+both of which are poor form if there is only one appendix.
+
+If you are writing a short dissertation 
+\index{short dissertation}%
+that does not require 
+chapters, you need to use the command \cn{nochapters} 
+\index{commands!nochapters@\cn{nochapters}}%
+just before the first section:
+
+\begin{verbatim}
+\nochapters 
+
+\section{...}     % First section.
+    ... text ... 
+\section{...}     % Second section.
+    ... text ... 
+        (...)
+\end{verbatim}
+
+Next comes the bibliography.
+\index{bibliography}%
+It can be made by hand like this:
+\begin{verbatim}
+\begin{thebibliography}{foo}
+\bibitem ...   
+\end{thebibliography}
+\end{verbatim}
+\index{commands!environments!thebibliography}%
+Or it can also be generated with BiB\TeX{}, 
+\index{BiBTeX@BiB\TeX{}}%
+as explained in chapter \ref{c:bib}.
+
+Finally the vita is produced like this:
+\begin{verbatim}
+\begin{vita}
+     % Insert your brief biographical sketch here. 
+     % Your permanent address and the name of the 
+     % typist(s) are generated automatically.
+\end{vita}
+
+\end{verbatim}

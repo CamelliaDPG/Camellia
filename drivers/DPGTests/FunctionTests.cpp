@@ -323,20 +323,20 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   vector<double> e2(2); // (0,1)
   e2[1] = 1;
   
-  FunctionPtr beta = e1 * u_prev + Teuchos::rcp( new ConstantVectorFunction( e2 ) );
+  FunctionPtr beta = e1 * u_prev + Function::constant( e2 );
   
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   
   if (! functionsAgree(e2 * u_prev, 
-                       Teuchos::rcp( new ConstantVectorFunction( e2 ) ) * u_prev,
+                       Function::constant( e2 ) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
   
-  FunctionPtr e1_f = Teuchos::rcp( new ConstantVectorFunction( e1 ) );
-  FunctionPtr e2_f = Teuchos::rcp( new ConstantVectorFunction( e2 ) );
-  FunctionPtr one  = Teuchos::rcp( new ConstantScalarFunction( 1.0 ) );
+  FunctionPtr e1_f = Function::constant( e1 );
+  FunctionPtr e2_f = Function::constant( e2 );
+  FunctionPtr one  = Function::constant( 1.0 );
   if (! functionsAgree( Teuchos::rcp( new ProductFunction(e1_f, (e1_f + e2_f)) ), // e1_f * (e1_f + e2_f)
                        one,
                        _basisCache) ) {

@@ -48,6 +48,16 @@ protected:
     _nextTrialID = nextTrialID;
     _nextTestID = nextTestID;
   }
+  void addTestVar(VarPtr var) {
+    _testVars[var->name()] = var;
+    _testVarsByID[var->ID()] = _testVars[var->name()];
+    _nextTestID = max(var->ID(), _nextTestID);
+  }
+  void addTrialVar(VarPtr var) {
+    _trialVars[var->name()] = var;
+    _trialVarsByID[var->ID()] = _trialVars[var->name()];
+    _nextTrialID = max(var->ID(), _nextTrialID);
+  }
 public:
   enum BubnovChoice { BUBNOV_TRIAL, BUBNOV_TEST };
   
@@ -156,6 +166,20 @@ public:
   
   const map< int, VarPtr > & trialVars() {
     return _trialVarsByID;
+  }
+  
+  VarFactory trialSubFactory(vector< VarPtr > &trialVars) {
+    // returns a new VarFactory with the same test space, and a subspace of the trial space
+    VarFactory subFactory;
+    for (vector< VarPtr >::iterator trialVarIt=trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++) {
+      VarPtr trialVar = *trialVarIt;
+      subFactory.addTrialVar(trialVar);
+    }
+    for (map<int, VarPtr>::iterator testVarIt=_testVarsByID.begin(); testVarIt != _testVarsByID.end(); testVarIt++) {
+      VarPtr testVar = testVarIt->second;
+      subFactory.addTestVar(testVar);
+    }
+    return subFactory;
   }
 };
 

@@ -63,6 +63,7 @@ public:
   void exportFields(const string& filePath, unsigned int num1DPts=0);
   void exportTraces(const string& filePath, unsigned int num1DPts=0);
   void exportFunction(FunctionPtr function, const string& functionName="function", unsigned int num1DPts=0);
+  void exportBoundaryValuedFunctions(vector< FunctionPtr > &functions, const string& filePath, unsigned int num1DPts=0);
   void setRefPoints(FieldContainer<double> refPoints, int num1DPts, int spaceDim);
 };
 

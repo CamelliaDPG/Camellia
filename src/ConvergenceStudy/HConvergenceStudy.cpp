@@ -40,7 +40,7 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 
-#include "MeshUtilities.h"
+#include "DataIO.h"
 #include "SerialDenseMatrixUtility.h"
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution> exactSolution,
@@ -208,7 +208,7 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
   ostringstream fileName;
   fileName << _globalStiffnessFilePrefix << "_" << logElements << ".dat";
   FieldContainer<double> globalStiffnessMatrix;
-  MeshUtilities::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
+  DataIO::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
   SerialDenseMatrixUtility::jacobiScaleMatrix(globalStiffnessMatrix);
   return SerialDenseMatrixUtility::estimate2NormConditionNumber(globalStiffnessMatrix);
 }
@@ -755,4 +755,30 @@ void HConvergenceStudy::setUseCondensedSolve(bool value) {
 void HConvergenceStudy::setWriteGlobalStiffnessToDisk(bool value, string globalStiffnessFilePrefix) {
   _writeGlobalStiffnessToDisk = value;
   _globalStiffnessFilePrefix = globalStiffnessFilePrefix;
+}
+
+vector<double> HConvergenceStudy::weightedL2Error(map<int, double> &weights, bool bestApproximation, bool relativeErrors) {
+  map< int, vector<double> > errors = bestApproximation ? bestApproximationErrors() : solutionErrors();
+  
+  vector<double> weightedError(_solutions.size());
+  double weightedSolutionNorm = 0;
+  
+  for (map<int, double>::iterator weightIt = weights.begin(); weightIt != weights.end(); weightIt++) {
+    int trialID = weightIt->first;
+    double weight = weightIt->second;
+    for (int i=0; i < errors[trialID].size(); i++) {
+      double err = errors[trialID][i];
+      weightedError[i] += err * err * weight * weight;
+    }
+    weightedSolutionNorm += _exactSolutionNorm[trialID] * _exactSolutionNorm[trialID] * weight * weight;
+  }
+  // take square roots:
+  weightedSolutionNorm = sqrt(weightedSolutionNorm);
+  for (int i=0; i<weightedError.size(); i++) {
+    weightedError[i] = sqrt(weightedError[i]);
+    if (relativeErrors) {
+      weightedError[i] /= weightedSolutionNorm;
+    }
+  }
+  return weightedError;
 }

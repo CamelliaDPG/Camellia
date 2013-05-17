@@ -29,6 +29,8 @@
 
 #include "MeshUtilities.h"
 
+#include "DataIO.h"
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
@@ -334,6 +336,78 @@ int main(int argc, char *argv[]) {
           cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
         }
       }
+    }
+    map< int, double > energyNormWeights;
+    energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+    energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
+    energyNormWeights[p_vgp->ID()] = 1.0;
+    vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
+    vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
+    
+    map<int, double> velocityWeights;
+    velocityWeights[u1_vgp->ID()] = 1.0;
+    velocityWeights[u2_vgp->ID()] = 1.0;
+    vector<double> bestVelocityError = study.weightedL2Error(velocityWeights,true);
+    vector<double> solnVelocityError = study.weightedL2Error(velocityWeights,false);
+    
+    map<int, double> pressureWeight;
+    pressureWeight[p_vgp->ID()] = 1.0;
+    vector<double> bestPressureError = study.weightedL2Error(pressureWeight,true);
+    vector<double> solnPressureError = study.weightedL2Error(pressureWeight,false);
+    
+    if (rank==0) {
+      cout << setw(25);
+      cout << "Solution Energy Error:" << setw(25) << "Best Energy Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnEnergy[i] << setw(25) << bestEnergy[i] << endl;
+      }
+      cout << setw(25);
+      cout << "Solution Velocity Error:" << setw(25) << "Best Velocity Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnVelocityError[i] << setw(25) << bestVelocityError[i] << endl;
+      }
+      cout << setw(25);
+      cout << "Solution Pressure Error:" << setw(25) << "Best Pressure Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnPressureError[i] << setw(25) << bestPressureError[i] << endl;
+      }
+      
+      vector< string > tableHeaders;
+      vector< vector<double> > dataTable;
+      vector< double > meshWidths;
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        double width = pow(2.0,i);
+        meshWidths.push_back(width);
+      }
+      
+      tableHeaders.push_back("mesh_width");
+      dataTable.push_back(meshWidths);
+      tableHeaders.push_back("soln_energy_error");
+      dataTable.push_back(solnEnergy);
+      tableHeaders.push_back("best_energy_error");
+      dataTable.push_back(bestEnergy);
+      
+      tableHeaders.push_back("soln_velocity_error");
+      dataTable.push_back(solnVelocityError);
+      tableHeaders.push_back("best_velocity_error");
+      dataTable.push_back(bestVelocityError);
+      
+      tableHeaders.push_back("soln_pressure_error");
+      dataTable.push_back(solnPressureError);
+      tableHeaders.push_back("best_pressure_error");
+      dataTable.push_back(bestPressureError);
+      
+      ostringstream fileNameStream;
+      fileNameStream << "oseen/Re" << Re << "k" << polyOrder << "_results.dat";
+      
+      DataIO::outputTableToFile(tableHeaders,dataTable,fileNameStream.str());
     }
   }
   if (rank==0) {

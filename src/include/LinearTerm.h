@@ -141,6 +141,7 @@ LinearTermPtr operator+(VarPtr v, LinearTermPtr a);
 LinearTermPtr operator+(LinearTermPtr a, VarPtr v);
 
 LinearTermPtr operator*(FunctionPtr f, VarPtr v);
+LinearTermPtr operator*(VarPtr v, FunctionPtr f);
 
 LinearTermPtr operator*(double weight, VarPtr v);
 

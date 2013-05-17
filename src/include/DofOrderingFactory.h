@@ -148,6 +148,7 @@ public:
                                              const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
                                              int childIndexInParentSide);
   bool sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex);
+  
 //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,
 //                                          bool conformingVertices = true);
 };
