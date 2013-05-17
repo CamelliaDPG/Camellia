@@ -143,7 +143,6 @@ public:
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm() {
-    // messing around: at any given time this may or may not correspond to "scale compliance", whatever that means
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     //    FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
