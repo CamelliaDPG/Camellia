@@ -254,6 +254,8 @@ int main(int argc, char *argv[]) {
     bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
     bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
 
+    bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
+    
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
     string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
@@ -372,8 +374,7 @@ int main(int argc, char *argv[]) {
     FunctionPtr u2_0 = Teuchos::rcp( new U2_0 );
     FunctionPtr zero = Function::zero();
     ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-    ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
-    VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
+    VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
                                                             horizontalCells,verticalCells,
                                                             H1Order, pToAdd,
                                                             u1_0, u2_0,  // BC for u
@@ -648,9 +649,18 @@ int main(int argc, char *argv[]) {
       FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
       FunctionPtr p_incr = Function::solution(p, solnIncrement);
       
-      FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-      + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
-      + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+      FunctionPtr l2_incr;
+      
+      if (! weightIncrementL2Norm) {
+        l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+        + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+        + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+      } else {
+        double Re2 = Re * Re;
+        l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
+        + Re2 * sigma11_incr * sigma11_incr + Re2 * sigma12_incr * sigma12_incr
+        + Re2 * sigma21_incr * sigma21_incr + Re2 * sigma22_incr * sigma22_incr;
+      }
 
       for (int refIndex=0; refIndex<numRefs; refIndex++){
         if (startWithZeroSolutionAfterRefinement) {
@@ -718,6 +728,7 @@ int main(int argc, char *argv[]) {
           vector<int> cornerIDs;
           cout << "top-left corner ID: " << topCorners[0]->cellID() << endl;
           cout << "top-right corner ID: " << topCorners[1]->cellID() << endl;
+          cout << mesh->activeElements().size() << " elements, " << mesh->numGlobalDofs() << " dofs.\n";
         }
       }
       // one more solve on the final refined mesh:
