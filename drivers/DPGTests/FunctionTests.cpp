@@ -538,27 +538,26 @@ bool FunctionTests::testQuotientRule() {
 bool FunctionTests::testIntegrate(){
   bool success = true;
 
-  // we must create our own basisCache here because _basisCache
-  // has had its ref cell points set, which basically means it's
-  // opted out of having any help with integration.
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
-  vector<int> cellIDs;
-  cellIDs.push_back(0);
-  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
-  
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  int numCells = basisCache->cellIDs().size();
-  FieldContainer<double> integrals(numCells);
-  x->integrate(integrals,basisCache);
-  double value = 0.0;
-  for (int i = 0;i<numCells;i++){
-    value += integrals(i);
-  }
+  FunctionPtr x = Function::xn(1);
+  double value = x->integrate(_spectralConfusionMesh);
+  double expectedValue = 0.0; // odd function in x on (-1,1)^2
   double tol = 1e-11;
-  if (abs(value)>tol){ // should get zero if integrating x over [-1,1]
+  if (abs(value-expectedValue)>tol){
     success = false;
-    cout << "failing testIntegrate()" << endl;
+    cout << "failed testIntegrate() on function x" << endl;
   }
+  
+  // now, let's try for the integral of the dot product of vector-valued functions
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr f1 = 1 * Function::vectorize(x, y); // 1 * to trigger creation of a ProductFunction
+  
+  value = (f1 * f1)->integrate(_spectralConfusionMesh,1); // enrich cubature to handle quadratics
+  expectedValue = 8.0 / 3.0; // integral of x^2 + y^2 on (-1,1)^2
+  if (abs(value-expectedValue)>tol){
+    success = false;
+    cout << "failing testIntegrate() on function (x,y) dot (x,y)" << endl;
+  }
+  
   return success;
 }
 
