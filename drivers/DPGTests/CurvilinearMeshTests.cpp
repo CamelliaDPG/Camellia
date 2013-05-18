@@ -258,6 +258,12 @@ bool CurvilinearMeshTests::testEdgeLength() {
     edgeToCurveMap[edge] = bottomCurve;
     
     quadMesh->setEdgeToCurveMap(edgeToCurveMap);
+
+    { // let's take a quick look to make sure we haven't screwed anything up majorly:
+      ostringstream filePath;
+      filePath << "/tmp/skewedQuadMesh.dat";
+      GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
+    }
     
     // the length of the sloped edge is 2 sqrt (2)
     // and the other edges have total length of 5:
@@ -280,6 +286,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
       // need sideCache not to retransform things so we can test the transformationFxn itself:
       // TODO: think through this carefully, and/or try with basisCache to confirm that the interior works
       //       the way we're asking the edge to.  We have reason to think the interior is working...
+      
+      // I'm unclear on whether we should set basisCache's transformation to null:
 //      basisCache->setTransformationFunction(Function::null());
       sideCache->setTransformationFunction(Function::null());
       
