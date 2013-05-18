@@ -155,7 +155,15 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(FieldContainer<double> &e
   set<int> edgeNodeFieldIndices = BasisFactory::sideFieldIndices(basis,true); // true: include vertex dofs
   
   FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
-  ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) compBasis.get())->getDofCoords(dofCoords);
+  IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(compBasis.get());
+  if (!intrepidBasisWrapper) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "compBasis does not appear to be an instance of IntrepidBasisWrapper");
+  }
+  Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* intrepidBasis = dynamic_cast< Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* >(intrepidBasisWrapper->intrepidBasis().get());
+  if (!intrepidBasis) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IntrepidBasisWrapper does not appear to wrap Basis_HGRAD_QUAD_Cn_FEM.");
+  }
+  intrepidBasis->getDofCoords(dofCoords);
   
   int edgeDim = 1;
   int vertexDim = 0;
