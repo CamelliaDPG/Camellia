@@ -41,9 +41,9 @@ void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
 
     double h = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); //mesh->getCellMeasure(cellID)); // getCellXSize or getCellYSize
     FieldContainer<double> cellIP(1,numDofs,numDofs);
-    if (h<_minH){
+    if (h > _minH){
       _ip1->computeInnerProductMatrix(cellIP,dofOrdering,cellCache);
-    }else{
+    }else{ 
       _ip2->computeInnerProductMatrix(cellIP,dofOrdering,cellCache);
     }
 

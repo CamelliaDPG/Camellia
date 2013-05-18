@@ -46,6 +46,7 @@ static const double GAMMA = 1.4;
 static const double PRANDTL = 0.72;
 static const double YTOP = 1.0;
 static const double X_BOUNDARY = 2.0;
+static const double rampHeight = 0.0;
 
 using namespace std;
 
@@ -444,31 +445,25 @@ public:
   bool matchesPoint(double x, double y) {
     double tol = 1e-14;
     bool yMatch = ((abs(y) < tol) && (x < 1.0) && (x > 0.0));
+    if (abs(rampHeight)<tol){
+      return yMatch; // if it's just a flat plate
+    }else{
+      return ((abs(y) < tol) && (x < .50) && (x > 0.0)); // if it's a ramp
+    }
+
+  }
+};
+
+// .5 to 1.0 - in front of ramp
+class NonRampPlate : public SpatialFilter {
+public:
+  bool matchesPoint(double x, double y) {
+    double tol = 1e-14;
+    bool yMatch = ((abs(y) < tol) && (x < 1.0) && (x > 0.5));
     return yMatch;
   }
 };
 
-class FreeStreamMinusH : public SpatialFilter {
-  MeshPtr _mesh;
-  double _eps;
-  double _plateStart;
-public:
-  FreeStreamMinusH(MeshPtr mesh, double plateStart, double eps){
-    _mesh = mesh;
-    _plateStart = plateStart;
-    _eps = eps; // defines width around plate edge that we want to allow to be free
-  }
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    FieldContainer<double> point(1,2);
-    point(0,0) = 1.0 - 1e-7; point(0,1) = 0.0; // just to the left of the plate
-    vector<ElementPtr> elemsForPoint = _mesh->elementsForPoints(point);
-    int cellID = elemsForPoint[0]->cellID();
-    double h = _mesh->getCellXSize(cellID);
-    bool match = ((abs(y) < tol) && (x < min(_plateStart-h,_plateStart-_eps)) && (x > 0.0));
-    return match;
-  }
-};
 
 class WallBoundary : public SpatialFilter {
 public:  
@@ -546,6 +541,8 @@ int main(int argc, char *argv[]) {
   bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",false); // default to zero
   int maxNRIter = args.Input<int>("--maxNRIter","maximum number of NR iterations",1); // default to one per timestep
   int numTimeSteps = args.Input<int>("--maxTimeSteps","max number of time steps",150); // max time steps
+  double minDt = args.Input<double>("--minDt","min timestep for adaptive timestepping",.01); // max time steps
+  double maxDt = args.Input<double>("--maxDt","max timestep for adaptive timestepping",.1); // max time steps
 
   // adaptivity
   int numUniformRefs = args.Input<int>("--numUniformRefs","num uniform refinements (pre-adaptivity)",0);
@@ -566,10 +563,7 @@ int main(int argc, char *argv[]) {
   bool useConditioningCFL = args.Input<bool>("--useConditioningCFL","option to use a CFL limit for conditioning",false); 
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   bool scalePlate = args.Input<bool>("--scalePlate","flag to weight plate so it matters less",false);
-  bool setFreeTraces = args.Input<bool>("--setFreeTraces","flag to set traces to freestream values before plate",false);
   double ipSwitch = args.Input<double>("--ipSwitch","smallest elem thresh to switch to graph norm",0.0); // default to not changing
-  bool useFluxLimiter = args.Input<bool>("--useFluxLimiter","flag to lower p = 1 at singularity",false);
-
   // IO stuff
   string replayFile = args.Input<string>("--loadFile", "file with refinement history to replay", "");
   string saveFile = args.Input<string>("--saveFile", "file to which to save refinement history", "");
@@ -670,7 +664,6 @@ int main(int argc, char *argv[]) {
 
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
 
-  double rampHeight = 0.0;
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(domainPoints, horizontalCells, verticalCells, bf, H1Order, H1Order+pToAdd, useTriangles);
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildRampMesh(rampHeight,bf, H1Order, H1Order+pToAdd);
@@ -1110,14 +1103,14 @@ int main(int argc, char *argv[]) {
   
   FunctionPtr timeTermScale = Function::constant(1.0);
   if (scalePlate){
-    //    TauReScaling = TauReScaling*plateWeight;
-    //    TauDivScaling = TauDivScaling*plateWeight;
+    TauReScaling = TauReScaling*plateWeight;
+    TauDivScaling = TauDivScaling*plateWeight;
     streamlineHScale = streamlineHScale*plateWeight;    
     timeTermScale = timeTermScale*plateWeight;
   }
 
   FunctionPtr timeScaling = Function::constant(1.0);
-  //  timeScaling = sqrtInvDt; // legal with first order term
+  timeScaling = sqrtInvDt; // legal with first order term
 
   ////////////////////////////////////////////////////////////////////
   // Timestep L2 portion of V
@@ -1240,7 +1233,7 @@ int main(int argc, char *argv[]) {
     LinearTermPtr ipSum = vStreamIt->second;
     ip->addTerm(streamlineHScale*ipSum); // streamlineHScale option for conditioning!
     //    ip->addTerm(ipSum);
-  }
+  } 
 
   ////////////////////////////////////////////////////////////////////
   // rest of the test terms (easier)
@@ -1251,19 +1244,44 @@ int main(int argc, char *argv[]) {
   ip->addTerm( l2HScale*v3 );
   ip->addTerm( l2HScale*v4 );    
   
-  // div remains the same (identity operator in classical variables)
+  // div remains the same (identity operator in classical variables)  
   ip->addTerm(TauDivScaling*tau1->div());
   ip->addTerm(TauDivScaling*tau2->div());
   ip->addTerm(TauDivScaling*tau3->div());
 
+  IPPtr ipCoupled = ip;
+  // u1
+  ipCoupled->addTerm(TauDivScaling*tau1->div() - streamlineHScale*vStreamVec[u1->ID()]);
+  // u2
+  ipCoupled->addTerm(TauDivScaling*tau2->div() - streamlineHScale*vStreamVec[u2->ID()]);
+  // T
+  ipCoupled->addTerm(TauDivScaling*tau3->div() - streamlineHScale*vStreamVec[T->ID()]);
+  
   IPPtr graphIP = bf->graphNorm();
   graphIP->addTerm( l2HScale*v1 ); 
   graphIP->addTerm( l2HScale*v2 );
   graphIP->addTerm( l2HScale*v3 );
   graphIP->addTerm( l2HScale*v4 );    
-   
-  //  IPPtr innerProduct = Teuchos::rcp(new IPSwitcher(ip,graphIP,ipSwitch));
-  IPPtr innerProduct = ip;
+
+  IPPtr innerProduct;
+  if (ipSwitch>1e-8){
+    //    innerProduct = Teuchos::rcp(new IPSwitcher(ip,graphIP,ipSwitch));
+    innerProduct = Teuchos::rcp(new IPSwitcher(ip,ipCoupled,ipSwitch));
+  }else{
+    innerProduct = ip;
+  }
+  innerProduct = ipCoupled;
+
+  int count = 0;
+  for (int i = 0;i<mesh->numActiveElements();i++){
+    int cellID = mesh->activeElements()[i]->cellID();
+    double h = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); 
+    if (h<ipSwitch)
+      count++;
+  }
+  if (rank==0){
+    cout << "Number of cells below ipSwitch thresh = " << count << endl;
+  }
 
   //  ////////////////////////////////////////////////////////////////////
   //  // DEFINE RHS
@@ -1313,6 +1331,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary());
   //  SpatialFilterPtr wallBoundary = Teuchos::rcp( new WallBoundary());
+  SpatialFilterPtr nonRampPlate = Teuchos::rcp(new NonRampPlate);
   SpatialFilterPtr wallBoundary = MeshUtilities::rampBoundary(rampHeight);
 
   // free stream quantities for inflow
@@ -1347,13 +1366,10 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u1hat, wallBoundary, zero);
   bc->addDirichlet(That, wallBoundary, Function::constant(T_free*Tscale));  
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets zero heat-flux in free stream bottom boundary
-
-  if (setFreeTraces){
-    double plateStart = 1.0;
-    double width = max(.001,50.0/Re);
-    SpatialFilterPtr freeBottomH = Teuchos::rcp(new FreeStreamMinusH(mesh,plateStart,width));
-    bc->addDirichlet(u1hat,freeBottomH,Function::constant(u1_free));
-    bc->addDirichlet(That,freeBottomH,Function::constant(T_free));
+  if (rampHeight>0.0){    
+    bc->addDirichlet(u2hat, nonRampPlate, zero);
+    bc->addDirichlet(u1hat, nonRampPlate, zero);
+    bc->addDirichlet(That, nonRampPlate, Function::constant(T_free*Tscale));  
   }
 
   // =============================================================================================
@@ -1380,7 +1396,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, innerProduct));
-  int enrichDegree = H1Order-1; // just for kicks. 
+  int enrichDegree = 2; // just for kicks. 
   if (rank==0)
     cout << "enriching cubature by " << enrichDegree << endl;
   solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
@@ -1398,7 +1414,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   //  refinementStrategy->setMinH(.5/Re); // 1/2 length of diffusion scale
-
   for (int i = 0;i<numUniformRefs;i++){
     refinementStrategy->hRefineUniformly(mesh); 
   } 
@@ -1421,7 +1436,7 @@ int main(int argc, char *argv[]) {
 
       mesh->verticesForCell(vertices, cellID);
       bool cellIDset = false;	
-      for (int j = 0;j<numSides;j++){ 	
+      for (int j = 0;j<numSides;j++){ // num sides = 4
 	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
 	  wallCells.push_back(cellID);
 	  cellIDset = true;
@@ -1490,26 +1505,6 @@ int main(int argc, char *argv[]) {
   // time steps
   for (int k = 0;k < numRefs+1;k++){    
 
-    if (useFluxLimiter){
-      // lower p to p = 1 at SINGULARITY only
-      vector<int> ids;
-      for (int i = 0;i<mesh->numActiveElements();i++){
-	int cellID = mesh->activeElements()[i]->cellID();
-	int elemOrder = mesh->cellPolyOrder(cellID)-1;
-	FieldContainer<double> vv(4,2); mesh->verticesForCell(vv, cellID);
-	bool vertexOnWall = false; bool vertexAtSingularity = false;
-	for (int j = 0;j<4;j++){
-	  if ((abs(vv(j,0)-1.0) + abs(vv(j,1)))<1e-10){
-	    vertexAtSingularity = true;
-	  }
-	}	
-	if (!vertexAtSingularity && elemOrder<polyOrder ){
-	  ids.push_back(cellID);
-	}
-      }
-      mesh->pRefine(ids); // to put order = 1
-    }
-
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                               ADJUST TIMESTEP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1517,7 +1512,7 @@ int main(int argc, char *argv[]) {
     // prevent conditioning issues (and keep robustness under control by increasing 1/dt in problem)
     if (useConditioningCFL){	
       double minSideLength = meshInfo.getMinCellSideLength();	
-      double CFL = 50.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
+      double CFL = 25.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
       double newDt = min(minSideLength*CFL,dt); // take orig dt if smaller (so dt doesn't get too large)
       if (newDt<dt){
 	((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
@@ -1525,7 +1520,7 @@ int main(int argc, char *argv[]) {
 	if (rank==0)
 	  cout << "setting timestep to " << 1.0/((ScalarParamFunction*)invDt.get())->get_param() << endl;
       }
-    }      
+    }
     
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                               END ADJUSTING TIMESTEP
@@ -1548,16 +1543,16 @@ int main(int argc, char *argv[]) {
 
       double alpha = 0.0; // to initialize
       int nriter = 0;
-      int posEnrich = 0; // amount of enriching of grid points on which to ensure positivity
-      //      while (alpha<1.0 && nriter < maxNRIter){
+      int posEnrich = 5; // amount of enriching of grid points on which to ensure positivity
       double newtonNorm = 1e7; // init to big value
-      while (newtonNorm > 1e-6 && nriter < maxNRIter){
+      double newtonTol = 1e-6;//min(max(L2_time_residual/100.0,1e-6),1e-4);  // min newton tol 1e-6, max newton tol 1e-3
+      while (newtonNorm > newtonTol && nriter < maxNRIter){
 	solution->condensedSolve();  // don't save memory (maybe turn on if ndofs > maxDofs?)      
 
 	// line search algorithm
 	alpha = 1.0; 
 	if (useLineSearch){ // to enforce positivity of density rho
-	  double lineSearchFactor = .75; double eps = 1.0/Re; // reynolds number dependent
+	  double lineSearchFactor = .75; double eps = .001; // arbitrary
 	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
 	  FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps); 
 	  bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
@@ -1584,11 +1579,22 @@ int main(int argc, char *argv[]) {
 	double TNorm = solution->L2NormOfSolutionGlobal(T->ID());
 	newtonNorm = sqrt(rhoNorm*rhoNorm + u1Norm*u1Norm + u2Norm*u2Norm + TNorm*TNorm);
 	if (rank==0)
-	  cout << "in Newton step, soln L2 norm = " << newtonNorm << endl;
+	  cout << "in Newton step, soln L2 norm = " << newtonNorm << " and tol = " << newtonTol << endl;
       }
      
-      rieszTimeResidual->computeRieszRep();
-      double timeRes = rieszTimeResidual->getNorm();
+      //      rieszTimeResidual->computeRieszRep();
+      //      double timeRes = rieszTimeResidual->getNorm();
+      
+      FunctionPtr t1 = rho_prev_time - rho_prev;      
+      FunctionPtr t2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;      
+      FunctionPtr t3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;      
+      FunctionPtr t4 = (rho_prev_time * e_prev_time - rho_prev * e);
+      double tr1 = (t1*t1)->integrate(mesh,5);
+      double tr2 = (t2*t2)->integrate(mesh,5);
+      double tr3 = (t3*t3)->integrate(mesh,5);
+      double tr4 = (t4*t4)->integrate(mesh,5);
+      double timeRes = sqrt(tr1 + tr2 + tr3 + tr4);
+      
       L2_time_residual = timeRes;
 
       // optional writing of timestep files
@@ -1608,34 +1614,57 @@ int main(int argc, char *argv[]) {
 	  exporter.exportSolution(string("dU") + oss.str());
 	  backgroundFlowExporter.exportSolution(string("U") + oss.str());
 	}
-      } 
- 
+      }  
+
+      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol           
+      i++;
 
       if (useAdaptiveTimestepping){
-	double dtMax = dt; // use original dt?
-	int k_thresh = 5; // check every 5 timesteps
+	double r = 4;	    
+	int k_thresh = 5; // check every k_thresh timesteps
+	/*
 	double prev_residual;      
 	if (i % k_thresh==0){ // if we should check
 	  if (i>k_thresh){ 
-	    double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-	    double r = 1.1;
-	    double newDt = min(dtMax,oldDt*pow(prev_residual/timeRes,r));  // growth factor
+	    if (rank==0)
+	      cout << "Time res on k = " << k << " is " << timeRes << ", and prev_res is " << prev_residual << endl;
+	      double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+	    double newDt;
+	    if (timeRes > .95*prev_residual){ // if we don't decrease sufficiently fast, consider it a stall
+	      //	      newDt = min(maxDt,oldDt*pow(prev_residual/timeRes,r));  // growth factor
+	      newDt = oldDt/r; 
+	    }
+	    newDt = max(newDt,minDt);
 	    ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
 	  }
 	  prev_residual = timeRes;
 	}
+	*/
+
+	// conservative timestepping algorithm - if max timestep is hit, relax things
+	if (i==numTimeSteps){
+	  double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+	  double newDt = oldDt/r;
+	  newDt = max(newDt,minDt);
+	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+	  double dtSet = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+	  numTimeSteps += 10;
+	  numTimeSteps = min(numTimeSteps,200); // put a strict cap on num time steps at 200
+	  if (rank==0)	    
+	    cout << "max time steps reached, decreasing dt to " << dtSet << " and max ts to " << numTimeSteps << endl;
+	}
       }
 
-
-      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol           
-      i++;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                          CHECK CONDITIONING 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    bool checkConditioning = true;
+    if (rank==0){
+      cout << "Mesh has minCellLength " << minSideLength << endl;
+    }
+    bool checkConditioning = false;
     if (checkConditioning){
       double minSideLength = meshInfo.getMinCellSideLength() ;
       StandardAssembler assembler(solution);
@@ -1722,10 +1751,27 @@ int main(int argc, char *argv[]) {
 	vector<int> cellIDs;
 	refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
 
+	// hack to always refine at the singularity
+	for (int i = 0;i<mesh->numActiveElements();i++){
+	  int cellID = mesh->activeElements()[i]->cellID();
+	  FieldContainer<double> vv(4,2); mesh->verticesForCell(vv, cellID);
+	  bool vertexAtSingularity = false;
+	  for (int j = 0;j<4;j++){
+	    if ((abs(vv(j,0)-1.0)<1e-10) && (abs(vv(j,1))<1e-10))
+	      vertexAtSingularity = true;
+	  }
+	  bool notInCellsTORefine = std::find(cellIDs.begin(), cellIDs.end(), cellID) == cellIDs.end();
+	  if (vertexAtSingularity && notInCellsTORefine){
+	    cellIDs.push_back(cellID);
+	    if (rank==0)
+	      cout << "artificially adding cell " << cellID << " at singularity for refinement" << endl;
+	  }
+	}
+
 	rieszResidual->computeRieszRep();
 	map<int,double> xErrMap = rieszResidual->computeAlternativeNormSqOnCells(xip,cellIDs);
 	map<int,double> yErrMap = rieszResidual->computeAlternativeNormSqOnCells(yip,cellIDs);
-	
+
 	vector<int> xCells,yCells,regCells;
 	map<int,double> threshMap;
 	map<int,bool> useHRefFlagMap;
@@ -1736,10 +1782,6 @@ int main(int argc, char *argv[]) {
 	  FieldContainer<double> vv(4,2); mesh->verticesForCell(vv, cellID);
 	  bool vertexOnWall = false; bool vertexAtSingularity = false;
 	  for (int j = 0;j<4;j++){
-	    /*
-	    if (abs(vv(j,1))<(1.0/Re)*(c[0])) // if any vertex is close to wall - if vertex y coord < (1/Re)*(1+x)
-	      vertexOnWall = true;	    
-	    */
 	    if (abs(rampHeight*(vv(j,0)-1.0)-vv(j,1))<1e-10) // if any vertex is close to wall - if vertex y coord < (1/Re)*(1+x)
 	      vertexOnWall = true;
 
@@ -1750,7 +1792,8 @@ int main(int argc, char *argv[]) {
 	    
 	  double ratio = xErrMap[cellID]/yErrMap[cellID];
 	  threshMap[cellID] = anisotropicThresh;
-	  if (vertexOnWall && atWall){
+	  double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));
+	  if (vertexOnWall && atWall && minCellSize > (polyOrder/Re)){
 	    threshMap[cellID] = 2.5; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
 	    // WARNING: A HACK TO TRIGGER ANISOTROPIC REFINEMENTS
 	    yErrMap[cellID] = yErrMap[cellID]*2;
@@ -1758,17 +1801,22 @@ int main(int argc, char *argv[]) {
 	  if (vertexAtSingularity || !atWall){
 	    threshMap[cellID] = maxThresh; // want ISOTROPIC refinements only at or before singularity
 	  }
+	  /*
 	  // p-refinement of diffusion-scale terms (for boundary layers and singularities)	  
-	  if (useHpStrategy && min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID))<(1.0/Re)){
+	  if (useHpStrategy && minCellSize < (polyOrder/Re)){
 	    useHRefFlagMap[cellID] = false;
 	    cout << "setting false ref flag" << endl;
 	  }else{
 	    useHRefFlagMap[cellID] = true;
 	  }
-	}
-	refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap,useHRefFlagMap); //anisotropic hp-scheme
+	  */
+	}	
+
+	refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap); //anisotropic hp-scheme
+	double minSideLength = meshInfo.getMinCellSideLength() ;
 	if (rank==0){
 	  cout << "Num elements = " << mesh->numActiveElements() << ", and num dofs = " << mesh->numGlobalDofs() << endl;
+	  cout << "min side length after refinement = " << minSideLength << endl;
 	}
       }
       if (rank==0){
