@@ -318,6 +318,11 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
+  Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,ArrayScalar>::intrepidBasis() {
+    return _intrepidBasis;
+  }
+  
+  template<class Scalar, class ArrayScalar>
   void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const {
     this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
     return _intrepidBasis->getValues(values,refPoints,operatorType);

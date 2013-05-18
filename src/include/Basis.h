@@ -129,6 +129,8 @@ namespace Camellia {
     const std::vector<int>& getDofTag(int dofOrd) const;
     const std::vector<std::vector<int> > & getAllDofTags() const;
     
+    Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis();
+    
     virtual bool isConforming() const; // true for Intrepid bases
     virtual bool isNodal() const;      // true for the Intrepid bases
     
