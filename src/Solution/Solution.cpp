@@ -3793,3 +3793,50 @@ void Solution::projectOldCellOntoNewCells(int cellID, ElementTypePtr oldElemType
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
 }*/
+
+void Solution::readFromFile(const string &filePath) {
+  ifstream fin(filePath.c_str());
+  
+  while (fin.good()) {
+    string refTypeStr;
+    int cellID;
+    
+    string line;
+    std::getline(fin, line, '\n');
+    std::istringstream linestream(line);
+    linestream >> cellID;
+    
+    if ( linestream.good() ) {
+      int numDofs;
+      linestream >> numDofs;
+      
+      // TODO: check that numDofs is right for cellID.
+      FieldContainer<double> dofValues(numDofs);
+      double dofValue;
+      int dofOrdinal = 0;
+      while (linestream.good()) {
+        linestream >> dofValue;
+        dofValues[dofOrdinal++] = dofValue;
+      }
+      
+      _solutionForCellIDGlobal[cellID] = dofValues;
+    }
+  }
+  fin.close();
+}
+void Solution::writeToFile(const string &filePath) {
+  ofstream fout(filePath.c_str());
+  
+  for (map<int, FieldContainer<double> >::iterator solnEntryIt = _solutionForCellIDGlobal.begin();
+       solnEntryIt != _solutionForCellIDGlobal.end(); solnEntryIt++) {
+    int cellID = solnEntryIt->first;
+    FieldContainer<double>* solnCoeffs = &(solnEntryIt->second);
+    fout << cellID << " " << solnCoeffs->size() << " ";
+    for (int i=0; i<solnCoeffs->size(); i++) {
+      fout << (*solnCoeffs)[i] << " ";
+    }
+    fout << endl;
+  }
+  
+  fout.close();  
+}

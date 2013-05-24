@@ -259,6 +259,8 @@ int main(int argc, char *argv[]) {
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
     string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
+    string solnFile = args.Input<string>("--solnFile", "file with solution data", "");
+    string solnSaveFile = args.Input<string>("--solnSaveFile", "file to which to save solution data", "");
     string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
     
     double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
@@ -282,7 +284,7 @@ int main(int argc, char *argv[]) {
     bool useMumps = true;
     bool compareWithOverkillMesh = false;
     bool useAdHocHPRefinements = false;
-    bool startWithZeroSolutionAfterRefinement = true;
+    bool startWithZeroSolutionAfterRefinement = false;
     
     bool artificialTimeStepping = false;
     
@@ -378,7 +380,8 @@ int main(int argc, char *argv[]) {
                                                             horizontalCells,verticalCells,
                                                             H1Order, pToAdd,
                                                             u1_0, u2_0,  // BC for u
-                                                            zero, zero); // zero forcing function
+                                                            zero, zero,  // zero forcing function
+                                                            useCompliantGraphNorm); // enrich velocity if using compliant graph norm
     
     SolutionPtr solution = problem.backgroundFlow();
     solution->setReportConditionNumber(reportConditionNumber);
@@ -470,6 +473,10 @@ int main(int argc, char *argv[]) {
       RefinementHistory refHistory;
       refHistory.loadFromFile(replayFile);
       refHistory.playback(mesh);
+    }
+    if (solnFile.length() > 0) {
+      solution->readFromFile(solnFile);
+      solution->writeToVTK("testSolnRead.vtk");
     }
     
     Teuchos::RCP<Solution> overkillSolution;
@@ -805,6 +812,12 @@ int main(int argc, char *argv[]) {
       cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
       cout << "Final energy error: " << energyErrorTotal << endl;
       cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
+    }
+    
+    if (rank==0) {
+      if (solnSaveFile.length() > 0) {
+        solution->writeToFile(solnSaveFile);
+      }
     }
     
     FunctionPtr u1_sq = u1_prev * u1_prev;
