@@ -133,6 +133,10 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const {
     std::set<int> dofOrdinals;
+    if (!_basisTagsAreSet) {
+      initializeTags();
+      _basisTagsAreSet = true;
+    }
     if ((subcellDim > 0) && includeLesserDimensions) {
       dofOrdinals = dofOrdinalsForSubcells(subcellDim-1,true);
     }

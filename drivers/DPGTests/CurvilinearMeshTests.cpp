@@ -32,6 +32,20 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testH1Projection()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testAutomaticStraightEdgesMatchVertices()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testEdgeLength()) {
     numTestsPassed++;
   }
@@ -49,13 +63,6 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testCylinderMesh()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testH1Projection()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -202,6 +209,125 @@ bool CurvilinearMeshTests::testCylinderMesh() {
     if (i<numHRefinements) {
       mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }
+  }
+  
+  return success;
+}
+
+bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
+  bool success = true;
+  FunctionPtr t = Teuchos::rcp( new Xn(1) );
+  
+  // for the moment, try just ref to affine (parallelogram) map: 
+  FunctionPtr x = 2 * t;
+  FunctionPtr y = Function::constant(-1);
+  
+  // (this is the real one we want to try)
+//  FunctionPtr x = 2 * t - 1;
+//  FunctionPtr y = x - 1;
+  
+  // for the moment, try just ref to ref map  
+  ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
+
+  int numCells = 1;
+  int numVertices = 4;
+  int spaceDim = 2;
+  
+  // for the moment, try just ref to affine (parallelogram) map:
+  FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+  physicalCellNodes(0,0,0) =  0;
+  physicalCellNodes(0,0,1) = -1;
+  
+  physicalCellNodes(0,1,0) =  2;
+  physicalCellNodes(0,1,1) = -1;
+  
+  physicalCellNodes(0,2,0) = 3;
+  physicalCellNodes(0,2,1) = 1;
+  
+  physicalCellNodes(0,3,0) = 1;
+  physicalCellNodes(0,3,1) = 1;
+  
+  // real one commented out below
+//  physicalCellNodes(0,0,0) = -1;
+//  physicalCellNodes(0,0,1) = -2;
+//  
+//  physicalCellNodes(0,1,0) = 1;
+//  physicalCellNodes(0,1,1) = 0;
+//  
+//  physicalCellNodes(0,2,0) = 1;
+//  physicalCellNodes(0,2,1) = 1;
+//  
+//  physicalCellNodes(0,3,0) = -1;
+//  physicalCellNodes(0,3,1) = 1;
+  
+  int quadraticOrder = 2;
+  BilinearFormPtr bf = VGPStokesFormulation(1.0).bf(); // just to specify something
+  MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
+  
+  int cellID = 0;
+  vector<int> vertices = quadMesh->vertexIndicesForCell(cellID);
+  pair<int,int> edge = make_pair(vertices[0],vertices[1]);
+  map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
+  edgeToCurveMap[edge] = bottomCurve;
+  
+  quadMesh->setEdgeToCurveMap(edgeToCurveMap);
+  
+  // now, get back the edges for the cell, and check that they interpolate the vertices:
+  vector< ParametricCurvePtr > edgeCurves = quadMesh->parametricEdgesForCell(cellID);
+  double tol=1e-14;
+  for (int vertex=0; vertex<numVertices; vertex++) {
+    ParametricCurvePtr curve = edgeCurves[vertex];
+    double x0, y0;
+    double x1, y1;
+    curve->value(0, x0, y0);
+    curve->value(1, x1, y1);
+    double x0_expected = physicalCellNodes(0,vertex,0);
+    double y0_expected = physicalCellNodes(0,vertex,1);
+    double x1_expected = physicalCellNodes(0,(vertex+1)%4,0);
+    double y1_expected = physicalCellNodes(0,(vertex+1)%4,1);
+    if ((abs(x0_expected - x0) > tol) 
+        || ((x1_expected - x1) > tol)
+        || (abs(y0_expected - y0) > tol) 
+        || ((y1_expected - y1) > tol)) {
+      success = false;
+      cout << "testAutomaticStraightEdgesMatchVertices() failure: edge " << vertex << " does not interpolate vertices.\n";
+    }
+  }
+  
+  FunctionPtr transformationFunction = quadMesh->getTransformationFunction();
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
+  
+  // turn off the basisCache transformation function, so we don't transform twice
+  basisCache->setTransformationFunction(Function::null());
+  FieldContainer<double> values(numCells, numVertices, spaceDim);
+  FieldContainer<double> refCellVertices(numVertices,spaceDim);
+  
+  refCellVertices(0,0) = -1;
+  refCellVertices(0,1) = -1;
+  refCellVertices(1,0) =  1;
+  refCellVertices(1,1) = -1;
+  refCellVertices(2,0) =  1;
+  refCellVertices(2,1) =  1;
+  refCellVertices(3,0) = -1;
+  refCellVertices(3,1) =  1;
+  
+  basisCache->setRefCellPoints(refCellVertices);
+  
+  transformationFunction->values(values, basisCache);
+  
+  { // let's take a quick look to make sure we haven't screwed anything up majorly:
+    ostringstream filePath;
+    filePath << "/tmp/straightEdgeMesh.dat";
+    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
+  }
+  
+  
+  double maxDiff = 0;
+  if (! fcsAgree(values, physicalCellNodes, tol, maxDiff)) {
+    success = false;
+    cout << "transformation function for straight-edge mesh does not map vertices to themselves; max difference " << maxDiff << endl;
+    cout << "vertices:\n" << physicalCellNodes;
+    cout << "transformed vertices:\n" << values;
   }
   
   return success;
@@ -589,13 +715,24 @@ bool CurvilinearMeshTests::testH1Projection() {
   
   if (numMiddleNodesScalar != 1) {
     cout << "# middle nodes for quadratic scalar basis is " << numMiddleNodesScalar;
-    cout << "; expected 1.";
+    cout << "; expected 1.\n";
     success = false;
+    
+    cout << "scalarEdgeNodes: ";
+    for (set<int>::iterator nodeIt = scalarEdgeNodes.begin(); nodeIt != scalarEdgeNodes.end(); nodeIt++) {
+      cout << *nodeIt << ", ";
+    }
+    cout << endl;
   }
   if (numMiddleNodesVector != 2) {
-    cout << "# middle nodes for quadratic scalar basis is " << numMiddleNodesScalar;
-    cout << "; expected 2.";
+    cout << "# middle nodes for quadratic vector basis is " << numMiddleNodesVector;
+    cout << "; expected 2.\n";
     success = false;
+    cout << "vectorEdgeNodes: ";
+    for (set<int>::iterator nodeIt = vectorEdgeNodes.begin(); nodeIt != vectorEdgeNodes.end(); nodeIt++) {
+      cout << *nodeIt << ", ";
+    }
+    cout << endl;
   }
   int middleNodeScalar;
   vector<int> middleNodeVector;
@@ -611,7 +748,18 @@ bool CurvilinearMeshTests::testH1Projection() {
   }
   
   FieldContainer<double> dofCoords(quadraticScalarBasis->getCardinality(),2);
-  ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) quadraticScalarBasis.get())->getDofCoords(dofCoords);
+  IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(quadraticScalarBasis.get());
+  if (!intrepidBasisWrapper) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "compBasis does not appear to be an instance of IntrepidBasisWrapper");
+  }
+  Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* intrepidBasis = dynamic_cast< Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* >(intrepidBasisWrapper->intrepidBasis().get());
+  if (!intrepidBasis) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IntrepidBasisWrapper does not appear to wrap Basis_HGRAD_QUAD_Cn_FEM.");
+  }
+  intrepidBasis->getDofCoords(dofCoords);
+  
+  
+//  ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) quadraticScalarBasis.get())->getDofCoords(dofCoords);
   
   // for quadratic basis, we expect the middle node to be at (0,0)
   if ((dofCoords(middleNodeScalar,0) != 0.0) || (dofCoords(middleNodeScalar,1) != 0.0)) {
