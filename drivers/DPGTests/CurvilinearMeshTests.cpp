@@ -32,6 +32,13 @@ void CurvilinearMeshTests::teardown() {
 
 void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testEdgeLength()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testH1Projection()) {
     numTestsPassed++;
   }
@@ -40,13 +47,6 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
   setup();
   if (testAutomaticStraightEdgesMatchVertices()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testEdgeLength()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -352,26 +352,46 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int H1Order = 1;
   
+  int numCells = 1;
+  int numVertices = 4;
+  int spaceDim = 2;
+  
+  
   // first test, before we get into the circular stuff: define a sloped edge
   // whose exact integral we know (and which is exactly representable by our geometry)
   {
     FunctionPtr t = Teuchos::rcp( new Xn(1) );
-    FunctionPtr x = 2 * t - 1;
-    FunctionPtr y = x - 1;
+//    FunctionPtr x = 2 * t - 1;
+//    FunctionPtr y = x - 1;
+    FunctionPtr x = 2 * t;
+    FunctionPtr y = Function::constant(-1);
     
     ParametricCurvePtr bottomCurve = ParametricCurve::curve(x,y);
     
-    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
-    physicalCellNodes(0,0,0) = -1;
-    physicalCellNodes(0,0,1) = -2;
+//    FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
+//    physicalCellNodes(0,0,0) = -1;
+//    physicalCellNodes(0,0,1) = -2;
+//    
+//    physicalCellNodes(0,1,0) = 1;
+//    physicalCellNodes(0,1,1) = 0;
+//    
+//    physicalCellNodes(0,2,0) = 1;
+//    physicalCellNodes(0,2,1) = 1;
+//    
+//    physicalCellNodes(0,3,0) = -1;
+//    physicalCellNodes(0,3,1) = 1;
     
-    physicalCellNodes(0,1,0) = 1;
-    physicalCellNodes(0,1,1) = 0;
+    FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+    physicalCellNodes(0,0,0) =  0;
+    physicalCellNodes(0,0,1) = -1;
     
-    physicalCellNodes(0,2,0) = 1;
+    physicalCellNodes(0,1,0) =  2;
+    physicalCellNodes(0,1,1) = -1;
+    
+    physicalCellNodes(0,2,0) = 3;
     physicalCellNodes(0,2,1) = 1;
     
-    physicalCellNodes(0,3,0) = -1;
+    physicalCellNodes(0,3,0) = 1;
     physicalCellNodes(0,3,1) = 1;
     
     int quadraticOrder = 2;
@@ -393,7 +413,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     // the length of the sloped edge is 2 sqrt (2)
     // and the other edges have total length of 5:
-    double expectedPerimeter = 6 + 2 * sqrt(2);
+    double expectedPerimeter = 4 + 2
+    * sqrt(5);
     
     // since our map from straight edges is the identity,
     // the expected jacobian function everywhere, including along the side, is
@@ -414,7 +435,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
       //       the way we're asking the edge to.  We have reason to think the interior is working...
       
       // I'm unclear on whether we should set basisCache's transformation to null:
-//      basisCache->setTransformationFunction(Function::null());
+      basisCache->setTransformationFunction(Function::null());
       sideCache->setTransformationFunction(Function::null());
       
       int numCells = 1;
@@ -427,29 +448,29 @@ bool CurvilinearMeshTests::testEdgeLength() {
       FunctionPtr transformationJacobian = transformationFxn->grad();
       transformationJacobian->values(jacobianValues,sideCache);
       
-      if (! expectedTransformation->equals(transformationFxn, basisCache) ) {
+      if (! expectedTransformation->equals(transformationFxn, basisCache) ) { // pass
         success = false;
-        cout << "transformationFxn and expectedTransformation differ on interior of the element.\n";
-        reportFunctionValueDifferences(transformationFxn, expectedTransformation, basisCache, tol);
+        cout << "expectedTransformation and transformationFxn differ on interior of the element.\n";
+        reportFunctionValueDifferences(expectedTransformation, transformationFxn, basisCache, tol);
       }
       
-      if (! expectedJacobian->equals(transformationJacobian, basisCache) ) {
+      if (! expectedJacobian->equals(transformationJacobian, basisCache) ) { // fail
         success = false;
-        cout << "transformationJacobian and expectedJacobian differ on interior of the element.\n";
-        reportFunctionValueDifferences(transformationJacobian, expectedJacobian, basisCache, tol);
+        cout << "expectedJacobian and transformationJacobian differ on interior of the element.\n";
+        reportFunctionValueDifferences(expectedJacobian, transformationJacobian, basisCache, tol);
       }
       
       double maxDiff = 0;
       
-      if (! expectedTransformation->equals(transformationFxn, sideCache)) {
+      if (! expectedTransformation->equals(transformationFxn, sideCache)) { // pass
         success = false;
-        cout << "testEdgeLength(): expected values don't match transformation function values along sloped edge.\n";
+        cout << "testEdgeLength(): expected values don't match transformation function values along parametrically specified edge.\n";
         reportFunctionValueDifferences(expectedTransformation, transformationFxn, sideCache, tol);
       }
       
-      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) {
+      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) { // fail
         success = false;
-        cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along sloped edge.\n";
+        cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along parametrically specified edge.\n";
         reportFunctionValueDifferences(expectedJacobian, transformationJacobian, sideCache, tol);
       }
       
