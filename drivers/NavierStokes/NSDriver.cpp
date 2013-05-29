@@ -1422,8 +1422,8 @@ int main(int argc, char *argv[]) {
   }  
   if (solnLoadFile.length() > 0) {
     std::ostringstream ss;
-    ss << dir <<  "solution_" << solnLoadFile;
-    solution->readFromFile(ss.str());
+    //    ss << dir <<  "solution_" << solnLoadFile;
+    //    solution->readFromFile(ss.str());
     ss.str("");
     ss << dir << "backgroundFlow_" << solnLoadFile;
     backgroundFlow->readFromFile(ss.str());
@@ -1867,9 +1867,9 @@ int main(int argc, char *argv[]) {
 	}
 	if (solnSaveFile.length() > 0) {
 	  std::ostringstream oss;
-	  oss << dir << "solution_" << string(solnSaveFile) << k ;            
-	  cout << "on refinement " << k << " saving solution update to " << oss.str() << endl;
-	  solution->writeToFile(oss.str());
+	  //	  oss << dir << "solution_" << string(solnSaveFile) << k ;            
+	  //	  cout << "on refinement " << k << " saving solution update to " << oss.str() << endl;
+	  //	  solution->writeToFile(oss.str());
 
 	  oss.str(""); // clear variable
 	  oss << dir << "backgroundFlow_" << string(solnSaveFile) << k ;            
