@@ -533,13 +533,14 @@ int main(int argc, char *argv[]) {
   double Re = args.Input<double>("--Re","Reynolds number",1e3);
   double dt = args.Input<double>("--dt","Timestep",.25);
   double Ma = args.Input<double>("--Ma","Mach number",3.0);
+
   // solver
   int nCells = args.Input<int>("--nCells", "num cells",2);  
   int polyOrder = args.Input<int>("--p","order of approximation",2);
   int pToAdd = args.Input<int>("--pToAdd", "test space enrichment",2); 
   double time_tol_orig = args.Input<double>("--timeTol", "time step tolerance",1e-8);
-  bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",false); // default to zero
-  int maxNRIter = args.Input<int>("--maxNRIter","maximum number of NR iterations",1); // default to one per timestep
+  bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",true); // default to zero
+  int maxNRIter = args.Input<int>("--maxNRIter","maximum number of NR iterations",2); // default to one per timestep
   int numTimeSteps = args.Input<int>("--maxTimeSteps","max number of time steps",150); // max time steps
   double minDt = args.Input<double>("--minDt","min timestep for adaptive timestepping",.01); // max time steps
   double maxDt = args.Input<double>("--maxDt","max timestep for adaptive timestepping",.1); // max time steps
@@ -564,17 +565,28 @@ int main(int argc, char *argv[]) {
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   bool scalePlate = args.Input<bool>("--scalePlate","flag to weight plate so it matters less",false);
   double ipSwitch = args.Input<double>("--ipSwitch","smallest elem thresh to switch to graph norm",0.0); // default to not changing
+
   // IO stuff
-  string replayFile = args.Input<string>("--loadFile", "file with refinement history to replay", "");
-  string saveFile = args.Input<string>("--saveFile", "file to which to save refinement history", "");
+  string saveFile = args.Input<string>("--meshSaveFile", "file to which to save refinement history", "");
+  string replayFile = args.Input<string>("--meshLoadFile", "file with refinement history to replay", "");
+
+  string solnSaveFile = args.Input<string>("--solnSaveFile", "file to which to save soln", "");
+  string solnLoadFile = args.Input<string>("--solnLoadFile", "file from which to load soln", "");
+
+  string dir = args.Input<string>("--dir", "dir to which we save/from which we load files","");
+
   bool reportTimingResults = args.Input<bool>("--reportTimings", "flag to report timings of solve", false);
   bool writeTimestepFiles = args.Input<bool>("--writeTimestepFiles","flag to turn on and off time step writing",false);
 
-  if (rank==0)
-    cout << "saveFile is " << saveFile << endl;
+  if (rank==0){
+    cout << "saveFile is " << dir + saveFile << endl;
+    cout << "saveSolnFile is " << dir + solnSaveFile << endl;
+  }
 
-  if (rank==0)
-    cout << "loadFile is " << replayFile << endl;
+  if (rank==0){
+    cout << "loadFile is " << dir + replayFile << endl;
+    cout << "loadSolnFile is " << dir + solnLoadFile << endl;
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////////////
   //                            END OF INPUT ARGUMENTS
@@ -638,7 +650,7 @@ int main(int argc, char *argv[]) {
   VarPtr u_1,u_2,u_3,u_4;
   // H1-ish fields
   if (useHigherOrderForU){ // HGRAD is one higher order 
-    u_1= varFactory.fieldVar("u_1",HGRAD); 
+    u_1 = varFactory.fieldVar("u_1",HGRAD); 
     u_2 = varFactory.fieldVar("u_2",HGRAD);
     u_3 = varFactory.fieldVar("u_3",HGRAD);
     u_4 = varFactory.fieldVar("u_4",HGRAD);        
@@ -675,18 +687,6 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory ); 
   mesh->registerObserver(refHistory);
   
-  // for loading refinement history
-  if (replayFile.length() > 0) {
-    RefinementHistory refHistory;
-    refHistory.loadFromFile(replayFile);
-    refHistory.playback(mesh);
-    int numElems = mesh->numActiveElements();
-    if (rank==0){
-      double minSideLength = meshInfo.getMinCellSideLength() ;    
-      cout << "after replay, num elems = " << numElems << " and min side length = " << minSideLength << endl;
-    }
-  }  
-
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
@@ -1408,6 +1408,34 @@ int main(int argc, char *argv[]) {
   mesh->registerSolution(backgroundFlow); // u_t(i)
   mesh->registerSolution(prevTimeFlow); // u_t(i-1)
     
+  // for loading refinement history
+  if (replayFile.length() > 0) {
+    RefinementHistory refHistory;
+    replayFile = dir + replayFile;
+    refHistory.loadFromFile(replayFile);
+    refHistory.playback(mesh);
+    int numElems = mesh->numActiveElements();
+    if (rank==0){
+      double minSideLength = meshInfo.getMinCellSideLength() ;    
+      cout << "after replay, num elems = " << numElems << " and min side length = " << minSideLength << endl;
+    }
+  }  
+  if (solnLoadFile.length() > 0) {
+    std::ostringstream ss;
+    ss << dir <<  "solution_" << solnLoadFile;
+    solution->readFromFile(ss.str());
+    ss.str("");
+    ss << dir << "backgroundFlow_" << solnLoadFile;
+    backgroundFlow->readFromFile(ss.str());
+    ss.str("");
+    ss << dir << "prevTimeFlow_" << solnLoadFile;
+    prevTimeFlow->readFromFile(ss.str());
+  }
+
+  ////////////////////////////////////////////////////////////////////
+  // SETUP MESH REFS
+  ////////////////////////////////////////////////////////////////////
+
   if (rank==0)
     cout << "Refinement threshhold = " << energyThreshold << endl;
 
@@ -1460,8 +1488,8 @@ int main(int argc, char *argv[]) {
   // PSEUDO-TIME SOLVE STRATEGY 
   ////////////////////////////////////////////////////////////////////
 
-  VTKExporter exporter(solution, mesh, varFactory);
-  VTKExporter backgroundFlowExporter(backgroundFlow, mesh, varFactory);
+  //  VTKExporter exporter(solution, mesh, varFactory);
+  //  VTKExporter backgroundFlowExporter(backgroundFlow, mesh, varFactory);
 
   LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-bf->testFunctional(solution));  
@@ -1534,11 +1562,12 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       std::ostringstream refNum;
       refNum << k;
-      string filename1 = "time_res" + refNum.str()+ ".txt";
+      string filename1 = dir + "time_res" + refNum.str()+ ".txt";
       residualFile.open(filename1.c_str());
     }
     double L2_time_residual = 1e7;
     int i = 0;
+    int nextNumTimeSteps = numTimeSteps;
     while(L2_time_residual > time_tol && (i<numTimeSteps)){
 
       double alpha = 0.0; // to initialize
@@ -1611,8 +1640,8 @@ int main(int argc, char *argv[]) {
 	if (writeTimestepFiles){
 	  string Ustr("U");      
 	  string dUstr("dU");      
-	  exporter.exportSolution(string("dU") + oss.str());
-	  backgroundFlowExporter.exportSolution(string("U") + oss.str());
+	  //	  exporter.exportSolution(string("dU") + oss.str());
+	  //	  backgroundFlowExporter.exportSolution(string("U") + oss.str());
 	}
       }  
 
@@ -1648,15 +1677,16 @@ int main(int argc, char *argv[]) {
 	  newDt = max(newDt,minDt);
 	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
 	  double dtSet = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-	  numTimeSteps += 10;
-	  numTimeSteps = min(numTimeSteps,200); // put a strict cap on num time steps at 200
+	  nextNumTimeSteps += 10;
+	  nextNumTimeSteps = min(nextNumTimeSteps,250); // put a strict cap on num time steps at 250
 	  if (rank==0)	    
-	    cout << "max time steps reached, decreasing dt to " << dtSet << " and max ts to " << numTimeSteps << endl;
+	    cout << "max time steps reached, decreasing dt to " << dtSet << " and max ts to " << nextNumTimeSteps << endl;
 	}
       }
 
     }
-
+    
+    numTimeSteps = nextNumTimeSteps;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                          CHECK CONDITIONING 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1725,9 +1755,9 @@ int main(int argc, char *argv[]) {
       std::ostringstream oss;
       oss << k ;      
       residualFile.close();
-      exporter.exportSolution(string("dU")+oss.str());
-      backgroundFlowExporter.exportSolution(string("U")+oss.str());
-      exporter.exportFunction(energyErrorFxn, string("energyErrFxn")+oss.str());
+      //      exporter.exportSolution(string("dU")+oss.str());
+      //      backgroundFlowExporter.exportSolution(string("U")+oss.str());
+      //      exporter.exportFunction(energyErrorFxn, string("energyErrFxn")+oss.str());
       //      exporter.exportFunction(H, string("H")+oss.str()); exporter.exportFunction(Hsq, string("Hsq")+oss.str());
     }
 
@@ -1828,12 +1858,28 @@ int main(int argc, char *argv[]) {
       //      prevTimeFlow->projectOntoMesh(functionMap);
 
       // save mesh to file
-      if (saveFile.length() > 0) {
-	std::ostringstream oss;
-	oss << string(saveFile) << k ;            
-	if (rank == 0) {	  
+      if (rank == 0) {	  
+	if (saveFile.length() > 0) {
+	  std::ostringstream oss;
+	  oss << dir << string(saveFile) << k ;            
 	  cout << "on refinement " << k << " saving mesh file to " << oss.str() << endl;
 	  refHistory->saveToFile(oss.str());
+	}
+	if (solnSaveFile.length() > 0) {
+	  std::ostringstream oss;
+	  oss << dir << "solution_" << string(solnSaveFile) << k ;            
+	  cout << "on refinement " << k << " saving solution update to " << oss.str() << endl;
+	  solution->writeToFile(oss.str());
+
+	  oss.str(""); // clear variable
+	  oss << dir << "backgroundFlow_" << string(solnSaveFile) << k ;            
+	  cout << "on refinement " << k << " saving background flow to " << oss.str() << endl;
+	  backgroundFlow->writeToFile(oss.str());
+
+	  oss.str(""); // clear variable
+	  oss << dir << "prevTimeFlow_" << string(solnSaveFile) << k ;            
+	  cout << "on refinement " << k << " saving prev time flow to " << oss.str() << endl;
+	  prevTimeFlow->writeToFile(oss.str());
 	}
       }
 
@@ -1849,8 +1895,8 @@ int main(int argc, char *argv[]) {
     
   }
   if (rank==0){
-    exporter.exportSolution("dU");
-    backgroundFlowExporter.exportSolution("U");
+    //    exporter.exportSolution("dU");
+    //    backgroundFlowExporter.exportSolution("U");
   }
   
   return 0;
