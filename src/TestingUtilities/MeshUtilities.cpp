@@ -55,6 +55,52 @@ MeshPtr MeshUtilities::buildRampMesh(double rampHeight, Teuchos::RCP< BilinearFo
 }
 
 
+// builds a [0,2]x[0,1] L shaped domain with 2 main blocks
+MeshPtr MeshUtilities::buildLongRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
+
+  MeshPtr mesh;
+  // L-shaped domain for double ramp problem
+  FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
+  A(0) = -1.0; A(1) = 0.0;
+  B(0) = 0.0; B(1) = 0.0;
+  C(0) = 1.0; C(1) = 0.0;
+  D(0) = 2.0; D(1) = 0.0 + rampHeight;
+  E(0) = 2.0; E(1) = 1.0;
+  F(0) = 1.0; F(1) = 1.0; 
+  G(0) = 0.0; G(1) = 1.0; 
+  H(0) = -1.0; H(1) = 1.0; 
+  vector<FieldContainer<double> > vertices;
+  vertices.push_back(A); int A_index = 0;
+  vertices.push_back(B); int B_index = 1;
+  vertices.push_back(C); int C_index = 2;
+  vertices.push_back(D); int D_index = 3;
+  vertices.push_back(E); int E_index = 4;
+  vertices.push_back(F); int F_index = 5;
+  vertices.push_back(G); int G_index = 6;
+  vertices.push_back(H); int H_index = 7;
+  vector< vector<int> > elementVertices;
+  vector<int> el1, el2, el3;
+  // left patch:
+  el1.push_back(A_index); el1.push_back(B_index); el1.push_back(G_index); el1.push_back(H_index);
+  // center patch:
+  el2.push_back(B_index); el2.push_back(C_index); el2.push_back(F_index); el2.push_back(G_index);
+  // right:
+  el3.push_back(C_index); el3.push_back(D_index); el3.push_back(E_index); el3.push_back(F_index);
+
+  elementVertices.push_back(el1);
+  elementVertices.push_back(el2);
+  elementVertices.push_back(el3);
+  int pToAdd = pTest-H1Order;
+  mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, bilinearForm, H1Order, pToAdd) );  
+  vector<ElementPtr> elems = mesh->activeElements();
+  vector<int> cellsToRefine;
+  for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    cellsToRefine.push_back((*elemIt)->cellID());
+  }
+  mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad()); // refine all cells (we know they're quads)
+  return mesh;
+}
+
 
 // builds a [0,2]x[0,2] L shaped domain with 3 main blocks
 MeshPtr MeshUtilities::buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest){
