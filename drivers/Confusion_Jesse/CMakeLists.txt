@@ -59,8 +59,8 @@ target_link_libraries(FrontStep
   Camellia
 )
 
-add_executable(Ramp RampTest.cpp)
-target_link_libraries(Ramp
+add_executable(RampTest RampTest.cpp)
+target_link_libraries(RampTest
   Camellia
 )
 
@@ -69,3 +69,7 @@ target_link_libraries(Plate
   Camellia
 )
 
+add_executable(Aniso AnisoTest.cpp)
+target_link_libraries(Aniso
+  Camellia
+)
