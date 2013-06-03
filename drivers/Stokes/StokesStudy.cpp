@@ -405,7 +405,9 @@ int main(int argc, char *argv[]) {
   
   bool dontImposeZeroMeanPressure = false;
   
-  bool writeGlobalStiffnessMatrixToFile = true;
+  bool writeGlobalStiffnessMatrixToFile = false;
+  
+  bool useCondensedSolve = true;
   
   bool useCG = false;
   bool useMumps = true;
@@ -764,6 +766,7 @@ int main(int argc, char *argv[]) {
                             bc, ip,  
                             minLogElements, maxLogElements, 
                             polyOrder+1, pToAdd, false, useTriangles, false);
+    study.setUseCondensedSolve(useCondensedSolve);
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setReportConditionNumber(reportConditionNumber);
     study.setWriteGlobalStiffnessToDisk(writeGlobalStiffnessMatrixToFile,"stokes_study_stiffness");
