@@ -56,6 +56,9 @@ class MeshUtilities {
   static SpatialFilterPtr rampBoundary(double rampHeight);
   static MeshPtr buildRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
+  static SpatialFilterPtr longRampBoundary(double rampHeight);
+  static MeshPtr buildLongRampMesh(double rampHeight, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
+
   static MeshPtr buildFrontFacingStep(Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
 
   static MeshPtr buildUnitQuadMesh(int horizontalCells, int verticalCells, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pTest);
