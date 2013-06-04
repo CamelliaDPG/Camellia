@@ -40,21 +40,42 @@ shards::CellTopology VectorizedBasis<Scalar,ArrayScalar>::domainTopology() const
 
 // dof ordinal subsets:
 template<class Scalar, class ArrayScalar>
-std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForEdges(bool includeVertices) const {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const {
+  std::set<int> dofOrdinals;
+  std::set<int> componentDofOrdinals = _componentBasis->dofOrdinalsForSubcells(subcellDim, includeLesserDimensions);
+
+  for (int compIndex = 0; compIndex < _numComponents; compIndex++) {
+    for (std::set<int>::iterator compDofOrdinalIt = componentDofOrdinals.begin();
+         compDofOrdinalIt != componentDofOrdinals.end(); compDofOrdinalIt++) {
+      int dofOrdinal = this->getDofOrdinalFromComponentDofOrdinal(*compDofOrdinalIt,compIndex);
+      dofOrdinals.insert(dofOrdinal);
+    }
+  }
+  
+  return dofOrdinals;
 }
-template<class Scalar, class ArrayScalar>
-std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForFaces(bool includeVerticesAndEdges) const {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
-}
-template<class Scalar, class ArrayScalar>
-std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
-}
-template<class Scalar, class ArrayScalar>
-std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForVertices() const {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
-}
+
+//template<class Scalar, class ArrayScalar>
+//std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForEdges(bool includeVertices) const {
+//  std::set<int> dofOrdinals;
+//  std::set<int> componentDofOrdinals = _componentBasis->dofOrdinalsForEdges(includeVertices);
+//  for (int compIndex = 0; compIndex < _numComponents; compIndex++) {
+//    
+//  }
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//}
+//template<class Scalar, class ArrayScalar>
+//std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForFaces(bool includeVerticesAndEdges) const {
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//}
+//template<class Scalar, class ArrayScalar>
+//std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const {
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//}
+//template<class Scalar, class ArrayScalar>
+//std::set<int> VectorizedBasis<Scalar,ArrayScalar>::dofOrdinalsForVertices() const {
+//  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+//}
 
 template<class Scalar, class ArrayScalar>
 void VectorizedBasis<Scalar, ArrayScalar>::getVectorizedValues(ArrayScalar& outputValues,

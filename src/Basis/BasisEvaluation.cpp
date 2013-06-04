@@ -186,26 +186,50 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Intre
         case IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD:
           // referenceValues has dimensions (F,P,D1,D2).  D1 is our component dimension, and D2 is the one that came from the gradient.
           // HGRADtransformGRAD expects (F,P,D) for input, and (C,F,P,D) for output.
-          // If we split referenceValues into (F,P,D1,D2=0) and (F,P,D1,D2=1), then we can transform each of those, and then interleave the results…
+          // If we split referenceValues into (F,P,D1=0,D2) and (F,P,D1=1,D2), then we can transform each of those, and then interleave the results…
         { // block off so we can create new stuff inside the switch case
           Teuchos::Array<int> dimensions;
           referenceValues->dimensions(dimensions);
-          int D2 = dimensions[dimensions.size() - 1];
-          dimensions.pop_back(); // get rid of D2
+          int numFields = dimensions[0];
+          int numPoints = dimensions[1];
+          int D1 = dimensions[dimensions.size()-2];
+          int D2 = dimensions[dimensions.size()-1];
+          dimensions[dimensions.size()-2] = D2; // put D2 in the D1 spot
+          dimensions.pop_back(); // get rid of original D2
           FieldContainer<double> refValuesSlice(dimensions);
           dimensions.insert(dimensions.begin(),numCells);
           FieldContainer<double> transformedValuesSlice(dimensions);
           
-          int numEntriesPerSlice = refValuesSlice.size();
-          int numEntriesPerTransformedSlice = transformedValuesSlice.size();
-          for (int compIndex=0; compIndex<D2; compIndex++) {
-            for (int i=0; i<numEntriesPerSlice; i++) {
-              refValuesSlice[i] = (*referenceValues)[i*D2 + compIndex];
+//          int numEntriesPerSlice = refValuesSlice.size();
+//          int numEntriesPerTransformedSlice = transformedValuesSlice.size();
+          
+          for (int compIndex1=0; compIndex1<D1; compIndex1++) {
+            // could speed the following along by doing the enumeration arithmetic in place...
+            for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+              for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                for (int compIndex2=0; compIndex2<D2; compIndex2++) {
+                  refValuesSlice(fieldIndex,ptIndex,compIndex2) = (*referenceValues)(fieldIndex,ptIndex,compIndex1,compIndex2);
+                }
+              }
             }
+            
+//            for (int i=0; i<numEntriesPerSlice; i++) {
+//              refValuesSlice[i] = (*referenceValues)[i*D2 + compIndex];
+//            }
             fst::HGRADtransformGRAD<double>(transformedValuesSlice,cellJacobianInv,refValuesSlice);
-            for (int i=0; i<numEntriesPerTransformedSlice; i++) {
-              (*transformedValues)[i*D2 + compIndex] = transformedValuesSlice[i];
+            // could speed the following along by doing the enumeration arithmetic in place...
+            for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+              for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++) {
+                for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+                  for (int compIndex2=0; compIndex2<D2; compIndex2++) {
+                    (*transformedValues)(cellIndex,fieldIndex,ptIndex,compIndex1,compIndex2) = transformedValuesSlice(cellIndex,fieldIndex,ptIndex,compIndex2);
+                  }
+                }
+              }
             }
+//            for (int i=0; i<numEntriesPerTransformedSlice; i++) {
+//              (*transformedValues)[i*D2 + compIndex] = transformedValuesSlice[i];
+//            }
           }
         }
           

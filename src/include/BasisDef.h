@@ -133,6 +133,10 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const {
     std::set<int> dofOrdinals;
+    if (!_basisTagsAreSet) {
+      initializeTags();
+      _basisTagsAreSet = true;
+    }
     if ((subcellDim > 0) && includeLesserDimensions) {
       dofOrdinals = dofOrdinalsForSubcells(subcellDim-1,true);
     }
@@ -315,6 +319,11 @@ namespace Camellia {
     // we leave tag initialization to the _intrepidBasis object, but we'll keep a copy ourselves:
     this->_tagToOrdinal = _intrepidBasis->getDofOrdinalData();
     this->_ordinalToTag = _intrepidBasis->getAllDofTags();
+  }
+  
+  template<class Scalar, class ArrayScalar>
+  Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,ArrayScalar>::intrepidBasis() {
+    return _intrepidBasis;
   }
   
   template<class Scalar, class ArrayScalar>

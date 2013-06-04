@@ -703,6 +703,15 @@ public:
     fileFriendlyNames.push_back("sigma22");
     correspondingTraceIDs.push_back(NONE);
   }
+  VarPtr u1var() {
+    return u1;
+  }
+  VarPtr u2var() {
+    return u2;
+  }
+  VarPtr pvar() {
+    return p;
+  }
 };
 
 const static string VGPF_V1_S = "v_1";

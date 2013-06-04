@@ -1,0 +1,213 @@
+\documentclass{report}
+
+\usepackage{utdiss2}  		% Dissertation package style file.
+
+\usepackage{array}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage[normalem]{ulem}
+
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{color}
+\usepackage{undertilde}
+\usepackage[colorlinks = true, filecolor = red, urlcolor = blue, linkcolor = black]{hyperref}
+\usepackage{pdflscape}
+\usepackage{pifont}
+%\usepackage{fullpage}
+\setlength\textwidth{6in}
+\setlength\textheight{8in}
+\setlength\oddsidemargin{0.25in} % LaTeX adds a default 1in to this!
+\setlength\evensidemargin{0.25in}
+\setlength\topmargin{-0.0in} % LaTeX adds a default 1in to this!
+\setlength\headsep{0in}
+\setlength\headheight{0in}
+\setlength\footskip{1in}
+
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\triangle}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\newcommand{\Reyn}{\rm Re}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+\date{}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+
+%%%%%%%%%%%%%%% End def of new commands %%%%%%%%%%%%%%%%%%%
+
+\author{Jesse Chan}
+\address{910 E. 32nd St, Apt.\ 101\\ Austin, Texas 78705}  % Required
+
+\title{A DPG method for compressible flow problems}
+
+\supervisor
+	[Leszek Demkowicz]
+	{Robert Moser}
+
+\committeemembers
+	[Todd Arbogast]
+	[Omar Ghattas]
+	{Venkat Raman}
+
+\previousdegrees{B.A.}
+
+\oneandonehalfspacequote
+
+\topmargin 0.125in
+
+\makeindex
+
+%%%%%%%%%%%%%%% Start of thesis %%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+%\copyrightpage          % Produces the copyright page.
+%\commcertpage           % Produces the Committee Certification
+\titlepage
+
+\tableofcontents   % Table of Contents will be automatically
+                   % generated and placed here.
+
+%\listoftables      % List of Tables and List of Figures will be placed
+%\listoffigures     % here, if applicable.
+
+
+\chapter{Introduction}
+
+\input{proposalIntro}
+
+\chapter{Range of problems}
+
+\input{problemRange}
+
+\chapter{Discontinuous Petrov-Galerkin: a minimum residual method for linear problems}
+
+\input{DPGtheory}
+
+\chapter{A robust DPG method for convection-diffusion}
+
+\input{DPGrobustness}
+
+\chapter{Extension to nonlinear problems and systems of equations}
+
+\input{NonlinDPG}
+\input{BurgersNotes}
+\input{NSNotes}
+%\input{areaReq}
+
+\bibliographystyle{plain}
+\bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes,H1DPG}
+
+%\chapter{Appendix}
+\appendix
+\input{paper_appendix.tex}
+%\input{hyperbolicDPG.tex}
+
+\end{document}

@@ -5,6 +5,8 @@
 #include "ParameterFunction.h"
 #include "LagrangeConstraints.h"
 
+#include "SolutionExporter.h"
+
 IncompressibleFormulationsTests::IncompressibleFormulationsTests(bool thorough) {
   _thoroughMode = thorough;
 }
@@ -166,14 +168,21 @@ void IncompressibleFormulationsTests::teardown() {
 }
 
 void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPassed) {
-  cout << "Running IncompressibleFormulationsTests.  (This can take up to 30 seconds.)" << endl;
+  if (_thoroughMode) {
+    cout << "Running IncompressibleFormulationsTests in thorough mode.  (This can take a long while...)" << endl;
+  } else {
+    cout << "Running IncompressibleFormulationsTests in non-thorough mode.  (This can still take a while...)" << endl;
+  }
   
+  cout << "About to run testVGPNavierStokesLocalConservation(), which has an outstanding failure in which the solver fails with error code -22.  (In thorough mode, get 0 row warnings, presumably due to different parameters.)\n";
   setup();
-  if (testVVPStokesFormulationGraphNorm()) {
+  if ( testVGPNavierStokesLocalConservation() ) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
+  
   
   setup();
   if (testVGPNavierStokesFormulationCorrectness()) {
@@ -182,12 +191,7 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   numTestsRun++;
   teardown();
   
-  setup();
-  if ( testVGPNavierStokesLocalConservation() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
+  cout << "testVGPNavierStokesFormulationCorrectness completed\n";
   
   setup();
   if (testVGPStokesFormulationGraphNorm()) {
@@ -195,6 +199,8 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   }
   numTestsRun++;
   teardown();
+  
+  cout << "testVGPStokesFormulationGraphNorm completed\n";
   
   setup();
   if (testVGPNavierStokesFormulationConsistency()) {
@@ -219,6 +225,13 @@ void IncompressibleFormulationsTests::runTests(int &numTestsRun, int &numTestsPa
   
   setup();
   if (testVGPStokesFormulationCorrectness()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
+  if (testVVPStokesFormulationGraphNorm()) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -460,7 +473,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationConsistency() {
   // starting out with a single hard-coded solve, but will switch soon to
   // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
     
-  double tol = 1e-11;
+  double tol = 2e-11;
   
   // exact solution functions: store these as vector< pair< Function, int > >
   // in the order u1, u2, p, where the paired int is the polynomial degree of the function
@@ -637,7 +650,7 @@ bool IncompressibleFormulationsTests::testVGPStokesFormulationGraphNorm() {
       ipExpected->addTerm(q_vgp);
     }
   
-    VGPStokesFormulation vgpStokesFormulation(mu);
+    VGPStokesFormulation vgpStokesFormulation(mu,false,false); // don't enrich velocity, don't scale sigma by mu
     IPPtr ipActual = vgpStokesFormulation.graphNorm();
     
     int horizontalCells = 2, verticalCells = 2;
@@ -763,7 +776,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   // starting out with a single hard-coded solve, but will switch soon to
   // doing several: varying meshes, pToAdd, mu, and which exact solutions we use...
   
-  double tol = 1e-11;
+  double tol = 2e-11;
   
   bool useLineSearch = false;
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
@@ -970,6 +983,13 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
     maxPolyOrder = max(maxPolyOrder,exactFxns[1].second);
     maxPolyOrder = max(maxPolyOrder,exactFxns[2].second);
     
+    double tol = 1e-13; // relax while we sort out some issues
+//    cout << "note: using tol of 1e-10 in VGP NS correctness test (used to be 1e-13).\n";
+    if (maxPolyOrder >= 10) {
+      // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
+      tol = 1e-10;
+    }
+    
     for (vector<double>::iterator muIt = muValues.begin(); muIt != muValues.end(); muIt++) {
       double mu = *muIt;
       double Re = 1/mu;
@@ -1005,21 +1025,30 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       FunctionPtr sigma12_prev = Function::solution(sigma12_vgp, backgroundFlow);
       FunctionPtr sigma21_prev = Function::solution(sigma21_vgp, backgroundFlow);
       FunctionPtr sigma22_prev = Function::solution(sigma22_vgp, backgroundFlow);
-      
+
+
       LinearTermPtr expectedRHS = f1 * v1_vgp + f2 * v2_vgp;
-      expectedRHS = expectedRHS + (u1_prev * sigma11_prev + u2_prev * sigma12_prev) * v1_vgp;
-      expectedRHS = expectedRHS + (u1_prev * sigma21_prev + u2_prev * sigma22_prev) * v2_vgp;
+      // VGP Oseen-ish form:
+      // (f,v) - (u_i u_j, v_i,j) + (u_i u_j n_j, v_i)
+//      expectedRHS = expectedRHS - u1_prev * u1_prev * v1_vgp->dx(); // i=1, j=1
+//      expectedRHS = expectedRHS - u1_prev * u2_prev * v1_vgp->dy(); // i=1, j=2
+//      expectedRHS = expectedRHS - u2_prev * u1_prev * v2_vgp->dx(); // i=2, j=1
+//      expectedRHS = expectedRHS - u2_prev * u2_prev * v2_vgp->dy(); // i=2, j=2
+//      
+//      FunctionPtr n = Function::normal();
+//      FunctionPtr un = u1_prev * n->x() + u2_prev * n->y();
+//      expectedRHS = expectedRHS + u1_prev * un * v1_vgp; // i=1
+//      expectedRHS = expectedRHS + u2_prev * un * v2_vgp; // i=2
+      
+      // gradient-based form:
+      expectedRHS = expectedRHS + (u1_prev * sigma11_prev / mu + u2_prev * sigma12_prev / mu) * v1_vgp;
+      expectedRHS = expectedRHS + (u1_prev * sigma21_prev / mu + u2_prev * sigma22_prev / mu) * v2_vgp;
       
       BFPtr stokesBF = problem.stokesBF();
       expectedRHS = expectedRHS - stokesBF->testFunctional(backgroundFlow);
       
       Teuchos::RCP<Mesh> mesh = problem.mesh();
       
-      double tol = 1e-13;
-      if (maxPolyOrder >= 10) {
-        // a bit of a cheat: this means it's the Kovasznay solution, which we won't get exact:
-        tol = 1e-10;        
-      }
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: before first solve (i.e. with zero background flow), LTs disagree\n";
         success = false;
@@ -1046,6 +1075,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: after first solve (i.e. with non-zero background flow), LTs disagree\n";
         success = false;
+        cout << "rhsLT's boundary-only part:\n" << rhsLT->getBoundaryOnlyPart()->displayString() << endl;
+        cout << "expectedRHS's boundary-only part:\n" << expectedRHS->getBoundaryOnlyPart()->displayString() << endl;
       }
       
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, stokesBF->graphNorm(), tol)) {
@@ -1055,7 +1086,42 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       
       // now, try projecting the exact solution:
       map<int, FunctionPtr > solnMap = vgpSolutionMap(u1_exact, u2_exact, p_exact, Re);
+      backgroundFlow->clear(); // should not be necessary -- just checking...
       backgroundFlow->projectOntoMesh(solnMap);
+      
+      if (maxPolyOrder < 10) { // polynomial solution: should be able to nail this
+        for (map<int, FunctionPtr >::iterator varIt = solnMap.begin(); varIt != solnMap.end(); varIt++) {
+          int varID = varIt->first;
+          VarPtr var = vgpVarFactory.trial(varID);
+          FunctionPtr exactSoln = varIt->second;
+          FunctionPtr projectedSoln = Function::solution(var, backgroundFlow);
+          
+          if (var->varType() == FLUX) { // then there will be an extra parity factor from Function::solution()
+            projectedSoln = projectedSoln * Function::sideParity();
+          }
+          
+          double tol = 1e-13;
+          if (!functionsAgree(exactSoln - projectedSoln, zero, mesh, tol) ) {
+            cout << "Projection of exact polynomial function failed for var " << var->displayString() << " != " << exactSoln->displayString() << endl;
+          } else {
+//            cout << "Projection succeeded for var "  << var->displayString() << " = " << exactSoln->displayString() << endl;
+          }
+        }
+      }
+      
+//      VTKExporter solnExporter(backgroundFlow,mesh,vgpVarFactory);
+//      solnExporter.exportSolution("correctness_background_flow");
+      
+//      vector< FunctionPtr > boundaryFunctions;
+//      boundaryFunctions.push_back(solnMap[t1n_vgp->ID()]);
+//      boundaryFunctions.push_back(solnMap[t2n_vgp->ID()]);
+      
+//      solnExporter.exportBoundaryValuedFunctions(boundaryFunctions, "boundaryFunctions");
+      
+//      solnExporter.exportFunction(Function::solution(u1_vgp, backgroundFlow), "u1_backFlow");
+//      solnExporter.exportFunction(solnMap[u1_vgp->ID()], "u1_exact");
+//      FunctionPtr u1diff = solnMap[u1_vgp->ID()] - Function::solution(u1_vgp, backgroundFlow);
+//      solnExporter.exportFunction(u1diff,"u1_diff");
       
       if (u1_exact->isZero() && u2_exact->isZero()) {
         if (functionsAgree(p_exact,y,mesh)) {
@@ -1068,7 +1134,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
           FunctionPtr n = Function::normal();
           LinearTermPtr testFunctionalExpected = y * v1_vgp->dx() + y * v2_vgp->dy() - y * n->x() * v1_vgp - y * n->y() * v2_vgp;
           LinearTermPtr testFunctionalActual = stokesBF->testFunctional(backgroundFlow);
-          if (! ltsAgree(testFunctionalExpected, testFunctionalActual, mesh, ip) ) {
+          if (! ltsAgree(testFunctionalExpected, testFunctionalActual, mesh, ip, tol) ) {
             success = false;
             cout << "for p=y solution, bf->testFunctional doesn't match expected (-v2 expected, actual is ";
             cout << testFunctionalActual->displayString() << ")" << endl;
@@ -1134,9 +1200,23 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       rieszRepRHS->computeRieszRep();
       double norm = rieszRepRHS->getNorm();
       if (maxPolyOrder < 10) { // polynomial solution: should have essentially zero RHS
+        
+        
 //        cout << "norm of RHS after projection of polynomial exact solution: " << norm << endl;
         if (norm > tol) {
           cout << "Failure: Navier-Stokes does not have a zero RHS after exact solution projected; norm of RHS is " << norm << "\n";
+          cout << "u1_exact = " << u1_exact->displayString() << endl;
+          cout << "u2_exact = " << u2_exact->displayString() << endl;
+          cout << " p_exact = " << p_exact->displayString() << endl;
+          cout << "sigma11_exact = " << solnMap[sigma11_vgp->ID()]->displayString() << endl;
+          cout << "sigma12_exact = " << solnMap[sigma12_vgp->ID()]->displayString() << endl;
+          cout << "sigma21_exact = " << solnMap[sigma21_vgp->ID()]->displayString() << endl;
+          cout << "sigma22_exact = " << solnMap[sigma22_vgp->ID()]->displayString() << endl;
+          cout << "t1n_vgp_exact = " << solnMap[t1n_vgp->ID()]->displayString() << endl;
+          cout << "t2n_vgp_exact = " << solnMap[t2n_vgp->ID()]->displayString() << endl;
+          cout << "u1hat_exact = " << solnMap[u1hat_vgp->ID()]->displayString() << endl;
+          cout << "u2hat_exact = " << solnMap[u2hat_vgp->ID()]->displayString() << endl;
+          cout << "Re = " << Re << endl;
           vector< VarPtr > nonZeros = nonZeroComponents(expectedRHS, vgpTests, mesh, stokesBF->naiveNorm());
           cout << "Expected RHS is non-zero in components: " << endl;
           for (vector< VarPtr >::iterator varIt = nonZeros.begin(); varIt != nonZeros.end(); varIt++) {
@@ -1213,8 +1293,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
   FunctionPtr u2_0 = Function::zero();
   FunctionPtr zero = Function::zero();
   ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-  ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u
@@ -1245,17 +1324,19 @@ map<int, FunctionPtr > IncompressibleFormulationsTests::vgpSolutionMap(FunctionP
   
   double mu = 1.0 / Re;
   
+  FunctionPtr skeletonRestrictor = Function::meshSkeletonCharacteristic();
+  
   map<int, FunctionPtr > solnMap;
   solnMap[ u1_vgp->ID() ] = u1_exact;
   solnMap[ u2_vgp->ID() ] = u2_exact;
   solnMap[  p_vgp->ID() ] =  p_exact;
-  solnMap[  sigma11_vgp->ID() ] = u1_exact->dx();
-  solnMap[  sigma12_vgp->ID() ] = u1_exact->dy();
-  solnMap[  sigma21_vgp->ID() ] = u2_exact->dx();
-  solnMap[  sigma22_vgp->ID() ] = u2_exact->dy();
+  solnMap[  sigma11_vgp->ID() ] = mu * u1_exact->dx();
+  solnMap[  sigma12_vgp->ID() ] = mu * u1_exact->dy();
+  solnMap[  sigma21_vgp->ID() ] = mu * u2_exact->dx();
+  solnMap[  sigma22_vgp->ID() ] = mu * u2_exact->dy();
   
-  solnMap[ u1hat_vgp->ID() ] = u1_exact;
-  solnMap[ u2hat_vgp->ID() ] = u2_exact;
+  solnMap[ u1hat_vgp->ID() ] = u1_exact * skeletonRestrictor; // skeletonRestrictor makes clear that these are boundary values
+  solnMap[ u2hat_vgp->ID() ] = u2_exact * skeletonRestrictor;
   
   FunctionPtr t1 = Function::vectorize( mu * u1_exact->dx() - p_exact, mu * u1_exact->dy() );
   FunctionPtr t2 = Function::vectorize( mu * u2_exact->dx(), mu * u2_exact->dy() - p_exact);
@@ -1304,8 +1385,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0(eps) );
   FunctionPtr u2_0 = zero;
   ParameterFunctionPtr Re_param = ParameterFunction::parameterFunction(Re);
-  ParameterFunctionPtr Re_sqrt_param = ParameterFunction::parameterFunction(sqrt(Re));
-  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,Re_sqrt_param,quadPoints,
+  VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re_param,quadPoints,
                                                           horizontalCells,verticalCells,
                                                           H1Order, pToAdd,
                                                           u1_0, u2_0,  // BC for u

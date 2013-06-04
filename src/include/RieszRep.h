@@ -100,7 +100,7 @@ class RieszRep {
   // for testing
   map<int,FieldContainer<double> > integrateRHS();
 
-  void computeRieszRep();
+  void computeRieszRep(int cubatureEnrichment=0);
 
   double getNorm();
   map<int,double> getNormsSquared();

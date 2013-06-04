@@ -69,22 +69,22 @@ namespace Camellia {
     virtual shards::CellTopology domainTopology() const;
     
     // dof ordinal subsets:
-    std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
-    std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-    std::set<int> dofOrdinalsForInterior() const;
-    std::set<int> dofOrdinalsForVertices() const;
-    std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
+    virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
+    virtual std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
+    virtual std::set<int> dofOrdinalsForInterior() const;
+    virtual std::set<int> dofOrdinalsForVertices() const;
+    virtual std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
     
-    std::set<int> dofOrdinalsForSubcell(int subcellDim, int edgeIndex) const;
-    std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
-    std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
+    virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int edgeIndex) const;
+    virtual std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
+    virtual std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
     
     virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
     virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     virtual const std::vector<int>& getDofTag(int dofOrd) const;
     virtual const std::vector<std::vector<int> > & getAllDofTags() const;
     
-    IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace() const;
+    virtual IntrepidExtendedTypes::EFunctionSpaceExtended functionSpace() const;
     
     // methods identifying the type of basis:
     virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
@@ -128,6 +128,8 @@ namespace Camellia {
     const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;
     const std::vector<int>& getDofTag(int dofOrd) const;
     const std::vector<std::vector<int> > & getAllDofTags() const;
+    
+    Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > intrepidBasis();
     
     virtual bool isConforming() const; // true for Intrepid bases
     virtual bool isNodal() const;      // true for the Intrepid bases

@@ -71,7 +71,7 @@ map<int,FieldContainer<double> > RieszRep::integrateRHS(){
   return cellRHS;
 }
 
-void RieszRep::computeRieszRep(){
+void RieszRep::computeRieszRep(int cubatureEnrichment){
 
   int numProcs=1;
   int rank=0;  
@@ -96,8 +96,7 @@ void RieszRep::computeRieszRep(){
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTestDofs = testOrderingPtr->totalDofs();
 
-    int cubEnrich = 5; // set to zero for release
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubatureEnrichment);
 
     FieldContainer<double> rhsValues(1,numTestDofs);
     _rhs->integrate(rhsValues, testOrderingPtr, basisCache);

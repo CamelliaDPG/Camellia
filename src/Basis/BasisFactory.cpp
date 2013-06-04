@@ -45,6 +45,7 @@
 
 #include "LobattoHGRAD_QuadBasis.h"
 #include "LobattoHDIV_QuadBasis.h"
+#include "LobattoHDIV_QuadBasis_separable.h"
 #include "LegendreHVOL_LineBasis.h"
 #include "LobattoHGRAD_LineBasis.h"
 
@@ -131,7 +132,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
           {
             bool conformingFalse = false;
             bool divFreeTrue = true;
-            basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse,divFreeTrue) );
+            basis = Teuchos::rcp( new LobattoHDIV_QuadBasis_separable<double, Intrepid::FieldContainer<double> >(polyOrder,conformingFalse,divFreeTrue) );
           }
             break;
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HCURL):

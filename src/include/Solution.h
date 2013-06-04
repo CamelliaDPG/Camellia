@@ -238,6 +238,10 @@ public:
   void getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K,Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
   void getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
 
+  void readFromFile(const string &filePath);
+  void writeToFile(const string &filePath);
+  
+  // MATLAB output (belongs elsewhere)
   void writeFieldsToFile(int trialID, const string &filePath);
   void writeFluxesToFile(int trialID, const string &filePath);
 

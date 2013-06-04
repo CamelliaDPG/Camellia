@@ -1,0 +1,19 @@
+#!/bin/sh
+#
+#	mydiss/zzclean
+#
+#
+rm -f	*.aux \
+	*.bbl \
+	*.blg \
+	*.dvi \
+	*.idx \
+	*.ilg \
+	*.ind \
+	*.lof \
+	*.log \
+	*.lot \
+	*.ps  \
+	*.pdf \
+	*.toc   2>/dev/null
+

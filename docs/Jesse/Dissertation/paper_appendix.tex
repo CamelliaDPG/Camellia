@@ -1,0 +1,164 @@
+\chapter{Proof of lemmas/stability of the adjoint problem}
+
+We present now the proofs of the three lemmas used in Section~\ref{sec:strategy3} to show the equivalence of the DPG energy norm to norms on $U$. We reduce the adjoint problem to the scalar second order equation
+\begin{align}
+- \epsilon \Delta v - \beta \cdot \grad v &= g - \epsilon \div f \eqnlab{adjoint}
+\end{align}
+with boundary conditions
+\begin{align}
+%\tau \cdot n = 
+- \epsilon \grad v \cdot n &=f\cdot n, \quad x\in \Gamma_- \label{reducedbc_1}\\ 
+v &= 0, \quad x\in \Gamma_+ \label{reducedbc_2}
+\end{align}
+and treat the cases $f=0$, $g=0$ separately.  The above boundary conditions are the reduced form of boundary conditions \eqref{bc_1} and \eqref{bc_2} corresponding to $\left.\tau\cdot n\right|_{\Gamma_-}=0$ and $\left.v\right|_{\Gamma_+}=0$. Additionally, the $\div$ operator is understood now in the weak sense, as the dual operator of $-\grad : H_0^1(\Omega) \rightarrow L^2(\Omega)$, such that $\div f \in \left(H_0^1(\Omega)\right)'$. 
+
+The normal trace of $f\cdot n$ is treated using a density argument --- for $f\in C^\infty(\Omega)$, we derive inequalities that are independent of $f\cdot n$ and $\div f$. We extend these inequalities to $f\in L^2(\Omega)$ by taking $f$ to be the limit of smooth functions. 
+%The appearance of the normal trace $f\cdot n$ necessitates the use of a smooth dense subset of $L^2$.  Formally speaking, we define the adjoint equation \eqnref{adjoint} for $f\in C^\infty(\Omega)$.  In doing so, we are allowed to speak of the normal trace $f\cdot n$ on the boundary.  We derive inequalities that are independent of $f\cdot n$ and $\div f$ (quantities that are ill-defined for $L^2(\Omega)$ functions), and note that, since smooth functions are dense in $L^2(\Omega)$, we can take any $L^2$ function to be the limit of $C^\infty(\Omega)$ functions.  Since each inequality will hold for all smooth functions and is well-defined for $L^2(\Omega)$ functions, the same inequality will hold for $L^2(\Omega)$ functions in the limit as well.
+
+\begin{lemma} 
+\label{lemma_stream}
+Assume $v$ satisfies \eqnref{adjoint}, with boundary conditions \eqref{bc_1} and \eqref{bc_2}, and $\beta$ satisfies \eqref{a_req} and \eqref{b_req}.  If $\div f = 0$ and $\epsilon$ is sufficiently small, then
+\[
+\|\beta \cdot \grad v \| \lesssim \| g\|.
+\]
+\end{lemma}
+
+\begin{proof}
+Define $v_\beta = \beta\cdot \grad v$.  Multiplying the adjoint equation \eqnref{adjoint} by $v_\beta$ and integrating over $\Omega$ gives
+\[
+\|v_\beta\|^2 = -\int_\Omega g v_\beta - \epsilon \int_\Omega \Delta v v_\beta.
+\]
+Note that 
+\[
+-\int_{\Omega} \beta\cdot \grad v \del v = -\int_{\Omega} \beta\cdot \grad v \div \grad v.
+\]
+Integrating this by parts, we get
+\[
+-\int_{\Omega} \beta\cdot \grad v \div \grad v = \int_{\Omega}\grad (\beta\cdot \grad v) \cdot \grad v  - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v.
+\]
+Since $\grad (\beta \cdot \grad v) = \grad \beta \cdot \grad v + \beta \cdot \grad \grad v$, where $\grad \beta$ and $\grad \grad v$ are understood to be tensors, 
+\[
+\int_{\Omega}\grad (\beta\cdot \grad v) \cdot \grad v = \int_{\Omega}(\grad \beta\cdot \grad v) \cdot \grad v + \int_{\Omega}\beta\cdot \grad\grad v \cdot \grad v 
+\]
+If we integrate by parts again and use that $\grad v \cdot \grad \grad v = \grad\frac{1}{2}\left(\grad v\cdot \grad v\right)$, we get
+%\[
+%\int_{\Omega}\beta\cdot \grad\grad v \cdot \grad v = \frac{1}{2}\int_{\Omega}\beta\cdot \grad(\grad v \cdot \grad v ) = \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) - \frac{1}{2}\int_{\Omega}\div \beta (\grad v \cdot \grad v )
+%\]
+%Then, we can combine these terms to get
+\begin{align*}
+-\int_{\Omega}  \del vv_\beta &= - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v + \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) - \frac{1}{2}\int_{\Omega}\div \beta (\grad v \cdot \grad v ) + \int_{\Omega}(\grad \beta\cdot \grad v) \cdot \grad v\\
+&= - \int_{\Gamma}n\cdot \grad v \beta\cdot\grad v + \frac{1}{2}\int_{\Gamma}\beta_n (\grad v \cdot \grad v ) + \int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v
+\end{align*}
+Finally, substituting this into our adjoint equation multiplied by $v_\beta$, we get
+\[
+\| v_\beta\|^2 = -\int_{\Omega}g\beta\cdot \grad v +  \epsilon\int_{\Gamma}  \left( -n\cdot \grad v \beta + \frac{1}{2}\beta_n \grad v \right) \cdot \grad v + \epsilon\int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v
+\]
+%The first term on the RHS can be controlled using Young's inequality. 
+The last term can be bounded by our assumption on $\|\grad \beta - \frac{1}{2}\div \beta I\|^2 \leq C$:
+\[
+\epsilon \int_{\Omega} \grad v \left(\grad \beta - \frac{1}{2}\div \beta I\right)\grad v \leq C\frac{\epsilon}{2} \|\grad v\|^2.
+\]
+For the boundary terms, on $\Gamma_-$, $\grad v\cdot n = 0$, reducing the integrand over the boundary to $\beta_n|\grad v|^2 \leq 0$.  On $\Gamma_+$, $v=0$ implies $\grad v \cdot \tau = 0$, where $\tau$ is any tangential direction.  An orthogonal decomposition in the normal and tangential directions yields $\grad v = (\grad v \cdot n) n$, reducing the above to 
+\[
+ \epsilon\int_{\Gamma}  -\frac{1}{2}|\beta_n| (\grad v \cdot n)^2 \leq 0.
+\]
+Applying these inequalities to our expression for $\|v_\beta\|^2$ leaves us with the estimate
+\[
+\|v_\beta\|^2 \leq  -\int_{\Omega}g\beta\cdot \grad v + C\frac{\epsilon}{2} \|\grad v\|^2.
+\]
+Since $C=O(1)$, an application of Young's inequality and Lemma \ref{lemma_grad} complete the estimate.
+\end{proof}
+
+\begin{lemma} 
+\label{lemma_grad}
+Assume $\beta$ satisfies \eqref{a_req}.  Then, for $v$ satisfying equation \eqnref{adjoint} with boundary conditions \eqref{bc_1} and \eqref{bc_2} and sufficiently small $\epsilon$, 
+\[
+\epsilon \|\grad v\|^2 + \|v\|^2 \lesssim \|g\|^2 + \epsilon \| f\|^2
+\]
+\end{lemma}
+
+\begin{proof}
+Since $\curl \beta=0$, and $\Omega$ is simply connected, there exists a scalar potential $\psi$, $\grad \psi = \beta$ by properties of the exact sequence. The potential is non-unique up to a constant, and we choose the constant such that $e^\psi = O(1)$.  Take the transformed function $w = e^\psi v$; following (2.26) in \cite{DPGrobustness}, we substitute $w$ into the the left hand side of equation \eqnref{adjoint}, arriving at the relation  
+\[
+-\epsilon \Delta w - (1-2\epsilon) \beta \cdot \grad w + \left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w = e^\psi (g-\epsilon \div f)
+\]
+Multiplying by $w$ and integrating over $\Omega$ gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w + \int_\Omega\left((1-\epsilon)|\beta|^2 + \epsilon \div \beta\right) w^2 = \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+Integrating by parts gives
+\[
+-\epsilon \int_\Omega \Delta ww - (1-2\epsilon) \int_\Omega\beta \cdot \grad w w = \epsilon \left( \int_\Omega |\grad w|^2- \int_{\Gamma} w \grad w \cdot n  \right) + \frac{(1-2\epsilon) }{2} \left(\int_\Omega \div \beta w^2 - \int_\Gamma\beta_n w^2 \right)
+\]
+Note that $w=0$ on $\Gamma_+$ reduces the boundary integrals over $\Gamma$ to just the inflow $\Gamma_-$.  Furthermore, we have $\grad w = e^\psi(\grad v + \beta v)$.  Applying the above and boundary conditions on $\Gamma_-$, the first boundary integral becomes
+\[
+\int_{\Gamma_-} w \grad w \cdot n = \int_{\Gamma_-} we^\psi(\grad v + \beta v)\cdot n =  \int_{\Gamma_-} we^\psi(f\cdot n + \beta_n v)
+\]
+Noting $\int_{\Gamma_-}\beta_n w^2 \leq 0$ through $\beta_n<0$ on the inflow gives
+\[
+\epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n \leq \int_\Omega e^\psi (g-\epsilon \div f) w
+\]
+assuming $\epsilon$ is sufficiently small.  Our assumptions on $\beta$ imply $\left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) \lesssim 1$ and $e^\psi = O(1)$. We can then bound from below:
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n  \lesssim \epsilon \int_\Omega |\grad w|^2 + \int_\Omega \left((1-\epsilon)|\beta|^2 + \frac{1}{2} \div \beta \right) w^2 - \epsilon \int_{\Gamma_-} we^\psi f\cdot n 
+\]
+Interpreting $\div f$ as a functional, the right hand gives
+\begin{align*}
+\int_\Omega e^\psi (g-\epsilon \div f) w &= \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) - \int_\Gamma \epsilon f\cdot n e^\psi w
+\end{align*}
+The boundary integral on $\Gamma$ reduces to $\Gamma_-$, which is then nullified by the same term on the left hand side, leaving us with 
+\[
+\epsilon \|\grad w\|^2 + \|w\|^2 \lesssim \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot \grad (e^\psi w) = \int_\Omega e^\psi g + \int_\Omega \epsilon f \cdot (\beta w + \grad w)
+\]
+From here, the proof is identical to the final lines of the proof of Lemma 1 in \cite{DPGrobustness}; an application of Young's inequality (with $\delta$) to the right hand side and bounds on $\|v\|, \|\grad v\|$ by $\|w\|,\|\grad w\|$ complete the estimate.  
+%ISSUE: REMOVE BOUNDARY TERM
+\end{proof}
+
+\begin{lemma}
+\label{lemma_boundary}
+%\todo{Rewrite in two steps - get variational soln to div free portion, then infer existence of curl z, then put together the decomp}
+Let $\beta$ satisfy conditions \eqref{a_req} and \eqref{c_req}, and let $v \in H^1(\Oh)$ , $\tau \in H({\rm div},\Oh)$ satisfy equations \eqref{adjoint1} and \eqref{adjoint2} with $f=g=0$%in a distributional sense, with arbitrary boundary conditions
+. Then
+\[
+\|\grad v\| = \frac{1}{\epsilon}\|\tau\| \lesssim \frac{1}{\epsilon} \| \jump{\tau\cdot n}\|_{\Gh \setminus \Gamma_+} + \frac{1}{\sqrt{\epsilon}} \| \jump{v}\|_{\Gh^0 \cup \Gamma_+}
+\]
+\end{lemma}
+\begin{proof}
+
+We begin by choosing $\psi$ as the unique solution to the following problem
+\begin{align*}
+-\epsilon \Delta \psi + \div \left(\beta \psi\right) &= -\div \tau \\
+\epsilon \grad \psi \cdot n - \beta_n\psi - \tau\cdot n &= 0, \quad x\in \Gamma_-\\
+\psi &= 0, \quad x\in \Gamma_+.
+\end{align*}
+Since $\div \beta = 0$, we can conclude that the bilinear form is coercive and the problem is well posed \cite{DPGrobustness}. The well-posedness of the above problem directly implies that $\div \left(\tau-(\epsilon\grad \psi - \beta \psi)\right) = 0$ in a distributional sense, and thus there exists a $z\in H({\rm curl},\Omega)$ such that
+\[
+\tau = \left(\epsilon \grad \psi - \beta \psi\right) + \curl z
+\]
+Since $\div \beta = 0$, we satisfy condition~\eqref{a_req}. Noting that the sign on $\beta$ is opposite now of the sign on $\epsilon \Delta \psi$, the problem for $\psi$ matches the adjoint problem \label{adjoint} for $f = \frac{1}{\epsilon}\tau$. Given the boundary conditions on $\psi$, we can use a trivial modification of the proof of Lemma \ref{lemma_grad} to bound
+\[
+\epsilon \|\grad \psi\|_{L^2}^2 + \|\psi \|_{L^2}^2 \lesssim \frac{1}{\epsilon}\|\tau\|_{L^2}^2.
+\]
+By the above bound and the triangle inequality, 
+\[
+\|\curl z \|_{L^2} \leq \epsilon \|\grad \psi\|_{L^2} + \|\beta \psi\|_{L^2} + \|\tau\|_{L^2} \lesssim \frac{1}{\sqrt{\epsilon}}\|\tau\|_{L^2}.
+\]
+On the other hand, using the decomposition and boundary conditions directly, we can integrate by parts over $\Oh$ to arrive at
+\begin{align*}
+\|\tau\|_{L^2}^2 &= (\tau, \epsilon \grad \psi - \beta \psi + \curl z)_{\Oh} = (\tau, \epsilon \grad \psi) - (\tau,\beta \psi) + (\tau,\curl z)  \\
+&=(\tau, \epsilon \grad \psi) + \epsilon(\grad v,\beta \psi) - \epsilon(\grad v,\curl z)  \\
+&=\epsilon \langle [\tau \cdot n],\psi \rangle - \epsilon  \langle n\cdot \curl z, \jump{v}\rangle-\epsilon(\div \tau, \psi) + \epsilon(\div \left(\beta v\right), \psi).
+\end{align*}
+Note that $\div(\beta v) - \div \tau = 0$ removes the contribution of the pairings on the domain and leaves us with only boundary pairings. By definition of the boundary norms on $\jump{\tau\cdot n}$ and $\jump{v}$ and the fact that $\curl z$ is trivially in $H({\rm div}, \Omega)$,
+\begin{align*}
+\|\tau\|_{L^2}^2 &=\epsilon \langle [\tau \cdot n],\psi \rangle -
+\epsilon \langle n\cdot \curl z, \jump{v}\rangle = \epsilon \langle [\tau
+  \cdot n],\psi \rangle_{\Gh \setminus \Gamma_+} - \epsilon
+\langle n\cdot \curl z,\jump{v}\rangle_{\Gh \setminus
+  \left(\Gamma_-\cup \Gamma_0\right)}\\ &\lesssim \epsilon \|[\tau
+  \cdot n]\| \|\psi\|_{H^1(\Omega)} + \epsilon \| \jump{v}\|\| \curl z
+\|_{L^2}.
+\end{align*}
+Applying the bounds $\|\psi\|_{H^1(\Omega)}  \leq \frac{1}{\epsilon}\|\tau\|_{L^2}$ and 
+$\|\curl z\|_{L^2} \lesssim \frac{1}{\sqrt{\epsilon}}\|\tau\|_{L^2}$, and noting that $\|\grad v\| = \frac{1}{\epsilon}\|\tau\|$ completes the proof.
+\end{proof}

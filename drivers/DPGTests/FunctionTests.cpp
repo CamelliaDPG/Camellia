@@ -323,20 +323,20 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   vector<double> e2(2); // (0,1)
   e2[1] = 1;
   
-  FunctionPtr beta = e1 * u_prev + Teuchos::rcp( new ConstantVectorFunction( e2 ) );
+  FunctionPtr beta = e1 * u_prev + Function::constant( e2 );
   
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   
   if (! functionsAgree(e2 * u_prev, 
-                       Teuchos::rcp( new ConstantVectorFunction( e2 ) ) * u_prev,
+                       Function::constant( e2 ) * u_prev,
                        _basisCache) ) {
     cout << "two like functions differ...\n";
     success = false;
   }
   
-  FunctionPtr e1_f = Teuchos::rcp( new ConstantVectorFunction( e1 ) );
-  FunctionPtr e2_f = Teuchos::rcp( new ConstantVectorFunction( e2 ) );
-  FunctionPtr one  = Teuchos::rcp( new ConstantScalarFunction( 1.0 ) );
+  FunctionPtr e1_f = Function::constant( e1 );
+  FunctionPtr e2_f = Function::constant( e2 );
+  FunctionPtr one  = Function::constant( 1.0 );
   if (! functionsAgree( Teuchos::rcp( new ProductFunction(e1_f, (e1_f + e2_f)) ), // e1_f * (e1_f + e2_f)
                        one,
                        _basisCache) ) {
@@ -538,27 +538,26 @@ bool FunctionTests::testQuotientRule() {
 bool FunctionTests::testIntegrate(){
   bool success = true;
 
-  // we must create our own basisCache here because _basisCache
-  // has had its ref cell points set, which basically means it's
-  // opted out of having any help with integration.
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
-  vector<int> cellIDs;
-  cellIDs.push_back(0);
-  basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(0), cellIDs, true );
-  
-  FunctionPtr x = Teuchos::rcp( new Xn(1) );
-  int numCells = basisCache->cellIDs().size();
-  FieldContainer<double> integrals(numCells);
-  x->integrate(integrals,basisCache);
-  double value = 0.0;
-  for (int i = 0;i<numCells;i++){
-    value += integrals(i);
-  }
+  FunctionPtr x = Function::xn(1);
+  double value = x->integrate(_spectralConfusionMesh);
+  double expectedValue = 0.0; // odd function in x on (-1,1)^2
   double tol = 1e-11;
-  if (abs(value)>tol){ // should get zero if integrating x over [-1,1]
+  if (abs(value-expectedValue)>tol){
     success = false;
-    cout << "failing testIntegrate()" << endl;
+    cout << "failed testIntegrate() on function x" << endl;
   }
+  
+  // now, let's try for the integral of the dot product of vector-valued functions
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr f1 = 1 * Function::vectorize(x, y); // 1 * to trigger creation of a ProductFunction
+  
+  value = (f1 * f1)->integrate(_spectralConfusionMesh,1); // enrich cubature to handle quadratics
+  expectedValue = 8.0 / 3.0; // integral of x^2 + y^2 on (-1,1)^2
+  if (abs(value-expectedValue)>tol){
+    success = false;
+    cout << "failing testIntegrate() on function (x,y) dot (x,y)" << endl;
+  }
+  
   return success;
 }
 

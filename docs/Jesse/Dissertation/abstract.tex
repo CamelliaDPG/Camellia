@@ -1,0 +1,192 @@
+\documentclass[12pt,letterpaper,oneside]{article}
+\usepackage{layout}
+\usepackage{fullpage}
+
+\usepackage{array}
+\usepackage{amsmath,amssymb,amsfonts,mathrsfs,amsthm}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{mathtools}
+\usepackage{dsfont}
+\usepackage{pdfpages}
+\usepackage[textsize=footnotesize,color=green]{todonotes}
+\usepackage{algorithm, algorithmic}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage[normalem]{ulem}
+
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{color}
+\usepackage{undertilde}
+\usepackage[colorlinks = true, filecolor = red, urlcolor = blue, linkcolor = black]{hyperref}
+\usepackage{pdflscape}
+\usepackage{pifont}
+\usepackage{geometry} 
+\geometry{letterpaper} 
+\usepackage{setspace}
+%\usepackage{fullpage}
+\setlength\textwidth{6in}
+\setlength\textheight{8in}
+\setlength\oddsidemargin{0.25in} % LaTeX adds a default 1in to this!
+\setlength\evensidemargin{0.25in}
+\setlength\topmargin{-0.0in} % LaTeX adds a default 1in to this!
+\setlength\headsep{0in}
+\setlength\headheight{0in}
+\setlength\footskip{1in}
+
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+
+\newcommand{\vect}[1]{\ensuremath\boldsymbol{#1}}
+\newcommand{\tensor}[1]{\underline{\vect{#1}}}
+\newcommand{\del}{\triangle}
+\newcommand{\grad}{\nabla}
+\newcommand{\curl}{\grad \times}
+\renewcommand{\div}{\grad \cdot}
+\newcommand{\ip}[1]{\left\langle #1 \right\rangle}
+\newcommand{\eip}[1]{a\left( #1 \right)}
+\newcommand{\pd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\pdd}[2]{\frac{\partial^2#1}{\partial#2^2}}
+
+\newcommand{\circone}{\ding{192}}
+\newcommand{\circtwo}{\ding{193}}
+\newcommand{\circthree}{\ding{194}}
+\newcommand{\circfour}{\ding{195}}
+\newcommand{\circfive}{\ding{196}}
+
+\newcommand{\Reyn}{\rm Re}
+
+\newcommand{\bs}[1]{\boldsymbol{#1}}
+\DeclareMathOperator{\diag}{diag}
+
+\newcommand{\equaldef}{\stackrel{\mathrm{def}}{=}}
+
+\newcommand{\tablab}[1]{\label{tab:#1}}
+\newcommand{\tabref}[1]{Table~\ref{tab:#1}}
+
+\newcommand{\theolab}[1]{\label{theo:#1}}
+\newcommand{\theoref}[1]{\ref{theo:#1}}
+\newcommand{\eqnlab}[1]{\label{eq:#1}}
+\newcommand{\eqnref}[1]{\eqref{eq:#1}}
+\newcommand{\seclab}[1]{\label{sec:#1}}
+\newcommand{\secref}[1]{\ref{sec:#1}}
+\newcommand{\lemlab}[1]{\label{lem:#1}}
+\newcommand{\lemref}[1]{\ref{lem:#1}}
+
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\mbb}[1]{\mathbb{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\nor}[1]{\left\| #1 \right\|}
+\newcommand{\snor}[1]{\left| #1 \right|}
+\newcommand{\LRp}[1]{\left( #1 \right)}
+\newcommand{\LRs}[1]{\left[ #1 \right]}
+\newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
+\newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
+\newcommand{\Grad} {\ensuremath{\nabla}}
+\newcommand{\Div} {\ensuremath{\nabla\cdot}}
+\newcommand{\Nel} {\ensuremath{{N^\text{el}}}}
+\newcommand{\jump}[1] {\ensuremath{\LRs{\![#1]\!}}}
+\newcommand{\uh}{\widehat{u}}
+\newcommand{\fnh}{\widehat{f}_n}
+\renewcommand{\L}{L^2\LRp{\Omega}}
+\newcommand{\pO}{\partial\Omega}
+\newcommand{\Gh}{\Gamma_h}
+\newcommand{\Gm}{\Gamma_{-}}
+\newcommand{\Gp}{\Gamma_{+}}
+\newcommand{\Go}{\Gamma_0}
+\newcommand{\Oh}{\Omega_h}
+
+\newcommand{\eval}[2][\right]{\relax
+  \ifx#1\right\relax \left.\fi#2#1\rvert}
+
+\def\etal{{\it et al.~}}
+
+
+\def\arr#1#2#3#4{\left[
+\begin{array}{cc}
+#1 & #2\\
+#3 & #4\\
+\end{array}
+\right]}
+\def\vecttwo#1#2{\left[
+\begin{array}{c}
+#1\\
+#2\\
+\end{array}
+\right]}
+\def\vectthree#1#2#3{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+\end{array}
+\right]}
+\def\vectfour#1#2#3#4{\left[
+\begin{array}{c}
+#1\\
+#2\\
+#3\\
+#4\\
+\end{array}
+\right]}
+\date{}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+
+\newcommand{\G} {\Gamma}
+\newcommand{\Gin} {\Gamma_{in}}
+\newcommand{\Gout} {\Gamma_{out}}
+
+\renewcommand{\arraystretch}{1.5}
+
+%%%%%%%%%%%%%%% End def of new commands %%%%%%%%%%%%%%%%%%%
+
+\author{Jesse Chan\\Committee: \vspace{-0.3cm}\\Dr.\ Leszek Demkowicz (co-supervisor), Dr.\ Robert Moser (co-supervisor),\vspace{-0.3cm}\\ Dr.\ Todd Arbogast, Dr.\ Omar Ghattas, Dr.\ Venkat Raman}
+
+\title{A DPG method for compressible flow problems}
+
+\begin{document}
+\maketitle
+
+Over the last three decades, Computational Fluid Dynamics (CFD) simulations have become commonplace as a tool in the engineering and design of high-speed aircraft.  Experiments are often complemented by computational simulations, and CFD technologies have proved very useful in both the reduction of aircraft development cycles, and in the simulation of conditions difficult to reproduce experimentally.  Great advances have been made in the field since its introduction, especially in areas of meshing, computer architecture, and solution strategies.  Despite this, there still exist many computational limitations in existing CFD methods; in particular, reliable higher order and $hp$-adaptive methods for the Navier-Stokes equations that govern compressible flow.
+
+Solutions to the Navier-Stokes equations can display shocks and boundary layers, which are characterized by localized regions of rapid change and high gradients.  The use of adaptive meshes is crucial in such settings --- good resolution for such problems under uniform meshes is computationally prohibitive and impractical for most physical regimes of interest.  However, the construction of ``good" meshes is a difficult task, usually requiring a-priori knowledge of the form of the solution.  An alternative to such is the construction of automatically adaptive schemes; such methods begin with a coarse mesh and refine based on the minimization of error.  However, this task is difficult, as the convergence of numerical methods for problems in CFD is notoriously sensitive to mesh quality.  Additionally, the use of adaptivity becomes even more difficult in the context of higher order and $hp$ methods \cite{BoeingHigherOrder}.  
+
+Many of the above issues are tied to the notion of \emph{robustness}, which we define loosely for CFD applications as the degradation of the quality of numerical solutions on a coarse mesh with respect to the Reynolds number, or nondimensional viscosity. For typical physical conditions of interest for the compressible Navier-Stokes equations, the Reynolds number dictates the scale of shock and boundary layer phenomena, and can be extremely high --- on the order of 1e7 in a unit domain.  For an under-resolved mesh, the Galerkin finite element method develops large oscillations which prevent convergence and pollute the solution.  
+
+The issue of robustness for finite element methods was addressed early on by Brooks and Hughes in the SUPG method \cite{SUPG}, which introduced the idea of residual-based stabilization to combat such oscillations. Such methods have been widely used in industry; however, these methods are limited to low-order approximations. Additionally, such methods are typically formulated for model problems and then applied to the Navier-Stokes equations, where the extrapolation can be inexact and ad-hoc.  
+
+Residual-based stabilizations can alternatively be viewed as modifying the standard finite element test space, and consequently the norm in which the finite element method converges. Demkowicz and Gopalakrishnan generalized this idea in 2009 by introducing the Discontinous Petrov-Galerkin (DPG) method with optimal test functions, where test functions are determined such that they minimize the discrete linear residual in a dual space.  Under the ultra-weak variational formulation, these test functions can be computed locally to yield a symmetric, positive-definite system.  The DPG method was quickly used to solve the convection and convection-diffusion problems \cite{DPG1,DPG2,DPG3}, and has recently been shown to yield a robust higher order adaptive method for the convection-diffusion model problem in arbitrary dimensions \cite{DPGrobustness,DPGrobustness2}.  
+
+\paragraph{Goal:} Our goal is to develop a DPG method and higher order adaptive scheme for the steady state compressible laminar Navier-Stokes equations in transonic/supersonic regimes that is robust over a range of Mach and Reynolds numbers. In particular, we hope to present a method for which automatic $hp$-adaptivity can be applied to problems in compressible flow.  
+
+\subsection*{Area A: Applicable Mathematics}
+
+The main theoretical thrust of this research is to develop a DPG method that is provably robust for singular perturbation problems in CFD, but does not suffer from discretization error in the approximation of test functions \cite{DPGrobustness, DPGrobustness2}.  I will develop such a method for the prototypical singular perturbation problem of convection-diffusion, demonstrate that the method does not suffer from error in the approximation of test functions, and prove the robust bound of the $L^2$ error by the energy error in which DPG is optimal.  In doing so, I will employ a new inflow boundary condition which, compared to standard Dirichlet inflow conditions, induces more well-behaved solutions to the adjoint problem, and describe the effect upon the robustness of the DPG method.  I will then extend this method to the linearized Navier-Stokes equations, and conduct a similar analysis of the robustness of DPG for the linearized Navier-Stokes system.  
+
+\subsection*{Area B: Numerical Analysis and Scientific Computation}
+
+A large thrust of the numerical work here has focused on the development of a 2D compressible flow code under the parallel DPG Camellia codebase, developed by Nathan Roberts at ICES \cite{Camellia}.  In particular, we have developed a framework allowing for rapid implementation of problems and the easy application of higher order and $hp$-adaptive schemes based on a natural error representation function that stems from the DPG residual \cite{DPG2, DPG3}. Additionally, the effectiveness and necessity of anisotropic refinement schemes for problems in CFD has been demonstrated several times in the literature \cite{anisotropy1,anisotropy2}. The DPG error representation function has been shown to yield an effective and natural residual with which to drive refinement, which we hope to generalize to anisotropic adaptive schemes. 
+
+A recent theoretical development has been a Hessian-based DPG method that aims to minimize the \emph{nonlinear} residual in the dual space.  This method will augment the positive definite DPG stiffness matrix with a symmetric update determined by the form of the Hessian and the nonlinear residual.  I will implement such a nonlinear approach and study its effect on the convergence of the nonlinear steady-state problem and the feasibility of different solvers for the new discrete system.  
+
+Finally, the DPG method under the ultra-weak formulation yields itself very naturally to a host of parallelizable solvers.  In particular, I will implement the distributed Schur complement method and study its scalability.  
+
+\subsection*{Area C: Mathematical Modeling and Applications}
+
+I will apply the DPG method to a several convection diffusion problems which mimic difficult problems in compressible flow simulations, including boundary layer and closed streamline problems.  I will also solve a viscous Burgers' equation as an extension of DPG to nonlinear problems.  Finally, the effectiveness of DPG as a numerical method for compressible flow will be assessed with the application of DPG to common transonic and superonic benchmark problems.  In particular, I will use DPG to solve the flat plate problem, the ramp problem, and flow over a Gaussian bump over a range of Mach numbers and laminar Reynolds numbers. 
+
+Time permitting, I will also attempt to simulate flow over an airfoil, and to explore the regularization of the inviscid convection and Euler equations using the full convection-diffusion and Navier-Stokes equations in the small-viscosity limit.  
+
+%Additionally, we will seek to pursue the application of DPG to the inviscid Euler equations 
+
+\bibliographystyle{plain}
+\bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes}
+
+\end{document}

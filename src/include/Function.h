@@ -119,6 +119,8 @@ public:
   // static Function construction methods:
   static FunctionPtr composedFunction( FunctionPtr f, FunctionPtr arg_g); // note: SLOW! avoid when possible...
   static FunctionPtr constant(double value);
+  static FunctionPtr constant(vector<double> &value);
+  
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);
@@ -365,6 +367,7 @@ public:
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   
+  virtual string displayString();
   int dim();
 };
 

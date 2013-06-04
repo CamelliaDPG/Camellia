@@ -39,10 +39,11 @@ public:
   shards::CellTopology domainTopology() const;
   
   // dof ordinal subsets:
-  std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
-  std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-  std::set<int> dofOrdinalsForInterior() const;
-  std::set<int> dofOrdinalsForVertices() const;
+  std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
+//  std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
+//  std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
+//  std::set<int> dofOrdinalsForInterior() const;
+//  std::set<int> dofOrdinalsForVertices() const;
   
   // range info for basis values:
   int rangeDimension() const;

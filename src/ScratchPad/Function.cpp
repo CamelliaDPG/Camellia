@@ -986,6 +986,10 @@ FunctionPtr Function::constant(double value) {
   return Teuchos::rcp( new ConstantScalarFunction(value) );
 }
 
+FunctionPtr Function::constant(vector<double> &value) {
+  return Teuchos::rcp( new ConstantVectorFunction(value) );
+}
+
 FunctionPtr Function::meshBoundaryCharacteristic() {
   // 1 on mesh boundary, 0 elsewhere
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
@@ -1729,6 +1733,16 @@ VectorizedFunction::VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionP
   _fxns.push_back(f2);
   _fxns.push_back(f3);
 }
+string VectorizedFunction::displayString() {
+  ostringstream str;
+  str << "(";
+  for (int i=0; i<_fxns.size(); i++) {
+    if (i > 0) str << ",";
+    str << _fxns[i]->displayString();
+  }
+  str << ")";
+  return str.str();
+}
 int VectorizedFunction::dim() {
   return _fxns.size();
 }
@@ -1875,7 +1889,7 @@ FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
 //}
 
 FunctionPtr operator*(double weight, FunctionPtr f) {
-  return Teuchos::rcp( new ConstantScalarFunction(weight) ) * f;
+  return Function::constant(weight) * f;
 }
 
 FunctionPtr operator*(FunctionPtr f, double weight) {
@@ -1883,7 +1897,7 @@ FunctionPtr operator*(FunctionPtr f, double weight) {
 }
 
 FunctionPtr operator*(vector<double> weight, FunctionPtr f) {
-  return Teuchos::rcp( new ConstantVectorFunction(weight) ) * f;
+  return Function::constant(weight) * f;
 }
 
 FunctionPtr operator*(FunctionPtr f, vector<double> weight) {

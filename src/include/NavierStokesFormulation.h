@@ -77,7 +77,7 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
   VarPtr tau1, tau2, q, v1, v2;
   BFPtr _bf, _stokesBF;
   IPPtr _graphNorm;
-  FunctionPtr _mu, _sqrt_mu;
+  FunctionPtr _mu;
   
   // previous solution Functions:
   FunctionPtr sigma11_prev;
@@ -116,15 +116,14 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
     u2_prev = Function::solution(u2,_soln);
   }
   
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, SolutionPtr soln) {
+  void init(FunctionPtr Re, SolutionPtr soln) {
     _mu = 1.0 / Re;
-    _sqrt_mu = 1.0 / sqrtRe;
     
     initVars();
     
     _stokesBF = stokesBF(_mu);
     
-    // construct bilinear form:
+    bool dontEnrichVelocity = false;
     _bf = stokesBF(_mu);
 
 //    FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
@@ -137,8 +136,8 @@ class VGPNavierStokesFormulation : public NavierStokesFormulation {
 //    _bf->addTerm( u2_prev * u1, v2->dx());
 //    _bf->addTerm( u2_prev * u2, v2->dy());
     
-    _bf->addTerm(- sigma11_prev * u1 - sigma12_prev * u2 - u1_prev * sigma11 - u2_prev * sigma12, v1);
-    _bf->addTerm(- sigma21_prev * u1 - sigma22_prev * u2 - u1_prev * sigma21 - u2_prev * sigma22, v2);
+    _bf->addTerm(- Re * sigma11_prev * u1 - Re * sigma12_prev * u2 - Re * u1_prev * sigma11 - Re * u2_prev * sigma12, v1);
+    _bf->addTerm(- Re * sigma21_prev * u1 - Re * sigma22_prev * u2 - Re * u1_prev * sigma21 - Re * u2_prev * sigma22, v2);
 //    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * u1, v1); // (div u) delta u v
 //    _bf->addTerm( - ( u1_prev->dx() + u2_prev->dy() ) * u2, v2); // (div u) delta u v
     
@@ -157,10 +156,10 @@ public:
   }
   
   VGPNavierStokesFormulation(double Re, SolutionPtr soln) : NavierStokesFormulation(Re, soln) {
-    init(Function::constant(Re), Function::constant(sqrt(Re)), soln);
+    init(Function::constant(Re), soln);
   }
-  VGPNavierStokesFormulation(FunctionPtr Re, FunctionPtr sqrtRe, SolutionPtr soln) : NavierStokesFormulation(Re, soln) {
-    init(Re,sqrtRe,soln);
+  VGPNavierStokesFormulation(FunctionPtr Re, SolutionPtr soln) : NavierStokesFormulation(Re, soln) {
+    init(Re,soln);
   }
   
   BFPtr bf() {
@@ -181,36 +180,34 @@ public:
 //    rhs->addTerm( - u2_prev * u_prev * v2->grad() );
     
     // finally, add the u sigma term:
-    rhs->addTerm( (u1_prev * sigma11_prev + u2_prev * sigma12_prev) * v1 );
-    rhs->addTerm( (u1_prev * sigma21_prev + u2_prev * sigma22_prev) * v2 );
+    rhs->addTerm( ((u1_prev / _mu) * sigma11_prev + (u2_prev / _mu) * sigma12_prev) * v1 );
+    rhs->addTerm( ((u1_prev / _mu) * sigma21_prev + (u2_prev / _mu) * sigma22_prev) * v2 );
 //    rhs->addTerm( (u1_prev->dx() + u2_prev->dy()) * (u1_prev * v1 + u2_prev * v2) ); // (div u) u * v
     
     return rhs;
   }
   IPPtr scaleCompliantGraphNorm(FunctionPtr dt_inv = Function::zero()) {
-    // messing around: at any given time this may or may not correspond to "scale compliance", whatever that means
+    // corresponds to ||u||^2 + ||grad u||^2 + ||p||^2
     FunctionPtr h = Teuchos::rcp( new hFunction() );
     IPPtr compliantGraphNorm = Teuchos::rcp( new IP );
     
-    FunctionPtr sqrt_mu_inv = 1.0 / _sqrt_mu;
+    compliantGraphNorm->addTerm( _mu * v1->dx() + tau1->x() - (u1_prev / _mu) * v1 ); // sigma11
+    compliantGraphNorm->addTerm( _mu * v1->dy() + tau1->y() - (u2_prev / _mu) * v1 ); // sigma12
+    compliantGraphNorm->addTerm( _mu * v2->dx() + tau2->x() - (u1_prev / _mu) * v2 ); // sigma21
+    compliantGraphNorm->addTerm( _mu * v2->dy() + tau2->y() - (u2_prev / _mu) * v2); // sigma22
     
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + sqrt_mu_inv * ( tau1->x() - u1_prev * v1 ) ); // sigma11
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dy() + sqrt_mu_inv * ( tau1->y() - u1_prev * v2 ) ); // sigma12
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dx() + sqrt_mu_inv * ( tau2->x() - u2_prev * v1 ) ); // sigma21
-    compliantGraphNorm->addTerm( _sqrt_mu * v2->dy() + sqrt_mu_inv * ( tau2->y() - u2_prev * v2 ) ); // sigma22
-    compliantGraphNorm->addTerm( _sqrt_mu * v1->dx() + _sqrt_mu * v2->dy() );          // pressure
-    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau1->div() - q->dx() - dt_inv * v1) - (_mu / h) * (sigma11_prev * v1 + sigma12_prev * v2 ) );  // u1
-    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau2->div() - q->dy() - dt_inv * v2) - (_mu / h) * (sigma21_prev * v1 + sigma22_prev * v2 ) );  // u2
-//    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau1->div() - q->dx() - sigma11_prev * v1 - sigma12_prev * v2 - dt_inv * v1) );  // u1
-//    compliantGraphNorm->addTerm( h * sqrt_mu_inv * ( tau2->div() - q->dy() - sigma21_prev * v1 - sigma22_prev * v2 - dt_inv * v2) );  // u2
+    compliantGraphNorm->addTerm(   h * tau1->div() - h * q->dx() - h * dt_inv * v1
+                                 - (sigma11_prev / _mu) * v1 - (sigma21_prev / _mu) * v2 );  // u1
+    compliantGraphNorm->addTerm(   h * tau2->div() - h * q->dy() - h * dt_inv * v2
+                                 - (sigma12_prev / _mu) * v1 - (sigma22_prev / _mu) * v2 );  // u2
     
-    compliantGraphNorm->addTerm( (_sqrt_mu / h) * v1 );
-    compliantGraphNorm->addTerm( (_sqrt_mu / h) * v2 );
-//    compliantGraphNorm->addTerm( v1 / h );
-//    compliantGraphNorm->addTerm( v2 / h);
-    compliantGraphNorm->addTerm( sqrt_mu_inv * q );
-    compliantGraphNorm->addTerm( sqrt_mu_inv * tau1 );
-    compliantGraphNorm->addTerm( sqrt_mu_inv * tau2 );
+    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
+    
+    compliantGraphNorm->addTerm( (1 / h) * v1 );
+    compliantGraphNorm->addTerm( (1 / h) * v2 );
+    compliantGraphNorm->addTerm( q );
+    compliantGraphNorm->addTerm( tau1 );
+    compliantGraphNorm->addTerm( tau2 );
     return compliantGraphNorm;
   }
   
@@ -239,10 +236,12 @@ public:
     
     mySolution->setSolutionFunction(p, p_exact);
     
-    FunctionPtr sigma11_exact = u1_exact->dx();
-    FunctionPtr sigma12_exact = u1_exact->dy();
-    FunctionPtr sigma21_exact = u2_exact->dx();
-    FunctionPtr sigma22_exact = u2_exact->dy();
+    FunctionPtr sigma_weight = _mu;
+    
+    FunctionPtr sigma11_exact = sigma_weight * u1_exact->dx();
+    FunctionPtr sigma12_exact = sigma_weight * u1_exact->dy();
+    FunctionPtr sigma21_exact = sigma_weight * u2_exact->dx();
+    FunctionPtr sigma22_exact = sigma_weight * u2_exact->dy();
     
     mySolution->setSolutionFunction(sigma11, sigma11_exact);
     mySolution->setSolutionFunction(sigma12, sigma12_exact);
@@ -252,8 +251,8 @@ public:
     // tn = (mu sigma - pI)n
     FunctionPtr sideParity = Function::sideParity();
     FunctionPtr n = Function::normal();
-    FunctionPtr t1n_exact = (mu * sigma11_exact - p_exact) * n->x() + mu * sigma12_exact * n->y();
-    FunctionPtr t2n_exact = mu * sigma21_exact * n->x() + (mu * sigma22_exact - p_exact) * n->y();
+    FunctionPtr t1n_exact = (sigma11_exact - p_exact) * n->x() + sigma12_exact * n->y();
+    FunctionPtr t2n_exact = sigma21_exact * n->x() + (sigma22_exact - p_exact) * n->y();
     
     mySolution->setSolutionFunction(u1hat, u1_exact);
     mySolution->setSolutionFunction(u2hat, u2_exact);
@@ -274,6 +273,15 @@ public:
     VGPStokesFormulation stokesFormulation(mu);
     stokesFormulation.trialIDs(fieldIDs,correspondingTraceIDs,fileFriendlyNames);
   }
+  VarPtr u1var() {
+    return u1;
+  }
+  VarPtr u2var() {
+    return u2;
+  }
+  VarPtr pvar() {
+    return p;
+  }
 };
 
 class VGPNavierStokesProblem {
@@ -289,8 +297,8 @@ class VGPNavierStokesProblem {
   
   bool _neglectFluxesOnRHS;
   
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, MeshGeometryPtr geometry, int H1Order, int pToAdd,
-            FunctionPtr f1, FunctionPtr f2) {
+  void init(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
+            FunctionPtr f1, FunctionPtr f2, bool enrichVelocity) {
     _neglectFluxesOnRHS = true;
     FunctionPtr mu = 1.0 / Re;
     _iterations = 0;
@@ -299,8 +307,17 @@ class VGPNavierStokesProblem {
     Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
     
     // create a new mesh:
+    bool useConformingTraces = true;
+    map<int, int> trialOrderEnhancements;
+    VarPtr u1 = vgpStokesFormulation->u1var();
+    VarPtr u2 = vgpStokesFormulation->u2var();
+    if (enrichVelocity) {
+      trialOrderEnhancements[u1->ID()] = 1;
+      trialOrderEnhancements[u2->ID()] = 1;
+    }
     _mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
-                                   vgpStokesFormulation->bf(), H1Order, pToAdd) );
+                                   vgpStokesFormulation->bf(), H1Order, pToAdd,
+                                   useConformingTraces, trialOrderEnhancements) );
     _mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
     
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
@@ -310,7 +327,7 @@ class VGPNavierStokesProblem {
     _solnIncrement = Teuchos::rcp( new Solution(_mesh) );
     _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
     
-    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, sqrtRe, _backgroundFlow));
+    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
     
     _backgroundFlow->setRHS( _vgpNavierStokesFormulation->rhs(f1, f2,_neglectFluxesOnRHS) );
     _backgroundFlow->setIP( _vgpNavierStokesFormulation->graphNorm() );
@@ -321,9 +338,9 @@ class VGPNavierStokesProblem {
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
   }
   
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
-            FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2) {
+            FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2, bool useEnrichedVelocity) {
     _neglectFluxesOnRHS = true;
     FunctionPtr mu = 1.0/Re;
     _iterations = 0;
@@ -332,15 +349,22 @@ class VGPNavierStokesProblem {
     Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
     
     // create a new mesh:
+    bool useConformingTraces = true;
+    bool triangulate = false;
+    map<int, int> trialOrderEnhancements;
+    VarPtr u1 = vgpStokesFormulation->u1var();
+    VarPtr u2 = vgpStokesFormulation->u2var();
+    if (useEnrichedVelocity) {
+      trialOrderEnhancements[u1->ID()] = 1;
+      trialOrderEnhancements[u2->ID()] = 1;
+    }
     _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
+                                triangulate, useConformingTraces, trialOrderEnhancements);
     
     SpatialFilterPtr entireBoundary = SpatialFilter::allSpace(); // allSpace() returns true everywhere
     
     BCPtr vgpBC = vgpStokesFormulation->bc(u1_0, u2_0, entireBoundary);
-    
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
     
     _backgroundFlow = Teuchos::rcp( new Solution(_mesh, vgpBC) );
     
@@ -348,7 +372,7 @@ class VGPNavierStokesProblem {
     _solnIncrement = Teuchos::rcp( new Solution(_mesh, vgpBC) );
     _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
     
-    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, sqrtRe, _backgroundFlow));
+    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
     
     _backgroundFlow->setRHS( _vgpNavierStokesFormulation->rhs(f1, f2, _neglectFluxesOnRHS) );
     _backgroundFlow->setIP( _vgpNavierStokesFormulation->graphNorm() );
@@ -359,7 +383,7 @@ class VGPNavierStokesProblem {
     _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2, _neglectFluxesOnRHS) );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
   }
-  void init(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
              int verticalCells, int H1Order, int pToAdd,
              FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
     _neglectFluxesOnRHS = false; // main reason we don't neglect fluxes is because exact solution isn't yet set up to handle that
@@ -367,19 +391,25 @@ class VGPNavierStokesProblem {
     _iterations = 0;
     _iterationWeight = 1.0;
     
-    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu, enrichVelocity) );
-    
-    // create a new mesh:
-    _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
-    
+    Teuchos::RCP< VGPStokesFormulation > vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
     
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
     
     BCPtr vgpBC = vgpStokesFormulation->bc(u1_exact, u2_exact, entireBoundary);
     
+    // create a new mesh:
+    bool useConformingTraces = true;
+    bool triangulate = false;
+    map<int, int> trialOrderEnhancements;
+    VarPtr u1 = vgpStokesFormulation->u1var();
+    VarPtr u2 = vgpStokesFormulation->u2var();
+    if (enrichVelocity) {
+      trialOrderEnhancements[u1->ID()] = 1;
+      trialOrderEnhancements[u2->ID()] = 1;
+    }
     _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd);
+                                vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
+                                triangulate, useConformingTraces, trialOrderEnhancements);
     
     _backgroundFlow = Teuchos::rcp( new Solution(_mesh, vgpBC) );
     
@@ -389,7 +419,7 @@ class VGPNavierStokesProblem {
     _solnIncrement = Teuchos::rcp( new Solution(_mesh, zeroBC) );
     _solnIncrement->setCubatureEnrichmentDegree( H1Order-1 ); // can have weights with poly degree = trial degree
     
-    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, sqrtRe, _backgroundFlow));
+    _vgpNavierStokesFormulation = Teuchos::rcp( new VGPNavierStokesFormulation(Re, _backgroundFlow));
     
     _exactSolution = _vgpNavierStokesFormulation->exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
     _backgroundFlow->setRHS( _exactSolution->rhs() );
@@ -400,38 +430,39 @@ class VGPNavierStokesProblem {
     _solnIncrement->setRHS( _exactSolution->rhs() );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
   }
-            
-  
 public:
-  VGPNavierStokesProblem(FunctionPtr Re, FunctionPtr sqrtRe, MeshGeometryPtr geometry, int H1Order, int pToAdd,
-                         FunctionPtr f1 = Function::zero(), FunctionPtr f2=Function::zero()) {
-    init(Re,sqrtRe,geometry,H1Order,pToAdd, f1,f2);
+  VGPNavierStokesProblem(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
+                         FunctionPtr f1 = Function::zero(), FunctionPtr f2=Function::zero(),
+                         bool enrichVelocity = false) {
+    init(Re,geometry,H1Order,pToAdd, f1,f2, enrichVelocity);
     // note that this constructor leaves BC enforcement up to the user
   }
   
-  VGPNavierStokesProblem(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2) {
-    init(Re,sqrtRe,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2);
+                         FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
+                         bool enrichVelocity = false) {
+    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2,enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
   VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2) {
-    init(Function::constant(Re),Function::constant(sqrt(Re)),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2);
+                         FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
+                         bool enrichVelocity = false) {
+    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
-  VGPNavierStokesProblem(FunctionPtr Re, FunctionPtr sqrtRe, FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(Re,sqrtRe,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity);
+    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
             
   VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(Function::constant(Re),Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity);
+    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
             
