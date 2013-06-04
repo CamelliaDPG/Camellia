@@ -230,7 +230,8 @@ int main(int argc, char *argv[]) {
   // define nodes for mesh
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
-  mesh = MeshFactory::hemkerMesh(6, 6, 1, bf, H1Order, pToAdd);
+  // mesh = MeshFactory::shiftedHemkerMesh(-3, 9, 6, 1, bf, H1Order, pToAdd);
+  mesh = MeshFactory::hemkerMesh(12, 6, 1, bf, H1Order, pToAdd);
   // if (readMesh)
   //   mesh = Mesh::readTriangle(Camellia_MeshDir+"Hemker/Hemker.1", bf, H1Order, pToAdd);
   // else
