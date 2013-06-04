@@ -15,6 +15,7 @@
 #include "SolutionExporter.h"
 
 #include "BuildHemkerMesh.h"
+#include "MeshFactory.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -229,10 +230,11 @@ int main(int argc, char *argv[]) {
   // define nodes for mesh
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
-  if (readMesh)
-    mesh = Mesh::readTriangle(Camellia_MeshDir+"Hemker/Hemker.1", bf, H1Order, pToAdd);
-  else
-    mesh = BuildHemkerMesh(bf, nseg, circleMesh, triangulateMesh, H1Order, pToAdd);
+  mesh = MeshFactory::hemkerMesh(6, 6, 1, bf, H1Order, pToAdd);
+  // if (readMesh)
+  //   mesh = Mesh::readTriangle(Camellia_MeshDir+"Hemker/Hemker.1", bf, H1Order, pToAdd);
+  // else
+  //   mesh = BuildHemkerMesh(bf, nseg, circleMesh, triangulateMesh, H1Order, pToAdd);
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
