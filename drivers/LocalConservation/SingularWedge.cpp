@@ -102,12 +102,12 @@ int main(int argc, char *argv[]) {
   double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
   int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
   bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
-  bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+  int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = modified robust");
 
   // Optional arguments (have defaults)
   halfwidth = args.Input("--halfwidth", "half the width of the wedge", 0.5);
   bool allQuads = args.Input("--allQuads", "use only quads in mesh", false);
-  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
+  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", enforceLocalConservation);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -140,21 +140,39 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
-  if (graphNorm)
+  // Graph norm
+  if (norm == 0)
   {
     ip = bf->graphNorm();
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    ip->addZeroMeanTerm( h2_scaling*v );
   }
-  else
+  // Robust norm
+  else if (norm == 1)
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
     FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
     if (!zeroL2)
-      ip->addTerm( ip_scaling * v );
+      ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    if (zeroL2)
+      ip->addZeroMeanTerm( h2_scaling*v );
+  }
+  // Modified robust norm
+  else if (norm == 2)
+  {
+    // robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    if (!zeroL2)
+      ip->addTerm( v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    ip->addTerm( tau->div() - beta*v->grad() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
     if (zeroL2)
       ip->addZeroMeanTerm( h2_scaling*v );
@@ -287,30 +305,6 @@ int main(int argc, char *argv[]) {
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
-    // {
-    //   // refinementStrategy.refine(commRank==0); // print to console on commRank 0
-    //   vector<int> cellsToRefine;
-    //   vector<int> cells_h;
-    //   vector<int> cells_p;
-    //   refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
-    //   for (int i=0; i < cellsToRefine.size(); i++)
-    //     if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-4)
-    //     {
-    //       int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
-    //       if (allQuads)
-    //         cells_p.push_back(cellsToRefine[i]);
-    //       else
-    //         if (pOrder < 8)
-    //           cells_p.push_back(cellsToRefine[i]);
-    //         else
-    //           cout << "Reached cell size and polynomial order limits" << endl;
-    //       //   cells_h.push_back(cellsToRefine[i]);
-    //     }
-    //     else
-    //       cells_h.push_back(cellsToRefine[i]);
-    //   refinementStrategy.pRefineCells(mesh, cells_p);
-    //   refinementStrategy.hRefineCells(mesh, cells_h);
-    // }
   }
   if (commRank == 0)
     errOut.close();
