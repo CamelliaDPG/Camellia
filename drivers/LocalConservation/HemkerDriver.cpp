@@ -24,6 +24,8 @@
 #include "choice.hpp"
 #endif
 
+#define saveVTK
+
 class EpsilonScaling : public hFunction {
   double _epsilon;
 public:
@@ -143,9 +145,6 @@ int main(int argc, char *argv[]) {
   int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = modified robust");
 
   // Optional arguments (have defaults)
-  bool circleMesh = args.Input("--circleMesh", "use circular inner mesh layer", false);
-  bool triangulateMesh = args.Input("--triangulateMesh", "divide quads into triangles", false);
-  int nseg = args.Input("--nseg", "number of linear segments per quarter circle", 8);
   bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
   args.Process();
 
@@ -278,7 +277,11 @@ int main(int argc, char *argv[]) {
   
   double energyThreshold = 0.25; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
+  Teuchos::RCP<RefinementHistory> refHistory = Teuchos::rcp( new RefinementHistory ); 
+  mesh->registerObserver(refHistory);
+#ifdef saveVTK
   VTKExporter exporter(solution, mesh, varFactory);
+#endif
   ofstream errOut;
   if (commRank == 0)
     errOut.open("hemker_err.txt");
@@ -290,7 +293,9 @@ int main(int argc, char *argv[]) {
     if (commRank==0){
       stringstream outfile;
       outfile << "hemker_" << refIndex;
+#ifdef saveVTK
       exporter.exportSolution(outfile.str());
+#endif
 
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
@@ -304,27 +309,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (refIndex < numRefs)
-    {
-      // refinementStrategy.refine(rank==0); // print to console on rank 0
-      vector<int> cellsToRefine;
-      vector<int> cells_h;
-      vector<int> cells_p;
-      refinementStrategy.getCellsAboveErrorThreshhold(cellsToRefine);
-      for (int i=0; i < cellsToRefine.size(); i++)
-        if (sqrt(mesh->getCellMeasure(cellsToRefine[i])) < 5e-5)
-        {
-          int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
-          if (pOrder < 8)
-            cells_p.push_back(cellsToRefine[i]);
-          else
-            cout << "Reached cell size and polynomial order limits" << endl;
-          //   cells_h.push_back(cellsToRefine[i]);
-        }
-        else
-          cells_h.push_back(cellsToRefine[i]);
-      refinementStrategy.pRefineCells(mesh, cells_p);
-      refinementStrategy.hRefineCells(mesh, cells_h);
-    }
+      refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
   if (commRank == 0)
     errOut.close();
