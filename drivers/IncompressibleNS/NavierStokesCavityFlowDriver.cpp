@@ -45,10 +45,7 @@
 
 #include "MeshUtilities.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#else
-#endif
 
 using namespace std;
 
@@ -227,13 +224,8 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
 
 int main(int argc, char *argv[]) {
   int rank = 0;
-#ifdef HAVE_MPI
-  // TODO: figure out the right thing to do here...
-  // may want to modify argc and argv before we make the following call:
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   rank=mpiSession.getRank();
-#else
-#endif
 #ifdef HAVE_MPI
   choice::MpiArgs args( argc, argv );
 #else
@@ -252,7 +244,10 @@ int main(int argc, char *argv[]) {
     bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
     bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "enforce local conservation using Lagrange constraints", false);
     bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
+    bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use static condensation", true);
     bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
+    
+    double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
 
     bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
     
@@ -272,7 +267,7 @@ int main(int argc, char *argv[]) {
     int pToAdd = 2; // for optimal test function approximation
     int pToAddForStreamFunction = 2;
     double nonlinearStepSize = 1.0;
-    double dt = 0.5;
+
     double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
     double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
@@ -286,33 +281,11 @@ int main(int argc, char *argv[]) {
     bool useAdHocHPRefinements = false;
     bool startWithZeroSolutionAfterRefinement = false;
     
-    bool artificialTimeStepping = false;
+    bool artificialTimeStepping = (dt > 0);
     
     int overkillMeshSize = 8;
     int overkillPolyOrder = 7; // H1 order
     
-    
-  //  // usage: polyOrder [numRefinements]
-  //  // parse args:
-  //  if ((argc != 4) && (argc != 3) && (argc != 2) && (argc != 5)) {
-  //    cout << "Usage: NavierStokesCavityFlowDriver fieldPolyOrder [numRefinements=10 [Reyn=400]]\n";
-  //    return -1;
-  //  }
-  //  int polyOrder = atoi(argv[1]);
-  //  int numRefs = 10;
-  //  if ( argc == 3) {
-  //    numRefs = atoi(argv[2]);
-  //  }
-  //  if ( argc == 4) {
-  //    numRefs = atoi(argv[2]);
-  //    Re = atof(argv[3]);
-  //  }
-  //  if ( argc == 5) {
-  //    numRefs = atoi(argv[2]);
-  //    Re = atof(argv[3]);
-  //    horizontalCells = atoi(argv[4]);
-  //    verticalCells = horizontalCells;
-  //  }
     if (rank == 0) {
       cout << "numRefinements = " << numRefs << endl;
       cout << "Re = " << Re << endl;
@@ -410,7 +383,11 @@ int main(int argc, char *argv[]) {
     }
     
     if (useCompliantGraphNorm) {
-      problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
+      if (artificialTimeStepping) {
+        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
+      } else {
+        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+      }
       // (otherwise, will use graph norm)
     }
     
@@ -516,7 +493,14 @@ int main(int argc, char *argv[]) {
       if (replayFile.length() > 0) {
         cout << "will replay refinements from file " << replayFile << endl;
       }
+      if (useCondensedSolve) {
+        cout << "using condensed solve.\n";
+      } else {
+        cout << "not using condensed solve.\n";
+      }
     }
+    
+//    cout << "Processor #" << rank << " got to: " << __LINE__ << endl;
     
     ////////////////////   CREATE BCs   ///////////////////////
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
@@ -564,6 +548,8 @@ int main(int argc, char *argv[]) {
   //      cout << "overkill energy error: " << overkillEnergyError << endl;
   //  }
     
+    
+//    cout << "Processor #" << rank << " got to: " << __LINE__ << endl;
     ////////////////////   SOLVE & REFINE   ///////////////////////
     
     FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
@@ -687,7 +673,7 @@ int main(int argc, char *argv[]) {
         
         double incr_norm;
         do {
-          problem.iterate(useLineSearch);
+          problem.iterate(useLineSearch, useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
 //          // update time step
 //          double new_dt = min(1.0/incr_norm, 1000.0);
@@ -747,7 +733,7 @@ int main(int argc, char *argv[]) {
       }
       double incr_norm;
       do {
-        problem.iterate(useLineSearch);
+        problem.iterate(useLineSearch, useCondensedSolve);
         incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
         if (rank==0) {
           cout << "\x1B[2K"; // Erase the entire current line.
@@ -774,7 +760,7 @@ int main(int argc, char *argv[]) {
           cout << "performing one extra iteration and outputting its stiffness matrix to disk.\n";
         }
         problem.solutionIncrement()->setWriteMatrixToFile(true, "nsCavity_final_stiffness.dat");
-        problem.iterate(useLineSearch);
+        problem.iterate(useLineSearch, useCondensedSolve);
         if (rank==0) {
           cout << "Final iteration, L^2(incr) = " << incr_norm << endl;
         }
@@ -916,7 +902,11 @@ int main(int argc, char *argv[]) {
     //    streamRefinementStrategy.refine(rank==0);
     //  }
     
-    streamSolution->solve(useMumps);
+    if (!useCondensedSolve){
+      streamSolution->solve(useMumps);
+    } else {
+      streamSolution->condensedSolve();
+    }
     energyErrorTotal = streamSolution->energyErrorTotal();
     if (rank == 0) {  
       cout << "...solved.\n";

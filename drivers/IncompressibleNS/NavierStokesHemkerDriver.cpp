@@ -20,6 +20,7 @@
 #include "RefinementStrategy.h"
 //#include "LidDrivenFlowRefinementStrategy.h"
 #include "RefinementPattern.h"
+#include "RefinementHistory.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
 #include "MeshPolyOrderFunction.h"
@@ -46,9 +47,9 @@ VarPtr u1, u2, sigma11, sigma12, sigma21, sigma22, p;
 class LeftBoundary : public SpatialFilter {
   double _left;
 public:
-  LeftBoundary(double width) {
+  LeftBoundary(double xLeft) {
     double tol = 1e-14;
-    _left = - width / 2.0 + tol;
+    _left = xLeft + tol;
   }
   bool matchesPoint(double x, double y) {
     bool matches = x < _left;
@@ -66,9 +67,9 @@ public:
 class RightBoundary : public SpatialFilter {
   double _right;
 public:
-  RightBoundary(double width) {
+  RightBoundary(double xRight) {
     double tol = 1e-14;
-    _right = width / 2.0 - tol;
+    _right = xRight - tol;
   }
   bool matchesPoint(double x, double y) {
     return x > _right;
@@ -79,9 +80,9 @@ public:
 class TopBoundary : public SpatialFilter {
   double _top;
 public:
-  TopBoundary(double height) {
+  TopBoundary(double yTop) {
     double tol = 1e-14;
-    _top = height / 2.0 - tol;
+    _top = yTop - tol;
   }
   bool matchesPoint(double x, double y) {
     return y > _top;
@@ -91,9 +92,9 @@ public:
 class BottomBoundary : public SpatialFilter {
   double _bottom;
 public:
-  BottomBoundary(double height) {
+  BottomBoundary(double yBottom) {
     double tol = 1e-14;
-    _bottom = - height / 2.0 + tol;
+    _bottom = yBottom + tol;
   }
   bool matchesPoint(double x, double y) {
     return y < _bottom;
@@ -163,17 +164,46 @@ FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double y
   return points;
 }
 
-FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1) {
-  int numPoints = points.dimension(0);
-  FieldContainer<double> values(numPoints);
-  solution->solutionValues(values, u1->ID(), points);
-  
+FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoints, SolutionPtr solution, VarPtr u) {
+  int numPointsPerCell = refPoints.dimension(0);
+
+  MeshPtr mesh = solution->mesh();
+  int numCells = mesh->numActiveElements();
+  int numPoints = numCells * numPointsPerCell;
   FieldContainer<double> xyzData(numPoints, 3);
-  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-    xyzData(ptIndex,0) = points(ptIndex,0);
-    xyzData(ptIndex,1) = points(ptIndex,1);
-    xyzData(ptIndex,2) = values(ptIndex);
+  
+  vector< ElementTypePtr > elementTypes = mesh->elementTypes(); // global element types list
+  vector< ElementTypePtr >::iterator elemTypeIt;
+
+  int globalPtIndex = 0;
+  
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+    //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
+    ElementTypePtr elemTypePtr = *(elemTypeIt);
+    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, mesh));
+    basisCache->setRefCellPoints(refPoints);
+    
+    vector<int> globalCellIDs = mesh->cellIDsOfTypeGlobal(elemTypePtr);
+    
+    FieldContainer<double> solutionValues(globalCellIDs.size(),numPointsPerCell);
+    FieldContainer<double> physicalCellNodesForType = mesh->physicalCellNodesGlobal(elemTypePtr);
+
+    basisCache->setPhysicalCellNodes(physicalCellNodesForType, globalCellIDs, false); // false: don't create side cache
+    
+    solution->solutionValues(solutionValues, u->ID(), basisCache);
+    
+    FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    
+    for (int cellIndex = 0; cellIndex < globalCellIDs.size(); cellIndex++) {
+      for (int localPtIndex=0; localPtIndex<numPointsPerCell; localPtIndex++) {
+        xyzData(globalPtIndex,0) = physicalPoints(cellIndex,localPtIndex,0);
+        xyzData(globalPtIndex,1) = physicalPoints(cellIndex,localPtIndex,1);
+        xyzData(globalPtIndex,2) = solutionValues(cellIndex,localPtIndex);
+        globalPtIndex++;
+      }
+    }
   }
+  
   return xyzData;
 }
 
@@ -190,19 +220,14 @@ set<double> logContourLevels(double height, int numPointsTop=50) {
 
 int main(int argc, char *argv[]) {
   int rank = 0;
-#ifdef HAVE_MPI
-  // TODO: figure out the right thing to do here...
-  // may want to modify argc and argv before we make the following call:
+  
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   rank=mpiSession.getRank();
-#else
-#endif
+
   bool useLineSearch = false;
   
   int pToAdd = 2; // for optimal test function approximation
-  double nonlinearStepSize = 1.0;
   double dt = 0.5;
-  double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
 
@@ -210,8 +235,13 @@ int main(int argc, char *argv[]) {
   
   bool artificialTimeStepping = false;
   
+  bool useCondensedSolve = true;
+  
   bool useScaleCompliantGraphNorm = false;
   bool enrichVelocity = useScaleCompliantGraphNorm;
+  
+  string solnSaveFile = "nsHemker.solution";
+  string saveFile = "nsHemkerRefinements.replay";
   
   int maxIters = 50; // for nonlinear steps
   
@@ -241,6 +271,11 @@ int main(int argc, char *argv[]) {
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOTE: experimentally, NOT starting with 0 solution after refinement...\n";
     }
+    if (useCondensedSolve) {
+      cout << "using condensed solve.\n";
+    } else {
+      cout << "not using condensed solve.\n";
+    }
   }
 
   // define meshes:
@@ -268,25 +303,30 @@ int main(int argc, char *argv[]) {
   tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
   q = varFactory.testVar(VGP_Q_S, HGRAD);
   
-  double width = 60, height = 20;
-  double radius = 1;
+//  double width = 60, height = 20;
+  double radius = 0.5;
   FunctionPtr zero = Function::zero();
   FunctionPtr inflowSpeed = Function::constant(1.0);
   
-  MeshGeometryPtr geometry = MeshFactory::hemkerGeometry(width,height,radius);
-//  MeshGeometryPtr geometry = MeshFactory::quadGeometry(width,height); // hemker domain, but without the cylinder, and without curvilinear geometry!
+  double xLeft = -7.5;
+  double xRight = 22.5;
+  double meshHeight = 15;
+  
+  MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, radius); //MeshFactory::hemkerGeometry(width,height,radius);
   
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Function::constant(Re),geometry,
-                                                          H1Order, pToAdd); // zero forcing function
+                                                          H1Order, pToAdd,
+                                                          Function::zero(), Function::zero(), // zero forcing function
+                                                          useScaleCompliantGraphNorm); // enrich velocity if using compliant graph norm
   SolutionPtr solution = problem.backgroundFlow();
   SolutionPtr solnIncrement = problem.solutionIncrement();
   
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
-  SpatialFilterPtr top          = Teuchos::rcp( new TopBoundary(height) );
-  SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(height) );
-  SpatialFilterPtr left         = Teuchos::rcp( new LeftBoundary(width) );
-  SpatialFilterPtr right        = Teuchos::rcp( new RightBoundary(width) );
+  SpatialFilterPtr top          = Teuchos::rcp( new TopBoundary(meshHeight/2.0) );
+  SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(-meshHeight/2.0) );
+  SpatialFilterPtr left         = Teuchos::rcp( new LeftBoundary(xLeft) );
+  SpatialFilterPtr right        = Teuchos::rcp( new RightBoundary(xRight) );
   // could simplify the below using SpatialFilter's Or-ing capability
   bc->addDirichlet(u1hat,nearCylinder,zero);
   bc->addDirichlet(u2hat,nearCylinder,zero);
@@ -308,6 +348,13 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh = problem.mesh();
   mesh->registerSolution(solution);
   mesh->registerSolution(solnIncrement);
+  
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  mesh->registerObserver(refHistory);
+  
+  if (useScaleCompliantGraphNorm) {
+    problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+  }
   
   // define bilinear form for stream function:
   VarFactory streamVarFactory;
@@ -384,15 +431,6 @@ int main(int argc, char *argv[]) {
   
   refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
-
-  Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-  Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                               stepSize,
-                                                                                               nonlinearRelativeEnergyTolerance));
-  
-  Teuchos::RCP<NonlinearSolveStrategy> finalSolveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                               stepSize,
-                                                                                               nonlinearRelativeEnergyTolerance / 10));
   
   if (true) { // do regular refinement strategy...
     bool printToConsole = rank==0;
@@ -419,7 +457,7 @@ int main(int argc, char *argv[]) {
       
       double incr_norm;
       do {
-        problem.iterate(useLineSearch);
+        problem.iterate(useLineSearch,useCondensedSolve);
         incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
         if (rank==0) {
           cout << "\x1B[2K"; // Erase the entire current line.
@@ -429,13 +467,30 @@ int main(int argc, char *argv[]) {
         }
       } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
 
-      if (rank==0)
+      if (rank==0) {
         cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
+      }
       
       // reset iteration count to 1 (for the background flow):
       problem.setIterationCount(1);
       
-      refinementStrategy->refine(rank==0); // print to console on rank 0
+      if (rank==0) {
+        if (solnSaveFile.length() > 0) {
+          solution->writeToFile(solnSaveFile);
+        }
+      }
+      
+      refinementStrategy->refine(false); // don't print to console // (rank==0); // print to console on rank 0
+      if (rank==0) {
+        cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
+      }
+      
+      if (saveFile.length() > 0) {
+        if (rank == 0) {
+          refHistory->saveToFile(saveFile);
+        }
+      }
+      
     }
     // one more solve on the final refined mesh:
     if (rank==0) cout << "Final solve:\n";
@@ -446,7 +501,7 @@ int main(int argc, char *argv[]) {
     }
     double incr_norm;
     do {
-      problem.iterate(useLineSearch);
+      problem.iterate(useLineSearch,useCondensedSolve);
       incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
       if (rank==0) {
         cout << "\x1B[2K"; // Erase the entire current line.
@@ -457,13 +512,18 @@ int main(int argc, char *argv[]) {
     } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
     if (rank==0) cout << endl;
   }
+
+  if (rank==0) {
+    if (solnSaveFile.length() > 0) {
+      solution->writeToFile(solnSaveFile);
+    }
+  }
   
   double energyErrorTotal = solution->energyErrorTotal();
   double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
-    cout << "Final energy error: " << energyErrorTotal << endl;
-    cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
+    cout << "Final incremental energy error: " << incrementalEnergyErrorTotal << ".)\n";
   }
   
   FunctionPtr u1_sq = u1_prev * u1_prev;
@@ -545,15 +605,15 @@ int main(int argc, char *argv[]) {
     
     exporter.exportFunction(vorticity, "HemkerVorticity");
     
-    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-    u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
+//    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+//    u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
 //    solution->writeFieldsToFile(u1->ID(), "u1.m");
 //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
 //    solution->writeFieldsToFile(u2->ID(), "u2.m");
 //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
 //    solution->writeFieldsToFile(p->ID(), "p.m");
     
-    polyOrderFunction->writeValuesToMATLABFile(mesh, "hemkerPolyOrders.m");
+//    polyOrderFunction->writeValuesToMATLABFile(mesh, "hemkerPolyOrders.m");
   }
   
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
@@ -567,7 +627,8 @@ int main(int argc, char *argv[]) {
   // phi, the streamfunction, can be used to measure mass flux between two points
   // reverse engineering that fact, we can use y as the BC for phi
   FunctionPtr y = Function::yn();
-  streamBC->addDirichlet(phi_hat, nearCylinder, y);
+  // experiment: try no BC around cylinder...
+//  streamBC->addDirichlet(phi_hat, nearCylinder, y);
   streamBC->addDirichlet(phi_hat, left, y);
   streamBC->addDirichlet(phi_hat, top, y);
   streamBC->addDirichlet(phi_hat, bottom, y);
@@ -592,15 +653,16 @@ int main(int argc, char *argv[]) {
   if (rank==0){
     VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
     streamExporter.exportSolution("hemkerStreamSoln", H1Order*2);
-    
-    FieldContainer<double> points = pointGrid(-width/2, width/2, -height/2, height/2, 100);
-    FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
-    string patchDataPath = "phi_navierStokes_hemker.dat";
-    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
-    set<double> patchContourLevels = logContourLevels(height);
-    vector<string> patchDataPaths;
-    patchDataPaths.push_back(patchDataPath);
-    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
+
+    // the commented-out code below doesn't really work because gnuplot requires a "point grid" in physical space...
+//    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
+//    FieldContainer<double> pointData = solutionDataFromRefPoints(refPoints, streamSolution, phi);
+//    string patchDataPath = "phi_navierStokes_hemker.dat";
+//    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
+//    set<double> patchContourLevels = logContourLevels(height);
+//    vector<string> patchDataPaths;
+//    patchDataPaths.push_back(patchDataPath);
+//    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
   }
   
   return 0;
