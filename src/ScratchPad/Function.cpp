@@ -995,6 +995,11 @@ FunctionPtr Function::meshBoundaryCharacteristic() {
   return Teuchos::rcp( new MeshBoundaryCharacteristicFunction );
 }
 
+FunctionPtr Function::h() {
+  // 1 on mesh boundary, 0 elsewhere
+  return Teuchos::rcp( new hFunction );
+}
+
 FunctionPtr Function::meshSkeletonCharacteristic() {
    // 1 on mesh skeleton, 0 elsewhere
   return Teuchos::rcp( new MeshSkeletonCharacteristicFunction );
