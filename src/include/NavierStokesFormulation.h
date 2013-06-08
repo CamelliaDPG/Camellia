@@ -332,7 +332,8 @@ class VGPNavierStokesProblem {
     _backgroundFlow->setRHS( _vgpNavierStokesFormulation->rhs(f1, f2,_neglectFluxesOnRHS) );
     _backgroundFlow->setIP( _vgpNavierStokesFormulation->graphNorm() );
     
-    _mesh->setBilinearForm(_vgpNavierStokesFormulation->bf());
+    _bf = _vgpNavierStokesFormulation->bf();
+    _mesh->setBilinearForm(_bf);
     
     _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2,_neglectFluxesOnRHS) );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
@@ -499,16 +500,24 @@ public:
       return alpha;
     }
   }
-  double iterate(bool useLineSearch) { // returns the weight used...    
+  double iterate(bool useLineSearch, bool useCondensedSolve) { // returns the weight used...
     double weight;
     if (_iterations==0) {
       _solnIncrement->clear(); // zero out so we start afresh if the _iterations have been manually set...
-      _backgroundFlow->solve();
+      if (useCondensedSolve) {
+        _backgroundFlow->condensedSolve();
+      } else {
+        _backgroundFlow->solve();
+      }
       // want _solnIncrement to store the initial solution as the first increment:
       weight = 1.0;
       _solnIncrement->addSolution(_backgroundFlow, weight, true); // true: allow adds of empty cells
     } else {
-      _solnIncrement->solve();
+      if (useCondensedSolve) {
+        _solnIncrement->condensedSolve();
+      } else {
+        _solnIncrement->solve();
+      }
       if (!useLineSearch) {
         weight = _iterationWeight;
       } else {
