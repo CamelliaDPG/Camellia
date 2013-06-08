@@ -344,7 +344,11 @@ int main(int argc, char *argv[]) {
     energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
     energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
     energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
-    energyNormWeights[p_vgp->ID()] = 1.0;
+    if (Re < 1) { // assuming we're using the experimental small Re thing
+      energyNormWeights[p_vgp->ID()] = Re;
+    } else {
+      energyNormWeights[p_vgp->ID()] = 1.0;
+    }
     vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
     vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
     

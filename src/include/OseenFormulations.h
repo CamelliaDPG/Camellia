@@ -50,6 +50,7 @@ class VGPOseenFormulation : public OseenFormulation {
   FunctionPtr _mu;
   
   bool _scale_sigma_by_mu;
+  bool _small_Re; // used for determining scale-compliant norm...
   
   // background flow Functions:
   FunctionPtr _U1;
@@ -120,9 +121,15 @@ public:
   
   VGPOseenFormulation(double Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
     init(Function::constant(Re),U1,U2, scaleSigmaByMu);
+    if (Re < 1) _small_Re = true;
+    else _small_Re = false;
+    if (_small_Re) {
+      cout << "_small_Re = true -- scale-compliant norm will be scaled accordingly.\n";
+    }
   }
   VGPOseenFormulation(FunctionPtr Re, FunctionPtr U1, FunctionPtr U2, bool scaleSigmaByMu = true) : OseenFormulation(Re) {
     init(Re,U1,U2,scaleSigmaByMu);
+    _small_Re = false; // the default assumption
   }
   BFPtr bf() {
     return _bf;
@@ -165,10 +172,15 @@ public:
     compliantGraphNorm->addTerm( h * tau1->div() - h * q->dx() + h * _U1 * v1->dx() + h * _U2 * v1->dy() );  // u1
     compliantGraphNorm->addTerm( h * tau2->div() - h * q->dy() + h * _U1 * v2->dx() + h * _U2 * v2->dy() );  // u2
     
-    compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
-    
-    compliantGraphNorm->addTerm( (1 / h) * v1 );
-    compliantGraphNorm->addTerm( (1 / h) * v2 );
+    if (! _small_Re ) {
+      compliantGraphNorm->addTerm( v1->dx() + v2->dy() );          // pressure
+      compliantGraphNorm->addTerm( (1 / h) * v1 );
+      compliantGraphNorm->addTerm( (1 / h) * v2 );
+    } else {
+      compliantGraphNorm->addTerm( _mu * v1->dx() + _mu * v2->dy() );   // pressure
+      compliantGraphNorm->addTerm( (_mu / h) * v1 );
+      compliantGraphNorm->addTerm( (_mu / h) * v2 );
+    }
     compliantGraphNorm->addTerm( q );
     compliantGraphNorm->addTerm( tau1 );
     compliantGraphNorm->addTerm( tau2 );
@@ -244,6 +256,12 @@ public:
     VGPStokesFormulation stokesFormulation(mu);
     stokesFormulation.primaryTrialIDs(fieldIDs);
   }
+  void setSmallRe(bool value) {
+    _small_Re = value;
+    cout << "_small_Re = ";
+    if (_small_Re) cout << "true\n";
+    else cout << "false\n";
+  }
   void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) {
     FunctionPtr mu = 1.0 / _Re;
     VGPStokesFormulation stokesFormulation(mu);
@@ -307,14 +325,15 @@ public:
                   int verticalCells, int H1Order, int pToAdd,
                   FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, scaleSigmaByMu);
-    // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
   VGPOseenProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                   int verticalCells, int H1Order, int pToAdd,
                   FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool scaleSigmaByMu) {
     init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity, 
          scaleSigmaByMu);
-    // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
+    if (Re < 1) {
+      _vgpOseenFormulation->setSmallRe(true);
+    }
   }
   
   BFPtr bf() {
