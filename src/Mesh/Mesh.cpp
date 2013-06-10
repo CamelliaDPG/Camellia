@@ -1202,6 +1202,10 @@ double Mesh::distance(double x0, double y0, double x1, double y1) {
 }
 
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
+  if (_transformationFunction.get()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elementsForPoints does not support curvilinear meshes");
+  }
+  
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<ElementPtr> elemsForPoints;
 //  cout << "entered elementsForPoints: \n" << physicalPoints;
