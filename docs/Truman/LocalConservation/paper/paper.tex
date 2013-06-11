@@ -58,7 +58,7 @@
 \newcommand{\bfn}{\mbox{\boldmath $n$}}
 \newcommand{\bfH}{\mbox{\boldmath $H$}}
 \newcommand{\HdivK}{\bfH(\text{div},K)}
-\newcommand{\HOneK}{H^{-1}(K)}
+\newcommand{\HOneK}{H^{1}(K)}
 \newcommand{\HOneOmegah}{H^{-1}(\Omega_h)}
 \newcommand{\HdivOmegah}{\bfH(\text{div},\Omega_h)}
 \newcommand{\vdeltau}{v_{\delta\bs u_h}}
@@ -139,6 +139,15 @@ Austin, TX 78712}
 \maketitle
 
 \begin{abstract}
+We develop a locally conservative formulation of the discontinuous
+Petrov-Galerkin finite element method (DPG) for convection-diffusion type
+problems using Lagrange multipliers to exactly enforce conservation over each
+element. We provide a proof of convergence as well as extensive numerical
+experiments showing that the method is indeed locally conservative. We also
+show that standard DPG, while not guaranteed to be conservative, is nearly
+conservative for the benchmarks considered. The new method preserves many of
+the attractive features of DPG, but turns the normally symmetric
+positive-difinite DPG system into a saddlepoint problem.
 \end{abstract}
 
 \section{Intoduction}
@@ -168,12 +177,14 @@ solution.
 
 The discontinuous Petrov-Galerkin finite element method has been described as
 least squares finite elements with a twist. The key difference is that least
-square methods seek to minimize the residual of the solution in the $L^2$
+squares methods seek to minimize the residual of the solution in the $L^2$
 norm, while DPG seeks the minimization in a dual norm realized through the
 inverse Riesz map. Exact mass conservation has been an issue that has plagued
 least squares finite elements for a long time. Several approaches have been
-used to try to adress this. Chang and Nelson\cite{ChangNelson1997} developed
-the \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
+used to try to adress this. Bochev \etal\cite{Bochev2010} accomplish local
+conservation by using a pointwise divergence free velocity space in the Stokes
+formulation.  Chang and Nelson\cite{ChangNelson1997} developed the
+\emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
 equations with a Lagrange multiplier explicitly enforcing mass conservation
 element-wise. Our conservative formulation of DPG takes a similar approach and
 both methods share similar negative of transforming a minimization method to a
@@ -291,7 +302,7 @@ order equations:
 \frac{1}{\epsilon}\bs\sigma-\grad u&=\bs0\,.
 \end{align*}
 If we then multiply the top equation by some scalar test function $v$ and the
-bottom equation by some vector-valued test function $\tau$, we can integrate by
+bottom equation by some vector-valued test function $\btau$, we can integrate by
 parts over each element $K$:
 \begin{equation}
 \label{eq:preultraweak}
@@ -381,7 +392,7 @@ convection-diffusion, we get:
 \label{eq:conservativeConfusionSystem}
 \end{equation}
 
-\subsection{Proof of Convergence}
+\subsection{\textcolor{red}{Proof of Convergence}}
 We cannot directly use Brezzi's theorem, but we can reproduce his argument.
 First of all, variational formulation \eqref{eq:variationalFormulation} is
 equivalent to:
@@ -515,7 +526,7 @@ we get the final stability result:
 \label{eq:stability}
 \end{equation}
 
-\subsection{Local Problem}
+\section{A coupled, robust test norm}
 The optimal test functions are determined by solving local problems determined
 by the choice of test norm. There are several options to consider.
 The graph norm \cite{DPGOverview} is one of the most natural norms to consider
@@ -524,22 +535,15 @@ as it is derived directly from the adjoint of the problem supplemented with
 Chan \etal\cite{ChanHeuerThanhDemkowicz2012} derived a more robust alternative
 norm for convection diffusion (dubbed the robust norm). We recently
 developed a modification of the robust norm that appears to produce better
-results in the presence of singularities.
-
-\section{A coupled, robust test norm}
-In the course of our numerical experiments, we encountered unforseen
-difficulties for certain problems under our current robust test norm.  We
-illustrate in this section the observed issue using a second model problem
-with a singular solution, offer possible explanations for the phenomena
-observed, and propose a modification of the robust test norm presented
-previously, which we demonstrate eliminates the issues observed in numerical
-experiments.  
-
+results in the presence of singularities. In this section we illustrate the
+singularity issues with the Laplace equation, offer possible explanations for
+the phenomena observed, and propose a modification of the robust test norm,
+which we demonstrate eliminates the issues observed in numerical experiments.
 
 \subsection{A second model problem}
 \seclab{sec:confusionPlate}
-We begin by first examining a different problem than convection-diffusion --
-we examine admissible solutions for the homogeneous Laplace's equation over
+We begin by first examining a different problem than convection-diffusion.
+We look at admissible solutions for the homogeneous Laplace's equation over
 the $y > 0$ half-plane under boundary conditions 
 \begin{align*}
 u &= 0 \text{ on } x > 0\\
@@ -550,14 +554,19 @@ polar coordinates shows that the solution is of the form
 \[
 u(r,\theta) = \sum_{n=0}^\infty R_n(r) \sin(\lambda_n \theta),
 \]
-where $\lambda_n = n + \frac{1}{2}$, and $R_n(r) = C_{1,n}x^{\lambda_n} + C_{2,n}x^{-\lambda_n}$.  By requiring $u(0,\theta) < \infty$, we have $R_n(r) = C_n x^{\lambda_n}$.  We have now that solutions to this problem include $u$ of the form
+where $\lambda_n = n + \frac{1}{2}$, and $R_n(r) = C_{1,n}x^{\lambda_n} +
+C_{2,n}x^{-\lambda_n}$.  By requiring $u(0,\theta) < \infty$, we have $R_n(r)
+= C_n x^{\lambda_n}$.  We have now that solutions to this problem include $u$
+of the form
 \[
 u = \sum_{n=0} x^{n+\frac{1}{2}} \sin\LRp{\LRp{n+\frac{1}{2}}\theta}.
 \]
 Note that even in the lowest-order term, the gradient of $u$ displays a
-singularity at $r = 0$.  \textcolor{red}{Find reference in that solutions to
-Laplace's equation always can be split into smooth and singular parts on
-similar domains.}  
+singularity at $r = 0$. It is well known that, for smooth boundary data,
+solutions to Laplace’s equation can be decomposed into the linear combination
+of smooth and singular contributions; the above analysis implies that, when
+boundary conditions change from Dirichlet to Neumann on the half-plane, the
+Laplace’s equation will always develop a singularity in the stresses.
 
 Consider now Laplace's equation $\del u = f$ on the box domain $\Omega =
 [0,1]^2$ with boundary conditions
@@ -585,7 +594,9 @@ condition changes from Neumann to Dirichlet.
 \centering
 \includegraphics[scale=.275]{figs/LaplaceFigs/LaplacePlateSigma1.png}
 \includegraphics[scale=.275]{figs/LaplaceFigs/LaplacePlateSigma2.png}
-\caption{$x$ and $y$ components of the $\Grad u$ for $u$ solving Laplace's equation with a change in boundary conditions.  Both components develop singularities at the point where the boundary condition changes type.}
+\caption{$x$ and $y$ components of the $\Grad u$ for $u$ solving Laplace's
+equation with a change in boundary conditions.  Both components develop
+singularities at the point where the boundary condition changes type.}
 \label{fig:laplaceStresses}
 \end{figure}
 
@@ -628,7 +639,10 @@ the solution \cite{roos2008robust}.
 \centering
 \includegraphics[scale=.275]{figs/LaplaceFigs/confusion1e2h1e2.png}
 \includegraphics[scale=.275]{figs/LaplaceFigs/confusion1e2h1e3.png}
-\caption{Solution $u$ for $\epsilon = .01$ under the robust test norm.  The solution oscillates strongly at the plate edge, growing in magnitude under additional refinements despite the absence of a singularity in $u$ at that point.}
+\caption{Solution $u$ for $\epsilon = .01$ under the robust test norm.  The
+solution oscillates strongly at the plate edge, growing in magnitude under
+additional refinements despite the absence of a singularity in $u$ at that
+point.}
 \label{fig:plateOsc}
 \end{figure}
 
@@ -653,7 +667,7 @@ under the theory underlying the robust test norm; the error in the $\L$-norm
 of the solution is guaranteed to be robustly bounded; however, the $\L$ norm
 does allow for the presence of weak singularities (singularities of order
 $x^{-\frac{1}{2}}$).  Apart from the oscillation of $u$ at the singular point,
-the solution is well-behaved, and the stress $\sigma = \epsilon \Grad u$ is
+the solution is well-behaved, and the stress $\bsigma = \epsilon \Grad u$ is
 very well represented, as indicated in Figure~\ref{fig:plateStresses}.  
 
 \begin{figure}[!h]
@@ -667,63 +681,69 @@ very well represented, as indicated in Figure~\ref{fig:plateStresses}.
 \subsection{A modification of the robust test norm}
 
 While oscillations of this sort in a solution near a singular point may be
-acceptable in certain simulations, it is a large problem for the methods in
+acceptable in certain simulations, it is a big problem for the methods in
 compressible flow simulations -- physical constraints require several solution
 variables to remain positive throughout simulation.\footnote{Apart from
 returning a non-physical solution, the violation of positivity constraints
 typically results in non-convergence of nonlinear solvers.}  We propose a
 modification of the robust test norm that appears to remedy this issue, which
-we refer to as 
-\[
-\norm{\LRp{v,\tau}}_V^2 \coloneqq \norm{v}^2_{\L} + \norm{\beta\cdot \Grad v}_{\L}^2 + \norm{\div \tau - \beta\cdot\Grad v}_{\L}^2 + \norm{C_\tau\tau}_{\L}^2,
-\]
-where $C_\tau$ is defined as before.
-\footnote{
+we refer to as the coupled robust test norm:
+\begin{align}
+\norm{\LRp{v,\btau}}_{V,K}^2 &\coloneqq 
+\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\norm{\btau}_K^2,
++ \norm{\div \btau - \bbeta\cdot\Grad v}_K^2 \\
+&+\norm{\bbeta\cdot \Grad v}_K^2 
++ \epsilon\norm{\Grad v}_K^2 
++ \norm{v}^2_K
+\end{align}
+where $||\cdot||_K$ signifies the $L^2$ norm over element $K$.\footnote{
 We note that we have dropped the
 mesh-dependent scaling on $\norm{v}_{\L}$ from the robust norm; this is related
-to recent insights into the nature of DPG test spaces and explained in more
-detail in %Appendix~\secref{appendix:globalLocal}.
+to recent insights into the nature of DPG test spaces as discussed in
+\cite{Chan2013}.
 }  
 We note that, under the
-theory developed in 
-% Section~\secref{sec:testNormSec}, 
+theory developed in \cite{ChanHeuerThanhDemkowicz2012}
 the above test norm is
-trivially provably robust using the same theory.
-\footnote{This is due to the
-fact that $\norm{\div \tau - \beta\cdot\Grad v}_{\L}^2$ is robustly bounded by
-$\norm{\div \tau}_{\L}$ and $\norm{\beta\cdot\Grad v}_{\L}$.  Alternatively, we
-can note that $\norm{\div \tau - \beta\cdot\Grad v}_{\L}^2 = \norm{g}_{\L}^2$,
+trivially provably robust using the same ideas.\footnote{This is due to the
+fact that $\norm{\div \btau - \bbeta\cdot\Grad v}_{\L}^2$ is robustly bounded by
+$\norm{\div \btau}_{\L}$ and $\norm{\bbeta\cdot\Grad v}_{\L}$.  Alternatively, we
+can note that $\norm{\div \btau - \bbeta\cdot\Grad v}_{\L}^2 = \norm{g}_{\L}^2$,
 where $g$ is a load of the adjoint problem related to robustness described in
-% Section~\secref{sec:testNormSec}.
+\cite{ChanHeuerThanhDemkowicz2012}.
 }
 
-While not rigorously understood, the author believes the issues related to the
+While not rigorously understood, we believe the issues related to the
 appearance of non-physical singularities to be related to the uncoupled nature
 of the test norm.  Previous example problems exhibited boundary layers and
-sharp gradients in the stress $\sigma$, but not singularities, which
+sharp gradients in the stress $\bsigma$, but not singularities, which
 contribute significantly more error.  We expect that the oscillations observed
 in $u$ are a sort of \textit{pollution error}, where error in $u$ is tied to
-error in $\sigma$.  If we consider the ultra-weak variational formulation for
+error in $\bsigma$.  If we consider the ultra-weak variational formulation for
 convection-diffusion
 \[
-\LRp{u,\div \tau - \beta\cdot \grad v}_{\L} + \LRp{\sigma,\frac{1}{\epsilon} \tau + \grad v}_{\L} + \ldots,
+\LRp{u,\div \btau - \bbeta\cdot \grad v}_{\L} + \LRp{\bsigma,\frac{1}{\epsilon}
+\btau + \grad v}_{\L} + \ldots,
 \]
 we can see that it is a combination of test functions that corresponds to both
-$u$ and $\sigma$.  Recall from the previous section that, by choosing $\tau$
+$u$ and $\bsigma$.  Referring to \cite{ChanHeuerThanhDemkowicz2012}, we note
+that, by choosing $\btau$
 and $v$ such that they satisfy the adjoint equation with forcing terms $u$ and
-$\sigma$, we recover the best $L^2$ approximation.  In other words, achieving
-optimality in the $L^2$ norm requires coupling between $v$ and $\tau$, which
+$\bsigma$, we recover the best $L^2$ approximation.  In other words, achieving
+optimality in the $L^2$ norm requires coupling between $v$ and $\btau$, which
 is achieved under the graph norm, but not the robust norm derived in the
-previous section.  If coupling of the test terms , we expect that decoupling
-$v$ and $\tau$ from each other in a test norm from each other will have the
-effect of coupling error in $\sigma$ to error in $u$, which would explain the
-spurious oscillations in $u$ in the presence of singularities in $\sigma$.
+previous section.  
+If coupling of the test terms delivers optimality in $u$ and $\bsigma$
+independently, we expect that decoupling
+$v$ and $\btau$ from each other in a test norm will have the
+effect of coupling error in $\bsigma$ to error in $u$, which would explain the
+spurious oscillations in $u$ in the presence of singularities in $\bsigma$.
 Similar results have been observed in the Stokes equations, where error in $u$
 is coupled to the behavior of the pressure variable \cite{FLD:FLD582}.  
 
 The drawback to using the above test norm is that the resulting local system
-for test functions is now completely coupled, whereas using the previous test
-norm, the system was block diagonal due to the decoupling in $v$ and $\tau$
+for test functions is now completely coupled, whereas using the robust test
+norm, the system was block diagonal due to the decoupling in $v$ and $\btau$
 and could be constructed and inverted more efficiently.  We hope to explore
 the difference between these two norms in more rigor and detail in the
 future.  
@@ -738,14 +758,14 @@ future.
 
 Figure~\ref{fig:newNorm} shows the solution for $\epsilon = .01$, where the
 diffusion scale is both underresolved and resolved by $h$-adaptivity.  In both
-cases, there are no additional oscillations near the plate tip --
+cases, there are no oscillations near the plate tip --
 Figure~\ref{fig:newNormZoom} shows a zoomed image of the solution $u$ at the
 point $(.5,0)$.  The stress is resolved similarly to the previous case;
 however, the solution $u$ does not display spurious oscillations in either the
 underresolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
 the same quantities, but for $\epsilon = 10^{-4}$, in order to demonstrate
 that the new test norm removes spurious oscillations in $u$ (in the presence
-of singularities in $\sigma$) independently of $\epsilon$.  
+of singularities in $\bsigma$) independently of $\epsilon$.  
 
 \begin{figure}[!h]
 \centering
@@ -762,18 +782,17 @@ of singularities in $\sigma$) independently of $\epsilon$.
 \label{fig:newNormSmallEps}
 \end{figure}
 
-\subsubsection{Robust Norm}
-For illustrative purposes we choose the robust
-test norm developed by Chan \etal\cite{ChanHeuerThanhDemkowicz2012}. With this
-choice, we get our local problem:
+\subsection{Adaptation for a Locally Conservative Formulation}
+With this choice of test norm, our local problem now becomes:
 
 Find $\vdeltau\in\HOneK,\,\taudeltau\in\HdivK$ such that:
 \begin{align}
-(\nabla\cdot\taudeltau,&\nabla\cdot\delta\btau)_K
-+\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
-+\epsilon(\nabla\vdeltau,\nabla \delta v)_K
+\min&\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
++(\nabla\cdot\taudeltau-\bbeta\cdot\nabla
+v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K
 +(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber\\
-&+\alpha\min\left\{\sqrt{\frac{\epsilon}{|K|}},1\right\}(\vdeltau,\delta v)_K
+&+\epsilon(\nabla\vdeltau,\nabla \delta v)_K
++\alpha(\vdeltau,\delta v)_K
 =b(\delta\bs u_h,(\delta v,\delta\btau))
 \quad\quad\forall\delta v\in\HOneK,\,\delta\btau\in\HdivK\,,
 \label{eq:localSolve}
@@ -790,13 +809,16 @@ F_h^{c}:=\{\hat t:\langle\hat t,(1_K,\bs0)\rangle=0\quad\forall K\}\,.
 This may be accomplished by employing for fluxes in $\hat F_h^{c}$ traces of
 curls, $\nabla\times\phi$. 
 
+\textcolor{red}{
 In practice, we solve \eqref{eq:conservativeConfusionSystem} as a fully 
 coupled system of equations, but for didactic purposes, we can examine it 
 one piece at a time. If we restrict \eqref{eq:conservativeConfusionSystem}$_1$
 to $\delta\hat t\in\hat F_h^{nc}$, the Lagrange multiplier term drops out and we 
 left with a system that we can solve for $u_h$, $\bsigma_h$, $\hat u_h$, and 
 $\hat t_h^c\in\hat F^c_h$.
+}
 
+\textcolor{red}{
 Restricting ourselves to $\delta\hat t\in\hat
 F_h^{c}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a system  of
 equations that can be solved for $u_h$, $\bsigma_h$, $\hat u$, and $\hat
@@ -804,6 +826,7 @@ t\in\hat F_h^c$. The remaining fluxes, $\hat t\in\hat F_h^{nc}$ are determined
 from \eqref{eq:conservativeConfusionSystem}$_2$. Finally, testing with $\hat
 t\in\hat F_h^{nc}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a
 system of equations that can be solved for Lagrange multipliers $\lambda_K$.
+}
 
 Additionally, we can pass in local problem \eqref{eq:localSolve} with
 $\alpha\rightarrow0$. The fact that the test functions will be determined then
@@ -813,18 +836,26 @@ Mathematically, we are dealing with equivalence classes of functions, but in ord
 to obtain a single function that we can deal with numerically, we replace the alpha 
 term with a zero mean scaling condition to obtain the new test norm,
 \begin{align}
-(\nabla\cdot\taudeltau,&\nabla\cdot\delta\btau)_K
-+\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
-\nonumber\\
-&+\epsilon(\nabla\vdeltau,\nabla \delta v)_K
-+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K
-+\frac{1}{|K|^2}\int_K\vdeltau\delta v\,,
+\min&\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
++(\nabla\cdot\taudeltau-\bbeta\cdot\nabla
+v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K\\
+&+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber
++\epsilon(\nabla\vdeltau,\nabla \delta v)_K
++\frac{1}{|K|}\int_K\vdeltau\int_K\delta v
 \label{eq:localSolveMod}
 \end{align}
+% \begin{align}
+% (\nabla\cdot\taudeltau,&\nabla\cdot\delta\btau)_K
+% +\min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}(\taudeltau,\delta\btau)_K
+% \nonumber\\
+% &+\epsilon(\nabla\vdeltau,\nabla \delta v)_K
+% +(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K
+% +\frac{1}{|K|^2}\int_K\vdeltau\delta v\,,
+% \label{eq:localSolveMod}
+% \end{align}
 where the $\frac{1}{|K|^2}$ coefficient is needed to make the zero mean term 
-scale correctly with $h$. Numerically this helps a good deal with the condition
+scale correctly with $h$. Numerically this helps with the condition
 numbers of the local solve.
-
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
 
@@ -836,12 +867,19 @@ solve with second order field variables and flux ($u$, $\bsigma$, and $\hat
 t$), third order traces ($\hat t$), and fifth order test functions ($v$ and
 $\btau$).
 
-Describe how we check local conservation.
+We measure flux imbalance by looping over each element in the mesh and
+integrating the flux over each side and summing them together. We then
+integrate the source term over the volume of the element. The two should match
+each other, and the remainder is the flux imbalance. We get the net global
+flux imbalance by summing these quantities and taking the absolute value. The
+max local flux imbalance is the maximum absolute value of these flux
+imbalances.
 
 \subsection{Description of Problems}\label{sec:problemDescriptions}
 Unless otherwise noted, the problem domain is $\Omega=[0,1]^2$ and $f=0$. Also
-note that except for the discontinuous source problem, blue corresponds to
-$u=0$ and red to $u=1$ with a linear scaling in between.
+note that except for the discontinuous source problem, for all of the
+pseudo-color plots, blue corresponds to $0$ and red to $1$ with a linear
+scaling in between. Also, all plots are of the field variable $u$.
 
 \subsubsection{Erickson-Johnson Model Problem}
 The Erickson-Johnson problem is one of the few convection-diffusion problems
@@ -1021,7 +1059,7 @@ of the wedge.
 \label{fig:wedge}
 \end{figure}
 
-\begin{figure}[p]
+\begin{figure}[h!]
 \centering
 \includegraphics[width=0.8\textwidth]{figs/Wedge/modifiedFlux.pdf}
 \caption{Flux imbalance in wedge solutions}
@@ -1057,7 +1095,7 @@ layer.
 \label{fig:innerlayer}
 \end{figure}
 
-\begin{figure}[p]
+\begin{figure}[h!]
 \centering
 \includegraphics[width=0.8\textwidth]{figs/InnerLayer/modifiedFlux.pdf}
 \caption{Flux imbalance in inner layer solutions}
@@ -1118,6 +1156,14 @@ cylinder.
 
 \begin{figure}[p]
 \centering
+\centering
+\includegraphics[width=0.8\textwidth]{figs/Hemker/modifiedFlux.pdf}
+\caption{Flux imbalance in Hemker problem}
+\label{fig:hemkerFlux}
+\end{figure}
+
+\begin{figure}[p]
+\centering
 \begin{subfigure}[t]{0.6\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/Hemker/modified8nc.png}
@@ -1142,18 +1188,10 @@ cylinder.
 \label{fig:hemker8}
 \end{figure}
 
-\begin{figure}[p]
-\centering
-\centering
-\includegraphics[width=0.8\textwidth]{figs/Hemker/modifiedFlux.pdf}
-\caption{Flux imbalance in Hemker problem}
-\label{fig:hemkerFlux}
-\end{figure}
-
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
 % Solution quality
 The general trend we see looking at the results is that the solution quality
-of the conservative and conconservative formulations is nearly identical. This
+of the conservative and nonconservative formulations is nearly identical. This
 is ideal, as we wish to preserve the attractive features of DPG --
 namely that it minimizes error in the energy norm. In particular, when we
 examine the error convergence plots for the Erickson-Johnson problem, the
@@ -1165,7 +1203,7 @@ DPG too much.
 Another measure of solution quality is to look at the magnitude of overshoots
 and undershoots in the solution. In most of the problems considered (barring
 the discontinuous source problem) the exact solution would range exactly
-between 0 and 1. The the resolved solutions, the divergence from these values
+between 0 and 1. In the resolved solutions, the divergence from these values
 would be negligible, but for the inner layer, in which $\epsilon=10^{-6}$, we
 get overshoots and undershoots along the separation line. For the
 nonconservative formulation, the solution range for $u$ was $[-0.392,1.342]$,
@@ -1184,9 +1222,9 @@ test norm also plays into this calculation of the error representation
 function. As discussed earlier, the conservative formulation allows us to
 throw away the $L^2$ term on $v$. The inclusion of this term required certain
 assumptions on $\bbeta$ \cite{ChanHeuerThanhDemkowicz2012} that break down for
-the vortex problem. Here we see the nonconservative method needlessly refine
+the vortex problem. Here we see the nonconservative method needlessly refines
 in the center of the domain where the solution is constant. The conservative
-scheme is more discerning about refinements and focuses refinements where
+scheme is more discerning about refinements and focuses them where
 solution features are changing. In general, though, both methods appear to
 follow very similar refinement patterns.
 
@@ -1194,13 +1232,33 @@ follow very similar refinement patterns.
 It shouldn't come as a surprise that the conservative and nonconservative
 solutions match each other so closely. The conservative formulation
 enforces local conservation more strictly, but if we examine the flux
-imbalance plots, the nonconservative formulation is nearly conservative on its
+imbalance plots, the standard DPG formulation is nearly conservative on its
 own -- and appears to become more conservative with refinement. The flux
 imbalance of the conservative methods appears to bounce around close to the
 machine epsilon (plus a few orders of magnitude). The level of enforcement
 appears to creep up with more degrees of freedom, indicating possible
 accruement of numerical error.
 
+\section{Conclusions}
+We've developed a locally conservative formulation of DPG by leveraging
+Lagrange multipliers. While the formulation is provably convergent, it does
+increase the number of unkowns in the system and changes the structure from
+symmetric positive-definite to a saddlepoint problem. Numerical results
+indicate that the method delivers what it promises with local flux imbalances
+hovering close to machine precision, but they also indicate that for the
+problems considered, standard DPG is close to conservative and becomes more so
+with refinements. Probably the most encouraging result of these experiments is
+that enforcing local conservation did not change the nature of the solutions
+too significantly. Standard DPG has a lot of attractive features, and we wish
+to preserve thoes.
+
+Mass conservation is probably the foremost issue facing the class of Least
+Squares Finite Element Methods. And there are several benchmark problems in the
+literature where these methods have performed very poorly, particularly Stokes
+flow over a cylinder and the backward facing step problem. Extending our locally
+conservative formulation of DPG to these kinds of problems should be
+relatively straightforward. The real test of whether local conservation is
+worth it for DPG will come when we start doing more realistic problems.
 
 \bibliographystyle{plain} 
 \bibliography{../../DPG} 
