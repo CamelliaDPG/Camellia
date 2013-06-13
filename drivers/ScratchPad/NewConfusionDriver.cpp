@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
   int rank = 0;
   int numProcs = 1;
 #endif
-  bool useCompliantGraphNorm = true;
+  bool useCompliantGraphNorm = false;
   bool enforceOneIrregularity = true;
   bool writeStiffnessMatrices = true;
   bool writeWorstCaseGramMatrices = true;
@@ -255,7 +255,8 @@ int main(int argc, char *argv[]) {
     solution->solve();
     if (writeWorstCaseGramMatrices) {
       string gramFile = fileNameForRefinement("confusion_gram", refIndex);
-      double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, gramFile);
+      bool jacobiScaling = true;
+      double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, jacobiScaling, gramFile);
       if (rank==0) {
         cout << "estimated worst-case Gram matrix condition number: " << condNum << endl;
         cout << "putative worst-case Gram matrix written to file " << gramFile << endl;
@@ -269,7 +270,8 @@ int main(int argc, char *argv[]) {
   }
   if (writeWorstCaseGramMatrices) {
     string gramFile = fileNameForRefinement("confusion_gram", numRefs);
-    double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, gramFile);
+    bool jacobiScaling = true;
+    double condNum = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, jacobiScaling, gramFile);
     if (rank==0) {
       cout << "estimated worst-case Gram matrix condition number: " << condNum << endl;
       cout << "putative worst-case Gram matrix written to file " << gramFile << endl;

@@ -2599,12 +2599,10 @@ void Solution::setWriteMatrixToMatrixMarketFile(bool value, const string &filePa
 
 // =================================== CONDENSED SOLVE ======================================
 void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory) {
-  int numProcs=1;
   int rank=0;
   
 #ifdef HAVE_MPI
   rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
@@ -2632,7 +2630,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
   
   // get local dof indices for reduced matrices
   map<int,set<int> > localFluxInds, localFieldInds;  
-  map<int,set<int> > globalFluxInds, globalFieldInds;  
+  map<int,set<int> > globalFluxInds, globalFieldInds;
   vector< ElementPtr > allElems = _mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
@@ -2870,47 +2868,48 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
   ///////////////////////////////////////////////////////////////////
   // impose zero mean constraints:
   ///////////////////////////////////////////////////////////////////
-  
-  int localRowIndex = allFluxInds.size(); // starts where the dofs left off
-  for (set< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
-    int trialID = *trialIt;
-    
-    // sample an element to make sure that the basis used for trialID is nodal
-    // (this is assumed in our imposition mechanism)
-    ElementTypePtr elemTypePtr = _mesh->getActiveElement(0)->elementType();
-    BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
-    if (!trialBasis->isNodal()) {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
-    }      
-    int zmcIndex = fluxPartMap.GID(localRowIndex);
-    //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
-    FieldContainer<double> basisIntegrals; FieldContainer<int> globalIndices;
-    integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
-    int numValues = globalIndices.size();    
-    FieldContainer<int> condensedGlobalIndices(numValues);
-    for (int i = 0;i<numValues;i++){
-      condensedGlobalIndices(i) = globalToCondensedMap[globalIndices(i)];
-      cout << "zmc constraint on condensed entry " << globalToCondensedMap[globalIndices(i)] << endl;
+  if (rank==0) {
+    int localRowIndex = myGlobalFluxInds.size(); // starts where the dofs left off
+    for (set< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
+      int trialID = *trialIt;
+      
+      // sample an element to make sure that the basis used for trialID is nodal
+      // (this is assumed in our imposition mechanism)
+      ElementTypePtr elemTypePtr = _mesh->getActiveElement(0)->elementType();
+      BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
+      if (!trialBasis->isNodal()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
+      }      
+      int zmcIndex = fluxPartMap.GID(localRowIndex);
+      //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
+      FieldContainer<double> basisIntegrals; FieldContainer<int> globalIndices;
+      integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
+      int numValues = globalIndices.size();    
+      FieldContainer<int> condensedGlobalIndices(numValues);
+      for (int i = 0;i<numValues;i++){
+        condensedGlobalIndices(i) = globalToCondensedMap[globalIndices(i)];
+  //      cout << "zmc constraint on condensed entry " << globalToCondensedMap[globalIndices(i)] << endl;
+      }
+      
+//      cout << "zmcIndex: " << zmcIndex << endl;
+      // insert row:
+      K_cond.InsertGlobalValues(1,&zmcIndex,numValues,&condensedGlobalIndices(0),&basisIntegrals(0));
+      // insert column:
+      K_cond.InsertGlobalValues(numValues,&condensedGlobalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+      
+      //      cout << "in zmc, diagonal entry: " << rho << endl;
+      //rho /= numValues;
+      // define stabilizing parameter for zero-mean constraints
+      double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
+      //      for (int i=0; i<numValues; i++) {
+      //        rho += basisIntegrals[i];
+      //      }
+      //  rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
+      rho = -1.0;
+      double rho_entry = - 1.0 / rho;
+      K_cond.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
+      localRowIndex++;
     }
-    
-    cout << "zmcIndex: " << zmcIndex << endl;
-    // insert row:
-    K_cond.InsertGlobalValues(1,&zmcIndex,numValues,&condensedGlobalIndices(0),&basisIntegrals(0));
-    // insert column:
-    K_cond.InsertGlobalValues(numValues,&condensedGlobalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-    
-    //      cout << "in zmc, diagonal entry: " << rho << endl;
-    //rho /= numValues;
-    // define stabilizing parameter for zero-mean constraints
-    double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
-    //      for (int i=0; i<numValues; i++) {
-    //        rho += basisIntegrals[i];
-    //      }
-    //  rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
-    rho = -1.0;
-    double rho_entry = - 1.0 / rho;
-    K_cond.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
-    localRowIndex++;
   }
   
   K_cond.GlobalAssemble();
