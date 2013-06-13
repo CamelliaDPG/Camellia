@@ -146,7 +146,7 @@ int main(int argc, char *argv[]) {
   double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
   int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
   bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
-  bool graphNorm = args.Input<bool>("--graphNorm", "use the graph norm rather than robust test norm");
+  int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = modified robust");
 
   // Optional arguments (have defaults)
   ramp = args.Input("--ramp", "length of ramp between BCs", sqrt(epsilon));
@@ -181,21 +181,40 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
-  if (graphNorm)
+  if (norm == 0)
   {
     ip = bf->graphNorm();
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    ip->addZeroMeanTerm( h2_scaling*v );
   }
-  else
+  // Robust norm
+  else if (norm == 1)
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
     FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
     if (!zeroL2)
-      ip->addTerm( ip_scaling * v );
+      ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+    if (zeroL2)
+      ip->addZeroMeanTerm( h2_scaling*v );
+  }
+  // Modified robust norm
+  else if (norm == 2)
+  {
+    // robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
+    if (!zeroL2)
+      ip->addTerm( v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->div() - beta*v->grad() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
     if (zeroL2)
       ip->addZeroMeanTerm( h2_scaling*v );
