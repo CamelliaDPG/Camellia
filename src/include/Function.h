@@ -121,6 +121,7 @@ public:
   static FunctionPtr constant(double value);
   static FunctionPtr constant(vector<double> &value);
   
+  static FunctionPtr h();
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
   static FunctionPtr polarize(FunctionPtr f);

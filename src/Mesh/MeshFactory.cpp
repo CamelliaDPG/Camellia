@@ -98,7 +98,7 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
   return Mesh::buildQuadMesh(quadPoints, horizontalElements, verticalElements, bf, H1Order, testOrder);
 }
 
-MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight, double cylinderRadius) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
   // first, set up an 8-element mesh, centered at the origin
   ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double embeddedSquareSideLength = cylinderRadius*3;
@@ -162,9 +162,9 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   
   int boundaryVertexOffset = vertices.size();
   // make some new vertices, going counter-clockwise:
-  ParametricCurvePtr meshRect = parametricRect(meshWidth, meshHeight, 0, 0);
+  ParametricCurvePtr meshRect = parametricRect(xRight-xLeft, meshHeight, 0.5*(xLeft+xRight), 0);
   FieldContainer<double> boundaryVertex(spaceDim);
-  boundaryVertex(0) = meshWidth / 2.0;
+  boundaryVertex(0) = xRight;
   boundaryVertex(1) = 0;
   vertices.push_back(boundaryVertex);
   
@@ -183,7 +183,7 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   boundaryVertex(0) = -embeddedSquareSideLength / 2.0;
   vertices.push_back(boundaryVertex);
   
-  boundaryVertex(0) = -meshWidth / 2.0;
+  boundaryVertex(0) = xLeft;
   vertices.push_back(boundaryVertex);
   
   boundaryVertex(1) = embeddedSquareSideLength / 2.0;
@@ -207,7 +207,7 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   boundaryVertex(0) = embeddedSquareSideLength / 2.0;
   vertices.push_back(boundaryVertex);
   
-  boundaryVertex(0) = meshWidth / 2.0;
+  boundaryVertex(0) = xRight;
   vertices.push_back(boundaryVertex);
   
   boundaryVertex(1) = -embeddedSquareSideLength / 2.0;
@@ -293,9 +293,9 @@ MeshGeometryPtr MeshFactory::hemkerGeometry(double meshWidth, double meshHeight,
   return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
 }
 
-MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
+MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                                 BilinearFormPtr bilinearForm, int H1Order, int pToAddTest) {
-  MeshGeometryPtr geometry = MeshFactory::hemkerGeometry(meshWidth, meshHeight, cylinderRadius);
+  MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
   MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
                                         bilinearForm, H1Order, pToAddTest) );
   mesh->setEdgeToCurveMap(geometry->edgeToCurveMap());

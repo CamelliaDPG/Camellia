@@ -24,10 +24,10 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 2;
+  int minPolyOrder = 1;
   int maxPolyOrder = 5;
   int pToAdd = 2;
-  int minLogElements = 1;
+  int minLogElements = 0;
   int maxLogElements = 3;
   bool useTriangles = false;
   double width = 10;
@@ -38,7 +38,6 @@ int main(int argc, char *argv[]) {
     cout << "minPolyOrder: " << minPolyOrder << "\n";
     cout << "maxPolyOrder: " << maxPolyOrder << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
-    
   }
   
   VarFactory vf;
@@ -127,6 +126,12 @@ int main(int argc, char *argv[]) {
       primaryVariables.push_back(psi1->ID());
       primaryVariables.push_back(psi2->ID());
       cout << study.TeXBestApproximationComparisonTable(primaryVariables);
+      
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        ostringstream filePath;
+        filePath << "/tmp/hemkerMeshLevel" << i << ".dat";
+        GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), study.getSolution(i)->mesh());
+      }
     }
   }
 }
