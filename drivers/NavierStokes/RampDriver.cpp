@@ -480,6 +480,10 @@ int main(int argc, char *argv[]) {
   int pToAdd = args.Input<int>("--pToAdd", "test space enrichment",2); 
   double time_tol_orig = args.Input<double>("--timeTol", "time step tolerance",1e-8);
   bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",true); // default to zero
+  int delayLineSearch = args.Input<int>("--delayLineSearch", "number of refinement iters to delay line search",0); // default to zero
+  if (rank==0){
+    cout << "delaying line search by " << delayLineSearch << " iters." << endl;
+  }
   int maxNRIter = args.Input<int>("--maxNRIter","maximum number of NR iterations",2); // default to one per timestep
   int numTimeSteps = args.Input<int>("--numTimeSteps","max number of time steps",150); // max time steps
   int maxTimeSteps = args.Input<int>("--maxTimeSteps","max number of time steps",250); // max time steps
@@ -495,6 +499,7 @@ int main(int argc, char *argv[]) {
   bool useAnisotropy = args.Input<bool>("--useAnisotropy","anisotropy flag",false);
   bool useArtVisc = args.Input<bool>("--useArtVisc","use extra viscosity at plate point",false);
   bool useAdaptiveTimestepping = args.Input<bool>("--useAdaptiveTimestepping","use adaptive timestepping", false);
+  bool refineAtSingularity = args.Input<bool>("--refineAtSingularity","flag to always refine at plate tip",false);
 
   // conditioning for DPG
   int hScaleOption = args.Input<int>("--hScaleOption","option to scale terms to offset conditioning for small h", 0);
@@ -502,12 +507,12 @@ int main(int argc, char *argv[]) {
 
   // etc - experimental
   bool useHigherOrderForU = args.Input<bool>("--useHigherOrderForU","option to increase order for field vars",false); // HGRAD is one higher order 
+  double CFL = args.Input<double>("--CFL","specified CFL number",32.0); 
   bool useCFL = args.Input<bool>("--useCFL","option to use a CFL limit for conditioning",false); 
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int numPlateRefs = args.Input<int>("--numPlateRefs","pre-refinements on plate",0);
   bool scalePlate = args.Input<bool>("--scalePlate","flag to weight plate so it matters less",false);
   double ipSwitch = args.Input<double>("--ipSwitch","smallest elem thresh to switch to graph norm",0.0); // default to not changing
-  bool usePlateCut = args.Input<bool>("--usePlateCut","flag to cut plate residual contribution so it matters less",false);
 
   // IO stuff
   string saveFile = args.Input<string>("--meshSaveFile", "file to which to save refinement history", "");
@@ -1236,7 +1241,6 @@ int main(int argc, char *argv[]) {
     innerProduct = ip;
   }
   innerProduct = ipCoupled;
-  //  innerProduct = graphIP;
   
   /*
   int count = 0;
@@ -1425,6 +1429,9 @@ int main(int argc, char *argv[]) {
   for (int i = 0;i<numUniformRefs;i++){
     refinementStrategy->hRefineUniformly(mesh); 
   } 
+  int numElems = mesh->numActiveElements();
+  if (rank==0)
+    cout << "Num elements after uniform refs = " << numElems << endl;
 
   ////////////////////////////////////////////////////////////////////
   // PREREFINE THE MESH
@@ -1564,6 +1571,7 @@ int main(int argc, char *argv[]) {
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     double minSideLength = meshInfo.getMinCellSideLength();	
+
     // prevent conditioning issues (and keep robustness under control by increasing 1/dt in problem)
     if (useCFL){	
       double CFL = 25.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
@@ -1619,7 +1627,7 @@ int main(int argc, char *argv[]) {
 	// line search algorithm
 	alpha = 1.0; 
 	//	if (useLineSearch && k > 5){ // to enforce positivity of density and temperature
-	if (useLineSearch){ // to enforce positivity of density and temperature
+	if (useLineSearch && k > delayLineSearch){ // to enforce positivity of density and temperature
 	  double lineSearchFactor = .75; double eps = 1e-2;// arbitrary
 	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
 	  FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps); 
@@ -1841,6 +1849,7 @@ int main(int argc, char *argv[]) {
       // adaptive time tolerance
       double energyError = solution->energyErrorTotal();
       time_tol = max(energyError*1e-2,time_tol_orig);
+      //      time_tol = time_tol_orig;
 
       if (rank==0){
 	cout << "Performing refinement number " << k << ", with energy error " << energyError << " and time tolerance = " << time_tol << endl;
@@ -1856,22 +1865,21 @@ int main(int argc, char *argv[]) {
 	vector<int> cellIDs;
 	refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
 
-	if (rank==0){cout << "num elements to refine = " << cellIDs.size() << endl;}
-	// hack to always refine elements adjacent to the singularity
-	for (int i = 0;i<mesh->numActiveElements();i++){
-	  int cellID = mesh->activeElements()[i]->cellID();
+	// hack to always refine at the singularity
+	vector<int> singularCellIDs;
+	vector<ElementPtr> elems = mesh->activeElements();
+	for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt != elems.end();elemIt++){
+	  int cellID = (*elemIt)->cellID();
 	  FieldContainer<double> singularPoint(2);
-	  singularPoint(0) = X_PLATE; singularPoint(1) = 0.0;
+	  singularPoint(0) = 1.0; singularPoint(1) = 0.0;
 	  bool  vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
-	  
 	  bool notInCellsTORefine = std::find(cellIDs.begin(), cellIDs.end(), cellID) == cellIDs.end();
 	  if (vertexAtSingularity && notInCellsTORefine){
-	    cellIDs.push_back(cellID);
+	    singularCellIDs.push_back(cellID);
 	    if (rank==0)
 	      cout << "artificially adding cell " << cellID << " at singularity for refinement" << endl;
 	  }
 	}
-	if (rank==0){cout << "num elements to refine after mods = " << cellIDs.size() << endl;}
 
 	rieszResidual->computeRieszRep();
 	map<int,double> xErrMap = rieszResidual->computeAlternativeNormSqOnCells(xip,cellIDs);
@@ -1893,7 +1901,6 @@ int main(int argc, char *argv[]) {
 	    if (abs(rampHeight*(vv(j,0)-X_RAMP)-vv(j,1))<1e-10 && vv(j,0) > X_RAMP) // if any vertex is close to ramp wall
 	      vertexOnWall = true;
 
-	    //	    if ((abs(vv(j,0)-X_PLATE) + abs(vv(j,1)))<1e-10)
 	    FieldContainer<double> singularPoint(2);
 	    singularPoint(0) = X_PLATE; singularPoint(1) = 0.0;
 	    vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
@@ -1915,6 +1922,11 @@ int main(int argc, char *argv[]) {
 	}	
 
 	refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap); //anisotropic hp-scheme
+	if (refineAtSingularity){	
+	  if (rank==0)
+	    cout << "refining singular cell contributions" << endl;
+	  refinementStrategy->refineCells(singularCellIDs);
+	}
 	double minSideLength = meshInfo.getMinCellSideLength() ;
 	if (rank==0){
 	  cout << "Num elements = " << mesh->numActiveElements() << ", num total dofs = " << mesh->numGlobalDofs() << ", and num flux dofs = " << mesh->numFluxDofs() << endl;
