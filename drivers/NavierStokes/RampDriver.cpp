@@ -744,7 +744,7 @@ int main(int argc, char *argv[]) {
   double minArtVisc = 1e-5;
   FunctionPtr artVisc = Teuchos::rcp(new ScalarParamFunction(minArtVisc));    
   if (useArtVisc){
-    mu = artVisc + T_visc / Re;
+    mu = T_visc * (1/Re + artVisc);
     double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
     if (rank==0)
       cout << "adding art visc of magnitude " << artViscMag << endl;
@@ -1503,9 +1503,9 @@ int main(int argc, char *argv[]) {
     }
     if (i<numPlateRefs){
       refinementStrategy->refineCells(wallCells);
-      //      vector<int> empty;      
-      //      mesh->hRefine(wallCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
-      //      refinementStrategy->enforceAnisotropicOneIrregularity(empty, wallCells);
+      vector<int> empty;      
+      mesh->hRefine(wallCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+      refinementStrategy->enforceAnisotropicOneIrregularity(empty, wallCells);
     }
   }
   if (numPlateRefs>0){
@@ -1594,7 +1594,7 @@ int main(int argc, char *argv[]) {
 
     if (useArtVisc){
       double oldArtVisc = ((ScalarParamFunction*)artVisc.get())->get_param();
-      double newArtVisc = max(minArtVisc,minSideLength/10.0); // h/10
+      double newArtVisc = max(minArtVisc,minSideLength/2.5); // O(h)
       newArtVisc = min(maxArtVisc,newArtVisc); // h/10
       ((ScalarParamFunction*)artVisc.get())->set_param(newArtVisc);
       double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
@@ -1626,9 +1626,8 @@ int main(int argc, char *argv[]) {
 
 	// line search algorithm
 	alpha = 1.0; 
-	//	if (useLineSearch && k > 5){ // to enforce positivity of density and temperature
 	if (useLineSearch && k > delayLineSearch){ // to enforce positivity of density and temperature
-	  double lineSearchFactor = .75; double eps = 1e-2;// arbitrary
+	  double lineSearchFactor = .75; double eps = 5e-2;// arbitrary
 	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
 	  FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps); 
 	  bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
@@ -1643,7 +1642,7 @@ int main(int argc, char *argv[]) {
 	    iter++;
 	  }
 	  if (rank==0 && alpha < 1.0){
-	    cout << "line search factor alpha = " << alpha << endl;
+	    cout << "line search factor alpha = " << alpha << ", with rhoPositive = " << rhoIsPositive << ", and TisPositive " << TIsPositive << endl;
 	  }      
 	}
 	backgroundFlow->addSolution(solution,alpha); // update with dU
