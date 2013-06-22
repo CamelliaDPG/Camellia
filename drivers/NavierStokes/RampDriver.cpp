@@ -302,9 +302,15 @@ public:
   }
   double value(double x, double y, double h) {
     // h = sqrt(|K|), or measure of one side of a quad elem
-    double scaling = min(_epsilon/(h), 1.0);
+    double scaling = min(_epsilon/h, 1.0);
     // sqrt because it's inserted into an IP form in a symmetric fashion
     return sqrt(scaling);
+  }
+  void set_param(double a){
+    _epsilon = a;
+  }
+  double get_param(){
+    return _epsilon;
   }
 };
 
@@ -470,7 +476,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr one = Function::constant(1.0);
 
   // problem params
-  double Re = args.Input<double>("--Re","Reynolds number",1e3);
+  double ReynoldsNumber = args.Input<double>("--Re","Reynolds number",1e3);
   double dt = args.Input<double>("--dt","Starting timestep",.25);
   double Ma = args.Input<double>("--Ma","Mach number",3.0);
 
@@ -497,13 +503,12 @@ int main(int argc, char *argv[]) {
   double energyThreshold = args.Input<double>("--energyThreshold", "energy thresh for adaptivity",0.25); // for mesh refinements 
   double anisotropicThresh = args.Input<int>("--anisotropicThresh","anisotropy threshhold",10.0);
   bool useAnisotropy = args.Input<bool>("--useAnisotropy","anisotropy flag",false);
-  bool useArtVisc = args.Input<bool>("--useArtVisc","use extra viscosity at plate point",false);
+  bool useAnalyticContin = args.Input<bool>("--useAnalyticContin","use analtyic continuation in Re",false);
   bool useAdaptiveTimestepping = args.Input<bool>("--useAdaptiveTimestepping","use adaptive timestepping", false);
   bool refineAtSingularity = args.Input<bool>("--refineAtSingularity","flag to always refine at plate tip",false);
 
   // conditioning for DPG
   int hScaleOption = args.Input<int>("--hScaleOption","option to scale terms to offset conditioning for small h", 0);
-  int hScaleTauOption = args.Input<int>("--hScaleTauOption","option to scale tau terms to offset conditioning for small h", 0);
 
   // etc - experimental
   bool useHigherOrderForU = args.Input<bool>("--useHigherOrderForU","option to increase order for field vars",false); // HGRAD is one higher order 
@@ -511,7 +516,6 @@ int main(int argc, char *argv[]) {
   bool useCFL = args.Input<bool>("--useCFL","option to use a CFL limit for conditioning",false); 
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int numPlateRefs = args.Input<int>("--numPlateRefs","pre-refinements on plate",0);
-  bool scalePlate = args.Input<bool>("--scalePlate","flag to weight plate so it matters less",false);
   double ipSwitch = args.Input<double>("--ipSwitch","smallest elem thresh to switch to graph norm",0.0); // default to not changing
 
   // IO stuff
@@ -557,14 +561,14 @@ int main(int argc, char *argv[]) {
   
   // define our manufactured solution or problem bilinear form:
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
-
   if (rank==0){
     cout << "Running with polynomial order " << polyOrder << ", delta p = " << pToAdd << endl;
-    cout << "Running with parameters Re = " << Re << ", Mach = " << Ma << ", and dt = " << dt << " with time tol = " << time_tol_orig << endl;
+    cout << "Running with parameters Re = " << ReynoldsNumber << ", Mach = " << Ma << ", and dt = " << dt << " with time tol = " << time_tol_orig << endl;
     cout << "AnisotropyFlag = " << useAnisotropy << ", and aniso thresh = " << anisotropicThresh << endl;
     cout << "Conditioning CFL = " << useCFL << endl;
     cout << "c_v = " << cv << endl;
   }
+  FunctionPtr Re = Teuchos::rcp(new ScalarParamFunction(ReynoldsNumber));    
   
   bool useTriangles = false;  
   FieldContainer<double> domainPoints(4,2);  
@@ -734,12 +738,12 @@ int main(int argc, char *argv[]) {
   if (abs(beta)<1e-14){
     T_visc = Function::constant(1.0);
   }else{
-    T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, T_free/Re) );  // set min viscosity
+    T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, T_free/1e4) );  // set min viscosity
   }
  
   FunctionPtr mu = T_visc / Re;
 
-  // try a point artificial diffusion at the plate edge...  
+  /*
   double maxArtVisc = 5e-4;
   double minArtVisc = 1e-5;
   FunctionPtr artVisc = Teuchos::rcp(new ScalarParamFunction(minArtVisc));    
@@ -749,6 +753,7 @@ int main(int argc, char *argv[]) {
     if (rank==0)
       cout << "adding art visc of magnitude " << artViscMag << endl;
   }
+  */
 
   FunctionPtr lambda = -.66 * mu;
   FunctionPtr kappa = GAMMA * cv * mu / PRANDTL; // double check sign
@@ -1059,26 +1064,7 @@ int main(int argc, char *argv[]) {
 
   // default to (1/eps)*||tau||^2 + ||div(tau)||^2
   FunctionPtr TauDivScaling = Function::constant(1.0);
-  FunctionPtr TauReScaling = Teuchos::rcp( new EpsilonScaling(1.0/Re) );  // default to Heuer paper norm
-  switch (hScaleTauOption){
-  case 1:
-    TauReScaling = invH;
-    break;
-  case 2:
-    TauDivScaling = sqrtH; // ||div(tau)*sqrt(h)||^2
-    break;
-  default: // do nothing
-    break;
-  }
-  
-  FunctionPtr timeTermScale = Function::constant(1.0);
-  if (scalePlate){
-    TauReScaling = TauReScaling*plateWeight;
-    TauDivScaling = TauDivScaling*plateWeight;
-    streamlineHScale = streamlineHScale*plateWeight;    
-    timeTermScale = timeTermScale*plateWeight;
-  }
-
+  FunctionPtr TauReScaling = Teuchos::rcp( new EpsilonScaling(1.0/ReynoldsNumber) );  // default to Heuer paper norm
   FunctionPtr timeScaling = Function::constant(1.0);
   timeScaling = sqrtInvDt; // legal with first order term
 
@@ -1102,7 +1088,7 @@ int main(int argc, char *argv[]) {
   // adds dual test portion to IP
   for (map<int, LinearTermPtr>::iterator vTimeIt = vTime.begin();vTimeIt != vTime.end();vTimeIt++){
     LinearTermPtr ipSum = vTimeIt->second;
-    ip->addTerm(timeTermScale*l2HScale*ipSum);
+    ip->addTerm(l2HScale*ipSum);
   }
 
   ////////////////////////////////////////////////////////////////////
@@ -1146,7 +1132,8 @@ int main(int argc, char *argv[]) {
   // epsilon portion of grad V
   ////////////////////////////////////////////////////////////////////
 
-  FunctionPtr SqrtReInv = Function::constant(1.0/sqrt(Re));
+  //  FunctionPtr SqrtReInv = Function::constant(1.0/sqrt(ReynValue));
+  FunctionPtr SqrtReInv = Teuchos::rcp(new ScalarParamFunction(1.0/sqrt(ReynoldsNumber)));
 
   map<int, LinearTermPtr> vEpsVec, vEpsX, vEpsY;
   initLinearTermVector(A_visc,vEpsVec); // initialize to LinearTermPtrs of dimensions of A_visc
@@ -1502,7 +1489,7 @@ int main(int argc, char *argv[]) {
       }
     }
     if (i<numPlateRefs){
-      refinementStrategy->refineCells(wallCells);
+      //      refinementStrategy->refineCells(wallCells); 
       vector<int> empty;      
       mesh->hRefine(wallCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
       refinementStrategy->enforceAnisotropicOneIrregularity(empty, wallCells);
@@ -1529,23 +1516,6 @@ int main(int argc, char *argv[]) {
   LinearTermPtr residual = rhs->linearTermCopy();
   residual->addTerm(-bf->testFunctional(solution));  
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, innerProduct, residual));
-  /*
-  FunctionPtr ev1 = Teuchos::rcp(new RepFunction(v1,rieszResidual));
-  FunctionPtr ev2 = Teuchos::rcp(new RepFunction(v2,rieszResidual));
-  FunctionPtr ev3 = Teuchos::rcp(new RepFunction(v3,rieszResidual));
-  FunctionPtr ev4 = Teuchos::rcp(new RepFunction(v4,rieszResidual));
-  FunctionPtr etau1 = Teuchos::rcp(new RepFunction(tau1,rieszResidual));
-  FunctionPtr etau2 = Teuchos::rcp(new RepFunction(tau2,rieszResidual)); 
-  FunctionPtr etau3 = Teuchos::rcp(new RepFunction(tau3,rieszResidual));
-  map<int,FunctionPtr> errRepMap;
-  errRepMap[v1->ID()] = ev1;
-  errRepMap[v2->ID()] = ev2;
-  errRepMap[v3->ID()] = ev3;
-  errRepMap[v4->ID()] = ev4;
-  errRepMap[tau1->ID()] = etau1;
-  errRepMap[tau2->ID()] = etau2;
-  errRepMap[tau3->ID()] = etau3;
-  */
 
   // for timestepping
   RieszRepPtr rieszTimeResidual = Teuchos::rcp(new RieszRep(mesh, innerProduct, time_res_LT));
@@ -1591,16 +1561,29 @@ int main(int argc, char *argv[]) {
 	  cout << "setting timestep to " << setDt << " with num timesteps " << numTimeSteps << endl;
       }      
     }
-
-    if (useArtVisc){
-      double oldArtVisc = ((ScalarParamFunction*)artVisc.get())->get_param();
-      double newArtVisc = max(minArtVisc,minSideLength/2.5); // O(h)
-      newArtVisc = min(maxArtVisc,newArtVisc); // h/10
-      ((ScalarParamFunction*)artVisc.get())->set_param(newArtVisc);
-      double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
-      if (rank==0)
+    
+    if (useAnalyticContin){
+      /*
+	double oldArtVisc = ((ScalarParamFunction*)artVisc.get())->get_param();
+	double newArtVisc = max(minArtVisc,minSideLength/2.5); // O(h)
+	newArtVisc = min(maxArtVisc,newArtVisc); // h/10
+	((ScalarParamFunction*)artVisc.get())->set_param(newArtVisc);
+	double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
+	if (rank==0)
 	cout << "changing amount of art visc to " << artViscMag << endl;
+      */
+      double maxRe = 1e4;
+      double oldRe = ((ScalarParamFunction*)Re.get())->get_param();
+      double newRe = max(ReynoldsNumber,minSideLength/10.0); // O(h)
+      newRe = min(maxRe,newRe);
+      ((ScalarParamFunction*)Re.get())->set_param(newRe);
+      double newReynoldsNumber = ((ScalarParamFunction*)Re.get())->get_param();
+      ((ScalarParamFunction*)SqrtReInv.get())->set_param(1.0/sqrt(newReynoldsNumber));
+      if (rank==0)
+	cout << "changing Reynolds number to " << newReynoldsNumber << endl;
+      ((EpsilonScaling*)TauReScaling.get())->set_param(1.0/newReynoldsNumber);
     }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                               END ADJUSTING TIMESTEP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1847,7 +1830,7 @@ int main(int argc, char *argv[]) {
 
       // adaptive time tolerance
       double energyError = solution->energyErrorTotal();
-      time_tol = max(energyError*1e-2,time_tol_orig);
+      time_tol = max(energyError*5e-3,time_tol_orig);
       //      time_tol = time_tol_orig;
 
       if (rank==0){
@@ -1909,8 +1892,8 @@ int main(int argc, char *argv[]) {
 	    
 	  double ratio = xErrMap[cellID]/yErrMap[cellID];
 	  threshMap[cellID] = anisotropicThresh;
-	  double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));
-	  if (vertexOnWall && atWall && minCellSize > (polyOrder/Re)){
+	  double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));	  
+	  if (vertexOnWall && atWall && minCellSize > (polyOrder/ReynoldsNumber)){
 	    threshMap[cellID] = 2.5; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
 	    // WARNING: A HACK TO TRIGGER ANISOTROPIC REFINEMENTS
 	    yErrMap[cellID] = yErrMap[cellID]*2;
