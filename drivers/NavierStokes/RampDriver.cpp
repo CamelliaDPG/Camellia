@@ -1610,12 +1610,12 @@ int main(int argc, char *argv[]) {
 	// line search algorithm
 	alpha = 1.0; 
 	if (useLineSearch && k > delayLineSearch){ // to enforce positivity of density and temperature
-	  double lineSearchFactor = .75; double eps = 5e-2;// arbitrary
+	  double lineSearchFactor = .5; double eps = 1e-2;// arbitrary
 	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
 	  FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps); 
 	  bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
 	  bool TIsPositive = TTemp->isPositive(mesh,posEnrich); 
-	  int iter = 0; int maxIter = 50;
+	  int iter = 0; int maxIter = 18;
 	  while (!(rhoIsPositive && TIsPositive) && iter < maxIter){
 	    alpha = alpha*lineSearchFactor;
 	    rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution); 
@@ -1642,24 +1642,6 @@ int main(int argc, char *argv[]) {
      
       rieszTimeResidual->computeRieszRep();
       double timeRes = rieszTimeResidual->getNorm();
-      /*
-      double width = dt*dt;
-      double center = X_PLATE; 
-      double amplitude = Re;
-      FunctionPtr plateCut = Teuchos::rcp(new TwoDGaussian(width,center,amplitude)) + Function::constant(1.0); // weights area around plate less 
-      if (!usePlateCut){
-	plateCut = Function::constant(1.0);
-      }
-      FunctionPtr t1 = rho_prev_time - rho_prev;      
-      FunctionPtr t2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;      
-      FunctionPtr t3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;      
-      FunctionPtr t4 = (rho_prev_time * e_prev_time - rho_prev * e);
-      double tr1 = (t1*t1/plateCut)->integrate(mesh,5);
-      double tr2 = (t2*t2/plateCut)->integrate(mesh,5);
-      double tr3 = (t3*t3/plateCut)->integrate(mesh,5);
-      double tr4 = (t4*t4/plateCut)->integrate(mesh,5);
-      double timeRes = sqrt(tr1 + tr2 + tr3 + tr4);
-      */
       
       L2_time_residual = timeRes;
 
@@ -1893,7 +1875,7 @@ int main(int argc, char *argv[]) {
 	  double ratio = xErrMap[cellID]/yErrMap[cellID];
 	  threshMap[cellID] = anisotropicThresh;
 	  double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));	  
-	  if (vertexOnWall && atWall && minCellSize > (polyOrder/ReynoldsNumber)){
+	  if (vertexOnWall && minCellSize > (polyOrder/ReynoldsNumber)){
 	    threshMap[cellID] = 2.5; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
 	    // WARNING: A HACK TO TRIGGER ANISOTROPIC REFINEMENTS
 	    yErrMap[cellID] = yErrMap[cellID]*2;
