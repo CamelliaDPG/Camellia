@@ -15,6 +15,7 @@
 #include "MeshPolyOrderFunction.h"
 #include "MeshTestUtility.h"
 #include "PenaltyConstraints.h"
+#include "Solver.h"
 //#include "CGSolver.h"
 #include "MPIWrapper.h"
 
@@ -225,7 +226,7 @@ int main(int argc, char *argv[]) {
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool useMumps = true;
+  bool useMumps = false;
   bool useCG = false;
   bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
@@ -243,6 +244,19 @@ int main(int argc, char *argv[]) {
   
   string saveFile = "stokesCavityReplay.replay";
   string replayFile = ""; //"stokesCavityReplay.replay";
+
+  Teuchos::RCP<Solver> solver;
+  if (useMumps) {
+#ifdef USE_MUMPS
+    solver = Teuchos::rcp(new MumpsSolver());
+#else
+    if (rank==0)
+      cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
+    exit(1);
+#endif
+  } else {
+    solver = Teuchos::rcp(new KluSolver());
+  }
 
 //  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
   
@@ -679,9 +693,9 @@ int main(int argc, char *argv[]) {
     }
     overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
     if (useCondensedSolve) {
-      overkillSolution->condensedSolve();
+      overkillSolution->condensedSolve(solver);
     } else {
-      overkillSolution->solve();
+      overkillSolution->solve(solver);
     }
     if (rank == 0)
       cout << "...solved.\n";
@@ -752,9 +766,9 @@ int main(int argc, char *argv[]) {
 
   if (!useCG) {
     if (useCondensedSolve) {
-      solution->condensedSolve();
+      solution->condensedSolve(solver);
     } else {
-      solution->solve(useMumps);
+      solution->solve(solver);
     }
   } else {
     cout << "WARNING: cgSolver unset.\n";
@@ -886,9 +900,9 @@ int main(int argc, char *argv[]) {
     }
     // solve on the refined mesh:
     if (useCondensedSolve) {
-      solution->condensedSolve();
+      solution->condensedSolve(solver);
     } else if (!useCG) {
-      solution->solve(useMumps);
+      solution->solve(solver);
     } else {
       cout << "WARNING: cgSolver unset.\n";
 //      solution->solve(cgSolver);
@@ -1091,14 +1105,14 @@ int main(int argc, char *argv[]) {
   //  streamMesh->registerObserver(mesh);
   //  RefinementStrategy streamRefinementStrategy( streamSolution, energyThreshold );
   //  for (int refIndex=0; refIndex < 3; refIndex++) {
-  //    streamSolution->solve(false);
+  //    streamSolution->solve(solver);
   //    streamRefinementStrategy.refine(rank==0);
   //  }
   
   if (useCondensedSolve) {
-    streamSolution->condensedSolve();
+    streamSolution->condensedSolve(solver);
   } else {
-    streamSolution->solve(useMumps);
+    streamSolution->solve(solver);
   }
   energyErrorTotal = streamSolution->energyErrorTotal();
   if (rank == 0) {  
