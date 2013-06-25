@@ -682,10 +682,10 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   timeSolveVector[0] = timeSolve;
   
   timer.ResetStartTime();
-  int maxLhsLength = 0;
-  for (int i=0; i<numProcs; i++) {
-    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
-  }
+//  int maxLhsLength = 0;
+//  for (int i=0; i<numProcs; i++) {
+//    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
+//  }
   lhsVector.GlobalAssemble();
   
   // Dump matrices to disk

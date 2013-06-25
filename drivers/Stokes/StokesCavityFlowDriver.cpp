@@ -595,6 +595,12 @@ int main(int argc, char *argv[]) {
     if (useDivergenceFreeVelocity) {
       cout << "Using divergence-free velocity.\n";
     }
+    
+    if (useCondensedSolve) {
+      cout << "Using condensed solve.\n";
+    } else {
+      cout << "Not using condensed solve.\n";
+    }
   }
   
   Teuchos::RCP<DPGInnerProduct> ip;
@@ -710,7 +716,11 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillH1Order, rank==0 ));
+    if (compareWithOverkillMesh) {
+      refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillH1Order, rank==0 ));
+    } else {
+      refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 0, 15, rank==0 ));
+    }
   else if (symmetricRefinements) {
     // we again use the problem-specific LidDrivenFlowRefinementStrategy, but now with hMin = 0, and maxP = H1Order-1 (i.e. never refine in p)
     Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, minH,
@@ -740,10 +750,12 @@ int main(int argc, char *argv[]) {
   topCornerPoints(3,0) = 1 - 1e-12;
   topCornerPoints(3,1) = 1 - 1e-10;
 
-  if (useCondensedSolve) {
-    solution->condensedSolve();
-  } else if (!useCG) {
-    solution->solve(useMumps);
+  if (!useCG) {
+    if (useCondensedSolve) {
+      solution->condensedSolve();
+    } else {
+      solution->solve(useMumps);
+    }
   } else {
     cout << "WARNING: cgSolver unset.\n";
   }
@@ -1160,8 +1172,9 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  if (compareWithOverkillMesh) {
-    if (rank==0) {
+
+  if (rank==0) {
+    if (compareWithOverkillMesh) {
       cout << "******* Adaptivity Convergence Report *******\n";
       cout << "dofs\tL2 error\n";
       for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {

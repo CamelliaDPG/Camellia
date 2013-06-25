@@ -407,7 +407,7 @@ int main(int argc, char *argv[]) {
   
   bool writeGlobalStiffnessMatrixToFile = false;
   
-  bool useCondensedSolve = true;
+  bool useCondensedSolve = false;
   
   bool useCG = false;
   bool useMumps = true;

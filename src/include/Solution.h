@@ -115,6 +115,8 @@ private:
   void clearComputedResiduals();
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
+  void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
+  
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);

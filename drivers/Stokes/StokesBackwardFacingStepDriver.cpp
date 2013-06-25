@@ -456,11 +456,11 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( eps * tau1 );
     qoptIP->addTerm( eps * tau2 );
   } else { // some version of graph norm, then
-    qoptIP->addTerm( sqrt(beta) * v1 );
-    qoptIP->addTerm( sqrt(beta) * v2 );
-    qoptIP->addTerm( sqrt(beta) * q );
-    qoptIP->addTerm( sqrt(beta) * tau1 );
-    qoptIP->addTerm( sqrt(beta) * tau2 );
+//    qoptIP->addTerm( sqrt(beta) * v1 );
+//    qoptIP->addTerm( sqrt(beta) * v2 );
+//    qoptIP->addTerm( sqrt(beta) * q );
+//    qoptIP->addTerm( sqrt(beta) * tau1 );
+//    qoptIP->addTerm( sqrt(beta) * tau2 );
     
     qoptIP = stokesBF->graphNorm();
   }
