@@ -28,6 +28,8 @@
 
 #include "MeshFactory.h"
 
+#include "SolutionExporter.h"
+
 using namespace std;
 
 //// just testing the mass flux integration
@@ -218,29 +220,29 @@ int main(int argc, char *argv[]) {
   // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
 //  double eps = 0.0; // John Evans's problem: not in H^1
   bool induceCornerRefinements = false;
-  bool symmetricRefinements = true; // symmetric across the horizontal midline
+  bool symmetricRefinements = false; // symmetric across the horizontal midline
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
   bool useMumps = true;
   bool useCG = false;
-  bool compareWithOverkillMesh = false;
+  bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
-  bool useWeightedGraphNorm = true;
+  bool useWeightedGraphNorm = false;
   bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
-  int overkillMeshSize = 64;
-  int overkillPolyOrder = 7; // H1 order
-  
+  bool useCondensedSolve = true;
+  int overkillMeshSize = 256;
+  int overkillH1Order = 3; // H1 order
   
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
   double energyThreshold = 0.20; // for mesh refinements
   
   string saveFile = "stokesCavityReplay.replay";
-  string replayFile = "stokesCavityReplay.replay";
+  string replayFile = ""; //"stokesCavityReplay.replay";
 
 //  Teuchos::RCP<Solver> cgSolver = Teuchos::rcp( new CGSolver(cgMaxIt, cgTol) );
   
@@ -267,6 +269,13 @@ int main(int argc, char *argv[]) {
   
   double minH = 1.0 / 1024.0;
   int maxPolyOrder = 15;
+  
+  if (compareWithOverkillMesh) {
+    if (polyOrder + 1 > overkillH1Order) {
+      cout << "Error: H1 order of coarse mesh exceeds the overkill mesh's H1 order.\n";
+      exit(1);
+    }
+  }
   
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
@@ -532,6 +541,8 @@ int main(int argc, char *argv[]) {
   
   Teuchos::RCP<Solution> overkillSolution;
   map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
+  map<int, double> dofsToBestL2error;
+
   vector< VarPtr > fields;
   if (useDivergenceFreeVelocity) {
     fields.push_back(u);
@@ -654,14 +665,18 @@ int main(int argc, char *argv[]) {
   /////////////////// SOLVE OVERKILL //////////////////////
   if (compareWithOverkillMesh) {
     overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
-                                       stokesBFMath, overkillPolyOrder, overkillPolyOrder+pToAdd, useTriangles);
+                                       stokesBFMath, overkillH1Order, overkillH1Order+pToAdd, useTriangles);
     
     if (rank == 0) {
       cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
       cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
     }
     overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-    overkillSolution->solve();
+    if (useCondensedSolve) {
+      overkillSolution->condensedSolve();
+    } else {
+      overkillSolution->solve();
+    }
     if (rank == 0)
       cout << "...solved.\n";
     double overkillEnergyError = overkillSolution->energyErrorTotal();
@@ -695,7 +710,7 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   if (useAdHocHPRefinements) 
 //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
+    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / overkillMeshSize, overkillH1Order, rank==0 ));
   else if (symmetricRefinements) {
     // we again use the problem-specific LidDrivenFlowRefinementStrategy, but now with hMin = 0, and maxP = H1Order-1 (i.e. never refine in p)
     Teuchos::RCP<LidDrivenFlowRefinementStrategy> lidRefinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, minH,
@@ -725,11 +740,12 @@ int main(int argc, char *argv[]) {
   topCornerPoints(3,0) = 1 - 1e-12;
   topCornerPoints(3,1) = 1 - 1e-10;
 
-  if (!useCG) {
+  if (useCondensedSolve) {
+    solution->condensedSolve();
+  } else if (!useCG) {
     solution->solve(useMumps);
   } else {
-      cout << "WARNING: cgSolver unset.\n";
-//    solution->solve(cgSolver);
+    cout << "WARNING: cgSolver unset.\n";
   }
   
   if (useDivergenceFreeVelocity) {
@@ -757,27 +773,63 @@ int main(int argc, char *argv[]) {
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (compareWithOverkillMesh) {
-      Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-      solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
-      if (refIndex==numRefs-1) { // last refinement
-        solution->writeFieldsToFile(p->ID(),"pressure.m");
-        overkillSolution->writeFieldsToFile(p->ID(), "pressure_overkill.m");
+      Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
+      overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
+      if (rank==0) {
+        VTKExporter exporter(solution, mesh, varFactory);
+        ostringstream cavityRefinement;
+        cavityRefinement << "cavity_solution_refinement_" << refIndex;
+        exporter.exportSolution(cavityRefinement.str());
+        VTKExporter exporterBest(bestSoln, mesh, varFactory);
+        ostringstream bestRefinement;
+        bestRefinement << "cavity_best_refinement_" << refIndex;
+        exporterBest.exportSolution(bestRefinement.str());
       }
+      Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
+      
+      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
+      double p_avg = p_best->integrate(mesh);
+      if (rank==0)
+        cout << "Integral of best solution pressure: " << p_avg << endl;
+      
+      // determine error as difference between our solution and overkill
+      bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
+      
+      Teuchos::RCP<Solution> adaptiveSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      solution->projectFieldVariablesOntoOtherSolution(adaptiveSolnOnOverkillMesh);
+//      if (refIndex==numRefs-1) { // last refinement
+//        solution->writeFieldsToFile(p->ID(),"pressure.m");
+//        overkillSolution->writeFieldsToFile(p->ID(), "pressure_overkill.m");
+//      }
 
-      projectedSoln->addSolution(overkillSolution,-1.0);
+      // determine error as difference between our solution and overkill
+      adaptiveSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
 
-      if (refIndex==numRefs-1) { // last refinement
-        projectedSoln->writeFieldsToFile(p->ID(), "pressure_error_vs_overkill.m");
-      }
+//      if (refIndex==numRefs-1) { // last refinement
+//        projectedSoln->writeFieldsToFile(p->ID(), "pressure_error_vs_overkill.m");
+//      }
       double L2errorSquared = 0.0;
+      double bestL2errorSquared = 0.0;
       for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
         VarPtr var = *fieldIt;
         int fieldID = var->ID();
-        double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-        if (rank==0)
-          cout << "L2error for " << var->name() << ": " << L2error << endl;
+        double L2error = adaptiveSolnOnOverkillMesh->L2NormOfSolutionGlobal(fieldID);
         L2errorSquared += L2error * L2error;
+        double bestL2error = bestSolnOnOverkillMesh->L2NormOfSolutionGlobal(fieldID);
+        bestL2errorSquared += bestL2error * bestL2error;
+        if (rank==0) {
+          cout << "L^2 error for " << var->name() << ": " << L2error;
+          cout << " (vs. best error of " << bestL2error << ")\n";
+        }
       }
+      if (rank==0) {
+        VTKExporter exporter(adaptiveSolnOnOverkillMesh, mesh, varFactory);
+        ostringstream errorForRefinement;
+        errorForRefinement << "overkillError_refinement_" << refIndex;
+        exporter.exportSolution(errorForRefinement.str());
+      }
+
 //      double maxError = 0.0;
 //      for (int i=0; i<overkillMesh->numElements(); i++) {
 //        double error = projectedSoln->L2NormOfSolutionInCell(p->ID(),i);
@@ -789,9 +841,12 @@ int main(int argc, char *argv[]) {
 //      }
       
       int numGlobalDofs = mesh->numGlobalDofs();
-      if (rank==0)
-        cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
+      if (rank==0) {
+        cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared);
+        cout << " (vs. best error of " << sqrt(bestL2errorSquared) << ")\n";
+      }
       dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
+      dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
     }
     refinementStrategy->refine(false);//rank==0); // print to console on rank 0
     if (! MeshTestUtility::checkMeshConsistency(mesh)) {
@@ -818,7 +873,9 @@ int main(int argc, char *argv[]) {
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
     }
     // solve on the refined mesh:
-    if (!useCG) {
+    if (useCondensedSolve) {
+      solution->condensedSolve();
+    } else if (!useCG) {
       solution->solve(useMumps);
     } else {
       cout << "WARNING: cgSolver unset.\n";
@@ -851,23 +908,45 @@ int main(int argc, char *argv[]) {
     ten->writeBoundaryValuesToMATLABFile(mesh, skeletonOutputFileName.str());
   }
   if (compareWithOverkillMesh) {
+    Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
+    overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
+    Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+    bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
+    FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
+    double p_avg = p_best->integrate(mesh);
+    if (rank==0)
+      cout << "Integral of best solution pressure: " << p_avg << endl;
+    
+    // determine error as difference between our solution and overkill
+    bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
+    
     Teuchos::RCP<Solution> projectedSoln = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
     solution->projectFieldVariablesOntoOtherSolution(projectedSoln);
     
     projectedSoln->addSolution(overkillSolution,-1.0);
     double L2errorSquared = 0.0;
+    double bestL2errorSquared = 0.0;
     for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
       VarPtr var = *fieldIt;
       int fieldID = var->ID();
       double L2error = projectedSoln->L2NormOfSolutionGlobal(fieldID);
-      if (rank==0)
-        cout << "L2error for " << var->name() << ": " << L2error << endl;
+      double bestL2error = bestSolnOnOverkillMesh->L2NormOfSolutionGlobal(fieldID);
+      bestL2errorSquared += bestL2error * bestL2error;
+      if (rank==0) {
+        cout << "L^2 error for " << var->name() << ": " << L2error;
+        cout << " (vs. best error of " << bestL2error << ")\n";
+      }
       L2errorSquared += L2error * L2error;
     }
     int numGlobalDofs = mesh->numGlobalDofs();
-    if (rank==0)
-      cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared) << endl;
     dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
+    dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
+    if (rank==0) {
+      VTKExporter exporter(solution, mesh, varFactory);
+      ostringstream errorForRefinement;
+      errorForRefinement << "overkillError_refinement_" << numRefs;
+      exporter.exportSolution(errorForRefinement.str());
+    }
   }
   
   double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, "cavity_maxConditionIPMatrix.dat");
@@ -1004,7 +1083,11 @@ int main(int argc, char *argv[]) {
   //    streamRefinementStrategy.refine(rank==0);
   //  }
   
-  streamSolution->solve(useMumps);
+  if (useCondensedSolve) {
+    streamSolution->condensedSolve();
+  } else {
+    streamSolution->solve(useMumps);
+  }
   energyErrorTotal = streamSolution->energyErrorTotal();
   if (rank == 0) {  
     cout << "...solved.\n";
@@ -1013,31 +1096,31 @@ int main(int argc, char *argv[]) {
   
   if (rank==0){
     if (! meshHasTriangles ) {
-      massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-      u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
-      u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
-      if (!useDivergenceFreeVelocity) {
-        solution->writeFieldsToFile(u1->ID(), "u1.m");
-        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-        solution->writeFieldsToFile(u2->ID(), "u2.m");
-        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-      }
-      solution->writeFieldsToFile(p->ID(), "p.m");
-      streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-      
-      streamSolution->writeFluxesToFile(phi_hat->ID(), "phi_hat.dat");
-      streamSolution->writeFieldsToFile(psi_1->ID(), "psi1.m");
-      streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
-      vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
-      
-//      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
-      ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
-      cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
+//      massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+//      u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
+//      u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
+//      if (!useDivergenceFreeVelocity) {
+//        solution->writeFieldsToFile(u1->ID(), "u1.m");
+//        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+//        solution->writeFieldsToFile(u2->ID(), "u2.m");
+//        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+//      }
+//      solution->writeFieldsToFile(p->ID(), "p.m");
+//      streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
+//      
+//      streamSolution->writeFluxesToFile(phi_hat->ID(), "phi_hat.dat");
+//      streamSolution->writeFieldsToFile(psi_1->ID(), "psi1.m");
+//      streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
+//      vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
+//      
+////      FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
+//      ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
+//      cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
     } else {
-      solution->writeToFile(u1->ID(), "u1.dat");
-      solution->writeToFile(u2->ID(), "u2.dat");
-      solution->writeToFile(u2->ID(), "p.dat");
-      cout << "wrote files: u1.dat, u2.dat, p.dat\n";
+//      solution->writeToFile(u1->ID(), "u1.dat");
+//      solution->writeToFile(u2->ID(), "u2.dat");
+//      solution->writeToFile(u2->ID(), "p.dat");
+//      cout << "wrote files: u1.dat, u2.dat, p.dat\n";
     }
     polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
     
@@ -1078,22 +1161,28 @@ int main(int argc, char *argv[]) {
   }
   
   if (compareWithOverkillMesh) {
-    cout << "******* Adaptivity Convergence Report *******\n";
-    cout << "dofs\tL2 error\n";
-    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-      int dofs = entryIt->first;
-      double err = entryIt->second;
-      cout << dofs << "\t" << err << endl;
+    if (rank==0) {
+      cout << "******* Adaptivity Convergence Report *******\n";
+      cout << "dofs\tL2 error\n";
+      for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+        int dofs = entryIt->first;
+        double err = entryIt->second;
+        cout << dofs << "\t" << err;
+        double bestError = dofsToBestL2error[dofs];
+        cout << "\t" << bestError << endl;
+      }
+      ofstream fout("overkillComparison.txt");
+      fout << "******* Adaptivity Convergence Report *******\n";
+      fout << "dofs\tL2 error\tBest error\n";
+      for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+        int dofs = entryIt->first;
+        double err = entryIt->second;
+        fout << dofs << "\t" << err;
+        double bestError = dofsToBestL2error[dofs];
+        fout << "\t" << bestError << endl;
+      }
+      fout.close();
     }
-    ofstream fout("overkillComparison.txt");
-    fout << "******* Adaptivity Convergence Report *******\n";
-    fout << "dofs\tL2 error\n";
-    for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
-      int dofs = entryIt->first;
-      double err = entryIt->second;
-      fout << dofs << "\t" << err << endl;
-    }
-    fout.close();
   }
   
   return 0;
