@@ -144,12 +144,20 @@ set( CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/ConditioningExperimentDriver.cpp"
 )
 
+set( KRYLOV_SCHUR_CONDITIONING_EXPERIMENT_DRIVER
+  "${DRIVERS_DIR}/ConditioningExperiment/BlockKrylovSchurEpetraExFile.cpp"
+)
+
 set( LOBPCG_CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/LOBPCGEpetraExFile.cpp"
 )
 
 set( LSQR_CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/LSQREpetraExFile.cpp"
+)
+
+set( CONFUSION_ITERATION_EXPERIMENT
+  "${SCRATCHPAD_DRIVER_DIR}/ConfusionIterationExperiment.cpp"
 )
 
 set( NEW_CONFUSION_DRIVER
@@ -272,6 +280,7 @@ link_directories(${Trilinos_TPL_LIBRARY_DIRS})
 MESSAGE( "Building project for ${CAMELLIA_LIBRARY_NAME} library." )
 add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(KrylovSchurConditioningDriver ${KRYLOV_SCHUR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
@@ -285,6 +294,7 @@ add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY
 add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
 add_executable(NavierStokesHemkerDriver ${NAVIER_STOKES_HEMKER_DRIVER})
 add_executable(StokesCavityFlowDriver ${STOKES_SOURCES} ${STOKES_CAVITY_FLOW_DRIVER})
+add_executable(ConfusionIterationExperiment ${CONFUSION_ITERATION_EXPERIMENT})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
@@ -302,6 +312,11 @@ target_link_libraries(ConditioningExperimentDriver
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
+target_link_libraries(KrylovSchurConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
 target_link_libraries(LOBPCGConditioningDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
@@ -313,6 +328,11 @@ target_link_libraries(LSQRConditioningDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(NewBurgersDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(ConfusionIterationExperiment
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
