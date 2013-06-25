@@ -6,6 +6,9 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#include "choice.hpp"
+#include "mpi_choice.hpp"
+
 #include "RefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
@@ -27,6 +30,13 @@
 #include "PenaltyConstraints.h"
 
 #include "StreamDriverUtil.h"
+
+// Epetra includes
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
 
 using namespace std;
 
@@ -209,45 +219,60 @@ int main(int argc, char *argv[]) {
   numProcs=mpiSession.getNProc();
 #else
 #endif
-  int pToAdd = 2; // for optimal test function approximation
-  double energyThreshold = 0.20; // for mesh refinements
-  int pToAddForStreamFunction = pToAdd;
-  bool enforceLocalConservation = false;
-  bool useExperimentalHdivNorm = false; // attempts to get H(div)-optimality in u (even though u is still L^2 discretely)
-  bool useExperimentalH1Norm = false; // attempts to get H^1-optimality in u (even though u is still L^2 discretely)
-  bool useGraphNormStrongerTau = false; // mimics the experimental H^1 norm in its requirements on tau
-  bool useCompliantGraphNorm = false;   // weights to improve conditioning of the local problems
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+#ifdef HAVE_MPI
+  choice::MpiArgs args( argc, argv );
+#else
+  choice::Args args(argc, argv );
+#endif
   bool useExtendedPrecisionForOptimalTestInversion = false;
-  bool useCEFormulation = false;
   bool useIterativeRefinementsWithSPDSolve = false;
   bool useSPDLocalSolve = false;
   bool finalSolveUsesStandardGraphNorm = false;
   
+  int polyOrder = args.Input<int>("--polyOrder", "L^2 (field) polynomial order");
+  int pToAdd = args.Input<int>("--pToAdd", "polynomial enrichment for test functions", 2);
+  int pToAddForStreamFunction = pToAdd;
+  
+  int numRefs = args.Input<int>("--numRefs", "Number of refinements", 10);
+  double energyThreshold = args.Input<double>("--adaptiveThreshold", "threshold parameter for greedy adaptivity", 0.20);
+  bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "Enforce local conservation.", false);
+  bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
+  bool useExperimentalNorm = args.Input<bool>("--useExperimentalNorm", "use whatever the current experimental norm is", false);
+  
+  bool compareWithOverkill = args.Input<bool>("--compareWithOverkill", "compare with an overkill solution", false);
+  int numOverkillRefinements = args.Input<int>("--numOverkillRefinements", "number of uniform refinements for overkill mesh compared with starting adaptive mesh", 4); // 4 for the final version --> 3072 elements with h=1/16
+  int H1OrderOverkill = 1 + args.Input<int>("--overkillPolyOrder", "polynomial order for overkill solution", 5);
+  
   double min_h = 0; //1.0 / 128.0;
+  
+  args.Process();
   
   // usage: polyOrder [numRefinements]
   // parse args:
-  if ((argc != 3) && (argc != 2) && (argc != 4)) {
-    cout << "Usage: StokesBackwardFacingStepDriver fieldPolyOrder [numRefinements=10 [adaptThresh=0.20]\n";
-    return -1;
-  }
-  int polyOrder = atoi(argv[1]);
-  int numRefs = 10;
-  if ( ( argc == 3 ) || (argc == 4)) {
-    numRefs = atoi(argv[2]);
-  }
-  if (argc == 4) {
-    energyThreshold = atof(argv[3]);
-  }
-  if (rank == 0) {
-    cout << "numRefinements = " << numRefs << endl;
-    if (useCEFormulation) {
-      cout << "Using 'cheap experimental' formulation.\n";
-    }
-  }
+//  if ((argc != 3) && (argc != 2) && (argc != 4)) {
+//    cout << "Usage: StokesBackwardFacingStepDriver fieldPolyOrder [numRefinements=10 [adaptThresh=0.20]\n";
+//    return -1;
+//  }
+//  int polyOrder = atoi(argv[1]);
+//  int numRefs = 10;
+//  if ( ( argc == 3 ) || (argc == 4)) {
+//    numRefs = atoi(argv[2]);
+//  }
+//  if (argc == 4) {
+//    energyThreshold = atof(argv[3]);
+//  }
+//  if (rank == 0) {
+//    cout << "numRefinements = " << numRefs << endl;
+//  }
   
   /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
-
   // fluxes and traces:
   VarPtr u1hat, u2hat, t1n, t2n;
   // fields for SGP:
@@ -264,93 +289,59 @@ int main(int argc, char *argv[]) {
   
   VarPtr tau1,tau2,v1,v2,q;
   VarFactory varFactory;
-  if ( useCEFormulation ) {
-    CEStokesFormulation stokesForm(mu);
-    stokesBF = stokesForm.bf();
-    qoptIP = stokesForm.graphNorm();
-    
-    varFactory = stokesForm.ceVarFactory();
-    VarPtr v1 = varFactory.testVar(CE_V1_S, HGRAD);
-    VarPtr v2 = varFactory.testVar(CE_V2_S, HGRAD);
-    VarPtr q = varFactory.testVar(CE_Q_S, HGRAD);
-    VarPtr tau1 = varFactory.testVar(CE_TAU1_S, HDIV);
-    VarPtr tau2 = varFactory.testVar(CE_TAU2_S, HDIV);
-    
-    u1hat = varFactory.traceVar(CE_U1HAT_S);
-    u2hat = varFactory.traceVar(CE_U2HAT_S);
-    
-    t1n = varFactory.fluxVar(CE_T1HAT_S);
-    t2n = varFactory.fluxVar(CE_T2HAT_S);
-    
-    u1 = varFactory.fieldVar(CE_U1_S, HGRAD);
-    u2 = varFactory.fieldVar(CE_U2_S, HGRAD);
-    p = varFactory.fieldVar(CE_P_S);
+  tau1 = varFactory.testVar("\\tau_1", HDIV);
+  tau2 = varFactory.testVar("\\tau_2", HDIV);
+  v1 = varFactory.testVar("v_1", HGRAD);
+  v2 = varFactory.testVar("v_2", HGRAD);
+  q = varFactory.testVar("q", HGRAD);
+  
+  u1hat = varFactory.traceVar("\\widehat{u}_1");
+  u2hat = varFactory.traceVar("\\widehat{u}_2");
+  
+  t1n = varFactory.fluxVar("\\widehat{t_{1n}}");
+  t2n = varFactory.fluxVar("\\widehat{t_{2n}}");
+  if (!useCompliantGraphNorm) {
+    u1 = varFactory.fieldVar("u_1");
+    u2 = varFactory.fieldVar("u_2");
   } else {
-    tau1 = varFactory.testVar("\\tau_1", HDIV);
-    tau2 = varFactory.testVar("\\tau_2", HDIV);
-    v1 = varFactory.testVar("v_1", HGRAD);
-    v2 = varFactory.testVar("v_2", HGRAD);
-    q = varFactory.testVar("q", HGRAD);
-    
-    u1hat = varFactory.traceVar("\\widehat{u}_1");
-    u2hat = varFactory.traceVar("\\widehat{u}_2");
-    
-    t1n = varFactory.fluxVar("\\widehat{t_{1n}}");
-    t2n = varFactory.fluxVar("\\widehat{t_{2n}}");
-    if (!useCompliantGraphNorm) {
-      u1 = varFactory.fieldVar("u_1");
-      u2 = varFactory.fieldVar("u_2");
-    } else {
-      u1 = varFactory.fieldVar("u_1", HGRAD);
-      u2 = varFactory.fieldVar("u_2", HGRAD);
-    }
-    sigma11 = varFactory.fieldVar("\\sigma_11");
-    sigma12 = varFactory.fieldVar("\\sigma_12");
-    sigma21 = varFactory.fieldVar("\\sigma_21");
-    sigma22 = varFactory.fieldVar("\\sigma_22");
-    p = varFactory.fieldVar("p");
-    
-    stokesBF = Teuchos::rcp( new BF(varFactory) );  
-    // tau1 terms:
-    stokesBF->addTerm(u1,tau1->div());
-    stokesBF->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
-    stokesBF->addTerm(sigma12,tau1->y());
-    stokesBF->addTerm(-u1hat, tau1->dot_normal());
-    
-    // tau2 terms:
-    stokesBF->addTerm(u2, tau2->div());
-    stokesBF->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
-    stokesBF->addTerm(sigma22,tau2->y());
-    stokesBF->addTerm(-u2hat, tau2->dot_normal());
-    
-    // v1:
-    stokesBF->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
-    stokesBF->addTerm(mu * sigma12,v1->dy());
-    stokesBF->addTerm( - p, v1->dx() );
-    stokesBF->addTerm( t1n, v1);
-    
-    // v2:
-    stokesBF->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
-    stokesBF->addTerm(mu * sigma22,v2->dy());
-    stokesBF->addTerm( -p, v2->dy());
-    stokesBF->addTerm( t2n, v2);
-    
-    if (! useCompliantGraphNorm) {
-        // q:
-      stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
-      stokesBF->addTerm(-u2,q->dy());
-      stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
-    } else {
-      // unsure whether I should divide q through by h in this equation
-      // (I divide it in the test norm) -- the RHS here is 0, so mathematically the two are
-      // equivalent.  Therefore conditioning should decide, and my conclusion is that
-      // we're better conditioned without the division by h.
-      // q:
-      stokesBF->addTerm(-u1,q->dx());// / h); // (-u, grad q)
-      stokesBF->addTerm(-u2,q->dy());// / h);
-      stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);// / h);
-    }
+    u1 = varFactory.fieldVar("u_1", HGRAD);
+    u2 = varFactory.fieldVar("u_2", HGRAD);
   }
+  sigma11 = varFactory.fieldVar("\\sigma_11");
+  sigma12 = varFactory.fieldVar("\\sigma_12");
+  sigma21 = varFactory.fieldVar("\\sigma_21");
+  sigma22 = varFactory.fieldVar("\\sigma_22");
+  p = varFactory.fieldVar("p");
+  
+  stokesBF = Teuchos::rcp( new BF(varFactory) );  
+  // tau1 terms:
+  stokesBF->addTerm(u1,tau1->div());
+  stokesBF->addTerm(sigma11,tau1->x()); // (sigma1, tau1)
+  stokesBF->addTerm(sigma12,tau1->y());
+  stokesBF->addTerm(-u1hat, tau1->dot_normal());
+  
+  // tau2 terms:
+  stokesBF->addTerm(u2, tau2->div());
+  stokesBF->addTerm(sigma21,tau2->x()); // (sigma2, tau2)
+  stokesBF->addTerm(sigma22,tau2->y());
+  stokesBF->addTerm(-u2hat, tau2->dot_normal());
+  
+  // v1:
+  stokesBF->addTerm(mu * sigma11,v1->dx()); // (mu sigma1, grad v1) 
+  stokesBF->addTerm(mu * sigma12,v1->dy());
+  stokesBF->addTerm( - p, v1->dx() );
+  stokesBF->addTerm( t1n, v1);
+  
+  // v2:
+  stokesBF->addTerm(mu * sigma21,v2->dx()); // (mu sigma2, grad v2)
+  stokesBF->addTerm(mu * sigma22,v2->dy());
+  stokesBF->addTerm( -p, v2->dy());
+  stokesBF->addTerm( t2n, v2);
+  
+    // q:
+  stokesBF->addTerm(-u1,q->dx()); // (-u, grad q)
+  stokesBF->addTerm(-u2,q->dy());
+  stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
   
   if (rank==0)
     stokesBF->printTrialTestInteractions();
@@ -399,6 +390,32 @@ int main(int argc, char *argv[]) {
   
   mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBF, H1Order, pToAdd) );
   
+  FunctionPtr one = Function::constant(1.0);
+  double meshMeasure = one->integrate(mesh);
+  
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  mesh->registerObserver(refHistory);
+  
+  // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
+  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  
+  MeshPtr overkillMesh;
+  if (compareWithOverkill) {
+    overkillMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBF, H1OrderOverkill, pToAdd) );
+    overkillMesh->hRefine(overkillMesh->getActiveCellIDs(), verticalCut);
+    overkillMesh->hRefine(overkillMesh->getActiveCellIDs(), verticalCut);
+    
+    for (int i=0; i<numOverkillRefinements; i++) {
+      overkillMesh->hRefine(overkillMesh->getActiveCellIDs(), RefinementPattern::regularRefinementPatternQuad());
+    }
+    if (rank==0) {
+      cout << "Overkill mesh has " << overkillMesh->numActiveElements() << " elements and ";
+      cout << overkillMesh->numGlobalDofs() << " dofs.\n";
+    }
+  }
+  
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
   
@@ -407,64 +424,45 @@ int main(int argc, char *argv[]) {
   
   IPPtr ip;
   
-  if (! useCEFormulation ) {
-    qoptIP = Teuchos::rcp(new IP());
+  qoptIP = Teuchos::rcp(new IP());
+  
+  double beta = 1.0;
+  
+  if (useCompliantGraphNorm) {
+    qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    qoptIP->addTerm( mu * v1->dx() + mu * v2->dy() );   // pressure
+    qoptIP->addTerm( h * tau1->div() - h * q->dx() );   // u1
+    qoptIP->addTerm( h * tau2->div() - h * q->dy());    // u2
     
-    double beta = 1.0;
+    qoptIP->addTerm( (mu / h) * v1 );
+    qoptIP->addTerm( (mu / h) * v2 );
+    qoptIP->addTerm( q );
+    qoptIP->addTerm( tau1 );
+    qoptIP->addTerm( tau2 );
+  } else if (useExperimentalNorm) {
+    qoptIP->addTerm( v1->dx() + tau1->x() ); // sigma11
+    qoptIP->addTerm( v1->dy() + tau1->y() ); // sigma12
+    qoptIP->addTerm( v2->dx() + tau2->x() ); // sigma21
+    qoptIP->addTerm( v2->dy() + tau2->y() ); // sigma22
+    qoptIP->addTerm( v1->dx() + v2->dy() );   // pressure
     
-    if (useExperimentalHdivNorm) {
-      qoptIP->addTerm( sqrt(beta) * v1 );
-      qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * q );
-      qoptIP->addTerm( sqrt(beta) * tau1 );
-      qoptIP->addTerm( sqrt(beta) * tau2 );
-      
-      qoptIP->addTerm( mu * v1->grad() + tau1 ); // sigma11, sigma12
-      qoptIP->addTerm( mu * v2->grad() + tau2 ); // sigma21, sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-      qoptIP->addTerm( q->dx() );    // u1
-      qoptIP->addTerm( q->dy() );    // u2    
-    } else if (useExperimentalH1Norm) {
-      qoptIP->addTerm( sqrt(beta) * v1 );
-      qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * q );
-      qoptIP->addTerm( sqrt(beta) * tau1 );
-      qoptIP->addTerm( sqrt(beta) * tau2 );
-      
-      // then we're "legally" allowed to reverse the integration by parts of both u1 and u2 terms...
-      qoptIP->addTerm( mu * v1->grad() + tau1 ); // sigma11, sigma12
-      qoptIP->addTerm( mu * v2->grad() + tau2 ); // sigma21, sigma22
-      qoptIP->addTerm( v1->dx() + v2->dy() );     // pressure
-      // For now, we add these in anyway...
-      qoptIP->addTerm( tau1->div() );    // u1
-      qoptIP->addTerm( tau2->div() );    // u2
-    } else if (useCompliantGraphNorm) {
-      qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
-      qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
-      qoptIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
-      qoptIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
-      qoptIP->addTerm( mu * v1->dx() + mu * v2->dy() );   // pressure
-      qoptIP->addTerm( h * tau1->div() - h * q->dx() );   // u1
-      qoptIP->addTerm( h * tau2->div() - h * q->dy());    // u2
-      
-      qoptIP->addTerm( (mu / h) * v1 );
-      qoptIP->addTerm( (mu / h) * v2 );
-      qoptIP->addTerm( q );
-      qoptIP->addTerm( tau1 );
-      qoptIP->addTerm( tau2 );
-    } else { // some version of graph norm, then
-      qoptIP->addTerm( sqrt(beta) * v1 );
-      qoptIP->addTerm( sqrt(beta) * v2 );
-      qoptIP->addTerm( sqrt(beta) * q );
-      qoptIP->addTerm( sqrt(beta) * tau1 );
-      qoptIP->addTerm( sqrt(beta) * tau2 );
-      
-      qoptIP = stokesBF->graphNorm();
-      if (useGraphNormStrongerTau) { // "mix in" a bit of the H^1 experimental norm...
-        qoptIP->addTerm( tau1->div() );    // u1
-        qoptIP->addTerm( tau2->div() );    // u2
-      }
-    }
+    double eps = 1e-4;
+    qoptIP->addTerm( eps * v1 );
+    qoptIP->addTerm( eps * v2 );
+    qoptIP->addTerm( eps * q );
+    qoptIP->addTerm( eps * tau1 );
+    qoptIP->addTerm( eps * tau2 );
+  } else { // some version of graph norm, then
+    qoptIP->addTerm( sqrt(beta) * v1 );
+    qoptIP->addTerm( sqrt(beta) * v2 );
+    qoptIP->addTerm( sqrt(beta) * q );
+    qoptIP->addTerm( sqrt(beta) * tau1 );
+    qoptIP->addTerm( sqrt(beta) * tau2 );
+    
+    qoptIP = stokesBF->graphNorm();
   }
   
   ip = qoptIP;
@@ -473,7 +471,20 @@ int main(int argc, char *argv[]) {
     ip->printInteractions();
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  
+  SolutionPtr overkillSolution;
+  map<int, double> dofsToL2error; // key: numGlobalDofs, value: total L2error compared with overkill
+  map<int, double> dofsToBestL2error;
+  
+  vector< VarPtr > fields;
+  fields.push_back(u1);
+  fields.push_back(u2);
+  fields.push_back(sigma11);
+  fields.push_back(sigma12);
+  fields.push_back(sigma21);
+  fields.push_back(sigma22);
+  fields.push_back(p);
   
   BFPtr streamBF;
   SolutionPtr streamSolution;
@@ -516,10 +527,9 @@ int main(int argc, char *argv[]) {
   streamBF->setUseExtendedPrecisionSolveForOptimalTestFunctions(useExtendedPrecisionForOptimalTestInversion);
   
   streamMesh = Teuchos::rcp( new Mesh(vertices, elementVertices, streamBF, H1Order, pToAddForStreamFunction) );
-  
   streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC ) );
   
-//  mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
+  // will use refinement history to playback refinements on streamMesh (no need to register streamMesh)
   
   ////////////////////   CREATE BCs   ///////////////////////
   FunctionPtr u1_0 = Teuchos::rcp( new U1_0 );
@@ -546,8 +556,8 @@ int main(int argc, char *argv[]) {
     FunctionPtr zero = Function::zero();
     bc->addDirichlet(t1n, outflowBoundary, zero);
     bc->addDirichlet(t2n, outflowBoundary, zero);
-    // hypothesis: when we impose the no-traction condition, not allowed to impose zero-mean pressure
-  //  bc->addZeroMeanConstraint(p);
+    // when we impose the no-traction condition, not allowed to impose zero-mean pressure
+    // bc->addZeroMeanConstraint(p);
   }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
@@ -556,26 +566,65 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
+  double L2normOverkill = -1;
+  if (compareWithOverkill) {
+    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+    
+    if (enforceLocalConservation) {
+      overkillSolution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==Function::zero());
+    }
+    
+    if (rank==0) {
+      cout << "Solving on overkill mesh";
+    }
+    Epetra_Time timer(Comm);
+    if (!enforceLocalConservation) {
+      if (rank==0) {
+        cout << " (using condensed solve)... " << endl;
+      }
+      overkillSolution->condensedSolve();
+    } else {
+      if (rank==0) {
+        cout << "... " << endl;
+      }
+      // condensed solve doesn't support lagrange constraints yet...
+      overkillSolution->solve(true);
+    }
+    
+    double overkillSolutionTime = timer.ElapsedTime();
+    if (rank==0) {
+      cout << "... solved in " << overkillSolutionTime << " seconds." << endl;
+    }
+    double overkillEnergyError = overkillSolution->energyErrorTotal();
+    if (rank == 0)
+      cout << "overkill energy error: " << overkillEnergyError << endl;
+    
+    double L2normSquared = 0;
+    for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
+      VarPtr var = *fieldIt;
+      FunctionPtr fieldFxn = Function::solution(var, overkillSolution);
+      if (var->ID() == p->ID()) {
+        // pressure: subtract off the average value:
+        double pAvg = fieldFxn->integrate(overkillMesh) / meshMeasure;
+        fieldFxn = fieldFxn - pAvg;
+      }
+      
+      double L2norm = fieldFxn->l2norm(overkillMesh);
+      L2normSquared += L2norm * L2norm;
+      if (rank==0) {
+        cout << "L^2 norm for overkill solution of field " << var->name() << ": " << L2norm << endl;
+      }
+    }
+    L2normOverkill = sqrt(L2normSquared);
+    if (rank==0) {
+      cout << "L^2 norm of all overkill fields: " << L2normOverkill << endl;
+    }
+  }
+  
   RefinementStrategy refinementStrategy( solution, energyThreshold, min_h );
   
   // just an experiment:
   //  refinementStrategy.setEnforceOneIrregurity(false);
-
-  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
-  mesh->registerObserver(refHistory);
-  
-  int uniformRefinements = 0;
-  for (int refIndex=0; refIndex<uniformRefinements; refIndex++){
-    refinementStrategy.refine();
-  }
-  
-  // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
-  // COMMENTING THESE LINES OUT AS A TEST: TODO: UNCOMMENT THEM.
-//  if (rank==0)
-//    cout << "NOTE: using anisotropic initial mesh.  Should change back after test complete!\n";
-  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
   
   if (rank == 0) {
     cout << "Starting mesh has " << mesh->numActiveElements() << " elements and ";
@@ -586,17 +635,8 @@ int main(int argc, char *argv[]) {
     if (enforceLocalConservation) {
       cout << "Enforcing local conservation.\n";
     }
-    if (useExperimentalHdivNorm) {
-      cout << "NOTE: Using experimental H(div) norm!\n";
-    }
-    if (useExperimentalH1Norm) {
-      cout << "NOTE: Using experimental H^1 norm!\n";
-    }
     if (useCompliantGraphNorm) {
       cout << "NOTE: Using unit-compliant graph norm.\n";
-    }
-    if (useGraphNormStrongerTau) {
-      cout << "NOTE: Using \"tau-strengthened\" graph norm.\n";
     }
     if (useExtendedPrecisionForOptimalTestInversion) {
       cout << "NOTE: using extended precision (long double) for Gram matrix inversion.\n";
@@ -607,7 +647,78 @@ int main(int argc, char *argv[]) {
   }
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){    
-    solution->solve(false);
+    if (!enforceLocalConservation) {
+      solution->condensedSolve();
+    } else {
+      // condensed solve doesn't support lagrange constraints yet...
+      solution->solve(true);
+    }
+    if (compareWithOverkill) {
+      Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
+      overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
+      if (rank==0) {
+        VTKExporter exporter(solution, mesh, varFactory);
+        ostringstream cavityRefinement;
+        cavityRefinement << "backstep_solution_refinement_" << refIndex;
+        exporter.exportSolution(cavityRefinement.str());
+        VTKExporter exporterBest(bestSoln, mesh, varFactory);
+        ostringstream bestRefinement;
+        bestRefinement << "backstep_best_refinement_" << refIndex;
+        exporterBest.exportSolution(bestRefinement.str());
+      }
+      Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
+      
+      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
+      double p_avg = p_best->integrate(mesh);
+      if (rank==0)
+        cout << "Integral of best solution pressure: " << p_avg << endl;
+      
+      // determine error as difference between our solution and overkill
+      bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
+      
+      Teuchos::RCP<Solution> adaptiveSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      solution->projectFieldVariablesOntoOtherSolution(adaptiveSolnOnOverkillMesh);
+      
+      // determine error as difference between our solution and overkill
+      adaptiveSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
+      
+      double L2errorSquared = 0.0;
+      double bestL2errorSquared = 0.0;
+      for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
+        VarPtr var = *fieldIt;
+        int fieldID = var->ID();
+        FunctionPtr fieldErrorFxn = Function::solution(var, adaptiveSolnOnOverkillMesh);
+        if (var->ID() == p->ID()) {
+          // pressure: subtract off the average difference:
+          double pAvg = fieldErrorFxn->integrate(adaptiveSolnOnOverkillMesh->mesh()) / meshMeasure;
+          fieldErrorFxn = fieldErrorFxn - pAvg;
+        }
+        
+        double L2error = fieldErrorFxn->l2norm(adaptiveSolnOnOverkillMesh->mesh());
+        L2errorSquared += L2error * L2error;
+        double bestL2error = bestSolnOnOverkillMesh->L2NormOfSolutionGlobal(fieldID);
+        bestL2errorSquared += bestL2error * bestL2error;
+        if (rank==0) {
+          cout << "L^2 error for " << var->name() << ": " << L2error;
+          cout << " (vs. best error of " << bestL2error << ")\n";
+        }
+      }
+      int numGlobalDofs = mesh->numGlobalDofs();
+      if (rank==0) {
+        cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared);
+        cout << " (vs. best error of " << sqrt(bestL2errorSquared) << ")\n";
+      }
+      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
+      dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
+      if (rank==0) {
+        VTKExporter exporter(adaptiveSolnOnOverkillMesh, mesh, varFactory);
+        ostringstream errorForRefinement;
+        errorForRefinement << "overkillError_refinement_" << refIndex;
+        exporter.exportSolution(errorForRefinement.str());
+      }
+    }
+    
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
   
@@ -619,7 +730,6 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "Max condition number estimate: " << maxConditionNumber << endl;
   }
-  
   
   if (finalSolveUsesStandardGraphNorm) {
     if (rank==0)
@@ -755,7 +865,7 @@ int main(int argc, char *argv[]) {
     cout << "solving for approximate stream function...\n";
   }
   
-  streamSolution->solve(false);
+  streamSolution->condensedSolve();
   energyErrorTotal = streamSolution->energyErrorTotal();
   // commenting out the recirculation region computation, because it doesn't work yet.
 //  double x,y;
@@ -768,10 +878,10 @@ int main(int argc, char *argv[]) {
   }
   
   if (rank==0){
-    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-    solution->writeFieldsToFile(u1->ID(), "u1.m");
-    solution->writeFieldsToFile(u2->ID(), "u2.m");
-    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
+//    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+//    solution->writeFieldsToFile(u1->ID(), "u1.m");
+//    solution->writeFieldsToFile(u2->ID(), "u2.m");
+//    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
     
     VTKExporter exporter(solution, mesh, varFactory);
     exporter.exportSolution("backStepSoln", H1Order*2);
@@ -779,12 +889,12 @@ int main(int argc, char *argv[]) {
     VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
     streamExporter.exportSolution("backStepStreamSoln", H1Order*2);
     
-    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-    solution->writeFieldsToFile(p->ID(), "p.m");
+//    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+//    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+//    solution->writeFieldsToFile(p->ID(), "p.m");
 
-    writePatchValues(0, RIGHT_OUTFLOW, 0, 2, streamSolution, phi, "phi_patch.m");
-    writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
+//    writePatchValues(0, RIGHT_OUTFLOW, 0, 2, streamSolution, phi, "phi_patch.m");
+//    writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
     
     FieldContainer<double> eastPoints = pointGrid(4, RIGHT_OUTFLOW, 0, 2, 100);
     FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
@@ -814,7 +924,7 @@ int main(int argc, char *argv[]) {
     GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
     
     GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
-      
+    
 //      ofstream fout("phiContourLevels.dat");
 //      fout << setprecision(15);
 //      for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++) {
@@ -823,6 +933,32 @@ int main(int argc, char *argv[]) {
 //      fout.close();
     //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
     //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+    
+    
+    if (compareWithOverkill) {
+      if (rank==0) {
+        cout << "******* Adaptivity Convergence Report *******\n";
+        cout << "dofs\tL2 error\n";
+        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+          int dofs = entryIt->first;
+          double err = entryIt->second;
+          cout << dofs << "\t" << err;
+          double bestError = dofsToBestL2error[dofs];
+          cout << "\t" << bestError << endl;
+        }
+        ofstream fout("backstepOverkillComparison.txt");
+        fout << "******* Adaptivity Convergence Report *******\n";
+        fout << "dofs\tL2 error\tBest error\n";
+        for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
+          int dofs = entryIt->first;
+          double err = entryIt->second;
+          fout << dofs << "\t" << err;
+          double bestError = dofsToBestL2error[dofs];
+          fout << "\t" << bestError << endl;
+        }
+        fout.close();
+      }
+    }
     
     cout << "wrote files.\n";
   }
