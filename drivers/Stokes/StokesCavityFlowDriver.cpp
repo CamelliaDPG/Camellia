@@ -31,6 +31,8 @@
 
 #include "SolutionExporter.h"
 
+#include "CamelliaConfig.h"
+
 using namespace std;
 
 //// just testing the mass flux integration
@@ -226,7 +228,7 @@ int main(int argc, char *argv[]) {
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
   bool reportPerCellErrors  = true;
-  bool useMumps = false;
+  bool useMumps = true;
   bool useCG = false;
   bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
@@ -701,7 +703,7 @@ int main(int argc, char *argv[]) {
       cout << "...solved.\n";
     double overkillEnergyError = overkillSolution->energyErrorTotal();
     if (rank == 0)
-      cout << "overkill energy error: " << overkillEnergyError << endl;
+      cout << "overkill energy error: " << setprecision(15) << overkillEnergyError << endl;
   }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
