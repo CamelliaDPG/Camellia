@@ -916,31 +916,31 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       solution->writeToVTK("nsCavitySoln.vtk");
       if (! meshHasTriangles ) {
-        massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-        u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
-        u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
-        solution->writeFieldsToFile(u1->ID(), "u1.m");
-        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-        solution->writeFieldsToFile(u2->ID(), "u2.m");
-        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-        solution->writeFieldsToFile(p->ID(), "p.m");
-        streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-        
-        streamSolution->writeFluxesToFile(phi_hat->ID(), "phi_hat.dat");
-        streamSolution->writeFieldsToFile(psi_1->ID(), "psi1.m");
-        streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
-        vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
-        
-        FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
-        ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
-        cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
+//        massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+//        u_mag->writeValuesToMATLABFile(solution->mesh(), "u_mag.m");
+//        u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
+//        solution->writeFieldsToFile(u1->ID(), "u1.m");
+//        solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+//        solution->writeFieldsToFile(u2->ID(), "u2.m");
+//        solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+//        solution->writeFieldsToFile(p->ID(), "p.m");
+//        streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
+//        
+//        streamSolution->writeFluxesToFile(phi_hat->ID(), "phi_hat.dat");
+//        streamSolution->writeFieldsToFile(psi_1->ID(), "psi1.m");
+//        streamSolution->writeFieldsToFile(psi_2->ID(), "psi2.m");
+//        vorticity->writeValuesToMATLABFile(streamMesh, "vorticity.m");
+//        
+//        FunctionPtr ten = Teuchos::rcp( new ConstantScalarFunction(10) );
+//        ten->writeBoundaryValuesToMATLABFile(solution->mesh(), "skeleton.dat");
+//        cout << "wrote files: u_mag.m, u_div.m, u1.m, u1_hat.dat, u2.m, u2_hat.dat, p.m, phi.m, vorticity.m.\n";
       } else {
-        solution->writeToFile(u1->ID(), "u1.dat");
-        solution->writeToFile(u2->ID(), "u2.dat");
-        solution->writeToFile(u2->ID(), "p.dat");
-        cout << "wrote files: u1.dat, u2.dat, p.dat\n";
+//        solution->writeToFile(u1->ID(), "u1.dat");
+//        solution->writeToFile(u2->ID(), "u2.dat");
+//        solution->writeToFile(u2->ID(), "p.dat");
+//        cout << "wrote files: u1.dat, u2.dat, p.dat\n";
       }
-      polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
+//      polyOrderFunction->writeValuesToMATLABFile(mesh, "cavityFlowPolyOrders.m");
       
       FieldContainer<double> points = pointGrid(0, 1, 0, 1, 100);
       FieldContainer<double> pointData = solutionData(points, streamSolution, phi);
@@ -951,10 +951,10 @@ int main(int argc, char *argv[]) {
       GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "lidCavityNavierStokes.p");
       GnuPlotUtil::writeComputationalMeshSkeleton("nsCavityMesh", mesh);
 
-      writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
-      writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
-      writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
-      writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
+//      writePatchValues(0, 1, 0, 1, streamSolution, phi, "phi_patch.m");
+//      writePatchValues(0, .1, 0, .1, streamSolution, phi, "phi_patch_detail.m");
+//      writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
+//      writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
     }
     
     if (compareWithOverkillMesh) {
