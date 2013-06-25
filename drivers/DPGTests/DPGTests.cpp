@@ -159,7 +159,7 @@ void DPGTests::runTests() {
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
-  bool skipSlowTests = true;
+  bool skipSlowTests = false;
   
   // set up a few special entries for BasisFactory first:
   createBases();
@@ -167,17 +167,19 @@ void DPGTests::runTests() {
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
   
+//  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
+  
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
-  //  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
@@ -2332,12 +2334,12 @@ bool DPGTests::checkOptTestWeights(FieldContainer<double> &optWeights,
   FieldContainer<double> preStiffExpected(numCells,preStiffness.dimension(1),
                                           preStiffness.dimension(2));
   for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
-    Epetra_SerialDenseMatrix optWeightsT(Copy,
+    Epetra_SerialDenseMatrix optWeightsT(::Copy,
                                          &optWeights(cellIndex,0,0),
                                          optWeights.dimension(2), // stride
                                          optWeights.dimension(2),optWeights.dimension(1));
     
-    Epetra_SerialDenseMatrix ipMatrixT(Copy,
+    Epetra_SerialDenseMatrix ipMatrixT(::Copy,
                                        &ipMatrix(cellIndex,0,0),
                                        ipMatrix.dimension(2), // stride
                                        ipMatrix.dimension(2),ipMatrix.dimension(1));
