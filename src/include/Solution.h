@@ -109,7 +109,10 @@ private:
   bool _reportConditionNumber, _reportTimingResults;
   bool _writeMatrixToMatlabFile;
   bool _writeMatrixToMatrixMarketFile;
+  bool _writeRHSToMatrixMarketFile;
   string _matrixFilePath;
+  string _rhsFilePath;
+  
   double _globalSystemConditionEstimate;
   
   void clearComputedResiduals();
@@ -223,6 +226,7 @@ public:
   
   void setWriteMatrixToFile(bool value,const string &filePath);
   void setWriteMatrixToMatrixMarketFile(bool value,const string &filePath);
+  void setWriteRHSToMatrixMarketFile(bool value, const string &filePath);
   
   Teuchos::RCP<Mesh> mesh() const;
   Teuchos::RCP<BC> bc() const;

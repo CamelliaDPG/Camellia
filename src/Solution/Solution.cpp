@@ -143,6 +143,7 @@ Solution::Solution(const Solution &soln) {
   _reportTimingResults = false;
   _writeMatrixToMatlabFile = false;
   _writeMatrixToMatrixMarketFile = false;
+  _writeRHSToMatrixMarketFile = false;
   _cubatureEnrichmentDegree = soln.cubatureEnrichmentDegree();
 }
 
@@ -166,6 +167,7 @@ void Solution::initialize() {
   
   _writeMatrixToMatlabFile = false;
   _writeMatrixToMatrixMarketFile = false;
+  _writeRHSToMatrixMarketFile = false;
   _residualsComputed = false;
   _energyErrorComputed = false;
   _reportConditionNumber = false;
@@ -656,6 +658,13 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
   
   rhsVector.GlobalAssemble();
+
+  if (_writeRHSToMatrixMarketFile) {
+    if (rank==0) {
+      cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
+    }
+    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),rhsVector,0,0,false);
+  }
   
   if (_reportConditionNumber) {
     //    double oneNorm = globalStiffMatrix.NormOne();
@@ -2595,6 +2604,11 @@ void Solution::setWriteMatrixToMatrixMarketFile(bool value, const string &filePa
   _matrixFilePath = filePath;
 }
 
+void Solution::setWriteRHSToMatrixMarketFile(bool value, const string &filePath) {
+  _writeRHSToMatrixMarketFile = value;
+  _rhsFilePath = filePath;
+}
+
 // Jesse's additions below:
 
 // =================================== CONDENSED SOLVE ======================================
@@ -2972,9 +2986,19 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
     EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),K_cond);     
   }
   if (_writeMatrixToMatrixMarketFile){
-    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),K_cond);     
+    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),K_cond);
   }
-  //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_cond.dat",rhs_cond,0,0,false);
+  if (_writeRHSToMatrixMarketFile) {
+    if (rank==0) {
+      cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
+    }
+    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),rhs_cond,0,0,false);
+    if (rank==0) {
+      cout << "type a number to continue:\n";
+      int blah;
+      cin >> blah;
+    }
+  }
   
   timer.ResetStartTime();
   
@@ -2983,7 +3007,10 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
   rhs_cond.GlobalAssemble();
   
   globalSolver->setProblem(problem_cond);
-  globalSolver->solve();
+  int solveSuccess = globalSolver->solve();
+  if (solveSuccess != 0 ) {
+    cout << "**** WARNING: in Solution.condensedSolve(), globalSolver->solve() failed with error code " << solveSuccess << ". ****\n";
+  }
   
   //  bool useIterativeSolver = false;
   //  if (!useIterativeSolver){
