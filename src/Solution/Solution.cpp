@@ -2993,11 +2993,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
       cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
     }
     EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),rhs_cond,0,0,false);
-    if (rank==0) {
-      cout << "type a number to continue:\n";
-      int blah;
-      cin >> blah;
-    }
   }
   
   timer.ResetStartTime();
