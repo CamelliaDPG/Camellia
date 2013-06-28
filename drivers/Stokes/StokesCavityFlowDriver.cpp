@@ -214,6 +214,17 @@ void writeStreamlines(double xMin, double xMax, double yMin, double yMax,
   fout.close();
 }
 
+bool canReadFile(string fileName) {
+  bool canRead = false;
+  ifstream fin(fileName.c_str());
+  if (fin.good())
+  {
+    canRead = true;
+  }
+  fin.close();
+  return canRead;
+}
+
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -688,26 +699,33 @@ int main(int argc, char *argv[]) {
   if (compareWithOverkillMesh) {
     overkillMesh = Mesh::buildQuadMesh(quadPoints, overkillMeshSize, overkillMeshSize,
                                        stokesBFMath, overkillH1Order, overkillH1Order+pToAdd, useTriangles);
-    
-    if (rank == 0) {
-      cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
-      cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
-    }
-    overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-    if (useCondensedSolve) {
-      overkillSolution->condensedSolve(solver);
+    if ((overkillSolnFile.length() > 0) && canReadFile(overkillSolnFile)) {
+      // then load solution from file, and skip solve
+      if (rank==0) {
+        cout << "Loading overkill solution from " << overkillSolnFile << "." << endl;
+      }
+      overkillSolution->readFromFile(overkillSolnFile);
     } else {
-      overkillSolution->solve(solver);
-    }
-    if (rank == 0)
-      cout << "...solved.\n";
-    double overkillEnergyError = overkillSolution->energyErrorTotal();
-    if (rank == 0)
-      cout << "overkill energy error: " << setprecision(15) << overkillEnergyError << endl;
-    if (rank == 0) {
-      if (overkillSolnFile.length() > 0) {
-        overkillSolution->writeToFile(overkillSolnFile);
-        cout << "Wrote overkill solution to " << overkillSolution << endl;
+      if (rank == 0) {
+        cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
+        cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
+      }
+      overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      if (useCondensedSolve) {
+        overkillSolution->condensedSolve(solver);
+      } else {
+        overkillSolution->solve(solver);
+      }
+      if (rank == 0)
+        cout << "...solved.\n";
+      double overkillEnergyError = overkillSolution->energyErrorTotal();
+      if (rank == 0)
+        cout << "overkill energy error: " << setprecision(15) << overkillEnergyError << endl;
+      if (rank == 0) {
+        if (overkillSolnFile.length() > 0) {
+          overkillSolution->writeToFile(overkillSolnFile);
+          cout << "Wrote overkill solution to " << overkillSolution << endl;
+        }
       }
     }
   }
@@ -1195,7 +1213,6 @@ int main(int argc, char *argv[]) {
     }
   }
   
-
   if (rank==0) {
     if (compareWithOverkillMesh) {
       cout << "******* Adaptivity Convergence Report *******\n";
