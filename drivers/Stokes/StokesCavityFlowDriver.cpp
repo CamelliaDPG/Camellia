@@ -227,8 +227,8 @@ int main(int argc, char *argv[]) {
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
-  bool reportPerCellErrors  = true;
-  bool useMumps = true;
+  bool reportPerCellErrors  = false;
+  bool useMumps = false;
   bool useCG = false;
   bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
@@ -239,13 +239,14 @@ int main(int argc, char *argv[]) {
   bool useCondensedSolve = true;
   int overkillMeshSize = 256;
   int overkillH1Order = 3; // H1 order
+  string overkillSolnFile = "stokesCavityOverkill256_k2.soln";
   
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
   double energyThreshold = 0.20; // for mesh refinements
   
   string saveFile = "stokesCavityReplay.replay";
-  string replayFile = ""; //"stokesCavityReplay.replay";
+  string replayFile = "stokesCavityReplay.replay";
 
   Teuchos::RCP<Solver> solver;
   if (useMumps) {
@@ -282,9 +283,8 @@ int main(int argc, char *argv[]) {
     energyThreshold = atof(argv[3]);
   }
   
-  
-  double minH = 1.0 / 1024.0;
-  int maxPolyOrder = 15;
+  double minH = 0; // 1.0 / 8192.0;
+  int maxPolyOrder = polyOrder; // forces just h-refinements
   
   if (compareWithOverkillMesh) {
     if (polyOrder + 1 > overkillH1Order) {
@@ -704,6 +704,12 @@ int main(int argc, char *argv[]) {
     double overkillEnergyError = overkillSolution->energyErrorTotal();
     if (rank == 0)
       cout << "overkill energy error: " << setprecision(15) << overkillEnergyError << endl;
+    if (rank == 0) {
+      if (overkillSolnFile.length() > 0) {
+        overkillSolution->writeToFile(overkillSolnFile);
+        cout << "Wrote overkill solution to " << overkillSolution << endl;
+      }
+    }
   }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
@@ -977,13 +983,14 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, "cavity_maxConditionIPMatrix.dat");
+//  cout << "on rank " << rank << ", about to compute max local condition number" << endl;
+//  double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(qoptIP, mesh, "cavity_maxConditionIPMatrix.dat");
   
   double energyErrorTotal = solution->energyErrorTotal();
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
-    cout << "Max Gram matrix condition number: " << maxConditionNumber << endl;
+//    cout << "Max Gram matrix condition number: " << maxConditionNumber << endl;
   }
   
   FunctionPtr u_prev, u_div;
@@ -1162,7 +1169,7 @@ int main(int argc, char *argv[]) {
     scaleToName[0.1] = "cavityPatchEddy1";
     scaleToName[0.006] = "cavityPatchEddy2";
     scaleToName[0.0004] = "cavityPatchEddy3";
-    scaleToName[0.00003] = "cavityPatchEddy4";
+    scaleToName[0.00004] = "cavityPatchEddy4";
     
     for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
       double scale = entryIt->first;
