@@ -16,6 +16,8 @@
 #include "MeshTestUtility.h"
 #include "PenaltyConstraints.h"
 #include "Solver.h"
+
+#include "MLSolver.h"
 //#include "CGSolver.h"
 #include "MPIWrapper.h"
 
@@ -241,6 +243,7 @@ int main(int argc, char *argv[]) {
   bool reportPerCellErrors  = false;
   bool useMumps = false;
   bool useCG = false;
+  bool useML = true;
   bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
   bool useWeightedGraphNorm = false;
@@ -270,6 +273,8 @@ int main(int argc, char *argv[]) {
       cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
     exit(1);
 #endif
+  } else if (useML) {
+    solver = Teuchos::rcp( new MLSolver );
   } else {
     solver = Teuchos::rcp(new KluSolver());
   }
