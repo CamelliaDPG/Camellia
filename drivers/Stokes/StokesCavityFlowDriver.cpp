@@ -248,6 +248,8 @@ int main(int argc, char *argv[]) {
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   bool useCondensedSolve = true;
+  bool writeOverkillRHSToFile = false;
+  string overkillRHSFile = "stokesCavityOverkillRHS_256_k2.rhs";
   int overkillMeshSize = 256;
   int overkillH1Order = 3; // H1 order
   string overkillSolnFile = "stokesCavityOverkill256_k2.soln";
@@ -704,29 +706,34 @@ int main(int argc, char *argv[]) {
       if (rank==0) {
         cout << "Loading overkill solution from " << overkillSolnFile << "." << endl;
       }
+      overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
       overkillSolution->readFromFile(overkillSolnFile);
+      if (rank==0) {
+        cout << "Loaded." << endl;
+      }
     } else {
       if (rank == 0) {
         cout << "Solving on overkill mesh (" << overkillMeshSize << " x " << overkillMeshSize << " elements, ";
         cout << overkillMesh->numGlobalDofs() <<  " dofs).\n";
       }
       overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      overkillSolution->setWriteRHSToMatrixMarketFile(writeOverkillRHSToFile, overkillRHSFile);
       if (useCondensedSolve) {
         overkillSolution->condensedSolve(solver);
       } else {
         overkillSolution->solve(solver);
       }
-      if (rank == 0)
+      if (rank == 0) {
         cout << "...solved.\n";
+        if (overkillSolnFile.length() > 0) {
+          cout << "writing to disk...\n";
+          overkillSolution->writeToFile(overkillSolnFile);
+          cout << "Wrote overkill solution to " << overkillSolnFile << endl;
+        }
+      }
       double overkillEnergyError = overkillSolution->energyErrorTotal();
       if (rank == 0)
         cout << "overkill energy error: " << setprecision(15) << overkillEnergyError << endl;
-      if (rank == 0) {
-        if (overkillSolnFile.length() > 0) {
-          overkillSolution->writeToFile(overkillSolnFile);
-          cout << "Wrote overkill solution to " << overkillSolution << endl;
-        }
-      }
     }
   }
   
