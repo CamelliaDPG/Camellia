@@ -304,13 +304,13 @@ int main(int argc, char *argv[]) {
   q = varFactory.testVar(VGP_Q_S, HGRAD);
   
 //  double width = 60, height = 20;
-  double radius = 0.5;
+  double radius = 1.0;
   FunctionPtr zero = Function::zero();
   FunctionPtr inflowSpeed = Function::constant(1.0);
   
-  double xLeft = -7.5;
-  double xRight = 22.5;
-  double meshHeight = 15;
+  double xLeft = -15.0;
+  double xRight = 45.0;
+  double meshHeight = 30;
   
   MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, radius); //MeshFactory::hemkerGeometry(width,height,radius);
   
@@ -340,7 +340,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(t1n,right,zero);
   bc->addDirichlet(t2n,right,zero);
   
-  cout << "NOT imposing constraint on the pressure\n";
+//  cout << "NOT imposing constraint on the pressure\n";
   // we used a problem constructor that neglects accumulated fluxes ==> we need to set BCs on each NR step
   problem.backgroundFlow()->setBC(bc);
   problem.solutionIncrement()->setBC(bc);
