@@ -779,6 +779,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
   double tol = 2e-11;
   
   bool useLineSearch = false;
+  bool useCondensedSolve = true;
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   vector<bool> useHessianList;
@@ -871,7 +872,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
             
             do {
-              problem.iterate(useLineSearch);
+              problem.iterate(useLineSearch,useCondensedSolve);
               if ( rieszRep.get() ) {
                 rieszRep->computeRieszRep();
               }
@@ -963,6 +964,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
   int horizontalCells = 2, verticalCells = 2;
   
   bool useLineSearch = false;
+  bool useCondensedSolve = true;
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector< PolyExactFunctions >::iterator exactIt = polyExactFunctions.begin();
@@ -1070,7 +1072,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       rieszRepRHS_naiveNorm->computeRieszRep();
 //      cout << "norm of RHS with zero background flow, using naive norm: " << rieszRepRHS_naiveNorm->getNorm() << endl;
       
-      problem.iterate(useLineSearch); // calls backgroundFlow.solve()
+      problem.iterate(useLineSearch, useCondensedSolve); // calls backgroundFlow.solve()
       
       if ( !ltsAgree(rhsLT, expectedRHS, mesh, vgpVarFactory, tol)) {
         cout << "Failure: Navier-Stokes correctedness: after first solve (i.e. with non-zero background flow), LTs disagree\n";
@@ -1312,9 +1314,10 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesLocalConservation() {
   }
   
   bool useLineSearch = false;
-  problem.iterate(useLineSearch);
+  bool useCondensedSolve = true;
+  problem.iterate(useLineSearch,useCondensedSolve);
   
-  problem.iterate(useLineSearch); // get zero rows and column warnings here
+  problem.iterate(useLineSearch,useCondensedSolve); // get zero rows and column warnings here
   
   return success;
 }
@@ -1426,8 +1429,9 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationLocalConserv
   }
   
   bool useLineSearch = false;
-  problem.iterate(useLineSearch);
-  problem.iterate(useLineSearch);
+  bool useCondensedSolve = true;
+  problem.iterate(useLineSearch, useCondensedSolve);
+  problem.iterate(useLineSearch, useCondensedSolve);
   
   return success;
 }
@@ -1463,6 +1467,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
 //  double nonlinear_step_weight = 1.0;
   
   bool useLineSearch = false; // we don't converge nearly as quickly (if at all) when using line search (a problem!)
+  bool useCondensedSolve = true;
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
   
   for (vector<bool>::iterator useHessianIt = useHessianList.begin();
@@ -1565,7 +1570,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
           
           do {
-            kProblem.iterate(useLineSearch);
+            kProblem.iterate(useLineSearch, useCondensedSolve);
             
             if ( rieszRep.get() ) {
               rieszRep->computeRieszRep();
