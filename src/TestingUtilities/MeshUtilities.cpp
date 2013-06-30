@@ -2,6 +2,9 @@
 #include "SerialDenseMatrixUtility.h"
 #include "DataIO.h"
 
+#include <Teuchos_GlobalMPISession.hpp>
+#include "MPIWrapper.h"
+
 //static const double RAMP_HEIGHT = 0.0;
 
 class RampWallBoundary : public SpatialFilter {
@@ -165,15 +168,20 @@ MeshPtr MeshUtilities::buildUnitQuadMesh(int nCells, Teuchos::RCP< BilinearForm 
 }
 
 double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProduct > ip, MeshPtr mesh, bool jacobiScaling, string sparseFileToWriteTo) {
-  set<int> cellIDs = mesh->getActiveCellIDs();
+  int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  vector< ElementPtr > elements = mesh->elementsInPartition(rank);
+
+  cout << "Checking condition numbers on rank " << rank << endl;
+  
   FieldContainer<double> maxConditionNumberIPMatrix;
   int maxCellID = -1;
-  double maxConditionNumber = -1;
-  for (set<int>::iterator cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-    int cellID = *cellIt;
+  double myMaxConditionNumber = -1;
+  for (vector< ElementPtr >::iterator elemIt = elements.begin(); elemIt != elements.end(); elemIt++) {
+    int cellID = (*elemIt)->cellID();
     bool testVsTest = true;
     BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
-    DofOrderingPtr testSpace = mesh->getElement(cellID)->elementType()->testOrderPtr;
+    DofOrderingPtr testSpace = (*elemIt)->elementType()->testOrderPtr;
     int testDofs = testSpace->totalDofs();
     int numCells = 1;
     FieldContainer<double> innerProductMatrix(numCells,testDofs,testDofs);
@@ -184,8 +192,8 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
       SerialDenseMatrixUtility::jacobiScaleMatrix(innerProductMatrix);
 //    double conditionNumber = SerialDenseMatrixUtility::estimate1NormConditionNumber(innerProductMatrix);
     double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(innerProductMatrix);
-    if (conditionNumber > maxConditionNumber) {
-      maxConditionNumber = conditionNumber;
+    if (conditionNumber > myMaxConditionNumber) {
+      myMaxConditionNumber = conditionNumber;
       maxConditionNumberIPMatrix = innerProductMatrix;
       maxCellID = cellID;
     } else if (maxConditionNumberIPMatrix.size()==0) {
@@ -193,9 +201,26 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
       maxConditionNumberIPMatrix = innerProductMatrix;
     }
   }
-  if (sparseFileToWriteTo.length() > 0) {
-    if (maxConditionNumberIPMatrix.size() > 0) {
-      DataIO::writeMatrixToSparseDataFile(maxConditionNumberIPMatrix, sparseFileToWriteTo);
+  cout << "Determined condition numbers on rank " << rank << endl;
+  FieldContainer<double> maxConditionNumbers(numProcs);
+  maxConditionNumbers[rank] = myMaxConditionNumber;
+  MPIWrapper::entryWiseSum(maxConditionNumbers);
+  
+  double maxConditionNumber = maxConditionNumbers[0];
+  int maxConditionNumberOwner = 0; // the MPI node with the max condition number
+  for (int i=1; i<numProcs; i++) {
+    if (maxConditionNumber < maxConditionNumbers[i]) {
+      maxConditionNumber = maxConditionNumbers[i];
+      maxConditionNumberOwner = i;
+    }
+  }
+  
+  if (rank==maxConditionNumberOwner) { // owner is responsible for writing to file
+    cout << "max condition number is on rank " << rank << endl;
+    if (sparseFileToWriteTo.length() > 0) {
+      if (maxConditionNumberIPMatrix.size() > 0) {
+        DataIO::writeMatrixToSparseDataFile(maxConditionNumberIPMatrix, sparseFileToWriteTo);
+      }
     }
   }
 //  cout << "max condition number occurs in cellID " << maxCellID << endl;
