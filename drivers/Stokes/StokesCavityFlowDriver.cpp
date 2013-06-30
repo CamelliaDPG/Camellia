@@ -243,19 +243,19 @@ int main(int argc, char *argv[]) {
   bool reportPerCellErrors  = false;
   bool useMumps = false;
   bool useCG = false;
-  bool useML = true;
+  bool useML = false;
   bool compareWithOverkillMesh = true;
   bool useDivergenceFreeVelocity = false;
-  bool useWeightedGraphNorm = false;
+  bool useWeightedGraphNorm = true;
   bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
   bool useCondensedSolve = true;
   bool writeOverkillRHSToFile = false;
-  string overkillRHSFile = "stokesCavityOverkillRHS_256_k2.rhs";
-  int overkillMeshSize = 256;
+  string overkillRHSFile = "stokesCavityOverkillRHS_192_k2.rhs";
+  int overkillMeshSize = 192;
   int overkillH1Order = 3; // H1 order
-  string overkillSolnFile = "stokesCavityOverkill256_k2.soln";
+  string overkillSolnFile = "stokesCavityOverkill_192_k2.soln";
   
   double cgTol = 1e-8;
   int cgMaxIt = 400000;
