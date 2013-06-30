@@ -251,6 +251,8 @@ int main(int argc, char *argv[]) {
 
     bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
     
+    bool induceCornerRefinements = args.Input<bool>("--induceCornerRefinements", "induce refinements in the recirculating corner", false);
+    
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
     string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
@@ -266,14 +268,14 @@ int main(int argc, char *argv[]) {
     
     int pToAdd = 2; // for optimal test function approximation
     int pToAddForStreamFunction = 2;
-    double nonlinearStepSize = 1.0;
+//    double nonlinearStepSize = 1.0;
 
-    double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
+//    double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
     double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
     // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
-    bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
+//    bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
     bool enforceOneIrregularity = true;
     bool reportPerCellErrors  = true;
     bool useMumps = true;
@@ -283,8 +285,8 @@ int main(int argc, char *argv[]) {
     
     bool artificialTimeStepping = (dt > 0);
     
-    int overkillMeshSize = 8;
-    int overkillPolyOrder = 7; // H1 order
+//    int overkillMeshSize = 8;
+//    int overkillPolyOrder = 7; // H1 order
     
     if (rank == 0) {
       cout << "numRefinements = " << numRefs << endl;
@@ -595,14 +597,14 @@ int main(int argc, char *argv[]) {
     refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
     refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
 
-    Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
-    Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                                 stepSize,
-                                                                                                 nonlinearRelativeEnergyTolerance));
-    
-    Teuchos::RCP<NonlinearSolveStrategy> finalSolveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
-                                                                                                 stepSize,
-                                                                                                 nonlinearRelativeEnergyTolerance / 10));
+//    Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
+//    Teuchos::RCP<NonlinearSolveStrategy> solveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
+//                                                                                                 stepSize,
+//                                                                                                 nonlinearRelativeEnergyTolerance));
+//    
+//    Teuchos::RCP<NonlinearSolveStrategy> finalSolveStrategy = Teuchos::rcp(new NonlinearSolveStrategy(solution, solnIncrement, 
+//                                                                                                 stepSize,
+//                                                                                                 nonlinearRelativeEnergyTolerance / 10));
 
     
     
@@ -707,6 +709,14 @@ int main(int argc, char *argv[]) {
   //      solveStrategy->solve(printToConsole);
         
         refinementStrategy->refine(false); //rank==0); // print to console on rank 0
+        
+        if (induceCornerRefinements) {
+          // induce refinements in bottom corner:
+          vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoint);
+          vector<int> cornerIDs;
+          cornerIDs.push_back(corners[0]->cellID());
+          mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
+        }
         
         if (saveFile.length() > 0) {
           if (rank == 0) {
