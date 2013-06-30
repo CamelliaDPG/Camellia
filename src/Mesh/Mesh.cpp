@@ -1202,7 +1202,7 @@ double Mesh::distance(double x0, double y0, double x1, double y1) {
 }
 
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
-  if (_transformationFunction.get()) {
+  if (_edgeToCurveMap.size() > 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elementsForPoints does not support curvilinear meshes");
   }
   
@@ -2759,7 +2759,7 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
 
   int maxNumVertices=0;
   int maxNumElems=0;
-  int spaceDim = 3;
+  int spaceDim = 2;
 
   //initialize verts
   for (int i=0;i<_numPartitions;i++){
@@ -2767,11 +2767,12 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
     for (int l=0;l<spaceDim;l++){
       myFile << "verts{"<< i+1 <<","<< l+1 << "} = zeros(" << maxNumVertices << ","<< maxNumElems << ");"<< endl;
       for (int j=0;j<elemsInPartition.size();j++){
-	FieldContainer<double> verts; // gets resized inside verticesForCell
-	verticesForCell(verts, elemsInPartition[j]->cellID());  //verts(numVertsForCell,dim)
-	maxNumVertices = max(maxNumVertices,verts.dimension(0));
-	maxNumElems = max(maxNumElems,(int)elemsInPartition.size());
-	spaceDim = verts.dimension(1);
+        int numVertices = elemsInPartition[j]->elementType()->cellTopoPtr->getVertexCount();
+        FieldContainer<double> verts(numVertices,spaceDim); // gets resized inside verticesForCell
+        verticesForCell(verts, elemsInPartition[j]->cellID());  //verts(numVertsForCell,dim)
+        maxNumVertices = max(maxNumVertices,verts.dimension(0));
+        maxNumElems = max(maxNumElems,(int)elemsInPartition.size());
+//        spaceDim = verts.dimension(1);
       }
     }
   }  
@@ -2782,9 +2783,9 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName){
     for (int l=0;l<spaceDim;l++){
       
       for (int j=0;j<elemsInPartition.size();j++){
-        FieldContainer<double> vertices; // gets resized inside verticesForCell
+        int numVertices = elemsInPartition[j]->elementType()->cellTopoPtr->getVertexCount();
+        FieldContainer<double> vertices(numVertices,spaceDim);
         verticesForCell(vertices, elemsInPartition[j]->cellID());  //vertices(numVertsForCell,dim)
-        int numVertices = vertices.dimension(0);
         
         // write vertex coordinates to file
         for (int k=0;k<numVertices;k++){

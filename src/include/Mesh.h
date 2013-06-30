@@ -83,6 +83,12 @@ public:
     _edgeToCurveMap = edgeToCurveMap;
   }
   
+  MeshGeometry(const vector<FieldContainer<double> > &vertices,
+               const vector< vector<int> > &elementVertices) {
+    _vertices = vertices;
+    _elementVertices = elementVertices;
+  }
+  
   map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
     return _edgeToCurveMap;
   }
