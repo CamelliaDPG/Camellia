@@ -102,6 +102,8 @@ public:
   bool isChild();
   vector< pair<int,int> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
   
+  set<int> getDescendants(bool leafNodesOnly = true);
+  
   void deleteChildrenFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements);
   void deleteFromMesh(set< pair<int,int> > &affectedNeighborSides, set<int> &deletedElements);
 //destructor:

@@ -209,6 +209,18 @@ vector< pair<int,int> > & Element::childIndicesForSide(int sideIndex) {
   return _refPattern->childrenForSides()[sideIndex];
 }
 
+set<int> Element::getDescendants(bool leafNodesOnly) {
+  set<int> descendants;
+  if (( numChildren() == 0) || !leafNodesOnly) {
+    descendants.insert(_cellID);
+  }
+  for (int childIndex=0; childIndex<numChildren(); childIndex++) {
+    set<int> childDescendants = this->getChild(childIndex)->getDescendants(leafNodesOnly);
+    descendants.insert(childDescendants.begin(), childDescendants.end());
+  }
+  return descendants;
+}
+
 vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool leafNodesOnly) {
   // if leafNodesOnly == true,  returns a flat list of leaf nodes (descendants that are not themselves parents)
   // if leafNodesOnly == false, returns a list in descending order: immediate children, then their children, and so on.
