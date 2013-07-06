@@ -32,7 +32,7 @@
 
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
-//#include "LidDrivenFlowRefinementStrategy.h"
+#include "LidDrivenFlowRefinementStrategy.h"
 #include "RefinementPattern.h"
 #include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
@@ -40,6 +40,8 @@
 #include "MeshTestUtility.h"
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
+
+#include "MassFluxFunction.h"
 
 #include "GnuPlotUtil.h"
 
@@ -70,12 +72,13 @@ public:
   double value(double x, double y) {
     double tol = 1e-14;
     if (abs(y-1.0) < tol) { // top boundary
+      // negated all these to agree with Botella & Peyret (main velocity was 1, is now -1)
       if ( (abs(x) < _eps) ) { // top left
-        return x / _eps;
+        return -x / _eps;
       } else if ( abs(1.0-x) < _eps) { // top right
-        return (1.0-x) / _eps;
+        return -(1.0-x) / _eps;
       } else { // top middle
-        return 1;
+        return -1;
       }
     } else { // not top boundary: 0.0
       return 0.0;
@@ -194,6 +197,51 @@ set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsP
   return filteredLevels;
 }
 
+vector<double> horizontalCenterLinePoints() {
+  // points where values are often reported in the literature
+  vector<double> xPoints;
+  xPoints.push_back(0.0000);
+  xPoints.push_back(0.0312);
+  xPoints.push_back(0.0391);
+  xPoints.push_back(0.0469);
+  xPoints.push_back(0.0547);
+  xPoints.push_back(0.0937);
+  xPoints.push_back(0.1406);
+  xPoints.push_back(0.1953);
+  xPoints.push_back(0.5000);
+  xPoints.push_back(0.7656);
+  xPoints.push_back(0.7734);
+  xPoints.push_back(0.8437);
+  xPoints.push_back(0.9062);
+  xPoints.push_back(0.9219);
+  xPoints.push_back(0.9297);
+  xPoints.push_back(0.9375);
+  xPoints.push_back(1.0000);
+  return xPoints;
+}
+
+vector<double> verticalCenterLinePoints() {
+  vector<double> yPoints;
+  yPoints.push_back(1.0000);
+  yPoints.push_back(0.9766);
+  yPoints.push_back(0.9688);
+  yPoints.push_back(0.9609);
+  yPoints.push_back(0.9531);
+  yPoints.push_back(0.8516);
+  yPoints.push_back(0.7344);
+  yPoints.push_back(0.6172);
+  yPoints.push_back(0.5000);
+  yPoints.push_back(0.4531);
+  yPoints.push_back(0.2813);
+  yPoints.push_back(0.1719);
+  yPoints.push_back(0.1016);
+  yPoints.push_back(0.0703);
+  yPoints.push_back(0.0625);
+  yPoints.push_back(0.0547);
+  yPoints.push_back(0.0000);
+  return yPoints;
+}
+
 void writePatchValues(double xMin, double xMax, double yMin, double yMax,
                       SolutionPtr solution, VarPtr u1, string filename,
                       int numPoints=100) {
@@ -222,6 +270,277 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
   fout.close();
 }
 
+enum XYVarying {
+  X_VARIES,
+  Y_VARIES
+};
+
+// Newton's method
+bool findZeroOnLine(FunctionPtr f, FunctionPtr f_prime, XYVarying variableChoice, double fixedValue,
+                    double &extremumCoordinate, double initialGuess = 0.5 ) {
+  double tol = 1e-8; // if we move less than this in a single step, we figure we've converged.
+  
+  // set initial guess
+  double z = initialGuess;  // calling the one that varies z (might be x or y)
+
+  double x, y;
+  if (variableChoice == X_VARIES) {
+    y = fixedValue;
+  } else {
+    x = fixedValue;
+  }
+  
+  double incr = 1;
+  while (abs(incr) > tol) {
+    if (variableChoice == X_VARIES) {
+      x = z;
+    } else {
+      y = z;
+    }
+    double f_value = Function::evaluate(f, x, y);
+    double f_prime_value = Function::evaluate(f_prime, x, y);
+    incr = - f_value / f_prime_value;
+    z += incr;
+    
+    if ((z < 0) || (z > 1)) {
+      cout << "ERROR: findExtremumOnLine diverged (left the mesh).\n";
+      return false;
+    }
+    extremumCoordinate = z;
+  }
+  return true;
+}
+
+// gradient ascent/descent
+bool findExtremum(bool findMax, FunctionPtr fxn, FunctionPtr grad, MeshPtr mesh, double &value, double &x, double &y,
+                  double x0 = 0.5, double y0 = 0.5) {
+  double xyPointTol = 1e-8; // convergence criterion (euclidean distance)
+  x = x0; // initial guess
+  y = y0;
+  double dx, dy;
+
+  double parity = findMax ? 1.0 : -1.0; // ascent vs. descent
+  
+  double l2incr = 1.0;
+  double gamma = 1.0; // unsure what gamma should be…
+  int iterCount = 0;
+  while (l2incr > xyPointTol) {
+    value = Function::evaluate(fxn, x, y);
+    dx = Function::evaluate(grad->x(), x, y);
+    dy = Function::evaluate(grad->y(), x, y);
+    
+    gamma = sqrt( abs(dx * dy) ); // geometric mean of the gradient components.  No idea if this is reasonable...
+
+    double x_incr = parity * gamma * dx;
+    double y_incr = parity * gamma * dy;
+    
+    x = x + x_incr;
+    y = y + y_incr;
+    
+    if ((x < 0) || (x > 1) || (y < 0) || (y > 1)) {
+      cout << "ERROR: findExtremum diverged (left the mesh).\n";
+      return false;
+    }
+    
+//    cout << "(x,y) = (" << x << ", " << y << ")\n";
+    
+    iterCount++;
+    l2incr = sqrt( x_incr * x_incr + y_incr * y_incr );
+  }
+  cout << "gradient descent/ascent took " << iterCount << " iterations.\n";
+  return true;
+}
+
+bool findMaximum(FunctionPtr fxn, FunctionPtr grad, MeshPtr mesh, double &value, double &x, double &y,
+                 double x0 = 0.5, double y0 = 0.5) {
+  return findExtremum(true, fxn, grad, mesh, value, x, y, x0, y0);
+}
+
+bool findMinimum(FunctionPtr fxn, FunctionPtr grad, MeshPtr mesh, double &value, double &x, double &y,
+                 double x0 = 0.5, double y0 = 0.5) {
+  return findExtremum(false, fxn, grad, mesh, value, x, y, x0, y0);
+}
+
+void reportStreamfunctionMaxValue(SolutionPtr streamSolution, VarPtr phi, FunctionPtr vorticity, double Re) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  FunctionPtr phiFxn = Teuchos::rcp( new PreviousSolutionFunction( streamSolution, phi ) );
+  FunctionPtr phiGrad = Function::vectorize(Teuchos::rcp( new PreviousSolutionFunction( streamSolution, phi->dx() ) ),
+                                            Teuchos::rcp( new PreviousSolutionFunction( streamSolution, phi->dy() ) ));
+  
+  double x_primary = 0.5, y_primary = 0.5;
+  double x_left_secondary = 0.05, y_left_secondary = 0.05;
+  double x_right_secondary = 0.95, y_right_secondary = 0.05;
+  
+  if (Re == 1000) {
+    x_primary = 0.4692;
+    y_primary = 0.5652;
+    x_left_secondary = 0.1360;
+    y_left_secondary = 0.1118;
+    x_right_secondary = 0.9167;
+    y_right_secondary = 0.0781;
+  }
+  
+  map< string, pair<double, double> > initialGuesses;
+  initialGuesses["primary"] = make_pair(x_primary, y_primary);
+  initialGuesses["left secondary"] = make_pair(x_left_secondary, y_left_secondary);
+  initialGuesses["right secondary"] = make_pair(x_right_secondary, y_right_secondary);
+  
+  map< string, bool > vortexIsMaximum;
+  vortexIsMaximum["primary"] = true;
+  vortexIsMaximum["left secondary"] = false;
+  vortexIsMaximum["right secondary"] = false;
+  
+  if (Re == 1000) {
+    initialGuesses["lower left tertiary"] = make_pair(0.00768, 0.00765);
+    vortexIsMaximum["lower left tertiary"] = true;
+  }
+  
+  if (rank==0) {
+    for (map< string, pair<double, double> >::iterator guessIt = initialGuesses.begin();
+         guessIt != initialGuesses.end(); guessIt++) {
+      string vortexID = guessIt->first;
+      double x0 = guessIt->second.first;
+      double y0 = guessIt->second.second;
+      
+      double x, y, value;
+      bool success;
+      if (vortexIsMaximum[vortexID]) {
+        success = findMaximum(phiFxn, phiGrad, streamSolution->mesh(), value, x, y, x0, y0);
+      } else {
+        success = findMinimum(phiFxn, phiGrad, streamSolution->mesh(), value, x, y, x0, y0);
+      }
+      if (success) {
+        cout << "phiMax for " << vortexID << " vortex is " << value << " at (" << x << ", " << y << ")\n";
+        ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+        cout << "vorticity at (" << x << ", " << y << ") = " << Function::evaluate(vorticity, x, y) << endl;
+      } else {
+        cout << "search for " << vortexID << " vortex diverged--left the mesh to point (" << x << ", " << y << ")\n";
+      }
+    }
+  }
+  
+}
+
+void reportCenterlineVelocityValues(FunctionPtr u1_prev, FunctionPtr u2_prev, FunctionPtr p_prev, FunctionPtr vorticity,
+                                    double &u1_max_y, double &u2_max_x, double &u2_min_x) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  // the next bit commented out -- Function::evaluate() must depend only on space, not on the mesh (prev soln depends on mesh)
+  vector<double> u2values, pValues, vorticityValues;
+  
+  double x,y;
+  y = 0.5;
+  vector<double> xPoints = horizontalCenterLinePoints();
+  for (int i=0; i<xPoints.size(); i++) {
+    x = xPoints[i];
+    u2values.push_back( Function::evaluate(u2_prev, x, y) );
+    pValues.push_back( Function::evaluate(p_prev, x, y) );
+    vorticityValues.push_back( Function::evaluate(vorticity, x, y) );
+  }
+  
+  // botella and peyret set the center pressure to 0, so we do that too
+  double centerPressure = Function::evaluate(p_prev, 0.5, 0.5);
+  for (int i=0; i<xPoints.size(); i++) {
+    pValues[i] -= centerPressure;
+  }
+  
+  // search for min/max values
+  double u1_max = 0, u2_max = 0, u2_min = 1;
+  for (int i=0; i<xPoints.size(); i++) {
+    if (u2values[i] > u2_max) {
+      u2_max = u2values[i];
+      u2_max_x = xPoints[i];
+    }
+    if (u2values[i] < u2_min) {
+      u2_min = u2values[i];
+      u2_min_x = xPoints[i];
+    }
+  }
+  
+  if (rank==0) {
+    cout << "**** horizontal center line, values ****\n";
+    int w = 20;
+    cout << setw(w) << "x" << setw(w) << "u2" << setw(w) << "p" << setw(w) << "omega" << endl;
+    for (int i=0; i<xPoints.size(); i++) {
+      cout << setw(w) << xPoints[i] << setw(w) << u2values[i] << setw(w) << pValues[i] << setw(w) << vorticityValues[i] << endl;
+    }
+  }
+  pValues.clear();
+  vorticityValues.clear();
+  vector<double> u1values;
+  x = 0.5;
+  vector<double> yPoints = verticalCenterLinePoints();
+  
+  for (int i=0; i<yPoints.size(); i++) {
+    y = yPoints[i];
+    u1values.push_back( Function::evaluate(u1_prev, x, y) );
+    pValues.push_back( Function::evaluate(p_prev, x, y) );
+    vorticityValues.push_back( Function::evaluate(vorticity, x, y) );
+  }
+  
+  // botella and peyret set the center pressure to 0, so we do that too
+  for (int i=0; i<xPoints.size(); i++) {
+    pValues[i] -= centerPressure;
+  }
+  
+  // search for min/max values
+  for (int i=0; i<yPoints.size(); i++) {
+    if (u1values[i] > u1_max) {
+      u1_max = u1values[i];
+      u1_max_y = yPoints[i];
+    }
+  }
+  
+  if (rank==0) {
+    cout << "**** vertical center line, values ****\n";
+    int w = 20;
+    cout << setw(w) << "y" << setw(w) << "u1" << setw(w) << "p" << setw(w) << "omega" << endl;
+    for (int i=0; i<yPoints.size(); i++) {
+      cout << setw(w) << yPoints[i] << setw(w) << u1values[i] << setw(w) << pValues[i] << setw(w) << vorticityValues[i] << endl;
+    }
+  }
+}
+
+void reportVelocityExtrema(FunctionPtr u1, FunctionPtr u1dy, FunctionPtr u1dydy,
+                           FunctionPtr u2, FunctionPtr u2dx, FunctionPtr u2dxdx,
+                           double u1_max_guess_y, double u2_max_guess_x, double u2_min_guess_x) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (rank==0) {
+    // find the extrema of the velocity components on the centerlines
+    double u1_max, y_max;
+    double u2_max, x_max;
+    double u2_min, x_min;
+    
+    y_max = u1_max_guess_y;
+    x_max = u2_max_guess_x;
+    x_min = u2_min_guess_x;
+    
+    if (! findZeroOnLine(u1dy, u1dydy, Y_VARIES, 0.5, y_max, y_max) ) {
+      cout << "could not resolve y_max\n";
+    }
+    if (! findZeroOnLine(u2dx, u2dxdx, X_VARIES, 0.5, x_max, x_max) ) {
+      cout << "could not resolve x_max\n";
+    }
+    if (! findZeroOnLine(u2dx, u2dxdx, X_VARIES, 0.5, x_min, x_min) ) {
+      cout << "could not resolve x_min\n";
+    }
+    
+    u1_max = Function::evaluate(u1, 0.5, y_max);
+    u2_max = Function::evaluate(u2, x_max, 0.5);
+    u2_min = Function::evaluate(u2, x_min, 0.5);
+
+    cout << "*************************** velocity extrema ***************************\n";
+    int w = 20;
+    cout << setw(w) << "u1max" << setw(w) << "ymax" << setw(w) << "u2max" << setw(w) << "xmax" << setw(w) << "u2min" << setw(w) << "xmin" << endl;
+    cout << setw(w) << u1_max << setw(w) << y_max << setw(w) << u2_max << setw(w) << x_max << setw(w) << u2_min << setw(w) << x_min << endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0;
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -247,6 +566,9 @@ int main(int argc, char *argv[]) {
     bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use static condensation", true);
     bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
     
+    bool reportStreamfunctionMax = args.Input<bool>("--reportStreamfunctionMax", "report streamfunction max value", true);
+    bool reportCenterlineVelocities = args.Input<bool>("--reportCenterlineVelocities", "report centerline velocities", true);
+    
     double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
 
     bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
@@ -262,6 +584,10 @@ int main(int argc, char *argv[]) {
     
     double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
     
+    bool useAdHocHPRefinements = args.Input<bool>("--useAdHocHPRefinements", "use ad hoc hp refinements", false);
+    
+    double eps = args.Input<double>("--rampWidth", "width of 'ramp' in BCs", 1.0/64.0);
+    
     args.Process();
     
     bool useLineSearch = false;
@@ -272,7 +598,6 @@ int main(int argc, char *argv[]) {
 
 //    double nonlinearRelativeEnergyTolerance = 0.015; // used to determine convergence of the nonlinear solution
   //  double nonlinearRelativeEnergyTolerance = 0.15; // used to determine convergence of the nonlinear solution
-    double eps = 1.0/64.0; // width of ramp up to 1.0 for top BC;  eps == 0 ==> soln not in H1
     // epsilon above is chosen to match our initial 16x16 mesh, to avoid quadrature errors.
   //  double eps = 0.0; // John Evans's problem: not in H^1
 //    bool enforceLocalConservationInFinalSolve = false; // only works correctly for Picard (and maybe not then!)
@@ -280,13 +605,12 @@ int main(int argc, char *argv[]) {
     bool reportPerCellErrors  = true;
     bool useMumps = true;
     bool compareWithOverkillMesh = false;
-    bool useAdHocHPRefinements = false;
     bool startWithZeroSolutionAfterRefinement = false;
     
     bool artificialTimeStepping = (dt > 0);
     
-//    int overkillMeshSize = 8;
-//    int overkillPolyOrder = 7; // H1 order
+    int overkillMeshSize = 8;
+    int overkillPolyOrder = 7; // H1 order
     
     if (rank == 0) {
       cout << "numRefinements = " << numRefs << endl;
@@ -455,7 +779,6 @@ int main(int argc, char *argv[]) {
     }
     if (solnFile.length() > 0) {
       solution->readFromFile(solnFile);
-      solution->writeToVTK("testSolnRead.vtk");
     }
     
     Teuchos::RCP<Solution> overkillSolution;
@@ -470,7 +793,7 @@ int main(int argc, char *argv[]) {
     fields.push_back(p);
     
     if (rank == 0) {
-      cout << "Starting mesh has " << horizontalCells << " x " << verticalCells << " elements and ";
+      cout << "Starting mesh has " << mesh->activeElements().size() << " elements and ";
       cout << mesh->numGlobalDofs() << " total dofs.\n";
       cout << "polyOrder = " << polyOrder << endl; 
       cout << "pToAdd = " << pToAdd << endl;
@@ -507,11 +830,17 @@ int main(int argc, char *argv[]) {
     ////////////////////   CREATE BCs   ///////////////////////
     SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered );
 
-    FunctionPtr u1_prev = Function::solution(u1,solution);
-    FunctionPtr u2_prev = Function::solution(u2,solution);
+    FunctionPtr u1_prev = Teuchos::rcp(new PreviousSolutionFunction(solution, u1));
+    FunctionPtr u2_prev = Teuchos::rcp(new PreviousSolutionFunction(solution, u2));
+    FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
     
     FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
     FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
+    
+    FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma12) );
+    FunctionPtr sigma12_dy = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma12->dy()) );
+    FunctionPtr sigma21_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma21) );
+    FunctionPtr sigma21_dx = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma21->dx()) );
       
   //  if ( ! usePicardIteration ) {
   //    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
@@ -585,9 +914,10 @@ int main(int argc, char *argv[]) {
     double energyThreshold = 0.20; // for mesh refinements
     Teuchos::RCP<RefinementStrategy> refinementStrategy;
     if (useAdHocHPRefinements) {
-  //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 1.0 / horizontalCells )); // no h-refinements allowed
-  //    refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "need to build against LidDrivenFlowRefinementStrategy before using ad hoc hp refinements");
+      if (! compareWithOverkillMesh )
+        refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solution, energyThreshold, 0, 15 )); // no minimum h, and a generous p maximum
+      else
+        refinementStrategy = Teuchos::rcp( new LidDrivenFlowRefinementStrategy( solnIncrement, energyThreshold, 1.0 / overkillMeshSize, overkillPolyOrder, rank==0 ));
     } else {
 //      if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
 //      refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
@@ -701,6 +1031,40 @@ int main(int argc, char *argv[]) {
           }
         }
         
+        if (reportCenterlineVelocities) {
+          double u1_max_y, u2_max_x, u2_min_x; // the maxes and mins we find along the reported centerline points
+          reportCenterlineVelocityValues(u1_prev,u2_prev,p_prev,vorticity, u1_max_y, u2_max_x, u2_min_x);
+          reportVelocityExtrema(u1_prev, sigma12_prev, sigma12_dy,
+                                u2_prev, sigma21_prev, sigma21_dx,
+                                u1_max_y, u2_max_x, u2_min_x);
+        }
+        
+        // stream solution:
+        if (reportStreamfunctionMax) {
+          
+          ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true); // speeds up the stream solution solve
+          ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+          ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+
+          if (rank == 0) {
+            cout << "solving for approximate stream function...\n";
+          }
+          
+          if (!useCondensedSolve){
+            streamSolution->solve(useMumps);
+          } else {
+            streamSolution->condensedSolve();
+          }
+          
+          double energyErrorTotal = streamSolution->energyErrorTotal();
+          if (rank == 0) {
+            cout << "...solved.\n";
+            cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+          }
+          
+          reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
+        }
+        
         // reset iteration count to 1 (for the background flow):
         problem.setIterationCount(1);
         // reset iteration count to 0 (to start from 0 initial guess):
@@ -712,7 +1076,7 @@ int main(int argc, char *argv[]) {
         
         if (induceCornerRefinements) {
           // induce refinements in bottom corner:
-          vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoint);
+          vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
           vector<int> cornerIDs;
           cornerIDs.push_back(corners[0]->cellID());
           mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
@@ -733,26 +1097,30 @@ int main(int argc, char *argv[]) {
           cout << "top-right corner ID: " << topCorners[1]->cellID() << endl;
           cout << mesh->activeElements().size() << " elements, " << mesh->numGlobalDofs() << " dofs.\n";
         }
+        
       }
-      // one more solve on the final refined mesh:
-      if (rank==0) cout << "Final solve:\n";
-      if (startWithZeroSolutionAfterRefinement) {
-        // start with a fresh (zero) initial guess for each adaptive mesh:
-        solution->clear();
-        problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
-      }
-      double incr_norm;
-      do {
-        problem.iterate(useLineSearch, useCondensedSolve);
-        incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-        if (rank==0) {
-          cout << "\x1B[2K"; // Erase the entire current line.
-          cout << "\x1B[0E"; // Move to the beginning of the current line.
-          cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
-          flush(cout);
+      if ((solnFile.length() == 0) || (numRefs > 0)) {
+
+        // one more solve on the final refined mesh:
+        if (rank==0) cout << "Final solve:\n";
+        if (startWithZeroSolutionAfterRefinement) {
+          // start with a fresh (zero) initial guess for each adaptive mesh:
+          solution->clear();
+          problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
-      } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
-      if (rank==0) cout << endl;
+        double incr_norm;
+        do {
+          problem.iterate(useLineSearch, useCondensedSolve);
+          incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+          if (rank==0) {
+            cout << "\x1B[2K"; // Erase the entire current line.
+            cout << "\x1B[0E"; // Move to the beginning of the current line.
+            cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+            flush(cout);
+          }
+        } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
+        if (rank==0) cout << endl;
+      }
       
       if (computeMaxConditionNumber) {
         string fileName = "nsCavity_maxConditionIPMatrix.dat";
@@ -771,6 +1139,7 @@ int main(int argc, char *argv[]) {
         }
         problem.solutionIncrement()->setWriteMatrixToFile(true, "nsCavity_final_stiffness.dat");
         problem.iterate(useLineSearch, useCondensedSolve);
+        double incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
         if (rank==0) {
           cout << "Final iteration, L^2(incr) = " << incr_norm << endl;
         }
@@ -820,33 +1189,24 @@ int main(int argc, char *argv[]) {
     FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
     FunctionPtr u_mag = Teuchos::rcp( new SqrtFunction( u_dot_u ) );
     FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
-    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
+    FunctionPtr u_n = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
     
     // check that the zero mean pressure is being correctly imposed:
-    FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution,p) );
     double p_avg = p_prev->integrate(mesh);
     if (rank==0)
       cout << "Integral of pressure: " << p_avg << endl;
+
+    FunctionPtr massFlux = Teuchos::rcp( new MassFluxFunction(u_n) );
+    FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(u_n,true) );
     
-    // integrate massFlux over each element (a test):
-    // fake a new bilinear form so we can integrate against 1
-    VarPtr testOne = varFactory.testVar("1",CONSTANT_SCALAR);
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
+    double totalAbsMassFlux = absMassFlux->integrate(mesh,0,false,true);
+    double totalMassFlux = massFlux->integrate(mesh,0,false,true);
     
-    CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-    
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
+    // examine cell sizes:
     double maxCellMeasure = 0;
     double minCellMeasure = 1;
+    
+    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
     for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
       ElementTypePtr elemType = *elemTypeIt;
       vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
@@ -858,44 +1218,29 @@ int main(int argc, char *argv[]) {
       BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,polyOrder) ); // enrich by trial space order
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
       FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      //      cout << "fakeRHSIntegrals:\n" << fakeRHSIntegrals;
+
       for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        // pick out the ones for testOne:
-        massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-      }
-      //      int numSides = 4;
-      //      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      //        for (int i=0; i<elems.size(); i++) {
-      //          int cellID = cellIDs[i];
-      //          // pick out the ones for testOne:
-      //          massFluxIntegral[cellID] += fakeRHSIntegrals(i,testOneIndex);
-      //        }
-      //      }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-      }
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
         maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
         minCellMeasure = min(minCellMeasure,cellMeasures(i));
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-        totalMassFlux += massFluxIntegral[cellID];
-        totalAbsMassFlux += abs( massFluxIntegral[cellID] );
       }
     }
+    
     if (rank==0) {
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
       cout << "total mass flux: " << totalMassFlux << endl;
       cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       cout << "largest h: " << sqrt(maxCellMeasure) << endl;
       cout << "smallest h: " << sqrt(minCellMeasure) << endl;
       cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
     }
+    
+    if (reportCenterlineVelocities) {
+      double u1_max_y, u2_max_x, u2_min_x; // the maxes and mins we find along the reported centerline points
+      reportCenterlineVelocityValues(u1_prev,u2_prev,p_prev,vorticity, u1_max_y, u2_max_x, u2_min_x);
+      reportVelocityExtrema(u1_prev, sigma12_prev, sigma12_dy,
+                            u2_prev, sigma21_prev, sigma21_dx,
+                            u1_max_y, u2_max_x, u2_min_x);
+    }
+    
     if (rank == 0) {
       cout << "phi ID: " << phi->ID() << endl;
       cout << "psi1 ID: " << psi_1->ID() << endl;
@@ -922,7 +1267,11 @@ int main(int argc, char *argv[]) {
       cout << "...solved.\n";
       cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
     }
-    
+  
+    if (reportStreamfunctionMax) {
+      reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
+    }
+
     if (rank==0){
       solution->writeToVTK("nsCavitySoln.vtk");
       if (! meshHasTriangles ) {
