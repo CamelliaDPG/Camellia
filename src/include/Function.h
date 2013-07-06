@@ -80,7 +80,7 @@ public:
   // return cell integrals specified in input argument cellIDs
   map<int,double> cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   
-  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
+  double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false);
 
   // adaptive quadrature
   double integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);

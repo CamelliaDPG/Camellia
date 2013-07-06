@@ -587,6 +587,23 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
       cellIntegrals(cellIndex) += values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex);
     }
+//    if ( (basisCache->cellIDs()[cellIndex]==0) && basisCache->isSideCache() && !sumInto)  {
+//      cout << "sideIndex: " << basisCache->getSideIndex() << endl;
+//      cout << "Function::integrate() values:\n";
+//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//        cout << ptIndex << ": " << values(cellIndex,ptIndex) << endl;
+//      }
+//      
+//      cout << "weightedMeasures:\n";
+//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//        cout << ptIndex << ": " << (*weightedMeasures)(cellIndex,ptIndex) << endl;
+//      }
+//      
+//      cout << "weighted values:\n";
+//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//        cout << ptIndex << ": " << values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex) << endl;
+//      }
+//    }
 //    if (basisCache->getSideIndex() == 0) {
 //      cout << "basisCache for side 0, physical cubature points:\n" << basisCache->getPhysicalCubaturePoints();
 //      cout << "basisCache for side 0, integrate() values:\n" << values;
@@ -650,7 +667,7 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   return sideParity * cellIntegral(0);
 }
 
-double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest) {
+double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache) {
   double integral = 0;
   
   int myPartition = Teuchos::GlobalMPISession::getRank();
@@ -666,7 +683,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
     for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
       cellIDs.push_back( cells[cellIndex]->cellID() );
     }
-    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly());
+    basisCache->setPhysicalCellNodes(mesh->physicalCellNodes(elemType), cellIDs, this->boundaryValueOnly() || requireSideCache);
     FieldContainer<double> cellIntegrals(numCells);
     if ( this->boundaryValueOnly() ) {
       // sum the integral over the sides...
