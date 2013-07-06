@@ -99,9 +99,14 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, int pToAddTest,
 }
 
 MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
+  return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
+}
+
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius) {
   // first, set up an 8-element mesh, centered at the origin
   ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double embeddedSquareSideLength = cylinderRadius*3;
+  double meshHeight = yTop - yBottom;
   ParametricCurvePtr rect = parametricRect(embeddedSquareSideLength, embeddedSquareSideLength, 0, 0);
   
   int numPoints = 8; // 8 points on rect, 8 on circle
@@ -162,7 +167,7 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   
   int boundaryVertexOffset = vertices.size();
   // make some new vertices, going counter-clockwise:
-  ParametricCurvePtr meshRect = parametricRect(xRight-xLeft, meshHeight, 0.5*(xLeft+xRight), 0);
+  ParametricCurvePtr meshRect = parametricRect(xRight-xLeft, meshHeight, 0.5*(xLeft+xRight), 0.5*(yBottom + yTop));
   FieldContainer<double> boundaryVertex(spaceDim);
   boundaryVertex(0) = xRight;
   boundaryVertex(1) = 0;
