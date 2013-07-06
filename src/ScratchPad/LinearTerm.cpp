@@ -214,6 +214,28 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
               }
             }
           }
+
+//          bool DEBUGGING = true;
+//          if (DEBUGGING) {
+//            if (basisCache->cellIDs().size() > 0) {
+//              if (basisCache->cellIDs()[0]==0) {
+//                if (basisCardinality==1) {
+//                  int cellIndex = 0;
+//                  FieldContainer<double> valueOnSide(1, basisCardinality);
+//                  for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+//                    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                      valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
+//                    }
+//                  }
+//                  cout << "LinearTerm::integrate: For cellID 0 on side " << sideIndex << ": " << valueOnSide(0,0) << endl;
+//                  cout << "LinearTerm::integrate: For cellID 0 on side " << sideIndex << ", ltValues:\n";
+//                  for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                    cout << ptIndex << ": " << ltValues(0,0,ptIndex) << endl;
+//                  }
+//                }
+//              }
+//            }
+//          }
         }
       }
     } else {
@@ -257,12 +279,33 @@ void LinearTerm::integrate(FieldContainer<double> &values, DofOrderingPtr thisOr
             }
           }
         }
+//        bool DEBUGGING = true;
+//        if (DEBUGGING) {
+//          if (basisCache->cellIDs().size() > 0) {
+//            if (basisCache->cellIDs()[0]==0) {
+//              if (basisCardinality==1) {
+//                int cellIndex = 0;
+//                FieldContainer<double> valueOnSide(1, basisCardinality);
+//                for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
+//                  for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                    valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
+//                  }
+//                }
+//                cout << "LinearTerm::integrate: For cellID 0 on side " << sideIndex << ": " << valueOnSide(0,0) << endl;
+//                cout << "LinearTerm::integrate: For cellID 0 on side " << sideIndex << ", ltValues:\n";
+//                for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+//                  cout << ptIndex << ": " << ltValues(0,0,ptIndex) << endl;
+//                }
+//              }
+//            }
+//          }
+//        }
       }
     }
   }
 }
 
-void LinearTerm::integrate(FieldContainer<double> &values, 
+void LinearTerm::integrate(FieldContainer<double> &values,
                            LinearTermPtr u, DofOrderingPtr uOrdering, 
                            LinearTermPtr v, DofOrderingPtr vOrdering, 
                            BasisCachePtr basisCache, bool sumInto) {
