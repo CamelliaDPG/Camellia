@@ -256,6 +256,26 @@ vector< int > cellIDsForVertices(MeshPtr mesh, const FieldContainer<double> &ver
   return cellIDs;
 }
 
+double liftCoefficient(FunctionPtr tn2, double radius, MeshPtr mesh) {
+  // a more efficient way of doing this would be to actually identify the cells on the boundary
+  // or the ones near the cylinder, and only do the integral over those.  The present approach
+  // just ensures that the integrand will be zero except in the region of interest...
+  SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
+
+  // this is (probably) right, but isn't working
+//  FunctionPtr n = Function::normal();
+//  FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
+//  
+//  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction(tn2 * n->y() * boundaryRestriction,
+//                                                                 nearCylinder));
+  
+  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction(tn2, nearCylinder));
+  
+  double F_L = dF_L->integrate(mesh);
+  
+  return 2 * F_L;
+}
+
 double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh) {
   // first thing: find elements for vertices (-r, 0) and (r, 0)
   // (we're using here the fact that these start out as element vertices, and therefore remain such,
@@ -660,25 +680,28 @@ int main(int argc, char *argv[]) {
         }
         
       }
-      // one more solve on the final refined mesh:
-      if (rank==0) cout << "Final solve:\n";
-      if (startWithZeroSolutionAfterRefinement) {
-        // start with a fresh (zero) initial guess for each adaptive mesh:
-        solution->clear();
-        problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
-      }
-      double incr_norm;
-      do {
-        problem.iterate(useLineSearch,useCondensedSolve);
-        incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-        if (rank==0) {
-          cout << "\x1B[2K"; // Erase the entire current line.
-          cout << "\x1B[0E"; // Move to the beginning of the current line.
-          cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
-          flush(cout);
+      // skip final solve if we haven't changed the solution that was loaded from disk:
+      if ((solnFile.length() == 0) || (numRefs > 0)) {
+        // one more solve on the final refined mesh:
+        if (rank==0) cout << "Final solve:\n";
+        if (startWithZeroSolutionAfterRefinement) {
+          // start with a fresh (zero) initial guess for each adaptive mesh:
+          solution->clear();
+          problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
-      } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
-      if (rank==0) cout << endl;
+        double incr_norm;
+        do {
+          problem.iterate(useLineSearch,useCondensedSolve);
+          incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+          if (rank==0) {
+            cout << "\x1B[2K"; // Erase the entire current line.
+            cout << "\x1B[0E"; // Move to the beginning of the current line.
+            cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
+            flush(cout);
+          }
+        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        if (rank==0) cout << endl;
+      }
     }
 
     if (rank==0) {
@@ -692,6 +715,20 @@ int main(int argc, char *argv[]) {
     if (rank==0) {
       cout << "pressure difference (front to back of cylinder): " << delta_pressure << endl;
     }
+    
+    FunctionPtr tn1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, t1n) );
+    FunctionPtr tn2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, t2n) );
+    
+    string bvoString = tn2_prev->boundaryValueOnly() ? "true" : "false";
+    if (rank==0)
+      cout << " tn2_prev->boundaryValueOnly(): " << bvoString << endl;
+
+    // this is not working:
+//    // compute lift coefficient:
+//    double c_L = liftCoefficient(tn2_prev, radius, mesh);
+//    if (rank==0) {
+//      cout << "lift coefficient: " << c_L << endl;
+//    }
     
     double energyErrorTotal = solution->energyErrorTotal();
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
