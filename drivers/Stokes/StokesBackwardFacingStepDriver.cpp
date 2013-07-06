@@ -19,7 +19,10 @@
 #include "StokesFormulation.h"
 #include "MeshUtilities.h"
 
+#include "MeshPolyOrderFunction.h"
+
 #include "RefinementPattern.h"
+#include "BackwardFacingStepRefinementStrategy.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -80,6 +83,7 @@ public:
     if (isTopWall || isBottomWallLeft || isBottomWallRight || isStep ) { // walls: no slip
       return 0.0;
     } else if (isInflow) {
+//      cout << "(" << x << ", " << y << "): imposing inflow condition on U1_0\n";
       return - 6.0 * (y-2.0) * (y-1.0);
     }
     return 0;
@@ -246,11 +250,12 @@ int main(int argc, char *argv[]) {
   bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
   bool useExperimentalNorm = args.Input<bool>("--useExperimentalNorm", "use whatever the current experimental norm is", false);
   
+  int maxPolyOrder = args.Input<int>("--maxPolyOrder", "maximum polynomial order allowed in refinements", polyOrder);
+  double min_h = args.Input<double>("--minh", "minimum element diameter for h-refinements", 0);
+  bool induceCornerRefinements = args.Input<bool>("--induceCornerRefinements", "induce refinements in the recirculating corner", false);
   bool compareWithOverkill = args.Input<bool>("--compareWithOverkill", "compare with an overkill solution", false);
   int numOverkillRefinements = args.Input<int>("--numOverkillRefinements", "number of uniform refinements for overkill mesh compared with starting adaptive mesh", 4); // 4 for the final version --> 3072 elements with h=1/16
   int H1OrderOverkill = 1 + args.Input<int>("--overkillPolyOrder", "polynomial order for overkill solution", 5);
-  
-  double min_h = 0; //1.0 / 128.0;
   
   args.Process();
   
@@ -388,6 +393,11 @@ int main(int argc, char *argv[]) {
   elementVertices.push_back(el2);
   elementVertices.push_back(el3);
   
+  FieldContainer<double> bottomCornerPoint(1,2);
+  // want to cheat just inside the bottom corner element:
+  bottomCornerPoint(0,0) = G(0) + 1e-10;
+  bottomCornerPoint(0,1) = G(1) + 1e-10;
+  
   mesh = Teuchos::rcp( new Mesh(vertices, elementVertices, stokesBF, H1Order, pToAdd) );
   
   FunctionPtr one = Function::constant(1.0);
@@ -426,8 +436,6 @@ int main(int argc, char *argv[]) {
   
   qoptIP = Teuchos::rcp(new IP());
   
-  double beta = 1.0;
-  
   if (useCompliantGraphNorm) {
     qoptIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
@@ -456,12 +464,6 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( eps * tau1 );
     qoptIP->addTerm( eps * tau2 );
   } else { // some version of graph norm, then
-//    qoptIP->addTerm( sqrt(beta) * v1 );
-//    qoptIP->addTerm( sqrt(beta) * v2 );
-//    qoptIP->addTerm( sqrt(beta) * q );
-//    qoptIP->addTerm( sqrt(beta) * tau1 );
-//    qoptIP->addTerm( sqrt(beta) * tau2 );
-    
     qoptIP = stokesBF->graphNorm();
   }
   
@@ -549,10 +551,8 @@ int main(int argc, char *argv[]) {
   } else {
     bc->addDirichlet(u1hat, nonOutflowBoundary, u1_0);
     bc->addDirichlet(u2hat, nonOutflowBoundary, u2_0);
-    // for now, prescribe same thing on the outflow boundary
-    // TODO: replace with zero-traction condition
-    // THIS IS A GUESS AT THE ZERO-TRACTION CONDITION
-  //  cout << "SHOULD CONFIRM THAT THE ZERO-TRACTION CONDITION IS RIGHT!!\n";
+
+    // impose zero-traction condition:
     FunctionPtr zero = Function::zero();
     bc->addDirichlet(t1n, outflowBoundary, zero);
     bc->addDirichlet(t2n, outflowBoundary, zero);
@@ -621,7 +621,12 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  RefinementStrategy refinementStrategy( solution, energyThreshold, min_h );
+  Teuchos::RCP<BackwardFacingStepRefinementStrategy> bfsRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(solution, energyThreshold,
+                                                                                                                                    min_h, maxPolyOrder, rank==0) );
+  bfsRefinementStrategy->addCorner(G(0), G(1));
+  bfsRefinementStrategy->addCorner(H(0), H(1));
+  
+//  Teuchos::RCP<RefinementStrategy> refinementStrategy( solution, energyThreshold, min_h );
   
   // just an experiment:
   //  refinementStrategy.setEnforceOneIrregurity(false);
@@ -718,8 +723,16 @@ int main(int argc, char *argv[]) {
         exporter.exportSolution(errorForRefinement.str());
       }
     }
+
+    bfsRefinementStrategy->refine(rank==0); // print to console on rank 0
     
-    refinementStrategy.refine(rank==0); // print to console on rank 0
+    if (induceCornerRefinements) {
+      // induce refinements in bottom corner:
+      vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoint);
+      vector<int> cornerIDs;
+      cornerIDs.push_back(corners[0]->cellID());
+      mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
+    }
   }
   
   // one more solve on the final refined mesh:
@@ -889,6 +902,9 @@ int main(int argc, char *argv[]) {
     VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
     streamExporter.exportSolution("backStepStreamSoln", H1Order*2);
     
+    FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
+    exporter.exportFunction(polyOrderFunction,"backStepPolyOrders");
+    
 //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
 //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
 //    solution->writeFieldsToFile(p->ID(), "p.m");
@@ -922,6 +938,42 @@ int main(int argc, char *argv[]) {
     vector<string> patchDataPath;
     patchDataPath.push_back("phi_patch_east.dat");
     GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+
+    {
+      map<double,string> scaleToName;
+      scaleToName[1]   = "bfsPatch";
+      scaleToName[0.4] = "bfsPatchEddy1";
+      scaleToName[0.05] = "bfsPatchEddy2";
+      scaleToName[0.005] = "bfsPatchEddy3";
+      
+      for (map<double,string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
+        double scale = entryIt->first;
+        string name = entryIt->second;
+        ostringstream fileNameStream;
+        fileNameStream << name << ".dat";
+        FieldContainer<double> patchPoints = pointGrid(4, 4+scale, 0, scale, 200);
+        FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
+        GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
+        ostringstream scriptNameStream;
+        scriptNameStream << name << ".p";
+        set<double> contourLevels = diagonalContourLevels(patchPointData,4);
+        vector<string> dataPaths;
+        dataPaths.push_back(fileNameStream.str());
+        GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str());
+      }
+      
+      double xTics = 0.1, yTics = -1;
+      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.45, 200);
+      FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
+      set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
+      // be sure to the 0 contour, where the direction should change:
+      patchContourLevels.insert(0);
+      
+      vector<string> patchDataPath;
+      patchDataPath.push_back("phi_patch_east.dat");
+      GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+    }
     
     GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
     
