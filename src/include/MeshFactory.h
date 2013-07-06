@@ -28,8 +28,13 @@ public:
 
   static MeshPtr shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
                             BilinearFormPtr bilinearForm, int H1Order, int pToAddTest);
-  
+
   static MeshGeometryPtr shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius);
+  
+  static MeshGeometryPtr shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius);
+
+
+
 };
 
 #endif
