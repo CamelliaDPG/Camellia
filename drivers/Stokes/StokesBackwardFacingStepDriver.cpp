@@ -45,14 +45,16 @@ using namespace std;
 
 static double tol=1e-14;
 
-static const double RIGHT_OUTFLOW = 8.0;
+static double RIGHT_OUTFLOW = 8.0;
+static double MESH_BOTTOM = 0.0;
+static double LEFT_INFLOW = 0.0;
 
 bool topWall(double x, double y) {
   return abs(y-2.0) < tol;
 }
 
 bool bottomWallRight(double x, double y) {
-  return (y < tol) && (x-4.0 >= tol);
+  return (abs(y-MESH_BOTTOM) < tol) && (x-4.0 >= tol);
 }
 
 bool bottomWallLeft(double x, double y) {
@@ -64,7 +66,7 @@ bool step(double x, double y) {
 }
 
 bool inflow(double x, double y) {
-  return abs(x) < tol;
+  return abs(x-LEFT_INFLOW) < tol;
 }
 
 bool outflow(double x, double y) {
@@ -213,6 +215,17 @@ void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr stre
   }
 }
 
+bool canReadFile(string fileName) {
+  bool canRead = false;
+  ifstream fin(fileName.c_str());
+  if (fin.good())
+  {
+    canRead = true;
+  }
+  fin.close();
+  return canRead;
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
@@ -249,6 +262,9 @@ int main(int argc, char *argv[]) {
   bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "Enforce local conservation.", false);
   bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
   bool useExperimentalNorm = args.Input<bool>("--useExperimentalNorm", "use whatever the current experimental norm is", false);
+  bool verboseRefinements = args.Input<bool>("--verboseRefinements", "verbose refinement output", false);
+  
+  bool useBiswasGeometry = args.Input<bool>("--useBiswasGeometry", "use an expansion ratio of 1.9423", false);
   
   int maxPolyOrder = args.Input<int>("--maxPolyOrder", "maximum polynomial order allowed in refinements", polyOrder);
   double min_h = args.Input<double>("--minh", "minimum element diameter for h-refinements", 0);
@@ -256,8 +272,10 @@ int main(int argc, char *argv[]) {
   bool compareWithOverkill = args.Input<bool>("--compareWithOverkill", "compare with an overkill solution", false);
   int numOverkillRefinements = args.Input<int>("--numOverkillRefinements", "number of uniform refinements for overkill mesh compared with starting adaptive mesh", 4); // 4 for the final version --> 3072 elements with h=1/16
   int H1OrderOverkill = 1 + args.Input<int>("--overkillPolyOrder", "polynomial order for overkill solution", 5);
+  string overkillSolnFile = args.Input<string>("--overkillSolnFile", "file to which to save / from which to load overkill solution.", "stokesBFSOverkill_3072_k5.soln");
   
   args.Process();
+  
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -276,6 +294,25 @@ int main(int argc, char *argv[]) {
 //  if (rank == 0) {
 //    cout << "numRefinements = " << numRefs << endl;
 //  }
+  
+  if (rank==0) {
+    cout << "polyOrder = " << polyOrder << endl;
+    if (useBiswasGeometry) {
+      cout << "using Biswas geometry.\n";
+    }
+    if (compareWithOverkill) {
+      cout << "Will compare with overkill mesh.\n";
+    }
+    if (verboseRefinements) {
+      cout << "Verbose refinements is true.\n";
+    }
+  }
+  
+  if (useBiswasGeometry) {
+    MESH_BOTTOM = 1.0 - 0.9423;
+    RIGHT_OUTFLOW = 7.0;
+    LEFT_INFLOW = 3.0;
+  }
   
   /////////////////////////// "VGP_CONFORMING" VERSION ///////////////////////
   // fluxes and traces:
@@ -348,8 +385,8 @@ int main(int argc, char *argv[]) {
   stokesBF->addTerm(-u2,q->dy());
   stokesBF->addTerm(u1hat->times_normal_x() + u2hat->times_normal_y(), q);
   
-  if (rank==0)
-    stokesBF->printTrialTestInteractions();
+//  if (rank==0)
+//    stokesBF->printTrialTestInteractions();
   
   stokesBF->setUseSPDSolveForOptimalTestFunctions(useSPDLocalSolve);
   stokesBF->setUseIterativeRefinementsWithSPDSolve(useIterativeRefinementsWithSPDSolve);
@@ -363,13 +400,13 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Mesh> mesh, streamMesh;
   
   FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-  A(0) = 0.0; A(1) = 1.0;
-  B(0) = 0.0; B(1) = 2.0;
+  A(0) = LEFT_INFLOW; A(1) = 1.0;
+  B(0) = LEFT_INFLOW; B(1) = 2.0;
   C(0) = 4.0; C(1) = 2.0;
   D(0) = RIGHT_OUTFLOW; D(1) = 2.0;
   E(0) = RIGHT_OUTFLOW; E(1) = 1.0;
-  F(0) = RIGHT_OUTFLOW; F(1) = 0.0;
-  G(0) = 4.0; G(1) = 0.0;
+  F(0) = RIGHT_OUTFLOW; F(1) = MESH_BOTTOM;
+  G(0) = 4.0; G(1) = MESH_BOTTOM;
   H(0) = 4.0; H(1) = 1.0;
   vector<FieldContainer<double> > vertices;
   vertices.push_back(A); int A_index = 0;
@@ -406,10 +443,22 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
   mesh->registerObserver(refHistory);
   
-  // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
   Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-  mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  if (! useBiswasGeometry) {
+    // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  } else {
+    // for the Biswas geometry, the only thing we can conveniently do is approximate squares.
+    FieldContainer<double> inflowPoint(1,2);
+    inflowPoint(0,0) = A(0) + 1e-10;
+    inflowPoint(0,1) = A(1) + 1e-10;
+    
+    int inflowCell = mesh->elementsForPoints(inflowPoint)[0]->cellID();
+    set<int> activeCellIDs = mesh->getActiveCellIDs();
+    activeCellIDs.erase(activeCellIDs.find(inflowCell));
+    mesh->hRefine(activeCellIDs, verticalCut);
+  }
   
   MeshPtr overkillMesh;
   if (compareWithOverkill) {
@@ -574,26 +623,47 @@ int main(int argc, char *argv[]) {
       overkillSolution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==Function::zero());
     }
     
-    if (rank==0) {
-      cout << "Solving on overkill mesh";
-    }
-    Epetra_Time timer(Comm);
-    if (!enforceLocalConservation) {
+    if ((overkillSolnFile.length() > 0) && canReadFile(overkillSolnFile)) {
+      // then load solution from file, and skip solve
       if (rank==0) {
-        cout << " (using condensed solve)... " << endl;
+        cout << "Loading overkill solution from " << overkillSolnFile << "." << endl;
       }
-      overkillSolution->condensedSolve();
+      overkillSolution = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
+      overkillSolution->readFromFile(overkillSolnFile);
+      if (rank==0) {
+        cout << "Loaded." << endl;
+      }
     } else {
       if (rank==0) {
-        cout << "... " << endl;
+        cout << "Solving on overkill mesh";
       }
-      // condensed solve doesn't support lagrange constraints yet...
-      overkillSolution->solve(true);
-    }
-    
-    double overkillSolutionTime = timer.ElapsedTime();
-    if (rank==0) {
-      cout << "... solved in " << overkillSolutionTime << " seconds." << endl;
+      Epetra_Time timer(Comm);
+      if (!enforceLocalConservation) {
+        if (rank==0) {
+          cout << " (using condensed solve)... " << endl;
+        }
+        overkillSolution->condensedSolve();
+      } else {
+        if (rank==0) {
+          cout << "... " << endl;
+        }
+        // condensed solve doesn't support lagrange constraints yet...
+        overkillSolution->solve(true);
+      }
+      
+      double overkillSolutionTime = timer.ElapsedTime();
+      if (rank==0) {
+        cout << "... solved in " << overkillSolutionTime << " seconds." << endl;
+      }
+      
+      if (rank == 0) {
+        if (overkillSolnFile.length() > 0) {
+          cout << "writing to disk...\n";
+          overkillSolution->writeToFile(overkillSolnFile);
+          cout << "Wrote overkill solution to " << overkillSolnFile << endl;
+        }
+      }
+
     }
     double overkillEnergyError = overkillSolution->energyErrorTotal();
     if (rank == 0)
@@ -622,7 +692,8 @@ int main(int argc, char *argv[]) {
   }
   
   Teuchos::RCP<BackwardFacingStepRefinementStrategy> bfsRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(solution, energyThreshold,
-                                                                                                                                    min_h, maxPolyOrder, rank==0) );
+                                                                                                                                    min_h, maxPolyOrder,
+                                                                                                                                    (rank==0) && verboseRefinements) );
   bfsRefinementStrategy->addCorner(G(0), G(1));
   bfsRefinementStrategy->addCorner(H(0), H(1));
   
@@ -661,23 +732,23 @@ int main(int argc, char *argv[]) {
     if (compareWithOverkill) {
       Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
       overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
-      if (rank==0) {
-        VTKExporter exporter(solution, mesh, varFactory);
-        ostringstream cavityRefinement;
-        cavityRefinement << "backstep_solution_refinement_" << refIndex;
-        exporter.exportSolution(cavityRefinement.str());
-        VTKExporter exporterBest(bestSoln, mesh, varFactory);
-        ostringstream bestRefinement;
-        bestRefinement << "backstep_best_refinement_" << refIndex;
-        exporterBest.exportSolution(bestRefinement.str());
-      }
+//      if (rank==0) {
+//        VTKExporter exporter(solution, mesh, varFactory);
+//        ostringstream cavityRefinement;
+//        cavityRefinement << "backstep_solution_refinement_" << refIndex;
+//        exporter.exportSolution(cavityRefinement.str());
+//        VTKExporter exporterBest(bestSoln, mesh, varFactory);
+//        ostringstream bestRefinement;
+//        bestRefinement << "backstep_best_refinement_" << refIndex;
+//        exporterBest.exportSolution(bestRefinement.str());
+//      }
       Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
       bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
       
-      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
-      double p_avg = p_best->integrate(mesh);
-      if (rank==0)
-        cout << "Integral of best solution pressure: " << p_avg << endl;
+//      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
+//      double p_avg = p_best->integrate(mesh);
+//      if (rank==0)
+//        cout << "Integral of best solution pressure: " << p_avg << endl;
       
       // determine error as difference between our solution and overkill
       bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
@@ -694,11 +765,11 @@ int main(int argc, char *argv[]) {
         VarPtr var = *fieldIt;
         int fieldID = var->ID();
         FunctionPtr fieldErrorFxn = Function::solution(var, adaptiveSolnOnOverkillMesh);
-        if (var->ID() == p->ID()) {
-          // pressure: subtract off the average difference:
-          double pAvg = fieldErrorFxn->integrate(adaptiveSolnOnOverkillMesh->mesh()) / meshMeasure;
-          fieldErrorFxn = fieldErrorFxn - pAvg;
-        }
+//        if (var->ID() == p->ID()) {
+//          // pressure: subtract off the average difference:
+//          double pAvg = fieldErrorFxn->integrate(adaptiveSolnOnOverkillMesh->mesh()) / meshMeasure;
+//          fieldErrorFxn = fieldErrorFxn - pAvg;
+//        }
         
         double L2error = fieldErrorFxn->l2norm(adaptiveSolnOnOverkillMesh->mesh());
         L2errorSquared += L2error * L2error;
@@ -714,14 +785,14 @@ int main(int argc, char *argv[]) {
         cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared);
         cout << " (vs. best error of " << sqrt(bestL2errorSquared) << ")\n";
       }
-      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-      dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
-      if (rank==0) {
-        VTKExporter exporter(adaptiveSolnOnOverkillMesh, mesh, varFactory);
-        ostringstream errorForRefinement;
-        errorForRefinement << "overkillError_refinement_" << refIndex;
-        exporter.exportSolution(errorForRefinement.str());
-      }
+      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared) / L2normOverkill;
+      dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared) / L2normOverkill;
+//      if (rank==0) {
+//        VTKExporter exporter(adaptiveSolnOnOverkillMesh, mesh, varFactory);
+//        ostringstream errorForRefinement;
+//        errorForRefinement << "overkillError_refinement_" << refIndex;
+//        exporter.exportSolution(errorForRefinement.str());
+//      }
     }
 
     bfsRefinementStrategy->refine(rank==0); // print to console on rank 0
@@ -951,7 +1022,7 @@ int main(int argc, char *argv[]) {
         string name = entryIt->second;
         ostringstream fileNameStream;
         fileNameStream << name << ".dat";
-        FieldContainer<double> patchPoints = pointGrid(4, 4+scale, 0, scale, 200);
+        FieldContainer<double> patchPoints = pointGrid(4, 4+scale, MESH_BOTTOM, MESH_BOTTOM + scale, 200);
         FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
         GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
         ostringstream scriptNameStream;
@@ -963,7 +1034,7 @@ int main(int argc, char *argv[]) {
       }
       
       double xTics = 0.1, yTics = -1;
-      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, 0, 0.45, 200);
+      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, MESH_BOTTOM + 0.45, 200);
       FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
       GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
       set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
@@ -998,9 +1069,8 @@ int main(int argc, char *argv[]) {
           double bestError = dofsToBestL2error[dofs];
           cout << "\t" << bestError << endl;
         }
-        ofstream fout("backstepOverkillComparison.txt");
-        fout << "******* Adaptivity Convergence Report *******\n";
-        fout << "dofs\tL2 error\tBest error\n";
+        ofstream fout("stokesBFSOverkillComparison.txt");
+        fout << "dofs\tsoln_error\tbest_error\n";
         for (map<int,double>::iterator entryIt=dofsToL2error.begin(); entryIt != dofsToL2error.end(); entryIt++) {
           int dofs = entryIt->first;
           double err = entryIt->second;
