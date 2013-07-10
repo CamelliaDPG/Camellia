@@ -172,7 +172,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   vector< ElementPtr > elements = mesh->elementsInPartition(rank);
 
-  cout << "Checking condition numbers on rank " << rank << endl;
+//  cout << "Checking condition numbers on rank " << rank << endl;
   
   FieldContainer<double> maxConditionNumberIPMatrix;
   int maxCellID = -1;
@@ -201,7 +201,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
       maxConditionNumberIPMatrix = innerProductMatrix;
     }
   }
-  cout << "Determined condition numbers on rank " << rank << endl;
+//  cout << "Determined condition numbers on rank " << rank << endl;
   FieldContainer<double> maxConditionNumbers(numProcs);
   maxConditionNumbers[rank] = myMaxConditionNumber;
   MPIWrapper::entryWiseSum(maxConditionNumbers);
@@ -216,7 +216,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(Teuchos::RCP< DPGInnerProdu
   }
   
   if (rank==maxConditionNumberOwner) { // owner is responsible for writing to file
-    cout << "max condition number is on rank " << rank << endl;
+//    cout << "max condition number is on rank " << rank << endl;
     if (sparseFileToWriteTo.length() > 0) {
       if (maxConditionNumberIPMatrix.size() > 0) {
         DataIO::writeMatrixToSparseDataFile(maxConditionNumberIPMatrix, sparseFileToWriteTo);
