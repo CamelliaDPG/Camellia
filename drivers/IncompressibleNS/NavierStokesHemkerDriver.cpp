@@ -28,6 +28,8 @@
 #include "NonlinearSolveStrategy.h"
 #include "PenaltyConstraints.h"
 
+#include "ParameterFunction.h"
+
 #include "MeshFactory.h"
 
 #include "SolutionExporter.h"
@@ -256,22 +258,58 @@ vector< int > cellIDsForVertices(MeshPtr mesh, const FieldContainer<double> &ver
   return cellIDs;
 }
 
-double liftCoefficient(FunctionPtr tn2, double radius, MeshPtr mesh) {
+FunctionPtr friction(SolutionPtr soln) {
+  // friction is given by (sigma n) x n (that's a cross product)
+  FunctionPtr n = Function::normal();
+  LinearTermPtr f_lt = n->y() * (sigma11->times_normal_x() + sigma12->times_normal_y())
+                     - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
+  
+  FunctionPtr f = Teuchos::rcp( new PreviousSolutionFunction(soln, f_lt) );
+  return f;
+}
+
+double dragCoefficient(SolutionPtr soln, double radius) {
   // a more efficient way of doing this would be to actually identify the cells on the boundary
   // or the ones near the cylinder, and only do the integral over those.  The present approach
   // just ensures that the integrand will be zero except in the region of interest...
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
+  
+  FunctionPtr frictionFxn = friction(soln);
+  
+  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  
+  FunctionPtr n = Function::normal();
+  FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
+  
+  // taken from Schäfer and Turek.  We negate everything because our normals are relative to
+  // elements, whereas the normal in the formula is going out from the cylinder...
+  FunctionPtr dF_D = Teuchos::rcp( new SpatiallyFilteredFunction( (- frictionFxn * n->y() + pressure * n->x()) * boundaryRestriction,
+                                                                 nearCylinder));
+  
+  double F_D = dF_D->integrate(soln->mesh());
+  
+  return 2 * F_D;
+}
 
-  // this is (probably) right, but isn't working
-//  FunctionPtr n = Function::normal();
-//  FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
-//  
-//  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction(tn2 * n->y() * boundaryRestriction,
-//                                                                 nearCylinder));
+double liftCoefficient(SolutionPtr soln, double radius) {
+  // a more efficient way of doing this would be to actually identify the cells on the boundary
+  // or the ones near the cylinder, and only do the integral over those.  The present approach
+  // just ensures that the integrand will be zero except in the region of interest...
+  SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
   
-  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction(tn2, nearCylinder));
+  FunctionPtr frictionFxn = friction(soln);
   
-  double F_L = dF_L->integrate(mesh);
+  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  
+  FunctionPtr n = Function::normal();
+  FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
+  
+  // taken from Schäfer and Turek.  We negate everything because our normals are relative to
+  // elements, whereas the normal in the formula is going out from the cylinder...
+  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction( (frictionFxn * n->x() + pressure * n->y()) * boundaryRestriction,
+                                                                 nearCylinder));
+  
+  double F_L = dF_L->integrate(soln->mesh());
   
   return 2 * F_L;
 }
@@ -519,6 +557,16 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
     mesh->registerObserver(refHistory);
     
+    ParameterFunctionPtr dt_inv = ParameterFunction::parameterFunction(1.0 / dt); //Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
+    if (artificialTimeStepping) {
+      //    // LHS gets u_inc / dt:
+      BFPtr bf = problem.bf();
+      FunctionPtr dt_inv_fxn = Teuchos::rcp(dynamic_cast< Function* >(dt_inv.get()), false);
+      bf->addTerm(-dt_inv_fxn * u1, v1);
+      bf->addTerm(-dt_inv_fxn * u2, v2);
+      problem.setIP( bf->graphNorm() ); // graph norm has changed...
+    }
+    
     if (useScaleCompliantGraphNorm) {
       problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
     }
@@ -599,7 +647,7 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "using sigma-based vorticity definition.\n";
     FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - Re * sigma12 + Re * sigma21 ) ); // Re because sigma = 1/Re grad u
     FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p) );
-
+    
     double delta = pressureDifference(p_prev, radius, mesh);
     if (rank==0) cout << "computed pressure delta on initial solution as " << delta << endl;
     
@@ -659,6 +707,18 @@ int main(int argc, char *argv[]) {
           cout << "pressure difference (front to back of cylinder): " << delta_pressure << endl;
         }
         
+        // compute lift coefficient:
+        double c_L = liftCoefficient(solution, radius);
+        if (rank==0) {
+          cout << "lift coefficient: " << c_L << endl;
+        }
+        
+        // compute drag coefficient:
+        double c_D = dragCoefficient(solution, radius);
+        if (rank==0) {
+          cout << "drag coefficient: " << c_D << endl;
+        }
+        
         // reset iteration count to 1 (for the background flow):
         problem.setIterationCount(1);
         
@@ -716,19 +776,17 @@ int main(int argc, char *argv[]) {
       cout << "pressure difference (front to back of cylinder): " << delta_pressure << endl;
     }
     
-    FunctionPtr tn1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, t1n) );
-    FunctionPtr tn2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, t2n) );
+    // compute lift coefficient:
+    double c_L = liftCoefficient(solution, radius);
+    if (rank==0) {
+      cout << "lift coefficient: " << c_L << endl;
+    }
     
-    string bvoString = tn2_prev->boundaryValueOnly() ? "true" : "false";
-    if (rank==0)
-      cout << " tn2_prev->boundaryValueOnly(): " << bvoString << endl;
-
-    // this is not working:
-//    // compute lift coefficient:
-//    double c_L = liftCoefficient(tn2_prev, radius, mesh);
-//    if (rank==0) {
-//      cout << "lift coefficient: " << c_L << endl;
-//    }
+    // compute drag coefficient:
+    double c_D = dragCoefficient(solution, radius);
+    if (rank==0) {
+      cout << "drag coefficient: " << c_D << endl;
+    }
     
     double energyErrorTotal = solution->energyErrorTotal();
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
