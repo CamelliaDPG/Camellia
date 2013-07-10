@@ -27,6 +27,10 @@
 
 #include "MeshUtilities.h"
 
+#include "DataIO.h"
+
+#include "ParameterFunction.h"
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
@@ -48,6 +52,14 @@ int main(int argc, char *argv[]) {
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
   double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-12);
+  string normChoice = args.Input<string>("--norm", "norm choice: graph, compliantGraph, stokesGraph, or stokesCompliantGraph", "graph");
+  
+  bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use static condensation", true);
+
+  double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0);
+  
+  double zmcRho = args.Input<double>("--zmcRho", "zero-mean constraint rho (stabilization parameter)", -1);
+  
 //  string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
 //  string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
   
@@ -60,39 +72,51 @@ int main(int argc, char *argv[]) {
   BasisFactory::setUseEnrichedTraces(useEnrichedTraces);
   
   // parse args:
-  bool useTriangles = false, useGraphNorm = true, useCompliantNorm = false, useStokesCompliantNorm = false, useStokesGraphNorm = false;
+  bool useTriangles = false, useGraphNorm = false, useCompliantNorm = false, useStokesCompliantNorm = false, useStokesGraphNorm = false;
+  
+  if (normChoice=="graph") {
+    useGraphNorm = true;
+  } else if (normChoice=="compliantGraph") {
+    useCompliantNorm = true;
+  } else if (normChoice=="stokesGraph") {
+    useStokesGraphNorm = true;
+  } else if (normChoice=="stokesCompliantGraph") {
+    useStokesCompliantNorm = true;
+  } else {
+    if (rank==0) cout << "unknown norm choice.  Exiting.\n";
+    exit(-1);
+  }
+  
+  bool artificialTimeStepping = (dt > 0);
   
   if (rank == 0) {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
-    cout << "useGraphNorm = "  << (useGraphNorm ? "true" : "false") << "\n";
-    cout << "useCompliantNorm = "  << (useCompliantNorm ? "true" : "false") << "\n";
-    cout << "useStokesGraphNorm = "  << (useStokesGraphNorm ? "true" : "false") << "\n";
-    cout << "useStokesCompliantNorm = "  << (useStokesCompliantNorm ? "true" : "false") << "\n";
+    cout << "norm = " << normChoice << endl;
     cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
   
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
   // domain from Cockburn Kanschat for Stokes:
-//  quadPointsKovasznay(0,0) = -0.5; // x1
-//  quadPointsKovasznay(0,1) =  0.0; // y1
-//  quadPointsKovasznay(1,0) =  1.5;
-//  quadPointsKovasznay(1,1) =  0.0;
-//  quadPointsKovasznay(2,0) =  1.5;
-//  quadPointsKovasznay(2,1) =  2.0;
-//  quadPointsKovasznay(3,0) = -0.5;
-//  quadPointsKovasznay(3,1) =  2.0;
+  quadPointsKovasznay(0,0) = -0.5; // x1
+  quadPointsKovasznay(0,1) =  0.0; // y1
+  quadPointsKovasznay(1,0) =  1.5;
+  quadPointsKovasznay(1,1) =  0.0;
+  quadPointsKovasznay(2,0) =  1.5;
+  quadPointsKovasznay(2,1) =  2.0;
+  quadPointsKovasznay(3,0) = -0.5;
+  quadPointsKovasznay(3,1) =  2.0;
   
   // Domain from Evans Hughes for Navier-Stokes:
-  quadPointsKovasznay(0,0) =  0.0; // x1
-  quadPointsKovasznay(0,1) = -0.5; // y1
-  quadPointsKovasznay(1,0) =  1.0;
-  quadPointsKovasznay(1,1) = -0.5;
-  quadPointsKovasznay(2,0) =  1.0;
-  quadPointsKovasznay(2,1) =  0.5;
-  quadPointsKovasznay(3,0) =  0.0;
-  quadPointsKovasznay(3,1) =  0.5;
+//  quadPointsKovasznay(0,0) =  0.0; // x1
+//  quadPointsKovasznay(0,1) = -0.5; // y1
+//  quadPointsKovasznay(1,0) =  1.0;
+//  quadPointsKovasznay(1,1) = -0.5;
+//  quadPointsKovasznay(2,0) =  1.0;
+//  quadPointsKovasznay(2,1) =  0.5;
+//  quadPointsKovasznay(3,0) =  0.0;
+//  quadPointsKovasznay(3,1) =  0.5;
 
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
 //  double Re = 40.0; // Evans Hughes Navier-Stokes
@@ -120,10 +144,14 @@ int main(int argc, char *argv[]) {
   VarPtr sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   VarPtr p_vgp = varFactory.fieldVar(VGP_P_S);
   
-  if (rank==0) {
-    cout << "bilinear form with zero background flow:\n";
-    zeroProblem.bf()->printTrialTestInteractions();
-  }
+  
+  VarPtr v1_vgp = varFactory.testVar(VGP_V1_S, HGRAD);
+  VarPtr v2_vgp = varFactory.testVar(VGP_V2_S, HGRAD);
+
+//  if (rank==0) {
+//    cout << "bilinear form with zero background flow:\n";
+//    zeroProblem.bf()->printTrialTestInteractions();
+//  }
   
   VGPStokesFormulation stokesForm(1/Re);
   
@@ -141,7 +169,7 @@ int main(int argc, char *argv[]) {
       cout << "Re = " << Re << endl;
     }
     
-    int kovasznayCubatureEnrichment = 10;
+    int kovasznayCubatureEnrichment = 20; // 20 is better than 10 for accurately measuring error on the coarser meshes.
 
     vector< VGPNavierStokesProblem > problems;
     do {
@@ -154,9 +182,26 @@ int main(int argc, char *argv[]) {
       
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+      
+      problem.backgroundFlow()->setZeroMeanConstraintRho(zmcRho);
+      problem.solutionIncrement()->setZeroMeanConstraintRho(zmcRho);
+      
+      FunctionPtr dt_inv;
+      
+      if (artificialTimeStepping) {
+        //    // LHS gets u_inc / dt:
+        BFPtr bf = problem.bf();
+        dt_inv = ParameterFunction::parameterFunction(1.0 / dt); //Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
+        bf->addTerm(-dt_inv * u1_vgp, v1_vgp);
+        bf->addTerm(-dt_inv * u2_vgp, v2_vgp);
+        problem.setIP( bf->graphNorm() ); // graph norm has changed...
+      } else {
+        dt_inv = Function::zero();
+      }
+      
       problems.push_back(problem);
       if ( useCompliantNorm ) {
-        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
+        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
       } else if (useStokesCompliantNorm) {
         VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
         problem.setIP(stokesForm.scaleCompliantGraphNorm());
@@ -203,7 +248,7 @@ int main(int argc, char *argv[]) {
                           + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
       double weight = 1.0;
       do {
-        weight = problem->iterate(useLineSearch);
+        weight = problem->iterate(useLineSearch, useCondensedSolve);
         
         LinearTermPtr rhsLT = ((RHSEasy*) problem->backgroundFlow()->rhs().get())->linearTerm();
         RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
@@ -263,6 +308,93 @@ int main(int argc, char *argv[]) {
         cout << "best energy error (measured according to the actual solution's test space IP): " << bestCostFunction << endl;
     }
     
+    map< int, double > energyNormWeights;
+    if (useCompliantNorm) {
+      energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
+      if (Re < 1) { // assuming we're using the experimental small Re thing
+        energyNormWeights[p_vgp->ID()] = Re;
+      } else {
+        energyNormWeights[p_vgp->ID()] = 1.0;
+      }
+    } else {
+      energyNormWeights[u1_vgp->ID()] = 1.0;
+      energyNormWeights[u2_vgp->ID()] = 1.0;
+      energyNormWeights[sigma11_vgp->ID()] = 1.0; 
+      energyNormWeights[sigma12_vgp->ID()] = 1.0;
+      energyNormWeights[sigma21_vgp->ID()] = 1.0;
+      energyNormWeights[sigma22_vgp->ID()] = 1.0;
+      energyNormWeights[p_vgp->ID()] = 1.0;
+    }
+    vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
+    vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
+    
+    map<int, double> velocityWeights;
+    velocityWeights[u1_vgp->ID()] = 1.0;
+    velocityWeights[u2_vgp->ID()] = 1.0;
+    vector<double> bestVelocityError = study.weightedL2Error(velocityWeights,true);
+    vector<double> solnVelocityError = study.weightedL2Error(velocityWeights,false);
+    
+    map<int, double> pressureWeight;
+    pressureWeight[p_vgp->ID()] = 1.0;
+    vector<double> bestPressureError = study.weightedL2Error(pressureWeight,true);
+    vector<double> solnPressureError = study.weightedL2Error(pressureWeight,false);
+    
+    if (rank==0) {
+      cout << setw(25);
+      cout << "Solution Energy Error:" << setw(25) << "Best Energy Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnEnergy[i] << setw(25) << bestEnergy[i] << endl;
+      }
+      cout << setw(25);
+      cout << "Solution Velocity Error:" << setw(25) << "Best Velocity Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnVelocityError[i] << setw(25) << bestVelocityError[i] << endl;
+      }
+      cout << setw(25);
+      cout << "Solution Pressure Error:" << setw(25) << "Best Pressure Error:" << endl;
+      cout << scientific << setprecision(1);
+      for (int i=0; i<bestEnergy.size(); i++) {
+        cout << setw(25) << solnPressureError[i] << setw(25) << bestPressureError[i] << endl;
+      }
+      
+      vector< string > tableHeaders;
+      vector< vector<double> > dataTable;
+      vector< double > meshWidths;
+      for (int i=minLogElements; i<=maxLogElements; i++) {
+        double width = pow(2.0,i);
+        meshWidths.push_back(width);
+      }
+      
+      tableHeaders.push_back("mesh_width");
+      dataTable.push_back(meshWidths);
+      tableHeaders.push_back("soln_energy_error");
+      dataTable.push_back(solnEnergy);
+      tableHeaders.push_back("best_energy_error");
+      dataTable.push_back(bestEnergy);
+      
+      tableHeaders.push_back("soln_velocity_error");
+      dataTable.push_back(solnVelocityError);
+      tableHeaders.push_back("best_velocity_error");
+      dataTable.push_back(bestVelocityError);
+      
+      tableHeaders.push_back("soln_pressure_error");
+      dataTable.push_back(solnPressureError);
+      tableHeaders.push_back("best_pressure_error");
+      dataTable.push_back(bestPressureError);
+      
+      ostringstream fileNameStream;
+      fileNameStream << "nsStudy_Re" << Re << "k" << polyOrder << "_results.dat";
+      
+      DataIO::outputTableToFile(tableHeaders,dataTable,fileNameStream.str());
+    }
+  
     if (rank == 0) {
       cout << study.TeXErrorRateTable();
       vector<int> primaryVariables;
@@ -286,7 +418,7 @@ int main(int argc, char *argv[]) {
         string fieldName = fieldFileNames[i];
         ostringstream filePathPrefix;
         filePathPrefix << "navierStokes/" << fieldName << "_p" << polyOrder;
-        bool writeMATLABplotData = true;
+        bool writeMATLABplotData = false;
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID, writeMATLABplotData);
       }
       
@@ -327,4 +459,5 @@ int main(int argc, char *argv[]) {
       fout.close();
     }
   }
+  
 }
