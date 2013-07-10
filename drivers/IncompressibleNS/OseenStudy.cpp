@@ -53,6 +53,7 @@ int main(int argc, char *argv[]) {
 //  bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   bool useCompliantNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' norm", !useGraphNorm);
+  bool writeMATLABplotData = args.Input<bool>("--writeMATLABplotData", "write MATLAB plot data", false);
   
   useGraphNorm = !useCompliantNorm;
   
@@ -159,7 +160,7 @@ int main(int argc, char *argv[]) {
       cout << "Re = " << Re << endl;
     }
     
-    int kovasznayCubatureEnrichment = 10;
+    int kovasznayCubatureEnrichment = 20; // 20 is better than 10 for accurately measuring error on the coarser meshes.
 
     vector< VGPOseenProblem > problems;
     do {
@@ -259,7 +260,7 @@ int main(int argc, char *argv[]) {
          problem != problems.end(); problem++) {
       
       SolutionPtr soln = problem->solution();
-      soln->solve();
+      soln->condensedSolve();
       solutions.push_back( soln );
       
       numCells1D *= 2;
@@ -309,7 +310,6 @@ int main(int argc, char *argv[]) {
         string fieldName = fieldFileNames[i];
         ostringstream filePathPrefix;
         filePathPrefix << "oseen/" << fieldName << "_p" << polyOrder;
-        bool writeMATLABplotData = true;
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID, writeMATLABplotData);
       }
       
@@ -338,15 +338,25 @@ int main(int argc, char *argv[]) {
       }
     }
     map< int, double > energyNormWeights;
-    energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
-    energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
-    energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
-    energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
-    energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
-    energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
-    if (Re < 1) { // assuming we're using the experimental small Re thing
-      energyNormWeights[p_vgp->ID()] = Re;
+    if (useCompliantNorm) {
+      energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
+      energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
+      if (Re < 1) { // assuming we're using the experimental small Re thing
+        energyNormWeights[p_vgp->ID()] = Re;
+      } else {
+        energyNormWeights[p_vgp->ID()] = 1.0;
+      }
     } else {
+      energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
+      energyNormWeights[sigma11_vgp->ID()] = 1.0; // 1/mu
+      energyNormWeights[sigma12_vgp->ID()] = 1.0; // 1/mu
+      energyNormWeights[sigma21_vgp->ID()] = 1.0; // 1/mu
+      energyNormWeights[sigma22_vgp->ID()] = 1.0; // 1/mu
       energyNormWeights[p_vgp->ID()] = 1.0;
     }
     vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
