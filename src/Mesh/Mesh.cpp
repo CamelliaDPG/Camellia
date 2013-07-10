@@ -1259,7 +1259,6 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
             if (d < minDistance) {
               minDistance = d;
               childSelected = childIndex;
-              break;
             }
           }
           elem = elem->getChild(childSelected);
