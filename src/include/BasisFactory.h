@@ -103,6 +103,8 @@ public:
   // the following convenience methods belong in Basis or perhaps a wrapper thereof
   static set<int> sideFieldIndices( BasisPtr basis, bool includeSideSubcells = true); // includeSideSubcells: e.g. include vertices as part of quad sides
   
+  static void setUseLobattoForQuadHGrad(bool value);
+  static void setUseLobattoForQuadHDiv(bool value);
 };
 
 #endif

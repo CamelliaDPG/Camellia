@@ -594,3 +594,10 @@ set<int> BasisFactory::sideFieldIndices( BasisPtr basis, bool includeSideSubcell
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "can't get side field indices for sideDim != 0, 1, or 2.");
   }
 }
+
+void BasisFactory::setUseLobattoForQuadHGrad(bool value) {
+  _useLobattoForQuadHGRAD = value;
+}
+void BasisFactory::setUseLobattoForQuadHDiv(bool value) {
+  _useLobattoForQuadHDIV = value;
+}
