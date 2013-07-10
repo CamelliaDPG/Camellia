@@ -1242,8 +1242,27 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
           }
         }
         if (!foundMatchingChild) {
-          cout << "parent matches (" << x << ", " << y << "), but none of its children do...\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent matches, but none of its children do...");
+          cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
+          int numVertices = elem->numSides();
+          int spaceDim = 2;
+          FieldContainer<double> vertices(numVertices,spaceDim);
+          verticesForCell(vertices, elem->cellID());
+          cout << "parent vertices:\n" << vertices;
+          double minDistance = numeric_limits<double>::max();
+          int childSelected = -1;
+          for (int childIndex = 0; childIndex < numChildren; childIndex++) {
+            ElementPtr child = elem->getChild(childIndex);
+            verticesForCell(vertices, child->cellID());
+            cout << "child " << childIndex << ", vertices:\n" << vertices;
+            vector<double> cellCentroid = getCellCentroid(child->cellID());
+            double d = sqrt((cellCentroid[0] - x) * (cellCentroid[0] - x) + (cellCentroid[1] - y) * (cellCentroid[1] - y));
+            if (d < minDistance) {
+              minDistance = d;
+              childSelected = childIndex;
+              break;
+            }
+          }
+          elem = elem->getChild(childSelected);
         }
       }
     }
