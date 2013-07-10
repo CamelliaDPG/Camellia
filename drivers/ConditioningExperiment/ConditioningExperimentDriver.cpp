@@ -8,15 +8,23 @@
 
 #include <iostream>
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 #include "VarFactory.h"
 #include "IP.h"
 #include "Function.h"
 #include "BF.h"
 #include "MeshFactory.h"
+#include "DataIO.h"
 #include "MeshUtilities.h"
 
 #include "Legendre.hpp"
 #include "Lobatto.hpp"
+
+#include "BasisFactory.h"
+
+#include "choice.hpp"
+#include "mpi_choice.hpp"
 
 #include "SerialDenseMatrixUtility.h"
 
@@ -125,21 +133,56 @@ string testTypeName(TestType testType) {
 }
 
 int main(int argc, char *argv[]) {
-  const int maxTestOrder = 8;
+  int maxTestOrder;
+  bool useLobatto;
+  double h;
+  
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+
+#ifdef HAVE_MPI
+  choice::MpiArgs args( argc, argv );
+#else
+  choice::Args args(argc, argv );
+#endif
+  
+  try {
+    // read args:
+    maxTestOrder = args.Input<int>("--maxOrder", "maximum basis polynomial order", 15);
+    useLobatto = args.Input<bool>("--useLobatto", "Use Lobatto basis (otherwise will use Intrepid's nodal basis)", false);
+    h = args.Input<double>("--h", "mesh width", 1.0);
+  } catch ( choice::ArgException& e )
+  {
+    exit(1);
+  }
+  
+  cout << "maxOrder = " << maxTestOrder << endl;
+  if (useLobatto) {
+    cout << "Using Lobatto HGRAD and HDIV.\n";
+  } else {
+    cout << "Using Intrepid's HGRAD, HDIV, HCURL bases.\n";
+  }
+  
+  BasisFactory::setUseLobattoForQuadHDiv(useLobatto);
+  BasisFactory::setUseLobattoForQuadHGrad(useLobatto);
+  
 //  printLobattoL2norm();
   
-  FieldContainer<double> conditionTest(2,2);
-  conditionTest(0,0) = 1;
-  conditionTest(1,1) = 1e-17;
-  SerialDenseMatrixUtility::jacobiScaleMatrix(conditionTest);
+//  FieldContainer<double> conditionTest(2,2);
+//  conditionTest(0,0) = 1;
+//  conditionTest(1,1) = 1e-17;
+//  SerialDenseMatrixUtility::jacobiScaleMatrix(conditionTest);
   
-  double condest = SerialDenseMatrixUtility::estimate1NormConditionNumber(conditionTest);
-  cout << "condest for diagonal matrix: " << condest << endl;
+//  double condest = SerialDenseMatrixUtility::estimate1NormConditionNumber(conditionTest);
+//  cout << "condest for diagonal matrix: " << condest << endl;
   
   vector< Space > spaces;
   spaces.push_back(HDIV);
   spaces.push_back(HGRAD);
-  spaces.push_back(HCURL);
+  if (! useLobatto) {
+    spaces.push_back(HCURL);
+  } else {
+    cout << "Skipping HCURL because this isn't yet supported for Lobatto.\n";
+  }
   vector< TestType > testTypes;
   testTypes.push_back(Stiffness);
   testTypes.push_back(Mass);
@@ -169,13 +212,13 @@ int main(int argc, char *argv[]) {
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
       for (int testOrder=1; testOrder<=maxTestOrder; testOrder++) {
-        MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, 1.0, 1.0); // width = 1, height = 1: unit quad
+        MeshPtr mesh = MeshFactory::quadMesh(bf, testOrder, pToAdd, h, h); // width = h, height = h
         ostringstream fileNameStream;
         fileNameStream << spaceName << "_" << typeName << "_p" << testOrder << ".dat";
         string fileName = fileNameStream.str();
         bool jacobiScaling = true; // (testType != Stiffness);
         double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, jacobiScaling, fileName);
-        cout << maxConditionNumber << endl;
+        cout << scientific << setprecision(3) << maxConditionNumber << endl;
       }
     }
     
@@ -227,7 +270,7 @@ int main(int argc, char *argv[]) {
       ip->computeInnerProductMatrix(innerProductMatrix, testSpace, cellBasisCache);
       // reshape:
       innerProductMatrix.resize(testDofs,testDofs);
-      MeshUtilities::writeMatrixToSparseDataFile(innerProductMatrix, name);
+      DataIO::writeMatrixToSparseDataFile(innerProductMatrix, name);
       cout << "Wrote " << name << endl;
     }
   }
