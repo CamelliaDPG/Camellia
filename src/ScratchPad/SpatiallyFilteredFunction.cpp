@@ -6,6 +6,10 @@ SpatiallyFilteredFunction::SpatiallyFilteredFunction(FunctionPtr f, SpatialFilte
   _sf = sf;
 }
 
+bool SpatiallyFilteredFunction::boundaryValueOnly() {
+  return _f->boundaryValueOnly();
+}
+
 void SpatiallyFilteredFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
 //  cout << "Entered SpatiallyFilteredFunction::values()\n";
   int numCells = values.dimension(0);

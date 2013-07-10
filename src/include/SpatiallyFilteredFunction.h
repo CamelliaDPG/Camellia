@@ -19,6 +19,7 @@ class SpatiallyFilteredFunction : public Function {
 public:
   SpatiallyFilteredFunction(FunctionPtr f, SpatialFilterPtr sf);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
 };
 
 #endif
