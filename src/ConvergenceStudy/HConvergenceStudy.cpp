@@ -255,12 +255,14 @@ void HConvergenceStudy::computeErrors() {
       double l2error = _exactSolution->L2NormOfError(*bestApproximation, trialID, _cubatureDegreeForExact);
 
       // test code below--doesn't seem to be much difference
-//      VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
-//      
-//      FunctionPtr bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
-//      double l2error = bestFxnError->l2norm(bestApproximation->mesh(),_cubatureDegreeForExact); // here the cubature is actually an enrichment....
-//      
-//      cout << "HConvergenceStudy: best l2Error for trial ID " << trialID << ": " << l2error << endl;
+//      {
+//        VarPtr trialVar = Teuchos::rcp( new Var(trialID, 0, "dummyVar"));
+//        
+//        FunctionPtr bestFxnError = Function::solution(trialVar, bestApproximation) - _exactSolutionFunctions[trialID];
+//        double l2error = bestFxnError->l2norm(bestApproximation->mesh(),_cubatureDegreeForExact); // here the cubature is actually an enrichment....
+//        
+//        cout << "HConvergenceStudy: best l2Error for trial ID " << trialID << ": " << l2error << endl;
+//      }
       
       _bestApproximationErrors[trialID].push_back(l2error);
       
@@ -741,6 +743,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
   }
   cout << "**************************************************************\n";
   
+  cout << scientific << setprecision(1);
   cout << "L2 norm of solution: " << l2norm  << endl;
 }
 
