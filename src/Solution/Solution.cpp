@@ -174,6 +174,8 @@ void Solution::initialize() {
   _reportTimingResults = false;
   _globalSystemConditionEstimate = -1;
   _cubatureEnrichmentDegree = 0;
+  
+  _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells) {
@@ -240,9 +242,6 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
 }
 
 void Solution::solve(Teuchos::RCP<Solver> solver) {
-  // the following is not strictly necessary if the mesh has not changed since we were constructed:
-  //initialize();
-  
   bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
   
   int numProcs=1;
@@ -501,13 +500,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   double min_h = sqrt(minCellMeasure); 
   double max_h = sqrt(maxCellMeasure);
   
-  // define stabilizing parameter for zero-mean constraints
-  double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
-  //      for (int i=0; i<numValues; i++) {
-  //        rho += basisIntegrals[i];
-  //      }
-  //  rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
-  rho = -1.0;
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
@@ -548,7 +540,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         
         for (int i=0; i<numValues; i++) {
           for (int j=0; j<numValues; j++) {
-            product(i,j) = rho * basisIntegrals(i) * basisIntegrals(j) / denominator;
+            product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
           }
         }
         globalStiffMatrix.SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
@@ -560,7 +552,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         
         //      cout << "in zmc, diagonal entry: " << rho << endl;
         //rho /= numValues;
-        double rho_entry = - 1.0 / rho;
+        double rho_entry = - 1.0 / _zmcRho;
         globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
         localRowIndex++;
       }
@@ -2914,13 +2906,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
       //      cout << "in zmc, diagonal entry: " << rho << endl;
       //rho /= numValues;
       // define stabilizing parameter for zero-mean constraints
-      double rho = 0.0; // our rho is the negative inverse of that in Bochev & Lehoucq
-      //      for (int i=0; i<numValues; i++) {
-      //        rho += basisIntegrals[i];
-      //      }
-      //  rho = -1 / (min_h * max_h);       // sorta like -1/h^2, following Bochev & Lehoucq
-      rho = -1.0;
-      double rho_entry = - 1.0 / rho;
+      double rho_entry = - 1.0 / _zmcRho;
       K_cond.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
       localRowIndex++;
     }
@@ -3887,11 +3873,24 @@ void Solution::readFromFile(const string &filePath) {
     std::istringstream linestream(line);
     linestream >> cellID;
     
+    if (_mesh->getElement(cellID).get() == NULL) {
+      cout << "No cellID " << cellID << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not find cellID in solution file in mesh.");
+    }
+    ElementTypePtr elemType = _mesh->getElement(cellID)->elementType();
+    int numDofsExpected = elemType->trialOrderPtr->totalDofs();
+    
     if ( linestream.good() ) {
       int numDofs;
       linestream >> numDofs;
       
       // TODO: check that numDofs is right for cellID.
+      if (numDofsExpected != numDofs) {
+        cout << "ERROR in readFromFile: expected cellID " << cellID << " to have " << numDofsExpected;
+        cout << ", but found " << numDofs << " instead.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of dofs for cell");
+      }
+      
       FieldContainer<double> dofValues(numDofs);
       double dofValue;
       int dofOrdinal = 0;
@@ -3920,4 +3919,12 @@ void Solution::writeToFile(const string &filePath) {
   }
   
   fout.close();  
+}
+
+void Solution::setZeroMeanConstraintRho(double value) {
+  _zmcRho = value;
+}
+
+double Solution::zeroMeanConstraintRho() {
+  return _zmcRho;
 }

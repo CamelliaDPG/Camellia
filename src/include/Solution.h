@@ -115,6 +115,8 @@ private:
   
   double _globalSystemConditionEstimate;
   
+  double _zmcRho;
+  
   void clearComputedResiduals();
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
   
@@ -283,6 +285,8 @@ public:
   
   void writeStatsToFile(const string &filePath, int precision=4);
   
+  void setZeroMeanConstraintRho(double value);
+  double zeroMeanConstraintRho();  
 };
 
 #endif
