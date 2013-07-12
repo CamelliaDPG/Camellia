@@ -149,7 +149,7 @@ bool checkDivergenceFree(FunctionPtr u1_exact, FunctionPtr u2_exact) {
 }
 
 enum NormChoice {
-  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm, UnitCompliantGraphNorm
+  GraphNorm, NaiveNorm, L2Norm, H1ExperimentalNorm, UnitCompliantGraphNorm, UnitCompliantGraphNormQScaled
 };
 
 enum ExactSolutionChoice {
@@ -186,7 +186,7 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
    
    where:
    formulationTypeStr = {"vgp"|"vgpf"|"vvp"|"vsp"|"dds"|"ddsp"|"ce"}
-   normChoice = {"opt"|"naive"|"l2"|"h1"|"compliant"}
+   normChoice = {"opt"|"naive"|"l2"|"h1"|"compliant"|"compliantQScaled"}
    
    */
   
@@ -238,6 +238,8 @@ void parseArgs(int argc, char *argv[], int &polyOrder, int &minLogElements, int 
     normChoice = H1ExperimentalNorm;
   } else if (normChoiceStr == "compliant") {
     normChoice = UnitCompliantGraphNorm;
+  } else if (normChoiceStr == "compliantQScaled") {
+    normChoice = UnitCompliantGraphNormQScaled;
   }
   if (formulationTypeStr == "vgp") {
     formulationType = VGP;
@@ -397,7 +399,7 @@ int main(int argc, char *argv[]) {
   
   ExactSolutionChoice exactSolnChoice = KanschatSmooth;
   
-  bool reportConditionNumber = false; // 2-norm condition number
+  bool computeGlobalConditionNumber = false; // really slow, and requires writeGlobalStiffnessMatrixToFile = true
   
   bool computeMaxGramConditionNumber = true; // for Gram matrices
   
@@ -405,7 +407,7 @@ int main(int argc, char *argv[]) {
   
   bool dontImposeZeroMeanPressure = false;
   
-  bool writeGlobalStiffnessMatrixToFile = false;
+  bool writeGlobalStiffnessMatrixToFile = true;  // also computes 2-norm condition number of global stiffness matrix (expensive!)
   
   bool useCondensedSolve = false;
   
@@ -440,6 +442,7 @@ int main(int argc, char *argv[]) {
   else if (normChoice == L2Norm) normChoiceStr = "l2";
   else if (normChoice == H1ExperimentalNorm) normChoiceStr = "H^1 Experimental";
   else if (normChoice == UnitCompliantGraphNorm) normChoiceStr = "unit-compliant graph";
+  else if (normChoice == UnitCompliantGraphNormQScaled) normChoiceStr = "unit-compliant graph with 1/h scaling in q";
   else normChoiceStr = "unknownNorm";
   
   string exactSolnChoiceStr;
@@ -476,7 +479,7 @@ int main(int argc, char *argv[]) {
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "test space norm: "  << normChoiceStr << "\n";
     cout << "exact solution choice: "  << exactSolnChoiceStr << "\n";
-    cout << "reportConditionNumber = " << (reportConditionNumber ? "true" : "false") << "\n";
+    cout << "computeGlobalConditionNumber = " << (computeGlobalConditionNumber ? "true" : "false") << "\n";
     cout << "useMumps = " << (useMumps ? "true" : "false") << "\n";
     cout << "useTrueTracesForVVP = " << (useTrueTracesForVVP ? "true" : "false") << endl;
     cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
@@ -487,6 +490,10 @@ int main(int argc, char *argv[]) {
   
   if ((normChoice == UnitCompliantGraphNorm) && (formulationType != VGP)) {
     cout << "Error: unit-compliant graph norm only supported for VGP right now.\n";
+    exit(1);
+  }
+  if ((normChoice == UnitCompliantGraphNormQScaled) && (formulationType != VGP)) {
+    cout << "Error: unit-compliant graph norm with q scaling only supported for VGP right now.\n";
     exit(1);
   }
   
@@ -506,7 +513,7 @@ int main(int argc, char *argv[]) {
       stokesForm = Teuchos::rcp(new DDSPStokesFormulation(mu));
       break;
     case VGP:
-      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu, normChoice==UnitCompliantGraphNorm));
+      stokesForm = Teuchos::rcp(new VGPStokesFormulation(mu, (normChoice==UnitCompliantGraphNorm) || (normChoice==UnitCompliantGraphNormQScaled)));
       break;
     case VGPF:
       stokesForm = Teuchos::rcp(new VGPFStokesFormulation(mu));
@@ -714,6 +721,32 @@ int main(int argc, char *argv[]) {
     ip = myIP;
   } else if (normChoice==UnitCompliantGraphNorm) {
     ip = dynamic_cast< VGPStokesFormulation* >(stokesForm.get())->scaleCompliantGraphNorm();
+  } else if (normChoice==UnitCompliantGraphNormQScaled) {
+    IPPtr myIP = Teuchos::rcp( new IP );
+    VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
+    VarPtr v1 = varFactory.testVar(VGP_V1_S, HGRAD);
+    VarPtr v2 = varFactory.testVar(VGP_V2_S, HGRAD);
+    VarPtr tau1 = varFactory.testVar(VGP_TAU1_S, HGRAD);
+    VarPtr tau2 = varFactory.testVar(VGP_TAU2_S, HGRAD);
+    VarPtr q = varFactory.testVar(VGP_Q_S, HGRAD);
+    
+    FunctionPtr h = Function::h();
+    
+    myIP->addTerm( mu * v1->dx() + tau1->x() ); // sigma11
+    myIP->addTerm( mu * v1->dy() + tau1->y() ); // sigma12
+    myIP->addTerm( mu * v2->dx() + tau2->x() ); // sigma21
+    myIP->addTerm( mu * v2->dy() + tau2->y() ); // sigma22
+    myIP->addTerm( mu * v1->dx() + mu * v2->dy() ); // pressure
+    myIP->addTerm( h * tau1->div() - q->dx() ); // u1
+    myIP->addTerm( h * tau2->div() - q->dy());  // u2
+    
+    myIP->addTerm( (mu / h) * v1 );
+    myIP->addTerm( (mu / h) * v2 );
+    myIP->addTerm( q / h );
+    myIP->addTerm( tau1 );
+    myIP->addTerm( tau2 );
+    
+    ip = myIP;
   }
   
   if (rank==0) 
@@ -768,8 +801,9 @@ int main(int argc, char *argv[]) {
                             polyOrder+1, pToAdd, false, useTriangles, false);
     study.setUseCondensedSolve(useCondensedSolve);
     study.setReportRelativeErrors(computeRelativeErrors);
-    study.setReportConditionNumber(reportConditionNumber);
-    study.setWriteGlobalStiffnessToDisk(writeGlobalStiffnessMatrixToFile,"stokes_study_stiffness");
+    ostringstream stiffness_prefix;
+    stiffness_prefix << "stokes_study_stiffness_k" << polyOrder << "_";
+    study.setWriteGlobalStiffnessToDisk(writeGlobalStiffnessMatrixToFile, stiffness_prefix.str());
     int maxTestDegree = polyOrder + 1 + pToAdd;
     int cubatureDegreeInMesh = polyOrder + maxTestDegree;
     
@@ -858,7 +892,7 @@ int main(int argc, char *argv[]) {
       }
     }
     
-    if (writeGlobalStiffnessMatrixToFile) {
+    if (writeGlobalStiffnessMatrixToFile && computeGlobalConditionNumber) {
       for (int i=minLogElements; i<=maxLogElements; i++) {
         double globalCondNum = study.computeJacobiPreconditionedConditionNumber(i);
         if (rank==0) {
