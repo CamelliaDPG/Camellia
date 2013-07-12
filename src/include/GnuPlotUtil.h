@@ -15,7 +15,7 @@
 
 class GnuPlotUtil {
 public:
-  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh) {
+  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false) {
     FunctionPtr transformationFunction = mesh->getTransformationFunction();
     if (transformationFunction.get()==NULL) {
       // then the computational and exact meshes are the same: call the other method:
@@ -34,6 +34,9 @@ public:
     int numActiveElements = mesh->numActiveElements();
     
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
+    
+    FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+    vector<int> cellIDs;
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
@@ -90,6 +93,20 @@ public:
       }
       
       fout << endl; // line break to separate elements
+      
+      if (labelCells) {
+        // this only works on quads right now
+        FieldContainer<double> refCellCentroid(1,spaceDim);
+        for (int i=0; i<spaceDim; i++) {
+          refCellCentroid(0,i) = 0.0;
+        }
+        FieldContainer<double> transformedCentroid(1,spaceDim);
+        basisCache->setRefCellPoints(refCellCentroid);
+        for (int i=0; i<spaceDim; i++) {
+          cellCentroids(cellIndex,i) = basisCache->getPhysicalCubaturePoints()(0,0,i);
+        }
+        cellIDs.push_back(cell->cellID());
+      }
     }
     
     double xDiff = maxX - minX;
@@ -101,6 +118,13 @@ public:
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    if (labelCells) {
+      for (int i=0; i<cellIDs.size(); i++) {
+        int cellID = cellIDs[i];
+        fout << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        fout << cellCentroids(i,1) << " center " << endl;
+      }
+    }
     fout << "# set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     fout << "# set out '" << filePath << ".eps'\n";
     fout << "# replot\n";
@@ -112,6 +136,13 @@ public:
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    if (labelCells) {
+      for (int i=0; i<cellIDs.size(); i++) {
+        int cellID = cellIDs[i];
+        scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        scriptOut << cellCentroids(i,1) << " center " << endl;
+      }
+    }
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
 //    scriptOut << "replot\n";
