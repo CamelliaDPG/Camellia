@@ -1013,7 +1013,6 @@ FunctionPtr Function::meshBoundaryCharacteristic() {
 }
 
 FunctionPtr Function::h() {
-  // 1 on mesh boundary, 0 elsewhere
   return Teuchos::rcp( new hFunction );
 }
 
