@@ -126,8 +126,13 @@ class Mesh : public RefinementObserver {
   vector< ElementPtr > _activeElements;
   vector< vector< ElementPtr > > _partitions;
   vector< vector<int> > _verticesForCellID;
+  
+  // the sorted list:
+  map< vector<double>, long > _vertexMap; // maps into indices in the vertices list
+  
+  // the chronologically ordered list:
   vector< FieldContainer<double> > _vertices;
-  map < vector<float>, vector<int> > _verticesMap; // key: coordinates; value: index to _vertices
+  
   //set< pair<int,int> > _edges;
   map< pair<int,int>, vector< pair<int, int> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
                                                                   //values are (cellID, sideIndex)
@@ -165,6 +170,8 @@ class Mesh : public RefinementObserver {
   map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
+  map<int, int> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
+  
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
@@ -182,6 +189,8 @@ class Mesh : public RefinementObserver {
   void setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly);
   
   void setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide);
+  
+  long getVertexIndex(double x, double y, double tol=1e-14);
   
   // simple utility functions:
   static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);

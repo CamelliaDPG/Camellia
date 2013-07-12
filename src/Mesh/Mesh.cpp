@@ -73,13 +73,24 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
 #endif
 
   int spaceDim = 2;
-  vector<float> vertexCoords(spaceDim);
+  vector<double> vertexCoords(spaceDim);
   int numVertices = vertices.size();
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
     for (int j=0; j<spaceDim; j++) {
       vertexCoords[j] = vertices[vertexIndex](j);
     }
-    _verticesMap[vertexCoords].push_back(vertexIndex);
+    _vertexMap[vertexCoords] = vertexIndex;
+  }
+  
+  // DEBUGGING: check how we did:
+  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
+    double x = vertices[vertexIndex](0);
+    double y = vertices[vertexIndex](1);
+    long assignedVertexIndex = getVertexIndex(x, y);
+    if (assignedVertexIndex != vertexIndex) {
+      cout << "INTERNAL ERROR: assigned vertex index is incorrect.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "internal error");
+    }
   }
                                       
   _bilinearForm = bilinearForm;
@@ -1608,6 +1619,62 @@ ElementTypeFactory & Mesh::getElementTypeFactory() {
   return _elementTypeFactory;
 }
 
+long Mesh::getVertexIndex(double x, double y, double tol) {
+  int spaceDim = 2;
+  vector<double> vertexForLowerBound;
+  vertexForLowerBound.push_back(x-tol);
+  vertexForLowerBound.push_back(y-tol);
+  
+  map< vector<double>, long >::iterator lowerBoundIt = _vertexMap.lower_bound(vertexForLowerBound);
+  double dist = 0;
+  long bestMatchIndex = -1;
+  double bestMatchDistance = tol;
+  double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
+                    // all the vertices that are near (x,y) in x...
+  while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol)) {
+    double xDiff = lowerBoundIt->first[0] - x;
+    double yDiff = lowerBoundIt->first[1] - y;
+    dist = sqrt( xDiff * xDiff + yDiff * yDiff );
+    if (dist < bestMatchDistance) {
+      bestMatchDistance = dist;
+      bestMatchIndex = lowerBoundIt->second;
+    }
+    xDist = abs(xDiff);
+    lowerBoundIt++;
+  }
+  // if we get here and bestMatchIndex == -1, then we should add
+  if (bestMatchIndex == -1) {
+    FieldContainer<double> vertexFC(spaceDim);
+    vector<double> vertex;
+    vertex.push_back(x);
+    vertex.push_back(y);
+    vertexFC[0] = x;
+    vertexFC[1] = y;
+    bestMatchIndex = _vertices.size();
+    _vertices.push_back(vertexFC);
+    
+    if (_vertexMap.find(vertex) != _vertexMap.end() ) {
+      cout << "Mesh error: attempting to add existing vertex.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
+    }
+    _vertexMap[vertex] = bestMatchIndex;
+    
+//    cout << "Added vertex " << bestMatchIndex << " (" << x << "," << y << ")\n";
+  }
+  return bestMatchIndex;
+}
+
+map<int, int> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
+  double tol = 1e-12; // tolerance for vertex equality
+  
+  map<int, int> localToGlobalVertexIndex;
+  int numVertices = vertices.dimension(0);
+  for (int i=0; i<numVertices; i++) {
+    localToGlobalVertexIndex[i] = getVertexIndex(vertices(i,0), vertices(i,1),tol);
+  }
+  return localToGlobalVertexIndex;
+}
+
 void Mesh::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                                  ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
                                  ElementPtr nonParent) {
@@ -1759,56 +1826,7 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
 //      }
     }
     
-    map<int, int> localToGlobalVertexIndex; // key: index in vertices; value: index in _vertices
-    double tol = 1e-14; // tolerance for vertex equality
-    
-    int numVertices = vertices.dimension(0);
-    for (int i=0; i<numVertices; i++) {
-      int globalVertexIndex = -1;
-      // TODO: we should probably split this out into a separate method for adding vertices...
-      //  the below allows approximate matches to vertex
-      //       ( _verticesMap keys are floats and values are a vector of ints -- _vertices indices.
-      //        We iterate through these, looking for close-enough matches.  If none are close enough,
-      //        add a vertex...  We could make an optional argument with a tolerance...)
-      vector<float> vertexFloat(spaceDim);
-      for (int dim=0; dim<spaceDim; dim++) {
-        vertexFloat[dim] = (float) vertices(i,dim);
-      }
-      
-      if ( _verticesMap.find(vertexFloat) != _verticesMap.end() ) {
-        vector<int> vertexIndices = _verticesMap[vertexFloat];
-        vector<int>::iterator vertexIndexIt;
-        double minDistance = tol;
-        int bestIndex = -1;
-        for (vertexIndexIt=vertexIndices.begin(); vertexIndexIt != vertexIndices.end(); vertexIndexIt++) {
-          double distance = 0.0;
-          int vertexIndex = *vertexIndexIt;
-          for (int dim=0; dim<spaceDim; dim++) {
-            distance += (_vertices[vertexIndex](dim)-vertices(i,dim))*(_vertices[vertexIndex](dim)-vertices(i,dim));
-          }
-          distance = sqrt(distance);
-          if (distance < minDistance) {
-            bestIndex = vertexIndex;
-            minDistance = distance;
-          }
-        }
-        globalVertexIndex = bestIndex;
-      }
-      if (globalVertexIndex == -1) {
-        // add the vertex
-        FieldContainer<double> vertexFC(spaceDim);
-        vector<double>::iterator coordIt;
-        for (int j=0; j<spaceDim; j++) {
-          vertexFC[j] = vertices(i,j);
-        }
-        globalVertexIndex = _vertices.size();
-//        cout << "Adding vertex " << globalVertexIndex << " (local index " << i << ")";
-//        cout << ": (" << vertexFC(0) << ", " << vertexFC(1) << ")\n";
-        _vertices.push_back(vertexFC);
-        _verticesMap[vertexFloat].push_back(globalVertexIndex);
-      }
-      localToGlobalVertexIndex[i] = globalVertexIndex;
-    }
+    map<int, int> localToGlobalVertexIndex = getGlobalVertexIDs(vertices); // key: index in vertices; value: index in _vertices
     
     // get the children, as vectors of vertex indices:
     vector< vector<int> > children = refPattern->children(localToGlobalVertexIndex);
