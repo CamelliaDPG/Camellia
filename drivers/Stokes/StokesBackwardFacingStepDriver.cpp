@@ -274,8 +274,9 @@ int main(int argc, char *argv[]) {
   int H1OrderOverkill = 1 + args.Input<int>("--overkillPolyOrder", "polynomial order for overkill solution", 5);
   string overkillSolnFile = args.Input<string>("--overkillSolnFile", "file to which to save / from which to load overkill solution.", "stokesBFSOverkill_3072_k5.soln");
   
-  args.Process();
+  double eps = args.Input<double>("--testNormL2Weight", "weight for L^2 test terms (smaller often better)", 1.0);
   
+  args.Process();
   
   // usage: polyOrder [numRefinements]
   // parse args:
@@ -494,11 +495,11 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( h * tau1->div() - h * q->dx() );   // u1
     qoptIP->addTerm( h * tau2->div() - h * q->dy());    // u2
     
-    qoptIP->addTerm( (mu / h) * v1 );
-    qoptIP->addTerm( (mu / h) * v2 );
-    qoptIP->addTerm( q );
-    qoptIP->addTerm( tau1 );
-    qoptIP->addTerm( tau2 );
+    qoptIP->addTerm( eps * (mu / h) * v1 );
+    qoptIP->addTerm( eps * (mu / h) * v2 );
+    qoptIP->addTerm( eps * q );
+    qoptIP->addTerm( eps * tau1 );
+    qoptIP->addTerm( eps * tau2 );
   } else if (useExperimentalNorm) {
     qoptIP->addTerm( v1->dx() + tau1->x() ); // sigma11
     qoptIP->addTerm( v1->dy() + tau1->y() ); // sigma12
@@ -513,7 +514,7 @@ int main(int argc, char *argv[]) {
     qoptIP->addTerm( eps * tau1 );
     qoptIP->addTerm( eps * tau2 );
   } else { // some version of graph norm, then
-    qoptIP = stokesBF->graphNorm();
+    qoptIP = stokesBF->graphNorm(eps);
   }
   
   ip = qoptIP;
