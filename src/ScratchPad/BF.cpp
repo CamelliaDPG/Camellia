@@ -135,12 +135,12 @@ void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<Element
  
 }
 
-IPPtr BF::graphNorm() {
+IPPtr BF::graphNorm(double weightForL2TestTerms) {
   map<int, double> varWeights;
-  return graphNorm(varWeights);
+  return graphNorm(varWeights, weightForL2TestTerms);
 }
 
-IPPtr BF::graphNorm(const map<int, double> &varWeights) {
+IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms) {
   typedef pair< FunctionPtr, VarPtr > LinearSummand;
   map<int, LinearTermPtr> testTermsForVarID;
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
@@ -180,7 +180,7 @@ IPPtr BF::graphNorm(const map<int, double> &varWeights) {
   // L^2 terms:
   map< int, VarPtr > testVars = _varFactory.testVars();
   for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
-    ip->addTerm( testVarIt->second );
+    ip->addTerm( sqrt(weightForL2TestTerms) * testVarIt->second );
   }
   
   return ip;

@@ -36,8 +36,8 @@ public:
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTest(int testID);
   IntrepidExtendedTypes::EFunctionSpaceExtended functionSpaceForTrial(int trialID);
   
-  IPPtr graphNorm();
-  IPPtr graphNorm(const map<int, double> &varWeights);
+  IPPtr graphNorm(double weightForL2TestTerms = 1.0);
+  IPPtr graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);
   IPPtr l2Norm();
   IPPtr naiveNorm();
   
