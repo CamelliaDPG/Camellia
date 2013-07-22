@@ -127,7 +127,7 @@
 
 \newtheorem{remark}{Remark}
 
-\title{A minimum-residual finite element method for the convection-dominated diffusion equation}
+\title{A minimum-residual finite element method for the convection-diffusion equation}
 \author{Jesse Chan, John A. Evans}
 \date{}
 \begin{document}
@@ -135,7 +135,7 @@
 \maketitle
 
 \begin{abstract}
-We present a minimum-residual finite element method for convection-dominated diffusion problems in a higher order, adaptive, continuous Galerkin setting.  The method borrows concepts from both the Discontinuous Petrov-Galerkin (DPG) method by Demkowicz et al.\ \cite{DPG2} and the method of variational stabilization by Dahmen et al.\ \cite{DahmenVariationalStabilization}, and it can also be interpreted as a variational multiscale method in which the fine-scales are defined through a dual-orthogonality condition.  A key ingredient in the method is the proper choice of norm used to measure the residual, and we present two alternatives which are observed to be robust in both convection and diffusion-dominated regimes.  Numerically obtained convergence rates are given in 2D, and benchmark numerical examples in all space dimensions are shown to illustrate the behavior of the method.
+We present a minimum-residual finite element method for convection-diffusion problems in a higher order, adaptive, continuous Galerkin setting.  The method borrows concepts from both the Discontinuous Petrov-Galerkin (DPG) method by Demkowicz and Gopalakrishnan \cite{DPG2} and the method of variational stabilization by Dahmen et al.\ \cite{DahmenVariationalStabilization}, and it can also be interpreted as a variational multiscale method in which the fine-scales are defined through a dual-orthogonality condition.  A key ingredient in the method is the proper choice of norm used to measure the residual, and we present two alternatives which are observed to be robust in both convection and diffusion-dominated regimes.  Numerically obtained convergence rates are given in 2D, and benchmark numerical examples in all space dimensions are shown to illustrate the behavior of the method.
 \end{abstract}
 
 %\tableofcontents
@@ -160,47 +160,47 @@ Our starting point is the minimization of some measure of error over a finite-di
 \eqnlab{variationEq}
 \left\{
   \begin{array}{l}
-    \text{Given } l \in V', \text{ find } u \in U  \text{ such that} \\ 
+    \text{Given } l \in V^*, \text{ find } u \in U  \text{ such that} \\ 
     b(u,v) = l(v), \quad \forall v\in V,
   \end{array}
   \right.
 \end{equation}
-where $b\LRp{\cdot,\cdot}: U \times V \to \mbb{R}$ is a continuous bilinear form.  Throughout the paper, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U'$ and $V'$ as the respective topological dual spaces.  Throughout the paper, we suppose the variational problem \eqnref{variationEq} to be well-posed in the inf-sup sense. We can then identify a unique operator $B:U\rightarrow V'$ such that 
+where $b\LRp{\cdot,\cdot}: U \times V \to \mbb{R}$ is a continuous bilinear form.  Throughout the paper, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U^*$ and $V^*$ as the respective topological dual spaces.  Throughout the paper, we suppose the variational problem \eqnref{variationEq} to be well-posed in the inf-sup sense. We can then identify a unique operator $B:U\rightarrow V^*$ such that 
 \[
-\langle Bu,v\rangle_V \coloneqq b(u,v), \quad u\in U, v\in V
+\langle Bu,v\rangle_{V^* \times V} \coloneqq b(u,v), \quad u\in U, v\in V
 \]
-with $\LRa{\cdot, \cdot}_V$ denoting the duality pairing between $V'$ and $V$, to obtain the operator form of the our variational problem
+with $\LRa{\cdot, \cdot}_{V^*\times V}$ denoting the duality pairing between $V^*$ and $V$, to obtain the operator form of the our variational problem
 \begin{equation}
 \eqnlab{dualEq}
-Bu = l \quad \text{in } V'.
+Bu = l \quad \text{in } V^*.
 \end{equation}
 We are interested in minimizing the residual over the discrete approximating subspace $U_h \subset U$
 \[
-u_h = \underset{u_h\in U_h}{\arg\min}\, J(u_h) \coloneqq \frac{1}{2}\|l-Bu_h\|_{V'}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus\{0\}} \frac{| l(v)- b(u_h,v)|^2}{\nor{v}_V^2}.
+u_h = \underset{u_h\in U_h}{\arg\min}\, J(u_h) \coloneqq \frac{1}{2}\|l-Bu_h\|_{V^*}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus\{0\}} \frac{| l(v)- b(u_h,v)|^2}{\nor{v}_V^2}.
 \]
 For convenience in writing, we will abuse the notation $\sup_{v \in V}$ to denote $\sup_{v\in V\setminus\{0\}}$ for the remainder of the paper.  If we define the problem-dependent \textit{energy norm} 
 \[
-\nor{u}_E \coloneqq \nor{Bu}_{V'},
+\nor{u}_E \coloneqq \nor{Bu}_{V^*},
 \]
 then we can equate the minimization of $J(u_h)$ with the minimization of error in $\nor{\cdot}_E$. 
 
 The first order optimality condition for minimization of the quadratic functional $J(u_h)$ requires the G\^ateaux derivative to be zero in all directions $\delta u \in U_h$,
 \begin{align}
-\left(l-Bu_h,B\delta u\right)_{V'} = 0, \quad \forall \delta u \in U,
+\left(l-Bu_h,B\delta u\right)_{V^*} = 0, \quad \forall \delta u \in U,
 \label{orthog}
 \end{align}
 which is nothing more than the least-squares condition enforcing orthogonality of error with respect to the inner product on $V$.  
 
-The difficulty in working with the first-order optimality condition~\eqref{orthog} is that the inner product $\LRp{\cdot,\cdot}_{V'}$ cannot be evaluated explicitly.  However, we have that 
+The difficulty in working with the first-order optimality condition~\eqref{orthog} is that the inner product $\LRp{\cdot,\cdot}_{V^*}$ cannot be evaluated explicitly.  However, we have that 
 \begin{align}
-\left(l-Bu_h,B\delta u\right)_{V'} = \left(R_V^{-1}(l-Bu_h),R_V^{-1}B\delta u\right)_{V},
+\left(l-Bu_h,B\delta u\right)_{V^*} = \left(R_V^{-1}(l-Bu_h),R_V^{-1}B\delta u\right)_{V},
 \label{rieszOrthog}
 \end{align}
-where $R_V: V\rightarrow V'$ is the Riesz map mapping elements of a Hilbert space $V$ to elements of the dual $V'$ defined by
+where $R_V: V\rightarrow V^*$ is the Riesz map mapping elements of a Hilbert space $V$ to elements of the dual $V^*$ defined by
 \[
-\LRa{R_Vv,\delta v}_{V\times V'} \coloneqq \LRp{v,\delta v}_V.
+\LRa{R_Vv,\delta v}_{V^*\times V} \coloneqq \LRp{v,\delta v}_V.
 \]
-Furthermore, the Riesz operator is an isometry, such that $J(u_h) = \frac{1}{2}\nor{l-Bu_h}^2_{V'} = \frac{1}{2}\nor{R_V^{-1}(l-Bu_h)}^2_{V}$.  Thus, satisfaction of~\eqref{rieszOrthog} is exactly equivalent to satisfaction of the original optimality conditions~\eqref{orthog}.  
+Furthermore, the Riesz operator is an isometry, such that $J(u_h) = \frac{1}{2}\nor{l-Bu_h}^2_{V^*} = \frac{1}{2}\nor{R_V^{-1}(l-Bu_h)}^2_{V}$.  Thus, satisfaction of~\eqref{rieszOrthog} is exactly equivalent to satisfaction of the original optimality conditions~\eqref{orthog}.  
 
 \subsection{Saddle point formulation}
 \label{sec:saddlePoint}
@@ -217,7 +217,7 @@ from which we can see that $\nor{e}_V = \nor{u-u_h}_E$.
 Secondly, we need to enforce the orthogonality of the error in equation~\eqref{rieszOrthog}, which becomes
 \begin{align*}
 \LRp{e,R_V^{-1}B\delta u}_V &= 0, \quad \forall \delta u \in U_h\\
-\Rightarrow \LRa{e,B\delta u}_{V\times V'} &= b(\delta u, e) = 0.
+\Rightarrow \LRa{e,B\delta u}_{V\times V^*} &= b(\delta u, e) = 0.
 \end{align*}
 Putting these two conditions returns the symmetric saddle-point problem for $\LRp{e,u_h} \in V\times U_h$
 \begin{align*}
@@ -234,13 +234,13 @@ At the moment, $V$ remains an infinite-dimensional space, and will have to be di
 \caption{Saddle point system for minimization of $J(u_h)$; the Schur complement eliminating degrees of freedom for $e$ returns the system resulting from optimal test functions.}
 \end{figure}
 
-This formulation was first introduced by Dahmen et al.\ in \cite{DahmenVariationalStabilization}, where $V_h$ was determined adaptively.  The method proceeded in two steps -- first, $V_h$ was set equal to $U_h$ on what we will define as the \textit{coarse mesh}.  Next, \textit{a posteriori} error estimators for $e$ (based on a specific choice of inner product $\LRp{\cdot,\cdot}_V$) were used to drive adaptivity to determine a fine-scale mesh on which $V_h$ was supported.  We choose a simpler representation -- if $U_h$ is represented by polynomials of order $p$, we set $V_h = P^{p+\triangle p}$ globally.  We note that these two choices of discretization for $V$ are not mutually exclusive, and that novel choices for $V_h$ are likely the key to yielding computationally effective methods under this framework.  
+This formulation was first introduced by Dahmen et al.\ in \cite{DahmenVariationalStabilization}, where $V_h$ was determined adaptively.  The method proceeded in two steps -- first, $V_h$ was set equal to $U_h$ on what we will define as the \textit{coarse mesh}.  Next, \textit{a posteriori} error estimators for $e$ (based on a specific choice of inner product $\LRp{\cdot,\cdot}_V$) were used to drive adaptivity to determine a fine-scale mesh on which $V_h$ was supported.  We choose a simpler representation -- if $U_h$ is represented by piecewise polynomials of order $p$, we set $V_h$ to be piecewise polynomials of order $p+\triangle p$.  We note that these two choices of discretization for $V$ are not mutually exclusive, and that novel choices for $V_h$ are likely the key to yielding computationally effective methods under this framework.  
 \subsection{DPG optimal test function framework}
 
 The DPG method was introduced by Demkowicz and Gopalakrishnan in 2009, and rapidly applied to a series of problems in computational mechanics \cite{DPG2,DPG3,DPG4,maxwellDPG,stokesDPG}.  Though the DPG method shares the same variational setting as Dahmen et al.\, each method followed very different approaches in implementation.  Recall the orthogonality of error~\eqref{rieszOrthog}; by defining the error representation function $e$ and undoing the Riesz map acting on $B\delta u$, we recovered a saddle point formulation.  However, it is possible to instead undo the Riesz map acting on the residual instead, to recover
 \begin{align*}
 \LRp{R_V^{-1}\LRp{l-Bu_h},R_V^{-1}B\delta u}_V &= 0, \quad \forall \delta u \in U_h\\
-\Rightarrow \LRa{\LRp{l-Bu_h},R_V^{-1}B\delta u}_{V\times V'} &= 0\\
+\Rightarrow \LRa{\LRp{l-Bu_h},R_V^{-1}B\delta u}_{V^*\times V} &= 0\\
 \Rightarrow l\LRp{R_V^{-1}B\delta u}-b\LRp{u_h,R_V^{-1}B\delta u} &= 0
 \end{align*}
 If we define $v_{\delta u} \coloneqq R_V^{-1}B\delta u$, then we recover the original variational formulation with a nonstandard test space
@@ -279,17 +279,17 @@ The above saddle point system can also be directly derived from variational mult
 
 We begin again with the variational problem
 \[
-\LRa{Bu,v}_{V'\times V} = \LRa{l,v}_{V'\times V},
+\LRa{Bu,v}_{V^*\times V} = \LRa{l,v}_{V^*\times V},
 \]
-where, as before, $B: U\rightarrow V'$ is the operator form of $b(u,v)$, and $l \in V'$ is the load.  Standard VMS techniques then decompose $U$ into a \textit{coarse scale} space $U_h$ and \textit{fine scale} space $U'$, such that the coarse and fine scales $u_h \in U_h \subset U$ and $u' \in U'$ are related through some yet-unspecified orthogonality condition.  Decomposing $u = u_h + u'$ gives 
+where, as before, $B: U\rightarrow V^*$ is the operator form of $b(u,v)$, and $l \in V^*$ is the load.  Standard VMS techniques then decompose $U$ into a \textit{coarse scale} space $U_h$ and \textit{fine scale} space $U'$, such that the coarse and fine scales $u_h \in U_h \subset U$ and $u' \in U'$ are related through some yet-unspecified orthogonality condition.  Decomposing $u = u_h + u'$ gives 
 \begin{align*}
-u_h \in U_h, u' \in U\setminus U_h, v \in V\\
-\LRa{Bu_h,v}_{V'\times V} + \LRa{Bu',v}_{V'\times V} = \LRa{l,v}_{V'\times V}
+u_h \in U_h, u' \in U', v \in V\\
+\LRa{Bu_h,v}_{V^*\times V} + \LRa{Bu',v}_{V^*\times V} = \LRa{l,v}_{V^*\times V}
 \end{align*}
-We can now explicitly choose our orthogonality condition defining the fine scales and rewrite the above problem as 
+where $U = U_h\oplus U'$.  We can now explicitly choose our orthogonality condition defining the fine scales and rewrite the above problem as 
 \begin{align*}
 u_h \in U_h, u' \in U, v \in V\\
-\LRa{Bu_h,v}_{V'\times V} + \LRa{Bu',v}_{V'\times V} &= \LRa{l,v}_{V'\times V}\\
+\LRa{Bu_h,v}_{V^*\times V} + \LRa{Bu',v}_{V^*\times V} &= \LRa{l,v}_{V^*\times V}\\
 \LRp{u',\bar{w}}_E &= 0, \quad \forall \bar{w} \in U_h,
 \end{align*}
 where $\LRp{u',\bar{w}}_E$ is defined through
@@ -301,18 +301,18 @@ where $\LRp{v,\delta v}_V$ is an inner product on $V$ and $R_V$ is the Riesz map
 
 If we define our fine-scale using the above orthogonality condition, we have that
 \begin{align*}
-\LRp{Tu',v}_V = \LRp{R_V^{-1}Bu',v}_V = \LRa{Bu',v}_{V'\times V}\\
-\LRp{u',\bar{w}}_E = \LRp{Tu',R_V^{-1}B\bar{w}}_V = \LRa{Tu',B\bar{w}}_{V\times V'}
+\LRp{Tu',v}_V = \LRp{R_V^{-1}Bu',v}_V = \LRa{Bu',v}_{V^*\times V}\\
+\LRp{u',\bar{w}}_E = \LRp{Tu',R_V^{-1}B\bar{w}}_V = \LRa{Tu',B\bar{w}}_{V\times V^*}
 \end{align*}
 and can now rewrite our above VMS formulation as 
 \begin{align*}
 u_h \in U_h, u' \in U, v \in V\\
-\LRa{Bu_h,v}_{V'\times V} + \LRp{Tu',v}_{V} &= \LRa{l,v}_{V'\times V}\\
-\LRp{Tu',B\bar{w}}_{V\times V'} &= 0, \quad \forall \bar{w} \in U_h.
+\LRa{Bu_h,v}_{V^*\times V} + \LRp{Tu',v}_{V} &= \LRa{l,v}_{V^*\times V}\\
+\LRp{Tu',B\bar{w}}_{V\times V^*} &= 0, \quad \forall \bar{w} \in U_h.
 \end{align*}
 The saddle point formulation of Section~\ref{sec:saddlePoint} can be interpreted as solving not for $u'$, but for $e\coloneqq Tu'$.  The discrete approximation then follows directly from setting $V \coloneqq V_h$, some finite-dimensional enriched space, which impacts the method only through the approximation of $Tu'$ and the construction of the Riesz map $R_V^{-1}$.  
 
-To summarize, the minimum-residual framework motivating both Dahmen's variational stabilization and Demkowicz's DPG method can be characterized as a VMS method under which 
+To summarize, the minimum-residual framework motivating both Dahmen's variational stabilization and Demkowicz and Gopalakrishnan's DPG method can be characterized as a VMS method under which 
 \begin{itemize}
 \item Orthogonality of $U_h$ and $U'$ is defined through a nonstandard \textit{energy inner product} (i.\ e.\ $\LRp{u',u_h}_E = 0$), and
 \item A change of variables (i.\ e.\ solving for $Tu'$ instead of $u'$) symmetrizes the fine-scale contribution and overall system.
@@ -350,7 +350,7 @@ Our first method is motivated by previous results for the DPG method in \cite{DP
 \[
 \nor{v}_{V,w}^2 \coloneqq \frac{L}{\LRb{\beta}}\nor{\sqrt{w}\beta\cdot \Grad v}_{\L}^2 + \epsilon\nor{\Grad v}_{\L}^2 + \alpha\nor{v}_{\L}^2,
 \]
-where $L = \LRb{\Omega}^{\frac{1}{d}}$ is the length measure of $\Omega$ in $d$ spatial dimensions, $\LRb{\beta} = \max_\Omega \nor{\beta}_{l^2}$, and we have introduced the scaling $\frac{L}{\LRb{\beta}}$ on the streamline diffusion term for unit consistency\footnote{In all problems considered, $\frac{L}{\LRb{\beta}} = O(1)$}. $\alpha \geq 0$ is a user-specified constant with units of inverse time\footnote{In the case where $\alpha = 0$, the seminorm remains a norm due to equivalence with the $H^1$ seminorm, which is norm on $H^1_0$.  Specifying $\alpha > 0$ does not change the results dramatically; however, it does appear to improve conditioning of $\bs{A}$.}, and $w(x)$ is some smoothly varying positive weighting function.  Specifically, we require $\LRb{w(x)}$ to be of magnitude $O(\epsilon)$ for $x\in \Gamma_{\rm in}$, but $O(1)$ away from the inflow boundary.  Specific restrictions on $w$ are derived in \cite{DPGrobustness} in context of the DPG method.  
+where $L = \LRb{\Omega}^{\frac{1}{d}}$ is the length measure of $\Omega$ in $d$ spatial dimensions, $\LRb{\beta} = \max_\Omega \nor{\beta}_{l^2}$, and we have introduced the scaling $\frac{L}{\LRb{\beta}}$ on the streamline diffusion term for unit consistency\footnote{In all problems considered, $\frac{L}{\LRb{\beta}} = O(1)$.}. $\alpha \geq 0$ is a user-specified constant with units of inverse time\footnote{In the case where $\alpha = 0$, the seminorm remains a norm due to equivalence with the $H^1$ seminorm, which is norm on $H^1_0$.  Specifying $\alpha > 0$ does not change the results dramatically; however, it does appear to improve conditioning of $\bs{A}$.}, and $w(x)$ is some smoothly varying positive weighting function.  Specifically, we require $\LRb{w(x)}$ to be of magnitude $O(\epsilon)$ for $x\in \Gamma_{\rm in}$, but $O(1)$ away from the inflow boundary.\footnote{Specific restrictions on $w$ are derived in \cite{DPGrobustness} in context of the DPG method.}
 
 A second motivation behind the weighting function can also be found in \cite{stynesSUPG, roos2008robust, johnsonCrosswind}, which refer to $w(x)$ as a cut-off function.  A theoretical issue with the convection-diffusion problem is that $\nor{u}_{H^1_0}$ and $\nor{u-u_h}_{H^1_0}$ do not remain bounded as $\epsilon\rightarrow 0$, due to the fact that $u' = O(\epsilon^{-1})$ in the region of boundary or internal layers.  These cut-off functions were introduced in order to yield $\epsilon$-independent bounds on the error by localizing error estimates away from layers.
 
@@ -407,9 +407,11 @@ A comparison between the weighted norm $\nor{v}_{V,w}$ with $e\in H^1_0(\Omega)$
 \end{figure}
 
 \begin{remark}
-We remark that this inclusion of $\epsilon\int_{\Gamma_{\rm in}} \pd{u}{n}v$ is a variational crime under the assumption that $u \in H^1_0(\Omega)$; the proper way to include such a term in a conforming manner (without introducing additional regularity assumptions on $u$) would be to introduce $\epsilon \pd{u}{n}$ as an additional unknown on the boundary, similar to the work done using DPG under the ultra-weak formulation \cite{DPG2,analysisDPG}.  We note that Broersen and Stevenson have also achieved good results by making use of the space $H^1_{\rm out}(\Omega)$ in their application of the DPG method to the mixed mild-weak formulation for convection-diffusion \cite{broersenStevenson}.  The mild-weak formulation effectively enforces the orthogonality of $e$ to polynomials of lower order on $\Gamma_{\rm in}$ in a conforming manner, by introducing an additional flux unknown representing $\epsilon \pd{u}{n}$.  
+We remark that this inclusion of $\epsilon\int_{\Gamma_{\rm in}} \pd{u}{n}v$ is a variational crime under the assumption that $u \in H^1_0(\Omega)$; the proper way to include such a term in a conforming manner (without introducing additional regularity assumptions on $u$) would be to introduce $\epsilon \pd{u}{n}$ as an additional unknown on the boundary, similar to the work done using DPG under the ultra-weak formulation \cite{DPG2,analysisDPG}.  However, we have found that doing so does not remove the boundary layer in the residual at the inflow, and numerical results appear to degenerate in quality as $\epsilon$ grows smaller and smaller.  We believe this is due to the fact that, by decoupling $\epsilon \pd{u}{n}$ as an additional unknown, the orthogonality boundary condition $\int_{\Gamma_{\rm in}} \pd{u}{n} e = 0$ is decoupled from the interior integrals and enforced strongly.\footnote{The same situation occurs when $\pd{u}{n}$ is declared as an additional unknown and when $\epsilon > 0$.}
 
-For many flow problems, activity near the inflow is typically very smooth and can thus be represented using a minimal number of elements under an effective adaptive mesh refinement scheme, implying that the cost of introducing such additional unknowns on $\Gamma_{\rm in}$ can be minimized.  However, since the codebase we currently use does not support unknowns with support only on element edges/faces, we continue to operate under this variational crime, in hopes that we can implement a conforming version in the near future.  Another way to properly include the term $\epsilon \pd{u}{n}$ in the variational formulation would be to work with higher continuity trial spaces that admit a normal trace of the derivative on the boundary \cite{nurbsTrace, NURBSorig}.  
+We note that Broersen and Stevenson have also achieved good results by making use of the space $H^1_{\rm out}(\Omega)$ in their application of the DPG method to the mixed mild-weak formulation for convection-diffusion \cite{broersenStevenson}.  The mild-weak formulation effectively enforces the orthogonality of $e$ to polynomials of lower order on $\Gamma_{\rm in}$ in a conforming manner, by introducing an additional flux unknown representing $\epsilon \pd{u}{n}$.  
+
+%For many flow problems, activity near the inflow is typically very smooth and can thus be represented using a minimal number of elements under an effective adaptive mesh refinement scheme, implying that the cost of introducing such additional unknowns on $\Gamma_{\rm in}$ can be minimized.  However, since the codebase we currently use does not feature unknowns with support only on element edges/faces, we continue to operate under this variational crime, in hopes that we can implement a conforming version in the near future.  %Another way to properly include the term $\epsilon \pd{u}{n}$ in the variational formulation would be to work with higher continuity trial spaces that admit a normal trace of the derivative on the boundary \cite{nurbsTrace, NURBSorig}.  
 \end{remark}
 \begin{remark}
 Various other methods of implementing a weak boundary condition on $e$ at the inflow $\Gamma_{\rm in}$ were implemented; for example, the inner product $\LRp{e,v}_V$ was modified by adding the a weak penalization term $$\epsilon C(h,p+\triangle p)\int_{\Gamma_{\rm in}}ev $$ to enforce the boundary condition at $\left.e\right |_{\Gamma_{\rm in}}$, where $C(h,p+\triangle p) = p^2/h$, which is a common choice of penalization parameter in high order finite element literature \cite{nurbsTrace,Warburton20032765}. However, the inclusion of the nonconforming term $\epsilon\int_{\Gamma_{\rm in}} \pd{u}{n}v$ in the bilinear form still resulted in the best solutions for all our numerical tests.  
@@ -429,7 +431,7 @@ We will utilize this second version of the method for all following numerical ex
 
 
 \begin{remark}
-We note that, for $\epsilon \ll L$, where $L$ is the length scale of the problem, the boundary term $\epsilon\int_{\Gamma_{\rm in}} \pd{u}{n}v$ effectively disappears, and numerically speaking, we can use $e,v\in H^1_{\rm out}(\Omega)$ without including the additional boundary term in the variational formulation.  
+We note that, when the Peclet number ${\rm Pe} = \frac{\LRb{\beta} L}{\epsilon} \gg 1$, the boundary term $\epsilon\int_{\Gamma_{\rm in}} \pd{u}{n}v$ effectively disappears, and numerically speaking, we can use $e,v\in H^1_{\rm out}(\Omega)$ without including the additional boundary term in the variational formulation.  
 \end{remark}
 
 \section{Numerical examples}
@@ -623,7 +625,7 @@ We examined the behavior of the method with respect to a small $\epsilon$, in th
 
 \section{Conclusions and future direction}
 
-We have presented a higher order adaptive $H^1$-conforming method for convection-diffusion problems for very small $\epsilon$, and have made connections to both the DPG method as well as the method of Cohen, Dahmen and Welper.  The method has also been shown to be derivable in the Variational Multiscale framework as well, and is distinguished from traditional VMS methods in its definition of the fine-scale space and problem.  Unlike standard stabilized $H^1$ methods, there are no stabilization parameters.  However, unlike the DPG methods of both Demkowicz et.\ al.\ and Broersen and Stevenson, this method is easily implementable within current finite element codes in arbitrary spatial dimensions.
+We have presented a higher order adaptive $H^1$-conforming method for convection-diffusion problems for very small $\epsilon$, and have made connections to both the DPG method as well as the method of Cohen, Dahmen and Welper.  The method has also been shown to be derivable in the Variational Multiscale framework as well, and is distinguished from traditional VMS methods in its definition of the fine-scale space and problem.  Unlike standard stabilized $H^1$ methods, there are no stabilization parameters.  However, unlike the DPG methods of both Demkowicz and Gopalakrishnan, as well as the method of Broersen and Stevenson, this method is easily implementable within current finite element codes in arbitrary spatial dimensions.
 
 We note that, while the method displays similarities to SUPG, we do not observe nodal exactness in 1D.  The two methods differ in that we do not work directly with coarse scales defined by the $H^1$ inner product; unless we can induce an energy inner product such that $\LRp{u_h,u'}_E = \LRp{u_h,u'}_{H^1_0}$, then we should not expect nodal exactness in 1D.  However, in higher space dimensions, the behavior of the method is qualitatively very similar to SUPG.  
 
@@ -649,10 +651,14 @@ where $f$ and $B$ are the load and overdetermined stiffness matrix under $V_h$, 
 
 One additional possibility would be the exploration of iterative methods for the Schur complement -- the matrix is positive definite, and assembling a matrix-vector product could be done efficiently under a good preconditioner for the symmetric positive-definite matrix $\bs{A}^{-1}$.  Preliminary results demonstrate effective speedup for uniform meshes of piecewise linears in 2D using standard preconditioners (ILU, block Jacobi, AMG), and suggest that a discretization of $V_h$ using a $h$-refined fine mesh could be possible; however, more work would be required to develop preconditioners for high order adaptive meshes.  
 \item Another possibility would be to solve the saddle point problem using an Uzawa method \cite{uzawa}, which would decouple the saddle point system into two problems, each involving only degrees of freedom for $e$ or for $u$.  The solution of these two problems feeds an iterative procedure which can converge to the solution of the saddle point problem.  Again, effective use of an Uzawa algorithm would require a good preconditioner for $\bs{A}$ under high-order refined meshes.
-\item We hope to explore alternative discretizations for both $U_h$ and $V_h$ in order to minimize degrees of freedom or solution for in the overall system.  A few examples of nonstandard discretizations include higher order continuity basis functions (splines and NURBS \cite{NURBSorig}), and discontinuous functions (DG).  We hope to also explore intelligent mixing of discretizations for $U_h$ and $V_h$.  
+\item We hope to explore alternative discretizations for both $U_h$ and $V_h$ in order to minimize degrees of freedom or solution for in the overall system.  A few examples of nonstandard discretizations include higher order continuity basis functions (splines and NURBS \cite{NURBSorig}), and discontinuous functions (DG).  Preliminary experiments have yielded promising results in 1D under the combination of higher-continuity and $C_0$ bases for $U_h$ and $V_h$, respectively.  We hope to further explore intelligent mixing of discretizations for trial and test spaces in future experiments.  
 \item The DPG method achieves computational efficiency by block-diagonalizing $\bs{A}$ using discontinuous test functions.  The same method could be applied to the $H^1$ setting for convection-diffusion problems at the cost of introducing inter-element fluxes representing the trace on the boundary of an element resulting from integration by parts of the viscous term.  An alternative along the same lines would be to consider block diagonalization of $\bs{A}$ under a patch-based decomposition, such as FETI or one of its variants \cite{FETI1,FETI2}.  
 \end{itemize}
-\newpage
+
+\section{Acknowledgements}
+
+The authors would like to acknowledge the help of Truman Ellis and Dr.\ Leszek Demkowicz for fruitful discussions and perspective.  Jesse Chan was supported by the Department of Energy [National Nuclear Security Administration] under Award Number [DE- FC52-08NA28615].  John A.\ Evans was partially supported by the ICES Postdoctoral Fellowship at the Institute for Computational Engineering and Sciences, and by a grant from the Office of Naval Research [N00014-08-1-0992].
+
 \bibliographystyle{unsrt}
 \bibliography{paper}
 
