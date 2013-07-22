@@ -1,4 +1,4 @@
-\subsection{Discontinuous Petrov-Galerkin methods with optimal test functions}
+\section{Discontinuous Petrov-Galerkin methods with optimal test functions}
 \seclab{optimalTest} Petrov-Galerkin methods, in which the test space
 differs from the trial space, have been explored for over 30 years,
 beginning with the approximate symmetrization method of Barrett and
@@ -16,7 +16,7 @@ connection between stabilization and least squares/minimum residual
 methods has been observed previously \cite{GLS}. However, the method in \cite{DPG2} distinguishes itself
 by measuring the residual of the natural \textit{operator form of the equation}, which is posed in the dual space, and measured with the dual norm, as we now discuss. 	
 
-Throughout this dissertation, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U'$ and $V'$ as the respective topological dual spaces. Let $U_h \subset U$ and $V_h\subset V$ be finite dimensional subsets. We are interested in the following problem  
+Throughout this dissertation, we assume that the trial space $U$ and test space $V$ are real Hilbert spaces, and denote $U'$ and $V'$ as the respective topological dual spaces. Let $U_h \subset U$ and $V_h\subset V$ be finite dimensional subspaces. We are interested in the following problem  
 \begin{equation}
 \eqnlab{variationEq}
 \left\{
@@ -29,7 +29,7 @@ Throughout this dissertation, we assume that the trial space $U$ and test space 
 where $b\LRp{\cdot,\cdot}: U \times V \to \mbb{R}$ is a continuous
 bilinear form.  $U_h$ is chosen to be some trial space of approximating functions, but $V_h$ is as of yet unspecified. 
 
-Throughout the paper, we suppose the variational
+Throughout the dissertation, we suppose the variational
 problem \eqnref{variationEq} to be well-posed. In that case, we can
 identify a unique operator $B:U\rightarrow V'$ such that
 \[
@@ -50,7 +50,7 @@ where $J(w)$ is defined for $w\in U$ as
 \[
 J(w) = \frac{1}{2}\|Bw-l\|_{V'}^2 \coloneqq\frac{1}{2} \sup_{v\in V\setminus\{0\}} \frac{| b(w,v)-l(v)|^2}{\nor{v}_V^2}.
 \]
-For convenience in writing, we will abuse the notation $\sup_{v \in V}$ to denote $\sup_{v\in V\setminus\{0\}}$ for the remainder of the paper.
+For convenience in writing, we will abuse the notation $\sup_{v \in V}$ to denote $\sup_{v\in V\setminus\{0\}}$ for the remainder of the dissertation.
 
 Let us define $R_V: V \to V'$ as the Riesz map, which identifies
 elements of $V$ with elements of $V'$ by 
@@ -108,7 +108,7 @@ variational problem
 However, in general, for standard $H^1$ and $H({\rm div})$-conforming finite element methods, test functions are continuous over the entire domain, and hence solving variational problem \eqnref{optvVar} for each optimal test function requires a global operation over the entire mesh, rendering the method impractical. A breakthrough came through the development of discontinous Galerkin (DG) methods, for which basis functions are discontinuous over elements. In particular, the use of discontinuous test functions $\delta v$ and a \textit{localizable} norm $\nor{\cdot}_V$\footnote{A localizable norm $\nor{v}_{V(\Oh)}$ can be written in the form 
 $$\nor{v}_{V(\Oh)}^2 = \sum_{K\in\Oh} \nor{v}_{V(K)}^2,$$ where $\nor{v}_{V(K)}$ is a norm over the element $K$.} reduces the problem of determining global optimal test functions in \eqnref{optvVar} to local problems that can be solved in an element-by-element fashion.
 
-We note that solving \eqnref{optvVar} on each element exactly is infeasible since it amounts to inverting the Riesz map $R_V$ exactly. Instead, optimal test functions are approximated using the standard Bubnov-Galerkin method on an ``enriched" subspace $\tilde{V} \subset V$ such that $\dim(\tilde{V}) > \dim(U_h)$ elementwise \cite{DPG1, DPG2}. In this paper, we assume the error in approximating the optimal test functions is negligible, and refer to the work in \cite{practicalDPG} for estimating the effects of approximation error on the performance of DPG.
+We note that solving \eqnref{optvVar} on each element exactly is still infeasible since it amounts to inverting the Riesz map $R_V$ exactly. Instead, optimal test functions are approximated using the standard Bubnov-Galerkin method on an ``enriched" subspace $\tilde{V} \subset V$ such that $\dim(\tilde{V}) > \dim(U_h)$ elementwise \cite{DPG1, DPG2}. In this dissertation, we assume the error in approximating the optimal test functions is negligible, and refer to the work in \cite{practicalDPG} for estimating the effects of approximation error on the performance of DPG.
 
 It is now well known that the DPG method delivers the best approximation error in the ``energy norm" --- that is \cite{Bui-ThanhDemkowiczGhattas11a, DPG2,DPG4} 
 \begin{equation}
@@ -134,12 +134,12 @@ and measuring its norm $\|e\|_V$.  This is simply a consequence of the least-squ
 
 Practically speaking, this implies that the DPG method is discretely stable on any mesh. In particular, DPG is unconditionally stable for higher order adaptive meshes, where discrete stability is often an issue. 
 
-\subsection{Duality between trial and test norms (energy norm pairings)}
-%\subsection{Abstract energy norm pairings}
+\section{Duality between trial and test norms (energy norm pairings)}
+
 \seclab{energyPair}
 A clear property of the energy norm defined by \eqnref{energyNorm} is that the trial norm $\nor{\cdot}_{U,E}$ is induced by a given test norm. However, the reverse relationship holds as well; for any trial norm, the test norm that induces such a norm is recoverable through duality. We have a result, Lemma 2.5 in \cite{Bui-ThanhDemkowiczGhattas11a}: assuming, for simplicity, that the bilinear form $b(u,v)$ is definite\footnote{By definite, we mean that \begin{align*}b(u,v) &= 0, \forall v\in V \Rightarrow u = 0\\ b(u,v)&=0, \forall u\in U \Rightarrow v = 0,\end{align*}  which imply injectivity of the bilinear operator $B$ and its transpose $B'$, defined such that $\LRa{Bu,v} = \LRa{u,B'v}$.  These conditions imply solvability of the variational problem.}, given any norm $\nor{\cdot}_{U}$ on the trial space $U$, for $\varphi \in U$, we can represent $\nor{\varphi}_{U}$ via
 \[
-\nor{\varphi}_{U} = \sup_{v \in V}\frac{b\LRp{w,v}}{\nor{v}_{V,U}}.
+\nor{\varphi}_{U} = \sup_{v \in V}\frac{b\LRp{\varphi,v}}{\nor{v}_{V,U}},
 \]
 where $\nor{v}_{V,U}$ is defined through
 \[
@@ -181,16 +181,16 @@ corresponding norms in $V$, that is, $\nor{\cdot}_{V,U,1}$ is stronger
 than $\nor{\cdot}_{V,U,2}$.
 
 %From now on, unless otherwise stated, we will refer to  $\nor{\cdot}_{V,U,1}$, $\nor{\cdot}_{V,U,2}$, and $\nor{\cdot}_{V}$ as the test norms which induce $\nor{\cdot}_{U,1}$, $\nor{\cdot}_{U,2}$, and $\nor{\cdot}_{U,E}$ and vice versa, in the sense discussed above. 
-From now on, unless otherwise stated, we will refer to $\nor{\cdot}_{V,U}$ as the test norm that induces a given norm $\nor{\cdot}_U$. Likewise, we will refer $\nor{\cdot}_{U,V}$ as the trial norm induced by a given test norm $\nor{\cdot}_V$. In this paper, for simplicity of exposition, we shall call a pair of norms in $U$ and $V$ that induce each other as an {\em energy norm pairing}.
+From now on, unless otherwise stated, we will refer to $\nor{\cdot}_{V,U}$ as the test norm that induces a given norm $\nor{\cdot}_U$. Likewise, we will refer $\nor{\cdot}_{U,V}$ as the trial norm induced by a given test norm $\nor{\cdot}_V$. In this dissertation, for simplicity of exposition, we shall call a pair of norms in $U$ and $V$ that induce each other as an {\em energy norm pairing}.
 
-\subsection{Discontinuous Petrov-Galerkin methods with the ultra-weak formulation}
+\section{Discontinuous Petrov-Galerkin methods with the ultra-weak formulation}
 \seclab{abstractUweak}
 
-The naming of the discontinuous Petrov-Galerkin method refers to the fact that the method is a Petrov-Galerkin method, and that the test functions are specified to be discontinuous across element boundaries. There is no specification of the regularity of the trial space, and we stress that the idea of DPG is not inherently tied to a single variational formulation \cite{Bui-ThanhDemkowiczGhattas11a}. Additionally, Cohen, Dahmen and Welper simultaneously extend the minimum residual concept behind DPG to general variational settings and avoid the use of discontinuous test functions by formulating the minimum residual method as a saddle-point problem \cite{DahmenVariationalStabilization}.  
+The name of the discontinuous Petrov-Galerkin method refers to the fact that the method is a Petrov-Galerkin method, and that the test functions are specified to be discontinuous across element boundaries. There is no specification of the regularity of the trial space, and we stress that the idea of DPG is not inherently tied to a single variational formulation \cite{Bui-ThanhDemkowiczGhattas11a}. Additionally, Cohen, Dahmen and Welper simultaneously extended the minimum residual concept behind DPG to general variational settings and avoid the use of discontinuous test functions by formulating the minimum residual method as a saddle-point problem \cite{DahmenVariationalStabilization}.  
 
-In most of the DPG literature, however, the discontinuous Petrov-Galerkin method refers to the combination of the concept of locally computable optimal test functions in Section \secref{optimalTest} with the so-called ``ultra-weak formulation" \cite{DPG1,DPG2,DPG3,DPG4,DPGElas,DBLP:journals/procedia/NiemiCC11}. Unlike the previous two sections in which we studied the general equation \eqnref{variationEq} given by abstract bilinear and linear forms, we now consider a concrete instance of \eqnref{variationEq} resulting from an ultra-weak formulation for an abstract first-order system of PDEs $Au = f$. Additionally, from this section onwards, we will refer to DPG as the pairing of the ultra-weak variational formulation with the concept of locally computable optimal test functions. 
+In most of the DPG literature, however, the discontinuous Petrov-Galerkin method refers to the combination of the concept of locally computable optimal test functions introduced in Section \secref{optimalTest} with the so-called ``ultra-weak formulation" \cite{DPG1,DPG2,DPG3,DPG4,DPGElas,DBLP:journals/procedia/NiemiCC11}. Unlike the previous two sections in which we studied the general equation \eqnref{variationEq} given by abstract bilinear and linear forms, we now consider a concrete instance of \eqnref{variationEq} resulting from an ultra-weak formulation for an abstract first-order system of PDEs $Au = f$. Additionally, from this section onwards, we will refer to DPG as the pairing of the ultra-weak variational formulation with the concept of locally computable optimal test functions. 
 
-We begin by partitioning the domain of interest $\Omega$ into $\Nel$ non-overlapping elements $K_j, j = 1,\hdots,\Nel$ such that $\Oh = \cup_{j=1}^\Nel K_j$ and $\overline{\Omega} = \overline{\Omega}_h$. Here, $h$ is defined as $h= \max_{j\in \LRc{1,\hdots,\Nel}}\text{diam}\LRp{K_j}$.  We denote the mesh ``skeleton" by $\Gh = \cup_{j=1}^\Nel \partial K_j$; the set of all faces/edges $e$, each of which comes with a normal vector ${n}_e$. The internal skeleton is then defined as $\Gamma^0_h = \Gh \setminus \partial \Omega$. If a face/edge $e \in \Gh$ is the intersection of $\partial K_i$ and $\partial K_j$, $i \ne j$, we define the following jumps:
+We begin by partitioning the domain of interest $\Omega$ into $\Nel$ non-overlapping elements $K_j, j = 1,\hdots,\Nel$ such that $\Oh = \cup_{j=1}^\Nel K_j$ and $\overline{\Omega} = \overline{\Omega}_h$. Here, $h$ is defined as $h= \max_{j\in \LRc{1,\hdots,\Nel}}\text{diam}\LRp{K_j}$.  We denote the mesh ``skeleton" by $\Gh = \cup_{j=1}^\Nel \partial K_j$; the set of all faces/edges $e$, each of which come with a normal vector ${n}_e$. The internal skeleton is then defined as $\Gamma^0_h = \Gh \setminus \partial \Omega$. If a face/edge $e \in \Gh$ is the intersection of $\partial K_i$ and $\partial K_j$, $i \ne j$, we define the following jumps:
 \[
 \jump{v} = \text{sgn} \LRp{{n}^-}v^- + \text{sgn} \LRp{{n}^+}v^+, \quad
 \jump{\tau \cdot n} = {n}^-\cdot \tau^- + {n}^+\cdot\tau^+,
@@ -210,7 +210,7 @@ For $e$ belonging to the domain boundary $\partial \Omega$, we define
 \jump{v} = v, \quad
 \jump{\tau \cdot n} = {n}_e\cdot \tau.
 \]
-Note that we allow arbitrariness in assigning ``-'' and ``+'' quantities to the adjacent elements $K_i$ and $K_j$.
+Note that we allow arbitrariness in assigning ``$-$'' and ``$+$'' quantities to the adjacent elements $K_i$ and $K_j$.
 %For the rest of the paper, we will use the same notation for both a function and its trace (if it is well-defined) when there is no ambiguity.
 
 The ultra-weak formulation for $Au = f$ on $\Oh$, ignoring boundary
@@ -223,7 +223,8 @@ b\left(\left(u, \widehat{u}\right),v\right) \coloneqq \langle \widehat{u}, \jump
 where we have denoted $\LRa{\cdot,\cdot}_{\Gh}$ as the duality
 pairing on $\Gh$, $\LRp{\cdot,\cdot}_{\Oh}$ the $L^2$-inner
 product over $\Oh$, and $A_h^*$ the formal adjoint resulting from
-element-wise integration by parts.  Occasionally, for simplicity in
+element-wise integration by parts.\footnote{We note that $\jump{v}$ refers to the jump of the trace of the test function across an edge; for example, for vector valued test functions $\tau$, $\jump{\tau}$ corresponds to the jump of the normal component. We will continue to use this notation in following chapters.}
+Occasionally, for simplicity in
 writing, we will ignore the subscripts in the duality pairing and
 $L^2$-inner product if they are $\Gh$ and $\Oh$. Both the
 inner product and formal adjoint are understood to be taken
@@ -246,7 +247,7 @@ and $\gamma(D(A))$ the trace space (assumed to exist) of the graph space of
 operator $A$. The first discussion of the well-posedness of DPG with the ultra-weak formulation can be found in \cite{analysisDPG}, where the proof is presented for the Poisson and convection-diffusion equations. A more comprehensive discussion of the abstract setting for DPG with the ultra-weak formulation using the graph space, as well as a more general proof of well-posedness, can be consulted in \cite{Bui-ThanhDemkowiczGhattas11b}. 
 
 %\subsection{Optimal and quasi-optimal test norms}
-\subsection{A canonical energy norm pairing for ultra-weak formulation}
+\section{A canonical energy norm pairing for ultra-weak formulation}
 
 From the discussion in Section~\secref{energyPair} of energy norm and test norm pairings, we know that specifying either a test norm or trial norm is sufficient to define an energy pairing. %In this section, we derive and discuss two important energy norm pairings, the first of which begins by specifying the canonical norm in $U$ and inducing a test norm on $V$. The second pairing begins instead by specifying the canonical norm on $V$ under the ultra-weak formulation \eqnref{uweak} and inducing an energy norm on the trial space $U$.
 In this section, we derive and discuss an important energy norm pairing which specifies the canonical norm in $U$ and induces a test norm on $V$. %The second pairing begins instead by specifying the canonical norm on $V$ under the ultra-weak formulation \eqnref{uweak} and inducing an energy norm on the trial space $U$.
@@ -325,5 +326,5 @@ This norm is a localization of $\nor{v}_{V,U}$ to allow for the solution of opti
 
 %On the other hand, the quasi-optimal test norm $\nor{v}_V$, namely the canonical norm in $V$, \textit{is} localizable, and hence practical. However, it's worth noting the difference between the induced energy norm $\nor{\LRp{u,\uh}}_{U,V}$ and the canonical norm in $U$; under the induced norm $\nor{\LRp{u,\uh}}_{U,V}$ there is no natural interpretation for the norm in which the error in the flux variable $\uh$ is measured. 
 
-Using variants of the quasi-optimal test norm, numerical results show that the DPG method appears to provide a ``pollution-free" method without phase error for the Helmholtz equation \cite{DPG4}, and analysis of the pollution-free nature of DPG is currently under investigation. Similar results have also been obtained in the context of elasticity \cite{DPGElas} and the linear Stokes equations \cite{Camellia}. On the theoretical side, the quasi-optimal test norm has been shown to yield a well-posed DPG methodology for the Poisson and convection-diffusion equations \cite{analysisDPG}. More recently, this theory has been generalized to show the well-posedness of DPG for the large class of PDEs of Friedrichs' type \cite{Bui-ThanhDemkowiczGhattas11b}.  
+Using variants of the graph test norm, numerical results show that the DPG method appears to provide a ``pollution-free" method without phase error for the Helmholtz equation \cite{DPG4}, and analysis of the pollution-free nature of DPG is currently under investigation. Similar results have also been obtained in the context of elasticity \cite{DPGElas} and the linear Stokes equations \cite{Camellia}. On the theoretical side, the graph test norm has been shown to yield a well-posed DPG methodology for the Poisson and convection-diffusion equations \cite{analysisDPG}. More recently, this theory has been generalized to show the well-posedness of DPG for the large class of PDEs of Friedrichs' type \cite{Bui-ThanhDemkowiczGhattas11b}.  
 

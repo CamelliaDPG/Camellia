@@ -63,6 +63,8 @@
 \newcommand{\tablab}[1]{\label{tab:#1}}
 \newcommand{\tabref}[1]{Table~\ref{tab:#1}}
 
+\newtheorem{remark}{Remark}
+
 \newcommand{\theolab}[1]{\label{theo:#1}}
 \newcommand{\theoref}[1]{\ref{theo:#1}}
 \newcommand{\eqnlab}[1]{\label{eq:#1}}
@@ -81,6 +83,8 @@
 \newcommand{\LRs}[1]{\left[ #1 \right]}
 \newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
 \newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\LRb}[1]{\left| #1 \right|}
+
 \newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
 \newcommand{\Grad} {\ensuremath{\nabla}}
 \newcommand{\Div} {\ensuremath{\nabla\cdot}}
@@ -143,10 +147,10 @@
 
 %%%%%%%%%%%%%%% End def of new commands %%%%%%%%%%%%%%%%%%%
 
-\author{Jesse Chan}
+\author{Jesse L. Chan}
 \address{910 E. 32nd St, Apt.\ 101\\ Austin, Texas 78705}  % Required
 
-\title{A DPG method for compressible flow problems}
+\title{A DPG method for convection-diffusion problems} % Required
 
 \supervisor
 	[Leszek Demkowicz]
@@ -157,7 +161,7 @@
 	[Omar Ghattas]
 	{Venkat Raman}
 
-\previousdegrees{B.A.}
+\previousdegrees{B.A.; M.S.C.S.E.M.}
 
 \oneandonehalfspacequote
 
@@ -168,46 +172,75 @@
 %%%%%%%%%%%%%%% Start of thesis %%%%%%%%%%%%%%%%%%%
 
 \begin{document}
-%\copyrightpage          % Produces the copyright page.
-%\commcertpage           % Produces the Committee Certification
+
+\copyrightpage          % Produces the copyright page.
+
+\commcertpage           % Produces the Committee Certification
+
 \titlepage
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Dedication and/or epigraph are optional, but must occur here.      %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%\begin{dedication}
+%\index{Dedication@\emph{Dedication}}%
+%Dedicated to my wife Shirley.
+%\end{dedication}
+
+\begin{acknowledgments}		% Optional
+\index{Acknowledgments@\emph{Acknowledgments}}%
+\input{acknowledgements}
+\end{acknowledgments}
+
+\utabstract
+\index{Abstract}%
+\indent
+\input{dissAbstract}
 \tableofcontents   % Table of Contents will be automatically
                    % generated and placed here.
 
 %\listoftables      % List of Tables and List of Figures will be placed
 %\listoffigures     % here, if applicable.
 
-
 \chapter{Introduction}
-
+\seclab{chap:intro}
 \input{proposalIntro}
 
 \chapter{Range of problems}
-
+\seclab{chap:problemRange}
 \input{problemRange}
 
 \chapter{Discontinuous Petrov-Galerkin: a minimum residual method for linear problems}
-
+\seclab{chap:introDPG}
 \input{DPGtheory}
 
-\chapter{A robust DPG method for convection-diffusion}
+\chapter{The graph norm for convection-diffusion}
+\seclab{chap:graphNorm}
+\input{confusionDPGIntro}
+\input{globalLocalDPG}
 
+\chapter{A robust DPG method for convection-diffusion}
+\seclab{chap:robustDPG}
 \input{DPGrobustness}
+\input{coupledRobust}
 
 \chapter{Extension to nonlinear problems and systems of equations}
-
+\seclab{chap:nonlinDPG}
 \input{NonlinDPG}
 \input{BurgersNotes}
 \input{NSNotes}
-%\input{areaReq}
 
-\bibliographystyle{plain}
-\bibliography{CFD_intro,DPG_old,paper,LitRev,NSNotes,H1DPG}
+\chapter{Conclusions and future direction}
+\input{Conclusions}
+
+\bibliographystyle{unsrt}
+\bibliography{NSNotes,paper,DPGarticles}
 
 %\chapter{Appendix}
 \appendix
 \input{paper_appendix.tex}
+\input{confusionAppendix.tex}
 %\input{hyperbolicDPG.tex}
 
 \end{document}
