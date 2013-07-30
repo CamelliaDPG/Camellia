@@ -12,6 +12,7 @@
 #include "Mesh.h"
 #include "Teuchos_GlobalMPISession.hpp"
 #include "MPIWrapper.h"
+#include "CellCharacteristicFunction.h"
 
 // for adaptive quadrature
 struct CacheInfo {
@@ -400,6 +401,14 @@ double Function::integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegr
   FieldContainer<double> cellIntegral(1);
   this->integrate(cellIntegral,basisCache);
   return cellIntegral(0);
+}
+
+FunctionPtr Function::cellCharacteristic(int cellID) {
+  return Teuchos::rcp( new CellCharacteristicFunction(cellID) );
+}
+
+FunctionPtr Function::cellCharacteristic(set<int> cellIDs) {
+  return Teuchos::rcp( new CellCharacteristicFunction(cellIDs) );
 }
 
 map<int, double> Function::cellIntegrals(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest){

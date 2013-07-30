@@ -136,6 +136,9 @@ public:
   static FunctionPtr xn(int n=1);
   static FunctionPtr yn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
+  
+  static FunctionPtr cellCharacteristic(int cellID);
+  static FunctionPtr cellCharacteristic(set<int> cellIDs);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
