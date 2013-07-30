@@ -1,4 +1,4 @@
-\section{The viscous Burgers equation}
+\section{A viscous Burgers equation}
 
 We will illustrate the application of DPG to nonlinear problems using a viscous Burgers' equation on domain $\Omega = [0,1]^2 \in \mathbb{R}^2$ \cite{MITDPG}
 \[
@@ -24,9 +24,7 @@ Linearizing the above then gives us
 b_u\left(\left(\Delta u,\sigma,\widehat{u},\widehat{f}_n\right),\left(v,\tau\right)\right) &= \LRp{\Delta u,\div \tau - \vecttwo{u}{1} \cdot \grad v} + \LRp{\sigma, \frac{1}{\epsilon}\tau + \grad v} + \LRa{\widehat{u},\tau\cdot n} + \LRa{\widehat{f}_n,v} \\
 &= \LRp{u,\div \tau - \beta(u)\cdot \grad v} 
 \end{align*}
-Notice that the nonlinear term is only dependent on $u$, and thus there is no need to linearize in the variables $\sigma$, $\widehat{u}$, and $\widehat{f}_n$.  
-
-Since the linearized Burgers' equation is of the form of a convection-diffusion problem with non-homogeneous load, we adopt the test norm described in Section~\secref{sec:testNormSec} with convection vector $\beta = (u,1)$.  
+Notice that the nonlinear term is only dependent on $u$, and thus there is no need to linearize in the variables $\sigma$, $\widehat{u}$, and $\widehat{f}_n$.  Since the linearized Burgers' equation is of the form of a convection-diffusion problem with non-homogeneous load, we adopt the test norm described in Section~\secref{sec:testNormSec} with convection vector $\beta = (u,1)$.  
 
 Recall that we did not linearize in the flux variables $\widehat{u}$ and $\widehat{f}_n$, so we can directly apply the nonlinear boundary conditions to our variational formulation.  
 Additionally, since Burgers' equation does not have any physical constraints, we can employ a direct Newton iteration to solve the nonlinear equation.  The adaptivity algorithm is identical to the greedy algorithm described previously, except that the linear solve is replaced by a nonlinear solve.  The results of an adaptive simulation are shown in Figure~\ref{fig:BurgersShock} for $\epsilon = 1e-4$.  

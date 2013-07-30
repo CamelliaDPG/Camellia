@@ -1,0 +1,67 @@
+The majority of this chapter will focus on the convection-diffusion problem using the abstract theory that we have discussed in the previous chapter. In particular, we shall use the DPG method based on the ultra-weak formulation with optimal test functions to solve this model problem and analyze its behavior as $\epsilon\rightarrow 0$. Our goal is to show the robustness of the method with respect to $\epsilon$ (for a given test norm), and demonstrate its usefulness as a numerical method for solving singular-perturbed problems.  In particular, we will examine three different choices of test norms on $V$ -- an ideal norm (which returns good results, but whose test functions are difficult to approximate), a robust norm (which is easy to approximate and computationally efficient to assemble but still returns good results over a range of $\epsilon$), and finally, a coupled, robust test norm that borrows ideas from both the ideal and robust norm.\footnote{This third test norm is motivated by observed numerical difficulties; the precise shortcomings of the previous robust test norm are not completely understood, though a possible explanation is offered for both the issues encountered by the robust norm and the success of the coupled robust test norm in overcoming these issues.}
+
+\section{DPG formulation for convection-diffusion}
+
+We consider the following model convection-diffusion problem on a domain
+$\Omega \subset \mathbb{R}^d$ with boundary $\pO \equiv \Gamma$
+\begin{equation}
+\div (\beta u) - \epsilon\Delta u = f  \in \L \label{primal},
+\end{equation}
+which can be cast into the first order form on the group variable
+$\LRp{u,\sigma}$ as
+\begin{equation}
+\eqnlab{CDstrong}
+A \LRp{u,\sigma} \coloneqq \LRs {
+\begin{array}{c}
+\div (\beta u - \sigma) \\ \frac{1}{\epsilon}\sigma - \grad u
+\end{array}} = \LRs{
+\begin{array}{c}
+f \\ 0
+\end{array}
+}.
+\end{equation}
+Using the abstract ultra-weak formulation developed in Section
+\secref{abstractUweak} for the first order system of PDEs \eqnref{CDstrong} we
+obtain
+\begin{align*}
+b\left(\left(u,\sigma, \widehat{u}, \widehat{f}_n\right),
+\left( v, \tau \right)\right) = \left(u,\div \tau - \beta \cdot \grad
+v\right)_{\Oh} + \left(\sigma, \epsilon^{-1} \tau + \grad v\right)_{\Oh} - \LRa{
+\jump{\tau\cdot n}, \widehat{u} }_{\Gh} + \LRa{ \widehat{f}_n,
+  \jump{v} }_{\Gh},
+\end{align*}
+where $\LRp{v, \tau}$ is the group test function. It should be pointed
+out that the divergence and gradient operators are understood to act
+element-wise on test functions $\LRp{v, \tau}$ in the broken graph
+space $ D\LRp{A_h^*} \coloneqq  H^1(\Oh) \times H({\rm div}, \Oh)$, but
+globally as usual on conforming test functions, i.e.\ $ \LRp{v, \tau}
+\in  H^1(\Omega) \times H({\rm div}, \Omega)$. It follows that the
+canonical norm on this test space can be written as
+\[
+\|\left(v, \tau\right)\|_V^2 = \|\left(v, \tau\right)\|_{H^1(\Oh) \times H({\rm div},\Oh)}^2
+= \sum_{K\in \Oh} \|\left(v, \tau\right)\|_{H^1(K) \times H({\rm
+    div},K)}^2,
+\]
+where
+\[
+\|\left(v, \tau \right)\|_{H^1(K) \times H({\rm div},K)}^2 =
+\|v\|_{L^2(K)}^2 + \|\grad v\|_{L^2(K)}^2 + \|\tau\|_{L^2(K)}^2 +
+\|\div \tau\|_{L^2(K)}^2.
+\]
+
+In order to define the proper norm on the trial space, boundary
+conditions need to be specified. We begin by splitting the boundary
+$\Gamma$ as follows
+\begin{align*}
+\Gamma_{-} &\coloneqq \{x\in \Gamma; \beta_n(x) < 0\} \quad {\rm
+  (inflow)},\\ 
+  \Gamma_{+} &\coloneqq \{x\in \Gamma; \beta_n(x) > 0\}
+\quad {\rm (outflow)},\\ 
+\Gamma_{0} &\coloneqq \{x\in \Gamma;
+\beta_n(x) = 0\},
+\end{align*}
+where $\beta_n \coloneqq \beta \cdot n$.
+On the inflow boundary, we apply the inflow boundary condition $$u = u_{\rm in} \quad \text{on }\Gm.$$  On the outflow boundary, we apply standard homogeneous Dirichlet boundary conditions
+\[
+u = 0, \quad \text{on } \Gp.
+\]

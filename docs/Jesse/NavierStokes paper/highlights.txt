@@ -1,0 +1,9 @@
+Highlights
+
+We summarize the higher order adaptive Discontinuous Petrov-Galerkin method.
+
+We extrapolate a DPG method for convection-diffusion problems to nonlinear systems.
+
+We present numerical results using adaptivity for a Burgers' equation with a shock.
+
+We present adaptive results for two model problems in viscous compressible flow.
