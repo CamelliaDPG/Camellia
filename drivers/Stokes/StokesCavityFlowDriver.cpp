@@ -35,6 +35,8 @@
 
 #include "CamelliaConfig.h"
 
+#include "GoalOrientedRefinementStrategy.h"
+
 using namespace std;
 
 //// just testing the mass flux integration
@@ -244,9 +246,12 @@ int main(int argc, char *argv[]) {
   bool useMumps = false;
   bool useCG = false;
   bool useML = false;
-  bool compareWithOverkillMesh = true;
+  bool compareWithOverkillMesh = false;
   bool useDivergenceFreeVelocity = false;
-  bool useWeightedGraphNorm = true;
+  bool useWeightedGraphNorm = false;
+  
+  bool adaptForLRCornerVorticity = true;
+  
   bool useExtendedPrecisionForOptimalTestInversion = false;
   bool useAdHocHPRefinements = false;
   bool usePenaltyConstraintsForDiscontinuousBC = false;
@@ -261,8 +266,8 @@ int main(int argc, char *argv[]) {
   int cgMaxIt = 400000;
   double energyThreshold = 0.20; // for mesh refinements
   
-  string saveFile = "stokesCavityReplay.replay";
-  string replayFile = "stokesCavityReplay.replay";
+  string saveFile = "";//"stokesCavityReplay.replay";
+  string replayFile = "";//"stokesCavityReplay.replay";
 
   Teuchos::RCP<Solver> solver;
   if (useMumps) {
@@ -637,6 +642,22 @@ int main(int argc, char *argv[]) {
     }
   }
   
+  FieldContainer<double> bottomCornerPoints(2,2);
+  bottomCornerPoints(0,0) = 1e-10;
+  bottomCornerPoints(0,1) = 1e-10;
+  bottomCornerPoints(1,0) = 1 - 1e-10;
+  bottomCornerPoints(1,1) = 1e-10;
+  
+  FieldContainer<double> topCornerPoints(4,2);
+  topCornerPoints(0,0) = 1e-10;
+  topCornerPoints(0,1) = 1 - 1e-12;
+  topCornerPoints(1,0) = 1 - 1e-10;
+  topCornerPoints(1,1) = 1 - 1e-12;
+  topCornerPoints(2,0) = 1e-12;
+  topCornerPoints(2,1) = 1 - 1e-10;
+  topCornerPoints(3,0) = 1 - 1e-12;
+  topCornerPoints(3,1) = 1 - 1e-10;
+  
   Teuchos::RCP<DPGInnerProduct> ip;
   
   IPPtr qoptIP = Teuchos::rcp(new IP());
@@ -701,6 +722,7 @@ int main(int argc, char *argv[]) {
   
   ////////////////////   CREATE RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy ); // zero for now...
+  rhs->addTerm(Function::zero() * v1); // just because goal-oriented doesn't handle empty RHS well just yet...
   
   /////////////////// SOLVE OVERKILL //////////////////////
   if (compareWithOverkillMesh) {
@@ -779,29 +801,21 @@ int main(int argc, char *argv[]) {
                                                                                                                             maxPolyOrder, rank==0 ));
     lidRefinementStrategy->setSymmetricRefinements(true);
     refinementStrategy = lidRefinementStrategy;
-  } else
+  } else if (adaptForLRCornerVorticity) {
+    // define goal:
+    vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
+    int lrCornerCellID = corners[0]->cellID();
+    FunctionPtr weight = Function::cellCharacteristic(lrCornerCellID);
+    LinearTermPtr trialFunctional = weight * ( - sigma12 + sigma21 ); // weighted vorticity
+    refinementStrategy = Teuchos::rcp( new GoalOrientedRefinementStrategy(trialFunctional, solution, energyThreshold, minH) );
+  } else {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold, minH ));
+  }
   
   // just an experiment:
   refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
   
-  FieldContainer<double> bottomCornerPoints(2,2);
-  bottomCornerPoints(0,0) = 1e-10;
-  bottomCornerPoints(0,1) = 1e-10;
-  bottomCornerPoints(1,0) = 1 - 1e-10;
-  bottomCornerPoints(1,1) = 1e-10;
-  
-  FieldContainer<double> topCornerPoints(4,2);
-  topCornerPoints(0,0) = 1e-10;
-  topCornerPoints(0,1) = 1 - 1e-12;
-  topCornerPoints(1,0) = 1 - 1e-10;
-  topCornerPoints(1,1) = 1 - 1e-12;
-  topCornerPoints(2,0) = 1e-12;
-  topCornerPoints(2,1) = 1 - 1e-10;
-  topCornerPoints(3,0) = 1 - 1e-12;
-  topCornerPoints(3,1) = 1 - 1e-10;
-
   if (!useCG) {
     if (useCondensedSolve) {
       solution->condensedSolve(solver);
@@ -911,6 +925,14 @@ int main(int argc, char *argv[]) {
       }
       dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
       dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
+    }
+    if (adaptForLRCornerVorticity) {
+      // update refinement strategy
+      vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoints);
+      int lrCornerCellID = corners[0]->cellID();
+      FunctionPtr weight = Function::cellCharacteristic(lrCornerCellID);
+      LinearTermPtr trialFunctional = weight * ( - sigma12 + sigma21 ); // weighted vorticity
+      ((GoalOrientedRefinementStrategy*) refinementStrategy.get())->setTrialFunctional(trialFunctional);
     }
     refinementStrategy->refine(false);//rank==0); // print to console on rank 0
     if (! MeshTestUtility::checkMeshConsistency(mesh)) {
