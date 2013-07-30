@@ -565,6 +565,8 @@ int main(int argc, char *argv[]) {
     bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
     bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use static condensation", true);
     bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
+
+    //bool adaptForLRCornerVorticity = args.Input<bool>("--adaptForLRCornerVorticity", "do goal-oriented ", false);
     
     bool reportStreamfunctionMax = args.Input<bool>("--reportStreamfunctionMax", "report streamfunction max value", true);
     bool reportCenterlineVelocities = args.Input<bool>("--reportCenterlineVelocities", "report centerline velocities", true);
