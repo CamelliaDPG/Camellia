@@ -276,7 +276,7 @@ public:
   vector< ElementPtr > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
   
-  vector< ElementPtr > elementsInPartition(int partitionNumber);
+  vector< ElementPtr > elementsInPartition(int partitionNumber = -1);
   
   ElementPtr getActiveElement(int index);
   int getDimension(); // spatial dimension of the mesh

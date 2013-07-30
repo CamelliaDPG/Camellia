@@ -1557,6 +1557,10 @@ vector< Teuchos::RCP< Element > > & Mesh::elements() {
 }
 
 vector< ElementPtr > Mesh::elementsInPartition(int partitionNumber){
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  if (partitionNumber == -1) {
+    partitionNumber = rank;
+  }
   return _partitions[partitionNumber];
 }
 
