@@ -268,7 +268,7 @@ FunctionPtr friction(SolutionPtr soln) {
   return f;
 }
 
-double dragCoefficient(SolutionPtr soln, double radius) {
+double dragCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false) {
   // a more efficient way of doing this would be to actually identify the cells on the boundary
   // or the ones near the cylinder, and only do the integral over those.  The present approach
   // just ensures that the integrand will be zero except in the region of interest...
@@ -277,6 +277,10 @@ double dragCoefficient(SolutionPtr soln, double radius) {
   FunctionPtr frictionFxn = friction(soln);
   
   FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  
+  if (neglectPressure) {
+    pressure = Function::zero();
+  }
   
   FunctionPtr n = Function::normal();
   FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
@@ -291,7 +295,7 @@ double dragCoefficient(SolutionPtr soln, double radius) {
   return 2 * F_D;
 }
 
-double liftCoefficient(SolutionPtr soln, double radius) {
+double liftCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false) {
   // a more efficient way of doing this would be to actually identify the cells on the boundary
   // or the ones near the cylinder, and only do the integral over those.  The present approach
   // just ensures that the integrand will be zero except in the region of interest...
@@ -300,6 +304,10 @@ double liftCoefficient(SolutionPtr soln, double radius) {
   FunctionPtr frictionFxn = friction(soln);
   
   FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  
+  if (neglectPressure) {
+    pressure = Function::zero();
+  }
   
   FunctionPtr n = Function::normal();
   FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
@@ -382,6 +390,159 @@ double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh) {
 }
 
 
+void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius) {
+  // start by identifying the various elements: there are 10 of interest to us
+  // to find the thin banded elements, note that radius * 3 will be outside the bounding square
+  // and that radius / 2 will be inside the band
+  FieldContainer<double> elementPoints(10,2);
+  // ESE band
+  elementPoints(0,0) =   radius * 3;
+  elementPoints(0,1) = - radius / 2;
+  // ENE band
+  elementPoints(1,0) = radius * 3;
+  elementPoints(1,1) = radius / 2;
+  // WSW band
+  elementPoints(2,0) = - radius * 3;
+  elementPoints(2,1) = - radius / 2;
+  // WNW band
+  elementPoints(3,0) = - radius * 3;
+  elementPoints(3,1) =   radius / 2;
+  // NNE band
+  elementPoints(4,0) =   radius / 2;
+  elementPoints(4,1) =   radius * 3;
+  // NNW band
+  elementPoints(5,0) = - radius / 2;
+  elementPoints(5,1) =   radius * 3;
+  // SSE band
+  elementPoints(6,0) =   radius / 2;
+  elementPoints(6,1) = - radius * 3;
+  // SSE band
+  elementPoints(7,0) = - radius / 2;
+  elementPoints(7,1) = - radius * 3;
+  // NE big element
+  elementPoints(8,0) = radius * 3;
+  elementPoints(8,1) = radius * 3;
+  // SE big element
+  elementPoints(9,0) =   radius * 3;
+  elementPoints(9,1) = - radius * 3;
+
+  vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints);
+  
+  vector<int> horizontalBandCellIDs;
+  horizontalBandCellIDs.push_back(elements[0]->cellID());
+  horizontalBandCellIDs.push_back(elements[1]->cellID());
+  horizontalBandCellIDs.push_back(elements[2]->cellID());
+  horizontalBandCellIDs.push_back(elements[3]->cellID());
+  
+  vector<int> verticalBandCellIDs;
+  verticalBandCellIDs.push_back(elements[4]->cellID());
+  verticalBandCellIDs.push_back(elements[5]->cellID());
+  verticalBandCellIDs.push_back(elements[6]->cellID());
+  verticalBandCellIDs.push_back(elements[7]->cellID());
+  
+  // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
+  horizontalBandCellIDs.push_back(elements[8]->cellID());
+  horizontalBandCellIDs.push_back(elements[9]->cellID());
+  
+  Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+  Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+  
+  FieldContainer<double> vertices(4,2);
+  
+  // horizontal bands want vertical cuts, and vice versa
+  for (vector<int>::iterator cellIDIt = horizontalBandCellIDs.begin();
+       cellIDIt != horizontalBandCellIDs.end(); cellIDIt++) {
+    int cellID = *cellIDIt;
+//    cout << "Identified cell " << cellID << " as a horizontal band.\n";
+    // work out what the current aspect ratio is
+    hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+//    cout << "vertices for cell " << cellID << ":\n" << vertices;
+    // here, we use knowledge of the implementation of the hemker mesh generation:
+    // we know that the first edges are always horizontal...
+    double xDiff = abs(vertices(1,0)-vertices(0,0));
+    double yDiff = abs(vertices(2,1)-vertices(1,1));
+    
+    set<int> cellIDsToRefine;
+    cellIDsToRefine.insert(cellID);
+    double aspect = xDiff / yDiff;
+    while (aspect > 2.0) {
+      hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
+      
+      // the next set of cellIDsToRefine are the children of the ones just refined
+      set<int> childCellIDs;
+      for (set<int>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
+        int refinedCellID = *refinedCellIDIt;
+        set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+        childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+      }
+      
+      cellIDsToRefine = childCellIDs;
+      aspect /= 2;
+    }
+  }
+  
+  // horizontal bands want vertical cuts, and vice versa
+  for (vector<int>::iterator cellIDIt = verticalBandCellIDs.begin();
+       cellIDIt != verticalBandCellIDs.end(); cellIDIt++) {
+    int cellID = *cellIDIt;
+//    cout << "Identified cell " << cellID << " as a vertical band.\n";
+    // work out what the current aspect ratio is
+    hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+    // here, we use knowledge of the implementation of the hemker mesh generation:
+    // we know that the first edges are always horizontal...
+    double xDiff = abs(vertices(1,0)-vertices(0,0));
+    double yDiff = abs(vertices(2,1)-vertices(1,1));
+    
+    set<int> cellIDsToRefine;
+    cellIDsToRefine.insert(cellID);
+    double aspect = yDiff / xDiff;
+    while (aspect > 2.0) {
+      hemkerMeshNoCurves->hRefine(cellIDsToRefine, horizontalCut);
+      
+      // the next set of cellIDsToRefine are the children of the ones just refined
+      set<int> childCellIDs;
+      for (set<int>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
+        int refinedCellID = *refinedCellIDIt;
+        set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+        childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+      }
+      
+      cellIDsToRefine = childCellIDs;
+      aspect /= 2;
+    }
+  }
+  hemkerMeshNoCurves->enforceOneIrregularity();
+}
+
+int cornerDescendantID(ElementPtr cell, int side1, int side2) {
+  vector< pair<int,int> > cell_descendants_side1_neighbors = cell->getDescendantsForSide(side1); // (cellID, sideIndex) pairs
+  set<int> cell_side1_neighbors_set;
+  for (int i=0; i<cell_descendants_side1_neighbors.size(); i++) {
+    cell_side1_neighbors_set.insert(cell_descendants_side1_neighbors[i].first);
+  }
+  vector< pair<int,int> > cell0_descendants_cylinder = cell->getDescendantsForSide(side2); // (cellID, sideIndex) pairs
+  
+  int cornerCellID = -1;
+  for (int i=0; i<cell0_descendants_cylinder.size(); i++) {
+    int cellID = cell0_descendants_cylinder[i].first;
+    if (cell_side1_neighbors_set.find(cellID) != cell_side1_neighbors_set.end()) {
+      cornerCellID = cellID;
+    }
+  }
+
+  return cornerCellID;
+}
+
+void printNeighbors(ElementPtr cell) {
+  cout << "cell " << cell->cellID() << " neighbors: ";
+  for (int i=0; i<4; i++) {
+    cout << cell->getNeighborCellID(i) << " ";
+  }
+  cout << endl;
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0;
   
@@ -408,9 +569,18 @@ int main(int argc, char *argv[]) {
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-8);
     
+    double meshHeight = args.Input<double>("--meshHeight", "mesh height", 30);
+    
+    bool useStraightEdgedGeometry = args.Input<bool>("--noCurves", "use straight-edge geometric approximation", false);
+    
     double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
     
     bool parabolicInflow = args.Input<bool>("--parabolicInflow", "use parabolic inflow (false for uniform)", false);
+    
+    bool makeMeshRoughlyIsotropic = args.Input<bool>("--isotropicMesh", "make starting mesh roughly isotropic", true);
+    
+    double xLeft = args.Input<double>("--xLeft", "x coordinate of the leftmost boundary", -7.5);
+    double xRight = args.Input<double>("--xRight", "x coordinate of the rightmost boundary", 42.5);
     
     args.Process();
     
@@ -491,11 +661,10 @@ int main(int argc, char *argv[]) {
     FunctionPtr zero = Function::zero();
     FunctionPtr inflowSpeed;
     
-    double xLeft = -7.5;
-    double xRight = 22.5;
-    double yTop = 7.5;
-    double yBottom = -7.5;
-    double meshHeight = 15;
+//    double xLeft = -7.5;
+//    double xRight = 42.5;
+    double yTop = meshHeight / 2.0;
+    double yBottom = - meshHeight / 2.0;
     
     if (! parabolicInflow) {
       inflowSpeed = Function::constant(1.0);
@@ -518,6 +687,25 @@ int main(int argc, char *argv[]) {
     }
     
     MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, radius); //MeshFactory::hemkerGeometry(width,height,radius);
+    
+
+
+    {
+      // print out some geometry info (checking something)
+//      vector< FieldContainer<double> > vertices = geometry->vertices();
+//      if (rank ==0) {
+//        for (int i=0; i<vertices.size(); i++) {
+//          cout << "vertex " << i << ": (" << vertices[i][0] << "," << vertices[i][1] << ")\n";
+//        }
+//      }
+    }
+    
+    if (useStraightEdgedGeometry) {
+      // right now, this is going to end up meaning that we have an octagon instead of a circle
+      MeshGeometryPtr straightEdgeGeometry = Teuchos::rcp( new MeshGeometry(geometry->vertices(), geometry->elementVertices()));
+      // (and that will remain true even as we refine)
+      geometry = straightEdgeGeometry;
+    }
     
     VGPNavierStokesProblem problem = VGPNavierStokesProblem(Function::constant(Re),geometry,
                                                             H1Order, pToAdd,
@@ -553,6 +741,31 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<Mesh> mesh = problem.mesh();
     mesh->registerSolution(solution);
     mesh->registerSolution(solnIncrement);
+    
+//    {
+//      if (rank==0) {
+//        ElementPtr cell0 = mesh->getElement(0);
+//        ElementPtr cell7 = mesh->getElement(7);
+//        printNeighbors(cell0);
+//        printNeighbors(cell7);
+//      }
+//      vector<int> cellIDs;
+//      cellIDs.push_back(0);
+//      cellIDs.push_back(7);
+//      mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
+//      
+//      if (rank==0) {
+//        ElementPtr cell0 = mesh->getElement(0);
+//        int cornerCellID = cornerDescendantID(cell0, 0, 3); // side 0: cell7, side 3: cylinder
+//        cout << "cell0 cornerCellID = " << cornerCellID << endl;
+//        printNeighbors(mesh->getElement(cornerCellID));
+//        
+//        ElementPtr cell7 = mesh->getElement(7);
+//        cornerCellID = cornerDescendantID(cell7, 2, 3); // side 2: cell0, side 3: cylinder
+//        cout << "cell7 cornerCellID = " << cornerCellID << endl;
+//        printNeighbors(mesh->getElement(cornerCellID));
+//      }
+//    }
     
     Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
     mesh->registerObserver(refHistory);
@@ -605,10 +818,29 @@ int main(int argc, char *argv[]) {
     
     mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
     
-  //  bc->addZeroMeanConstraint(p);
+    if (rank==0) {
+      GnuPlotUtil::writeComputationalMeshSkeleton("preliminaryHemkerMesh", mesh, true);
+    }
+    
+    // now, let's get the elements to be roughly isotropic
+    // to do spatial lookups, we need a mesh without curves (this is a bit ugly)
+    // we don't care which BF we use, so we use streamBF because it's cheaper
+    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
+                                               streamBF, H1Order, pToAdd,
+                                               useConformingTraces, trialOrderEnhancements) );
+    // now, register the real mesh with the proxy
+    proxyMesh->registerObserver(mesh);
+    // and make the proxy roughly isotropic:
+    if (makeMeshRoughlyIsotropic) {
+      makeRoughlyIsotropic(proxyMesh, radius);
+    }
+
+    if (rank==0) {
+      GnuPlotUtil::writeComputationalMeshSkeleton("initialHemkerMesh", mesh, true);
+    }
     
     if (rank == 0) {
-      cout << "Starting mesh has " << problem.mesh()->numElements() << " elements and ";
+      cout << "Starting mesh has " << problem.mesh()->numActiveElements() << " elements and ";
       cout << mesh->numGlobalDofs() << " total dofs.\n";
       cout << "polyOrder = " << polyOrder << endl; 
       cout << "pToAdd = " << pToAdd << endl;
@@ -709,14 +941,18 @@ int main(int argc, char *argv[]) {
         
         // compute lift coefficient:
         double c_L = liftCoefficient(solution, radius);
+        double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
         if (rank==0) {
           cout << "lift coefficient: " << c_L << endl;
+          cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
         }
         
         // compute drag coefficient:
         double c_D = dragCoefficient(solution, radius);
+        double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
         if (rank==0) {
           cout << "drag coefficient: " << c_D << endl;
+          cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
         }
         
         // reset iteration count to 1 (for the background flow):
@@ -733,6 +969,18 @@ int main(int argc, char *argv[]) {
           cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
         }
         
+//        if (rank==0) { // DEBUGGING code
+//          ElementPtr cell0 = mesh->getElement(0);
+//          int cornerCellID = cornerDescendantID(cell0, 0, 3); // side 0: cell7, side 3: cylinder
+//          cout << "cell0 cornerCellID = " << cornerCellID << endl;
+//          printNeighbors(mesh->getElement(cornerCellID));
+//
+//          ElementPtr cell7 = mesh->getElement(7);
+//          cornerCellID = cornerDescendantID(cell7, 2, 3); // side 2: cell0, side 3: cylinder
+//          cout << "cell7 cornerCellID = " << cornerCellID << endl;
+//          printNeighbors(mesh->getElement(cornerCellID));
+//        }
+//        
         if (saveFile.length() > 0) {
           if (rank == 0) {
             refHistory->saveToFile(saveFile);
@@ -778,14 +1026,18 @@ int main(int argc, char *argv[]) {
     
     // compute lift coefficient:
     double c_L = liftCoefficient(solution, radius);
+    double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
     if (rank==0) {
       cout << "lift coefficient: " << c_L << endl;
+      cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
     }
     
     // compute drag coefficient:
     double c_D = dragCoefficient(solution, radius);
+    double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
     if (rank==0) {
       cout << "drag coefficient: " << c_D << endl;
+      cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
     }
     
     double energyErrorTotal = solution->energyErrorTotal();
