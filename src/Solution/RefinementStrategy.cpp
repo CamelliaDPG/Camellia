@@ -10,7 +10,8 @@
 #include "Mesh.h"
 #include "Solution.h"
 
-RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h) {
+RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h,
+                                       int max_p, bool preferPRefinements) {
   _solution = solution;
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
@@ -18,6 +19,8 @@ RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEne
   _anisotropicThreshhold = 10.0;
   _maxAspectRatio = 2^5; // five anisotropic refinements of an element
   _min_h = min_h;
+  _preferPRefinements = preferPRefinements;
+  _max_p = max_p;
 }
 
 void RefinementStrategy::setMinH(double value) {
@@ -97,15 +100,25 @@ void RefinementStrategy::refine(bool printToConsole) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
     double h = sqrt(cellMeasures[cellID]);
-      double cellEnergyError = energyError->find(cellID)->second;
-      if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
-        //      cout << "refining cellID " << cellID << endl;
+    double cellEnergyError = energyError->find(cellID)->second;
+    int p = mesh->cellPolyOrder(cellID);
+
+    if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
+      //      cout << "refining cellID " << cellID << endl;
+      if (!_preferPRefinements) {
         if (h > _min_h) {
           cellsToRefine.push_back(cellID);
         } else {
           cellsToPRefine.push_back(cellID);
         }
+      } else {
+        if (p < _max_p) {
+          cellsToPRefine.push_back(cellID);
+        } else {
+          cellsToRefine.push_back(cellID);
+        }
       }
+    }
   }
   
   refineCells(cellsToRefine);

@@ -34,8 +34,10 @@ protected:
   double _maxAspectRatio;
   vector< RefinementResults > _results;
   double _min_h;
+  int _max_p;
+  bool _preferPRefinements;
 public:
-  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0);
+  RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   void setMaxAspectRatio(double value);
