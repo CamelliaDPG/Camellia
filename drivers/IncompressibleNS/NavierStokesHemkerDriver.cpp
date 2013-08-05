@@ -390,7 +390,7 @@ double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh) {
 }
 
 
-void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius) {
+void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforceOneIrregularity) {
   // start by identifying the various elements: there are 10 of interest to us
   // to find the thin banded elements, note that radius * 3 will be outside the bounding square
   // and that radius / 2 will be inside the band
@@ -513,7 +513,8 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius) {
       aspect /= 2;
     }
   }
-  hemkerMeshNoCurves->enforceOneIrregularity();
+  if (enforceOneIrregularity)
+    hemkerMeshNoCurves->enforceOneIrregularity();
 }
 
 int cornerDescendantID(ElementPtr cell, int side1, int side2) {
@@ -578,9 +579,12 @@ int main(int argc, char *argv[]) {
     bool parabolicInflow = args.Input<bool>("--parabolicInflow", "use parabolic inflow (false for uniform)", false);
     
     bool makeMeshRoughlyIsotropic = args.Input<bool>("--isotropicMesh", "make starting mesh roughly isotropic", true);
+    bool enforceOneIrregularity = args.Input<bool>("--oneIrregular", "enforce 1-irregularity", true);
     
     double xLeft = args.Input<double>("--xLeft", "x coordinate of the leftmost boundary", -7.5);
     double xRight = args.Input<double>("--xRight", "x coordinate of the rightmost boundary", 42.5);
+    
+    bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
     
     args.Process();
     
@@ -589,7 +593,6 @@ int main(int argc, char *argv[]) {
     bool useLineSearch = false;
     
     int pToAdd = 2; // for optimal test function approximation
-    bool enforceOneIrregularity = true;
     bool reportPerCellErrors  = true;
 
     bool startWithZeroSolutionAfterRefinement = false;
@@ -619,6 +622,7 @@ int main(int argc, char *argv[]) {
 //      Re = atof(argv[3]);
 //    }
     if (rank == 0) {
+      cout << "NEW as of 8-3-13: using L^2 tolerance relative to L^2 norm of background flow.\n";
       cout << "numRefinements = " << numRefs << endl;
       cout << "Re = " << Re << endl;
       if (artificialTimeStepping) cout << "dt = " << dt << endl;
@@ -832,7 +836,7 @@ int main(int argc, char *argv[]) {
     proxyMesh->registerObserver(mesh);
     // and make the proxy roughly isotropic:
     if (makeMeshRoughlyIsotropic) {
-      makeRoughlyIsotropic(proxyMesh, radius);
+      makeRoughlyIsotropic(proxyMesh, radius, enforceOneIrregularity);
     }
 
     if (rank==0) {
@@ -889,7 +893,9 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<RefinementStrategy> refinementStrategy;
   //  if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
   //  refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
-    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold ));
+    double min_h = 0;
+    int maxP = 11;
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold, min_h, maxP, refineInPFirst ));
     
     refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
     refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
@@ -908,6 +914,18 @@ int main(int argc, char *argv[]) {
       + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
       + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
+      FunctionPtr u1_prev = Function::solution(u1, solution);
+      FunctionPtr u2_prev = Function::solution(u2, solution);
+      FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
+      FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
+      FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
+      FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
+      FunctionPtr p_prev = Function::solution(p, solution);
+      
+      FunctionPtr l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
+      + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
+      + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
+      
       for (int refIndex=0; refIndex<numRefs; refIndex++){
         if (startWithZeroSolutionAfterRefinement) {
           // start with a fresh initial guess for each adaptive mesh:
@@ -917,10 +935,14 @@ int main(int argc, char *argv[]) {
           problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
         
-        double incr_norm;
+        double incr_norm, prev_norm;
         do {
           problem.iterate(useLineSearch,useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+          prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
+          if (prev_norm > 0) {
+            incr_norm /= prev_norm;
+          }
           if (rank==0) {
             cout << "\x1B[2K"; // Erase the entire current line.
             cout << "\x1B[0E"; // Move to the beginning of the current line.
@@ -997,10 +1019,14 @@ int main(int argc, char *argv[]) {
           solution->clear();
           problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
-        double incr_norm;
+        double incr_norm, prev_norm;
         do {
           problem.iterate(useLineSearch,useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+          prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
+          if (prev_norm > 0) {
+            incr_norm /= prev_norm;
+          }
           if (rank==0) {
             cout << "\x1B[2K"; // Erase the entire current line.
             cout << "\x1B[0E"; // Move to the beginning of the current line.
