@@ -586,6 +586,8 @@ int main(int argc, char *argv[]) {
     
     bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
     
+    bool velocityConditionsTopAndBottom = args.Input<bool>("--velocityConditionsTopAndBottom", "impose velocity BCs on top and bottom boundaries", false);
+    
     args.Process();
     
     bool artificialTimeStepping = (dt > 0);
@@ -633,6 +635,11 @@ int main(int argc, char *argv[]) {
         cout << "using condensed solve.\n";
       } else {
         cout << "not using condensed solve.\n";
+      }
+      if (velocityConditionsTopAndBottom) {
+        cout << "imposing velocity BCs on top and bottom boundaries.\n";
+      } else {
+        cout << "imposing zero-traction BCs on top and bottom boundaries.\n";
       }
     }
 
@@ -717,6 +724,8 @@ int main(int argc, char *argv[]) {
                                                             useScaleCompliantGraphNorm); // enrich velocity if using compliant graph norm
     SolutionPtr solution = problem.backgroundFlow();
     SolutionPtr solnIncrement = problem.solutionIncrement();
+    solution->setReportTimingResults(false);
+    solnIncrement->setReportTimingResults(false);
     
     Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
     SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
@@ -729,11 +738,18 @@ int main(int argc, char *argv[]) {
     bc->addDirichlet(u2hat,nearCylinder,zero);
     bc->addDirichlet(u1hat,left,inflowSpeed);
     bc->addDirichlet(u2hat,left,zero);
-    bc->addDirichlet(u1hat,top,inflowSpeed);
-    bc->addDirichlet(u2hat,top,zero);
-    bc->addDirichlet(u1hat,bottom,inflowSpeed);
-    bc->addDirichlet(u2hat,bottom,zero);
-    // finally, no-traction conditions
+    if (velocityConditionsTopAndBottom) {
+      bc->addDirichlet(u1hat,top,inflowSpeed);
+      bc->addDirichlet(u2hat,top,zero);
+      bc->addDirichlet(u1hat,bottom,inflowSpeed);
+      bc->addDirichlet(u2hat,bottom,zero);
+    } else { // else, no-traction conditions
+      bc->addDirichlet(t1n,top,zero);
+      bc->addDirichlet(u2hat,top,zero);
+      bc->addDirichlet(t1n,bottom,zero);
+      bc->addDirichlet(u2hat,bottom,zero);
+    }
+    // finally, no-traction conditions at outflow
     bc->addDirichlet(t1n,right,zero);
     bc->addDirichlet(t2n,right,zero);
     
