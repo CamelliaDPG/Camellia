@@ -4,7 +4,7 @@ project(DPGDrivers)
 include_directories(DPGTests)
 
 # Add each driver
-add_subdirectory(LocalConservation)
+add_subdirectory(Truman)
 add_subdirectory(NavierStokes)
 add_subdirectory(Euler)
 #add_subdirectory(Burgers)
