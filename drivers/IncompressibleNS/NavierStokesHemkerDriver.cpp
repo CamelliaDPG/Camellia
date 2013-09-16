@@ -733,25 +733,48 @@ int main(int argc, char *argv[]) {
     SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(-meshHeight/2.0) );
     SpatialFilterPtr left         = Teuchos::rcp( new LeftBoundary(xLeft) );
     SpatialFilterPtr right        = Teuchos::rcp( new RightBoundary(xRight) );
-    // could simplify the below using SpatialFilter's Or-ing capability
+
     bc->addDirichlet(u1hat,nearCylinder,zero);
     bc->addDirichlet(u2hat,nearCylinder,zero);
     bc->addDirichlet(u1hat,left,inflowSpeed);
     bc->addDirichlet(u2hat,left,zero);
+    
+    SpatialFilterPtr topAndBottom = SpatialFilter::unionFilter(top, bottom);
+    
     if (velocityConditionsTopAndBottom) {
-      bc->addDirichlet(u1hat,top,inflowSpeed);
-      bc->addDirichlet(u2hat,top,zero);
-      bc->addDirichlet(u1hat,bottom,inflowSpeed);
-      bc->addDirichlet(u2hat,bottom,zero);
+      bc->addDirichlet(u1hat,topAndBottom,inflowSpeed);
+      bc->addDirichlet(u2hat,topAndBottom,zero);
+      
+      if (rank==0)
+        cout << "Imposing zero *pseudo*-traction at outflow--this is not the right thing, quite.\n";
+      // finally, no-traction conditions at outflow
+      bc->addDirichlet(t1n,right,zero);
+      bc->addDirichlet(t2n,right,zero);
     } else { // else, no-traction conditions
-      bc->addDirichlet(t1n,top,zero);
-      bc->addDirichlet(u2hat,top,zero);
-      bc->addDirichlet(t1n,bottom,zero);
-      bc->addDirichlet(u2hat,bottom,zero);
+      // t1n, t2n are *pseudo*-tractions
+      // we use penalty conditions for the true traction
+      
+      // define traction components in terms of field variables
+      FunctionPtr n = Function::normal();
+      LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+      LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+      
+      // at top, we impose u2 = 0 and t1 = 0
+      bc->addDirichlet(u2hat, topAndBottom, zero);
+      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+      pc->addConstraint(t1==zero,topAndBottom);
+      
+      // outflow: both traction components are 0
+      pc->addConstraint(t1==zero, right);
+      pc->addConstraint(t2==zero, right);
+      
+      // add penalty constraints to both solution objects
+      problem.backgroundFlow()->setFilter(pc);
+      problem.solutionIncrement()->setFilter(pc);
+      
+      if (rank==0)
+        cout << "Imposing zero-traction conditions using penalty constraints.\n";
     }
-    // finally, no-traction conditions at outflow
-    bc->addDirichlet(t1n,right,zero);
-    bc->addDirichlet(t2n,right,zero);
     
   //  cout << "NOT imposing constraint on the pressure\n";
     // we used a problem constructor that neglects accumulated fluxes ==> we need to set BCs on each NR step
@@ -979,18 +1002,18 @@ int main(int argc, char *argv[]) {
         
         // compute lift coefficient:
         double c_L = liftCoefficient(solution, radius);
-        double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
+//        double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
         if (rank==0) {
           cout << "lift coefficient: " << c_L << endl;
-          cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
+//          cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
         }
         
         // compute drag coefficient:
         double c_D = dragCoefficient(solution, radius);
-        double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
+//        double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
         if (rank==0) {
           cout << "drag coefficient: " << c_D << endl;
-          cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
+//          cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
         }
         
         // reset iteration count to 1 (for the background flow):
@@ -1068,10 +1091,10 @@ int main(int argc, char *argv[]) {
     
     // compute lift coefficient:
     double c_L = liftCoefficient(solution, radius);
-    double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
+//    double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
     if (rank==0) {
       cout << "lift coefficient: " << c_L << endl;
-      cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
+//      cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
     }
     
     // compute drag coefficient:
@@ -1079,7 +1102,7 @@ int main(int argc, char *argv[]) {
     double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
     if (rank==0) {
       cout << "drag coefficient: " << c_D << endl;
-      cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
+//      cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
     }
     
     double energyErrorTotal = solution->energyErrorTotal();
