@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
   meshPoints(2,0) = 1.0;
   meshPoints(2,1) = 1.0;
   meshPoints(3,0) = 0.0;
-  meshPoints(3,1) = 1.0;  
+  meshPoints(3,1) = 1.0;
 
   int H1Order = polyOrder + 1;
   int horizontalCells = 4, verticalCells = 4;
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
   double nonlinearRelativeEnergyTolerance = 1e-8; // used to determine convergence of the nonlinear solution
 
   ////////////////////////////////////////////////////////////////////
-  // DEFINE VARIABLES 
+  // DEFINE VARIABLES
   ////////////////////////////////////////////////////////////////////
 
   // new-style bilinear form definition
@@ -116,12 +116,12 @@ int main(int argc, char *argv[]) {
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
 
   ////////////////////////////////////////////////////////////////////
-  // CREATE MESH 
+  // CREATE MESH
   ////////////////////////////////////////////////////////////////////
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshPoints, horizontalCells, 
-      verticalCells, bf, H1Order, 
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshPoints, horizontalCells,
+      verticalCells, bf, H1Order,
       H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC,
         nullRHS, nullIP) );
 
   vector<double> e1(2); // (1,0)
@@ -216,7 +216,7 @@ int main(int argc, char *argv[]) {
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
   ////////////////////////////////////////////////////////////////////
-  // SOLVE 
+  // SOLVE
   ////////////////////////////////////////////////////////////////////
 
   for (int refIndex=0;refIndex<=numRefs;refIndex++){
@@ -227,7 +227,7 @@ int main(int argc, char *argv[]) {
       solution->solve();
       L2Update = solution->L2NormOfSolutionGlobal(u->ID());
       cout << "L2 Norm of Update = " << L2Update << endl;
-      backgroundFlow->clearSolution(fhat->ID());
+      // backgroundFlow->clear();
       backgroundFlow->addSolution(solution, newtonStepSize);
       iterCount++;
     }

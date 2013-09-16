@@ -1,0 +1,3 @@
+project(SpaceTimeConvection)
+
+add_executable(SpaceTimeConvection SpaceTimeConvection.cpp)
