@@ -1,0 +1,4 @@
+project(SpaceTimeConvection)
+
+add_executable(IsentropicSinePulse IsentropicSinePulse.cpp)
+add_executable(DoubleRarefaction DoubleRarefaction.cpp)
