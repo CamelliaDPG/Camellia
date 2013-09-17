@@ -6,7 +6,6 @@ include_directories(DPGTests)
 # Add each driver
 add_subdirectory(Truman)
 add_subdirectory(NavierStokes)
-add_subdirectory(Euler)
 #add_subdirectory(Burgers)
 add_subdirectory(ScratchPad)
 add_subdirectory(IncompressibleNS)
