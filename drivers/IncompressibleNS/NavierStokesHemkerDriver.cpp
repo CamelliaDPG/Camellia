@@ -754,15 +754,32 @@ int main(int argc, char *argv[]) {
       // t1n, t2n are *pseudo*-tractions
       // we use penalty conditions for the true traction
       
+//      if (rank==0)
+//        cout << "EXPERIMENTALLY, imposing zero-mean constraint on pressure.\n";
+//      bc->addZeroMeanConstraint(p);
+      
       // define traction components in terms of field variables
       FunctionPtr n = Function::normal();
       LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
       LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
       
-      // at top, we impose u2 = 0 and t1 = 0
-      bc->addDirichlet(u2hat, topAndBottom, zero);
+      bool imposeZeroSecondTraction = true;
+      
       Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
-      pc->addConstraint(t1==zero,topAndBottom);
+      if (imposeZeroSecondTraction) {
+        pc->addConstraint(t1==zero,topAndBottom);
+        pc->addConstraint(t2==zero,topAndBottom);
+        if (rank==0) {
+          cout << "imposing zero second traction (t2) at top and bottom\n";
+        }
+      } else {
+        // at top, we impose u2 = 0 and t1 = 0
+        bc->addDirichlet(u2hat, topAndBottom, zero);
+        pc->addConstraint(t1==zero,topAndBottom);
+        if (rank==0) {
+          cout << "imposing zero second velocity (u2) at top and bottom\n";
+        }
+      }
       
       // outflow: both traction components are 0
       pc->addConstraint(t1==zero, right);
