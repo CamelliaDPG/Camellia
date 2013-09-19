@@ -17,10 +17,18 @@
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 
+double xmin = -1;
+double xmax = 1;
+
 double GAMMA = 1.4;
-double halfwidth = 0.02;
-double xmin = 0.5-halfwidth;
-double xmax = 0.5+halfwidth;
+double rhoL = 7;
+double rhoR = 7;
+double uL = -1;
+double uR = 1;
+double pL = 0.2;
+double pR = 0.2;
+double eL = pL/(rhoL*(GAMMA-1));
+double eR = pR/(rhoR*(GAMMA-1));
 
 int H1Order = 3, pToAdd = 2;
 
@@ -60,18 +68,18 @@ class InitialDensity : public Function {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
                double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0;
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = rhoL;
                else
-                  values(cellIndex, ptIndex) = 0.125;
+                  values(cellIndex, ptIndex) = rhoR;
             }
          }
       }
 };
 
-class InitialMassFlux : public Function {
+class InitialVelocity : public Function {
    public:
-      InitialMassFlux() : Function(0) {}
+      InitialVelocity() : Function(0) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
@@ -81,28 +89,10 @@ class InitialMassFlux : public Function {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
                double y = (*points)(cellIndex,ptIndex,1);
-               values(cellIndex, ptIndex) = 0.0;
-            }
-         }
-      }
-};
-
-class InitialTotalEnergy : public Function {
-   public:
-      InitialTotalEnergy() : Function(0) {}
-      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-         int numCells = values.dimension(0);
-         int numPoints = values.dimension(1);
-
-         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-               double x = (*points)(cellIndex,ptIndex,0);
-               double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0/(GAMMA-1);
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = uL;
                else
-                  values(cellIndex, ptIndex) = 0.1/(GAMMA-1);
+                  values(cellIndex, ptIndex) = uR;
             }
          }
       }
@@ -120,10 +110,73 @@ class InitialInternalEnergy : public Function {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
                double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0/(1.0*(GAMMA-1));
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = eL;
                else
-                  values(cellIndex, ptIndex) = 0.1/(0.125*(GAMMA-1));
+                  values(cellIndex, ptIndex) = eR;
+            }
+         }
+      }
+};
+
+class InitialMassFlux : public Function {
+   public:
+      InitialMassFlux() : Function(0) {}
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+               double x = (*points)(cellIndex,ptIndex,0);
+               double y = (*points)(cellIndex,ptIndex,1);
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = -uL*rhoL;
+               else
+                  values(cellIndex, ptIndex) = -uR*rhoR;
+            }
+         }
+      }
+};
+
+class InitialMomentumFlux : public Function {
+   public:
+      InitialMomentumFlux() : Function(0) {}
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+               double x = (*points)(cellIndex,ptIndex,0);
+               double y = (*points)(cellIndex,ptIndex,1);
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = -(rhoL*uL*uL+pL);
+               else
+                  values(cellIndex, ptIndex) = -(rhoR*uR*uR+pR);
+            }
+         }
+      }
+};
+
+class InitialEnergyFlux : public Function {
+   public:
+      InitialEnergyFlux() : Function(0) {}
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+               double x = (*points)(cellIndex,ptIndex,0);
+               double y = (*points)(cellIndex,ptIndex,1);
+               if (x <= 0)
+                  values(cellIndex, ptIndex) = -(rhoL*eL+0.5*rhoL*uL*uL+pL)*uL;
+               else
+                  values(cellIndex, ptIndex) = -(rhoR*eR+0.5*rhoR*uR*uR+pR)*uR;
             }
          }
       }
@@ -203,8 +256,8 @@ int main(int argc, char *argv[]) {
    map<int, Teuchos::RCP<Function> > functionMap;
    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
    FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-   functionMap[rho->ID()] = Teuchos::rcp( new InitialDensity );
-   functionMap[u->ID()] = zero;
+   functionMap[rho->ID()] =Teuchos::rcp( new InitialDensity ) ;
+   functionMap[u->ID()] = Teuchos::rcp( new InitialVelocity );
    functionMap[e->ID()] = Teuchos::rcp( new InitialInternalEnergy );
 
    backgroundFlow->projectOntoMesh(functionMap);
@@ -279,18 +332,18 @@ int main(int argc, char *argv[]) {
    SpatialFilterPtr timezero = Teuchos::rcp( new TimeZero );
    SpatialFilterPtr left = Teuchos::rcp( new LeftBoundary );
    SpatialFilterPtr right = Teuchos::rcp( new RightBoundary );
-   FunctionPtr rho0 = Teuchos::rcp( new InitialDensity );
-   FunctionPtr mass0 = Teuchos::rcp( new InitialMassFlux );
-   FunctionPtr E0 = Teuchos::rcp( new InitialTotalEnergy );
-   bc->addDirichlet(Fm, timezero, -rho0);
-   bc->addDirichlet(Fx, timezero, -mass0);
-   bc->addDirichlet(Fe, timezero, -E0);
-   bc->addDirichlet(Fm, left, zero);
-   bc->addDirichlet(Fm, right, zero);
-   bc->addDirichlet(Fx, left, -one);
-   bc->addDirichlet(Fx, right, 0.1*one);
-   bc->addDirichlet(Fe, left, zero);
-   bc->addDirichlet(Fe, right, zero);
+   FunctionPtr rho0 = Teuchos::rcp( new InitialMassFlux );
+   FunctionPtr mass0 = Teuchos::rcp( new InitialMomentumFlux );
+   FunctionPtr E0 = Teuchos::rcp( new InitialEnergyFlux );
+   bc->addDirichlet(Fm, timezero, rho0);
+   bc->addDirichlet(Fx, timezero, mass0);
+   bc->addDirichlet(Fe, timezero, E0);
+   bc->addDirichlet(Fm, left, -rhoL*uL*one);
+   bc->addDirichlet(Fm, right, rhoR*uR*one);
+   bc->addDirichlet(Fx, left, -(rhoL*uL*uL+pL)*one);
+   bc->addDirichlet(Fx, right, (rhoR*uR*uR+pR)*one);
+   bc->addDirichlet(Fe, left, (rhoL*eL+0.5*rhoL*uL*uL+pL)*uL*one);
+   bc->addDirichlet(Fe, right, (rhoR*eR+0.5*rhoR*uR*uR+pR)*uR*one);
 
    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -302,9 +355,7 @@ int main(int argc, char *argv[]) {
    double energyThreshold = 0.2; // for mesh refinements
    RefinementStrategy refinementStrategy( solution, energyThreshold );
    VTKExporter exporter(backgroundFlow, mesh, varFactory);
-   VTKExporter updateExporter(solution, mesh, varFactory);
 
-   double nonlinearStepSize = 0.1;
    double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
    for (int refIndex=0; refIndex<=numRefs; refIndex++)
    {
@@ -353,9 +404,8 @@ int main(int argc, char *argv[]) {
       if (commRank == 0)
       {
          stringstream outfile;
-         outfile << "Sod_" << refIndex;
+         outfile << "DoubleRarefaction_" << refIndex;
          exporter.exportSolution(outfile.str());
-         updateExporter.exportSolution("Update"+outfile.str());
       }
 
       if (refIndex < numRefs)

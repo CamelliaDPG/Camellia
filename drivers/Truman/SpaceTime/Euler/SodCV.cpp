@@ -18,9 +18,10 @@ typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 
 double GAMMA = 1.4;
-double halfwidth = 0.02;
+double halfwidth = 0.5;
 double xmin = 0.5-halfwidth;
 double xmax = 0.5+halfwidth;
+double tmax = 0.2;
 
 int H1Order = 3, pToAdd = 2;
 
@@ -150,9 +151,9 @@ int main(int argc, char *argv[]) {
    meshBoundary(1,0) =  xmax;
    meshBoundary(1,1) =  0.0;
    meshBoundary(2,0) =  xmax;
-   meshBoundary(2,1) =  0.01;
+   meshBoundary(2,1) =  tmax;
    meshBoundary(3,0) =  xmin;
-   meshBoundary(3,1) =  0.01;
+   meshBoundary(3,1) =  tmax;
 
    int horizontalCells = 32, verticalCells = 8;
 
@@ -254,6 +255,9 @@ int main(int argc, char *argv[]) {
 
    ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
    IPPtr ip = bf->graphNorm();
+   ip->addTerm( 5e-2*vm->dx() );
+   ip->addTerm( 5e-2*vx->dx() );
+   ip->addTerm( 5e-2*ve->dx() );
 
    ////////////////////   CREATE BCs   ///////////////////////
    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -302,7 +306,7 @@ int main(int argc, char *argv[]) {
          bool useLineSearch = true;
          int posEnrich = 5; // amount of enriching of grid points on which to ensure positivity
          if (useLineSearch){ // to enforce positivity of density rho
-            double lineSearchFactor = .75; double eps = .001; // arbitrary
+            double lineSearchFactor = .5; double eps = .001; // arbitrary
             FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps);
             FunctionPtr ETemp = Function::solution(E,backgroundFlow) + alpha*Function::solution(E,solution) - Function::constant(eps);
             bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich);
@@ -316,6 +320,7 @@ int main(int argc, char *argv[]) {
                EIsPositive = ETemp->isPositive(mesh,posEnrich);
                iter++;
             }
+            alpha = max(alpha, 0.05);
             if (commRank==0 && alpha < 1.0){
                cout << "line search factor alpha = " << alpha << endl;
             }
