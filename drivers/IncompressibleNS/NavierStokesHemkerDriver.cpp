@@ -587,6 +587,8 @@ int main(int argc, char *argv[]) {
     bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
     
     bool velocityConditionsTopAndBottom = args.Input<bool>("--velocityConditionsTopAndBottom", "impose velocity BCs on top and bottom boundaries", false);
+
+    bool velocityConditionsRight = args.Input<bool>("--velocityConditionsRight", "impose velocity BCs on right boundaries", false);
     
     args.Process();
     
@@ -640,6 +642,11 @@ int main(int argc, char *argv[]) {
         cout << "imposing velocity BCs on top and bottom boundaries.\n";
       } else {
         cout << "imposing zero-traction BCs on top and bottom boundaries.\n";
+      }
+      if (velocityConditionsRight) {
+        cout << "imposing velocity BCs on outflow boundary.\n";
+      } else {
+        cout << "imposing zero-traction BCs on outflow boundary.\n";
       }
     }
 
@@ -745,11 +752,16 @@ int main(int argc, char *argv[]) {
       bc->addDirichlet(u1hat,topAndBottom,inflowSpeed);
       bc->addDirichlet(u2hat,topAndBottom,zero);
       
-      if (rank==0)
-        cout << "Imposing zero *pseudo*-traction at outflow--this is not the right thing, quite.\n";
-      // finally, no-traction conditions at outflow
-      bc->addDirichlet(t1n,right,zero);
-      bc->addDirichlet(t2n,right,zero);
+      if (velocityConditionsRight) {
+        bc->addDirichlet(u1hat,right,inflowSpeed);
+        bc->addDirichlet(u2hat,right,zero);
+      } else {
+        if (rank==0)
+          cout << "Imposing zero *pseudo*-traction at outflow--this is not the right thing, quite.\n";
+        // finally, no-traction conditions at outflow
+        bc->addDirichlet(t1n,right,zero);
+        bc->addDirichlet(t2n,right,zero);
+      }
     } else { // else, no-traction conditions
       // t1n, t2n are *pseudo*-tractions
       // we use penalty conditions for the true traction
@@ -781,9 +793,14 @@ int main(int argc, char *argv[]) {
         }
       }
       
-      // outflow: both traction components are 0
-      pc->addConstraint(t1==zero, right);
-      pc->addConstraint(t2==zero, right);
+      if (velocityConditionsRight) {
+        bc->addDirichlet(u1hat,right,inflowSpeed);
+        bc->addDirichlet(u2hat,right,zero);
+      } else {
+        // outflow: both traction components are 0
+        pc->addConstraint(t1==zero, right);
+        pc->addConstraint(t2==zero, right);
+      }
       
       // add penalty constraints to both solution objects
       problem.backgroundFlow()->setFilter(pc);
