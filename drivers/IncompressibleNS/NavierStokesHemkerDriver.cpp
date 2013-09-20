@@ -755,6 +755,11 @@ int main(int argc, char *argv[]) {
       if (velocityConditionsRight) {
         bc->addDirichlet(u1hat,right,inflowSpeed);
         bc->addDirichlet(u2hat,right,zero);
+        
+        if (rank==0) {
+          cout << "velocity conditions everywhere: imposing zero mean on pressure";
+        }
+        bc->addZeroMeanConstraint(p);
       } else {
         if (rank==0)
           cout << "Imposing zero *pseudo*-traction at outflow--this is not the right thing, quite.\n";
