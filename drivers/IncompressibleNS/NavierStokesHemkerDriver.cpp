@@ -757,7 +757,7 @@ int main(int argc, char *argv[]) {
         bc->addDirichlet(u2hat,right,zero);
         
         if (rank==0) {
-          cout << "velocity conditions everywhere: imposing zero mean on pressure";
+          cout << "velocity conditions everywhere: imposing zero mean on pressure.\n";
         }
         bc->addZeroMeanConstraint(p);
       } else {
