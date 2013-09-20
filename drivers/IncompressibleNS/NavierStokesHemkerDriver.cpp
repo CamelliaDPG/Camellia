@@ -589,6 +589,8 @@ int main(int argc, char *argv[]) {
     bool velocityConditionsTopAndBottom = args.Input<bool>("--velocityConditionsTopAndBottom", "impose velocity BCs on top and bottom boundaries", false);
 
     bool velocityConditionsRight = args.Input<bool>("--velocityConditionsRight", "impose velocity BCs on right boundaries", false);
+
+    bool skipPostProcessing = args.Input<bool>("--skipPostProcessing", "skip computations of mass flux, pressure, and stream solution", false);
     
     args.Process();
     
@@ -748,6 +750,13 @@ int main(int argc, char *argv[]) {
     
     SpatialFilterPtr topAndBottom = SpatialFilter::unionFilter(top, bottom);
     
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+    
     if (velocityConditionsTopAndBottom) {
       bc->addDirichlet(u1hat,topAndBottom,inflowSpeed);
       bc->addDirichlet(u2hat,topAndBottom,zero);
@@ -762,10 +771,11 @@ int main(int argc, char *argv[]) {
         bc->addZeroMeanConstraint(p);
       } else {
         if (rank==0)
-          cout << "Imposing zero *pseudo*-traction at outflow--this is not the right thing, quite.\n";
-        // finally, no-traction conditions at outflow
-        bc->addDirichlet(t1n,right,zero);
-        bc->addDirichlet(t2n,right,zero);
+          cout << "Imposing zero traction at outflow with penalty constraints.\n";
+        // outflow: both traction components are 0
+        pc->addConstraint(t1==zero, right);
+        pc->addConstraint(t2==zero, right);
+
       }
     } else { // else, no-traction conditions
       // t1n, t2n are *pseudo*-tractions
@@ -775,14 +785,8 @@ int main(int argc, char *argv[]) {
 //        cout << "EXPERIMENTALLY, imposing zero-mean constraint on pressure.\n";
 //      bc->addZeroMeanConstraint(p);
       
-      // define traction components in terms of field variables
-      FunctionPtr n = Function::normal();
-      LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
-      LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
-      
       bool imposeZeroSecondTraction = true;
       
-      Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
       if (imposeZeroSecondTraction) {
         pc->addConstraint(t1==zero,topAndBottom);
         pc->addConstraint(t2==zero,topAndBottom);
@@ -807,12 +811,14 @@ int main(int argc, char *argv[]) {
         pc->addConstraint(t2==zero, right);
       }
       
+      if (rank==0)
+        cout << "Imposing zero-traction conditions using penalty constraints.\n";
+    }
+    
+    if (! (velocityConditionsRight && velocityConditionsTopAndBottom) ) { // i.e. there are penalty constraints
       // add penalty constraints to both solution objects
       problem.backgroundFlow()->setFilter(pc);
       problem.solutionIncrement()->setFilter(pc);
-      
-      if (rank==0)
-        cout << "Imposing zero-traction conditions using penalty constraints.\n";
     }
     
   //  cout << "NOT imposing constraint on the pressure\n";
@@ -1151,93 +1157,95 @@ int main(int argc, char *argv[]) {
       cout << "Final incremental energy error: " << incrementalEnergyErrorTotal << ".)\n";
     }
     
-    FunctionPtr u1_sq = u1_prev * u1_prev;
-    FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
-    FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
-    FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
-    
-    // check that the zero mean pressure is being correctly imposed:
-    double p_avg = p_prev->integrate(mesh);
-    if (rank==0)
-      cout << "Integral of pressure: " << p_avg << endl;
-    
-    // integrate massFlux over each element (a test):
-    // fake a new bilinear form so we can integrate against 1 
-    VarPtr testOne = varFactory.testVar("1",CONSTANT_SCALAR);
-    BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-    LinearTermPtr massFluxTerm = massFlux * testOne;
-    
-    CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    DofOrderingFactory dofOrderingFactory(fakeBF);
-    int fakeTestOrder = H1Order;
-    DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
-    
-    int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-    vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-    map<int, double> massFluxIntegral; // cellID -> integral
-    double maxMassFluxIntegral = 0.0;
-    double totalMassFlux = 0.0;
-    double totalAbsMassFlux = 0.0;
-    double maxCellMeasure = 0;
-    double minCellMeasure = 1;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-      ElementTypePtr elemType = *elemTypeIt;
-      vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
-      vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
-        cellIDs.push_back(elems[i]->cellID());
-        if (elems[i]->cellID()==0) {
-          cout << "cellID 0\n"; // this line for setting a breakpoint.
+    if (!skipPostProcessing) {
+      FunctionPtr u1_sq = u1_prev * u1_prev;
+      FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
+      FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
+      FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
+      
+      // check that the zero mean pressure is being correctly imposed:
+      double p_avg = p_prev->integrate(mesh);
+      if (rank==0)
+        cout << "Integral of pressure: " << p_avg << endl;
+      
+      // integrate massFlux over each element (a test):
+      // fake a new bilinear form so we can integrate against 1 
+      VarPtr testOne = varFactory.testVar("1",CONSTANT_SCALAR);
+      BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
+      LinearTermPtr massFluxTerm = massFlux * testOne;
+      
+      CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
+      DofOrderingFactory dofOrderingFactory(fakeBF);
+      int fakeTestOrder = H1Order;
+      DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+      
+      int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
+      vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
+      map<int, double> massFluxIntegral; // cellID -> integral
+      double maxMassFluxIntegral = 0.0;
+      double totalMassFlux = 0.0;
+      double totalAbsMassFlux = 0.0;
+      double maxCellMeasure = 0;
+      double minCellMeasure = 1;
+      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+        ElementTypePtr elemType = *elemTypeIt;
+        vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
+        vector<int> cellIDs;
+        for (int i=0; i<elems.size(); i++) {
+          cellIDs.push_back(elems[i]->cellID());
+          if (elems[i]->cellID()==0) {
+            cout << "cellID 0\n"; // this line for setting a breakpoint.
+          }
+        }
+        FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
+        BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,true,15) ); // enrich by a bunch
+        basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+        FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+        FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
+        massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          // pick out the ones for testOne:
+          massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+        }
+        // find the largest:
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+        }
+        for (int i=0; i<elems.size(); i++) {
+          int cellID = cellIDs[i];
+          maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
+          minCellMeasure = min(minCellMeasure,cellMeasures(i));
+          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+          totalMassFlux += massFluxIntegral[cellID];
+          totalAbsMassFlux += abs( massFluxIntegral[cellID] );
+    //      if (rank==0) {
+    //        cout << "driver: massFluxIntegral[" << cellID << "] = " << massFluxIntegral[cellID] << endl;
+    //      }
         }
       }
-      FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,true,15) ); // enrich by a bunch
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-      FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-      FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-      massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        // pick out the ones for testOne:
-        massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
+      if (rank==0) {
+        cout << "largest mass flux: " << maxMassFluxIntegral << endl;
+        cout << "total mass flux: " << totalMassFlux << endl;
+        cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
+        cout << "largest h: " << sqrt(maxCellMeasure) << endl;
+        cout << "smallest h: " << sqrt(minCellMeasure) << endl;
+        cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
       }
-      // find the largest:
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
+      
+      FunctionPtr newMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux) );
+      FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux,true) );
+      
+      totalAbsMassFlux = absMassFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
+      totalMassFlux = massFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
+
+      if (rank==0) {
+        cout << "new total mass flux: " << totalMassFlux << endl;
+        cout << "new sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       }
-      for (int i=0; i<elems.size(); i++) {
-        int cellID = cellIDs[i];
-        maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
-        minCellMeasure = min(minCellMeasure,cellMeasures(i));
-        maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-        totalMassFlux += massFluxIntegral[cellID];
-        totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-  //      if (rank==0) {
-  //        cout << "driver: massFluxIntegral[" << cellID << "] = " << massFluxIntegral[cellID] << endl;
-  //      }
-      }
-    }
-    if (rank==0) {
-      cout << "largest mass flux: " << maxMassFluxIntegral << endl;
-      cout << "total mass flux: " << totalMassFlux << endl;
-      cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-      cout << "largest h: " << sqrt(maxCellMeasure) << endl;
-      cout << "smallest h: " << sqrt(minCellMeasure) << endl;
-      cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
     }
     
-    FunctionPtr newMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux) );
-    FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux,true) );
-    
-    totalAbsMassFlux = absMassFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
-    totalMassFlux = massFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
-
-    if (rank==0) {
-      cout << "new total mass flux: " << totalMassFlux << endl;
-      cout << "new sum of mass flux absolute value: " << totalAbsMassFlux << endl;
-    }
-
     if (rank==0){
       GnuPlotUtil::writeComputationalMeshSkeleton("finalHemkerMesh", mesh);
       
@@ -1257,56 +1265,58 @@ int main(int argc, char *argv[]) {
   //    polyOrderFunction->writeValuesToMATLABFile(mesh, "hemkerPolyOrders.m");
     }
     
-    Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
-    streamRHS->addTerm(vorticity * q_s);
-    ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-    ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
-    ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
-    
-    Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
-    // wherever we enforce velocity BCs, enforce BCs on phi, too
-    // phi, the streamfunction, can be used to measure mass flux between two points
-    // reverse engineering that fact, we can use y as the BC for phi
-    FunctionPtr y = Function::yn();
-    streamBC->addDirichlet(phi_hat, nearCylinder, zero); // had had this commented out; zero makes sense by analogy to the cavity flow problem.
-    streamBC->addDirichlet(phi_hat, left, y);
-    streamBC->addDirichlet(phi_hat, top, y);
-    streamBC->addDirichlet(phi_hat, bottom, y);
-    
-    IPPtr streamIP = Teuchos::rcp( new IP );
-    streamIP->addTerm(q_s);
-    streamIP->addTerm(q_s->grad());
-    streamIP->addTerm(v_s);
-    streamIP->addTerm(v_s->div());
-    SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
-    
-    cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
-    cout << "solving for approximate stream function...\n";
+    if ( !skipPostProcessing ) {
+      Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
+      streamRHS->addTerm(vorticity * q_s);
+      ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+      
+      Teuchos::RCP<BCEasy> streamBC = Teuchos::rcp( new BCEasy );
+      // wherever we enforce velocity BCs, enforce BCs on phi, too
+      // phi, the streamfunction, can be used to measure mass flux between two points
+      // reverse engineering that fact, we can use y as the BC for phi
+      FunctionPtr y = Function::yn();
+      streamBC->addDirichlet(phi_hat, nearCylinder, zero); // had had this commented out; zero makes sense by analogy to the cavity flow problem.
+      streamBC->addDirichlet(phi_hat, left, y);
+      streamBC->addDirichlet(phi_hat, top, y);
+      streamBC->addDirichlet(phi_hat, bottom, y);
+      
+      IPPtr streamIP = Teuchos::rcp( new IP );
+      streamIP->addTerm(q_s);
+      streamIP->addTerm(q_s->grad());
+      streamIP->addTerm(v_s);
+      streamIP->addTerm(v_s->div());
+      SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
+      
+      cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
+      cout << "solving for approximate stream function...\n";
 
-    if (useCondensedSolve) {
-      streamSolution->condensedSolve();
-    } else {
-      streamSolution->solve();
-    }
-    energyErrorTotal = streamSolution->energyErrorTotal();
-    if (rank == 0) {
-      cout << "...solved.\n";
-      cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
-    }
-    
-    if (rank==0){
-      VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
-      streamExporter.exportSolution("hemkerStreamSoln", H1Order*2);
+      if (useCondensedSolve) {
+        streamSolution->condensedSolve();
+      } else {
+        streamSolution->solve();
+      }
+      energyErrorTotal = streamSolution->energyErrorTotal();
+      if (rank == 0) {
+        cout << "...solved.\n";
+        cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
+      }
+      
+      if (rank==0){
+        VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
+        streamExporter.exportSolution("hemkerStreamSoln", H1Order*2);
 
-      // the commented-out code below doesn't really work because gnuplot requires a "point grid" in physical space...
-  //    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
-  //    FieldContainer<double> pointData = solutionDataFromRefPoints(refPoints, streamSolution, phi);
-  //    string patchDataPath = "phi_navierStokes_hemker.dat";
-  //    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
-  //    set<double> patchContourLevels = logContourLevels(height);
-  //    vector<string> patchDataPaths;
-  //    patchDataPaths.push_back(patchDataPath);
-  //    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
+        // the commented-out code below doesn't really work because gnuplot requires a "point grid" in physical space...
+    //    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
+    //    FieldContainer<double> pointData = solutionDataFromRefPoints(refPoints, streamSolution, phi);
+    //    string patchDataPath = "phi_navierStokes_hemker.dat";
+    //    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
+    //    set<double> patchContourLevels = logContourLevels(height);
+    //    vector<string> patchDataPaths;
+    //    patchDataPaths.push_back(patchDataPath);
+    //    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
+      }
     }
     
     if (saveFile.length() > 0) {
