@@ -1,3 +1,5 @@
 project(SpaceTimeConvection)
 
 add_executable(SpaceTimeConvection SpaceTimeConvection.cpp)
+add_executable(SpaceTimeConfusion SpaceTimeConfusion.cpp)
+add_executable(TimeStepConfusion TimeStepConfusion.cpp)
