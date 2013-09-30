@@ -1,52 +1,82 @@
 #include "TimeIntegrator.h"
 #include "PreviousSolutionFunction.h"
-#include "SolutionExporter.h"
 
-ImplicitEulerIntegrator::ImplicitEulerIntegrator(BFPtr steadyBF,Teuchos::RCP<RHSEasy>  steadyRHS, MeshPtr mesh,
-        SolutionPtr solution): bf(steadyBF), rhs(steadyRHS), mesh(mesh), solution(solution)
+TimeIntegrator::TimeIntegrator(BFPtr steadyBF,Teuchos::RCP<RHSEasy>  steadyRHS, MeshPtr _mesh,
+        SolutionPtr _solution, map<int, FunctionPtr> initialCondition):
+         _bf(steadyBF), _rhs(steadyRHS), _mesh(_mesh), _solution(_solution)
 {
    BCPtr nullBC = Teuchos::rcp((BC*)NULL);
    RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
    IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-   prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
-   invDt = Teuchos::rcp( new InvDtFunction(0.1) );
+   prevSolution = Teuchos::rcp(new Solution(_mesh, nullBC, nullRHS, nullIP) );
+   prevSolution->projectOntoMesh(initialCondition);
 
-   // mesh->registerSolution(solution);
-   mesh->registerSolution(prevTimeFlow);
+   _invDt = Teuchos::rcp( new InvDtFunction(_dt) );
 
-   t = 0;
-   dt = 0.1;
-   timestep = 0;
+   _mesh->registerSolution(prevSolution);
+
+   _t = 0;
+   _dt = 1e-3;
+   _timestep = 0;
 }
 
-
-void ImplicitEulerIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
+void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
 {
-
-   FunctionPtr trialPrevTime = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, trialVar) );
-   bf->addTerm( invDt*multiplier*trialVar, testVar );
-   rhs->addTerm( invDt*multiplier*trialPrevTime*testVar );
+   FunctionPtr trialPrevTime = Teuchos::rcp( new PreviousSolutionFunction(prevSolution, trialVar) );
+   _bf->addTerm( _invDt*multiplier*trialVar, testVar );
+   _rhs->addTerm( _invDt*multiplier*trialPrevTime*testVar );
 }
 
-void ImplicitEulerIntegrator::runToTime(double T)
+void TimeIntegrator::calcNextTimeStep(double _dt)
 {
-   while (t < T)
+   dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(_dt);
+   _solution->solve(false);
+   prevSolution->setSolution(_solution);
+}
+
+void TimeIntegrator::printMessage()
+{
+   cout << "timestep: " << _timestep << " t = " << _t << " _dt = " << _dt << endl;
+}
+
+void ImplicitEulerIntegrator::runToTime(double T, double dt)
+{
+   while (_t < T)
    {
-      calcNextTimeStep(dt);
-      t = t + dt;
-      timestep += 1;
-      cout << "timestep: " << timestep << " t = " << t << " dt = " << dt << endl;
+      _dt = max(1e-9, min(dt, T));
+      calcNextTimeStep(_dt);
+      _t += _dt;
+      _timestep++;
+      printMessage();
    }
 }
 
-void ImplicitEulerIntegrator::calcNextTimeStep(double dt)
+void TrapezoidRuleIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
 {
-   // invDt->setDt(dt);
-   solution->solve(false);
-   prevTimeFlow->setSolution(solution);
+   steadyLinearTerm = _bf->testFunctional(prevSolution);
+
+   TimeIntegrator::addTimeTerm(trialVar, testVar, multiplier);
 }
 
-void ImplicitEulerIntegrator::writeSolution()
+void TrapezoidRuleIntegrator::runToTime(double T, double dt)
 {
-  // VTKExporter exporter(solution, mesh, bf->varFactory());
+   if (_t == 0)
+   {
+      _dt = max(1e-9, min(dt, T));
+      calcNextTimeStep(_dt);
+
+      _rhs->addTerm( -steadyLinearTerm );
+
+      _t += _dt;
+      _timestep++;
+      printMessage();
+   }
+   while (_t < T)
+   {
+      _dt = max(1e-9, min(dt, T));
+      calcNextTimeStep(0.5*_dt);
+      _t += _dt;
+      _timestep++;
+      printMessage();
+   }
 }

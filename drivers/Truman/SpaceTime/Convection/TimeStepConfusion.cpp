@@ -6,6 +6,7 @@
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
 #include "TimeIntegrator.h"
+#include "PreviousSolutionFunction.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -64,7 +65,7 @@ class InitialCondition : public Function {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1.0;
+            values(cellIndex, ptIndex) = -4*(abs(x)-0.25);
           else
             values(cellIndex, ptIndex) = 0;
         }
@@ -115,7 +116,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   BUILD MESH   ///////////////////////
   FieldContainer<double> meshBoundary(4,2);
   double xmin = -0.5;
-  double xmax = 0.5;
+  double xmax = 1.0;
   double ymin = 0.0;
   double ymax = 0.1;
 
@@ -128,7 +129,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) =  xmin;
   meshBoundary(3,1) =  ymax;
 
-  int horizontalCells = 32, verticalCells = 1;
+  int horizontalCells = 64, verticalCells = 1;
 
   MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
       bf, H1Order, H1Order+pToAdd, false);
@@ -139,9 +140,9 @@ int main(int argc, char *argv[]) {
   beta.push_back(0.0);
 
   // tau terms:
-  bf->addTerm(sigma / epsilon, tau);
-  bf->addTerm(u, tau->div());
-  bf->addTerm(-uhat, tau->dot_normal());
+  bf->addTerm( sigma / epsilon, tau);
+  bf->addTerm( u, tau->div());
+  bf->addTerm( -uhat, tau->dot_normal());
 
   // v terms:
   bf->addTerm( sigma, v->grad() );
@@ -150,21 +151,21 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   // Graph norm
-  if (norm == 0)
-  {
-    ip = bf->graphNorm();
-  }
-  // Coupled robust norm
-  else if (norm == 1)
-  {
-    // coupled robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-    ip->addTerm( v );
-    ip->addTerm( sqrt(epsilon) * v->grad() );
-    ip->addTerm( beta * v->grad() );
-    ip->addTerm( tau->div() - beta*v->grad() );
-    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  }
+  // if (norm == 0)
+  // {
+  //   ip = bf->graphNorm();
+  // }
+  // // Coupled robust norm
+  // else if (norm == 1)
+  // {
+  //   // coupled robust test norm
+  //   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+  //   ip->addTerm( v );
+  //   ip->addTerm( sqrt(epsilon) * v->grad() );
+  //   ip->addTerm( beta * v->grad() );
+  //   ip->addTerm( tau->div() - beta*v->grad() );
+  //   ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+  // }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -183,8 +184,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  ImplicitEulerIntegrator eulerIntegrator(bf, rhs, mesh, solution);
-  eulerIntegrator.addTimeTerm(u, v, one);
+
 
   // ==================== SET INITIAL GUESS ==========================
   double u_free = 0.0;
@@ -193,29 +193,26 @@ int main(int argc, char *argv[]) {
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[u->ID()]      = u0;
   functionMap[sigma->ID()] = Function::vectorize(zero, zero);
-  eulerIntegrator.prevTimeFlow->projectOntoMesh(functionMap);
 
-  double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
+  // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
+  TrapezoidRuleIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
+  LinearTermPtr steadyRHS = bf->testFunctional(timeIntegrator.prevSolution);
+  timeIntegrator.addTimeTerm(u, v, one);
+
+  solution->setIP( bf->graphNorm() );
+
+  double dt = 2e-2;
+  double Dt = 1e-1;
   VTKExporter exporter(solution, mesh, varFactory);
 
-  eulerIntegrator.runToTime(0.5);
-  exporter.exportSolution("timestep_confusion");
+  timeIntegrator.runToTime(1*Dt, dt);
+  exporter.exportSolution("timestep_confusion0");
 
-  // for (int refIndex=0; refIndex<=numRefs; refIndex++)
-  // {
-  //   solution->solve(false);
+  timeIntegrator.runToTime(2*Dt, dt);
+  exporter.exportSolution("timestep_confusion1");
 
-  //   if (commRank==0)
-  //   {
-  //     stringstream outfile;
-  //     outfile << "timestep_confusion_" << refIndex;
-  //     exporter.exportSolution(outfile.str());
-  //   }
-
-  //   if (refIndex < numRefs)
-  //     refinementStrategy.refine(commRank==0); // print to console on commRank 0
-  // }
+  timeIntegrator.runToTime(5*Dt, dt);
+  exporter.exportSolution("timestep_confusion2");
 
   return 0;
 }
