@@ -195,13 +195,13 @@ int main(int argc, char *argv[]) {
   functionMap[sigma->ID()] = Function::vectorize(zero, zero);
 
   // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  TrapezoidRuleIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
+  ESDIRK2Integrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
   LinearTermPtr steadyRHS = bf->testFunctional(timeIntegrator.prevSolution);
   timeIntegrator.addTimeTerm(u, v, one);
 
   solution->setIP( bf->graphNorm() );
 
-  double dt = 2e-2;
+  double dt = 1e-1;
   double Dt = 1e-1;
   VTKExporter exporter(solution, mesh, varFactory);
 
@@ -211,8 +211,8 @@ int main(int argc, char *argv[]) {
   timeIntegrator.runToTime(2*Dt, dt);
   exporter.exportSolution("timestep_confusion1");
 
-  timeIntegrator.runToTime(5*Dt, dt);
-  exporter.exportSolution("timestep_confusion2");
+  // timeIntegrator.runToTime(3*Dt, dt);
+  // exporter.exportSolution("timestep_confusion2");
 
   return 0;
 }

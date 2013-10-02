@@ -42,7 +42,7 @@ class TimeIntegrator
         SolutionPtr solution, map<int, FunctionPtr> initialCondition);
     virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
     virtual void runToTime(double T, double dt) = 0;
-    void calcNextTimeStep(double dt);
+    virtual void calcNextTimeStep(double dt);
     void printMessage();
 };
 
@@ -55,16 +55,32 @@ class ImplicitEulerIntegrator : public TimeIntegrator
     void runToTime(double T, double dt);
 };
 
-class TrapezoidRuleIntegrator : public TimeIntegrator
+class RungeKuttaIntegrator : public TimeIntegrator
 {
-  private:
-    LinearTermPtr steadyLinearTerm;
+  protected:
+    LinearTermPtr _steadyLinearTerm;
 
   public:
 
-    TrapezoidRuleIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
-        SolutionPtr solution, map<int, FunctionPtr> initialCondition) :
-      TimeIntegrator(steadyBF, steadyRHS, mesh, solution, initialCondition) {}
+    RungeKuttaIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
+    virtual void runToTime(double T, double dt);
+};
+
+// Also known as the trapezoid rule
+class ESDIRK2Integrator : public RungeKuttaIntegrator
+{
+  private:
+    double a21, a22;
+    double b1, b2;
+    SolutionPtr _k2Solution;
+    Teuchos::RCP<RHSEasy> _k2RHS;
+    Teuchos::RCP<RHSEasy> _knRHS;
+
+  public:
+
+    ESDIRK2Integrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
     void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
-    void runToTime(double T, double dt);
+    void calcNextTimeStep(double dt);
 };
