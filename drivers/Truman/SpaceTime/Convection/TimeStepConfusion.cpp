@@ -65,7 +65,8 @@ class InitialCondition : public Function {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = -4*(abs(x)-0.25);
+            // values(cellIndex, ptIndex) = -4*(abs(x)-0.25);
+            values(cellIndex, ptIndex) = 1;
           else
             values(cellIndex, ptIndex) = 0;
         }
@@ -90,6 +91,8 @@ int main(int argc, char *argv[]) {
   double epsilon = args.Input<double>("--epsilon", "diffusion parameter", 1e-2);
   int norm = args.Input<int>("--norm", "0 = graph\n    1 = coupled robust", 0);
   args.Process();
+
+  cout << "Running with epsilon = " << epsilon << " and " << ((norm) ? "robust norm" : "graph norm") << endl;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
@@ -195,13 +198,12 @@ int main(int argc, char *argv[]) {
   functionMap[sigma->ID()] = Function::vectorize(zero, zero);
 
   // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  ESDIRK2Integrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  LinearTermPtr steadyRHS = bf->testFunctional(timeIntegrator.prevSolution);
+  ESDIRK4Integrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
   timeIntegrator.addTimeTerm(u, v, one);
 
   solution->setIP( bf->graphNorm() );
 
-  double dt = 1e-1;
+  double dt = 2e-2;
   double Dt = 1e-1;
   VTKExporter exporter(solution, mesh, varFactory);
 

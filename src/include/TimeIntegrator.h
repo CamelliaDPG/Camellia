@@ -51,17 +51,17 @@ class ImplicitEulerIntegrator : public TimeIntegrator
   private:
 
   public:
-
+    ImplicitEulerIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
     void runToTime(double T, double dt);
 };
 
 class RungeKuttaIntegrator : public TimeIntegrator
 {
   protected:
-    LinearTermPtr _steadyLinearTerm;
+    // LinearTermPtr _steadyLinearTerm;
 
   public:
-
     RungeKuttaIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
         SolutionPtr solution, map<int, FunctionPtr> initialCondition);
     virtual void runToTime(double T, double dt);
@@ -75,11 +75,31 @@ class ESDIRK2Integrator : public RungeKuttaIntegrator
     double b1, b2;
     SolutionPtr _k2Solution;
     Teuchos::RCP<RHSEasy> _k2RHS;
-    Teuchos::RCP<RHSEasy> _knRHS;
 
   public:
 
     ESDIRK2Integrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
+    void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+    void calcNextTimeStep(double dt);
+};
+
+class ESDIRK4Integrator : public RungeKuttaIntegrator
+{
+  private:
+    // Standard Butcher tables run from 0 to s
+    // I am running from 0 to s-1 to match 0 index
+    int numStages;
+    double a[6][6];
+    double b[6];
+    // For ESDIRK schemes, stage 1 is prevSolution
+    SolutionPtr _stageSolution[6];
+    Teuchos::RCP<RHSEasy> _stageRHS[6];
+    LinearTermPtr _steadyLinearTerm[5];
+
+  public:
+
+    ESDIRK4Integrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
         SolutionPtr solution, map<int, FunctionPtr> initialCondition);
     void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
     void calcNextTimeStep(double dt);
