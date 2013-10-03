@@ -21,6 +21,38 @@ struct CacheInfo {
   FieldContainer<double> subCellNodes;
 };
 
+// private class ComponentFunction
+class ComponentFunction : public Function {
+  FunctionPtr _vectorFxn;
+  int _component;
+public:
+  ComponentFunction(FunctionPtr vectorFunction, int componentIndex) {
+    _vectorFxn = vectorFunction;
+    _component = componentIndex;
+    if (_vectorFxn->rank() < 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vector function must have rank 1 or greater");
+    }
+  }
+  bool boundaryValueOnly() {
+    return _vectorFxn->boundaryValueOnly();
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    // note this allocation.  There might be ways of reusing memory here, if we had a slightly richer API.
+    int spaceDim = basisCache->getSpaceDim();
+    Teuchos::Array<int> dim;
+    values.dimensions(dim);
+    dim.push_back(spaceDim);
+    
+    FieldContainer<double> vectorValues(dim);
+    _vectorFxn->values(vectorValues, basisCache);
+    
+    int numValues = values.size();
+    for (int i=0; i<numValues; i++) {
+      values[i] = vectorValues[spaceDim*i + _component];
+    }
+  }
+};
+
 // private class CellBoundaryRestrictedFunction
 class CellBoundaryRestrictedFunction : public Function {
   FunctionPtr _fxn;
@@ -1068,6 +1100,18 @@ FunctionPtr Function::xn(int n) {
 
 FunctionPtr Function::yn(int n) {
   return Teuchos::rcp( new Yn(n) );
+}
+
+FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
+}
+
+FunctionPtr Function::yPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 1) );
+}
+
+FunctionPtr Function::zPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 2) );
 }
 
 FunctionPtr Function::zero(int rank) {

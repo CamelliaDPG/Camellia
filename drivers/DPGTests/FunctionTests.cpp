@@ -125,6 +125,13 @@ void FunctionTests::setup() {
 
 void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testComponentFunction()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testVectorFunctionValuesOrdering()) {
     numTestsPassed++;
   }
@@ -368,6 +375,26 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
     success = false;
   }
   
+  return success;
+}
+
+bool FunctionTests::testComponentFunction() {
+  FunctionPtr one = Function::constant(1);
+  FunctionPtr two = Function::constant(2);
+  
+  FunctionPtr vector = Function::vectorize(one, two);
+  FunctionPtr xPart = Function::xPart(vector);
+  FunctionPtr yPart = Function::yPart(vector);
+  
+  bool success = true;
+  if (! functionsAgree(one, xPart, _basisCache)) {
+    success = false;
+    cout << "xPart != one";
+  }
+  if (! functionsAgree(two, yPart, _basisCache)) {
+    success = false;
+    cout << "yPart != two";
+  }
   return success;
 }
 
