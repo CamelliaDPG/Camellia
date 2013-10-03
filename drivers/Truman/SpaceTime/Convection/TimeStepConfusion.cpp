@@ -15,6 +15,8 @@
 #include "choice.hpp"
 #endif
 
+double pi = 2.0*acos(0.0);
+
 int H1Order = 3, pToAdd = 2;
 
 class EpsilonScaling : public hFunction {
@@ -65,8 +67,9 @@ class InitialCondition : public Function {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           if (abs(x) <= 0.25)
+            values(cellIndex, ptIndex) = cos(2*pi*x);
             // values(cellIndex, ptIndex) = -4*(abs(x)-0.25);
-            values(cellIndex, ptIndex) = 1;
+            // values(cellIndex, ptIndex) = 1;
           else
             values(cellIndex, ptIndex) = 0;
         }
@@ -198,12 +201,12 @@ int main(int argc, char *argv[]) {
   functionMap[sigma->ID()] = Function::vectorize(zero, zero);
 
   // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  ESDIRK4Integrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
+  ESDIRKIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap, 6);
   timeIntegrator.addTimeTerm(u, v, one);
 
   solution->setIP( bf->graphNorm() );
 
-  double dt = 2e-2;
+  double dt = 5e-2;
   double Dt = 1e-1;
   VTKExporter exporter(solution, mesh, varFactory);
 

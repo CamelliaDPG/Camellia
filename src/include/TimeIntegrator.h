@@ -56,51 +56,24 @@ class ImplicitEulerIntegrator : public TimeIntegrator
     void runToTime(double T, double dt);
 };
 
-class RungeKuttaIntegrator : public TimeIntegrator
-{
-  protected:
-    // LinearTermPtr _steadyLinearTerm;
-
-  public:
-    RungeKuttaIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
-        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
-    virtual void runToTime(double T, double dt);
-};
-
-// Also known as the trapezoid rule
-class ESDIRK2Integrator : public RungeKuttaIntegrator
-{
-  private:
-    double a21, a22;
-    double b1, b2;
-    SolutionPtr _k2Solution;
-    Teuchos::RCP<RHSEasy> _k2RHS;
-
-  public:
-
-    ESDIRK2Integrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
-        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
-    void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
-    void calcNextTimeStep(double dt);
-};
-
-class ESDIRK4Integrator : public RungeKuttaIntegrator
+class ESDIRKIntegrator : public TimeIntegrator
 {
   private:
     // Standard Butcher tables run from 0 to s
     // I am running from 0 to s-1 to match 0 index
-    int numStages;
-    double a[6][6];
-    double b[6];
+    int _numStages;
+    vector< vector<double> > a;
+    vector<double> b;
     // For ESDIRK schemes, stage 1 is prevSolution
-    SolutionPtr _stageSolution[6];
-    Teuchos::RCP<RHSEasy> _stageRHS[6];
-    LinearTermPtr _steadyLinearTerm[5];
+    vector< SolutionPtr > _stageSolution;
+    vector< Teuchos::RCP<RHSEasy> > _stageRHS;
+    vector< LinearTermPtr > _steadyLinearTerm;
 
   public:
 
-    ESDIRK4Integrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
-        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
-    void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
-    void calcNextTimeStep(double dt);
+    ESDIRKIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition, int numStages);
+    virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+    virtual void runToTime(double T, double dt);
+    virtual void calcNextTimeStep(double dt);
 };
