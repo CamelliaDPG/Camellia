@@ -56,6 +56,21 @@ class ImplicitEulerIntegrator : public TimeIntegrator
     void runToTime(double T, double dt);
 };
 
+class NonlinearImplicitEulerIntegrator : public ImplicitEulerIntegrator
+{
+  private:
+    Teuchos::RCP<RHSEasy> _nlRHS;
+    SolutionPtr _prevNLSolution;
+    LinearTermPtr _steadyPrevTimeTerm;
+    LinearTermPtr _steadyPrevNLTerm;
+
+  public:
+    NonlinearImplicitEulerIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
+        SolutionPtr solution, map<int, FunctionPtr> initialCondition);
+    void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+    void calcNextTimeStep(double dt);
+};
+
 class ESDIRKIntegrator : public TimeIntegrator
 {
   private:

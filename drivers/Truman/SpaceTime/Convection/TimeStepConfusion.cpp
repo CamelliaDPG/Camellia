@@ -201,7 +201,8 @@ int main(int argc, char *argv[]) {
   functionMap[sigma->ID()] = Function::vectorize(zero, zero);
 
   // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  ESDIRKIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap, 6);
+  NonlinearImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
+  // ESDIRKIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap, 6);
   timeIntegrator.addTimeTerm(u, v, one);
 
   solution->setIP( bf->graphNorm() );
