@@ -9,6 +9,7 @@
 #include "vtkXMLUnstructuredGridWriter.h"
 #include "vtkCellType.h"
 #include "vtkIdList.h"
+#include "vtkVersion.h"
 
 // Write solution to unstructured VTK format
 void Solution::writeToVTK(const string& filePath, unsigned int num1DPts)
@@ -237,7 +238,11 @@ void Solution::writeFieldsToVTK(const string& filePath, unsigned int num1DPts)
   // ug->GetCellData()->AddArray(polyOrderData);
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   wr->SetInput(ug);
+#else
+  wr->SetInputData(ug);
+#endif
   ug->Delete();
   wr->SetFileName((filePath+".vtu").c_str());
   wr->SetDataModeToBinary();
@@ -369,7 +374,11 @@ void Solution::writeTracesToVTK(const string& filePath)
     traceData[varIdx]->Delete();
   }
   vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   trace_wr->SetInput(trace_ug);
+#else
+  trace_wr->SetInputData(trace_ug);
+#endif
   trace_ug->Delete();
   trace_wr->SetFileName(("trace_"+filePath+".vtu").c_str());
   trace_wr->SetDataModeToAscii();
