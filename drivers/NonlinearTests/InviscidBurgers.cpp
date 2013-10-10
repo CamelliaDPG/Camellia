@@ -20,7 +20,7 @@
 #include "HessianFilter.h"
 
 #include "TestingUtilities.h"
-#include "FiniteDifferenceUtilities.h" 
+#include "FiniteDifferenceUtilities.h"
 #include "MeshUtilities.h"
 
 #include "SolutionExporter.h"
@@ -38,7 +38,7 @@ void getGradient(FieldContainer<double> &rhsVec, Teuchos::RCP<StandardAssembler>
 
 class PositivePart : public Function {
   FunctionPtr _f;
-public:
+  public:
   PositivePart(FunctionPtr f) {
     _f = f;
   }
@@ -48,31 +48,31 @@ public:
 
     FieldContainer<double> beta_pts(numCells,numPoints);
     _f->values(values,basisCache);
-    
+
     for (int i = 0;i<numCells;i++){
       for (int j = 0;j<numPoints;j++){
-	if (values(i,j)<0){
-	  values(i,j) = 0.0;
-	}
+        if (values(i,j)<0){
+          values(i,j) = 0.0;
+        }
       }
     }
   }
 };
 
 class U0 : public SimpleFunction {
-public:
-  double value(double x, double y) {
-    return 1 - 2 * x;
-  }
+  public:
+    double value(double x, double y) {
+      return 1 - 2 * x;
+    }
 };
 
 class TopBoundary : public SpatialFilter {
-public:
-  bool matchesPoint(double x, double y) {
-    double tol = 1e-14;
-    bool yMatch = (abs(y-1.0) < tol);
-    return yMatch;
-  }
+  public:
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      bool yMatch = (abs(y-1.0) < tol);
+      return yMatch;
+    }
 };
 
 int main(int argc, char *argv[]) {
@@ -86,54 +86,54 @@ int main(int argc, char *argv[]) {
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
-  bool useTriangles = false;  
+  bool useTriangles = false;
 
   int nCells = args.Input<int>("--nCells", "num cells",2);
   int numSteps = args.Input<int>("--numSteps", "num NR steps",20);
   int useHessian = args.Input<int>("--useHessian", "to use hessian mod or not",0);
 
-  int polyOrder = 1; 
+  int polyOrder = 1;
   int pToAdd = 1;
 
   args.Process();
- 
+
   ////////////////////////////////////////////////////////////////////
-  // DEFINE VARIABLES 
+  // DEFINE VARIABLES
   ////////////////////////////////////////////////////////////////////
-  
+
   // new-style bilinear form definition
   VarFactory varFactory;
   VarPtr fn = varFactory.fluxVar("\\widehat{\\beta_n_u}");
   VarPtr u = varFactory.fieldVar("u");
-  
+
   VarPtr v = varFactory.testVar("v",HGRAD);
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
-  
+
   ////////////////////////////////////////////////////////////////////
-  // CREATE MESH 
+  // CREATE MESH
   ////////////////////////////////////////////////////////////////////
-  
+
   int H1Order = polyOrder + 1;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells , bf, H1Order, H1Order+pToAdd);
-  
+
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
   BCPtr nullBC = Teuchos::rcp((BC*)NULL); RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL); IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
-  
+
   vector<double> e1(2),e2(2);
   e1[0] = 1; e2[1] = 1;
-  
+
   FunctionPtr u_prev = Function::solution(u,backgroundFlow);
   FunctionPtr beta = e1 * u_prev + Teuchos::rcp( new ConstantVectorFunction( e2 ) );
-  
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
   ////////////////////////////////////////////////////////////////////
-  
+
   // v:
   bf->addTerm( -u, beta * v->grad());
   bf->addTerm( fn, v);
@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;  
+  FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
   rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad());
 
   // ==================== SET INITIAL GUESS ==========================
@@ -179,9 +179,9 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr outflowBoundary = Teuchos::rcp( new TopBoundary);
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   Teuchos::RCP<BCEasy> inflowBC = Teuchos::rcp( new BCEasy );
-  inflowBC->addDirichlet(fn,inflowBoundary, 
-                         ( e1 * u0_squared_div_2 + e2 * u0) * n );
-  
+  inflowBC->addDirichlet(fn,inflowBoundary,
+      ( e1 * u0_squared_div_2 + e2 * u0) * n );
+
   ////////////////////////////////////////////////////////////////////
   // CREATE SOLUTION OBJECT
   ////////////////////////////////////////////////////////////////////
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
   solution->setCubatureEnrichmentDegree(10);
 
   ////////////////////////////////////////////////////////////////////
-  // Create residual for Hessian/gradient 
+  // Create residual for Hessian/gradient
   ////////////////////////////////////////////////////////////////////
 
   FunctionPtr fnhat = Function::solution(fn,solution);
@@ -213,11 +213,11 @@ int main(int argc, char *argv[]) {
   VarFactory hessianVars = varFactory.getBubnovFactory(VarFactory::BUBNOV_TRIAL);
   VarPtr du = hessianVars.test(u->ID());
   BFPtr hessianBF = Teuchos::rcp( new BF(hessianVars) ); // initialize bilinear form
-  hessianBF->addTerm(e_v->dx()*u,du); 
+  hessianBF->addTerm(e_v->dx()*u,du);
   Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
 
   ////////////////////////////////////////////////////////////////////
-  // CHECKS ON GRADIENT 
+  // CHECKS ON GRADIENT
   ////////////////////////////////////////////////////////////////////
 
   map<int,set<int> > fluxInds, fieldInds;
@@ -227,8 +227,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0;i<numSteps;i++){
     if (i>0){
       if (useHessian){
-	solution->setFilter(hessianFilter);       
-	cout << "applying Hessian" << endl;
+        solution->setFilter(hessianFilter);
+        cout << "applying Hessian" << endl;
       }
     }
 
@@ -236,9 +236,9 @@ int main(int argc, char *argv[]) {
     Epetra_FECrsMatrix K = assembler->initializeMatrix();
     Epetra_FEVector b = assembler->initializeVector();
     Epetra_FEVector x = assembler->initializeVector();
-    assembler->assembleProblem(K,b);  
+    assembler->assembleProblem(K,b);
     Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp(new Epetra_LinearProblem(&K,&x,&b));
-    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver());    
+    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver());
     solver->setProblem(problem);
     solver->solve();
     assembler->distributeDofs(x);
@@ -249,10 +249,10 @@ int main(int argc, char *argv[]) {
     du.Random();
     for (int dofIndex = 0; dofIndex < mesh->numGlobalDofs();dofIndex++){
       if (TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)){
-	(*xNonlin(0))[dofIndex] = (*x(0))[dofIndex];
+        (*xNonlin(0))[dofIndex] = (*x(0))[dofIndex];
       }else{
-	(*xNonlin(0))[dofIndex] = 0.0;	  
-	//	(*du(0))[dofIndex] = 0.0; // zero out 
+        (*xNonlin(0))[dofIndex] = 0.0;
+        //	(*du(0))[dofIndex] = 0.0; // zero out
       }
     }
 
@@ -262,36 +262,36 @@ int main(int argc, char *argv[]) {
     backgroundFlow->addSolution(solution,stepLength);
     NL_residual = LS_Step->getNLResidual();
     if (rank==0){
-      cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
+      cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;
     }
-    
+
     FieldContainer<double> gradVec(mesh->numGlobalDofs());
     getGradient(gradVec,assembler,xNonlin);
-   
-    // check gradients 
+
+    // check gradients
     for (int dofIndex = 0;dofIndex<mesh->numGlobalDofs();dofIndex++){
       // preset ALL fluxes in all solution perturbations - boundary conditions and otherwise
       TestingUtilities::initializeSolnCoeffs(solnPerturbation);
       for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-	set<int> elemFluxDofs = fluxInds[(*elemIt)->cellID()];
-	for (set<int>::iterator dofIt = elemFluxDofs.begin();dofIt != elemFluxDofs.end();dofIt++){
-	  TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,(*x(0))[*dofIt],*dofIt);
-	}
+        set<int> elemFluxDofs = fluxInds[(*elemIt)->cellID()];
+        for (set<int>::iterator dofIt = elemFluxDofs.begin();dofIt != elemFluxDofs.end();dofIt++){
+          TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,(*x(0))[*dofIt],*dofIt);
+        }
       }
       bool isFluxIndex = TestingUtilities::isFluxOrTraceDof(mesh,dofIndex);
       if (!isFluxIndex){
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,dofIndex);
+        TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,dofIndex);
       }
 
       double fd_gradient = FiniteDifferenceUtilities::finiteDifferenceGradient(mesh, rieszResidual, backgroundFlow, dofIndex);
       // CHECK RHS/gradient
       if (!isFluxIndex){
-	double b = gradVec(dofIndex);
-	if (abs(fd_gradient-b)>1e-7){
-	  cout << "fd gradient = " << fd_gradient << ", while b[" << dofIndex << "] = " << b << endl;
-	}
+        double b = gradVec(dofIndex);
+        if (abs(fd_gradient-b)>1e-7){
+          cout << "fd gradient = " << fd_gradient << ", while b[" << dofIndex << "] = " << b << endl;
+        }
       }
-    }    
+    }
 
     // check Hessians - Hdu ~ (G(u+h*du) - G(u))/h
     double h = 1e-7;
@@ -302,15 +302,15 @@ int main(int argc, char *argv[]) {
     backgroundFlow->addSolution(solnPerturbation, h); // u+h*du
     FieldContainer<double> gradVecPerturbed(mesh->numGlobalDofs());
     getGradient(gradVecPerturbed,assembler,xNonlin);
-    backgroundFlow->addSolution(solnPerturbation, -h); // bring the background flow back to zero   
+    backgroundFlow->addSolution(solnPerturbation, -h); // bring the background flow back to zero
 
-    FieldContainer<double> fdHessian(mesh->numGlobalDofs());    
+    FieldContainer<double> fdHessian(mesh->numGlobalDofs());
     for (int i = 0;i<mesh->numGlobalDofs();i++){
       fdHessian(i) = (gradVecPerturbed(i)-gradVec(i))/h;
     }
 
     // actual Hessian that we compute
-    FieldContainer<double> computedHessian(mesh->numGlobalDofs());    
+    FieldContainer<double> computedHessian(mesh->numGlobalDofs());
     MeshPtr mesh = assembler->solution()->mesh();
     vector<ElementPtr> elems = mesh->activeElements();
     for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
@@ -322,10 +322,10 @@ int main(int argc, char *argv[]) {
       SerialDenseWrapper::multiplyAndAdd(elemHessian,K,du_K,'N','N',1.0,-1.0);
       // for galerkin orthog / gradient
       for (int i = 0;i<numTrialDofs;i++){
-	int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
-	computedHessian(globalDofIndex) += elemHessian(i,0);
+        int globalDofIndex = mesh->globalDofIndex(elem->cellID(),i);
+        computedHessian(globalDofIndex) += elemHessian(i,0);
       }
-    }    
+    }
     for (int i = 0;i < mesh->numGlobalDofs();i++){
       cout << "comped Hessian = " << computedHessian(i) << endl;
       cout << "fd hessian = " << fdHessian(i) << endl;
@@ -333,7 +333,7 @@ int main(int argc, char *argv[]) {
 
     cout << endl;
   }
-  
+
   VTKExporter exporter(solution, mesh, varFactory);
   if (rank==0){
     exporter.exportSolution("inviscidBurgers");
@@ -346,7 +346,7 @@ int main(int argc, char *argv[]) {
 // rhsVec should be size of number of total dofs
 void getGradient(FieldContainer<double> &rhsVec, Teuchos::RCP<StandardAssembler> assembler, Epetra_FEVector &xNonlin){
 
-  //  FieldContainer<double> rhsVec(mesh->numGlobalDofs());  
+  //  FieldContainer<double> rhsVec(mesh->numGlobalDofs());
   MeshPtr mesh = assembler->solution()->mesh();
   vector<ElementPtr> elems = mesh->activeElements();
   for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end();elemIt++){
