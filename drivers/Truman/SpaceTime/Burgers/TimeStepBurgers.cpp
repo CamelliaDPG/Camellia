@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm( -f2hat, v2);
 
   // time terms
-  double dt = 1e-3;
+  double dt = 1e-1;
   bf->addTerm( u1/dt, v1);
   bf->addTerm( u2/dt, v2);
 
@@ -267,20 +267,20 @@ int main(int argc, char *argv[]) {
   // residual terms
   // rhs->addTerm( bf->testFunctional(backgroundFlow) );
   FunctionPtr Rfunc = Function::constant(R);
-  rhs->addTerm( Rfunc*sigma1_prev * tau1 );
-  rhs->addTerm( Rfunc*sigma2_prev * tau2 );
-  rhs->addTerm( u1_prev * tau1->div());
-  rhs->addTerm( u2_prev * tau2->div());
+  rhs->addTerm( -Rfunc*sigma1_prev * tau1 );
+  rhs->addTerm( -Rfunc*sigma2_prev * tau2 );
+  rhs->addTerm( -u1_prev * tau1->div());
+  rhs->addTerm( -u2_prev * tau2->div());
 
-  rhs->addTerm( u1_prev/dt * v1);
-  rhs->addTerm( u2_prev/dt * v2);
+  rhs->addTerm( -u1_prev/dt * v1);
+  rhs->addTerm( -u2_prev/dt * v2);
   rhs->addTerm( u1_prev_time/dt * v1);
   rhs->addTerm( u2_prev_time/dt * v2);
 
-  rhs->addTerm( Rbeta*sigma1_prev * v1);
-  rhs->addTerm( Rbeta*sigma2_prev * v2);
-  rhs->addTerm( sigma1_prev * v1->grad() );
-  rhs->addTerm( sigma2_prev * v2->grad() );
+  rhs->addTerm( -Rbeta*sigma1_prev * v1);
+  rhs->addTerm( -Rbeta*sigma2_prev * v2);
+  rhs->addTerm( -sigma1_prev * v1->grad() );
+  rhs->addTerm( -sigma2_prev * v2->grad() );
 
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -294,6 +294,8 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
   FunctionPtr u1Exact = functionMap[u1->ID()];
   FunctionPtr u2Exact = functionMap[u2->ID()];
+  FunctionPtr sigma1Exact = functionMap[sigma1->ID()];
+  FunctionPtr sigma2Exact = functionMap[sigma2->ID()];
   bc->addDirichlet(u1hat, left,   u1Exact);
   bc->addDirichlet(u1hat, bottom, u1Exact);
   bc->addDirichlet(u1hat, right,  u1Exact);
@@ -305,16 +307,30 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  VTKExporter prevTimeExporter(prevTimeFlow, mesh, varFactory);
+  // VTKExporter prevTimeExporter(prevTimeFlow, mesh, varFactory);
   VTKExporter exporter(backgroundFlow, mesh, varFactory);
-  prevTimeExporter.exportSolution("Burgers_0");
+  // prevTimeExporter.exportSolution("Burgers_1_0");
 
-  for (int i = 1; i < 3; i++)
+  double t = dt;
+  int timestep = 0;
+  while (t <= 3)
   {
-    solution->solve();
-    backgroundFlow->addSolution(solution, 1);
+    timestep++;
+    t += dt;
+    dynamic_cast< ExactU1* >(u1Exact.get())->t += dt;
+    dynamic_cast< ExactU2* >(u2Exact.get())->t += dt;
+    dynamic_cast< ExactSigma1* >(sigma1Exact.get())->t += dt;
+    dynamic_cast< ExactSigma2* >(sigma2Exact.get())->t += dt;
+    double uUpdateL2 = 1e9;
+    while (uUpdateL2 > 1e-6)
+    {
+      solution->solve();
+      uUpdateL2 = solution->L2NormOfSolution(0);
+      cout << "Update size = " << uUpdateL2 << endl;
+      backgroundFlow->addSolution(solution, 1);
+    }
     stringstream outfile;
-    outfile << "Burgers_" << i;
+    outfile << "Burgers_" << timestep;
     exporter.exportSolution(outfile.str());
   }
 
