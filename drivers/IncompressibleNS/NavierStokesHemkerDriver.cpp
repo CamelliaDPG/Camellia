@@ -1330,10 +1330,12 @@ int main(int argc, char *argv[]) {
     if (rank==0){
       GnuPlotUtil::writeComputationalMeshSkeleton("finalHemkerMesh", mesh);
       
-      VTKExporter exporter(solution, mesh, varFactory);
-      exporter.exportSolution("nsHemkerSoln", H1Order*2);
-      
-      exporter.exportFunction(vorticity, "HemkerVorticity");
+#ifdef USE_VTK
+        VTKExporter exporter(solution, mesh, varFactory);
+        exporter.exportSolution("nsHemkerSoln", H1Order*2);
+        
+        exporter.exportFunction(vorticity, "HemkerVorticity");
+#endif
       
   //    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
   //    u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
@@ -1377,8 +1379,10 @@ int main(int argc, char *argv[]) {
       }
       
       if (rank==0){
+#ifdef USE_VTK
         VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
         streamExporter.exportSolution("hemkerStreamSoln", H1Order*2);
+#endif
 
         // the commented-out code below doesn't really work because gnuplot requires a "point grid" in physical space...
     //    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
