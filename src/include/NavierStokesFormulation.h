@@ -13,6 +13,8 @@
 
 #include "StokesFormulation.h"
 
+#include "Solver.h"
+
 // implementation of some standard Navier-Stokes Formulations.
 class NavierStokesFormulation {
 protected:
@@ -297,6 +299,8 @@ class VGPNavierStokesProblem {
   
   bool _neglectFluxesOnRHS;
   
+  Teuchos::RCP<Solver> _solver;
+  
   void init(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
             FunctionPtr f1, FunctionPtr f2, bool enrichVelocity) {
     _neglectFluxesOnRHS = true;
@@ -337,6 +341,9 @@ class VGPNavierStokesProblem {
     
     _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2,_neglectFluxesOnRHS) );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
+    
+    _solver = Teuchos::rcp( new KluSolver() );
+
   }
   
   void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
@@ -383,6 +390,8 @@ class VGPNavierStokesProblem {
     
     _solnIncrement->setRHS( _vgpNavierStokesFormulation->rhs(f1,f2, _neglectFluxesOnRHS) );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
+    
+    _solver = Teuchos::rcp( new KluSolver() );
   }
   void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
              int verticalCells, int H1Order, int pToAdd,
@@ -430,6 +439,8 @@ class VGPNavierStokesProblem {
     
     _solnIncrement->setRHS( _exactSolution->rhs() );
     _solnIncrement->setIP( _vgpNavierStokesFormulation->graphNorm() );
+    
+    _solver = Teuchos::rcp( new KluSolver() );
   }
 public:
   VGPNavierStokesProblem(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
@@ -505,18 +516,18 @@ public:
     if (_iterations==0) {
       _solnIncrement->clear(); // zero out so we start afresh if the _iterations have been manually set...
       if (useCondensedSolve) {
-        _backgroundFlow->condensedSolve();
+        _backgroundFlow->condensedSolve(_solver);
       } else {
-        _backgroundFlow->solve();
+        _backgroundFlow->solve(_solver);
       }
       // want _solnIncrement to store the initial solution as the first increment:
       weight = 1.0;
       _solnIncrement->addSolution(_backgroundFlow, weight, true); // true: allow adds of empty cells
     } else {
       if (useCondensedSolve) {
-        _solnIncrement->condensedSolve();
+        _solnIncrement->condensedSolve(_solver);
       } else {
-        _solnIncrement->solve();
+        _solnIncrement->solve(_solver);
       }
       if (!useLineSearch) {
         weight = _iterationWeight;
@@ -571,6 +582,13 @@ public:
   }
   Teuchos::RCP< VGPNavierStokesFormulation > vgpNavierStokesFormulation() {
     return _vgpNavierStokesFormulation;
+  }
+  
+  void setSolver( Teuchos::RCP<Solver> solver ) {
+    _solver = solver;
+  }
+  Teuchos::RCP<Solver> solver() {
+    return _solver;
   }
 };
 
