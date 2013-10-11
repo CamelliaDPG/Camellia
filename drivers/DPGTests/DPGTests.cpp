@@ -159,7 +159,7 @@ void DPGTests::runTests() {
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
-  bool skipSlowTests = false;
+  bool skipSlowTests = true;
   
   // set up a few special entries for BasisFactory first:
   createBases();
