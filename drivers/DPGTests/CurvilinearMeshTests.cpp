@@ -100,6 +100,8 @@ void lineAcrossQuadRefCell(FieldContainer<double> &refPoints, int numPoints, boo
 bool CurvilinearMeshTests::testCylinderMesh() {
   bool success = true;
   
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   FunctionPtr one = Function::constant(1.0);
   
   double width = 30.0;
@@ -134,18 +136,22 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   cout << setprecision(15);
   // test p-convergence of mesh area
   double previousError = 1000;
-  int numPRefinements = 5;
+  int numPRefinements = 3;
   for (int i=1; i<=numPRefinements; i++) {
     double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    cout << "For k=" << i << ", implied value of pi: " << impliedPi;
-    cout << " (error " << abs(PI-impliedPi) << ")\n";
+    if (rank==0) {
+      cout << "For k=" << i << ", implied value of pi: " << impliedPi;
+      cout << " (error " << abs(PI-impliedPi) << ")\n";
+    }
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence
       success = false;
-      cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
-      cout << "Current error = " << error << "; previous = " << previousError << endl;
+      if (rank==0) {
+        cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
+        cout << "Current error = " << error << "; previous = " << previousError << endl;
+      }
     }
 //    ostringstream filePath;
 //    filePath << "/tmp/cylinderFlowMesh" << i << ".dat";
@@ -184,18 +190,22 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   H1Order = 2;
   mesh = MeshFactory::hemkerMesh(width, height, r, bf, H1Order, pToAdd);
   previousError = 1000;
-  int numHRefinements = 5;
+  int numHRefinements = 3;
   for (int i=0; i<=numHRefinements; i++) {
     double approximateArea = one->integrate(mesh);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
-    cout << " (error " << abs(PI-impliedPi) << ")\n";
+    if (rank==0) {
+      cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
+      cout << " (error " << abs(PI-impliedPi) << ")\n";
+    }
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
     if ((error > previousError) && (error > tol)) { // non-convergence
       success = false;
-      cout << "Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
-      cout << "Current error = " << error << "; previous = " << previousError << endl;
+      if (rank==0) {
+        cout << "Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
+        cout << "Current error = " << error << "; previous = " << previousError << endl;
+      }
     }
     //    ostringstream filePath;
     //    filePath << "/tmp/cylinderFlowMesh_h" << i << ".dat";
@@ -315,11 +325,11 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   
   transformationFunction->values(values, basisCache);
   
-  { // let's take a quick look to make sure we haven't screwed anything up majorly:
-    ostringstream filePath;
-    filePath << "/tmp/straightEdgeMesh.dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
-  }
+//  { // let's take a quick look to make sure we haven't screwed anything up majorly:
+//    ostringstream filePath;
+//    filePath << "/tmp/straightEdgeMesh.dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
+//  }
   
   
   double maxDiff = 0;
@@ -335,6 +345,8 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
 
 bool CurvilinearMeshTests::testEdgeLength() {
   bool success = true;
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
   
   cout << setprecision(15);
   double tol = 1e-14;
@@ -405,11 +417,11 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     quadMesh->setEdgeToCurveMap(edgeToCurveMap);
 
-    { // let's take a quick look to make sure we haven't screwed anything up majorly:
-      ostringstream filePath;
-      filePath << "/tmp/skewedQuadMesh.dat";
-      GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
-    }
+//    { // let's take a quick look to make sure we haven't screwed anything up majorly:
+//      ostringstream filePath;
+//      filePath << "/tmp/skewedQuadMesh.dat";
+//      GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), quadMesh);
+//    }
     
     // the length of the sloped edge is 2 sqrt (2)
     // and the other edges have total length of 5:
@@ -538,7 +550,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   // now, do much the same thing, except with h-refinements:
   H1Order = 2;
   mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
-  int numHRefinements = 5;
+  int numHRefinements = 3;
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
@@ -582,21 +594,25 @@ bool CurvilinearMeshTests::testEdgeLength() {
   perimeter = oneOnBoundary->integrate(mesh);
   double previousError = 1000;
   
-  numPRefinements = 5;
+  numPRefinements = 3;
   for (int i=1; i<=numPRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
+    if (rank==0) {
+      cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
+    }
     double error = abs(truePerimeter - perimeter);
     if ((error >= previousError) && (error > tol)) { // non-convergence
       success = false;
-      cout << "testEdgeLength: Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
-      cout << "Current error = " << error << "; previous = " << previousError << endl;
+      if (rank==0) {
+        cout << "testEdgeLength: Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
+        cout << "Current error = " << error << "; previous = " << previousError << endl;
+      }
     }
-    ostringstream filePath;
-    filePath << "/tmp/circularMesh_p" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    ostringstream filePath;
+//    filePath << "/tmp/circularMesh_p" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     // p-refine
     if (i < numPRefinements) {
@@ -609,26 +625,30 @@ bool CurvilinearMeshTests::testEdgeLength() {
   mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth, 1, 1);
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   previousError = 1000;
-  numHRefinements = 5;
+  numHRefinements = 3;
   for (int i=0; i<=numHRefinements; i++) {
     perimeter = oneOnBoundary->integrate(mesh);
     
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
+    if (rank==0) {
+      cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
+    }
     
     double error = abs(truePerimeter - perimeter);
     if ((error >= previousError) && (error > tol)) { // non-convergence
       success = false;
-      cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
-      cout << "Current error = " << error << "; previous = " << previousError << endl;
+      if (rank==0) {
+        cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
+        cout << "Current error = " << error << "; previous = " << previousError << endl;
+      }
     }
-    ostringstream filePath;
-    filePath << "/tmp/circularMesh_h" << i << ".dat";
-    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
-    filePath.str("");
-    filePath << "/tmp/circularMesh_h" << i << "_straight_lines.dat";
-    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
+//    ostringstream filePath;
+//    filePath << "/tmp/circularMesh_h" << i << ".dat";
+//    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
+//    filePath.str("");
+//    filePath << "/tmp/circularMesh_h" << i << "_straight_lines.dat";
+//    GnuPlotUtil::writeExactMeshSkeleton(filePath.str(), mesh, 2);
     previousError = error;
     
     // h-refine
