@@ -282,6 +282,7 @@ ExactSolution::ExactSolution(Teuchos::RCP<BilinearForm> bf, Teuchos::RCP<BC> bc,
 
 double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+  return 0;
 //  int spaceDim = physicalPoint.size();
 //  double x = physicalPoint(0);
 //  double y = physicalPoint(1);
@@ -300,6 +301,7 @@ double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physica
 double ExactSolution::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
                                     FieldContainer<double> &unitNormal) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
+  return 0;
 //  int spaceDim = physicalPoint.size();
 //  double x = physicalPoint(0);
 //  double y = physicalPoint(1);

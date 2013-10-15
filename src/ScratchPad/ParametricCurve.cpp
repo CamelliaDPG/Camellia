@@ -236,6 +236,7 @@ public:
   
   ParametricCurvePtr dt() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
+    return Teuchos::rcp((ParametricCurve*)NULL);
   }
 };
 

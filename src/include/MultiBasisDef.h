@@ -497,6 +497,7 @@ Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > MultiBasis<Scalar, ArrayScal
     leafOrdinalOffset += numLeaves;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
+  return Teuchos::rcp((Camellia::Basis<Scalar,ArrayScalar> *) NULL);
 }
 
 template<class Scalar, class ArrayScalar>

@@ -25,6 +25,7 @@ RefinementType refinementTypeForString(string refTypeStr) {
     return P_REFINEMENT;
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unknown refinement type string.");
+    return UNKNOWN_REFINEMENT;
   }
 }
 
@@ -40,6 +41,8 @@ string stringForRefinementType(RefinementType refType) {
       return "p";
     case H_UNREFINEMENT:
       return "hu";
+    case UNKNOWN_REFINEMENT:
+      return "UNKNOWN";
   }
 }
 
