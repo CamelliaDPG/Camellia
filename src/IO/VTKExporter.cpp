@@ -4,7 +4,7 @@
  *  Created by Truman Ellis on 12/12/2012.
  *
  */
- 
+
 //#include "VTKExporterCamellia.h"
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
@@ -62,21 +62,21 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   vector< ElementTypePtr >::iterator elemTypeIt;
 
   // Loop through Quads, Triangles, etc
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    
-    FieldContainer<double> vertexPoints;    
+
+    FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
-    
+
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<int> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
@@ -136,7 +136,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
     }
-    
+
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
@@ -261,7 +261,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   wr->Write();
   wr->Delete();
 
-  cout << "Wrote Field Variables to " << filePath << ".vtu" << endl;
+  cout << "    wrote field variables to " << filePath << ".vtu" << endl;
 }
 
 void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
@@ -271,12 +271,12 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
    // 1. the fluxes get an extra parity factor
    // 2. the function names are rendered with an \\overline (from Function::solution())
    vector< FunctionPtr > traceFxns;
-   
+
    // Get trialIDs
    vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
    vector<VarPtr> vars;
    int numVars = traceTrialIDs.size();
-   
+
    for (int varIdx = 0; varIdx < numVars; varIdx++)
    {
    VarPtr var = _varFactory.trial(traceTrialIDs[varIdx]);
@@ -310,22 +310,22 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
 
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numSides = cellTopoPtr->getSideCount();
-    
-    FieldContainer<double> vertexPoints;    
+
+    FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
-    
+
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<int> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
@@ -344,7 +344,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     {
       //      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
       double a = -.99;
-      double b = .99; 
+      double b = .99;
       double x = a + (b-a)*(double(i)/double(num1DPts-1));
       refPoints(i,0) = x;
     }
@@ -412,7 +412,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   trace_wr->Write();
   trace_wr->Delete();
 
-  cout << "Wrote " << "trace_"+filePath << ".vtu" << endl;
+  cout << "    wrote trace variables to " << "trace_"+filePath << ".vtu" << endl;
 }
 
 void VTKExporter::exportFunction(FunctionPtr function, const string& functionName, unsigned int num1DPts)
@@ -437,21 +437,21 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
   vector< ElementTypePtr >::iterator elemTypeIt;
 
   // Loop through Quads, Triangles, etc
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) 
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    
-    FieldContainer<double> vertexPoints;    
+
+    FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
-    
+
     int numCells = physicalCellNodes.dimension(0);
     bool createSideCacheToo = false;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<int> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) 
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
@@ -511,7 +511,7 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
     }
-    
+
     basisCache->setRefCellPoints(refPoints);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
     const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
@@ -624,51 +624,51 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
 
 void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions, const string& filePath, unsigned int num1DPts) {
   bool defaultPts = (num1DPts == 0);
-  
+
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::New();
   vector<vtkFloatArray*> data;
   vtkPoints* points = vtkPoints::New();
-  
+
   int numFxns = functions.size();
   for (int fxnIdx = 0; fxnIdx < numFxns; fxnIdx++)
   {
     data.push_back(vtkFloatArray::New());
-    
+
     data[fxnIdx]->SetNumberOfComponents(1);
     data[fxnIdx]->SetName(functions[fxnIdx]->displayString().c_str());
   }
   unsigned int total_vertices = 0;
-  
+
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
-  
+
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
     int numSides = cellTopoPtr->getSideCount();
-    
+
     FieldContainer<double> vertexPoints;
     _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
-    
+
     bool createSideCacheToo = true;
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh, createSideCacheToo));
-    
+
     vector<int> cellIDs;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       int cellID = _mesh->cellID(elemTypePtr, cellIndex, -1); // -1: global cellID
       cellIDs.push_back(cellID);
     }
-    
+
     int pOrder = _mesh->cellPolyOrder(cellIDs[0]);
     if (defaultPts)
       num1DPts = pow(2.0, pOrder-1);
-    
+
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
-    
+
     FieldContainer<double> refPoints(num1DPts,1);
     for (int i=0; i < num1DPts; i++)
     {
@@ -678,7 +678,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
       double x = a + (b-a)*(double(i)/double(num1DPts-1));
       refPoints(i,0) = x;
     }
-    
+
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
@@ -686,7 +686,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
       int numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
       if (sideBasisCache.get() == NULL)
         cout << "NULL Side Basis" << endl;
-      
+
       vector< FieldContainer<double> > computedValues;
       computedValues.resize(numFxns);
       for (int i=0; i < numFxns; i++)
@@ -697,7 +697,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
       const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
       // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();
       // cout << " physPoints dim = " << physicalPoints->dimension(0) << " " << physicalPoints->dimension(1)<< endl;
-      
+
       for (int cellIndex=0;cellIndex < numCells;cellIndex++)
       {
         vtkIdList* edge = vtkIdList::New();
@@ -708,7 +708,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
         }
         ug->InsertNextCell((int)VTK_POLY_LINE, edge);
         edge->Delete();
-        
+
         // cout << "Physical Points: " << endl;
         for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
         {
@@ -741,7 +741,7 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
   wr->Update();
   wr->Write();
   wr->Delete();
-  
+
   cout << "Wrote " << filePath << ".vtu" << endl;
 }
 

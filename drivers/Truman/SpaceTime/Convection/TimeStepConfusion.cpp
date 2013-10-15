@@ -6,7 +6,6 @@
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
 #include "TimeIntegrator.h"
-#include "PreviousSolutionFunction.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -54,9 +53,9 @@ class ConstantYBoundary : public SpatialFilter {
       }
 };
 
-class InitialCondition : public Function {
+class InitialU : public Function {
   public:
-    InitialCondition() : Function(0) {}
+    InitialU() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -67,13 +66,74 @@ class InitialCondition : public Function {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = cos(2*pi*x);
-            // values(cellIndex, ptIndex) = -4*(abs(x)-0.25);
-            // values(cellIndex, ptIndex) = 1;
+            values(cellIndex, ptIndex) = 1+cos(4*pi*x);
           else
             values(cellIndex, ptIndex) = 0;
         }
       }
+    }
+};
+
+class InitialSigma : public Function {
+  public:
+    InitialSigma() : Function(1) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          if (abs(x) <= 0.25)
+          {
+            // values(cellIndex, ptIndex,0) = -4e-2*pi*sin(4*pi*x);
+            values(cellIndex, ptIndex,0) = 0;
+            values(cellIndex, ptIndex,1) = 0;
+          }
+          else
+          {
+            values(cellIndex, ptIndex,0) = 0;
+            values(cellIndex, ptIndex,1) = 0;
+          }
+        }
+      }
+    }
+};
+
+class ConfusionSteadyResidual : public SteadyResidual{
+  private:
+    vector<double> beta;
+    double epsilon;
+  public:
+    ConfusionSteadyResidual(VarFactory &varFactory, vector<double> beta, double epsilon):
+      SteadyResidual(varFactory), beta(beta), epsilon(epsilon) {};
+    LinearTermPtr createResidual(SolutionPtr solution)
+    {
+      VarPtr tau = varFactory.testVar("tau", HDIV);
+      VarPtr v = varFactory.testVar("v", HGRAD);
+
+      VarPtr u = varFactory.fieldVar("u");
+      VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+      VarPtr uhat = varFactory.traceVar("uhat");
+      VarPtr fhat = varFactory.fluxVar("fhat");
+
+      FunctionPtr u_prev = Function::solution(u, solution);
+      FunctionPtr sigma_prev = Function::solution(sigma, solution);
+      FunctionPtr uhat_prev = Function::solution(uhat, solution);
+      FunctionPtr fhat_prev = Function::solution(fhat, solution);
+
+      LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
+      residual->addTerm( beta*u_prev * -v->grad() );
+      residual->addTerm( sigma_prev * v->grad() );
+      // residual->addTerm( fhat_prev * v);
+
+      residual->addTerm( sigma_prev / epsilon * tau);
+      residual->addTerm( u_prev * tau->div());
+      // residual->addTerm( -uhat_prev * tau->dot_normal());
+
+      return residual;
     }
 };
 
@@ -110,8 +170,7 @@ int main(int argc, char *argv[]) {
   VarPtr fhat = varFactory.fluxVar("fhat");
 
   // Initialize useful variables
-  BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
+  BFPtr steadyJacobian = Teuchos::rcp( new BF(varFactory) );
   IPPtr ip = Teuchos::rcp(new IP);
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
 
@@ -138,7 +197,7 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 64, verticalCells = 1;
 
   MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      bf, H1Order, H1Order+pToAdd, false);
+      steadyJacobian, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   vector<double> beta;
@@ -146,20 +205,22 @@ int main(int argc, char *argv[]) {
   beta.push_back(0.0);
 
   // tau terms:
-  bf->addTerm( sigma / epsilon, tau);
-  bf->addTerm( u, tau->div());
-  bf->addTerm( -uhat, tau->dot_normal());
+  steadyJacobian->addTerm( sigma / epsilon, tau);
+  steadyJacobian->addTerm( u, tau->div());
+  steadyJacobian->addTerm( -uhat, tau->dot_normal());
 
   // v terms:
-  bf->addTerm( sigma, v->grad() );
-  bf->addTerm( beta * u, - v->grad() );
-  bf->addTerm( fhat, v);
+  steadyJacobian->addTerm( sigma, v->grad() );
+  steadyJacobian->addTerm( beta * u, - v->grad() );
+  steadyJacobian->addTerm( fhat, v);
+
+  ConfusionSteadyResidual steadyResidual(varFactory, beta, epsilon);
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   // Graph norm
   // if (norm == 0)
   // {
-  //   ip = bf->graphNorm();
+    ip = steadyJacobian->graphNorm();
   // }
   // // Coupled robust norm
   // else if (norm == 1)
@@ -174,51 +235,54 @@ int main(int argc, char *argv[]) {
   // }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
-  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  // FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  // residual->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(ymin) );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
-  FunctionPtr u0 = Teuchos::rcp( new InitialCondition );
+  FunctionPtr u0 = Teuchos::rcp( new InitialU );
+  FunctionPtr sigma0 = Teuchos::rcp( new InitialSigma );
+  FunctionPtr n = Function::normal();
+  FunctionPtr fhat0 = beta*n;
   bc->addDirichlet(fhat, left, zero);
   bc->addDirichlet(fhat, bottom, zero);
   bc->addDirichlet(uhat, right, zero);
   bc->addDirichlet(fhat, top, zero);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-
 
   // ==================== SET INITIAL GUESS ==========================
-  double u_free = 0.0;
-  double sigma1_free = 0.0;
-  double sigma2_free = 0.0;
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[u->ID()]      = u0;
-  functionMap[sigma->ID()] = Function::vectorize(zero, zero);
+  functionMap[sigma->ID()] = sigma0;
+  functionMap[uhat->ID()]  = zero;
+  functionMap[fhat->ID()]  = zero;
 
-  // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  NonlinearImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  // ESDIRKIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap, 6);
+  ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, functionMap, true);
   timeIntegrator.addTimeTerm(u, v, one);
 
-  solution->setIP( bf->graphNorm() );
+  ip->addTerm( timeIntegrator.invDt() * v );
 
-  double dt = 5e-2;
+  // timeIntegrator.solution()->setIP( steadyJacobian->graphNorm() );
+
+  double dt = 2e-2;
   double Dt = 1e-1;
-  VTKExporter exporter(solution, mesh, varFactory);
+  VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
+  VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
+
+  prevExporter.exportSolution("timestep_confusion0");
 
   timeIntegrator.runToTime(1*Dt, dt);
-  exporter.exportSolution("timestep_confusion0");
-
-  timeIntegrator.runToTime(2*Dt, dt);
   exporter.exportSolution("timestep_confusion1");
 
-  // timeIntegrator.runToTime(3*Dt, dt);
-  // exporter.exportSolution("timestep_confusion2");
+  timeIntegrator.runToTime(2*Dt, dt);
+  exporter.exportSolution("timestep_confusion2");
+
+  timeIntegrator.runToTime(3*Dt, dt);
+  exporter.exportSolution("timestep_confusion3");
 
   return 0;
 }
