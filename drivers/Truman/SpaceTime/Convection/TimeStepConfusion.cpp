@@ -74,34 +74,6 @@ class InitialU : public Function {
     }
 };
 
-class InitialSigma : public Function {
-  public:
-    InitialSigma() : Function(1) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-          {
-            // values(cellIndex, ptIndex,0) = -4e-2*pi*sin(4*pi*x);
-            values(cellIndex, ptIndex,0) = 0;
-            values(cellIndex, ptIndex,1) = 0;
-          }
-          else
-          {
-            values(cellIndex, ptIndex,0) = 0;
-            values(cellIndex, ptIndex,1) = 0;
-          }
-        }
-      }
-    }
-};
-
 class ConfusionSteadyResidual : public SteadyResidual{
   private:
     vector<double> beta;
@@ -121,17 +93,13 @@ class ConfusionSteadyResidual : public SteadyResidual{
 
       FunctionPtr u_prev = Function::solution(u, solution);
       FunctionPtr sigma_prev = Function::solution(sigma, solution);
-      FunctionPtr uhat_prev = Function::solution(uhat, solution);
-      FunctionPtr fhat_prev = Function::solution(fhat, solution);
 
       LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
       residual->addTerm( beta*u_prev * -v->grad() );
       residual->addTerm( sigma_prev * v->grad() );
-      // residual->addTerm( fhat_prev * v);
 
       residual->addTerm( sigma_prev / epsilon * tau);
       residual->addTerm( u_prev * tau->div());
-      // residual->addTerm( -uhat_prev * tau->dot_normal());
 
       return residual;
     }
@@ -174,7 +142,6 @@ int main(int argc, char *argv[]) {
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
   FunctionPtr u0 = Teuchos::rcp( new InitialU );
-  FunctionPtr sigma0 = Teuchos::rcp( new InitialSigma );
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
@@ -235,6 +202,7 @@ int main(int argc, char *argv[]) {
   if (norm == 0)
   {
     ip = steadyJacobian->graphNorm();
+    timeIntegrator.solutionUpdate()->setIP(ip);
   }
   // Coupled robust norm
   else if (norm == 1)

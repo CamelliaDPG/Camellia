@@ -53,6 +53,14 @@ SolutionPtr TimeIntegrator::solution()
     return _solution;
 }
 
+SolutionPtr TimeIntegrator::solutionUpdate()
+{
+  if (_nonlinear)
+    return _solution;
+  else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solution update only makes sense for nonlinear problems");
+}
+
 void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier)
 {
   FunctionPtr trialPrevTime = Function::solution(trialVar, _prevTimeSolution);

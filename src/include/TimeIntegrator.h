@@ -58,6 +58,7 @@ class TimeIntegrator
     TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
         Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear);
     SolutionPtr solution();
+    SolutionPtr solutionUpdate();
     SolutionPtr prevSolution();
     FunctionPtr invDt();
     void setNLTolerance(double tol) { _nlTolerance = tol; }
