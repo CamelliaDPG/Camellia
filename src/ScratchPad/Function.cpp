@@ -214,8 +214,8 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
       break;
-      return Teuchos::rcp((Function*)NULL);
   }
+  return Teuchos::rcp((Function*)NULL);
 }
 
 bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
