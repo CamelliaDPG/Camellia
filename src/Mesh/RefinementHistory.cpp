@@ -41,7 +41,7 @@ string stringForRefinementType(RefinementType refType) {
       return "p";
     case H_UNREFINEMENT:
       return "hu";
-    case UNKNOWN_REFINEMENT:
+    default:
       return "UNKNOWN";
   }
 }
