@@ -25,6 +25,7 @@ public:
   // just 2D for now:
   virtual bool matchesPoint(double x, double y) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y) unimplemented.");
+    return false;
   }
   virtual bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());

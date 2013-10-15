@@ -590,6 +590,7 @@ int MultiBasis<Scalar, ArrayScalar>::relativeToAbsoluteDofOrdinal(int basisDofOr
     previousMaxReachable = maxReachableLeaf;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
+  return -1;
 }
 
 template<class Scalar, class ArrayScalar>

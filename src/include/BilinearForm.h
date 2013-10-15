@@ -55,6 +55,7 @@ public:
                                  IntrepidExtendedTypes::EOperatorExtended &trialOperator,
                                  IntrepidExtendedTypes::EOperatorExtended &testOperator) { 
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either trialTestOperator or trialTestOperators!");
+    return false;
   }; // specifies differential operators to apply to trial and test (bool = false if no test-trial term)
   
   virtual void trialTestOperators(int trialID, int testID, 
@@ -66,6 +67,7 @@ public:
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      const FieldContainer<double> &points) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
+    return false;
   }
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
