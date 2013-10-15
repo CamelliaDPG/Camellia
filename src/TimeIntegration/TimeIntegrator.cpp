@@ -32,7 +32,6 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   if (_nonlinear)
   {
     _rhs->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
-    // _rhs->addTerm( -steadyJacobian->testFunctional(_prevNLSolution, true) );
   }
 }
 

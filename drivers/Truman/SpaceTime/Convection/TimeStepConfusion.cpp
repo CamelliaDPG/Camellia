@@ -169,14 +169,21 @@ int main(int argc, char *argv[]) {
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr fhat = varFactory.fluxVar("fhat");
 
-  // Initialize useful variables
-  BFPtr steadyJacobian = Teuchos::rcp( new BF(varFactory) );
-  IPPtr ip = Teuchos::rcp(new IP);
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-
+  ////////////////////   INITIALIZE USEFUL VARIABLES   ///////////////////////
   // Define useful functions
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
+  FunctionPtr u0 = Teuchos::rcp( new InitialU );
+  FunctionPtr sigma0 = Teuchos::rcp( new InitialSigma );
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+
+  // Initialize useful variables
+  IPPtr ip = Teuchos::rcp(new IP);
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  BFPtr steadyJacobian = Teuchos::rcp( new BF(varFactory) );
+  ConfusionSteadyResidual steadyResidual(varFactory, beta, epsilon);
 
   ////////////////////   BUILD MESH   ///////////////////////
   FieldContainer<double> meshBoundary(4,2);
@@ -199,10 +206,16 @@ int main(int argc, char *argv[]) {
   MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
       steadyJacobian, H1Order, H1Order+pToAdd, false);
 
+  ////////////////////   SET INITIAL CONDITIONS   ///////////////////////
+  map<int, Teuchos::RCP<Function> > initialConditions;
+  initialConditions[u->ID()]     = u0;
+  initialConditions[sigma->ID()] = Function::vectorize(zero, zero);
+  initialConditions[uhat->ID()]  = zero;
+  initialConditions[fhat->ID()]  = zero;
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  vector<double> beta;
-  beta.push_back(1.0);
-  beta.push_back(0.0);
+  // Set up problem
+  ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
 
   // tau terms:
   steadyJacobian->addTerm( sigma / epsilon, tau);
@@ -214,61 +227,40 @@ int main(int argc, char *argv[]) {
   steadyJacobian->addTerm( beta * u, - v->grad() );
   steadyJacobian->addTerm( fhat, v);
 
-  ConfusionSteadyResidual steadyResidual(varFactory, beta, epsilon);
+  // time terms:
+  timeIntegrator.addTimeTerm(u, v, one);
 
-  ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+  ////////////////////   DEFINE INNER PRODUCT   ///////////////////////
   // Graph norm
-  // if (norm == 0)
-  // {
+  if (norm == 0)
+  {
     ip = steadyJacobian->graphNorm();
-  // }
-  // // Coupled robust norm
-  // else if (norm == 1)
-  // {
-  //   // coupled robust test norm
-  //   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-  //   ip->addTerm( v );
-  //   ip->addTerm( sqrt(epsilon) * v->grad() );
-  //   ip->addTerm( beta * v->grad() );
-  //   ip->addTerm( tau->div() - beta*v->grad() );
-  //   ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  // }
-
-  ////////////////////   SPECIFY RHS   ///////////////////////
-  // FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-  // residual->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
+  }
+  // Coupled robust norm
+  else if (norm == 1)
+  {
+    // coupled robust test norm
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    ip->addTerm( v );
+    ip->addTerm( sqrt(epsilon) * v->grad() );
+    ip->addTerm( beta * v->grad() );
+    ip->addTerm( tau->div() - beta*v->grad() );
+    ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
+  }
+  ip->addTerm( timeIntegrator.invDt() * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(ymin) );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
-  FunctionPtr u0 = Teuchos::rcp( new InitialU );
-  FunctionPtr sigma0 = Teuchos::rcp( new InitialSigma );
-  FunctionPtr n = Function::normal();
-  FunctionPtr fhat0 = beta*n;
   bc->addDirichlet(fhat, left, zero);
   bc->addDirichlet(fhat, bottom, zero);
   bc->addDirichlet(uhat, right, zero);
   bc->addDirichlet(fhat, top, zero);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-
-  // ==================== SET INITIAL GUESS ==========================
-  map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[u->ID()]      = u0;
-  functionMap[sigma->ID()] = sigma0;
-  functionMap[uhat->ID()]  = zero;
-  functionMap[fhat->ID()]  = zero;
-
-  ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, functionMap, true);
-  timeIntegrator.addTimeTerm(u, v, one);
-
-  ip->addTerm( timeIntegrator.invDt() * v );
-
-  // timeIntegrator.solution()->setIP( steadyJacobian->graphNorm() );
-
-  double dt = 2e-2;
+  double dt = 5e-2;
   double Dt = 1e-1;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
