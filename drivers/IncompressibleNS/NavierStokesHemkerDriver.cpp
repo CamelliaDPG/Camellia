@@ -1412,9 +1412,12 @@ int main(int argc, char *argv[]) {
     }
 
     
-  } catch ( choice::ArgException& e )
+  } catch ( std::exception& e )
   {
-    // There is no reason to do anything
+    if (rank==0) {
+      cout << e.what() << endl;
+      throw e;
+    }
   }
   
   return 0;
