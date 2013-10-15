@@ -55,6 +55,7 @@ IntrepidExtendedTypes::EFunctionSpaceExtended VarFunctionSpaces::efsForSpace(Spa
   if (space == VECTOR_L2)
     return IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL;
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+  return IntrepidExtendedTypes::FUNCTION_SPACE_UNKNOWN;
 }
 
 /*Space VarFunctionSpaces::spaceForEFS(IntrepidExtendedTypes::EFunctionSpaceExtended efs) {
