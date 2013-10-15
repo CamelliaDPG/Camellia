@@ -1364,8 +1364,10 @@ int main(int argc, char *argv[]) {
       streamIP->addTerm(v_s->div());
       SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
       
-      cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
-      cout << "solving for approximate stream function...\n";
+      if (rank==0) {
+        cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
+        cout << "solving for approximate stream function...\n";
+      }
 
       if (useCondensedSolve) {
         streamSolution->condensedSolve(solver);
@@ -1401,11 +1403,14 @@ int main(int argc, char *argv[]) {
         refHistory->saveToFile(saveFile);
         cout << "Saved refinement history to " << saveFile << endl;
       }
-      if (solnSaveFile.length() > 0) {
+    }
+    if (solnSaveFile.length() > 0) {
+      if (rank==0) {
         solution->writeToFile(solnSaveFile);
         cout << "Saved solution to " << solnSaveFile << endl;
       }
     }
+
     
   } catch ( choice::ArgException& e )
   {
