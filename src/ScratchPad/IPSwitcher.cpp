@@ -23,6 +23,7 @@ IPSwitcher::IPSwitcher(IPPtr ip1, IPPtr ip2, double minH){
 // added by Jesse - evaluate inner product at given varFunctions
 LinearTermPtr IPSwitcher::evaluate(map< int, FunctionPtr> &varFunctions, bool boundaryPart) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Evaluation of switched IPs not supported yet");
+  return Teuchos::rcp((LinearTerm *)NULL);
 }
 
 void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct, 
