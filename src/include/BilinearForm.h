@@ -67,7 +67,6 @@ public:
                                      FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
                                      const FieldContainer<double> &points) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
-    return false;
   }
   
   virtual void applyBilinearFormData(FieldContainer<double> &trialValues, FieldContainer<double> &testValues, 
