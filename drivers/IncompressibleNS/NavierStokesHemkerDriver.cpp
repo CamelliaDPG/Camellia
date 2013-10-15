@@ -1242,88 +1242,49 @@ int main(int argc, char *argv[]) {
       FunctionPtr u1_sq = u1_prev * u1_prev;
       FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
       FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
-      FunctionPtr massFlux = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
       
       // check that the zero mean pressure is being correctly imposed:
       double p_avg = p_prev->integrate(mesh);
       if (rank==0)
         cout << "Integral of pressure: " << p_avg << endl;
+
+      FunctionPtr u_n = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
       
-      // integrate massFlux over each element (a test):
-      // fake a new bilinear form so we can integrate against 1 
-      VarPtr testOne = varFactory.testVar("1",CONSTANT_SCALAR);
-      BFPtr fakeBF = Teuchos::rcp( new BF(varFactory) );
-      LinearTermPtr massFluxTerm = massFlux * testOne;
+      FunctionPtr massFlux = Teuchos::rcp( new MassFluxFunction(u_n) );
+      FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(u_n,true) );
       
-      CellTopoPtr quadTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-      DofOrderingFactory dofOrderingFactory(fakeBF);
-      int fakeTestOrder = H1Order;
-      DofOrderingPtr testOrdering = dofOrderingFactory.testOrdering(fakeTestOrder, *quadTopoPtr);
+      double totalAbsMassFlux = absMassFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
+      double totalMassFlux = massFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
       
-      int testOneIndex = testOrdering->getDofIndex(testOne->ID(),0);
-      vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-      map<int, double> massFluxIntegral; // cellID -> integral
-      double maxMassFluxIntegral = 0.0;
-      double totalMassFlux = 0.0;
-      double totalAbsMassFlux = 0.0;
+      // examine cell sizes:
       double maxCellMeasure = 0;
       double minCellMeasure = 1;
+      
+      vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
       for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
         ElementTypePtr elemType = *elemTypeIt;
         vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
         vector<int> cellIDs;
         for (int i=0; i<elems.size(); i++) {
           cellIDs.push_back(elems[i]->cellID());
-          if (elems[i]->cellID()==0) {
-            cout << "cellID 0\n"; // this line for setting a breakpoint.
-          }
         }
         FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
-        BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,true,15) ); // enrich by a bunch
+        BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,polyOrder) ); // enrich by trial space order
         basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
         FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-        FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
-        massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
+        
         for (int i=0; i<elems.size(); i++) {
-          int cellID = cellIDs[i];
-          // pick out the ones for testOne:
-          massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
-        }
-        // find the largest:
-        for (int i=0; i<elems.size(); i++) {
-          int cellID = cellIDs[i];
-          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-        }
-        for (int i=0; i<elems.size(); i++) {
-          int cellID = cellIDs[i];
           maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
           minCellMeasure = min(minCellMeasure,cellMeasures(i));
-          maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
-          totalMassFlux += massFluxIntegral[cellID];
-          totalAbsMassFlux += abs( massFluxIntegral[cellID] );
-    //      if (rank==0) {
-    //        cout << "driver: massFluxIntegral[" << cellID << "] = " << massFluxIntegral[cellID] << endl;
-    //      }
         }
       }
+
       if (rank==0) {
-        cout << "largest mass flux: " << maxMassFluxIntegral << endl;
         cout << "total mass flux: " << totalMassFlux << endl;
         cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
         cout << "largest h: " << sqrt(maxCellMeasure) << endl;
         cout << "smallest h: " << sqrt(minCellMeasure) << endl;
         cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
-      }
-      
-      FunctionPtr newMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux) );
-      FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(massFlux,true) );
-      
-      totalAbsMassFlux = absMassFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
-      totalMassFlux = massFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
-
-      if (rank==0) {
-        cout << "new total mass flux: " << totalMassFlux << endl;
-        cout << "new sum of mass flux absolute value: " << totalAbsMassFlux << endl;
       }
     }
     
