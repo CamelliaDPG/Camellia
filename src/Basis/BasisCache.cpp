@@ -231,6 +231,7 @@ FieldContainer<double> BasisCache::computeParametricPoints() {
     return parametricCache->getPhysicalCubaturePoints();
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported cellTopo");
+    return FieldContainer<double>(0);
   }
 }
 

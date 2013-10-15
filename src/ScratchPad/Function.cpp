@@ -215,6 +215,7 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
       break;
   }
+  return Teuchos::rcp((Function*)NULL);
 }
 
 bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
@@ -312,6 +313,7 @@ FunctionPtr Function::grad(int numComponents) {
     }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
+  return Teuchos::rcp((Function*) NULL);
 }
 //FunctionPtr Function::inverse() {
 //  return Function::null();
@@ -1304,6 +1306,7 @@ int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
   if (f1->rank() == 0) return f2->rank();
   if (f2->rank() == 0) return f1->rank();
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank pairing for function product.");
+  return -1;
 }
 
 ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( productRank(f1,f2) ) {
@@ -1544,6 +1547,7 @@ FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
 
 double SimpleFunction::value(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
+  return 0;
 }
 
 double SimpleFunction::value(double x, double y) {

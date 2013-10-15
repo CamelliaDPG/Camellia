@@ -497,6 +497,7 @@ Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > MultiBasis<Scalar, ArrayScal
     leafOrdinalOffset += numLeaves;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
+  return Teuchos::rcp((Camellia::Basis<Scalar,ArrayScalar> *) NULL);
 }
 
 template<class Scalar, class ArrayScalar>
@@ -590,6 +591,7 @@ int MultiBasis<Scalar, ArrayScalar>::relativeToAbsoluteDofOrdinal(int basisDofOr
     previousMaxReachable = maxReachableLeaf;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
+  return -1;
 }
 
 template<class Scalar, class ArrayScalar>

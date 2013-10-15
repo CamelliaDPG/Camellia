@@ -18,6 +18,7 @@
 #include "vtkXMLUnstructuredGridWriter.h"
 #include "vtkCellType.h"
 #include "vtkIdList.h"
+#include "vtkVersion.h"
 
 void VTKExporter::exportSolution(const string& filePath, unsigned int num1DPts)
 {
@@ -253,7 +254,11 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   ug->GetCellData()->AddArray(polyOrderData);
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   wr->SetInput(ug);
+#else
+  wr->SetInputData(ug);
+#endif
   ug->Delete();
   wr->SetFileName((filePath+".vtu").c_str());
   wr->SetDataModeToBinary();
@@ -404,7 +409,11 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     traceData[varIdx]->Delete();
   }
   vtkXMLUnstructuredGridWriter* trace_wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   trace_wr->SetInput(trace_ug);
+#else
+  trace_wr->SetInputData(trace_ug);
+#endif
   trace_ug->Delete();
   trace_wr->SetFileName(("trace_"+filePath+".vtu").c_str());
   trace_wr->SetDataModeToBinary();
@@ -610,7 +619,11 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
   vals->Delete();
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   wr->SetInput(ug);
+#else
+  wr->SetInputData(ug);
+#endif
   ug->Delete();
   wr->SetFileName((functionName+".vtu").c_str());
   // wr->SetDataModeToBinary();
@@ -734,7 +747,11 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
     data[fxnIdx]->Delete();
   }
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
   wr->SetInput(ug);
+#else
+  wr->SetInputData(ug);
+#endif
   ug->Delete();
   wr->SetFileName((filePath+".vtu").c_str());
   wr->SetDataModeToBinary();

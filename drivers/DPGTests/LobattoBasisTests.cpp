@@ -13,6 +13,8 @@
 
 #include "doubleBasisConstruction.h"
 
+#include <Teuchos_GlobalMPISession.hpp>
+
 // Shards includes
 #include "Shards_CellTopology.hpp"
 
@@ -339,21 +341,28 @@ bool LobattoBasisTests::testLobattoLineClassifications() {
 bool LobattoBasisTests::testH1Classifications() {
   // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
   bool success = true;
+
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   bool conformingTrue = true;
   for (int polyOrder=1; polyOrder<20; polyOrder++) {
     BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<>(polyOrder,conformingTrue) );
     if (! testBasisClassifications(lobattoBasis) ) {
-      cout << "LobattoBasisTests::testH1Classifications() failed for polyOrder " << polyOrder << endl;
+      if (rank==0)
+        cout << "LobattoBasisTests::testH1Classifications() failed for polyOrder " << polyOrder << endl;
     }
   }
   // TODO: implement this
-  cout << "Warning: testH1Classification unfinished.\n";
+  if (rank==0)
+    cout << "Warning: testH1Classification unfinished.\n";
   
   return success;
 }
 
 bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   bool success = true;
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
   
   VarFactory varFactory;
   VarPtr u = varFactory.fieldVar("u");
@@ -416,8 +425,8 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   // TODO: finish this test
   
 //  cout << stiffness;
- 
-  cout << "Warning: testSimpleStiffnessMatrix() unfinished.\n";
+  if (rank==0)
+    cout << "Warning: testSimpleStiffnessMatrix() unfinished.\n";
   
   return success;
 }

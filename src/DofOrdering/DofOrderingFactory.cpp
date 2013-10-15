@@ -126,6 +126,7 @@ DofOrderingPtr DofOrderingFactory::getTrialOrdering(DofOrdering &ordering) {
     return *orderingIt;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
+  return Teuchos::rcp((DofOrdering*) NULL);
 }
 
 DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
@@ -135,6 +136,7 @@ DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
     return *orderingIt;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
+  return Teuchos::rcp((DofOrdering*) NULL);
 }
 
 void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering,
