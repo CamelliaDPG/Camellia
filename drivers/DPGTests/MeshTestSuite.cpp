@@ -2032,6 +2032,35 @@ bool MeshTestSuite::testPointContainment() {
     testIndex++;
   }
   
+  // now try it for a case that has failed in the past:
+  quadPoints(0,0) = 4.000000e+00;
+  quadPoints(0,1) = 5.288500e-01;
+  quadPoints(1,0) = 4.18750e+00;
+  quadPoints(1,1) = 5.288500e-01;
+  quadPoints(2,0) = 4.18750e+00;
+  quadPoints(2,1) = 0.764425;
+  quadPoints(3,0) = 4.000000e+00;
+  quadPoints(3,1) = 0.764425;
+  
+  horizontalCells = 1;
+  verticalCells = 1;
+  myMesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                               exactSolution.bilinearForm(), order, order+pToAdd, triangulate);
+  // two uniform refinements:
+  myMesh->hRefine(myMesh->getActiveCellIDs(), RefinementPattern::regularRefinementPatternQuad());
+  myMesh->hRefine(myMesh->getActiveCellIDs(), RefinementPattern::regularRefinementPatternQuad());
+  
+  points.resize(1,spaceDim);
+  points[0] = 4.04226;
+  points[1] = 0.646637;
+  
+  elements = myMesh->elementsForPoints(points);
+  
+  // we don't really have anything to check at this point: if it crashes, that's the problem.
+  // but even prior to fixing the instigating issue, it doesn't crash, so there must be something
+  // else going on...
+//  cout << "In new mesh test, matched element " << elements[0]->cellID() << endl;
+  
   return success;
 }
 bool MeshTestSuite::testMultiBasisCrash(){
