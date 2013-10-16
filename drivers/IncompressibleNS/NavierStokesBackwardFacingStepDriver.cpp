@@ -47,24 +47,27 @@ using namespace std;
 
 static double tol=1e-14;
 
+static double MESH_TOP = 2.0;
+static double STEP_Y = 1.0;
+static double STEP_X = 4.0;
 static double RIGHT_OUTFLOW = 8.0;
 static double MESH_BOTTOM = 0.0;
 static double LEFT_INFLOW = 0.0;
 
 bool topWall(double x, double y) {
-  return abs(y-2.0) < tol;
+  return abs(y-MESH_TOP) < tol;
 }
 
 bool bottomWallRight(double x, double y) {
-  return (abs(y-MESH_BOTTOM) < tol) && (x-4.0 >= tol);
+  return (abs(y-MESH_BOTTOM) < tol) && (x-STEP_X >= tol);
 }
 
 bool bottomWallLeft(double x, double y) {
-  return (abs(y-1.0) < tol) && (x-4.0 < tol);
+  return (abs(y-STEP_Y) < tol) && (x-STEP_X < tol);
 }
 
 bool step(double x, double y) {
-  return (abs(x-4.0) < tol) && (y-1.0 <=tol);
+  return (abs(x-STEP_X) < tol) && (y-STEP_Y <=tol);
 }
 
 bool inflow(double x, double y) {
@@ -87,7 +90,10 @@ public:
     if (isTopWall || isBottomWallLeft || isBottomWallRight || isStep ) { // walls: no slip
       return 0.0;
     } else if (isInflow) {
-      return - 6.0 * (y-2.0) * (y-1.0);
+      // U1_0 should be 1.5 in the middle of the inflow (yields average of 1.0)
+      double inflowHeight = MESH_TOP - STEP_Y;
+      double weight = 6 * (1.0 / inflowHeight) * (1.0 / inflowHeight);
+      return - weight * (y-MESH_TOP) * (y-STEP_Y);
     }
     return 0;
   }
@@ -111,7 +117,6 @@ public:
     bool isBottomWallRight = bottomWallRight(x,y);
     bool isStep = step(x,y);
     bool isInflow = inflow(x,y);
-    bool isOutflow = outflow(x,y);
     if (isBottomWallLeft || isBottomWallRight || isStep ) { // walls: no slip
       return 0.0;
     } else if (isTopWall || isInflow) {
@@ -247,13 +252,18 @@ int main(int argc, char *argv[]) {
   int pToAdd = args.Input<int>("--pToAdd", "polynomial enrichment for test functions", 2);
   int pToAddForStreamFunction = pToAdd;
   
-  double Re = args.Input<double>("--Re", "Reynolds number", 100);
+  bool useGartlingParameters = args.Input<bool>("--useGartling", "Use parameters from D.K. Gartling's 1990 paper");
+  double Re_default = 100;
+  if (useGartlingParameters) { // default to the 800 Re used there
+    Re_default = 800;
+  }
+  double Re = args.Input<double>("--Re", "Reynolds number", Re_default);
   
   int numRefs = args.Input<int>("--numRefs", "Number of refinements", 10);
   double energyThreshold = args.Input<double>("--adaptiveThreshold", "threshold parameter for greedy adaptivity", 0.20);
   bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "Enforce local conservation.", false);
   bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
-  bool useExperimentalNorm = args.Input<bool>("--useExperimentalNorm", "use whatever the current experimental norm is", false);
+
   bool longDoubleGramInversion = args.Input<bool>("--longDoubleGramInversion", "use long double Cholesky factorization for Gram matrix", false);
   
   bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
@@ -294,13 +304,30 @@ int main(int argc, char *argv[]) {
     MESH_BOTTOM = 1.0 - 0.9423;
     RIGHT_OUTFLOW = 7.0;
     LEFT_INFLOW = 3.0;
+  } else if (useGartlingParameters) {
+    RIGHT_OUTFLOW = 30.0;
+    LEFT_INFLOW = 0.0;
+    STEP_Y = 0.0;
+    STEP_X = 0.0;
+    MESH_TOP = 0.5;
+    MESH_BOTTOM = -0.5;
   }
   
-  bool enforceOneIrregularity = true;
-  bool reportPerCellErrors  = true;
   bool useMumps = true;
-  bool compareWithOverkillMesh = false;
-  bool useAdHocHPRefinements = false;
+  
+  Teuchos::RCP<Solver> solver;
+  if (useMumps) {
+#ifdef USE_MUMPS
+    solver = Teuchos::rcp(new MumpsSolver());
+#else
+    if (rank==0)
+      cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
+    exit(1);
+#endif
+  } else {
+    solver = Teuchos::rcp(new KluSolver());
+  }
+  
   bool startWithZeroSolutionAfterRefinement = false;
   
   bool useLineSearch = false;
@@ -360,35 +387,55 @@ int main(int argc, char *argv[]) {
   int H1Order = polyOrder + 1;
   
   FieldContainer<double> A(2), B(2), C(2), D(2), E(2), F(2), G(2), H(2);
-  A(0) = LEFT_INFLOW; A(1) = 1.0;
-  B(0) = LEFT_INFLOW; B(1) = 2.0;
-  C(0) = 4.0; C(1) = 2.0;
-  D(0) = RIGHT_OUTFLOW; D(1) = 2.0;
-  E(0) = RIGHT_OUTFLOW; E(1) = 1.0;
+  A(0) = LEFT_INFLOW; A(1) = STEP_Y;
+  B(0) = LEFT_INFLOW; B(1) = MESH_TOP;
+  C(0) = STEP_X; C(1) = MESH_TOP;
+  D(0) = RIGHT_OUTFLOW; D(1) = MESH_TOP;
+  E(0) = RIGHT_OUTFLOW; E(1) = STEP_Y;
   F(0) = RIGHT_OUTFLOW; F(1) = MESH_BOTTOM;
-  G(0) = 4.0; G(1) = MESH_BOTTOM;
-  H(0) = 4.0; H(1) = 1.0;
+  G(0) = STEP_X; G(1) = MESH_BOTTOM;
+  H(0) = STEP_X; H(1) = STEP_Y;
   vector<FieldContainer<double> > vertices;
-  vertices.push_back(A); int A_index = 0;
-  vertices.push_back(B); int B_index = 1;
-  vertices.push_back(C); int C_index = 2;
-  vertices.push_back(D); int D_index = 3;
-  vertices.push_back(E); int E_index = 4;
-  vertices.push_back(F); int F_index = 5;
-  vertices.push_back(G); int G_index = 6;
-  vertices.push_back(H); int H_index = 7;
   vector< vector<int> > elementVertices;
   vector<int> el1, el2, el3, el4, el5;
-  // left patch:
-  el1.push_back(A_index); el1.push_back(H_index); el1.push_back(C_index); el1.push_back(B_index);
-  // top right:
-  el2.push_back(H_index); el2.push_back(E_index); el2.push_back(D_index); el2.push_back(C_index);
-  // bottom right:
-  el3.push_back(G_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(H_index);
   
-  elementVertices.push_back(el1);
-  elementVertices.push_back(el2);
-  elementVertices.push_back(el3);
+  if (! useGartlingParameters) {
+    vertices.push_back(A); int A_index = 0;
+    vertices.push_back(B); int B_index = 1;
+    vertices.push_back(C); int C_index = 2;
+    vertices.push_back(D); int D_index = 3;
+    vertices.push_back(E); int E_index = 4;
+    vertices.push_back(F); int F_index = 5;
+    vertices.push_back(G); int G_index = 6;
+    vertices.push_back(H); int H_index = 7;
+
+    // left patch:
+    el1.push_back(A_index); el1.push_back(H_index); el1.push_back(C_index); el1.push_back(B_index);
+    // top right:
+    el2.push_back(H_index); el2.push_back(E_index); el2.push_back(D_index); el2.push_back(C_index);
+    // bottom right:
+    el3.push_back(G_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(H_index);
+    
+    elementVertices.push_back(el1);
+    elementVertices.push_back(el2);
+    elementVertices.push_back(el3);
+  } else {
+    // Gartling's domain begins just at the step edge...
+    vertices.push_back(C); int C_index = 0;
+    vertices.push_back(D); int D_index = 1;
+    vertices.push_back(E); int E_index = 2;
+    vertices.push_back(F); int F_index = 3;
+    vertices.push_back(G); int G_index = 4;
+    vertices.push_back(H); int H_index = 5;
+    
+    // top right:
+    el2.push_back(H_index); el2.push_back(E_index); el2.push_back(D_index); el2.push_back(C_index);
+    // bottom right:
+    el3.push_back(G_index); el3.push_back(F_index); el3.push_back(E_index); el3.push_back(H_index);
+    
+    elementVertices.push_back(el2);
+    elementVertices.push_back(el3);
+  }
   
   FieldContainer<double> bottomCornerPoint(1,2);
   // want to cheat just inside the bottom corner element:
@@ -401,6 +448,7 @@ int main(int argc, char *argv[]) {
                                                           H1Order, pToAdd,
                                                           zero, zero,  // zero forcing function
                                                           useCompliantGraphNorm); // enrich velocity if using compliant graph norm
+  problem.setSolver(solver);
   
   SolutionPtr solution = problem.backgroundFlow();
   solution->setReportConditionNumber(reportConditionNumber);
