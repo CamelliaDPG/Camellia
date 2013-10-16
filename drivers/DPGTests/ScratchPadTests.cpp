@@ -929,6 +929,8 @@ bool ScratchPadTests::testRieszIntegration(){
 // tests residual computation on simple convection
 bool ScratchPadTests::testLTResidualSimple(){
   double tol = 1e-11;
+  int rank = Teuchos::GlobalMPISession::getRank();
+
   bool success = true;
 
   int nCells = 2;
@@ -1013,13 +1015,15 @@ bool ScratchPadTests::testLTResidualSimple(){
   // check that energy error computed thru Solution and through rieszRep are the same  
   success = abs(energyError-energyErrorLT)<tol;
   if (success==false){
-    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;    
+    if (rank==0)
+      cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;
     return success;
   }
   // checks that matrix-computed and integrated errors are the same
   success = abs(energyErrorLT-energyErrorIntegrated)<tol;
   if (success==false){
-    cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;    
+    if (rank==0)
+      cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;
     return success;
   }
   return success;
@@ -1028,6 +1032,8 @@ bool ScratchPadTests::testLTResidualSimple(){
 // tests to make sure the energy error calculated thru direct integration works for vector valued test functions too
 bool ScratchPadTests::testLTResidual(){
   double tol = 1e-11;
+  int rank = Teuchos::GlobalMPISession::getRank();
+
   bool success = true;
 
   int nCells = 2; 
@@ -1142,7 +1148,8 @@ bool ScratchPadTests::testLTResidual(){
   bool success2 = abs(energyErrorLT-energyErrorIntegrated)<tol;
   success = success1==true && success2==true;
   if (!success){
-    cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;    
+    if (rank==0)
+      cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and thru integration, error = " << energyErrorIntegrated << endl;
   }
   //  VTKExporter exporter(solution, mesh, varFactory);
   //  exporter.exportSolution("testLTRes");
@@ -1152,6 +1159,8 @@ bool ScratchPadTests::testLTResidual(){
 }
 
 bool ScratchPadTests::testResidualMemoryError(){
+
+  int rank = Teuchos::GlobalMPISession::getRank();
 
   double tol = 1e-11;
   bool success = true;
@@ -1256,7 +1265,8 @@ bool ScratchPadTests::testResidualMemoryError(){
 
   // if energy error rises
   if (energyErr1 < energyErr2) {
-    cout << "energy error increased from " << energyErr1 << " to " << energyErr2 << " after refinement.\n";
+    if (rank==0)
+      cout << "energy error increased from " << energyErr1 << " to " << energyErr2 << " after refinement.\n";
     success = false;
   }
 

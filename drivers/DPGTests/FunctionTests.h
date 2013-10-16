@@ -46,6 +46,8 @@ public:
   
   bool testBasisSumFunction();
   
+  bool testComponentFunction();
+  
   bool testThatLikeFunctionsAgree();
   
   bool testPolarizedFunctions();

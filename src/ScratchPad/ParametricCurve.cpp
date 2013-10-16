@@ -236,6 +236,7 @@ public:
   
   ParametricCurvePtr dt() {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
+    return Teuchos::rcp((ParametricCurve*)NULL);
   }
 };
 
@@ -654,6 +655,7 @@ std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(unsigned c
     return referenceTriangleEdges();
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled cellTopoKey");
+    return std::vector< ParametricCurvePtr >();
   }
 }
 

@@ -21,6 +21,38 @@ struct CacheInfo {
   FieldContainer<double> subCellNodes;
 };
 
+// private class ComponentFunction
+class ComponentFunction : public Function {
+  FunctionPtr _vectorFxn;
+  int _component;
+public:
+  ComponentFunction(FunctionPtr vectorFunction, int componentIndex) {
+    _vectorFxn = vectorFunction;
+    _component = componentIndex;
+    if (_vectorFxn->rank() < 1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vector function must have rank 1 or greater");
+    }
+  }
+  bool boundaryValueOnly() {
+    return _vectorFxn->boundaryValueOnly();
+  }
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+    // note this allocation.  There might be ways of reusing memory here, if we had a slightly richer API.
+    int spaceDim = basisCache->getSpaceDim();
+    Teuchos::Array<int> dim;
+    values.dimensions(dim);
+    dim.push_back(spaceDim);
+    
+    FieldContainer<double> vectorValues(dim);
+    _vectorFxn->values(vectorValues, basisCache);
+    
+    int numValues = values.size();
+    for (int i=0; i<numValues; i++) {
+      values[i] = vectorValues[spaceDim*i + _component];
+    }
+  }
+};
+
 // private class CellBoundaryRestrictedFunction
 class CellBoundaryRestrictedFunction : public Function {
   FunctionPtr _fxn;
@@ -183,6 +215,7 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
       break;
   }
+  return Teuchos::rcp((Function*)NULL);
 }
 
 bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol) {
@@ -280,6 +313,7 @@ FunctionPtr Function::grad(int numComponents) {
     }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported numComponents");
+  return Teuchos::rcp((Function*) NULL);
 }
 //FunctionPtr Function::inverse() {
 //  return Function::null();
@@ -1070,6 +1104,18 @@ FunctionPtr Function::yn(int n) {
   return Teuchos::rcp( new Yn(n) );
 }
 
+FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
+}
+
+FunctionPtr Function::yPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 1) );
+}
+
+FunctionPtr Function::zPart(FunctionPtr vectorFxn) {
+  return Teuchos::rcp( new ComponentFunction(vectorFxn, 2) );
+}
+
 FunctionPtr Function::zero(int rank) {
   static FunctionPtr _zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   if (rank==0) {
@@ -1260,6 +1306,7 @@ int ProductFunction::productRank(FunctionPtr f1, FunctionPtr f2) {
   if (f1->rank() == 0) return f2->rank();
   if (f2->rank() == 0) return f1->rank();
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank pairing for function product.");
+  return -1;
 }
 
 ProductFunction::ProductFunction(FunctionPtr f1, FunctionPtr f2) : Function( productRank(f1,f2) ) {
@@ -1500,6 +1547,7 @@ FunctionPtr Function::composedFunction( FunctionPtr f, FunctionPtr arg_g) {
 
 double SimpleFunction::value(double x) {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
+  return 0;
 }
 
 double SimpleFunction::value(double x, double y) {

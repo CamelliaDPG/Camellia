@@ -5,31 +5,31 @@
 //
 // Original version Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 /*
  *  Mesh.h
@@ -63,6 +63,9 @@
 #include "Function.h"
 #include "ParametricCurve.h"
 
+class Mesh;
+typedef Teuchos::RCP<Mesh> MeshPtr;
+
 class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
@@ -82,21 +85,21 @@ public:
     _elementVertices = elementVertices;
     _edgeToCurveMap = edgeToCurveMap;
   }
-  
+
   MeshGeometry(const vector<FieldContainer<double> > &vertices,
                const vector< vector<int> > &elementVertices) {
     _vertices = vertices;
     _elementVertices = elementVertices;
   }
-  
+
   map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
     return _edgeToCurveMap;
   }
-  
+
   vector< vector<int> > &elementVertices() {
     return _elementVertices;
   }
-  
+
   vector<FieldContainer<double> > &vertices() {
     return _vertices;
   }
@@ -111,11 +114,11 @@ class Mesh : public RefinementObserver {
   bool _useConformingTraces; // if true, enforces vertex trace continuity
   // for now, just a uniform mesh, with a rectangular boundary and elements.
   Boundary _boundary;
-  
+
   int _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
-  
+
   set< int > _cellIDsWithCurves;
-  
+
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
   Teuchos::RCP< BilinearForm > _bilinearForm;
@@ -126,29 +129,29 @@ class Mesh : public RefinementObserver {
   vector< ElementPtr > _activeElements;
   vector< vector< ElementPtr > > _partitions;
   vector< vector<int> > _verticesForCellID;
-  
+
   // the sorted list:
   map< vector<double>, long > _vertexMap; // maps into indices in the vertices list
-  
+
   // the chronologically ordered list:
   vector< FieldContainer<double> > _vertices;
-  
+
   //set< pair<int,int> > _edges;
   map< pair<int,int>, vector< pair<int, int> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
                                                                   //values are (cellID, sideIndex)
                                                                   //( will need to do something else in 3D )
   vector< vector<int> > _cellSideParitiesForCellID;
-  
+
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
   map< int, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
-  
+
   map< pair<int,int>, pair<int,int> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
   // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
   // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
   // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
-  
+
   // call buildTypeLookups to rebuild the elementType data structures:
   vector< map< ElementType*, vector<int> > > _cellIDsForElementType;
   map< ElementType*, map<int, int> > _globalCellIndexToCellID;
@@ -159,19 +162,19 @@ class Mesh : public RefinementObserver {
   map<int, int> _partitionLocalIndexForGlobalDofIndex;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
   vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
-  map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..  
+  map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   vector< set<int> > _partitionedGlobalDofIndices;
-  
+
   vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
-  
-  map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex> 
-  
+
+  map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
+
   map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
-  
+
   map<int, int> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
-  
+
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
@@ -180,18 +183,18 @@ class Mesh : public RefinementObserver {
   void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
   int _numGlobalDofs;
   ElementPtr _nullPtr;
-  
+
   void addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve);
   ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
-  void addChildren(ElementPtr parent, vector< vector<int> > &children, 
+  void addChildren(ElementPtr parent, vector< vector<int> > &children,
                    vector< vector< pair< int, int> > > &childrenForSide);
-  
+
   void setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly);
-  
+
   void setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide);
-  
+
   long getVertexIndex(double x, double y, double tol=1e-14);
-  
+
   // simple utility functions:
   static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);
   static double distance(double x0, double y0, double x1, double y1);
@@ -204,66 +207,66 @@ public:
   //     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap = map< pair<int, int>, ParametricCurvePtr >());
 
   static Teuchos::RCP<Mesh> readMsh(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
-  
-  static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
-  
 
-  static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints, 
+  static Teuchos::RCP<Mesh> readTriangle(string filePath, Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAdd);
+
+
+  static Teuchos::RCP<Mesh> buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
                                           int horizontalElements, int verticalElements,
-                                          Teuchos::RCP< BilinearForm > bilinearForm, 
+                                          Teuchos::RCP< BilinearForm > bilinearForm,
                                           int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                           map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                           map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints, 
+  static Teuchos::RCP<Mesh> buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
                                                 int horizontalElements, int verticalElements,
-                                                Teuchos::RCP< BilinearForm > bilinearForm, 
+                                                Teuchos::RCP< BilinearForm > bilinearForm,
                                                 int H1Order, int pTest, bool useConformingTraces=true);
-  static void quadMeshCellIDs(FieldContainer<int> &cellIDs, 
+  static void quadMeshCellIDs(FieldContainer<int> &cellIDs,
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
-  
+
   int activeCellOffset();
-  
+
   FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr);
   FieldContainer<double> cellSideParitiesForCell( int cellID );
-  
+
   Teuchos::RCP<BilinearForm> bilinearForm();
   void setBilinearForm( Teuchos::RCP<BilinearForm>);
-  
+
   vector<ElementPtr> elementsForPoints(const FieldContainer<double> &physicalPoints);
   bool elementContainsPoint(ElementPtr elem, double x, double y);
-  
+
   vector< Teuchos::RCP< ElementType > > elementTypes(int partitionNumber=-1); // returns *all* elementTypes by default
-  
+
   Boundary &boundary();
-  
+
   int cellID(ElementTypePtr elemTypePtr, int cellIndex, int partitionNumber=-1);
 
   const vector< int > & cellIDsOfType(ElementTypePtr elemType); // for current MPI node.
   const vector< int > & cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< int > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
-  
+
   int cellPolyOrder(int cellID);
-  
+
   void enforceOneIrregularity();
 //  void enforceOneIrregularity(vector< Teuchos::RCP<Solution> > solutions);
 
   vector<double> getCellCentroid(int cellID);
 
   // commented out because unused
-  //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm); 
-  
+  //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm);
+
   ElementPtr getElement(int cellID);
-  
+
   const map< pair<int,int> , int>& getLocalToGlobalMap(){
     return _localToGlobalMap;
   }
   //  map< int, pair<int,int> > getGlobalToLocalMap();
-  
+
   int globalDofIndex(int cellID, int localDofIndex);
-  
+
   set<int> globalDofIndicesForPartition(int partitionNumber);
-  
+
   set<int> getActiveCellIDs();
   vector< ElementPtr > & activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor);
@@ -275,9 +278,9 @@ public:
   vector< ElementPtr > & elements();
   vector< ElementPtr > elementsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
-  
+
   vector< ElementPtr > elementsInPartition(int partitionNumber = -1);
-  
+
   ElementPtr getActiveElement(int index);
   int getDimension(); // spatial dimension of the mesh
   DofOrderingFactory & getDofOrderingFactory();
@@ -286,44 +289,44 @@ public:
   void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
                              ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
                              ElementPtr nonParent);
-  
+
   // getPartitionMap is likely cruft: there's another copy of this in Solution, and this one appears never to be called…
   Epetra_Map getPartitionMap(); // returns map for current processor's local-to-global dof indices
-  
+
   void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
   FunctionPtr getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
   void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  
+
   void hRefine(const vector<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hUnrefine(const set<int> &cellIDs);
   // for the case where we want to reproject the previous mesh solution onto the new one:
-//  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions); 
-  
+//  void hRefine(vector<int> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< Teuchos::RCP<Solution> > solutions);
+
   void matchNeighbor(const ElementPtr &elem, int sideIndex);
-  
+
   void maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem, int sideIndex);
-  
+
   map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex, int bigNeighborPolyOrder = -1);
-  
+
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   static int neighborDofPermutation(int dofIndex, int numDofsForSide);
-  
+
   int numActiveElements();
-  
+
   int numFluxDofs();
   int numFieldDofs();
 
   int numGlobalDofs();
 
   int numElements();
-  
+
   int numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
 
   int numInitialElements();
-  
+
   int parityForSide(int cellID, int sideIndex);
-  
+
   int partitionForCellID(int cellID);
   int partitionForGlobalDofIndex( int globalDofIndex );
   int partitionLocalIndexForGlobalDofIndex( int globalDofIndex );
@@ -334,48 +337,46 @@ public:
 
   void pRefine(const vector<int> &cellIDsForPRefinements);
   void pRefine(const vector<int> &cellIDsForPRefinements, int pToAdd);
-  void pRefine(const set<int> &cellIDsForPRefinements); 
+  void pRefine(const set<int> &cellIDsForPRefinements);
   void pRefine(const set<int> &cellIDsForPRefinements, int pToAdd); // added by jesse
   void printLocalToGlobalMap(); // for debugging
   void printVertices(); // for debugging
-  
+
   void rebuildLookups();
-  
+
   void registerObserver(Teuchos::RCP<RefinementObserver> observer);
-  
+
   void registerSolution(Teuchos::RCP<Solution> solution);
-  
-  int condensedRowSizeUpperBound(); 
+
+  int condensedRowSizeUpperBound();
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
-  
+
   void setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap);
   void setEnforceMultiBasisFluxContinuity( bool value );
-  
+
   vector< ParametricCurvePtr > parametricEdgesForCell(int cellID, bool neglectCurves=false);
-  
+
   void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
-  
+
   void setUsePatchBasis( bool value );
   bool usePatchBasis();
-  
+
   vector<int> vertexIndicesForCell(int cellID);
   FieldContainer<double> vertexCoordinates(int vertexIndex);
-  
+
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
 
   void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
   void unregisterSolution(Teuchos::RCP<Solution> solution);
-  
+
   void writeMeshPartitionsToFile(const string & fileName);
-  
+
   double getCellMeasure(int cellID);
   double getCellXSize(int cellID);
   double getCellYSize(int cellID);
   vector<double> getCellOrientation(int cellID);
 };
-
-typedef Teuchos::RCP<Mesh> MeshPtr;
 
 #endif

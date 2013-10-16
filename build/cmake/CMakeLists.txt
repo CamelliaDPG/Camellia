@@ -22,12 +22,14 @@ if (Boost_FOUND)
   MESSAGE("   Boost_LIBRARY_DIRS = ${Boost_LIBRARY_DIRS}")
 endif()
 
-find_package(VTK REQUIRED)
-include(${VTK_USE_FILE})
-if(VTK_LIBRARIES)
-  link_libraries(${VTK_LIBRARIES})
-else()
-  link_libraries(vtkHybrid)
+find_package(VTK)
+if (VTK_FOUND)
+  include(${VTK_USE_FILE})
+  if(VTK_LIBRARIES)
+    link_libraries(${VTK_LIBRARIES})
+  else()
+    link_libraries(vtkHybrid)
+  endif()
 endif()
 
 if(MPI_DIR)
@@ -43,6 +45,19 @@ if(MPI_DIR)
   if(SCALAPACK_LIB)
     link_libraries(${SCALAPACK_LIB})
   endif()
+else()
+  if(SCALAPACK_LIB)
+    link_libraries(${SCALAPACK_LIB})
+  endif()
+endif()
+
+if(ADDITIONAL_LIBRARY_DIRS) 
+  MESSAGE("ADDITIONAL_LIBRARY_DIRS: ${ADDITIONAL_LIBRARY_DIRS}") 
+  MESSAGE("ADDITIONAL_LIBRARIES: ${ADDITIONAL_LIBRARIES}")
+  link_directories(${ADDITIONAL_LIBRARY_DIRS})
+  set(Trilinos_TPL_LIBRARIES ${Trilinos_TPL_LIBRARIES}
+${ADDITIONAL_LIBRARIES})
+#  link_libraries(${ADDITIONAL_LIBRARIES})
 endif()
 
 # If FIND_PACKAGE successfully found your Trilinos install, it will
@@ -81,7 +96,7 @@ ENDIF()
 # that was used to build Trilinos on your machine.  You do _not_ need
 # to edit this line.
 #IF(NOT CMAKE_CXX_COMPILER)
-  MESSAGE("Setting CXX compiler.")
+  MESSAGE("Setting CXX compiler to ${Trilinos_CXX_COMPILER}.")
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
 #ENDIF()
 
@@ -89,7 +104,7 @@ ENDIF()
 # that was used to build Trilinos on your machine.  You do _not_ 
 # need to edit this line.
 #IF(NOT CMAKE_C_COMPILER)
-  MESSAGE("Setting C compiler.")
+  MESSAGE("Setting C compiler to ${Trilinos_C_COMPILER}.")
   SET(CMAKE_C_COMPILER ${Trilinos_C_COMPILER})
 #ENDIF()
 
@@ -319,6 +334,10 @@ add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 # with the Trilinos libraries, and with the third-party libraries 
 # (TPLs) with which Trilinos was built.
 #
+target_link_libraries(${CAMELLIA_LIBRARY_NAME}
+  ${Trilinos_LIBRARIES}
+  ${Trilinos_TPL_LIBRARIES}
+  )
 
 target_link_libraries(ConditioningExperimentDriver
   ${Trilinos_LIBRARIES} 

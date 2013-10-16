@@ -79,6 +79,8 @@
 using namespace Intrepid;
 
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   // next three added by Jesse
   numTestsRun++;
   if (testPRefinementAdjacentCells() ) {
@@ -92,8 +94,8 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testAnisotropicCrash() ) {
     numTestsPassed++;
   }
-  
-  cout << "WARNING: skipping unrefinement test.\n";
+  if (rank==0)
+    cout << "WARNING: skipping unrefinement test.\n";
   /*
   numTestsRun++;
   if (testHUnrefinementForConfusion() ) {

@@ -17,14 +17,7 @@
 typedef map< int, FunctionPtr > sparseFxnVector;    // dim = {trialID}
 typedef map< int, sparseFxnVector > sparseFxnMatrix; // dim = {testID, trialID}
 
-double GAMMA = 1.4;
-double halfwidth = 0.02;
-double xmin = 0.5-halfwidth;
-double xmax = 0.5+halfwidth;
-
-int H1Order = 3, pToAdd = 2;
-
-class TimeZero : public SpatialFilter {
+class ZeroTimeBoundary : public SpatialFilter {
    public:
       bool matchesPoint(double x, double y) {
          double tol = 1e-14;
@@ -32,25 +25,24 @@ class TimeZero : public SpatialFilter {
       }
 };
 
-class LeftBoundary : public SpatialFilter {
+class ConstantXBoundary : public SpatialFilter {
+   private:
+      double xval;
    public:
+      ConstantXBoundary(double xval): xval(xval) {};
       bool matchesPoint(double x, double y) {
          double tol = 1e-14;
-         return (abs(x-xmin) < tol);
+         return (abs(x-xval) < tol);
       }
 };
 
-class RightBoundary : public SpatialFilter {
+class DiscontinuousInitialCondition : public Function {
+   private:
+      double xloc;
+      double valL;
+      double valR;
    public:
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(x-xmax) < tol);
-      }
-};
-
-class InitialDensity : public Function {
-   public:
-      InitialDensity() : Function(0) {}
+      DiscontinuousInitialCondition(double xloc, double valL, double valR) : Function(0), xloc(xloc), valL(valL), valR(valR) {}
       void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
          int numCells = values.dimension(0);
          int numPoints = values.dimension(1);
@@ -59,76 +51,14 @@ class InitialDensity : public Function {
          for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
             for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
                double x = (*points)(cellIndex,ptIndex,0);
-               double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0;
+               if (x <= xloc)
+                  values(cellIndex, ptIndex) = valL;
                else
-                  values(cellIndex, ptIndex) = 0.125;
+                  values(cellIndex, ptIndex) = valR;
             }
          }
       }
 };
-
-class InitialMassFlux : public Function {
-   public:
-      InitialMassFlux() : Function(0) {}
-      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-         int numCells = values.dimension(0);
-         int numPoints = values.dimension(1);
-
-         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-               double x = (*points)(cellIndex,ptIndex,0);
-               double y = (*points)(cellIndex,ptIndex,1);
-               values(cellIndex, ptIndex) = 0.0;
-            }
-         }
-      }
-};
-
-class InitialTotalEnergy : public Function {
-   public:
-      InitialTotalEnergy() : Function(0) {}
-      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-         int numCells = values.dimension(0);
-         int numPoints = values.dimension(1);
-
-         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-               double x = (*points)(cellIndex,ptIndex,0);
-               double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0/(GAMMA-1);
-               else
-                  values(cellIndex, ptIndex) = 0.1/(GAMMA-1);
-            }
-         }
-      }
-};
-
-class InitialInternalEnergy : public Function {
-   public:
-      InitialInternalEnergy() : Function(0) {}
-      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-         int numCells = values.dimension(0);
-         int numPoints = values.dimension(1);
-
-         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-            for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-               double x = (*points)(cellIndex,ptIndex,0);
-               double y = (*points)(cellIndex,ptIndex,1);
-               if (x <= 0.5)
-                  values(cellIndex, ptIndex) = 1.0/(1.0*(GAMMA-1));
-               else
-                  values(cellIndex, ptIndex) = 0.1/(0.125*(GAMMA-1));
-            }
-         }
-      }
-};
-
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
    Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -140,11 +70,85 @@ int main(int argc, char *argv[]) {
    int numProcs = Teuchos::GlobalMPISession::getNProc();
 
    // Required arguments
+   int problem = args.Input<int>("--problem", "which problem to run");
    int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
    int maxNewtonIterations = args.Input<int>("--maxIterations", "maximum number of Newton iterations");
 
    // Optional arguments (have defaults)
+   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
+   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
+   int xCells = args.Input("--xCells", "number of cells in the x direction", 32);
+   int tCells = args.Input("--tCells", "number of cells in the t direction", 8);
    args.Process();
+
+   ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
+   int H1Order = polyOrder+1;
+
+   double xmin, xmax, xint, tmax;
+   double GAMMA, rhoL, rhoR, uL, uR, pL, pR, eL, eR;
+   string problemName;
+
+   switch (problem)
+   {
+      case 1:
+         // Sod shock tube
+         problemName = "Sod";
+         xmin = 0;
+         xmax = 1;
+         xint = 0.5;
+         tmax = 0.2;
+
+         GAMMA = 1.4;
+         rhoL = 1;
+         rhoR = 0.125;
+         uL = 0;
+         uR = 0;
+         pL = 1;
+         pR = 0.1;
+         eL = pL/(rhoL*(GAMMA-1));
+         eR = pR/(rhoR*(GAMMA-1));
+         break;
+      case 2:
+         // Double Rarefaction
+         problemName = "DoubleRarefaction";
+         xmin = -1;
+         xmax = 1;
+         xint = 0;
+         tmax = 0.2;
+
+         GAMMA = 1.4;
+         rhoL = 7;
+         rhoR = 7;
+         uL = -1;
+         uR = 1;
+         pL = 0.2;
+         pR = 0.2;
+         eL = pL/(rhoL*(GAMMA-1));
+         eR = pR/(rhoR*(GAMMA-1));
+         break;
+      case 3:
+         // Single Rarefaction
+         problemName = "SingleRarefaction";
+         xmin = -0.2;
+         xmax = 1;
+         xint = 0;
+         tmax = 0.5;
+
+         GAMMA = 1.4;
+         rhoL = 7;
+         rhoR = 7;
+         uL = 0;
+         uR = 1;
+         pL = 0.2;
+         pR = 0.2;
+         eL = pL/(rhoL*(GAMMA-1));
+         eR = pR/(rhoR*(GAMMA-1));
+         break;
+      default:
+         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid problem number");
+   }
+   cout << "Running the " << problemName << " problem" << endl;
+
 
    ////////////////////   DECLARE VARIABLES   ///////////////////////
    // define test variables
@@ -171,15 +175,13 @@ int main(int argc, char *argv[]) {
    meshBoundary(1,0) =  xmax;
    meshBoundary(1,1) =  0.0;
    meshBoundary(2,0) =  xmax;
-   meshBoundary(2,1) =  0.01;
+   meshBoundary(2,1) =  tmax;
    meshBoundary(3,0) =  xmin;
-   meshBoundary(3,1) =  0.01;
-
-   int horizontalCells = 32, verticalCells = 8;
+   meshBoundary(3,1) =  tmax;
 
    // create a pointer to a new mesh:
-   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-         bf, H1Order, H1Order+pToAdd);
+   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, xCells, tCells,
+         bf, H1Order, H1Order+deltaP);
 
    ////////////////////////////////////////////////////////////////////
    // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -199,13 +201,14 @@ int main(int argc, char *argv[]) {
    FunctionPtr rho_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, rho) );
    FunctionPtr e_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, e) );
 
-   // ==================== SET INITIAL GUESS ==========================
-   map<int, Teuchos::RCP<Function> > functionMap;
    FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
    FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-   functionMap[rho->ID()] = Teuchos::rcp( new InitialDensity );
-   functionMap[u->ID()] = zero;
-   functionMap[e->ID()] = Teuchos::rcp( new InitialInternalEnergy );
+
+   // ==================== SET INITIAL GUESS ==========================
+   map<int, Teuchos::RCP<Function> > functionMap;
+   functionMap[rho->ID()] = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) ) ;
+   functionMap[u->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL, uR) );
+   functionMap[e->ID()]   = Teuchos::rcp( new DiscontinuousInitialCondition(xint, eL, eR) );
 
    backgroundFlow->projectOntoMesh(functionMap);
 
@@ -276,21 +279,21 @@ int main(int argc, char *argv[]) {
 
    ////////////////////   CREATE BCs   ///////////////////////
    Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-   SpatialFilterPtr timezero = Teuchos::rcp( new TimeZero );
-   SpatialFilterPtr left = Teuchos::rcp( new LeftBoundary );
-   SpatialFilterPtr right = Teuchos::rcp( new RightBoundary );
-   FunctionPtr rho0 = Teuchos::rcp( new InitialDensity );
-   FunctionPtr mass0 = Teuchos::rcp( new InitialMassFlux );
-   FunctionPtr E0 = Teuchos::rcp( new InitialTotalEnergy );
-   bc->addDirichlet(Fm, timezero, -rho0);
-   bc->addDirichlet(Fx, timezero, -mass0);
-   bc->addDirichlet(Fe, timezero, -E0);
-   bc->addDirichlet(Fm, left, zero);
-   bc->addDirichlet(Fm, right, zero);
-   bc->addDirichlet(Fx, left, -one);
-   bc->addDirichlet(Fx, right, 0.1*one);
-   bc->addDirichlet(Fe, left, zero);
-   bc->addDirichlet(Fe, right, zero);
+   SpatialFilterPtr timezero = Teuchos::rcp( new ZeroTimeBoundary );
+   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
+   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
+   FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -rhoL, -rhoR) );
+   FunctionPtr mass0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -uL*rhoL, -uR*rhoR) );
+   FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, -(rhoL*eL+0.5*rhoL*uL*uL), -(rhoR*eR+0.5*rhoR*uR*uR)) );
+   bc->addDirichlet(Fm, timezero, rho0);
+   bc->addDirichlet(Fx, timezero, mass0);
+   bc->addDirichlet(Fe, timezero, E0);
+   bc->addDirichlet(Fm, left, -rhoL*uL*one);
+   bc->addDirichlet(Fm, right, rhoR*uR*one);
+   bc->addDirichlet(Fx, left, -(rhoL*uL*uL+pL)*one);
+   bc->addDirichlet(Fx, right, (rhoR*uR*uR+pR)*one);
+   bc->addDirichlet(Fe, left, -(rhoL*eL+0.5*rhoL*uL*uL+pL)*uL*one);
+   bc->addDirichlet(Fe, right, (rhoR*eR+0.5*rhoR*uR*uR+pR)*uR*one);
 
    Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -302,9 +305,7 @@ int main(int argc, char *argv[]) {
    double energyThreshold = 0.2; // for mesh refinements
    RefinementStrategy refinementStrategy( solution, energyThreshold );
    VTKExporter exporter(backgroundFlow, mesh, varFactory);
-   VTKExporter updateExporter(solution, mesh, varFactory);
 
-   double nonlinearStepSize = 0.1;
    double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
    for (int refIndex=0; refIndex<=numRefs; refIndex++)
    {
@@ -353,9 +354,8 @@ int main(int argc, char *argv[]) {
       if (commRank == 0)
       {
          stringstream outfile;
-         outfile << "Sod_" << refIndex;
+         outfile << problemName << "_" << refIndex;
          exporter.exportSolution(outfile.str());
-         updateExporter.exportSolution("Update"+outfile.str());
       }
 
       if (refIndex < numRefs)
