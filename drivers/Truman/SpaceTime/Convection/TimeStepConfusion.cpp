@@ -182,7 +182,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
-  ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
+  // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 2, true);
 
   // tau terms:
   steadyJacobian->addTerm( sigma / epsilon, tau);
@@ -228,7 +229,7 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(fhat, top, zero);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  double dt = 5e-2;
+  double dt = 1e-1;
   double Dt = 1e-1;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);

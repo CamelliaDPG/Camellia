@@ -249,7 +249,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
-  ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
+  // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 2, true);
 
   FunctionPtr u1_prev     = Function::solution(u1, timeIntegrator.prevSolution());
   FunctionPtr u2_prev     = Function::solution(u2, timeIntegrator.prevSolution());
