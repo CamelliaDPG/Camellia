@@ -41,6 +41,7 @@ class TimeIntegrator
     BFPtr _steadyJacobian;
     SteadyResidual &_steadyResidual;
     Teuchos::RCP<RHSEasy> _rhs;
+    Teuchos::RCP<BCEasy> _bc;
     SolutionPtr _solution;
     SolutionPtr _prevTimeSolution;
     SolutionPtr _prevNLSolution;

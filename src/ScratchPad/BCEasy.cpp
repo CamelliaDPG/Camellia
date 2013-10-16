@@ -15,7 +15,7 @@ typedef pair< SpatialFilterPtr, FunctionPtr > DirichletBC;
 class BCLogicalOrFunction : public Function {
   FunctionPtr _f1, _f2;
   SpatialFilterPtr _sf1, _sf2;
-  
+
 public:
   BCLogicalOrFunction(FunctionPtr f1, SpatialFilterPtr sf1, FunctionPtr f2, SpatialFilterPtr sf2) : Function(f1->rank()) {
     _f1 = f1;
@@ -23,11 +23,17 @@ public:
     _f2 = f2;
     _sf2 = sf2;
   }
+  void setTime(double time)
+  {
+    _time = time;
+    _f1->setTime(time);
+    _f2->setTime(time);
+  }
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     values.initialize(0.0);
-    
+
     Teuchos::Array<int> dim;
     values.dimensions(dim);
     Teuchos::Array<int> valuesDim = dim;
@@ -42,10 +48,10 @@ public:
 //    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     FieldContainer<bool> pointsMatch1(numCells,numPoints);
     FieldContainer<bool> pointsMatch2(numCells,numPoints);
-    
+
     bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
     bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
-    
+
     if ( somePointMatches1 ) {
       f1Values.resize(valuesDim);
       _f1->values(f1Values,basisCache);
@@ -116,7 +122,7 @@ void BCEasy::removeZeroMeanConstraint( int fieldID ) {
     _zeroMeanConstraints.erase( _zeroMeanConstraints.find(fieldID) );
   }
 }
-  
+
 void BCEasy::addSinglePointBC( int fieldID, FunctionPtr valueFunction, SpatialFilterPtr spatialPoints ) {
   DirichletBC bc = make_pair(spatialPoints, valueFunction);
   _singlePointBCs[ fieldID ] = bc;
@@ -130,39 +136,39 @@ map< int, DirichletBC > & BCEasy::dirichletBCs() {
   return _dirichletBCs;
 }
 
-void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere, 
+void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bool> &imposeHere,
                       int varID, FieldContainer<double> &unitNormals, BasisCachePtr basisCache) {
   FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-  
+
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
-  
-  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells ) 
-                     || ( dirichletValues.dimension(1) != numPoints ) 
+
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells )
+                     || ( dirichletValues.dimension(1) != numPoints )
                      || ( dirichletValues.rank() != 2  ),
                      std::invalid_argument,
                      "dirichletValues dimensions should be (numCells,numPoints).");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells ) 
-                     || ( imposeHere.dimension(1) != numPoints ) 
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells )
+                     || ( imposeHere.dimension(1) != numPoints )
                      || ( imposeHere.rank() != 2  ),
                      std::invalid_argument,
                      "imposeHere dimensions should be (numCells,numPoints).");
-  
+
   TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument,
                      "spaceDim != 2 not yet supported by imposeBC." );
-  
+
   imposeHere.initialize(false);
   if ( _dirichletBCs.find(varID) == _dirichletBCs.end() ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
   }
-  
+
   DirichletBC bc = _dirichletBCs[varID];
   SpatialFilterPtr filter = bc.first;
   FunctionPtr f = bc.second;
-  
+
   filter->matchesPoints(imposeHere,basisCache);
-  
+
   f->values(dirichletValues,basisCache);
 }
 
@@ -176,14 +182,14 @@ void BCEasy::imposeBC(int varID, FieldContainer<double> &physicalPoints,
   DirichletBC bc = _singlePointBCs[varID];
   SpatialFilterPtr filter = bc.first;
   FunctionPtr f = bc.second;
-  
+
   BasisCachePtr basisCache = Teuchos::rcp( new PhysicalPointCache(physicalPoints) );
-  
+
   filter->matchesPoints(imposeHere,basisCache);
   f->values(dirichletValues,basisCache);
-  
+
   cout << "BCEasy::imposeBC (singleton BC implementation) called for varID " << varID << endl;
-  
+
   bool pointMatched = false; // make sure we just impose this once
   for (int i=0; i<imposeHere.size(); i++) {
     if (imposeHere[i]) {
@@ -201,7 +207,7 @@ bool BCEasy::singlePointBC(int varID) {
   // for now, these are unsupported
 //  return false;
   return _singlePointBCs.find(varID) != _singlePointBCs.end();
-} 
+}
 
 bool BCEasy::imposeZeroMeanConstraint(int varID) {
   return _zeroMeanConstraints.find(varID) != _zeroMeanConstraints.end();
@@ -212,9 +218,19 @@ Teuchos::RCP<BCEasy> BCEasy::copyImposingZero() {
   Teuchos::RCP<BCEasy> zeroBC = Teuchos::rcp( new BCEasy(*this) );
   map< int, DirichletBC >* dirichletBCs = &(zeroBC->dirichletBCs());
   for (map< int, DirichletBC >::iterator bcIt = dirichletBCs->begin();
-       bcIt != dirichletBCs->end(); bcIt++) {
+       bcIt != dirichletBCs->end(); ++bcIt) {
     bcIt->second.second = Function::zero();
   }
-  
+
   return zeroBC;
+}
+
+void BCEasy::setTime(double time)
+{
+  _time = time;
+  for (map< int, DirichletBC >::iterator bcIt = dirichletBCs().begin();
+       bcIt != dirichletBCs().end(); ++bcIt)
+  {
+    bcIt->second.second->setTime(time);
+  }
 }

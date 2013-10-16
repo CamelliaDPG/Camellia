@@ -42,9 +42,8 @@ class ConstantYBoundary : public SpatialFilter {
 
 class ExactU1 : public Function {
   public:
-    double t;
     double R;
-    ExactU1(double R) : Function(0), R(R), t(0) { }
+    ExactU1(double R) : Function(0), R(R) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -54,7 +53,7 @@ class ExactU1 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.75-1./(4*(1+exp(R*(-t-4*x+4*y)/32)));
+          values(cellIndex, ptIndex) = 0.75-1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
         }
       }
     }
@@ -62,9 +61,8 @@ class ExactU1 : public Function {
 
 class ExactU2 : public Function {
   public:
-    double t;
     double R;
-    ExactU2(double R) : Function(0), R(R), t(0) { }
+    ExactU2(double R) : Function(0), R(R) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -74,7 +72,7 @@ class ExactU2 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.75+1./(4*(1+exp(R*(-t-4*x+4*y)/32)));
+          values(cellIndex, ptIndex) = 0.75+1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
         }
       }
     }
@@ -82,9 +80,8 @@ class ExactU2 : public Function {
 
 class ExactSigma1 : public Function {
   public:
-    double t;
     double R;
-    ExactSigma1(double R) : Function(1), R(R), t(0) { }
+    ExactSigma1(double R) : Function(1), R(R) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -94,8 +91,8 @@ class ExactSigma1 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = -R/32*exp(R/32*(-t-4*x+4*y))/pow(1+exp(R*(-t-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = R/32*exp(R/32*(-t-4*x+4*y))/pow(1+exp(R*(-t-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 0) = -R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 1) = R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
         }
       }
     }
@@ -103,9 +100,8 @@ class ExactSigma1 : public Function {
 
 class ExactSigma2 : public Function {
   public:
-    double t;
     double R;
-    ExactSigma2(double R) : Function(1), R(R), t(0) { }
+    ExactSigma2(double R) : Function(1), R(R) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -115,8 +111,8 @@ class ExactSigma2 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = R/32*exp(R/32*(-t-4*x+4*y))/pow(1+exp(R*(-t-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = -R/32*exp(R/32*(-t-4*x+4*y))/pow(1+exp(R*(-t-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 0) = R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 1) = -R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
         }
       }
     }
@@ -184,7 +180,7 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  // int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
 
   // Optional arguments (have defaults)
   double R = args.Input<double>("--R", "effective Reynolds number", 80);
@@ -313,8 +309,8 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, top,    u2Exact);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  double dt = 5e-2;
-  double Dt = 1e-1;
+  double dt = 2e-1;
+  double Dt = 1e-0;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
 
