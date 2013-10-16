@@ -3,7 +3,7 @@
 
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
     Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
-  _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _nonlinear(nonlinear)
+  _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
 {
   _t = 0;
   _dt = 1e-3;
@@ -11,7 +11,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _nlTolerance = 1e-6;
 
   _rhs = Teuchos::rcp( new RHSEasy );
-  _solution = Teuchos::rcp( new Solution(mesh, bc, _rhs, ip) );
+  _solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, ip) );
 
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
@@ -74,6 +74,7 @@ void TimeIntegrator::addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr mu
 void TimeIntegrator::calcNextTimeStep(double _dt)
 {
   dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(_dt);
+  _bc->setTime(_t);
   if (_nonlinear)
   {
     _nlL2Error = 1e10;
