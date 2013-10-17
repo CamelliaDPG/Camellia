@@ -9,7 +9,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _dt = 1e-3;
   _timestep = 0;
   _nlTolerance = 1e-6;
-  _nlIterationMax = 10;
+  _nlIterationMax = 20;
 
   _rhs = Teuchos::rcp( new RHSEasy );
   _solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, ip) );
@@ -221,6 +221,10 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   for (int k=1; k < _numStages; k++)
   {
+    if (_nonlinear)
+    {
+      _stageRHS[k]->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
+    }
     for (int j=0; j < k; j++)
     {
       FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
@@ -246,25 +250,26 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 {
   for (int k=1; k < _numStages; k++)
   {
+    cout << "    stage " << k << endl;
+    _nlIteration = 1;
     dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(a[k][k]*dt);
     _bc->setTime(_t+c[k]*dt);
     _solution->setRHS(_stageRHS[k]);
     if (_nonlinear)
     {
       _nlL2Error = 1e10;
-      _nlIteration = 1;
       while (_nlL2Error > _nlTolerance)
       {
-        if (_nlIteration > _nlIterationMax)
-        {
-          cout << "Hit maximum number of iterations" << endl;
-          break;
-        }
         _solution->solve(false);
         _nlL2Error = _solution->L2NormOfSolution(0);
         _prevNLSolution->addSolution(_solution, 1);
         printNLMessage();
         _nlIteration++;
+        if (_nlIteration > _nlIterationMax)
+        {
+          cout << "Hit maximum number of iterations" << endl;
+          break;
+        }
       }
       _stageSolution[k]->setSolution(_prevNLSolution);
     }
@@ -295,7 +300,7 @@ void ESDIRKIntegrator::runToTime(double T, double dt)
   // be initialized correctly (which is not a problem for implicit Euler)
   if (_t == 0)
   {
-    _dt = max(1e-9, 1e0*min(dt, T-_t));
+    _dt = max(1e-9, 1e-3*min(dt, T-_t));
     printTimeStepMessage();
     TimeIntegrator::calcNextTimeStep(_dt);
   }

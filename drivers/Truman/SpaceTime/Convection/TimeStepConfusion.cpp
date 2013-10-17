@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
-  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 2, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 6, true);
 
   // tau terms:
   steadyJacobian->addTerm( sigma / epsilon, tau);
@@ -232,9 +232,9 @@ int main(int argc, char *argv[]) {
   double dt = 1e-1;
   double Dt = 1e-1;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
-  VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
+  // VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
 
-  prevExporter.exportSolution("timestep_confusion0");
+  // prevExporter.exportSolution("timestep_confusion0");
 
   timeIntegrator.runToTime(1*Dt, dt);
   exporter.exportSolution("timestep_confusion1");
