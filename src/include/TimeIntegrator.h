@@ -54,6 +54,7 @@ class TimeIntegrator
     double _nlTolerance;
     double _nlL2Error;
     int _nlIteration;
+    int _nlIterationMax;
 
   public:
     TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
@@ -64,6 +65,8 @@ class TimeIntegrator
     FunctionPtr invDt();
     void setNLTolerance(double tol) { _nlTolerance = tol; }
     double getNLTolerance() { return _nlTolerance; }
+    void setNLIterationMax(double nlIterationMax) { _nlIterationMax = nlIterationMax; }
+    double getNLIterationMax() { return _nlIterationMax; }
     virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
     virtual void runToTime(double T, double dt) = 0;
     virtual void calcNextTimeStep(double dt);
@@ -81,24 +84,25 @@ class ImplicitEulerIntegrator : public TimeIntegrator
     void runToTime(double T, double dt);
 };
 
-// class ESDIRKIntegrator : public TimeIntegrator
-// {
-//   private:
-//     // Standard Butcher tables run from 1 to s
-//     // I am running from 0 to s-1 to match 0 index
-//     int _numStages;
-//     vector< vector<double> > a;
-//     vector<double> b;
-//     // For ESDIRK schemes, stage 1 is _prevTimeSolution
-//     vector< SolutionPtr > _stageSolution;
-//     vector< Teuchos::RCP<RHSEasy> > _stageRHS;
-//     vector< LinearTermPtr > _steadyLinearTerm;
-//
-//   public:
-//
-//     ESDIRKIntegrator(BFPtr steadyBF, Teuchos::RCP<RHSEasy> steadyRHS, MeshPtr mesh,
-//         Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear);
-//     virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
-//     virtual void runToTime(double T, double dt);
-//     virtual void calcNextTimeStep(double dt);
-// };
+class ESDIRKIntegrator : public TimeIntegrator
+{
+  private:
+    // Standard Butcher tables run from 1 to s
+    // I am running from 0 to s-1 to match 0 index
+    int _numStages;
+    vector< vector<double> > a;
+    vector<double> b;
+    vector<double> c;
+    // For ESDIRK schemes, first stage is _prevTimeSolution
+    vector< SolutionPtr > _stageSolution;
+    vector< Teuchos::RCP<RHSEasy> > _stageRHS;
+    vector< LinearTermPtr > _steadyLinearTerm;
+
+  public:
+
+    ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
+        Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, int numStages, bool nonlinear);
+    virtual void addTimeTerm(VarPtr trialVar, VarPtr testVar, FunctionPtr multiplier);
+    virtual void runToTime(double T, double dt);
+    virtual void calcNextTimeStep(double dt);
+};
