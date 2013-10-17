@@ -177,18 +177,48 @@ public:
   }
 };
 
+double findHorizontalSignReversal(double y, double xGuessLeft, double xGuessRight, SolutionPtr soln, VarPtr u1) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  double leftValue = getSolutionValueAtPoint(xGuessLeft, y, soln, u1);
+  double rightValue = getSolutionValueAtPoint(xGuessRight, y, soln, u1);
+  if (leftValue * rightValue > 0) {
+    double xGuess = (xGuessLeft + xGuessRight) / 2;
+    if (rank==0) {
+      cout << "Error: u1(" << xGuessLeft << ") = " << leftValue << " and u1(" << xGuessRight << ") = " << rightValue;
+      cout << " have the same sign.  Returning " << xGuess << endl;
+    }
+  }
+  int numIterations = 30;
+  double x = 0;
+  for (int i=0; i<numIterations; i++) {
+    double xGuess = (xGuessLeft + xGuessRight) / 2;
+    double middleValue = getSolutionValueAtPoint(xGuess, y, soln, u1);
+    if (middleValue * leftValue > 0) { // same sign
+      xGuessLeft = xGuess;
+      leftValue = middleValue;
+    }
+    if (middleValue * rightValue > 0) {
+      xGuessRight = xGuess;
+      rightValue = middleValue;
+    }
+    x = xGuess;
+  }
+  return x;
+}
+
 void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr streamSoln, VarPtr phi) {
   // find the x recirculation region first
   int numIterations = 20;
   double x,y;
   y = 0.01;
+  int rank = Teuchos::GlobalMPISession::getRank();
   {
     double xGuessLeft = 4.25;
     double xGuessRight = 4.60;
     double leftValue = getSolutionValueAtPoint(xGuessLeft, y, streamSoln, phi);
     double rightValue = getSolutionValueAtPoint(xGuessRight, y, streamSoln, phi);
     if (leftValue * rightValue > 0) {
-      cout << "Error: leftValue and rightValue have same sign.\n";
+      if (rank==0) cout << "Error: leftValue and rightValue have same sign.\n";
     }
     for (int i=0; i<numIterations; i++) {
       double xGuess = (xGuessLeft + xGuessRight) / 2;
@@ -223,6 +253,22 @@ void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr stre
       }
       yPoint = yGuess;
     }
+  }
+}
+
+void printLengthsForGartling(SolutionPtr soln, VarPtr u1) {
+  // find the sign reversals in u1
+  double yNearBottom = MESH_BOTTOM + .01;
+  double yNearTop = MESH_TOP - .01;
+  double primaryReattachmentLength = findHorizontalSignReversal(yNearBottom, 1.0, 15.0, soln, u1);
+  double secondarySeparationLength = findHorizontalSignReversal(yNearTop, 1.0, 7, soln, u1);
+  double secondaryReattachmentLength = findHorizontalSignReversal(yNearTop, 7, 15, soln, u1);
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
+  if (rank==0) {
+    cout << "primary reattachment length: " << setw(10) << primaryReattachmentLength << endl;
+    cout << "secondary separation length: " << setw(10) << secondarySeparationLength << endl;
+    cout << "secondary reattachment length: " << setw(10) << secondaryReattachmentLength << endl;
   }
 }
 
@@ -343,6 +389,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
     cout << "Re = " << Re << endl;
+    cout << "using L^2 tolerance relative to L^2 norm of background flow.\n";
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOT starting with 0 solution after refinement...\n";
@@ -620,25 +667,18 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<PenaltyConstraints> pc;
   
   if (useTractionBCsOnOutflow) {
-    bool DEBUGGING = false;
+    pc = Teuchos::rcp(new PenaltyConstraints);
     
-    if (!DEBUGGING) {
-      pc = Teuchos::rcp(new PenaltyConstraints);
-      
-      // define traction components in terms of field variables
-      FunctionPtr n = Function::normal();
-      LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
-      LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
-      
-      if (rank==0)
-        cout << "Imposing zero traction at outflow with penalty constraints.\n";
-      // outflow: both traction components are 0
-      pc->addConstraint(t1==zero, outflowBoundary);
-      pc->addConstraint(t2==zero, outflowBoundary);
-    } else {
-      bc->addDirichlet(t1n, outflowBoundary, zero);
-      bc->addDirichlet(t2n, outflowBoundary, zero);
-    }
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+    
+    if (rank==0)
+      cout << "Imposing zero traction at outflow with penalty constraints.\n";
+    // outflow: both traction components are 0
+    pc->addConstraint(t1==zero, outflowBoundary);
+    pc->addConstraint(t2==zero, outflowBoundary);
   } else {
     // do nothing on outflow, but do impose zero-mean pressure
     bc->addZeroMeanConstraint(p);
@@ -658,8 +698,10 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
+  bool printRefsToConsole = false;
+//  bool printRefsToConsole = rank==0;
   Teuchos::RCP<BackwardFacingStepRefinementStrategy> bfsRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(solnIncrement, energyThreshold,
-                                                                                                                                    min_h, maxPolyOrder, rank==0) );
+                                                                                                                                    min_h, maxPolyOrder, printRefsToConsole) );
   bfsRefinementStrategy->addCorner(G(0), G(1));
   bfsRefinementStrategy->addCorner(H(0), H(1));
   
@@ -697,17 +739,33 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
   FunctionPtr p_incr = Function::solution(p, solnIncrement);
   
-  FunctionPtr l2_incr;
+  FunctionPtr u1_prev = Function::solution(u1, solution);
+  FunctionPtr u2_prev = Function::solution(u2, solution);
+  FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
+  FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
+  FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
+  FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
+  FunctionPtr p_prev = Function::solution(p, solution);
+  
+  FunctionPtr l2_incr, l2_prev;
   
   if (! weightIncrementL2Norm) {
     l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
     + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
     + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+    
+    l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
+    + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
+    + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
   } else {
     double Re2 = Re * Re;
     l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
     + Re2 * sigma11_incr * sigma11_incr + Re2 * sigma12_incr * sigma12_incr
     + Re2 * sigma21_incr * sigma21_incr + Re2 * sigma22_incr * sigma22_incr;
+    
+    l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
+    + Re2 * sigma11_prev * sigma11_prev + Re2 * sigma12_prev * sigma12_prev
+    + Re2 * sigma21_prev * sigma21_prev + Re2 * sigma22_prev * sigma22_prev;
   }
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
@@ -726,14 +784,16 @@ int main(int argc, char *argv[]) {
       }
     }
     
-    double incr_norm;
+    double incr_norm, prev_norm;
     do {
       problem.iterate(useLineSearch, useCondensedSolve);
-      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-      //          // update time step
-      //          double new_dt = min(1.0/incr_norm, 1000.0);
-      //          dt_inv->setValue(1/new_dt);
       
+      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+      prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
+      if (prev_norm > 0) {
+        incr_norm /= prev_norm;
+      }
+
       if (rank==0) {
         cout << "\x1B[2K"; // Erase the entire current line.
         cout << "\x1B[0E"; // Move to the beginning of the current line.
@@ -766,6 +826,8 @@ int main(int argc, char *argv[]) {
       cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
       cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
     }
+    
+    if (useGartlingParameters) printLengthsForGartling(solution, u1);
 
     bfsRefinementStrategy->refine(false); //rank==0); // print to console on rank 0
     
@@ -842,6 +904,8 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
+
+  if (useGartlingParameters) printLengthsForGartling(solution, u1);
   
   if (rank==0) {
     if (solnSaveFile.length() > 0) {
@@ -976,7 +1040,8 @@ int main(int argc, char *argv[]) {
 //    solution->writeFieldsToFile(u1->ID(), "u1.m");
 //    solution->writeFieldsToFile(u2->ID(), "u2.m");
 //    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-    
+
+#ifdef USE_VTK
     VTKExporter exporter(solution, mesh, varFactory);
     exporter.exportSolution("backStepSoln", H1Order*2);
     
@@ -988,6 +1053,7 @@ int main(int argc, char *argv[]) {
     exporter.exportFunction(vorticity, "backStepVorticity");
     
     cout << "exported vorticity to backStepVorticity\n";
+#endif
 //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
 //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
 //    solution->writeFieldsToFile(p->ID(), "p.m");
