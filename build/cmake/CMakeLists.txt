@@ -18,6 +18,8 @@ SET(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "/usr/local/")
 FIND_PACKAGE(Boost)
 if (Boost_FOUND)
   INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIR})
+  MESSAGE("   Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
+  MESSAGE("   Boost_LIBRARY_DIRS = ${Boost_LIBRARY_DIRS}")
 endif()
 
 find_package(VTK)
@@ -171,6 +173,10 @@ set( LSQR_CONDITIONING_EXPERIMENT_DRIVER
   "${DRIVERS_DIR}/ConditioningExperiment/LSQREpetraExFile.cpp"
 )
 
+set( SCALING_EXPERIMENT_ML
+  "${DRIVERS_DIR}/ScalingExperiment/ScalingExperimentML.cpp"
+)
+
 set( CONFUSION_ITERATION_EXPERIMENT
   "${SCRATCHPAD_DRIVER_DIR}/ConfusionIterationExperiment.cpp"
 )
@@ -185,6 +191,10 @@ set( STOKES_CONSERVATION_EXPERIMENT
 
 set( STOKES_BACKWARD_FACING_STEP_DRIVER
   "${STOKES_DIR}/StokesBackwardFacingStepDriver.cpp"
+  )
+
+set( NAVIER_STOKES_BACKWARD_FACING_STEP_DRIVER
+  "${INCOMPRESSIBLE_NS_DIR}/NavierStokesBackwardFacingStepDriver.cpp"
   )
   
 set( NAVIER_STOKES_CAVITY_FLOW_DRIVER
@@ -233,6 +243,7 @@ set( STOKES_SOURCES
   "${STOKES_DIR}/StokesMathBilinearForm.cpp"
   "${STOKES_DIR}/StokesVVPBilinearForm.cpp"
   "${STOKES_DIR}/LidDrivenFlowRefinementStrategy.cpp"
+  "${STOKES_DIR}/BackwardFacingStepRefinementStrategy.cpp"
 )
 
 set( POISSON_SOURCES
@@ -298,14 +309,16 @@ add_library(${CAMELLIA_LIBRARY_NAME} ${SOURCES} ${HEADERS})
 add_executable(ConditioningExperimentDriver ${CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(KrylovSchurConditioningDriver ${KRYLOV_SCHUR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER})
+add_executable(ScalingExperimentML ${CONFUSION_SOURCES} ${SCALING_EXPERIMENT_ML})
 add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(OseenStudy ${OSEEN_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
+add_executable(NavierStokesBackwardFacingStepDriver ${STOKES_SOURCES} ${NAVIER_STOKES_BACKWARD_FACING_STEP_DRIVER})
 add_executable(StokesConservationExperiment ${STOKES_SOURCES} ${STOKES_CONSERVATION_EXPERIMENT})
-add_executable(NavierStokesCavityFlowDriver ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
+add_executable(NavierStokesCavityFlowDriver ${STOKES_SOURCES} ${NAVIER_STOKES_CAVITY_FLOW_DRIVER})
 add_executable(NavierStokesCavityFlowContinuationAdaptive ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_ADAPTIVE})
 add_executable(NavierStokesCavityFlowContinuationFixedMesh ${NAVIER_STOKES_CAVITY_FLOW_CONTINUATION_FIXED_MESH})
 add_executable(NavierStokesHemkerDriver ${NAVIER_STOKES_HEMKER_DRIVER})
@@ -343,6 +356,11 @@ target_link_libraries(LOBPCGConditioningDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(LSQRConditioningDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(ScalingExperimentML
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
@@ -398,6 +416,11 @@ target_link_libraries(StokesCavityFlowDriver
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(StokesBackwardFacingStepDriver
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(NavierStokesBackwardFacingStepDriver
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}

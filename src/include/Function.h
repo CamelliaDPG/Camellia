@@ -32,40 +32,44 @@ protected:
   int _rank;
   string _displayString; // this is here mostly for identifying functions in the debugger
   void CHECK_VALUES_RANK(FieldContainer<double> &values); // throws exception on bad values rank
+  double _time;
 public:
   Function();
   Function(int rank);
-  
+
+  virtual void setTime(double time);
+  virtual double getTime();
+
   bool equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, double tol = 1e-14);
-  
+
   virtual bool isZero() { return false; } // if true, the function is identically zero
-  
+
   virtual bool boundaryValueOnly() { return false; } // if true, indicates a function defined only on element boundaries (mesh skeleton)
-  
+
   virtual void values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache);
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) = 0;
-  
+
   static FunctionPtr op(FunctionPtr f, EOperatorExtended op);
-  
+
   virtual FunctionPtr x();
   virtual FunctionPtr y();
   virtual FunctionPtr z();
-  
+
   virtual FunctionPtr dx();
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
   virtual FunctionPtr div();
   virtual FunctionPtr grad(int numComponents=-1);
-  
+
 // inverse() presently unused: and unclear how useful...
 //  virtual FunctionPtr inverse();
-  
+
   int rank();
-  
+
   virtual void addToValues(FieldContainer<double> &valuesToAddTo, BasisCachePtr basisCache);
-  
+
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment);
-  
+
   double integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
   double integrate(BasisCachePtr basisCache);
@@ -74,12 +78,12 @@ public:
   // integrate over only one cell
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
-  
+
   // return all cell integrals
   map<int,double> cellIntegrals( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
   // return cell integrals specified in input argument cellIDs
   map<int,double> cellIntegrals(vector<int> cellIDs, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
-  
+
   double integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false);
 
   // adaptive quadrature
@@ -87,40 +91,40 @@ public:
 
   bool isPositive(BasisCachePtr basisCache);
   bool isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich = 0, bool testVsTest = false);
-  
+
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
-  
+
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
-  
+
   // divide values by this function (supported only when this is a scalar)
   virtual void scalarDivideFunctionValues(FieldContainer<double> &functionValues, BasisCachePtr basisCache);
-  
+
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
-  
+
   // divide values by this function (supported only when this is a scalar)
   virtual void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
-  
-  virtual void valuesDottedWithTensor(FieldContainer<double> &values, 
-                                      FunctionPtr tensorFunctionOfLikeRank, 
+
+  virtual void valuesDottedWithTensor(FieldContainer<double> &values,
+                                      FunctionPtr tensorFunctionOfLikeRank,
                                       BasisCachePtr basisCache);
-  
+
   virtual string displayString();
-  
+
   void writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
   void writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath);
 
   static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
-  
+
   static bool isNull(FunctionPtr f);
-  
+
   // static Function construction methods:
   static FunctionPtr composedFunction( FunctionPtr f, FunctionPtr arg_g); // note: SLOW! avoid when possible...
   static FunctionPtr constant(double value);
   static FunctionPtr constant(vector<double> &value);
-  
+
   static FunctionPtr h();
   static FunctionPtr meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static FunctionPtr meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
@@ -132,21 +136,21 @@ public:
   static FunctionPtr solution(VarPtr var, SolutionPtr soln);
   static FunctionPtr zero(int rank=0);
   static FunctionPtr restrictToCellBoundary(FunctionPtr f);
-  
+
   static FunctionPtr xn(int n=1);
   static FunctionPtr yn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
-  
+
   static FunctionPtr cellCharacteristic(int cellID);
   static FunctionPtr cellCharacteristic(set<int> cellIDs);
-  
+
   static FunctionPtr xPart(FunctionPtr vectorFunction);
   static FunctionPtr yPart(FunctionPtr vectorFunction);
   static FunctionPtr zPart(FunctionPtr vectorFunction);
 private:
   void scalarModifyFunctionValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
-  
+
   void scalarModifyBasisValues(FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
 
@@ -155,15 +159,15 @@ private:
 
 // restricts a given function to just the mesh skeleton
 class BoundaryFunction : public Function{
- private: 
+ private:
   FunctionPtr _f;
- public:  
+ public:
   BoundaryFunction(FunctionPtr f){
     _f = f;
   }
   bool boundaryValueOnly(){
     return true;
-  }  
+  }
   FunctionPtr getFunction(){
     return _f;
   }
@@ -180,7 +184,7 @@ class InternalBoundaryFunction : public BoundaryFunction{
     this->getFunction()->values(values,basisCache);
 
     int sideIndex = basisCache->getSideIndex();
-    vector<int> cellIDs = basisCache->cellIDs();    
+    vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
     for (int i = 0;i<cellIDs.size();i++){
@@ -209,17 +213,17 @@ class PolarizedFunction : public Function { // takes a 2D Function of x and y, i
 public:
   PolarizedFunction( FunctionPtr f_of_xAsR_yAsTheta );
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  
+
   FunctionPtr dx();
   FunctionPtr dy();
-  
+
   Teuchos::RCP<PolarizedFunction> dtheta();
   Teuchos::RCP<PolarizedFunction> dr();
-  
+
   virtual string displayString(); // for PolarizedFunction, this should be _f->displayString() + "(r,theta)";
-  
+
   bool isZero();
-  
+
   static Teuchos::RCP<PolarizedFunction> r();
   static Teuchos::RCP<PolarizedFunction> sin_theta();
   static Teuchos::RCP<PolarizedFunction> cos_theta();
@@ -240,7 +244,7 @@ public:
   void scalarDivideBasisValues(FieldContainer<double> &basisValues, BasisCachePtr basisCache);
   double value();
   double value(double x, double y);
-  
+
   FunctionPtr dx();
   FunctionPtr dy();
   // FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
@@ -251,11 +255,11 @@ class ConstantVectorFunction : public Function {
 public:
   ConstantVectorFunction(vector<double> value);
   bool isZero();
-  
+
   FunctionPtr x();
   FunctionPtr y();
 //  FunctionPtr z();
-  
+
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   vector<double> value();
 };
@@ -276,15 +280,15 @@ public:
   ProductFunction(FunctionPtr f1, FunctionPtr f2);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
-  
+
   FunctionPtr x();
   FunctionPtr y();
   FunctionPtr z();
-  
+
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
-  
+
   string displayString(); // _f1->displayString() << " " << _f2->displayString();
 };
 
@@ -304,21 +308,21 @@ class SumFunction : public Function {
   FunctionPtr _f1, _f2;
 public:
   SumFunction(FunctionPtr f1, FunctionPtr f2);
-  
+
   FunctionPtr x();
   FunctionPtr y();
   FunctionPtr z();
-  
+
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
-  
+
   FunctionPtr grad(int numComponents=-1); // gradient of sum is the sum of gradients
   FunctionPtr div();  // divergence of sum is sum of divergences
-  
+
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
-  
+
   string displayString();
 };
 
@@ -333,10 +337,10 @@ class UnitNormalFunction : public Function {
   int _comp;
 public:
   UnitNormalFunction(int comp=-1); // -1: the vector normal.  Otherwise, picks out the comp component
-  
+
   FunctionPtr x();
   FunctionPtr y();
-  
+
   bool boundaryValueOnly();
   string displayString();
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
@@ -365,16 +369,16 @@ public:
   virtual FunctionPtr x();
   virtual FunctionPtr y();
   virtual FunctionPtr z();
-  
+
   virtual FunctionPtr dx();
   virtual FunctionPtr dy();
   virtual FunctionPtr dz();
-  
+
   VectorizedFunction(const vector< FunctionPtr > &fxns);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2);
   VectorizedFunction(FunctionPtr f1, FunctionPtr f2, FunctionPtr f3);
   void values(FieldContainer<double> &values, BasisCachePtr basisCache);
-  
+
   virtual string displayString();
   int dim();
 };
@@ -479,7 +483,7 @@ public:
   double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
-  
+
   string displayString();
 };
 
@@ -513,7 +517,7 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
-  
+
   string displayString();
 };
 

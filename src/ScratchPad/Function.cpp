@@ -42,10 +42,10 @@ public:
     Teuchos::Array<int> dim;
     values.dimensions(dim);
     dim.push_back(spaceDim);
-    
+
     FieldContainer<double> vectorValues(dim);
     _vectorFxn->values(vectorValues, basisCache);
-    
+
     int numValues = values.size();
     for (int i=0; i<numValues; i++) {
       values[i] = vectorValues[spaceDim*i + _component];
@@ -60,7 +60,7 @@ public:
   CellBoundaryRestrictedFunction(FunctionPtr fxn) : Function(fxn->rank()) {
     _fxn = fxn;
   }
-  
+
   bool boundaryValueOnly() { return true; }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
     _fxn->values(values, basisCache);
@@ -68,10 +68,10 @@ public:
 };
 
 class MeshBoundaryCharacteristicFunction : public Function {
-  
+
 public:
   MeshBoundaryCharacteristicFunction() : Function(0) {
-    
+
   }
   bool boundaryValueOnly() { return true; }
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
@@ -104,10 +104,10 @@ public:
 };
 
 class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction {
-  
+
 public:
   MeshSkeletonCharacteristicFunction() : ConstantScalarFunction(1, "|_{\\Gamma_h}") {
-    
+
   }
   bool boundaryValueOnly() { return true; }
 };
@@ -123,7 +123,7 @@ public:
   FunctionPtr dy();
   FunctionPtr dz();
   // for reasons of efficiency, may want to implement div() and grad() as well
-  
+
   string displayString();
   bool boundaryValueOnly();
 };
@@ -141,18 +141,30 @@ public:
 Function::Function() {
   _rank = 0;
   _displayString = this->displayString();
+  _time = 0;
 }
-Function::Function(int rank) { 
+Function::Function(int rank) {
   _rank = rank;
   _displayString = this->displayString();
+  _time = 0;
 }
 
 string Function::displayString() {
   return "f";
 }
 
-int Function::rank() { 
-  return _rank; 
+int Function::rank() {
+  return _rank;
+}
+
+void Function::setTime(double time)
+{
+  _time = time;
+}
+
+double Function::getTime()
+{
+  return _time;
 }
 
 void Function::values(FieldContainer<double> &values, EOperatorExtended op, BasisCachePtr basisCache) {
@@ -180,7 +192,7 @@ void Function::values(FieldContainer<double> &values, EOperatorExtended op, Basi
       break;
   }
   if (op==IntrepidExtendedTypes::OP_VALUE) {
-    
+
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
   }
@@ -192,7 +204,7 @@ FunctionPtr Function::op(FunctionPtr f, IntrepidExtendedTypes::EOperatorExtended
   }
   switch (op) {
     case IntrepidExtendedTypes::OP_VALUE:
-      return f;  
+      return f;
     case IntrepidExtendedTypes::OP_DX:
       return f->dx();
     case IntrepidExtendedTypes::OP_DY:
@@ -224,7 +236,7 @@ bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, 
   }
   FunctionPtr thisPtr = Teuchos::rcp(this,false);
   FunctionPtr diff = thisPtr-f;
-  
+
   int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
   // compute L^2 norm of difference on the cells
   FieldContainer<double> diffs_squared(numCells);
@@ -239,7 +251,7 @@ bool Function::equals(FunctionPtr f, BasisCachePtr basisCacheForCellsToCompare, 
 double Function::evaluate(FunctionPtr f, double x) {
   static FieldContainer<double> value(1,1); // (C,P)
   static FieldContainer<double> physPoint(1,1,1);
-  
+
   static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   if (f->rank() != 0) {
@@ -370,18 +382,18 @@ double Function::integrate(BasisCachePtr basisCache) {
 // added by Jesse to check positivity of a function
 bool Function::isPositive(BasisCachePtr basisCache){
   bool isPositive = true;
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);  
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);  
+  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   FieldContainer<double> fxnValues(numCells,numPoints);
-  this->values(fxnValues, basisCache);  
-  
+  this->values(fxnValues, basisCache);
+
   for (int i = 0;i<fxnValues.size();i++){
     if (fxnValues[i] <= 0.0){
       isPositive=false;
       break;
     }
   }
-  return isPositive;  
+  return isPositive;
 }
 
 bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTest){
@@ -391,22 +403,22 @@ bool Function::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool testVsTes
   vector<ElementPtr> elems = mesh->elementsInPartition(myPartition);
   for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
     int cellID = (*elemIt)->cellID();
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubEnrich);    					   
-    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubEnrich);
+
     // if we want to check positivity on uniformly spaced points
     if ((*elemIt)->numSides()==4){ // tensor product structure only works with quads
-      FieldContainer<double> origPts = basisCache->getRefCellPoints();      
+      FieldContainer<double> origPts = basisCache->getRefCellPoints();
       int numPts1D = ceil(sqrt(origPts.dimension(0)));
       int numPts = numPts1D*numPts1D;
       FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
-      double h = 1.0/(numPts1D-1); 
+      double h = 1.0/(numPts1D-1);
       int iter = 0;
       for (int i = 0;i<numPts1D;i++){
 	for (int j = 0;j<numPts1D;j++){
 	  uniformSpacedPts(iter,0) = 2*h*i-1.0;
 	  uniformSpacedPts(iter,1) = 2*h*j-1.0;
 	  iter++;
-	}	
+	}
       }
       basisCache->setRefCellPoints(uniformSpacedPts);
     }
@@ -494,12 +506,12 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
   vector<CacheInfo> subCellsToCheck = subCellCacheInfo;
   int iter = 0;
   int maxIter = 1000; // arbitrary
-  while (!allConverged && iter < maxIter){    
+  while (!allConverged && iter < maxIter){
     allConverged = true;
     ++iter;
     // check relative error, tag subcells to refine
     double tempIntegral = 0.0;
-    set<int> subCellsToRefine;    
+    set<int> subCellsToRefine;
     for (int i = 0;i<subCellsToCheck.size();i++){
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
       int cellID = subCellsToCheck[i].cellID;
@@ -516,7 +528,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
       FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
       this->integrate(cellIntegral,basisCache);
       this->integrate(enrichedCellIntegral,enrichedCache);
-      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error      
+      double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error
       if (error > tol){
         allConverged = false;
         subCellsToRefine.insert(i);
@@ -540,8 +552,8 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
       {
         case shards::Quadrilateral<4>::key:
           {
-            // break into 4 subcells 
-            int spaceDim = 2; int numCells = 1; // cell-by-cell 
+            // break into 4 subcells
+            int spaceDim = 2; int numCells = 1; // cell-by-cell
 
             FieldContainer<double> oldNodes = newCacheInfo.subCellNodes;
             oldNodes.resize(4,spaceDim);
@@ -599,7 +611,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
             newCellNodes(0,3,1) = oldNodes(3,1);
             newCacheInfo.subCellNodes = newCellNodes;
             newSubCells.push_back(newCacheInfo);
-            break;	
+            break;
           }
         default: // case shards::Triangle<3>::key:{} // covers triangles for now
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized in adaptive quadrature routine; topology not implemented");
@@ -607,7 +619,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
     }
     // reset subCell list
     subCellsToCheck.clear();
-    subCellsToCheck = newSubCells; // new list    
+    subCellsToCheck = newSubCells; // new list
   }
 
   return MPIWrapper::sum(integral);
@@ -636,12 +648,12 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
 //      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 //        cout << ptIndex << ": " << values(cellIndex,ptIndex) << endl;
 //      }
-//      
+//
 //      cout << "weightedMeasures:\n";
 //      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 //        cout << ptIndex << ": " << (*weightedMeasures)(cellIndex,ptIndex) << endl;
 //      }
-//      
+//
 //      cout << "weighted values:\n";
 //      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
 //        cout << ptIndex << ": " << values(cellIndex,ptIndex) * (*weightedMeasures)(cellIndex,ptIndex) << endl;
@@ -674,29 +686,29 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnric
   return integral;
 }
 
-double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {  
+double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideIndex, int cubatureDegreeEnrichment) {
   // for boundaries, the jump is 0
   if (mesh->boundary().boundaryElement(cellID,sideIndex)) {
     return 0;
   }
   int neighborCellID = mesh->getElement(cellID)->getNeighborCellID(sideIndex);
   int neighborSideIndex = mesh->getElement(cellID)->getSideIndexInNeighbor(sideIndex);
-  
+
   ElementTypePtr myType = mesh->getElement(cellID)->elementType();
   ElementTypePtr neighborType = mesh->getElement(neighborCellID)->elementType();
-  
+
   // TODO: rewrite this to compute in distributed fashion
   vector<int> myCellIDVector;
   myCellIDVector.push_back(cellID);
   vector<int> neighborCellIDVector;
   neighborCellIDVector.push_back(neighborCellID);
-  
+
   BasisCachePtr myCache = Teuchos::rcp(new BasisCache( myType, mesh, true, cubatureDegreeEnrichment));
   myCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(cellID), myCellIDVector, true);
-  
+
   BasisCachePtr neighborCache = Teuchos::rcp(new BasisCache( neighborType, mesh, true, cubatureDegreeEnrichment));
   neighborCache->setPhysicalCellNodes(mesh->physicalCellNodesForCell(neighborCellID), neighborCellIDVector, true);
-  
+
   double sideParity = mesh->cellSideParitiesForCell(cellID)[sideIndex];
   // cellIntegral will store the difference between my value and neighbor's
   FieldContainer<double> cellIntegral(1);
@@ -705,17 +717,17 @@ double Function::integralOfJump(Teuchos::RCP<Mesh> mesh, int cellID, int sideInd
   cellIntegral[0] *= -1;
   this->integrate(cellIntegral, myCache->getSideBasisCache(sideIndex), true);
 //  cout << "integral difference: " << cellIntegral[0] << endl;
-  
+
   // multiply by sideParity to make jump uniquely valued.
   return sideParity * cellIntegral(0);
 }
 
 double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache) {
   double integral = 0;
-  
+
   int myPartition = Teuchos::GlobalMPISession::getRank();
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(myPartition);
-  
+
   for (vector< ElementTypePtr >::iterator typeIt = elementTypes.begin(); typeIt != elementTypes.end(); typeIt++) {
     ElementTypePtr elemType = *typeIt;
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( elemType, mesh, testVsTest, cubatureDegreeEnrichment) ); // all elements of same type
@@ -742,7 +754,7 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment
       integral += cellIntegrals(cellIndex);
     }
   }
-  
+
   return MPIWrapper::sum(integral);
 }
 
@@ -777,8 +789,8 @@ void Function::scalarDivideBasisValues(FieldContainer<double> &basisValues, Basi
   scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
 }
 
-void Function::valuesDottedWithTensor(FieldContainer<double> &values, 
-                                      FunctionPtr tensorFunctionOfLikeRank, 
+void Function::valuesDottedWithTensor(FieldContainer<double> &values,
+                                      FunctionPtr tensorFunctionOfLikeRank,
                                       BasisCachePtr basisCache) {
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,
                      "Can't dot functions of unlike rank");
@@ -787,29 +799,29 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
-  
+
   values.initialize(0.0);
-  
+
   Teuchos::Array<int> tensorValueIndex(_rank+2); // +2 for numCells, numPoints indices
   tensorValueIndex[0] = numCells;
   tensorValueIndex[1] = numPoints;
   for (int d=0; d<_rank; d++) {
     tensorValueIndex[d+2] = spaceDim;
   }
-  
+
   FieldContainer<double> myTensorValues(tensorValueIndex);
   this->values(myTensorValues,basisCache);
   FieldContainer<double> otherTensorValues(tensorValueIndex);
   tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
-  
+
 //  cout << "myTensorValues:\n" << myTensorValues;
 //  cout << "otherTensorValues:\n" << otherTensorValues;
-  
+
   // clear out the spatial indices of tensorValueIndex so we can use it as index
   for (int d=0; d<_rank; d++) {
     tensorValueIndex[d+2] = 0;
   }
-  
+
   int entriesPerPoint = 1;
   for (int d=0; d<_rank; d++) {
     entriesPerPoint *= spaceDim;
@@ -821,7 +833,7 @@ void Function::valuesDottedWithTensor(FieldContainer<double> &values,
       double *myValue = &myTensorValues[ myTensorValues.getEnumeration(tensorValueIndex) ];
       double *otherValue = &otherTensorValues[ otherTensorValues.getEnumeration(tensorValueIndex) ];
       double *value = &values(cellIndex,ptIndex);
-      
+
       for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++) {
         *value += *myValue * *otherValue;
 //        cout << "myValue: " << *myValue << "; otherValue: " << *otherValue << endl;
@@ -838,12 +850,12 @@ void Function::scalarModifyFunctionValues(FieldContainer<double> &values, BasisC
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
-  
+
   FieldContainer<double> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
-  
+
   Teuchos::Array<int> valueIndex(values.rank());
-  
+
   int entriesPerPoint = 1;
   for (int d=0; d < values.rank()-2; d++) {  // -2 for numCells, numPoints indices
     entriesPerPoint *= spaceDim;
@@ -871,16 +883,16 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
   int numCells = values.dimension(0);
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
-  
+
   int spaceDim = basisCache->getPhysicalCubaturePoints().dimension(2);
-  
+
   FieldContainer<double> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
-  
+
 //  cout << "scalarModifyBasisValues: scalarValues:\n" << scalarValues;
-  
+
   Teuchos::Array<int> valueIndex(values.rank());
-  
+
   int entriesPerPoint = 1;
   for (int d=0; d<values.rank()-3; d++) {  // -3 for numCells, numFields, numPoints indices
     entriesPerPoint *= spaceDim;
@@ -908,20 +920,20 @@ void Function::scalarModifyBasisValues(FieldContainer<double> &values, BasisCach
 
 void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
   typedef CellTools<double>  CellTools;
-  
+
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
   int spaceDim = 2; // TODO: generalize to 3D...
-  
+
   BasisCachePtr basisCache;
   for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh, true) );
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     int numSides = cellTopo.getSideCount();
-    
+
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
@@ -938,7 +950,7 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
       double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
       refPoints(i,0) = x;
     }
-  
+
     for (int sideIndex=0; sideIndex < numSides; sideIndex++){
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
       sideBasisCache->setRefCellPoints(refPoints);
@@ -947,7 +959,7 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
 
       FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
       this->values(computedValues,sideBasisCache);
-      
+
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0;cellIndex < numCells;cellIndex++){
         FieldContainer<double> cellParities = mesh->cellSideParitiesForCell( cellIDs[cellIndex] );
@@ -971,12 +983,12 @@ void Function::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const st
 void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &filePath) {
   // MATLAB format, supports scalar functions defined inside 2D volume right now...
   typedef CellTools<double>  CellTools;
-  
+
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
   int spaceDim = 2; // TODO: generalize to 3D...
   int num1DPts = 15;
-  
+
   int numPoints = num1DPts * num1DPts;
   FieldContainer<double> refPoints(numPoints,spaceDim);
   for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
@@ -988,13 +1000,13 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
       refPoints(ptIndex,1) = y;
     }
   }
-  
+
   vector< ElementTypePtr > elementTypes = mesh->elementTypes();
   vector< ElementTypePtr >::iterator elemTypeIt;
-  
+
   fout << "numCells = " << mesh->activeElements().size() << endl;
   fout << "x=cell(numCells,1);y=cell(numCells,1);z=cell(numCells,1);" << endl;
-  
+
   // initialize storage
   fout << "for i = 1:numCells" << endl;
   fout << "x{i} = zeros(" << num1DPts << ",1);"<<endl;
@@ -1009,7 +1021,7 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
     basisCache->setRefCellPoints(refPoints);
     shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
     Teuchos::RCP<shards::CellTopology> cellTopoPtr = elemTypePtr->cellTopoPtr;
-    
+
     FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
@@ -1021,24 +1033,24 @@ void Function::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const string &fi
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, false); // false: don't create side cache
 
     FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
-    
+
     FieldContainer<double> computedValues(numCells,numPoints);
-    this->values(computedValues, basisCache);	
-    
+    this->values(computedValues, basisCache);
+
     // NOW loop over all cells to write solution to file
     for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++){
       for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++){
         int ptIndex = xPointIndex*num1DPts + yPointIndex;
-        for (int cellIndex=0;cellIndex < numCells;cellIndex++){	  
+        for (int cellIndex=0;cellIndex < numCells;cellIndex++){
           fout << "x{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<")=" << physCubPoints(cellIndex,ptIndex,0) << ";" << endl;
           fout << "y{"<<globalCellInd+cellIndex<< "}("<<yPointIndex+1<<")=" << physCubPoints(cellIndex,ptIndex,1) << ";" << endl;
-          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,ptIndex) << ";" << endl;	  
+          fout << "z{"<<globalCellInd+cellIndex<< "}("<<xPointIndex+1<<","<<yPointIndex+1<<")=" << computedValues(cellIndex,ptIndex) << ";" << endl;
         }
       }
     }
     globalCellInd+=numCells;
-    
-  } //end of element type loop 
+
+  } //end of element type loop
   fout.close();
 }
 
@@ -1130,15 +1142,15 @@ FunctionPtr Function::zero(int rank) {
   }
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value) { 
+ConstantScalarFunction::ConstantScalarFunction(double value) {
   _value = value;
   ostringstream valueStream;
   valueStream << value;
   _stringDisplay = valueStream.str();
 }
 
-ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) { 
-  _value = value; 
+ConstantScalarFunction::ConstantScalarFunction(double value, string stringDisplay) {
+  _value = value;
   _stringDisplay = stringDisplay;
 }
 
@@ -1194,8 +1206,8 @@ FunctionPtr ConstantScalarFunction::dy() {
   return Function::zero();
 }
 
-ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) { 
-  _value = value; 
+ConstantVectorFunction::ConstantVectorFunction(vector<double> value) : Function(1) {
+  _value = value;
 }
 
 FunctionPtr ConstantVectorFunction::x() {
@@ -1425,7 +1437,7 @@ FunctionPtr SumFunction::y() {
   if ( (_f1->y().get() == NULL) || (_f2->y().get() == NULL) ) {
     return null();
   }
-  return _f1->y() + _f2->y();  
+  return _f1->y() + _f2->y();
 }
 FunctionPtr SumFunction::z() {
   if ( (_f1->z().get() == NULL) || (_f2->z().get() == NULL) ) {
@@ -1481,7 +1493,7 @@ void hFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
   CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
   const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -1562,7 +1574,7 @@ void SimpleFunction::values(FieldContainer<double> &values, BasisCachePtr basisC
   CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   int spaceDim = points->dimension(2);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -1654,10 +1666,10 @@ bool PolarizedFunction::isZero() {
 void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
   CHECK_VALUES_RANK(values);
   static const double PI  = 3.141592653589793238462;
-  
+
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
-  
+
   const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   FieldContainer<double> polarPoints = *points;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -1669,7 +1681,7 @@ void PolarizedFunction::values(FieldContainer<double> &values, BasisCachePtr bas
       // now x = r cos theta, but need to guarantee that y = r sin theta (might differ in sign)
       // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) ==> theta := 2 pi - theta;
       if (y < 0) theta = 2*PI-theta;
-      
+
       polarPoints(cellIndex, ptIndex, 0) = r;
       polarPoints(cellIndex, ptIndex, 1) = theta;
 //      if (r == 0) {
@@ -1844,7 +1856,7 @@ void VectorizedFunction::values(FieldContainer<double> &values, BasisCachePtr ba
   dims.pop_back(); // remove the last, dimensions argument
   FieldContainer<double> compValues(dims);
   int valuesPerComponent = compValues.size();
-  
+
   for (int comp=0; comp < numComponents; comp++) {
     FunctionPtr fxn = _fxns[comp];
     fxn->values(compValues, basisCache);
@@ -1943,7 +1955,7 @@ FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
 //}
 //
 //ConstantScalarFunctionPtr operator/(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2) {
-//  return Teuchos::rcp( new ConstantScalarFunction(f1->value() / f2->value()) );  
+//  return Teuchos::rcp( new ConstantScalarFunction(f1->value() / f2->value()) );
 //}
 
 //ConstantVectorFunctionPtr operator*(ConstantVectorFunctionPtr f1, ConstantScalarFunctionPtr f2) {
@@ -1951,7 +1963,7 @@ FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
 //  for (int d=0; d<value.size(); d++) {
 //    value[d] *= f2->value();
 //  }
-//  return Teuchos::rcp( new ConstantVectorFunction(value) );  
+//  return Teuchos::rcp( new ConstantVectorFunction(value) );
 //}
 //
 //ConstantVectorFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantVectorFunctionPtr f2) {
@@ -1963,7 +1975,7 @@ FunctionPtr operator/(double value, FunctionPtr scalarDivisor) {
 //  for (int d=0; d<value.size(); d++) {
 //    value[d] /= f2->value();
 //  }
-//  return Teuchos::rcp( new ConstantVectorFunction(value) );  
+//  return Teuchos::rcp( new ConstantVectorFunction(value) );
 //}
 
 FunctionPtr operator*(double weight, FunctionPtr f) {
