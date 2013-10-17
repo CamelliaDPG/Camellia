@@ -279,6 +279,7 @@ include_directories(${Trilinos_TPL_INCLUDE_DIRS})
 include_directories(${Trilinos_INCLUDE_DIRS})
 if (MUMPS_DIR)
   include_directories(${MUMPS_DIR}/include)
+  link_directories(${MUMPS_DIR})
 endif()
 
 # Add to the library path Trilinos' library path, and the library
