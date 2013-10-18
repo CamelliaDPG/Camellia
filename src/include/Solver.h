@@ -89,6 +89,9 @@ public:
           }
         } else {
           cout << "MUMPS encountered unhandled error code " << infog[0] << endl;
+          for (int i=0; i<40; i++) {
+            cout << "infog[" << setw(2) << i+1 << "] = " << infog[i] << endl; // i+1 because 1-based indices are used in MUMPS manual
+          }
         }
       }
       mumps.SymbolicFactorization();
