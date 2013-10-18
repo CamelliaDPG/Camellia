@@ -45,7 +45,7 @@ using namespace std;
 class MumpsSolver : public Solver {
   int _maxMemoryPerCoreMB;
 public:
-  MumpsSolver(int maxMemoryPerCoreMB = 768) {
+  MumpsSolver(int maxMemoryPerCoreMB = 512) {
     // maximum amount of memory MUMPS may allocate per core.
     _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
   }
@@ -77,13 +77,13 @@ public:
           int sizeToSet = max(2 * minSize, previousSize*2);
           sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
           mumps.SetICNTL(23, sizeToSet);
-          cout << "MUMPS memory allocation too small.  Resetting to: " << sizeToSet << endl;
+          cout << "\nMUMPS memory allocation too small.  Setting to: " << sizeToSet << " MB/core." << endl;
           previousSize = sizeToSet;
         } else if (infog[0]==-13) {
           if (previousSize > 0) {
             int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
             mumps.SetICNTL(23, sizeToSet);
-            cout << "MUMPS memory allocation error -13.  Resetting to: " << sizeToSet << endl;
+            cout << "MUMPS memory allocation error -13; likely indicates we're out of memory.  Reducing by 25%; setting to: " << sizeToSet << " MB/core." << endl;
           } else {
             cout << "MUMPS memory allocation error -13, but previousSize was 0.  (Unhandled case)." << endl;
           }
