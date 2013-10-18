@@ -43,7 +43,13 @@ using namespace std;
 #ifdef HAVE_MPI
 #include "Amesos_Mumps.h"
 class MumpsSolver : public Solver {
+  int _maxMemoryPerCoreMB;
 public:
+  MumpsSolver(int maxMemoryPerCoreMB = 768) {
+    // maximum amount of memory MUMPS may allocate per core.
+    _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
+  }
+  
   int solve() {
     Amesos_Mumps mumps(problem());
     mumps.SymbolicFactorization();
@@ -69,6 +75,7 @@ public:
           int minSize = infog[26-1];
           // want to set ICNTL 23 to a size "significantly larger" than minSize
           int sizeToSet = max(10 * minSize, previousSize*2);
+          sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
           mumps.SetICNTL(23, sizeToSet);
           cout << "MUMPS memory allocation too small.  Resetting to: " << sizeToSet << endl;
           previousSize = sizeToSet;
