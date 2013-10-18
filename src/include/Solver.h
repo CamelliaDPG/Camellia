@@ -70,13 +70,13 @@ public:
           // want to set ICNTL 23 to a size "significantly larger" than minSize
           int sizeToSet = max(10 * minSize, previousSize*2);
           mumps.SetICNTL(23, sizeToSet);
-          cout << "MUMPS memory allocation too small.  Set size to: " << sizeToSet << endl;
+          cout << "MUMPS memory allocation too small.  Resetting to: " << sizeToSet << endl;
           previousSize = sizeToSet;
         }
       }
       mumps.SymbolicFactorization();
       mumps.NumericFactorization();
-      if (numErrors > 20) {
+      if (numErrors > 200) {
         cout << "Too many errors during MUMPS factorization.  Quitting.\n";
         break;
       }
