@@ -84,6 +84,8 @@ public:
             int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
             mumps.SetICNTL(23, sizeToSet);
             cout << "MUMPS memory allocation error -13.  Resetting to: " << sizeToSet << endl;
+          } else {
+            cout << "MUMPS memory allocation error -13, but previousSize was 0.  (Unhandled case)." << endl;
           }
         } else {
           cout << "MUMPS encountered unhandled error code " << infog[0] << endl;
