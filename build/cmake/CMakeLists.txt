@@ -213,6 +213,10 @@ set( LAPLACE_CURVILINEAR_DRIVER
   "${DEMO_DRIVERS_DIR}/LaplaceCurvilinear.cpp"
   )
 
+set( LAPLACE_3D_SINGLE_ELEMENT_DRIVER
+  "${DEMO_DRIVERS_DIR}/Laplace3DSingleElement.cpp"
+  )
+
 set( NAVIER_STOKES_HEMKER_DRIVER
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesHemkerDriver.cpp"
   )
@@ -312,6 +316,7 @@ add_executable(LOBPCGConditioningDriver ${LOBPCG_CONDITIONING_EXPERIMENT_DRIVER}
 add_executable(ScalingExperimentML ${CONFUSION_SOURCES} ${SCALING_EXPERIMENT_ML})
 add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
+add_executable(Laplace3DSingleElement ${LAPLACE_3D_SINGLE_ELEMENT_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(OseenStudy ${OSEEN_STUDY})
@@ -401,6 +406,11 @@ target_link_libraries(NavierStokesCavityFlowContinuationFixedMesh
   ${CAMELLIA_LIBRARY_NAME}
   )
 target_link_libraries(LaplaceCurvilinear
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(Laplace3DSingleElement
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
