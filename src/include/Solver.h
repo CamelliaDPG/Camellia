@@ -62,6 +62,7 @@ public:
 #ifdef HAVE_MPI
     rank     = Teuchos::GlobalMPISession::getRank();
     numProcs = Teuchos::GlobalMPISession::getNProc();
+    mumps.SetICNTL(28, 2); // 2: parallel analysis
 #else
 #endif
     int previousSize = 0;
@@ -79,7 +80,14 @@ public:
           mumps.SetICNTL(23, sizeToSet);
           cout << "\nMUMPS memory allocation too small.  Setting to: " << sizeToSet << " MB/core." << endl;
           previousSize = sizeToSet;
-        } else if (infog[0]==-13) {
+        } else if (infog[0] == -7) {
+          // some error related to an integer array allocation.
+          // since I'm not sure how to determine how much we previously had, we'll just try again with the max
+          int sizeToSet = _maxMemoryPerCoreMB;
+          cout << "\nMUMPS encountered an error related to the integer workspace -- likely it's running into our allocation limit.  Setting the allocation limit to ";
+          cout << sizeToSet << " MB/core." << endl;
+          mumps.SetICNTL(23, sizeToSet);
+        } else if (infog[0]==-13) { // error during a Fortran ALLOCATE statement
           if (previousSize > 0) {
             int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
             mumps.SetICNTL(23, sizeToSet);
@@ -97,7 +105,7 @@ public:
       }
       mumps.SymbolicFactorization();
       mumps.NumericFactorization();
-      if (numErrors > 200) {
+      if (numErrors > 20) {
         if (rank==0) cout << "Too many errors during MUMPS factorization.  Quitting.\n";
         break;
       }
