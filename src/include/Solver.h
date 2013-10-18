@@ -50,7 +50,6 @@ public:
     mumps.NumericFactorization();
     int relaxationParam = 0; // the default
     int* info = mumps.GetINFO();
-    int numErrors = 0;
     int numProcs=1;
     int rank=0;
     
@@ -60,6 +59,7 @@ public:
 #else
 #endif
     int previousSize = 0;
+    int numErrors = 0;
     while (info[0] < 0) { // error occurred
       
       numErrors++;
@@ -72,12 +72,14 @@ public:
           mumps.SetICNTL(23, sizeToSet);
           cout << "MUMPS memory allocation too small.  Resetting to: " << sizeToSet << endl;
           previousSize = sizeToSet;
+        } else {
+          cout << "MUMPS encountered unhandled error code " << infog[0] << endl;
         }
       }
       mumps.SymbolicFactorization();
       mumps.NumericFactorization();
       if (numErrors > 200) {
-        cout << "Too many errors during MUMPS factorization.  Quitting.\n";
+        if (rank==0) cout << "Too many errors during MUMPS factorization.  Quitting.\n";
         break;
       }
     }
