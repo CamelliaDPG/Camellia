@@ -74,11 +74,17 @@ public:
         if (infog[0] == -9) {
           int minSize = infog[26-1];
           // want to set ICNTL 23 to a size "significantly larger" than minSize
-          int sizeToSet = max(10 * minSize, previousSize*2);
+          int sizeToSet = max(2 * minSize, previousSize*2);
           sizeToSet = min(sizeToSet, _maxMemoryPerCoreMB);
           mumps.SetICNTL(23, sizeToSet);
           cout << "MUMPS memory allocation too small.  Resetting to: " << sizeToSet << endl;
           previousSize = sizeToSet;
+        } else if (infog[0]==-13) {
+          if (previousSize > 0) {
+            int sizeToSet = 3 * previousSize / 4; // reduce size by 25%
+            mumps.SetICNTL(23, sizeToSet);
+            cout << "MUMPS memory allocation error -13.  Resetting to: " << sizeToSet << endl;
+          }
         } else {
           cout << "MUMPS encountered unhandled error code " << infog[0] << endl;
         }
