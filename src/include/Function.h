@@ -139,6 +139,7 @@ public:
 
   static FunctionPtr xn(int n=1);
   static FunctionPtr yn(int n=1);
+  static FunctionPtr zn(int n=1);
 //  static FunctionPtr jump(FunctionPtr f);
 
   static FunctionPtr cellCharacteristic(int cellID);
@@ -473,6 +474,17 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  string displayString();
+};
+
+class Zn : public SimpleFunction {
+  int _n;
+public:
+  Zn(int n);
+  double value(double x, double y, double z);
+  FunctionPtr dx();
+  FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 

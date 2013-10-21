@@ -1116,6 +1116,10 @@ FunctionPtr Function::yn(int n) {
   return Teuchos::rcp( new Yn(n) );
 }
 
+FunctionPtr Function::zn(int n) {
+  return Teuchos::rcp( new Zn(n) );
+}
+
 FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
   return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
 }
@@ -2160,6 +2164,38 @@ FunctionPtr Yn::dx() {
   return Function::zero();
 }
 FunctionPtr Yn::dy() {
+  if (_n == 0) {
+    return Function::zero();
+  }
+  FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
+  return _n * y_n_minus;
+}
+
+string Zn::displayString() {
+  ostringstream ss;
+  if ((_n != 1) && (_n != 0)) {
+    ss << "z^" << _n ;
+  } else if (_n == 1) {
+    ss << "z";
+  } else {
+    ss << "(1)";
+  }
+  return ss.str();
+}
+Zn::Zn(int n) {
+  _n = n;
+}
+double Zn::value(double x, double y, double z) {
+  return pow(z,_n);
+}
+
+FunctionPtr Zn::dx() {
+  return Function::zero();
+}
+FunctionPtr Zn::dy() {
+  return Function::zero();
+}
+FunctionPtr Zn::dz() {
   if (_n == 0) {
     return Function::zero();
   }
