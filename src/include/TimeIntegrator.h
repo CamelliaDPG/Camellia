@@ -2,8 +2,7 @@
 #include "Mesh.h"
 #include "Solution.h"
 
-// class TimeIntegrator;
-// typedef Teuchos::RCP<TimeIntegrator> TimeIntegratorPtr;
+// TODO: change L2 error to use different variables
 
 class InvDtFunction : public Function
 {
@@ -32,7 +31,7 @@ class SteadyResidual
     VarFactory &varFactory;
   public:
     SteadyResidual(VarFactory &varFactory):varFactory(varFactory) {};
-    virtual LinearTermPtr createResidual(SolutionPtr solution) = 0;
+    virtual LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms) = 0;
 };
 
 class TimeIntegrator
@@ -55,6 +54,8 @@ class TimeIntegrator
     double _nlL2Error;
     int _nlIteration;
     int _nlIterationMax;
+    vector<VarPtr> testVars;
+    vector<VarPtr> trialVars;
 
   public:
     TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,

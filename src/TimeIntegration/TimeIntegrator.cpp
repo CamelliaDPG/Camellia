@@ -32,7 +32,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
 
   if (_nonlinear)
   {
-    _rhs->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
+    _rhs->addTerm( -_steadyResidual.createResidual(_prevNLSolution, false) );
   }
 }
 
@@ -89,7 +89,7 @@ void TimeIntegrator::calcNextTimeStep(double dt)
       }
       _solution->solve(false);
       _nlL2Error = _solution->L2NormOfSolution(0);
-      _prevNLSolution->addSolution(_solution, 1);
+      _prevNLSolution->addSolution(_solution, 1, false, true);
       printNLMessage();
       _nlIteration++;
     }
@@ -107,7 +107,7 @@ void TimeIntegrator::calcNextTimeStep(double dt)
 void TimeIntegrator::printTimeStepMessage()
 {
   cout << endl;
-  cout << "timestep: " << _timestep << " t = " << _t << " dt = " << _dt << endl;
+  cout << "timestep: " << _timestep << " t = " << _t+_dt << " dt = " << _dt << endl;
 }
 
 void TimeIntegrator::printNLMessage()
@@ -208,6 +208,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   _stageSolution[0] = _prevTimeSolution;
   _stageRHS[0] = _rhs;
+
   for (int k=1; k < _numStages; k++)
   {
     _stageSolution[k] = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
@@ -216,14 +217,14 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   for (int k=0; k < _numStages-1; k++)
   {
-    _steadyLinearTerm[k] = _steadyResidual.createResidual(_stageSolution[k]);
+    _steadyLinearTerm[k] = _steadyResidual.createResidual(_stageSolution[k], true);
   }
 
   for (int k=1; k < _numStages; k++)
   {
     if (_nonlinear)
     {
-      _stageRHS[k]->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
+      _stageRHS[k]->addTerm( -_steadyResidual.createResidual(_prevNLSolution, false) );
     }
     for (int j=0; j < k; j++)
     {
@@ -262,7 +263,7 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
       {
         _solution->solve(false);
         _nlL2Error = _solution->L2NormOfSolution(0);
-        _prevNLSolution->addSolution(_solution, 1);
+        _prevNLSolution->addSolution(_solution, 1, false, true);
         printNLMessage();
         _nlIteration++;
         if (_nlIteration > _nlIterationMax)
@@ -282,7 +283,6 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 
   if (_nonlinear)
   {
-    _prevNLSolution->setSolution(_stageSolution[_numStages-1]);
     _prevTimeSolution->setSolution(_prevNLSolution);
   }
   else

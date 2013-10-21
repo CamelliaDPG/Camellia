@@ -91,8 +91,8 @@ class ExactSigma1 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = -R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 0) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 1) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
         }
       }
     }
@@ -111,8 +111,8 @@ class ExactSigma2 : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = -R/32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 0) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+          values(cellIndex, ptIndex, 1) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
         }
       }
     }
@@ -125,7 +125,7 @@ class BurgersSteadyResidual : public SteadyResidual{
   public:
     BurgersSteadyResidual(VarFactory &varFactory, double R):
       SteadyResidual(varFactory), R(R) {};
-    LinearTermPtr createResidual(SolutionPtr solution)
+    LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
     {
       VarPtr tau1 = varFactory.testVar("tau1", HDIV);
       VarPtr tau2 = varFactory.testVar("tau2", HDIV);
@@ -146,6 +146,10 @@ class BurgersSteadyResidual : public SteadyResidual{
       FunctionPtr u2_prev = Function::solution(u2, solution);
       FunctionPtr sigma1_prev = Function::solution(sigma1, solution);
       FunctionPtr sigma2_prev = Function::solution(sigma2, solution);
+      FunctionPtr u1hat_prev = Function::solution(u1hat, solution);
+      FunctionPtr u2hat_prev = Function::solution(u2hat, solution);
+      FunctionPtr f1hat_prev = Function::solution(f1hat, solution);
+      FunctionPtr f2hat_prev = Function::solution(f2hat, solution);
 
       vector<double> e1(2); // (1,0)
       e1[0] = R;
@@ -159,11 +163,21 @@ class BurgersSteadyResidual : public SteadyResidual{
       residual->addTerm( Rfunc*sigma2_prev * tau2 );
       residual->addTerm( u1_prev * tau1->div() );
       residual->addTerm( u2_prev * tau2->div() );
+      if (includeBoundaryTerms)
+      {
+        residual->addTerm( -u1hat_prev * tau1->dot_normal());
+        residual->addTerm( -u2hat_prev * tau2->dot_normal());
+      }
 
       residual->addTerm( Rbeta*sigma1_prev * v1);
       residual->addTerm( Rbeta*sigma2_prev * v2);
       residual->addTerm( sigma1_prev * v1->grad() );
       residual->addTerm( sigma2_prev * v2->grad() );
+      if (includeBoundaryTerms)
+      {
+        residual->addTerm( -f1hat_prev * v1);
+        residual->addTerm( -f2hat_prev * v2);
+      }
 
       return residual;
     }
@@ -250,7 +264,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
-  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 2, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 6, true);
 
   FunctionPtr u1_prev     = Function::solution(u1, timeIntegrator.prevSolution());
   FunctionPtr u2_prev     = Function::solution(u2, timeIntegrator.prevSolution());
@@ -310,13 +324,14 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, top,    u2Exact);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  double dt = 2e-1;
+  double dt = 5e-1;
   double Dt = 1e-0;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
 
   prevExporter.exportSolution("timestep_burgers0");
 
+  // timeIntegrator.setNLIterationMax(1);
   timeIntegrator.runToTime(1*Dt, dt);
   exporter.exportSolution("timestep_burgers1");
 
@@ -325,48 +340,6 @@ int main(int argc, char *argv[]) {
 
   timeIntegrator.runToTime(3*Dt, dt);
   exporter.exportSolution("timestep_burgers3");
-
-  // double t = dt;
-  // int timestep = 0;
-  // while (t <= 3)
-  // {
-  //   timestep++;
-  //   t += dt;
-  //   dynamic_cast< ExactU1* >(u1Exact.get())->t += dt;
-  //   dynamic_cast< ExactU2* >(u2Exact.get())->t += dt;
-  //   dynamic_cast< ExactSigma1* >(sigma1Exact.get())->t += dt;
-  //   dynamic_cast< ExactSigma2* >(sigma2Exact.get())->t += dt;
-  //   double uUpdateL2 = 1e9;
-  //   while (uUpdateL2 > 1e-6)
-  //   {
-  //     solution->solve();
-  //     uUpdateL2 = solution->L2NormOfSolution(0);
-  //     cout << "Update size = " << uUpdateL2 << endl;
-  //     backgroundFlow->addSolution(solution, 1);
-  //   }
-  //   stringstream outfile;
-  //   outfile << "Burgers_" << timestep;
-  //   exporter.exportSolution(outfile.str());
-  // }
-
-  // // ImplicitEulerIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap);
-  // ESDIRKIntegrator timeIntegrator(bf, rhs, mesh, solution, functionMap, 6);
-  // timeIntegrator.addTimeTerm(u, v, one);
-
-  // solution->setIP( bf->graphNorm() );
-
-  // double dt = 5e-2;
-  // double Dt = 1e-1;
-  // VTKExporter exporter(solution, mesh, varFactory);
-
-  // timeIntegrator.runToTime(1*Dt, dt);
-  // exporter.exportSolution("timestep_confusion0");
-
-  // timeIntegrator.runToTime(2*Dt, dt);
-  // exporter.exportSolution("timestep_confusion1");
-
-  // timeIntegrator.runToTime(3*Dt, dt);
-  // exporter.exportSolution("timestep_confusion2");
 
   return 0;
 }
