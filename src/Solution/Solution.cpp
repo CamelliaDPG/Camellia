@@ -178,7 +178,7 @@ void Solution::initialize() {
   _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
 }
 
-void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceFluxes) {
+void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
   // thisSoln += weight * otherSoln
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
   const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
@@ -203,7 +203,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       }
     }
     FieldContainer<double>* myValues = &(myMapIt->second);
-    if (!replaceFluxes)
+    if (!replaceBoundaryTerms)
     {
       int numValues = myValues->size();
       TEUCHOS_TEST_FOR_EXCEPTION(numValues != otherValues->size(),
