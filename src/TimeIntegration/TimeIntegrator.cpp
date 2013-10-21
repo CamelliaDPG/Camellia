@@ -156,6 +156,29 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
       c[0] = 0;
       c[1] = 1;
       break;
+    case 4:
+      a[1][0] = 1767732205903./1767732205903;
+      a[1][1] = 1767732205903./1767732205903;
+
+      a[2][0] = 2746238789719./10658868560708;
+      a[2][1] = -640167445237./6845629431997;
+      a[2][2] = 1767732205903./4055673282236;
+
+      a[3][0] = 1471266399579./7840856788654;
+      a[3][1] = -4482444167858./7529755066697;
+      a[3][2] = 11266239266428./11593286722821;
+      a[3][3] = 1767732205903./4055673282236;
+
+      b[0] = 1471266399579./7840856788654;
+      b[1] = -4482444167858./7529755066697;
+      b[2] = 11266239266428./11593286722821;
+      b[3] = 1767732205903./4055673282236;
+
+      c[0] = 0;
+      c[1] = 1767732205903./2027836641118;
+      c[2] = 3./5;
+      c[3] = 1;
+      break;
     case 6:
       // Values from http://utoronto-comp-aero.wikispaces.com/file/view/sammy_isono_masc.pdf
       a[1][0] = 1./4;
@@ -251,7 +274,7 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 {
   for (int k=1; k < _numStages; k++)
   {
-    cout << "    stage " << k << endl;
+    cout << "    stage " << k+1 << endl;
     _nlIteration = 1;
     dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(a[k][k]*dt);
     _bc->setTime(_t+c[k]*dt);
