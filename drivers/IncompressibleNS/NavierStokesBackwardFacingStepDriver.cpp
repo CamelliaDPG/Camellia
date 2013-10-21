@@ -120,7 +120,12 @@ public:
     if (isBottomWallLeft || isBottomWallRight || isStep ) { // walls: no slip
       return 0.0;
     } else if (isTopWall || isInflow) {
-      return 9 * y * y - 2 * y * y * y - 12 * y + 5; // 5 just to make it 0 at y=1
+      double inflowHeight = MESH_TOP - STEP_Y;
+      double weight = 6 * (1.0 / inflowHeight) * (1.0 / inflowHeight);
+      return - weight * ( (y * y * y  - STEP_Y * STEP_Y * STEP_Y) / 3.0
+                         - (MESH_TOP + STEP_Y) * (y * y - STEP_Y * STEP_Y) / 2.0
+                         + MESH_TOP * STEP_Y * (y - STEP_Y) );
+//      return 9 * y * y - 2 * y * y * y - 12 * y + 5; // 5 just to make it 0 at y=1
     } 
     //    else if (isOutflow) {
     //      // cheating: assume that we simply stretch the inflow uniformly
@@ -172,18 +177,48 @@ public:
   }
 };
 
+double findHorizontalSignReversal(double y, double xGuessLeft, double xGuessRight, SolutionPtr soln, VarPtr u1) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  double leftValue = getSolutionValueAtPoint(xGuessLeft, y, soln, u1);
+  double rightValue = getSolutionValueAtPoint(xGuessRight, y, soln, u1);
+  if (leftValue * rightValue > 0) {
+    double xGuess = (xGuessLeft + xGuessRight) / 2;
+    if (rank==0) {
+      cout << "Error: u1(" << xGuessLeft << ") = " << leftValue << " and u1(" << xGuessRight << ") = " << rightValue;
+      cout << " have the same sign.  Returning " << xGuess << endl;
+    }
+  }
+  int numIterations = 30;
+  double x = 0;
+  for (int i=0; i<numIterations; i++) {
+    double xGuess = (xGuessLeft + xGuessRight) / 2;
+    double middleValue = getSolutionValueAtPoint(xGuess, y, soln, u1);
+    if (middleValue * leftValue > 0) { // same sign
+      xGuessLeft = xGuess;
+      leftValue = middleValue;
+    }
+    if (middleValue * rightValue > 0) {
+      xGuessRight = xGuess;
+      rightValue = middleValue;
+    }
+    x = xGuess;
+  }
+  return x;
+}
+
 void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr streamSoln, VarPtr phi) {
   // find the x recirculation region first
   int numIterations = 20;
   double x,y;
   y = 0.01;
+  int rank = Teuchos::GlobalMPISession::getRank();
   {
     double xGuessLeft = 4.25;
     double xGuessRight = 4.60;
     double leftValue = getSolutionValueAtPoint(xGuessLeft, y, streamSoln, phi);
     double rightValue = getSolutionValueAtPoint(xGuessRight, y, streamSoln, phi);
     if (leftValue * rightValue > 0) {
-      cout << "Error: leftValue and rightValue have same sign.\n";
+      if (rank==0) cout << "Error: leftValue and rightValue have same sign.\n";
     }
     for (int i=0; i<numIterations; i++) {
       double xGuess = (xGuessLeft + xGuessRight) / 2;
@@ -221,6 +256,26 @@ void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr stre
   }
 }
 
+void printLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance) {
+  // find the sign reversals in u1
+  double yNearBottom = MESH_BOTTOM + epsDistance;
+  double yNearTop = MESH_TOP - epsDistance;
+  double primaryReattachmentLength = findHorizontalSignReversal(yNearBottom, 1.0, 15.0, soln, u1);
+  double secondarySeparationLength = findHorizontalSignReversal(yNearTop, 1.0, 7, soln, u1);
+  double secondaryReattachmentLength = findHorizontalSignReversal(yNearTop, 7, 15, soln, u1);
+  
+//  double primaryReattachmentLength = findZeroPointHorizontalSearch(yNearBottom, 1.0, 15.0, soln, u1);
+//  double secondarySeparationLength = findZeroPointHorizontalSearch(yNearTop, 1.0, 7, soln, u1);
+//  double secondaryReattachmentLength = findZeroPointHorizontalSearch(yNearTop, 7, 15, soln, u1);
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
+  if (rank==0) {
+    cout << setw(30) << "primary reattachment length: " << primaryReattachmentLength << endl;
+    cout << setw(30) << "secondary separation length: "  << secondarySeparationLength << endl;
+    cout << setw(30) << "secondary reattachment length: " << secondaryReattachmentLength << endl;
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
@@ -252,7 +307,7 @@ int main(int argc, char *argv[]) {
   int pToAdd = args.Input<int>("--pToAdd", "polynomial enrichment for test functions", 2);
   int pToAddForStreamFunction = pToAdd;
   
-  bool useGartlingParameters = args.Input<bool>("--useGartling", "Use parameters from D.K. Gartling's 1990 paper");
+  bool useGartlingParameters = args.Input<bool>("--useGartling", "Use parameters from D.K. Gartling's 1990 paper", false);
   double Re_default = 100;
   if (useGartlingParameters) { // default to the 800 Re used there
     Re_default = 800;
@@ -260,6 +315,7 @@ int main(int argc, char *argv[]) {
   double Re = args.Input<double>("--Re", "Reynolds number", Re_default);
   
   int numRefs = args.Input<int>("--numRefs", "Number of refinements", 10);
+  int numStreamSolutionRefs = args.Input<int>("--numStreamRefs", "Number of refinements in stream solution", 3);
   double energyThreshold = args.Input<double>("--adaptiveThreshold", "threshold parameter for greedy adaptivity", 0.20);
   bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "Enforce local conservation.", false);
   bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
@@ -298,6 +354,8 @@ int main(int argc, char *argv[]) {
   
   double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
   
+  bool useMumps = args.Input<bool>("--useMumps", "use MUMPS for global linear solves", true);
+  
   args.Process();
   
   if (useBiswasGeometry) {
@@ -312,8 +370,6 @@ int main(int argc, char *argv[]) {
     MESH_TOP = 0.5;
     MESH_BOTTOM = -0.5;
   }
-  
-  bool useMumps = true;
   
   Teuchos::RCP<Solver> solver;
   if (useMumps) {
@@ -337,6 +393,7 @@ int main(int argc, char *argv[]) {
   if (rank == 0) {
     cout << "numRefinements = " << numRefs << endl;
     cout << "Re = " << Re << endl;
+    cout << "using L^2 tolerance relative to L^2 norm of background flow.\n";
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOT starting with 0 solution after refinement...\n";
@@ -487,7 +544,14 @@ int main(int argc, char *argv[]) {
   }
 
   Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-  if (! useBiswasGeometry) {
+  if (useGartlingParameters) {
+    // our elements now have aspect ratio 30:1.  We want to do 5 sets of horizontal refinements to square them up.
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+  } else if (! useBiswasGeometry) {
     // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
     mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
     mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
@@ -604,14 +668,29 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u1hat, nonOutflowBoundary, u1_0);
   bc->addDirichlet(u2hat, nonOutflowBoundary, u2_0);
 
+  Teuchos::RCP<PenaltyConstraints> pc;
+  
   if (useTractionBCsOnOutflow) {
-    // impose zero-traction condition:
-    bc->addDirichlet(t1n, outflowBoundary, zero);
-    bc->addDirichlet(t2n, outflowBoundary, zero);
+    pc = Teuchos::rcp(new PenaltyConstraints);
+    
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+    
+    if (rank==0)
+      cout << "Imposing zero traction at outflow with penalty constraints.\n";
+    // outflow: both traction components are 0
+    pc->addConstraint(t1==zero, outflowBoundary);
+    pc->addConstraint(t2==zero, outflowBoundary);
   } else {
     // do nothing on outflow, but do impose zero-mean pressure
     bc->addZeroMeanConstraint(p);
   }
+  
+  // set pc and bc -- pc in particular may be null
+  solution->setFilter(pc);
+  solnIncrement->setFilter(pc);
   
   solution->setBC(bc);
   solnIncrement->setBC(bc);
@@ -623,8 +702,10 @@ int main(int argc, char *argv[]) {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y()==zero);
   }
   
+  bool printRefsToConsole = false;
+//  bool printRefsToConsole = rank==0;
   Teuchos::RCP<BackwardFacingStepRefinementStrategy> bfsRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(solnIncrement, energyThreshold,
-                                                                                                                                    min_h, maxPolyOrder, rank==0) );
+                                                                                                                                    min_h, maxPolyOrder, printRefsToConsole) );
   bfsRefinementStrategy->addCorner(G(0), G(1));
   bfsRefinementStrategy->addCorner(H(0), H(1));
   
@@ -662,17 +743,33 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
   FunctionPtr p_incr = Function::solution(p, solnIncrement);
   
-  FunctionPtr l2_incr;
+  FunctionPtr u1_prev = Function::solution(u1, solution);
+  FunctionPtr u2_prev = Function::solution(u2, solution);
+  FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
+  FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
+  FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
+  FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
+  FunctionPtr p_prev = Function::solution(p, solution);
+  
+  FunctionPtr l2_incr, l2_prev;
   
   if (! weightIncrementL2Norm) {
     l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
     + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
     + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+    
+    l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
+    + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
+    + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
   } else {
     double Re2 = Re * Re;
     l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
     + Re2 * sigma11_incr * sigma11_incr + Re2 * sigma12_incr * sigma12_incr
     + Re2 * sigma21_incr * sigma21_incr + Re2 * sigma22_incr * sigma22_incr;
+    
+    l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
+    + Re2 * sigma11_prev * sigma11_prev + Re2 * sigma12_prev * sigma12_prev
+    + Re2 * sigma21_prev * sigma21_prev + Re2 * sigma22_prev * sigma22_prev;
   }
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
@@ -691,14 +788,16 @@ int main(int argc, char *argv[]) {
       }
     }
     
-    double incr_norm;
+    double incr_norm, prev_norm;
     do {
       problem.iterate(useLineSearch, useCondensedSolve);
-      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-      //          // update time step
-      //          double new_dt = min(1.0/incr_norm, 1000.0);
-      //          dt_inv->setValue(1/new_dt);
       
+      incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
+      prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
+      if (prev_norm > 0) {
+        incr_norm /= prev_norm;
+      }
+
       if (rank==0) {
         cout << "\x1B[2K"; // Erase the entire current line.
         cout << "\x1B[0E"; // Move to the beginning of the current line.
@@ -730,6 +829,13 @@ int main(int argc, char *argv[]) {
     if (rank == 0) {
       cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
       cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
+    }
+  
+    if (useGartlingParameters) {
+//      if (rank==0) cout << "Using u1 sign reversals and .01 eps:\n";
+//      printLengthsForGartling(solution, u1, 0.01);
+      if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
+      printLengthsForGartling(solution, sigma12, 0);
     }
 
     bfsRefinementStrategy->refine(false); //rank==0); // print to console on rank 0
@@ -807,140 +913,19 @@ int main(int argc, char *argv[]) {
     cout << "Final energy error: " << energyErrorTotal << endl;
     cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
+
+  if (useGartlingParameters) {
+//    if (rank==0) cout << "Using u1 sign reversals and .01 eps:\n";
+//    printLengthsForGartling(solution, u1, 0.01);
+    if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
+    printLengthsForGartling(solution, sigma12, 0);
+  }
   
   if (rank==0) {
     if (solnSaveFile.length() > 0) {
       solution->writeToFile(solnSaveFile);
     }
   }
-
-  
-//  for (int refIndex=0; refIndex<numRefs; refIndex++){
-//    if (!enforceLocalConservation) {
-//      solution->condensedSolve();
-//    } else {
-//      // condensed solve doesn't support lagrange constraints yet...
-//      solution->solve(true);
-//    }
-//    if (compareWithOverkill) {
-//      Teuchos::RCP<Solution> bestSoln = Teuchos::rcp( new Solution(solution->mesh(), bc, rhs, ip) );
-//      overkillSolution->projectFieldVariablesOntoOtherSolution(bestSoln);
-//      if (rank==0) {
-//        VTKExporter exporter(solution, mesh, varFactory);
-//        ostringstream cavityRefinement;
-//        cavityRefinement << "backstep_solution_refinement_" << refIndex;
-//        exporter.exportSolution(cavityRefinement.str());
-//        VTKExporter exporterBest(bestSoln, mesh, varFactory);
-//        ostringstream bestRefinement;
-//        bestRefinement << "backstep_best_refinement_" << refIndex;
-//        exporterBest.exportSolution(bestRefinement.str());
-//      }
-//      Teuchos::RCP<Solution> bestSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//      bestSoln->projectFieldVariablesOntoOtherSolution(bestSolnOnOverkillMesh);
-//      
-//      FunctionPtr p_best = Teuchos::rcp( new PreviousSolutionFunction(bestSoln,p) );
-//      double p_avg = p_best->integrate(mesh);
-//      if (rank==0)
-//        cout << "Integral of best solution pressure: " << p_avg << endl;
-//      
-//      // determine error as difference between our solution and overkill
-//      bestSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
-//      
-//      Teuchos::RCP<Solution> adaptiveSolnOnOverkillMesh = Teuchos::rcp( new Solution(overkillMesh, bc, rhs, ip) );
-//      solution->projectFieldVariablesOntoOtherSolution(adaptiveSolnOnOverkillMesh);
-//      
-//      // determine error as difference between our solution and overkill
-//      adaptiveSolnOnOverkillMesh->addSolution(overkillSolution,-1.0);
-//      
-//      double L2errorSquared = 0.0;
-//      double bestL2errorSquared = 0.0;
-//      for (vector< VarPtr >::iterator fieldIt=fields.begin(); fieldIt !=fields.end(); fieldIt++) {
-//        VarPtr var = *fieldIt;
-//        int fieldID = var->ID();
-//        FunctionPtr fieldErrorFxn = Function::solution(var, adaptiveSolnOnOverkillMesh);
-//        if (var->ID() == p->ID()) {
-//          // pressure: subtract off the average difference:
-//          double pAvg = fieldErrorFxn->integrate(adaptiveSolnOnOverkillMesh->mesh()) / meshMeasure;
-//          fieldErrorFxn = fieldErrorFxn - pAvg;
-//        }
-//        
-//        double L2error = fieldErrorFxn->l2norm(adaptiveSolnOnOverkillMesh->mesh());
-//        L2errorSquared += L2error * L2error;
-//        double bestL2error = bestSolnOnOverkillMesh->L2NormOfSolutionGlobal(fieldID);
-//        bestL2errorSquared += bestL2error * bestL2error;
-//        if (rank==0) {
-//          cout << "L^2 error for " << var->name() << ": " << L2error;
-//          cout << " (vs. best error of " << bestL2error << ")\n";
-//        }
-//      }
-//      int numGlobalDofs = mesh->numGlobalDofs();
-//      if (rank==0) {
-//        cout << "for " << numGlobalDofs << " dofs, total L2 error: " << sqrt(L2errorSquared);
-//        cout << " (vs. best error of " << sqrt(bestL2errorSquared) << ")\n";
-//      }
-//      dofsToL2error[numGlobalDofs] = sqrt(L2errorSquared);
-//      dofsToBestL2error[numGlobalDofs] = sqrt(bestL2errorSquared);
-//      if (rank==0) {
-//        VTKExporter exporter(adaptiveSolnOnOverkillMesh, mesh, varFactory);
-//        ostringstream errorForRefinement;
-//        errorForRefinement << "overkillError_refinement_" << refIndex;
-//        exporter.exportSolution(errorForRefinement.str());
-//      }
-//    }
-//
-//    bfsRefinementStrategy->refine(rank==0); // print to console on rank 0
-//    
-//    if (induceCornerRefinements) {
-//      // induce refinements in bottom corner:
-//      vector< Teuchos::RCP<Element> > corners = mesh->elementsForPoints(bottomCornerPoint);
-//      vector<int> cornerIDs;
-//      cornerIDs.push_back(corners[0]->cellID());
-//      mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
-//    }
-//  }
-//  
-//  // one more solve on the final refined mesh:
-//  solution->solve(false);
-//  double energyErrorTotal = solution->energyErrorTotal();
-//  double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, mesh, "bfs_maxConditionIPMatrix.dat");
-//  if (rank == 0) {
-//    cout << "Final energy error: " << energyErrorTotal << endl;
-//    cout << "Max condition number estimate: " << maxConditionNumber << endl;
-//  }
-//  
-//  if (finalSolveUsesStandardGraphNorm) {
-//    if (rank==0)
-//      cout << "switching to graph norm for final solve";
-//    
-//    IPPtr ipToCompare = stokesBF->graphNorm();
-//    Teuchos::RCP<Solution> solutionToCompare = Teuchos::rcp( new Solution(mesh, bc, rhs, ipToCompare) );
-//
-//    solutionToCompare->solve(false);
-//    
-//    FunctionPtr u1ToCompare = Function::solution(u1, solutionToCompare);
-//    FunctionPtr u2ToCompare = Function::solution(u2, solutionToCompare);
-//    
-//    FunctionPtr u1_soln = Function::solution(u1, solution);
-//    FunctionPtr u2_soln = Function::solution(u2, solution);
-//    
-//    double u1_l2difference = (u1ToCompare - u1_soln)->l2norm(mesh) / u1_soln->l2norm(mesh);
-//    double u2_l2difference = (u2ToCompare - u2_soln)->l2norm(mesh) / u2_soln->l2norm(mesh);
-//    
-//    double graph_maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ipToCompare, mesh, "bfs_maxConditionIPMatrix_graph.dat");
-//    
-//    if (rank==0) {
-//      cout << "L^2 differences with automatic graph norm:\n";
-//      cout << "    u1: " << u1_l2difference * 100 << "%" << endl;
-//      cout << "    u2: " << u2_l2difference * 100 << "%" << endl;
-//    }  
-//    solution = solutionToCompare;
-//    
-//    double energyErrorTotal = solution->energyErrorTotal();
-//    if (rank == 0) {
-//      cout << "Final energy error (standard graph norm): " << energyErrorTotal << endl;
-//      cout << "Max condition number estimate (standard graph norm): " << graph_maxConditionNumber << endl;
-//    }
-//  }
   
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
@@ -1042,7 +1027,17 @@ int main(int argc, char *argv[]) {
     cout << "solving for approximate stream function...\n";
   }
   
-  streamSolution->condensedSolve();
+  // register the main solution's mesh with streamMesh, so that refinements propagate appropriately:
+  streamMesh->registerObserver(solution->mesh());
+  Teuchos::RCP<BackwardFacingStepRefinementStrategy> streamRefinementStrategy = Teuchos::rcp( new BackwardFacingStepRefinementStrategy(streamSolution, energyThreshold,
+                                                                                                                                       min_h, maxPolyOrder, rank==0) );
+  for (int refIndex=0; refIndex<numStreamSolutionRefs; refIndex++) {
+    cout << "Stream refinement # " << refIndex + 1 << ":\n";
+    streamSolution->condensedSolve(solver);
+    streamRefinementStrategy->refine();
+  }
+  
+  streamSolution->condensedSolve(solver);
   energyErrorTotal = streamSolution->energyErrorTotal();
   // commenting out the recirculation region computation, because it doesn't work yet.
 //  double x,y;
@@ -1059,7 +1054,8 @@ int main(int argc, char *argv[]) {
 //    solution->writeFieldsToFile(u1->ID(), "u1.m");
 //    solution->writeFieldsToFile(u2->ID(), "u2.m");
 //    streamSolution->writeFieldsToFile(phi->ID(), "phi.m");
-    
+
+#ifdef USE_VTK
     VTKExporter exporter(solution, mesh, varFactory);
     exporter.exportSolution("backStepSoln", H1Order*2);
     
@@ -1071,6 +1067,7 @@ int main(int argc, char *argv[]) {
     exporter.exportFunction(vorticity, "backStepVorticity");
     
     cout << "exported vorticity to backStepVorticity\n";
+#endif
 //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
 //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
 //    solution->writeFieldsToFile(p->ID(), "p.m");

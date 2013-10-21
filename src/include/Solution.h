@@ -143,7 +143,6 @@ public:
   void solve( Teuchos::RCP<Solver> solver );
 
   void addSolution(Teuchos::RCP<Solution> soln, double weight, bool allowEmptyCells = false, bool replaceFluxes=false); // thisSoln += weight * soln
-
   // static method interprets a set of trial ordering coefficients in terms of a specified DofOrdering
   // and returns a set of weights for the appropriate basis
   static void basisCoeffsForTrialOrder(FieldContainer<double> &basisCoeffs, DofOrderingPtr trialOrder,
