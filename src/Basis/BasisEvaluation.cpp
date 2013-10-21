@@ -410,9 +410,6 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
   int spaceDim = sideNormals.dimension(2);
   int basisCardinality = values->dimension(1);
   
-  if (spaceDim != 2) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dotting with normal only supported for 2D right now");
-  }
   if ( (numCells != values->dimension(0)) || (basisCardinality != values->dimension(1))
       || (numPoints != values->dimension(2)) || (spaceDim != values->dimension(3)) 
       ) {
@@ -423,11 +420,12 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
   for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++) {
       for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-        double n1 = sideNormals(cellIndex,pointIndex,0);
-        double n2 = sideNormals(cellIndex,pointIndex,1);
-        double xValue = (*values)(cellIndex,basisOrdinal,pointIndex,0);
-        double yValue = (*values)(cellIndex,basisOrdinal,pointIndex,1);
-        (*result)(cellIndex,basisOrdinal,pointIndex) = xValue*n1 + yValue*n2;
+        (*result)(cellIndex,basisOrdinal,pointIndex) = 0;
+        for (int d=0; d<spaceDim; d++) {
+          double nd = sideNormals(cellIndex,pointIndex,d);
+          double dValue = (*values)(cellIndex,basisOrdinal,pointIndex,d);
+          (*result)(cellIndex,basisOrdinal,pointIndex) += nd * dValue;
+        }
       }
     }
   }
