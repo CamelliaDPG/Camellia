@@ -178,13 +178,13 @@ void Solution::initialize() {
   _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
 }
 
-void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceFluxes) {
+void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
   // thisSoln += weight * otherSoln
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
   const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
   if ( ! allowEmptyCells ) {
     TEUCHOS_TEST_FOR_EXCEPTION(otherMapPtr->size() != _solutionForCellIDGlobal.size(),
-                               std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
+        std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
   }
   map< int, FieldContainer<double> >::const_iterator mapIt;
   for (mapIt=otherMapPtr->begin(); mapIt != otherMapPtr->end(); mapIt++) {
@@ -194,7 +194,7 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     if (myMapIt == _solutionForCellIDGlobal.end()) {
       if ( !allowEmptyCells ) {
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
-                                   "otherSoln doesn't match Solution's solutionMap (cellID not found).");
+            "otherSoln doesn't match Solution's solutionMap (cellID not found).");
       } else {
         // just copy, and apply the weight
         _solutionForCellIDGlobal[cellID] = *otherValues;
@@ -203,14 +203,69 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
       }
     }
     FieldContainer<double>* myValues = &(myMapIt->second);
-    int numValues = myValues->size();
-    TEUCHOS_TEST_FOR_EXCEPTION(numValues != otherValues->size(),
-                               std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (differing # of coefficients).");
-    for (int dofIndex = 0; dofIndex < numValues; dofIndex++) {
-      (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
+    if (!replaceBoundaryTerms)
+    {
+      int numValues = myValues->size();
+      TEUCHOS_TEST_FOR_EXCEPTION(numValues != otherValues->size(),
+          std::invalid_argument, "otherSoln doesn't match Solution's solutionMap (differing # of coefficients).");
+      for (int dofIndex = 0; dofIndex < numValues; dofIndex++) {
+        (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
+      }
+    }
+    else
+    {
+      vector<int> volumeTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
+      // for volume variables, use +=
+      for (int idIdx = 0; idIdx < volumeTrialIDs.size(); idIdx++)
+      {
+        int trialID = volumeTrialIDs[idIdx];
+
+        int rank = Teuchos::GlobalMPISession::getRank();
+        vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
+        vector< ElementTypePtr >::iterator elemTypeIt;
+        for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
+        {
+          ElementTypePtr elemTypePtr = *(elemTypeIt);
+          DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
+
+          BasisPtr basis = trialOrdering->getBasis(trialID, 0);
+          int basisCardinality = basis->getCardinality();
+          for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
+          {
+            int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, 0);
+            (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
+          }
+        }
+      }
+      vector<int> boundaryTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
+      // for volume variables, use =
+      for (int idIdx = 0; idIdx < boundaryTrialIDs.size(); idIdx++)
+      {
+        int trialID = boundaryTrialIDs[idIdx];
+
+        int rank = Teuchos::GlobalMPISession::getRank();
+        vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
+        vector< ElementTypePtr >::iterator elemTypeIt;
+        for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
+        {
+          ElementTypePtr elemTypePtr = *(elemTypeIt);
+          DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
+          shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+          int numSides = cellTopo.getSideCount();
+          for (int sideIndex=0; sideIndex < numSides; sideIndex++)
+          {
+            BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
+            int basisCardinality = basis->getCardinality();
+            for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
+            {
+              int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, sideIndex);
+              (*myValues)[dofIndex] = weight * (*otherValues)[dofIndex];
+            }
+          }
+        }
+      }
     }
   }
-  // now that we've added, any computed residuals are invalid
   clearComputedResiduals();
 }
 

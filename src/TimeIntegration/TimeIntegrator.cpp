@@ -32,7 +32,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
 
   if (_nonlinear)
   {
-    _rhs->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
+    _rhs->addTerm( -_steadyResidual.createResidual(_prevNLSolution, false) );
   }
 }
 
@@ -89,7 +89,7 @@ void TimeIntegrator::calcNextTimeStep(double dt)
       }
       _solution->solve(false);
       _nlL2Error = _solution->L2NormOfSolution(0);
-      _prevNLSolution->addSolution(_solution, 1);
+      _prevNLSolution->addSolution(_solution, 1, false, true);
       printNLMessage();
       _nlIteration++;
     }
@@ -107,7 +107,7 @@ void TimeIntegrator::calcNextTimeStep(double dt)
 void TimeIntegrator::printTimeStepMessage()
 {
   cout << endl;
-  cout << "timestep: " << _timestep << " t = " << _t << " dt = " << _dt << endl;
+  cout << "timestep: " << _timestep << " t = " << _t+_dt << " dt = " << _dt << endl;
 }
 
 void TimeIntegrator::printNLMessage()
@@ -147,6 +147,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
   switch (_numStages)
   {
     case 2:
+      // second order accurate
       a[1][0] = 1./2;
       a[1][1] = 1./2;
 
@@ -156,7 +157,33 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
       c[0] = 0;
       c[1] = 1;
       break;
+    case 4:
+      // 3rd order accurate
+      // Values from http://dx.doi.org/10.1006/jcph.2002.7059
+      a[1][0] = 1767732205903./4055673282236;
+      a[1][1] = 1767732205903./4055673282236;
+
+      a[2][0] = 2746238789719./10658868560708;
+      a[2][1] = -640167445237./6845629431997;
+      a[2][2] = 1767732205903./4055673282236;
+
+      a[3][0] = 1471266399579./7840856788654;
+      a[3][1] = -4482444167858./7529755066697;
+      a[3][2] = 11266239266428./11593286722821;
+      a[3][3] = 1767732205903./4055673282236;
+
+      b[0] = 1471266399579./7840856788654;
+      b[1] = -4482444167858./7529755066697;
+      b[2] = 11266239266428./11593286722821;
+      b[3] = 1767732205903./4055673282236;
+
+      c[0] = 0;
+      c[1] = 1767732205903./2027836641118;
+      c[2] = 3./5;
+      c[3] = 1;
+      break;
     case 6:
+      // 4th order accurate
       // Values from http://utoronto-comp-aero.wikispaces.com/file/view/sammy_isono_masc.pdf
       a[1][0] = 1./4;
       a[1][1] = 1./4;
@@ -208,6 +235,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   _stageSolution[0] = _prevTimeSolution;
   _stageRHS[0] = _rhs;
+
   for (int k=1; k < _numStages; k++)
   {
     _stageSolution[k] = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
@@ -216,14 +244,14 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   for (int k=0; k < _numStages-1; k++)
   {
-    _steadyLinearTerm[k] = _steadyResidual.createResidual(_stageSolution[k]);
+    _steadyLinearTerm[k] = _steadyResidual.createResidual(_stageSolution[k], true);
   }
 
   for (int k=1; k < _numStages; k++)
   {
     if (_nonlinear)
     {
-      _stageRHS[k]->addTerm( -_steadyResidual.createResidual(_prevNLSolution) );
+      _stageRHS[k]->addTerm( -_steadyResidual.createResidual(_prevNLSolution, false) );
     }
     for (int j=0; j < k; j++)
     {
@@ -250,7 +278,7 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 {
   for (int k=1; k < _numStages; k++)
   {
-    cout << "    stage " << k << endl;
+    cout << "    stage " << k+1 << endl;
     _nlIteration = 1;
     dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(a[k][k]*dt);
     _bc->setTime(_t+c[k]*dt);
@@ -262,7 +290,7 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
       {
         _solution->solve(false);
         _nlL2Error = _solution->L2NormOfSolution(0);
-        _prevNLSolution->addSolution(_solution, 1);
+        _prevNLSolution->addSolution(_solution, 1, false, true);
         printNLMessage();
         _nlIteration++;
         if (_nlIteration > _nlIterationMax)
@@ -282,7 +310,6 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 
   if (_nonlinear)
   {
-    _prevNLSolution->setSolution(_stageSolution[_numStages-1]);
     _prevTimeSolution->setSolution(_prevNLSolution);
   }
   else

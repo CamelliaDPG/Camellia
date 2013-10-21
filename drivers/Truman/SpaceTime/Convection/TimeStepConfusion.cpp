@@ -81,7 +81,7 @@ class ConfusionSteadyResidual : public SteadyResidual{
   public:
     ConfusionSteadyResidual(VarFactory &varFactory, vector<double> beta, double epsilon):
       SteadyResidual(varFactory), beta(beta), epsilon(epsilon) {};
-    LinearTermPtr createResidual(SolutionPtr solution)
+    LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
     {
       VarPtr tau = varFactory.testVar("tau", HDIV);
       VarPtr v = varFactory.testVar("v", HGRAD);
@@ -93,13 +93,23 @@ class ConfusionSteadyResidual : public SteadyResidual{
 
       FunctionPtr u_prev = Function::solution(u, solution);
       FunctionPtr sigma_prev = Function::solution(sigma, solution);
+      FunctionPtr uhat_prev = Function::solution(uhat, solution);
+      FunctionPtr fhat_prev = Function::solution(fhat, solution);
 
       LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
       residual->addTerm( beta*u_prev * -v->grad() );
       residual->addTerm( sigma_prev * v->grad() );
+      if (includeBoundaryTerms)
+      {
+        residual->addTerm( fhat_prev * v);
+      }
 
       residual->addTerm( sigma_prev / epsilon * tau);
       residual->addTerm( u_prev * tau->div());
+      if (includeBoundaryTerms)
+      {
+        residual->addTerm( -uhat_prev * tau->dot_normal());
+      }
 
       return residual;
     }
@@ -116,7 +126,7 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  // int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
 
   // Optional arguments (have defaults)
   double epsilon = args.Input<double>("--epsilon", "diffusion parameter", 1e-2);
@@ -183,7 +193,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
-  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 6, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 4, true);
 
   // tau terms:
   steadyJacobian->addTerm( sigma / epsilon, tau);
