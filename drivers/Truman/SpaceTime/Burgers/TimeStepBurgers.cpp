@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
-  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 6, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 4, true);
 
   FunctionPtr u1_prev     = Function::solution(u1, timeIntegrator.prevSolution());
   FunctionPtr u2_prev     = Function::solution(u2, timeIntegrator.prevSolution());
@@ -325,7 +325,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double dt = 5e-1;
-  double Dt = 1e-0;
+  double Dt = 5e-1;
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
 

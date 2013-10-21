@@ -147,6 +147,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
   switch (_numStages)
   {
     case 2:
+      // second order accurate
       a[1][0] = 1./2;
       a[1][1] = 1./2;
 
@@ -157,6 +158,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
       c[1] = 1;
       break;
     case 4:
+      // 3rd order accurate
       // Values from http://dx.doi.org/10.1006/jcph.2002.7059
       a[1][0] = 1767732205903./4055673282236;
       a[1][1] = 1767732205903./4055673282236;
@@ -181,6 +183,7 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
       c[3] = 1;
       break;
     case 6:
+      // 4th order accurate
       // Values from http://utoronto-comp-aero.wikispaces.com/file/view/sammy_isono_masc.pdf
       a[1][0] = 1./4;
       a[1][1] = 1./4;
