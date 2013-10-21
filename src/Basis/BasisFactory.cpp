@@ -39,6 +39,10 @@
 
 #include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
 
+#include "Intrepid_HGRAD_HEX_Cn_FEM.hpp"
+#include "Intrepid_HDIV_HEX_In_FEM.hpp"
+#include "Intrepid_HCURL_HEX_In_FEM.hpp"
+
 #include "Basis_HGRAD_QUAD_C0_FEM.hpp"
 
 #include "VectorizedBasis.h"
@@ -83,12 +87,15 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   }
   
   int spaceDim;
+  bool threeD = (cellTopoKey == shards::Hexahedron<8>::key);
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
   if (oneD) {
     spaceDim = 1;
   } else if (twoD) {
     spaceDim = 2;
+  } else if (threeD) {
+    spaceDim = 3;
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
   }
@@ -103,6 +110,28 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
   } else { 
     switch (cellTopoKey) {
+      case shards::Hexahedron<8>::key:
+        switch(fs) {
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, scalarRank, fs) );
+            break;
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, vectorRank, fs) );
+            break;
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, vectorRank, fs) );
+            break;
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+                                                             spaceDim, scalarRank, fs) );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function space for topology Hexahedron<8>");
+        }
+        break;
       case shards::Quadrilateral<4>::key:
         switch(fs) {
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
