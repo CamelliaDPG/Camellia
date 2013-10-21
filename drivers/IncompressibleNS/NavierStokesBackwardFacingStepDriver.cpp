@@ -256,19 +256,23 @@ void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr stre
   }
 }
 
-void printLengthsForGartling(SolutionPtr soln, VarPtr u1) {
+void printLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance) {
   // find the sign reversals in u1
-  double yNearBottom = MESH_BOTTOM + .01;
-  double yNearTop = MESH_TOP - .01;
+  double yNearBottom = MESH_BOTTOM + epsDistance;
+  double yNearTop = MESH_TOP - epsDistance;
   double primaryReattachmentLength = findHorizontalSignReversal(yNearBottom, 1.0, 15.0, soln, u1);
   double secondarySeparationLength = findHorizontalSignReversal(yNearTop, 1.0, 7, soln, u1);
   double secondaryReattachmentLength = findHorizontalSignReversal(yNearTop, 7, 15, soln, u1);
   
+//  double primaryReattachmentLength = findZeroPointHorizontalSearch(yNearBottom, 1.0, 15.0, soln, u1);
+//  double secondarySeparationLength = findZeroPointHorizontalSearch(yNearTop, 1.0, 7, soln, u1);
+//  double secondaryReattachmentLength = findZeroPointHorizontalSearch(yNearTop, 7, 15, soln, u1);
+  
   int rank = Teuchos::GlobalMPISession::getRank();
   if (rank==0) {
-    cout << "primary reattachment length: " << setw(10) << primaryReattachmentLength << endl;
-    cout << "secondary separation length: " << setw(10) << secondarySeparationLength << endl;
-    cout << "secondary reattachment length: " << setw(10) << secondaryReattachmentLength << endl;
+    cout << setw(30) << "primary reattachment length: " << primaryReattachmentLength << endl;
+    cout << setw(30) << "secondary separation length: "  << secondarySeparationLength << endl;
+    cout << setw(30) << "secondary reattachment length: " << secondaryReattachmentLength << endl;
   }
 }
 
@@ -826,8 +830,13 @@ int main(int argc, char *argv[]) {
       cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
       cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
     }
-    
-    if (useGartlingParameters) printLengthsForGartling(solution, u1);
+  
+    if (useGartlingParameters) {
+//      if (rank==0) cout << "Using u1 sign reversals and .01 eps:\n";
+//      printLengthsForGartling(solution, u1, 0.01);
+      if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
+      printLengthsForGartling(solution, sigma12, 0);
+    }
 
     bfsRefinementStrategy->refine(false); //rank==0); // print to console on rank 0
     
@@ -905,7 +914,12 @@ int main(int argc, char *argv[]) {
     cout << "  (Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".)\n";
   }
 
-  if (useGartlingParameters) printLengthsForGartling(solution, u1);
+  if (useGartlingParameters) {
+//    if (rank==0) cout << "Using u1 sign reversals and .01 eps:\n";
+//    printLengthsForGartling(solution, u1, 0.01);
+    if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
+    printLengthsForGartling(solution, sigma12, 0);
+  }
   
   if (rank==0) {
     if (solnSaveFile.length() > 0) {
