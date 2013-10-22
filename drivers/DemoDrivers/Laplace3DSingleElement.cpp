@@ -24,12 +24,23 @@
 #include "BF.h"
 #include "SpatialFilter.h"
 
+#include "BilinearFormUtility.h"
+
+void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
+  vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
+  cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
+  for (int i=0; i<dofIndices.size(); i++) {
+    cout << dofIndices[i] << " ";
+  }
+  cout << endl;
+}
+
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 2;
-  int maxPolyOrder = 5;
+  int minPolyOrder = 1;
+  int maxPolyOrder = 10;
   int pToAdd = 2;
 
   if (rank==0) {
@@ -137,11 +148,15 @@ int main(int argc, char *argv[]) {
   cubePoints(0,1) = -1;
   cubePoints(0,2) = -1;
   
-  cubePoints.resize(1,8,3); // first argument is cellIndex; we'll just have 1
+  int numCells = 1;
+  cubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
   
   Teuchos::RCP<shards::CellTopology> hexTopoPtr;
   hexTopoPtr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
 
+  FieldContainer<double> cellSideParities(numCells, hexTopoPtr->getSideCount());
+  cellSideParities.initialize(1); // since we have only a single element, all parities are arbitary: set to 1
+  
   int sideDim = 2;
   int delta_k = 2;
   
@@ -166,6 +181,9 @@ int main(int argc, char *argv[]) {
     // traces:
     for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
       trialOrderPtr->addEntry(phi_hat->ID(), hGradBasisQuad, l2BasisQuad->rangeRank(), sideOrdinal);
+    }
+    // fluxes:
+    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
       trialOrderPtr->addEntry(psi_hat_n->ID(), l2BasisQuad, l2BasisQuad->rangeRank(), sideOrdinal);
     }
     
@@ -244,21 +262,59 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    // after adding all those identifications, need to rebuild the DofOrdering's index:
+    trialOrderPtr->rebuildIndex();
+    
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 0);
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 1);
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 2);
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 3);
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 4);
+//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 5);
     
     // Define test discretization
     DofOrderingPtr testOrderPtr = Teuchos::rcp( new DofOrdering );
     testOrderPtr->addEntry(q->ID(), hDivBasisHexTest, hDivBasisHex->rangeRank());
     testOrderPtr->addEntry(v->ID(), hGradBasisHexTest, hGradBasisHex->rangeRank());
     
-    cout << "For k = " << polyOrder - 1 << ", " << trialOrderPtr->totalDofs() << " trial dofs and " << testOrderPtr->totalDofs() << " test dofs.\n";
+    int numTrialDofs = trialOrderPtr->totalDofs();
+    int numTestDofs = testOrderPtr->totalDofs();
+    
+    cout << "For k = " << polyOrder - 1 << ", " << numTrialDofs << " trial dofs and " << numTestDofs << " test dofs.\n";
+    
+//    cout << "*** trial ordering *** \n" << *trialOrderPtr;
+//    cout << "*** test ordering *** \n" << *testOrderPtr;
     
     // Create ElementType for cube
     Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(trialOrderPtr, testOrderPtr, hexTopoPtr) );
     
     // Create BasisCache for ElementType and cubePoints
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
-    basisCache->setPhysicalCellNodes(cubePoints, vector<int>(1,1), true);
+    vector<int> cellIDs;
+    cellIDs.push_back(0);
+    basisCache->setPhysicalCellNodes(cubePoints, cellIDs, true);
     
+    BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,Teuchos::rcp((Mesh*) NULL), true));
+    ipBasisCache->setPhysicalCellNodes(cubePoints,cellIDs,false); // false: no side cache for IP
+    
+    //int numCells = physicalCellNodes.dimension(0);
+    CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
+    
+    FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
+    ip->computeInnerProductMatrix(ipMatrix, testOrderPtr, ipBasisCache);
+    
+    //      cout << "ipMatrix:\n" << ipMatrix;
+    
+    FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+    
+    int optSuccess = bf->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
+    
+    FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
+    
+    BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
+    
+    FieldContainer<double> localRHSVector(numCells, numTrialDofs);
+    rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderPtr, basisCache);
     
   }
 
