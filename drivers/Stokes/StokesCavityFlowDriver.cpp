@@ -33,9 +33,9 @@
 
 #include "SolutionExporter.h"
 
-#include "CamelliaConfig.h"
+#include "QoIFilter.h"
 
-#include "GoalOrientedRefinementStrategy.h"
+#include "CamelliaConfig.h"
 
 using namespace std;
 
@@ -765,7 +765,11 @@ int main(int argc, char *argv[]) {
   }
   
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  SolutionPtr qoiSolution;
+  if (adaptForLRCornerVorticity) {
+    qoiSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  }
   
   FunctionPtr vorticity;
   if (useDivergenceFreeVelocity) {
@@ -807,7 +811,8 @@ int main(int argc, char *argv[]) {
     int lrCornerCellID = corners[0]->cellID();
     FunctionPtr weight = Function::cellCharacteristic(lrCornerCellID);
     LinearTermPtr trialFunctional = weight * ( - sigma12 + sigma21 ); // weighted vorticity
-    refinementStrategy = Teuchos::rcp( new GoalOrientedRefinementStrategy(trialFunctional, solution, energyThreshold, minH) );
+    qoiSolution->setFilter(QoIFilter::qoiFilter(trialFunctional));
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( qoiSolution, energyThreshold, minH ));
   } else {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold, minH ));
   }
@@ -819,8 +824,14 @@ int main(int argc, char *argv[]) {
   if (!useCG) {
     if (useCondensedSolve) {
       solution->condensedSolve(solver);
+      if (qoiSolution.get()) {
+        qoiSolution->condensedSolve(solver);
+      }
     } else {
       solution->solve(solver);
+      if (qoiSolution.get()) {
+        qoiSolution->solve(solver);
+      }
     }
   } else {
     cout << "WARNING: cgSolver unset.\n";
@@ -932,7 +943,7 @@ int main(int argc, char *argv[]) {
       int lrCornerCellID = corners[0]->cellID();
       FunctionPtr weight = Function::cellCharacteristic(lrCornerCellID);
       LinearTermPtr trialFunctional = weight * ( - sigma12 + sigma21 ); // weighted vorticity
-      ((GoalOrientedRefinementStrategy*) refinementStrategy.get())->setTrialFunctional(trialFunctional);
+      qoiSolution->setFilter(QoIFilter::qoiFilter(trialFunctional));
     }
     refinementStrategy->refine(false);//rank==0); // print to console on rank 0
     if (! MeshTestUtility::checkMeshConsistency(mesh)) {
@@ -959,13 +970,20 @@ int main(int argc, char *argv[]) {
       mesh->hRefine(cornerIDs, RefinementPattern::regularRefinementPatternQuad());
     }
     // solve on the refined mesh:
-    if (useCondensedSolve) {
-      solution->condensedSolve(solver);
-    } else if (!useCG) {
-      solution->solve(solver);
+    if (!useCG) {
+      if (useCondensedSolve) {
+        solution->condensedSolve(solver);
+        if (qoiSolution.get()) {
+          qoiSolution->condensedSolve(solver);
+        }
+      } else {
+        solution->solve(solver);
+        if (qoiSolution.get()) {
+          qoiSolution->solve(solver);
+        }
+      }
     } else {
       cout << "WARNING: cgSolver unset.\n";
-//      solution->solve(cgSolver);
     }
     
     if (useDivergenceFreeVelocity) {
