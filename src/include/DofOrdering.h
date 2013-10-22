@@ -52,12 +52,11 @@ class DofOrdering {
 //  vector<int> varIDs;
   set<int> varIDs;
   vector<int> varIDsVector;
-// outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   map< pair<int, pair<int, int> >, pair<int, int> > dofIdentifications; // keys: <varID, <sideIndex, dofOrdinal> >
                                                                         // values: <sideIndex, dofOrdinal>
   map<int,int> numSidesForVarID;
   map< pair<int,int>, vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
-//  map< pair<int,pair<int,int> >, int> indices; // keys for indices are <varID, <sideIndex, dofOrdinal> >, where sideIndex = 0 for field (volume) variables
+  // values for indices: list of the indices used in the DofOrdering by this <varID, sideIndex> pair's basis, ordered according to that basis's ordering
   map< pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
   map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
   

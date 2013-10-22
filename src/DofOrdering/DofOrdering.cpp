@@ -68,7 +68,7 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
 void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
                                     int side2, int basisDofOrdinal2) {
   _indexNeedsToBeRebuilt = true;
-  //cout << "addIdentification: " << varID << ", (" << side1 << "," << basisDofOrdinal1 << ")=(" << side2 << "," << basisDofOrdinal2 << ")" << endl;
+//  cout << "addIdentification: " << varID << ", (" << side1 << "," << basisDofOrdinal1 << ")=(" << side2 << "," << basisDofOrdinal2 << ")" << endl;
   pair<int, int> sidePair1; // defined so that sidePair1.side < sidePair2.side
   pair<int, int> sidePair2;
   if (side1 < side2) {
@@ -259,12 +259,16 @@ void DofOrdering::rebuildIndex() {
           pair<int,int> earlierIndexKey = make_pair(varID,earlierSideIndex);
           if (indices[indexKey][dofOrdinal] != indices[earlierIndexKey][earlierDofOrdinal]) {
             indices[indexKey][dofOrdinal] = indices[earlierIndexKey][earlierDofOrdinal];
-            //cout << "processed identification for varID " << varID << ": (" << sideIndex << "," << dofOrdinal << ")" << endl;
+//            cout << "processed identification for varID " << varID << ": (" << sideIndex << "," << dofOrdinal << ")";
+//            cout << " --> " << "(" << earlierSideIndex << "," << earlierDofOrdinal << ")" << endl;
             numIdentificationsProcessed++;
           }
         } else {
           // modify the index according to the number of dofs we've consolidated
+//          cout << "Reducing indices for key (varID=" << indexKey.first << ", sideIndex " << indexKey.second << ") for dofOrdinal " << dofOrdinal << " from ";
+//          cout << indices[indexKey][dofOrdinal] << " to ";
           indices[indexKey][dofOrdinal] -= numIdentificationsProcessed;
+//          cout << indices[indexKey][dofOrdinal] << "\n";
         }
       }
     }
