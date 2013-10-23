@@ -26,6 +26,10 @@
 
 #include "BilinearFormUtility.h"
 
+#include "BCFunction.h"
+
+#include "SerialDenseWrapper.h"
+
 void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
@@ -40,7 +44,7 @@ int main(int argc, char *argv[]) {
   int rank = mpiSession.getRank();
   
   int minPolyOrder = 1;
-  int maxPolyOrder = 10;
+  int maxPolyOrder = 4;
   int pToAdd = 2;
 
   if (rank==0) {
@@ -280,7 +284,8 @@ int main(int argc, char *argv[]) {
     int numTrialDofs = trialOrderPtr->totalDofs();
     int numTestDofs = testOrderPtr->totalDofs();
     
-    cout << "For k = " << polyOrder - 1 << ", " << numTrialDofs << " trial dofs and " << numTestDofs << " test dofs.\n";
+    if (rank==0)
+      cout << "For k = " << polyOrder - 1 << ", " << numTrialDofs << " trial dofs and " << numTestDofs << " test dofs.\n";
     
 //    cout << "*** trial ordering *** \n" << *trialOrderPtr;
 //    cout << "*** test ordering *** \n" << *testOrderPtr;
@@ -297,13 +302,11 @@ int main(int argc, char *argv[]) {
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,Teuchos::rcp((Mesh*) NULL), true));
     ipBasisCache->setPhysicalCellNodes(cubePoints,cellIDs,false); // false: no side cache for IP
     
-    //int numCells = physicalCellNodes.dimension(0);
     CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
     
+    // Mimic/copy Solution's treatment of stiffness and optimal test functions.
     FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
     ip->computeInnerProductMatrix(ipMatrix, testOrderPtr, ipBasisCache);
-    
-    //      cout << "ipMatrix:\n" << ipMatrix;
     
     FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
     
@@ -315,6 +318,54 @@ int main(int argc, char *argv[]) {
     
     FieldContainer<double> localRHSVector(numCells, numTrialDofs);
     rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderPtr, basisCache);
+    
+    // Apply BCs
+    // here, we know that phi_hat is what we're interested in, so we skip the usual loop over varIDs
+    // we also know that we're applying the BC on every side, so we skip any check that the BCs are applicable
+    int varID = phi_hat->ID();
+    bool isTrace = true;
+    Teuchos::RCP<BCFunction> bcFunction = Teuchos::rcp(new BCFunction(bc, varID, isTrace));
+    FieldContainer<double> bcVector(trialOrderPtr->totalDofs());
+    set<int> bcDofIndices;
+    for (int sideIndex=0; sideIndex < cellTopoPtr->getSideCount(); sideIndex++) {
+      BasisPtr basis = trialOrderPtr->getBasis(varID,sideIndex);
+      FieldContainer<double> dirichletValues(numCells, basis->getCardinality());
+      bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
+      int cellIndex = 0;
+      for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++) {
+        int localDofIndex = trialOrderPtr->getDofIndex(varID, basisOrdinal);
+        // we can also skip any global dof index lookup, since we're dealing with just one element
+        bcVector(localDofIndex) = dirichletValues(cellIndex,basisOrdinal);
+        bcDofIndices.insert(localDofIndex);
+      }
+    }
+    // now, multiply the "finalStiffness" by the bcVector to determine what we have to subtract:
+    finalStiffness.resize(numTrialDofs,numTrialDofs);
+    bcVector.resize(numTrialDofs,1); // vector as a 2D array
+    FieldContainer<double> rhsAdjustment(numTrialDofs,1);
+    SerialDenseWrapper::multiply(rhsAdjustment, finalStiffness, bcVector);
+    
+    // adjust RHS:
+    rhsAdjustment.resize(numTrialDofs);
+    localRHSVector.resize(numTrialDofs);
+    for (int dofIndex=0; dofIndex<numTrialDofs; dofIndex++) {
+      localRHSVector(dofIndex) -= rhsAdjustment(dofIndex);
+    }
+    
+    // zero out the stiffness matrix rows for dirichlet values
+    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++) {
+      int dofIndex = *dofIndexIt;
+      for (int i=0; i<numTrialDofs; i++) {
+        finalStiffness(i,dofIndex) = 0;
+      }
+      // set the dirichlet value:
+      finalStiffness(dofIndex, dofIndex) = 1;
+      localRHSVector(dofIndex) = bcVector(dofIndex);
+    }
+    
+    // solve:
+    FieldContainer<double>solution(numTrialDofs);
+    SerialDenseWrapper::solveSystem(solution, finalStiffness, localRHSVector);
     
   }
 
