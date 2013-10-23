@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
   bool singularityAvoidingInitialMesh = false;
   bool enforceLocalConservation = false;
   bool enforceOneIrregularity = true;
-  bool reportPerCellErrors  = false;
+  bool reportPerCellErrors  = true;
   bool useMumps = false;
   bool useCG = false;
   bool useML = false;
@@ -817,7 +817,6 @@ int main(int argc, char *argv[]) {
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold, minH ));
   }
   
-  // just an experiment:
   refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
   
@@ -945,7 +944,7 @@ int main(int argc, char *argv[]) {
       LinearTermPtr trialFunctional = weight * ( - sigma12 + sigma21 ); // weighted vorticity
       qoiSolution->setFilter(QoIFilter::qoiFilter(trialFunctional));
     }
-    refinementStrategy->refine(false);//rank==0); // print to console on rank 0
+    refinementStrategy->refine(rank==0); // print to console on rank 0
     if (! MeshTestUtility::checkMeshConsistency(mesh)) {
       if (rank==0) cout << "checkMeshConsistency returned false after refinement.\n";
     }
