@@ -155,8 +155,8 @@ void BCEasy::imposeBC(FieldContainer<double> &dirichletValues, FieldContainer<bo
                      std::invalid_argument,
                      "imposeHere dimensions should be (numCells,numPoints).");
 
-  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim != 2, std::invalid_argument,
-                     "spaceDim != 2 not yet supported by imposeBC." );
+  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim > 3, std::invalid_argument,
+                     "spaceDim > 3 not yet supported by imposeBC." );
 
   imposeHere.initialize(false);
   if ( _dirichletBCs.find(varID) == _dirichletBCs.end() ) {

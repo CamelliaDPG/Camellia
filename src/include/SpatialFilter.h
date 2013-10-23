@@ -23,10 +23,30 @@ typedef Teuchos::RCP< SpatialFilter > SpatialFilterPtr;
 class SpatialFilter {
 public:
   // just 2D for now:
+  virtual bool matchesPoint(double x) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x) unimplemented.");
+    return false;
+  }
   virtual bool matchesPoint(double x, double y) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y) unimplemented.");
     return false;
   }
+  virtual bool matchesPoint(double x, double y, double z) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z) unimplemented.");
+  }
+  virtual bool matchesPoint(vector<double>&point) {
+    if (point.size() == 3) {
+      return matchesPoint(point[0],point[1],point[2]);
+    } else if (point.size() == 2) {
+      return matchesPoint(point[0],point[1]);
+    } else if (point.size() == 1) {
+      return matchesPoint(point[0]);
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point is of unsupported dimension.");
+      return false;
+    }
+  }
+  
   virtual bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) {
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
 //    cout << "points:\n" << *points;
@@ -35,14 +55,16 @@ public:
     int spaceDim = points->dimension(2);
     TEUCHOS_TEST_FOR_EXCEPTION(numCells != pointsMatch.dimension(0), std::invalid_argument, "numCells do not match.");
     TEUCHOS_TEST_FOR_EXCEPTION(numPoints != pointsMatch.dimension(1), std::invalid_argument, "numPoints do not match.");
-    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "matchesPoints only supports 2D so far.");
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > 3, std::invalid_argument, "matchesPoints supports 1D, 2D, and 3D only.");
     pointsMatch.initialize(false);
     bool somePointMatches = false;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        if (matchesPoint(x,y)) {
+        vector<double> point;
+        for (int d=0; d<spaceDim; d++) {
+          point.push_back((*points)(cellIndex,ptIndex,d));
+        }
+        if (matchesPoint(point)) {
           somePointMatches = true;
           pointsMatch(cellIndex,ptIndex) = true;
         }
@@ -50,16 +72,13 @@ public:
     }
     return somePointMatches;
   }
-  //  bool matchesPoint(double x, double y, double z) {
-  //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z) unimplemented.");
-  //  }
   
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
 };
 
 class SpatialFilterUnfiltered : public SpatialFilter {
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(vector<double> &point) {
     return true;
   }
 };
@@ -75,7 +94,6 @@ public:
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
     int numCells = points->dimension(0);
     int numPoints = points->dimension(1);
-    int spaceDim = points->dimension(2);
     FieldContainer<bool> pointsMatch2(pointsMatch);
     bool somePointMatches1 = _sf1->matchesPoints(pointsMatch,basisCache);
     bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
@@ -113,7 +131,6 @@ public:
     const FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
     int numCells = points->dimension(0);
     int numPoints = points->dimension(1);
-    int spaceDim = points->dimension(2);
     _filterToNegate->matchesPoints(pointsMatch,basisCache);
     bool somePointMatches = false;
     for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
