@@ -630,7 +630,7 @@ void Function::integrate(FieldContainer<double> &cellIntegrals, BasisCachePtr ba
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
   int numCells = cellIntegrals.dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-//  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
+  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
   FieldContainer<double> values(numCells,numPoints);
   this->values(values,basisCache);
   if ( !sumInto ) {
@@ -1207,6 +1207,10 @@ FunctionPtr ConstantScalarFunction::dx() {
 }
 
 FunctionPtr ConstantScalarFunction::dy() {
+  return Function::zero();
+}
+
+FunctionPtr ConstantScalarFunction::dz() {
   return Function::zero();
 }
 
@@ -2141,6 +2145,9 @@ FunctionPtr Xn::dx() {
 FunctionPtr Xn::dy() {
   return Function::zero();
 }
+FunctionPtr Xn::dz() {
+  return Function::zero();
+}
 
 string Yn::displayString() {
   ostringstream ss;
@@ -2169,6 +2176,9 @@ FunctionPtr Yn::dy() {
   }
   FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
   return _n * y_n_minus;
+}
+FunctionPtr Yn::dz() {
+  return Function::zero();
 }
 
 string Zn::displayString() {
@@ -2199,8 +2209,8 @@ FunctionPtr Zn::dz() {
   if (_n == 0) {
     return Function::zero();
   }
-  FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
-  return _n * y_n_minus;
+  FunctionPtr z_n_minus = Teuchos::rcp( new Zn(_n-1) );
+  return _n * z_n_minus;
 }
 
 SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {

@@ -248,7 +248,7 @@ public:
 
   FunctionPtr dx();
   FunctionPtr dy();
-  // FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
+  FunctionPtr dz();  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
 };
 
 class ConstantVectorFunction : public Function {
@@ -464,6 +464,7 @@ public:
   double value(double x);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
@@ -474,6 +475,7 @@ public:
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
