@@ -59,7 +59,7 @@ namespace Camellia {
   int Basis<Scalar, ArrayScalar>::getDofOrdinal(const int subcDim,
                                                 const int subcOrd,
                                                 const int subcDofOrd) const {
-    std::cout << "int Basis<Scalar, ArrayScalar>::getDofOrdinal" << std::endl;
+//    std::cout << "int Basis<Scalar, ArrayScalar>::getDofOrdinal" << std::endl;
     if (!_basisTagsAreSet) {
       initializeTags();
       _basisTagsAreSet = true;
