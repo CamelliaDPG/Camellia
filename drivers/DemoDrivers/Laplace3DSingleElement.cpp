@@ -30,6 +30,8 @@
 
 #include "SerialDenseWrapper.h"
 
+#include "BasisSumFunction.h"
+
 void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
@@ -44,7 +46,7 @@ int main(int argc, char *argv[]) {
   int rank = mpiSession.getRank();
   
   int minPolyOrder = 1;
-  int maxPolyOrder = 4;
+  int maxPolyOrder = 1;
   int pToAdd = 2;
 
   if (rank==0) {
@@ -66,11 +68,11 @@ int main(int argc, char *argv[]) {
   VarPtr v = vf.testVar("v", HGRAD);
   // bilinear form
   BFPtr bf = Teuchos::rcp( new BF(vf) );
-  bf->addTerm(-phi, q->div());
-  bf->addTerm(-psi1, q->x());
-  bf->addTerm(-psi2, q->y());
-  bf->addTerm(-psi3, q->z());
-  bf->addTerm(phi_hat, q->dot_normal());
+  bf->addTerm(phi, q->div());
+  bf->addTerm(psi1, q->x());
+  bf->addTerm(psi2, q->y());
+  bf->addTerm(psi3, q->z());
+  bf->addTerm(-phi_hat, q->dot_normal());
   
   bf->addTerm(-psi1, v->dx());
   bf->addTerm(-psi2, v->dy());
@@ -81,7 +83,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-  FunctionPtr phi_exact = x * y * z;
+  FunctionPtr phi_exact = z; // Function::constant(1);
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   FunctionPtr psi3_exact = phi_exact->dz();
@@ -92,7 +94,7 @@ int main(int argc, char *argv[]) {
   
   // RHS
   Teuchos::RCP< RHSEasy > rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
   rhs->addTerm(f * v);
   
   // exact solution object
@@ -344,10 +346,11 @@ int main(int argc, char *argv[]) {
     bcVector.resize(numTrialDofs,1); // vector as a 2D array
     FieldContainer<double> rhsAdjustment(numTrialDofs,1);
     SerialDenseWrapper::multiply(rhsAdjustment, finalStiffness, bcVector);
-    
-    // adjust RHS:
     rhsAdjustment.resize(numTrialDofs);
     localRHSVector.resize(numTrialDofs);
+    bcVector.resize(numTrialDofs);
+    
+    // adjust RHS:
     for (int dofIndex=0; dofIndex<numTrialDofs; dofIndex++) {
       localRHSVector(dofIndex) -= rhsAdjustment(dofIndex);
     }
@@ -367,6 +370,25 @@ int main(int argc, char *argv[]) {
     FieldContainer<double>solution(numTrialDofs);
     SerialDenseWrapper::solveSystem(solution, finalStiffness, localRHSVector);
     
+    // check solution
+    vector<int> trialIDs = bf->trialVolumeIDs();
+    for (vector<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+      int trialID = *trialIDIt;
+      BasisPtr basis = trialOrderPtr->getBasis(trialID);
+      FieldContainer<double> solnCoefficients(basis->getCardinality());
+      for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++) {
+        int localDofIndex = trialOrderPtr->getDofIndex(trialID, basisOrdinal);
+        solnCoefficients(basisOrdinal) = solution(localDofIndex);
+      }
+      FunctionPtr solnFxn = NewBasisSumFunction::basisSumFunction(basis, solnCoefficients);
+      FunctionPtr exactFxn = exactSolution->exactFunctions().find(trialID)->second;
+      double integral = solnFxn->integrate(basisCache);
+      cout << "integral of solnFxn for trialID " << trialID << ": " << integral <<  "\n";
+      integral = exactFxn->integrate(basisCache);
+      cout << "integral of exactFxn for trialID " << trialID << ": " << integral << "\n";
+      double l2Error = ((exactFxn - solnFxn) * (exactFxn - solnFxn))->integrate(basisCache);
+      cout << "L^2 error for trialID " << trialID << ": " << l2Error << endl;
+    }
   }
 
   // Steps to solve:
