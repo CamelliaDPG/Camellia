@@ -382,6 +382,8 @@ public:
 
   virtual string displayString();
   int dim();
+  
+  bool isZero();
 };
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
