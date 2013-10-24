@@ -435,7 +435,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
     FunctionPtr expectedTransformation, expectedJacobian;
     {
       expectedTransformation = Function::vectorize(Function::xn(1), Function::yn(1));
-      expectedJacobian = expectedTransformation->grad();
+      expectedJacobian = expectedTransformation->grad(spaceDim);
     }
     
     for (int hRefinement=0; hRefinement<5; hRefinement++) {

@@ -644,7 +644,7 @@ bool FunctionTests::testJacobianOrdering() {
   }
   
   FieldContainer<double> values(numCells, numPoints, spaceDim, spaceDim);
-  f->grad()->values(values, basisCache);
+  f->grad(spaceDim)->values(values, basisCache);
   
   double maxDiff = 0;
   double tol = 1e-14;
