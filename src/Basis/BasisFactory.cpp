@@ -53,6 +53,8 @@
 #include "LegendreHVOL_LineBasis.h"
 #include "LobattoHGRAD_LineBasis.h"
 
+#include "PointBasis.h"
+
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBases;
@@ -110,6 +112,17 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
   } else { 
     switch (cellTopoKey) {
+      case shards::Node::key: // point topology
+        switch (fs) {
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+          case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+                    basis = Teuchos::rcp( new PointBasis<>() );
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
+        }
+
+        break;
       case shards::Hexahedron<8>::key:
         switch(fs) {
           case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
