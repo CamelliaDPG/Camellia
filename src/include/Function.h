@@ -117,6 +117,7 @@ public:
 
   static double evaluate(FunctionPtr f, double x); // for testing
   static double evaluate(FunctionPtr f, double x, double y); // for testing
+  static double evaluate(FunctionPtr f, double x, double y, double z); // for testing
 
   static bool isNull(FunctionPtr f);
 

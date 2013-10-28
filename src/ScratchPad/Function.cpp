@@ -274,6 +274,20 @@ double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; t
   return value[0];
 }
 
+double Function::evaluate(FunctionPtr f, double x, double y, double z) { // for testing; this isn't super-efficient
+  static FieldContainer<double> value(1,1);
+  static FieldContainer<double> physPoint(1,1,3);
+  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
+  dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
+  dummyCache->writablePhysicalCubaturePoints()(0,0,2) = z;
+  if (f->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  f->values(value,dummyCache);
+  return value[0];
+}
+
 FunctionPtr Function::x() {
   return Function::null();
 }
