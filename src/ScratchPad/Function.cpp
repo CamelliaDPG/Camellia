@@ -274,6 +274,20 @@ double Function::evaluate(FunctionPtr f, double x, double y) { // for testing; t
   return value[0];
 }
 
+double Function::evaluate(FunctionPtr f, double x, double y, double z) { // for testing; this isn't super-efficient
+  static FieldContainer<double> value(1,1);
+  static FieldContainer<double> physPoint(1,1,3);
+  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
+  dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
+  dummyCache->writablePhysicalCubaturePoints()(0,0,2) = z;
+  if (f->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  f->values(value,dummyCache);
+  return value[0];
+}
+
 FunctionPtr Function::x() {
   return Function::null();
 }
@@ -1116,6 +1130,10 @@ FunctionPtr Function::yn(int n) {
   return Teuchos::rcp( new Yn(n) );
 }
 
+FunctionPtr Function::zn(int n) {
+  return Teuchos::rcp( new Zn(n) );
+}
+
 FunctionPtr Function::xPart(FunctionPtr vectorFxn) {
   return Teuchos::rcp( new ComponentFunction(vectorFxn, 0) );
 }
@@ -1203,6 +1221,10 @@ FunctionPtr ConstantScalarFunction::dx() {
 }
 
 FunctionPtr ConstantScalarFunction::dy() {
+  return Function::zero();
+}
+
+FunctionPtr ConstantScalarFunction::dz() {
   return Function::zero();
 }
 
@@ -1921,6 +1943,16 @@ FunctionPtr VectorizedFunction::dz() {
   return di(2);
 }
 
+bool VectorizedFunction::isZero() {
+  // vector function is zero if each of its components is zero.
+  for (vector< FunctionPtr >::iterator fxnIt = _fxns.begin(); fxnIt != _fxns.end(); fxnIt++) {
+    if (! (*fxnIt)->isZero() ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 FunctionPtr operator*(FunctionPtr f1, FunctionPtr f2) {
   if (f1->isZero() || f2->isZero()) {
     if ( f1->rank() == f2->rank() ) {
@@ -2137,6 +2169,9 @@ FunctionPtr Xn::dx() {
 FunctionPtr Xn::dy() {
   return Function::zero();
 }
+FunctionPtr Xn::dz() {
+  return Function::zero();
+}
 
 string Yn::displayString() {
   ostringstream ss;
@@ -2165,6 +2200,41 @@ FunctionPtr Yn::dy() {
   }
   FunctionPtr y_n_minus = Teuchos::rcp( new Yn(_n-1) );
   return _n * y_n_minus;
+}
+FunctionPtr Yn::dz() {
+  return Function::zero();
+}
+
+string Zn::displayString() {
+  ostringstream ss;
+  if ((_n != 1) && (_n != 0)) {
+    ss << "z^" << _n ;
+  } else if (_n == 1) {
+    ss << "z";
+  } else {
+    ss << "(1)";
+  }
+  return ss.str();
+}
+Zn::Zn(int n) {
+  _n = n;
+}
+double Zn::value(double x, double y, double z) {
+  return pow(z,_n);
+}
+
+FunctionPtr Zn::dx() {
+  return Function::zero();
+}
+FunctionPtr Zn::dy() {
+  return Function::zero();
+}
+FunctionPtr Zn::dz() {
+  if (_n == 0) {
+    return Function::zero();
+  }
+  FunctionPtr z_n_minus = Teuchos::rcp( new Zn(_n-1) );
+  return _n * z_n_minus;
 }
 
 SimpleSolutionFunction::SimpleSolutionFunction(VarPtr var, SolutionPtr soln) : Function(var->rank()) {

@@ -59,6 +59,7 @@ namespace Camellia {
   int Basis<Scalar, ArrayScalar>::getDofOrdinal(const int subcDim,
                                                 const int subcOrd,
                                                 const int subcDofOrd) const {
+//    std::cout << "int Basis<Scalar, ArrayScalar>::getDofOrdinal" << std::endl;
     if (!_basisTagsAreSet) {
       initializeTags();
       _basisTagsAreSet = true;
@@ -107,17 +108,24 @@ namespace Camellia {
       _basisTagsAreSet = true;
     }
     std::set<int> dofOrdinals;
-    // Use .at() for bounds checking
-    int firstDofOrdinal = this->_tagToOrdinal.at(subcellDim).at(subcellIndex).at(0);
-    if (firstDofOrdinal == -1) { // no matching dof ordinals
-      return dofOrdinals;
-    }
-    int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
-
-    for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
-      int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
-      if (dofOrdinal >= 0) {
-        dofOrdinals.insert(dofOrdinal);
+    try {
+      // Use .at() for bounds checking
+      int firstDofOrdinal = this->_tagToOrdinal.at(subcellDim).at(subcellIndex).at(0);
+      if (firstDofOrdinal == -1) { // no matching dof ordinals
+        return dofOrdinals;
+      }
+      int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
+      
+      for (int dofIndex=0; dofIndex<numDofs; dofIndex++) {
+        int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
+        if (dofOrdinal >= 0) {
+          dofOrdinals.insert(dofOrdinal);
+        }
+      }
+    } catch (std::out_of_range e) {
+      // we can be out of range if there aren't any dofs defined, but not otherwise...
+      if ( dofOrdinals.size() > 0) { // that's unexpected, then.
+        throw e;
       }
     }
     return dofOrdinals;
