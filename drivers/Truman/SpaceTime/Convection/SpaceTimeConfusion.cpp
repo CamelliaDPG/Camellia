@@ -82,8 +82,9 @@ int main(int argc, char *argv[]) {
 
   // define trial variables
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma_x = varFactory.fieldVar("sigma_x");
-  VarPtr sigma_t = varFactory.fieldVar("sigma_t");
+  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+  // VarPtr sigma_x = varFactory.fieldVar("sigma_x");
+  // VarPtr sigma_t = varFactory.fieldVar("sigma_t");
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr fhat = varFactory.fluxVar("fhat");
 
@@ -113,7 +114,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   double epsilon_x = 1e-2;
-  double epsilon_t = 1e-22;
+  double epsilon_t = 1e-2;
 
   // // v terms:
   // bf->addTerm( -alpha*u, v->dx() );
@@ -139,16 +140,18 @@ int main(int argc, char *argv[]) {
   FunctionPtr Dsqrt = xxPart + yyPart;
 
   // tau terms:
-  bf->addTerm( sigma_x, tau->x() );
-  bf->addTerm( sigma_t, tau->y() );
+  bf->addTerm( sigma, tau );
+  // bf->addTerm( sigma_x, tau->x() );
+  // bf->addTerm( sigma_t, tau->y() );
   bf->addTerm( u, Dsqrt*tau->grad() );
   bf->addTerm( -uhat, sqrt(epsilon_x)*n->x()*tau->x()+sqrt(epsilon_t)*n->y()*tau->y() );
 
   // v terms:
   bf->addTerm( -alpha*u, v->dx() );
   bf->addTerm( -u, v->dy() );
-  bf->addTerm( sqrt(epsilon_x)*sigma_x, v->dx() );
-  bf->addTerm( sqrt(epsilon_t)*sigma_t, v->dy() );
+  bf->addTerm( sqrt(epsilon_x)*sigma, v->grad() );
+  // bf->addTerm( sqrt(epsilon_x)*sigma_x, v->dx() );
+  // bf->addTerm( sqrt(epsilon_t)*sigma_t, v->dy() );
   bf->addTerm( fhat, v);
 
   ////////////////////   SPECIFY RHS   ///////////////////////
