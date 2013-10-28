@@ -32,87 +32,7 @@
 
 #include "BasisSumFunction.h"
 
-void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
-  vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
-  cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
-  for (int i=0; i<dofIndices.size(); i++) {
-    cout << dofIndices[i] << " ";
-  }
-  cout << endl;
-}
-
-int main(int argc, char *argv[]) {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
-  int rank = mpiSession.getRank();
-  
-  int minPolyOrder = 1;
-  int maxPolyOrder = 1;
-  int pToAdd = 2;
-
-  if (rank==0) {
-    cout << "minPolyOrder: " << minPolyOrder << "\n";
-    cout << "maxPolyOrder: " << maxPolyOrder << "\n";
-    cout << "pToAdd: " << pToAdd << "\n";
-  }
-  
-  VarFactory vf;
-  // trial variables:
-  VarPtr phi = vf.fieldVar("\\phi");
-  VarPtr psi1 = vf.fieldVar("\\psi_{1}");
-  VarPtr psi2 = vf.fieldVar("\\psi_{2}");
-  VarPtr psi3 = vf.fieldVar("\\psi_{3}");
-  VarPtr phi_hat = vf.traceVar("\\widehat{\\phi}");
-  VarPtr psi_hat_n = vf.fluxVar("\\widehat{\\psi}_n");
-  // test variables
-  VarPtr q = vf.testVar("q", HDIV);
-  VarPtr v = vf.testVar("v", HGRAD);
-  // bilinear form
-  BFPtr bf = Teuchos::rcp( new BF(vf) );
-  bf->addTerm(phi, q->div());
-  bf->addTerm(psi1, q->x());
-  bf->addTerm(psi2, q->y());
-  bf->addTerm(psi3, q->z());
-  bf->addTerm(-phi_hat, q->dot_normal());
-  
-  bf->addTerm(-psi1, v->dx());
-  bf->addTerm(-psi2, v->dy());
-  bf->addTerm(-psi3, v->dz());
-  bf->addTerm(psi_hat_n, v);
-  
-  // define exact solution functions
-  FunctionPtr x = Function::xn(1);
-  FunctionPtr y = Function::yn(1);
-  FunctionPtr z = Function::zn(1);
-  FunctionPtr phi_exact = z; // Function::constant(1);
-  FunctionPtr psi1_exact = phi_exact->dx();
-  FunctionPtr psi2_exact = phi_exact->dy();
-  FunctionPtr psi3_exact = phi_exact->dz();
-  
-  // set up BCs
-  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  bc->addDirichlet(phi_hat, SpatialFilter::allSpace(), phi_exact);
-  
-  // RHS
-  Teuchos::RCP< RHSEasy > rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
-  rhs->addTerm(f * v);
-  
-  // exact solution object
-  Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new ExactSolution(bf,bc,rhs) );
-  exactSolution->setSolutionFunction(phi, phi_exact);
-  exactSolution->setSolutionFunction(psi1, psi1_exact );
-  exactSolution->setSolutionFunction(psi2, psi2_exact );
-  exactSolution->setSolutionFunction(psi3, psi3_exact );
-  
-  // inner product
-  IPPtr ip = bf->graphNorm();
-  
-  if (rank==0) {
-    cout << "Laplace bilinear form:\n";
-    bf->printTrialTestInteractions();
-  }
-  
-  // for now, let's use the reference cell.  (Jacobian should be the identity.)
+FieldContainer<double> referenceCubeNodes() {
   FieldContainer<double> cubePoints(8,3);
   cubePoints(0,0) = -1;
   cubePoints(0,1) = -1;
@@ -145,14 +65,116 @@ int main(int argc, char *argv[]) {
   cubePoints(7,0) = -1;
   cubePoints(7,1) = 1;
   cubePoints(7,2) = 1;
+  return cubePoints;
+}
+
+void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
+  vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
+  cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
+  for (int i=0; i<dofIndices.size(); i++) {
+    cout << dofIndices[i] << " ";
+  }
+  cout << endl;
+}
+
+double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
+  // uses the fact that the reference element and physical are identical
   
-  cubePoints(0,0) = -1;
-  cubePoints(0,1) = -1;
-  cubePoints(0,2) = -1;
+  FieldContainer<double> value(1,1);
+  FieldContainer<double> physPoint(1,3);
+  physPoint(0,0) = x;
+  physPoint(0,1) = y;
+  physPoint(0,2) = z;
   
-  cubePoints(0,0) = -1;
-  cubePoints(0,1) = -1;
-  cubePoints(0,2) = -1;
+  shards::CellTopology cellTopo(shards::getCellTopologyData<shards::Hexahedron<8> >() );
+  
+  FieldContainer<double> refCubeNodes = referenceCubeNodes();
+  refCubeNodes.resize(1,8,3);
+  
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(refCubeNodes, cellTopo, 0) );
+  if (fxn->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  basisCache->setRefCellPoints(physPoint); // this is where we use the fact that the ref element matches physical
+  fxn->values(value,basisCache);
+  return value[0];
+}
+
+int main(int argc, char *argv[]) {
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
+  int rank = mpiSession.getRank();
+  
+  int minPolyOrder = 2;
+  int maxPolyOrder = 2;
+  int pToAdd = 2;
+
+  if (rank==0) {
+    cout << "min H^1 Order: " << minPolyOrder << "\n";
+    cout << "max H^1 Order: " << maxPolyOrder << "\n";
+    cout << "pToAdd: " << pToAdd << "\n";
+  }
+  
+  VarFactory vf;
+  // trial variables:
+  VarPtr phi = vf.fieldVar("\\phi");
+  VarPtr psi1 = vf.fieldVar("\\psi_{1}");
+  VarPtr psi2 = vf.fieldVar("\\psi_{2}");
+  VarPtr psi3 = vf.fieldVar("\\psi_{3}");
+  VarPtr phi_hat = vf.traceVar("\\widehat{\\phi}");
+  VarPtr psi_hat_n = vf.fluxVar("\\widehat{\\psi}_n");
+  // test variables
+  VarPtr q = vf.testVar("q", HDIV);
+  VarPtr v = vf.testVar("v", HGRAD);
+  // bilinear form
+  BFPtr bf = Teuchos::rcp( new BF(vf) );
+  bf->addTerm(phi, q->div());
+  bf->addTerm(psi1, q->x());
+  bf->addTerm(psi2, q->y());
+  bf->addTerm(psi3, q->z());
+  bf->addTerm(-phi_hat, q->dot_normal());
+  
+  bf->addTerm(-psi1, v->dx());
+  bf->addTerm(-psi2, v->dy());
+  bf->addTerm(-psi3, v->dz());
+  bf->addTerm(psi_hat_n, v);
+  
+  // define exact solution functions
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
+  FunctionPtr z = Function::zn(1);
+  FunctionPtr phi_exact = x;
+//  FunctionPtr phi_exact = Function::constant(2);
+//  FunctionPtr phi_exact = z;
+  FunctionPtr psi1_exact = phi_exact->dx();
+  FunctionPtr psi2_exact = phi_exact->dy();
+  FunctionPtr psi3_exact = phi_exact->dz();
+  
+  // set up BCs
+  Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
+  bc->addDirichlet(phi_hat, SpatialFilter::allSpace(), phi_exact);
+  
+  // RHS
+  Teuchos::RCP< RHSEasy > rhs = Teuchos::rcp( new RHSEasy );
+  FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
+  rhs->addTerm(f * v);
+  
+  // exact solution object
+  Teuchos::RCP<ExactSolution> exactSolution = Teuchos::rcp( new ExactSolution(bf,bc,rhs) );
+  exactSolution->setSolutionFunction(phi, phi_exact);
+  exactSolution->setSolutionFunction(psi1, psi1_exact );
+  exactSolution->setSolutionFunction(psi2, psi2_exact );
+  exactSolution->setSolutionFunction(psi3, psi3_exact );
+  
+  // inner product
+  IPPtr ip = bf->graphNorm();
+  
+  if (rank==0) {
+    cout << "Laplace bilinear form:\n";
+    bf->printTrialTestInteractions();
+  }
+  
+  // for now, let's use the reference cell.  (Jacobian should be the identity.)
+  FieldContainer<double> cubePoints = referenceCubeNodes();
   
   int numCells = 1;
   cubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
@@ -335,7 +357,7 @@ int main(int argc, char *argv[]) {
       bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
       int cellIndex = 0;
       for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++) {
-        int localDofIndex = trialOrderPtr->getDofIndex(varID, basisOrdinal);
+        int localDofIndex = trialOrderPtr->getDofIndex(varID, basisOrdinal, sideIndex);
         // we can also skip any global dof index lookup, since we're dealing with just one element
         bcVector(localDofIndex) = dirichletValues(cellIndex,basisOrdinal);
         bcDofIndices.insert(localDofIndex);
@@ -371,23 +393,41 @@ int main(int argc, char *argv[]) {
     SerialDenseWrapper::solveSystem(solution, finalStiffness, localRHSVector);
     
     // check solution
-    vector<int> trialIDs = bf->trialVolumeIDs();
-    for (vector<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
-      int trialID = *trialIDIt;
-      BasisPtr basis = trialOrderPtr->getBasis(trialID);
-      FieldContainer<double> solnCoefficients(basis->getCardinality());
-      for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++) {
-        int localDofIndex = trialOrderPtr->getDofIndex(trialID, basisOrdinal);
-        solnCoefficients(basisOrdinal) = solution(localDofIndex);
+    map<int, VarPtr > trialVars = vf.trialVars();
+    for (map<int, VarPtr >::iterator trialVarIt = trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++) {
+      VarPtr var = trialVarIt->second;
+      if (var->varType() == FIELD) {
+        BasisPtr basis = trialOrderPtr->getBasis(var->ID());
+        FieldContainer<double> solnCoefficients(basis->getCardinality());
+        for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++) {
+          int localDofIndex = trialOrderPtr->getDofIndex(var->ID(), basisOrdinal);
+          solnCoefficients(basisOrdinal) = solution(localDofIndex);
+        }
+        FunctionPtr solnFxn = NewBasisSumFunction::basisSumFunction(basis, solnCoefficients);
+        FunctionPtr exactFxn = exactSolution->exactFunctions().find(var->ID())->second;
+        double integral = solnFxn->integrate(basisCache);
+        cout << "integral of solnFxn for trial variable " << var->name() << ": " << integral <<  "\n";
+        integral = exactFxn->integrate(basisCache);
+        cout << "integral of exactFxn for trial variable " << var->name() << ": " << integral << "\n";
+        double l2Error = ((exactFxn - solnFxn) * (exactFxn - solnFxn))->integrate(basisCache);
+        cout << "L^2 error for trial variable " << var->name() << ": " << l2Error << endl;
+        cout << "exact at (0,0,0): "  << Function::evaluate(exactFxn, 0,0,0) << endl;
+        cout << "sol'n at (0,0,0): "  << evaluateSoln(solnFxn, 0,0,0) << endl;
+        cout << "exact at (0,0,1): "  << Function::evaluate(exactFxn, 0,0,1) << endl;
+        cout << "sol'n at (0,0,1): "  << evaluateSoln(solnFxn, 0,0,1) << endl;
+        cout << "exact at (0,1,0): "  << Function::evaluate(exactFxn, 0,1,0) << endl;
+        cout << "sol'n at (0,1,0): "  << evaluateSoln(solnFxn, 0,1,0) << endl;
+        
+        cout << "exact at (1,0,0): "  << Function::evaluate(exactFxn, 1,0,0) << endl;
+        cout << "sol'n at (1,0,0): "  << evaluateSoln(solnFxn, 1,0,0) << endl;
+        
+        cout << "exact at (1,1,0): "  << Function::evaluate(exactFxn, 1,1,0) << endl;
+        cout << "sol'n at (1,1,0): "  << evaluateSoln(solnFxn, 1,1,0) << endl;
+        
+        cout << "exact at (1,1,1): "  << Function::evaluate(exactFxn, 1,1,1) << endl;
+        cout << "sol'n at (1,1,1): "  << evaluateSoln(solnFxn, 1,1,1) << endl;
+        
       }
-      FunctionPtr solnFxn = NewBasisSumFunction::basisSumFunction(basis, solnCoefficients);
-      FunctionPtr exactFxn = exactSolution->exactFunctions().find(trialID)->second;
-      double integral = solnFxn->integrate(basisCache);
-      cout << "integral of solnFxn for trialID " << trialID << ": " << integral <<  "\n";
-      integral = exactFxn->integrate(basisCache);
-      cout << "integral of exactFxn for trialID " << trialID << ": " << integral << "\n";
-      double l2Error = ((exactFxn - solnFxn) * (exactFxn - solnFxn))->integrate(basisCache);
-      cout << "L^2 error for trialID " << trialID << ": " << l2Error << endl;
     }
   }
 
