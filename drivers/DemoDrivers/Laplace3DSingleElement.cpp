@@ -104,8 +104,8 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 2;
-  int maxPolyOrder = 2;
+  int minPolyOrder = 3;
+  int maxPolyOrder = 3;
   int pToAdd = 2;
 
   if (rank==0) {
@@ -142,9 +142,11 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-  FunctionPtr phi_exact = x;
 //  FunctionPtr phi_exact = Function::constant(2);
+//  FunctionPtr phi_exact = x;
+  FunctionPtr phi_exact = y;
 //  FunctionPtr phi_exact = z;
+
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   FunctionPtr psi3_exact = phi_exact->dz();
@@ -217,29 +219,72 @@ int main(int argc, char *argv[]) {
     
     // for the trace of H^1 (phi_hat), need to add identifications of vertex and edge dofs.
     map< unsigned, vector< pair<unsigned, unsigned> > > vertexNodeToSideVertex;  // key: hex's node #.  Values: sideOrdinal, quad's vertex #.
-    map< unsigned, vector< pair<unsigned, unsigned> > > edgeNodeToSideEdge;  // key: hex's node #.  Values: sideOrdinal, quad's edge #.
+    map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > edgeNodeToSideEdge;  // key: hex's vertex node numbers, in ascending order.  Values: ( (sideOrdinal, quad's edge #), orientation (true if we didn't need to flip the hex node ordering) ).
 
     int vertexDim = 0;
     int edgeDim = 1;
+    int faceDim = 2;
     
     for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
       shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
+//      cout << "Side " << sideOrdinal << endl;
       for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++) {
         // how does the hex identify this edge?
-        unsigned hexNodeForEdge = hexTopoPtr->getNodeMap(edgeDim, sideOrdinal, edgeOrdinal);
-        if (edgeNodeToSideEdge.find(hexNodeForEdge) == edgeNodeToSideEdge.end()) {
-          edgeNodeToSideEdge[hexNodeForEdge] = vector< pair<unsigned, unsigned> >();
+        // that's not quite the right question to ask, I think, particularly since our Hexahedron<8> only has vertex nodes,
+        // but clearly Intrepid's basis classes have a way of ordering edges in each topology.
+        // TODO: fix this call (broken!)
+        unsigned hexNodeForVertex0 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, edgeOrdinal);
+        unsigned hexNodeForVertex1 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, (edgeOrdinal+1)%(sideTopo.getVertexCount()));
+        
+        unsigned hexNodeMin = min(hexNodeForVertex0,hexNodeForVertex1);
+        unsigned hexNodeMax = max(hexNodeForVertex0,hexNodeForVertex1);
+        bool orientationAgreesWithNodeOrdering = (hexNodeForVertex0==hexNodeMin);
+        
+        pair< unsigned, unsigned > edge = make_pair(hexNodeMin, hexNodeMax);
+        
+        if (edgeNodeToSideEdge.find(edge) == edgeNodeToSideEdge.end()) {
+          edgeNodeToSideEdge[edge] = vector< pair< pair<unsigned, unsigned>, bool > >();
         }
-        edgeNodeToSideEdge[hexNodeForEdge].push_back(make_pair(sideOrdinal, edgeOrdinal));
+        edgeNodeToSideEdge[edge].push_back(make_pair(make_pair(sideOrdinal, edgeOrdinal), orientationAgreesWithNodeOrdering));
       }
       for (int vertexOrdinal=0; vertexOrdinal < sideTopo.getVertexCount(); vertexOrdinal++) {
         // how does the hex identify this vertex?
-        unsigned hexNodeForVertex = hexTopoPtr->getNodeMap(vertexDim, sideOrdinal, vertexOrdinal);
+        unsigned hexNodeForVertex = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, vertexOrdinal);
         if (vertexNodeToSideVertex.find(hexNodeForVertex) == vertexNodeToSideVertex.end()) {
           vertexNodeToSideVertex[hexNodeForVertex] = vector< pair<unsigned, unsigned> >();
         }
         vertexNodeToSideVertex[hexNodeForVertex].push_back(make_pair(sideOrdinal, vertexOrdinal));
       }
+    }
+    // DEBUG loop over vertexNodeToSideVertex:
+    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
+         vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
+      int hexNodeForVertex = vertexNodeIter->first;
+      cout << "vertex " << hexNodeForVertex << ", (side, vertex) pairs: ";
+      vector< pair<unsigned, unsigned> > vertices = vertexNodeIter->second;
+      for (vector< pair<unsigned, unsigned> >::iterator verticesIter = vertices.begin();
+           verticesIter != vertices.end(); verticesIter++) {
+        int sideOrdinal = verticesIter->first;
+        int vertexOrdinalInSide = verticesIter->second;
+        cout << "(" << sideOrdinal << ", " << vertexOrdinalInSide << ") ";
+      }
+      cout << endl;
+    }
+    // DEBUG loop over edgeNodeToSideEdge:
+    for (map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > ::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
+         edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++) {
+      unsigned v0 = edgeNodeIter->first.first;
+      unsigned v1 = edgeNodeIter->first.second;
+      cout << "edge (" << v0 << "," << v1 << ") (side, edge) pairs: ";
+      vector< pair < pair<unsigned, unsigned>, bool > > edges = edgeNodeIter->second;
+      for (vector< pair < pair<unsigned, unsigned>, bool > >::iterator edgesIter = edges.begin();
+           edgesIter != edges.end(); edgesIter++) {
+        bool orientationsAgree = edgesIter->second;
+        int sideOrdinal = edgesIter->first.first;
+        int edgeOrdinalInSide = edgesIter->first.second;
+        cout << "(" << sideOrdinal << ", " << edgeOrdinalInSide << ") ";
+      }
+      cout << endl;
     }
     // now, we want to identify all those dofs:
     for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
@@ -258,34 +303,51 @@ int main(int argc, char *argv[]) {
                                                  ->getDofOrdinal(vertexDim, vertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
         trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstVertexDofOrdinal,
                                          sideOrdinal, vertexDofOrdinal);
+        cout << "(" << firstSideOrdinal << ", " << firstVertexOrdinal;
+        cout << ") <-> (" << sideOrdinal << ", " << vertexOrdinal << ")" << endl;
       }
     }
 
-    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
+    for (map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > ::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
          edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++) {
+      vector< pair < pair<unsigned, unsigned>, bool > > edges = edgeNodeIter->second;
+      vector< pair < pair<unsigned, unsigned>, bool > >::iterator edgeIter = edges.begin();
+      if (edgeIter == edges.end()) continue;
       // there could be a bunch of these (or 0, for linear elements).  How do we determine the correct permutation?
       // for now, we make the assumption that the layout is CCW or CW consistently for all sides of the element, which
       // would mean that the orderings are reversed
-      vector< pair<unsigned, unsigned> > edges = edgeNodeIter->second;
-      vector< pair<unsigned, unsigned> >::iterator edgeIter = edges.begin();
-      unsigned firstSideOrdinal = edgeIter->first;
-      unsigned firstEdgeOrdinal = edgeIter->second;
+      
+      bool firstOrientationAgrees = edgeIter->second;
+      int firstSideOrdinal = edgeIter->first.first;
+      int firstEdgeOrdinalInSide = edgeIter->first.second;
+      
       BasisPtr firstBasis = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal);
       
-      int numDofs = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)->dofOrdinalsForSubcell(edgeDim, firstEdgeOrdinal).size();
+      int numDofs = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)->dofOrdinalsForSubcell(edgeDim, firstEdgeOrdinalInSide).size();
 
       while (++edgeIter != edges.end()) {
-        unsigned sideOrdinal = edgeIter->first;
-        unsigned edgeOrdinal = edgeIter->second;
+        unsigned sideOrdinal = edgeIter->first.first;
+        unsigned edgeOrdinal = edgeIter->first.second;
+        unsigned orientationAgrees = edgeIter->second;
         for (int dofNumber=0; dofNumber<numDofs; dofNumber++) {
-          // this is the point where we make an assumption about the relative permutation of the identified bases...
+          // this is the point where we consider the relative permutation of the identified bases...
           // when we do this in a mesh, we'll need to do something more sophisticated.
-          unsigned firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
-                                               ->getDofOrdinal(edgeDim, edgeOrdinal, numDofs - dofNumber - 1);
-          unsigned edgeDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                                 ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
-          trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
-                                           sideOrdinal, edgeDofOrdinal);
+          if (orientationAgrees != firstOrientationAgrees) {
+            unsigned firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+                                                 ->getDofOrdinal(edgeDim, edgeOrdinal, numDofs - dofNumber - 1);
+            unsigned edgeDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+                                                   ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+            trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
+                                             sideOrdinal, edgeDofOrdinal);
+          } else {
+            cout << "Unexpectedly, two sides agree on edge orientation.\n";
+            unsigned firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+                                                    ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+            unsigned edgeDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+                                                    ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+            trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
+                                             sideOrdinal, edgeDofOrdinal);
+          }
           
         }
       }
@@ -293,12 +355,12 @@ int main(int argc, char *argv[]) {
     // after adding all those identifications, need to rebuild the DofOrdering's index:
     trialOrderPtr->rebuildIndex();
     
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 0);
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 1);
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 2);
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 3);
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 4);
-//    printDofIndicesForVariable(trialOrderPtr, psi_hat_n, 5);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 0);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 1);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 2);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 3);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 4);
+    printDofIndicesForVariable(trialOrderPtr, phi_hat, 5);
     
     // Define test discretization
     DofOrderingPtr testOrderPtr = Teuchos::rcp( new DofOrdering );
@@ -336,6 +398,10 @@ int main(int argc, char *argv[]) {
     
     int optSuccess = bf->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
     
+    if (optSuccess != 0) {
+      cout << "Error while solving for optimal test weights.\n";
+    }
+    
     FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
     
     BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
@@ -355,6 +421,7 @@ int main(int argc, char *argv[]) {
       BasisPtr basis = trialOrderPtr->getBasis(varID,sideIndex);
       FieldContainer<double> dirichletValues(numCells, basis->getCardinality());
       bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
+//      cout << "dirichletValues for side " << sideIndex << ":" << endl << dirichletValues;
       int cellIndex = 0;
       for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++) {
         int localDofIndex = trialOrderPtr->getDofIndex(varID, basisOrdinal, sideIndex);
@@ -363,6 +430,7 @@ int main(int argc, char *argv[]) {
         bcDofIndices.insert(localDofIndex);
       }
     }
+//    cout << "bcVector:\n" << bcVector;
     // now, multiply the "finalStiffness" by the bcVector to determine what we have to subtract:
     finalStiffness.resize(numTrialDofs,numTrialDofs);
     bcVector.resize(numTrialDofs,1); // vector as a 2D array
@@ -377,11 +445,12 @@ int main(int argc, char *argv[]) {
       localRHSVector(dofIndex) -= rhsAdjustment(dofIndex);
     }
     
-    // zero out the stiffness matrix rows for dirichlet values
+    // zero out the stiffness matrix rows and columns for dirichlet values
     for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++) {
       int dofIndex = *dofIndexIt;
       for (int i=0; i<numTrialDofs; i++) {
         finalStiffness(i,dofIndex) = 0;
+        finalStiffness(dofIndex,i) = 0;
       }
       // set the dirichlet value:
       finalStiffness(dofIndex, dofIndex) = 1;
@@ -391,6 +460,23 @@ int main(int argc, char *argv[]) {
     // solve:
     FieldContainer<double>solution(numTrialDofs);
     SerialDenseWrapper::solveSystem(solution, finalStiffness, localRHSVector);
+    
+    bool bcsCorrect = true;
+    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++) {
+      int dofIndex = *dofIndexIt;
+      
+      if (solution(dofIndex) != bcVector(dofIndex)) {
+        cout << solution(dofIndex) << " = solution(" << dofIndex;
+        cout << ") != bcVector(" << dofIndex << ") = " << bcVector(dofIndex) << "\n";
+        bcsCorrect = false;
+      }
+    }
+    if (bcsCorrect)
+      cout << "BCs were correctly imposed.\n";
+    else
+      cout << "BCs were NOT correctly imposed.\n";
+    
+//    cout << "solution coefficients:\n" << solution;
     
     // check solution
     map<int, VarPtr > trialVars = vf.trialVars();
@@ -406,9 +492,9 @@ int main(int argc, char *argv[]) {
         FunctionPtr solnFxn = NewBasisSumFunction::basisSumFunction(basis, solnCoefficients);
         FunctionPtr exactFxn = exactSolution->exactFunctions().find(var->ID())->second;
         double integral = solnFxn->integrate(basisCache);
-        cout << "integral of solnFxn for trial variable " << var->name() << ": " << integral <<  "\n";
+        cout << "integral of solnFxn for " << var->name() << ": " << integral <<  "\n";
         integral = exactFxn->integrate(basisCache);
-        cout << "integral of exactFxn for trial variable " << var->name() << ": " << integral << "\n";
+        cout << "integral of exactFxn for " << var->name() << ": " << integral << "\n";
         double l2Error = ((exactFxn - solnFxn) * (exactFxn - solnFxn))->integrate(basisCache);
         cout << "L^2 error for trial variable " << var->name() << ": " << l2Error << endl;
         cout << "exact at (0,0,0): "  << Function::evaluate(exactFxn, 0,0,0) << endl;
@@ -426,7 +512,6 @@ int main(int argc, char *argv[]) {
         
         cout << "exact at (1,1,1): "  << Function::evaluate(exactFxn, 1,1,1) << endl;
         cout << "sol'n at (1,1,1): "  << evaluateSoln(solnFxn, 1,1,1) << endl;
-        
       }
     }
   }
