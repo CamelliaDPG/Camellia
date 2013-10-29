@@ -127,7 +127,7 @@
 
 \title{Locally Conservative Discontinuous Petrov-Galerkin Finite Elements for
 Fluid Problems}
-\author{Truman Ellis} 
+\author{Truman Ellis}
 \author{Leszek Demkowicz}
 \author{Jesse Chan}
 \affil{Institute for Computational Engineering and Sciences,\\
@@ -160,7 +160,7 @@ with extensive numerical results.
 
 \subsection{Importance of Local Conservation}
 Locally conservative methods hold a special place for numerical analysts in
-the field of fluid dynamics. 
+the field of fluid dynamics.
 Perot\cite{Perot2011} argues
 \begin{quote}
 Accuracy, stability, and consistency are the mathematical concepts that are
@@ -216,7 +216,7 @@ The first order optimality condition for \eqnref{rieszapplied} requires
 the G\^ateaux derivative to be zero in all directions $\delta u \in
 U_h$, i.e.,
 \[
-\left(R_V^{-1}(Bu_h-l),R_V^{-1}B\delta u\right)_V = 0, \quad \forall \delta u \in U. 
+\left(R_V^{-1}(Bu_h-l),R_V^{-1}B\delta u\right)_V = 0, \quad \forall \delta u \in U.
 \]
 By definition of the Riesz operator, this is equivalent to
 \begin{equation}
@@ -328,11 +328,11 @@ $\bsigma\in\mb{L^2}(K)$. Mathematically, this leaves their traces on element
 boundaries undefined, and in a manner similar to the hybridized discontinuous
 Galerkin method, we define new unknowns for trace $\hat u$ and flux $\hat t$.
 Applying these definitions to \eqnref{preultraweak} and adding the two
-equations together, we arrive at our desired variational problem. 
+equations together, we arrive at our desired variational problem.
 
 Find
 $\bs u:=(u,\bsigma,\hat u,\hat t)
-\in\bs U:=L^2(\Omega_h)\times \bs L^2(\Omega_h)\times H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$ 
+\in\bs U:=L^2(\Omega_h)\times \bs L^2(\Omega_h)\times H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$
 such that
 \begin{align}
 \label{eq:variationalFormulation}
@@ -396,7 +396,7 @@ convection-diffusion, we get:
 We can decompose the discrete flux space $\hat F_h$ into equilibriated fluxes
 (zero net flux over each element) and some algebraic complement:
 \begin{equation}
-\hat F_h=\hat F_h^e\oplus\hat F_h^{ne}\,,\quad\hat 
+\hat F_h=\hat F_h^e\oplus\hat F_h^{ne}\,,\quad\hat
 F_h^{e}:=\{\hat t:\langle\hat t,(1_K,\bs0)\rangle=0\quad\forall K\}\,.
 \label{eq:decomposition}
 \end{equation}
@@ -563,7 +563,7 @@ The optimal test functions are determined by solving local problems determined
 by the choice of test norm. There are several options to consider.
 The graph norm \cite{DPGOverview} is one of the most natural norms to consider
 as it is derived directly from the adjoint of the problem supplemented with
-(possibly scaled) $L^2$ field terms to upgrade it from a semi-norm. 
+(possibly scaled) $L^2$ field terms to upgrade it from a semi-norm.
 Chan \etal\cite{ChanHeuerThanhDemkowicz2012} derived a more robust alternative
 norm for convection diffusion (dubbed the robust norm). We recently
 developed a modification of the robust norm that appears to produce better
@@ -576,7 +576,7 @@ which we demonstrate eliminates the issues observed in numerical experiments.
 \seclab{sec:confusionPlate}
 We begin by first examining a different problem than convection-diffusion.
 We look at admissible solutions for the homogeneous Laplace's equation over
-the $y > 0$ half-plane under boundary conditions 
+the $y > 0$ half-plane under boundary conditions
 \begin{align*}
 u &= 0 \text{ on } x > 0\\
 \pd{u}{n} &= 0 \text{ on } x < 0.
@@ -606,7 +606,7 @@ Consider now Laplace's equation $\del u = f$ on the box domain $\Omega =
 u &= 0 \text{ on } x > .5\\
 \pd{u}{n} &= 0 \text{ on } x < .5.
 \end{align*}
-with forcing term $f=1$.  
+with forcing term $f=1$.
 \begin{figure}[!h]
 \centering
 \includegraphics[scale=.375]{figs/LaplaceFigs/LaplacePlate.png}
@@ -620,7 +620,7 @@ singularity in its gradient.  Figures~\ref{fig:laplace} and
 under a quadratic $h$-refined mesh.  Figure~\ref{fig:laplace} confirms that
 $u$ is bounded, while Figure~\ref{fig:laplaceStresses} confirms that
 singularities in the gradient appear at the point $(.5,0)$, where the boundary
-condition changes from Neumann to Dirichlet.  
+condition changes from Neumann to Dirichlet.
 
 \begin{figure}[!h]
 \centering
@@ -665,7 +665,7 @@ that singularities in solutions are determined primarily by the highest order
 differential operator present in the equation -- in other words, the addition
 of a convective term to a scaled Laplacian (to recover the
 convection-diffusion equation) will not alter the presence of a singularity in
-the solution \cite{roos2008robust}.  
+the solution \cite{roos2008robust}.
 
 \begin{figure}[!h]
 \centering
@@ -685,7 +685,7 @@ refinements are done until the element size $h$ is at or below the diffusion
 scale.  Due to the singular nature of the solution, refinements are clustered
 around $(.5,0)$, and the order is set to be uniform with $p=2$.  While there
 should be no singularity in $u$, the magnitude of $u$ grows as $h \rightarrow
-0$, so long as $h\leq \epsilon$.  
+0$, so long as $h\leq \epsilon$.
 
 \begin{figure}[!h]
 \centering
@@ -700,7 +700,7 @@ of the solution is guaranteed to be robustly bounded; however, the $\L$ norm
 does allow for the presence of weak singularities (singularities of order
 $x^{-\frac{1}{2}}$).  Apart from the oscillation of $u$ at the singular point,
 the solution is well-behaved, and the stress $\bsigma = \epsilon \Grad u$ is
-very well represented, as indicated in Figure~\ref{fig:plateStresses}.  
+very well represented, as indicated in Figure~\ref{fig:plateStresses}.
 
 \begin{figure}[!h]
 \centering
@@ -721,11 +721,11 @@ typically results in non-convergence of nonlinear solvers.}  We propose a
 modification of the robust test norm that appears to remedy this issue, which
 we refer to as the coupled robust test norm:
 \begin{align}
-\norm{\LRp{v,\btau}}_{V,K}^2 &\coloneqq 
+\norm{\LRp{v,\btau}}_{V,K}^2 &\coloneqq
 \min\left\{\frac{1}{\epsilon},\frac{1}{|K|}\right\}\norm{\btau}_K^2,
 + \norm{\div \btau - \bbeta\cdot\Grad v}_K^2 \\
-&+\norm{\bbeta\cdot \Grad v}_K^2 
-+ \epsilon\norm{\Grad v}_K^2 
+&+\norm{\bbeta\cdot \Grad v}_K^2
++ \epsilon\norm{\Grad v}_K^2
 + \norm{v}^2_K
 \end{align}
 where $||\cdot||_K$ signifies the $L^2$ norm over element $K$.\footnote{
@@ -733,7 +733,7 @@ We note that we have dropped the
 mesh-dependent scaling on $\norm{v}_{\L}$ from the robust norm; this is related
 to recent insights into the nature of DPG test spaces as discussed in
 \cite{Chan2013}.
-}  
+}
 We note that, under the
 theory developed in \cite{ChanHeuerThanhDemkowicz2012}
 the above test norm is
@@ -764,21 +764,21 @@ and $v$ such that they satisfy the adjoint equation with forcing terms $u$ and
 $\bsigma$, we recover the best $L^2$ approximation.  In other words, achieving
 optimality in the $L^2$ norm requires coupling between $v$ and $\btau$, which
 is achieved under the graph norm, but not the robust norm derived in the
-previous section.  
+previous section.
 If coupling of the test terms delivers optimality in $u$ and $\bsigma$
 independently, we expect that decoupling
 $v$ and $\btau$ from each other in a test norm will have the
 effect of coupling error in $\bsigma$ to error in $u$, which would explain the
 spurious oscillations in $u$ in the presence of singularities in $\bsigma$.
 Similar results have been observed in the Stokes equations, where error in $u$
-is coupled to the behavior of the pressure variable \cite{FLD:FLD582}.  
+is coupled to the behavior of the pressure variable \cite{FLD:FLD582}.
 
 The drawback to using the above test norm is that the resulting local system
 for test functions is now completely coupled, whereas using the robust test
 norm, the system was block diagonal due to the decoupling in $v$ and $\btau$
 and could be constructed and inverted more efficiently.  We hope to explore
 the difference between these two norms in more rigor and detail in the
-future.  
+future.
 
 \begin{figure}[!h]
 \centering
@@ -797,7 +797,7 @@ however, the solution $u$ does not display spurious oscillations in either the
 underresolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
 the same quantities, but for $\epsilon = 10^{-4}$, in order to demonstrate
 that the new test norm removes spurious oscillations in $u$ (in the presence
-of singularities in $\bsigma$) independently of $\epsilon$.  
+of singularities in $\bsigma$) independently of $\epsilon$.
 
 \begin{figure}[!h]
 \centering
@@ -849,7 +849,7 @@ v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K\\
 +\frac{1}{|K|}\int_K\vdeltau\int_K\delta v
 \label{eq:localSolveMod}
 \end{align}
-where the $\frac{1}{|K|^2}$ coefficient is needed to make the zero mean term 
+where the $\frac{1}{|K|^2}$ coefficient is needed to make the zero mean term
 scale correctly with $h$. Numerically this helps with the condition
 numbers of the local solve.
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
@@ -878,13 +878,13 @@ scaling in between. Also, all plots are of the field variable $u$.
 
 \subsubsection{Erickson-Johnson Model Problem}
 The Erickson-Johnson problem is one of the few convection-diffusion problems
-with a known analytical solution. Take 
+with a known analytical solution. Take
 $\bbeta=(1,0)^T$ and boundary conditions $\hat t=\bbeta\cdot\mathbf{n} u_0$ when
 $\beta_n\le0$, where $u_0$ is the trace of the exact solution, and $\hat u=0$
 when $\beta_n>0$. For
 $n=1,2,\cdots$, let
 $\lambda_n=n^2\pi^2\epsilon$,
-$r_n=\frac{1+\sqrt{1+4\epsilon\lambda_n}}{2\epsilon}$, and 
+$r_n=\frac{1+\sqrt{1+4\epsilon\lambda_n}}{2\epsilon}$, and
 $s_n=\frac{1-\sqrt{1+4\epsilon\lambda_n}}{2\epsilon}$. The exact solution
 is
 \begin{equation}
@@ -893,7 +893,7 @@ u(x,y)=C_0+\sum_{n=1}^\infty C_n\frac{\exp(s_n(x-1))-\exp(r_n(x-1))}
 \label{eq:ericksonExact}
 \end{equation}
 Taking $\epsilon=10^{-2}$, $C_1=1$, and $C_{n\neq1}=0$, the exact solution looks
-like Figure \ref{fig:erickson}. 
+like Figure \ref{fig:erickson}.
 
 \begin{figure}[p]
 \centering
@@ -920,7 +920,7 @@ like Figure \ref{fig:erickson}.
 This is a standard convection-diffusion problem with a skewed convection
 vector relative to the mesh. We take $\bbeta=(2,1)$, and on the left and
 bottom inflow boundaries we impose $\hat t=1-x-y$ while the right and top
-boundaries have $\hat u=0$. We solve for $\epsilon=10^{-4}$. 
+boundaries have $\hat u=0$. We solve for $\epsilon=10^{-4}$.
 
 \begin{figure}[p]
 \centering
@@ -950,7 +950,7 @@ boundaries have $\hat u=0$. We solve for $\epsilon=10^{-4}$.
 \end{figure}
 
 \subsubsection{Double Glazing Problem}
-This nominal problem definition takes the same unit square domain with 
+This nominal problem definition takes the same unit square domain with
 \[
 \bbeta=\binom{2(2y-1)(1-(2x-1)^2)}{-2(2x-1)(1-(2y-1)^2)}\,;\quad
 \hat u=
@@ -961,7 +961,7 @@ This nominal problem definition takes the same unit square domain with
 \]
 except that this definition for the boundary is not legal for $\hat u\in
 H^{\frac{1}{2}}(\Gamma_h)$ which is continuous. Therefore we use a ramp of
-width $\sqrt{\epsilon}$ on the right edge to go from 0 to 1. The 
+width $\sqrt{\epsilon}$ on the right edge to go from 0 to 1. The
 results are for $\epsilon=10^{-2}$.
 
 \begin{figure}[p]
@@ -1140,7 +1140,7 @@ fitted to better approximate an exact circle.The boundary conditions are $\hat
 t=\bbeta\cdot\mathbf{n}\cdot 1$ on the left inflow boundary,
 $\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the right outflow
 boundary, $\hat t=0$ on the top and bottom edges, and $\hat u=1$ on the
-cylinder.
+cylinder. We run with $\epsilon=10^{-3}$.
 
 \begin{figure}[p]
 \centering
@@ -1255,7 +1255,7 @@ conservative formulation of DPG to these kinds of problems should be
 relatively straightforward. The real test of whether local conservation is
 worth it for DPG will come when we start doing more realistic problems.
 
-\bibliographystyle{plain} 
-\bibliography{../../DPG} 
+\bibliographystyle{plain}
+\bibliography{../../DPG}
 \end{document}
 
