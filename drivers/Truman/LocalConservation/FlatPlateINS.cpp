@@ -89,13 +89,13 @@ int main(int argc, char *argv[]) {
   // define trial variables
   VarPtr u1 = varFactory.fieldVar("u1");
   VarPtr u2 = varFactory.fieldVar("u2");
-  VarPtr sigma1 = varFactory.fieldVar("sigma1", VECTOR_L2);
-  VarPtr sigma2 = varFactory.fieldVar("sigma2", VECTOR_L2);
   VarPtr p = varFactory.fieldVar("p");
   VarPtr u1hat = varFactory.traceVar("u1hat");
   VarPtr u2hat = varFactory.traceVar("u2hat");
   VarPtr t1hat = varFactory.fluxVar("t1hat");
   VarPtr t2hat = varFactory.fluxVar("t2hat");
+  VarPtr sigma1 = varFactory.fieldVar("sigma1", VECTOR_L2);
+  VarPtr sigma2 = varFactory.fieldVar("sigma2", VECTOR_L2);
 
   ////////////////////   BUILD MESH   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -147,8 +147,8 @@ int main(int argc, char *argv[]) {
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[u1->ID()] = one;
   functionMap[u2->ID()] = zero;
-  functionMap[sigma1->ID()] = zero;
-  functionMap[sigma2->ID()] = zero;
+  functionMap[sigma1->ID()] = Function::vectorize(zero,zero);
+  functionMap[sigma2->ID()] = Function::vectorize(zero,zero);
   functionMap[p->ID()] = zero;
 
   backgroundFlow->projectOntoMesh(functionMap);
@@ -213,10 +213,16 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr bottomPlate = Teuchos::rcp( new BottomPlate );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
   bc->addDirichlet(t2hat, bottomFree, zero);
+  bc->addDirichlet(u2hat, bottomFree, zero);
   bc->addDirichlet(u1hat, bottomPlate, zero);
   bc->addDirichlet(u2hat, bottomPlate, zero);
   bc->addDirichlet(u1hat, top, one);
+  bc->addDirichlet(t2hat, top, zero);
   bc->addDirichlet(u1hat, left, one);
+  bc->addDirichlet(u2hat, left, zero);
+  // bc->addDirichlet(t1hat, left, zero);
+  // bc->addDirichlet(t2hat, left, zero);
+  bc->addDirichlet(t1hat, right, zero);
 
   // zero mean constraint on pressure
   bc->addZeroMeanConstraint(p);

@@ -37,3 +37,5 @@ add_executable(TransientHemker TransientHemker.cpp)
 add_executable(InviscidBurgers InviscidBurgers.cpp)
 
 add_executable(FlatPlateINS FlatPlateINS.cpp)
+
+add_executable(FlatPlateConfusion FlatPlateConfusion.cpp)

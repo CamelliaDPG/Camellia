@@ -40,74 +40,43 @@ class ZeroMeanScaling : public hFunction {
   }
 };
 
-class InflowBoundary : public SpatialFilter {
+class ConstantXBoundary : public SpatialFilter {
+  private:
+    double xval;
+  public:
+    ConstantXBoundary(double xval): xval(xval) {};
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      return (abs(x-xval) < tol);
+    }
+};
+
+;
+
+class ConstantYBoundary : public SpatialFilter {
+  private:
+    double yval;
+  public:
+    ConstantYBoundary(double yval): yval(yval) {};
+    bool matchesPoint(double x, double y) {
+      double tol = 1e-14;
+      return (abs(y-yval) < tol);
+    }
+};
+
+class BottomFree : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool xMatch = (abs(x) < tol) ;
-      bool yMatch = (abs(y) < tol) ;
-      return xMatch || yMatch;
+      return (abs(y) < tol && (x < 0));
     }
 };
 
-class OutflowBoundary : public SpatialFilter {
+class BottomPlate : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      bool xMatch = (abs(x-1.0) < tol);
-      bool yMatch = (abs(y-1.0) < tol);
-      return xMatch || yMatch;
-    }
-};
-
-// boundary value for u
-class U0 : public Function {
-  public:
-    U0() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          // solution with a boundary layer (section 5.2 in DPG Part II)
-          // for x = 1, y = 1: u = 0
-          if ( ( abs(x-1.0) < tol ) || (abs(y-1.0) < tol ) ) {
-            values(cellIndex,ptIndex) = 0;
-          } else if ( abs(x) < tol ) { // for x=0: u = 1 - y
-            values(cellIndex,ptIndex) = 1.0 - y;
-          } else { // for y=0: u=1-x
-            values(cellIndex,ptIndex) = 1.0 - x;
-          }
-
-        }
-      }
-    }
-};
-
-class Beta : public Function {
-  public:
-    Beta() : Function(1) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-      int spaceDim = values.dimension(2);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          for (int d = 0; d < spaceDim; d++) {
-            double x = (*points)(cellIndex,ptIndex,0);
-            double y = (*points)(cellIndex,ptIndex,1);
-            values(cellIndex,ptIndex,0) = y;
-            values(cellIndex,ptIndex,0) = -x;
-          }
-        }
-      }
+      return (abs(y) < tol && (x >= 0));
     }
 };
 
@@ -122,13 +91,21 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  double epsilon = args.Input<double>("--epsilon", "diffusion parameter");
   int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
-  bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation");
   int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = modified robust");
 
   // Optional arguments (have defaults)
-  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", true);
+  int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
+  int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
+  int xCells = args.Input("--xCells", "number of cells in the x direction", 4);
+  int yCells = args.Input("--yCells", "number of cells in the t direction", 2);
+  double xmin = args.Input("--xmin", "min x", -1);
+  double xmax = args.Input("--xmax", "max x", 1);
+  double ymin = args.Input("--ymin", "min y", 0);
+  double ymax = args.Input("--ymax", "max y", 1);
+  double epsilon = args.Input("--epsilon", "diffusion parameter", 1e-2);
+  bool enforceLocalConservation = args.Input("--conserve", "enforce local conservation", false);
+  bool zeroL2 = args.Input("--zeroL2", "take L2 term on v in robust norm to zero", false);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -145,28 +122,28 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-  int H1Order = 3, pToAdd = 2;
+  int H1Order = polyOrder+1;
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
 
-  meshBoundary(0,0) = 0.0; // x1
-  meshBoundary(0,1) = 0.0; // y1
-  meshBoundary(1,0) = 1.0;
-  meshBoundary(1,1) = 0.0;
-  meshBoundary(2,0) = 1.0;
-  meshBoundary(2,1) = 1.0;
-  meshBoundary(3,0) = 0.0;
-  meshBoundary(3,1) = 1.0;
-
-  int horizontalCells = 4, verticalCells = 4;
+  meshBoundary(0,0) =  xmin; // x1
+  meshBoundary(0,1) =  ymin; // y1
+  meshBoundary(1,0) =  xmax;
+  meshBoundary(1,1) =  ymin;
+  meshBoundary(2,0) =  xmax;
+  meshBoundary(2,1) =  ymax;
+  meshBoundary(3,0) =  xmin;
+  meshBoundary(3,1) =  ymax;
 
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      bf, H1Order, H1Order+pToAdd, false);
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, xCells, yCells,
+      bf, H1Order, H1Order+deltaP);
 
   vector<double> beta;
-  beta.push_back(2.0);
-  beta.push_back(1.0);
+  beta.push_back(1);
+  beta.push_back(0);
+  FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // tau terms:
@@ -227,13 +204,15 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr inflowBoundary = Teuchos::rcp( new InflowBoundary );
-  SpatialFilterPtr outflowBoundary = Teuchos::rcp( new OutflowBoundary );
-  FunctionPtr u0 = Teuchos::rcp( new U0 );
-  bc->addDirichlet(uhat, outflowBoundary, u0);
-
-  FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
-  bc->addDirichlet(fhat, inflowBoundary, beta*n*u0);
+  SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
+  SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
+  SpatialFilterPtr bottomFree = Teuchos::rcp( new BottomFree );
+  SpatialFilterPtr bottomPlate = Teuchos::rcp( new BottomPlate );
+  SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
+  bc->addDirichlet(fhat, left, zero);
+  bc->addDirichlet(fhat, bottomFree, zero);
+  bc->addDirichlet(uhat, bottomPlate, one);
+  bc->addDirichlet(fhat, top, zero);
 
   // Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
   // pc->addConstraint(uhat==u0,inflowBoundary);
@@ -250,36 +229,26 @@ int main(int argc, char *argv[]) {
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
-  ofstream errOut;
-  if (commRank == 0)
-    errOut.open("confusion_err.txt");
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++){
     solution->solve(false);
 
-    double energy_error = solution->energyErrorTotal();
     if (commRank==0){
       stringstream outfile;
-      outfile << "confusion_" << refIndex;
+      outfile << "flatplateconfusion_" << refIndex;
       exporter.exportSolution(outfile.str());
-      // solution->writeToVTK(outfile.str());
 
-      // Check local conservation
-      FunctionPtr flux = Function::solution(fhat, solution);
-      FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
-      Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
-
-      errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+      // // Check local conservation
+      // FunctionPtr flux = Function::solution(fhat, solution);
+      // FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+      // Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
+      // cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+      //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
       refinementStrategy.refine(commRank==0); // print to console on commRank 0
   }
-  if (commRank == 0)
-    errOut.close();
 
   return 0;
 }

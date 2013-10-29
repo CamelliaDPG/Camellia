@@ -76,17 +76,17 @@ int main(int argc, char *argv[]) {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
+  VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  // VarPtr tau = varFactory.testVar("tau", HDIV);
-  VarPtr tau = varFactory.testVar("tau", VECTOR_HGRAD);
+  // VarPtr tau = varFactory.testVar("tau", VECTOR_HGRAD);
 
   // define trial variables
+  VarPtr uhat = varFactory.traceVar("uhat");
+  VarPtr fhat = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
   // VarPtr sigma_x = varFactory.fieldVar("sigma_x");
   // VarPtr sigma_t = varFactory.fieldVar("sigma_t");
-  VarPtr uhat = varFactory.traceVar("uhat");
-  VarPtr fhat = varFactory.fluxVar("fhat");
 
   ////////////////////   BUILD MESH   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -112,49 +112,50 @@ int main(int argc, char *argv[]) {
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   double epsilon_x = 1e-2;
   double epsilon_t = 1e-2;
-
-  // // v terms:
-  // bf->addTerm( -alpha*u, v->dx() );
-  // bf->addTerm( -u, v->dy() );
-  // bf->addTerm( sigma_x, v->dx() );
-  // bf->addTerm( sigma_t, v->dy() );
-  // bf->addTerm( fhat, v);
-
-  // // tau terms:
-  // bf->addTerm( sigma_x/epsilon_x, tau->x() );
-  // bf->addTerm( sigma_t/epsilon_t, tau->y() );
-  // bf->addTerm( u, tau->div() );
-  // bf->addTerm( -uhat, tau->dot_normal() );
-
-  FunctionPtr n = Function::normal();
-  FunctionPtr one = Function::constant(1.0);
-  FunctionPtr zero = Function::zero();
-  FunctionPtr one_zero = Function::vectorize(one,zero);
-  FunctionPtr zero_one = Function::vectorize(zero,one);
-  FunctionPtr zero_zero = Function::vectorize(zero,zero);
-  FunctionPtr xxPart = sqrt(epsilon_x)*Function::vectorize(one_zero, zero_zero);
-  FunctionPtr yyPart = sqrt(epsilon_t)*Function::vectorize(zero_zero, zero_one);
-  FunctionPtr Dsqrt = xxPart + yyPart;
-
-  // tau terms:
-  bf->addTerm( sigma, tau );
-  // bf->addTerm( sigma_x, tau->x() );
-  // bf->addTerm( sigma_t, tau->y() );
-  bf->addTerm( u, Dsqrt*tau->grad() );
-  bf->addTerm( -uhat, sqrt(epsilon_x)*n->x()*tau->x()+sqrt(epsilon_t)*n->y()*tau->y() );
 
   // v terms:
   bf->addTerm( -alpha*u, v->dx() );
   bf->addTerm( -u, v->dy() );
-  bf->addTerm( sqrt(epsilon_x)*sigma, v->grad() );
-  // bf->addTerm( sqrt(epsilon_x)*sigma_x, v->dx() );
-  // bf->addTerm( sqrt(epsilon_t)*sigma_t, v->dy() );
+  bf->addTerm( sigma, v->grad() );
+  // bf->addTerm( sigma_x, v->dx() );
+  // bf->addTerm( sigma_t, v->dy() );
   bf->addTerm( fhat, v);
 
+  // tau terms:
+  bf->addTerm( sigma/epsilon_x, tau );
+  // bf->addTerm( sigma_x/epsilon_x, tau->x() );
+  // bf->addTerm( sigma_t/epsilon_t, tau->y() );
+  bf->addTerm( u, tau->div() );
+  bf->addTerm( -uhat, tau->dot_normal() );
+
+  // FunctionPtr n = Function::normal();
+  FunctionPtr one = Function::constant(1.0);
+  FunctionPtr zero = Function::zero();
+  // FunctionPtr one_zero = Function::vectorize(one,zero);
+  // FunctionPtr zero_one = Function::vectorize(zero,one);
+  // FunctionPtr zero_zero = Function::vectorize(zero,zero);
+  // FunctionPtr xxPart = sqrt(epsilon_x)*Function::vectorize(one_zero, zero_zero);
+  // FunctionPtr yyPart = sqrt(epsilon_t)*Function::vectorize(zero_zero, zero_one);
+  // FunctionPtr Dsqrt = xxPart + yyPart;
+
+  // // tau terms:
+  // bf->addTerm( sigma, tau );
+  // bf->addTerm( sigma_x, tau->x() );
+  // bf->addTerm( sigma_t, tau->y() );
+  // bf->addTerm( u, Dsqrt*tau->grad() );
+  // bf->addTerm( -uhat, sqrt(epsilon_x)*n->x()*tau->x()+sqrt(epsilon_t)*n->y()*tau->y() );
+
+  // // v terms:
+  // bf->addTerm( -alpha*u, v->dx() );
+  // bf->addTerm( -u, v->dy() );
+  // bf->addTerm( sqrt(epsilon_x)*sigma_x, v->dx() );
+  // bf->addTerm( sqrt(epsilon_t)*sigma_t, v->dy() );
+  // bf->addTerm( fhat, v);
+
   ////////////////////   SPECIFY RHS   ///////////////////////
+  Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
