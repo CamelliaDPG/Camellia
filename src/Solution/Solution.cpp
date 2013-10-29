@@ -179,6 +179,8 @@ void Solution::initialize() {
 }
 
 void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool allowEmptyCells, bool replaceBoundaryTerms) {
+  vector<int> volumeTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
+  vector<int> boundaryTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
   // thisSoln += weight * otherSoln
   // throws exception if the two Solutions' solutionForElementTypeMaps fail to match in any way other than in values
   const map< int, FieldContainer<double> >* otherMapPtr = &(otherSoln->solutionForCellIDGlobal());
@@ -187,11 +189,13 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
         std::invalid_argument, "otherSoln doesn't match Solution's solutionMap.");
   }
   map< int, FieldContainer<double> >::const_iterator mapIt;
-  for (mapIt=otherMapPtr->begin(); mapIt != otherMapPtr->end(); mapIt++) {
+  for (mapIt=otherMapPtr->begin(); mapIt != otherMapPtr->end(); mapIt++)
+  {
     int cellID = mapIt->first;
     const FieldContainer<double>* otherValues = &(mapIt->second);
     map< int, FieldContainer<double> >::iterator myMapIt = _solutionForCellIDGlobal.find(cellID);
-    if (myMapIt == _solutionForCellIDGlobal.end()) {
+    if (myMapIt == _solutionForCellIDGlobal.end())
+    {
       if ( !allowEmptyCells ) {
         TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,
             "otherSoln doesn't match Solution's solutionMap (cellID not found).");
@@ -214,53 +218,39 @@ void Solution::addSolution(Teuchos::RCP<Solution> otherSoln, double weight, bool
     }
     else
     {
-      vector<int> volumeTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
       // for volume variables, use +=
       for (int idIdx = 0; idIdx < volumeTrialIDs.size(); idIdx++)
       {
         int trialID = volumeTrialIDs[idIdx];
 
-        int rank = Teuchos::GlobalMPISession::getRank();
-        vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
-        vector< ElementTypePtr >::iterator elemTypeIt;
-        for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
-        {
-          ElementTypePtr elemTypePtr = *(elemTypeIt);
-          DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
+        ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
+        DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
 
-          BasisPtr basis = trialOrdering->getBasis(trialID, 0);
-          int basisCardinality = basis->getCardinality();
-          for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
-          {
-            int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, 0);
-            (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
-          }
+        BasisPtr basis = trialOrdering->getBasis(trialID, 0);
+        int basisCardinality = basis->getCardinality();
+        for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
+        {
+          int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, 0);
+          (*myValues)[dofIndex] += weight * (*otherValues)[dofIndex];
         }
       }
-      vector<int> boundaryTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
       // for volume variables, use =
       for (int idIdx = 0; idIdx < boundaryTrialIDs.size(); idIdx++)
       {
         int trialID = boundaryTrialIDs[idIdx];
 
-        int rank = Teuchos::GlobalMPISession::getRank();
-        vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
-        vector< ElementTypePtr >::iterator elemTypeIt;
-        for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
+        ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
+        DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
+        shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
+        int numSides = cellTopo.getSideCount();
+        for (int sideIndex=0; sideIndex < numSides; sideIndex++)
         {
-          ElementTypePtr elemTypePtr = *(elemTypeIt);
-          DofOrderingPtr trialOrdering= elemTypePtr->trialOrderPtr;
-          shards::CellTopology cellTopo = *(elemTypePtr->cellTopoPtr);
-          int numSides = cellTopo.getSideCount();
-          for (int sideIndex=0; sideIndex < numSides; sideIndex++)
+          BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
+          int basisCardinality = basis->getCardinality();
+          for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
           {
-            BasisPtr basis = trialOrdering->getBasis(trialID, sideIndex);
-            int basisCardinality = basis->getCardinality();
-            for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++)
-            {
-              int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, sideIndex);
-              (*myValues)[dofIndex] = weight * (*otherValues)[dofIndex];
-            }
+            int dofIndex = trialOrdering->getDofIndex(trialID, basisOrdinal, sideIndex);
+            (*myValues)[dofIndex] = weight * (*otherValues)[dofIndex];
           }
         }
       }
