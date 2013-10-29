@@ -212,6 +212,14 @@ void SolutionTests::teardown() {
 
 void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  
+  if (testProjectVectorValuedSolution()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testHRefinementInitialization()) {
     numTestsPassed++;
   }
@@ -433,6 +441,170 @@ bool SolutionTests::testProjectFunction() {
   }      
 
   return success;  
+}
+
+bool SolutionTests::testProjectVectorValuedSolution() {
+  bool success = true;
+  double tol = 1e-14;
+  
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactory varFactory;
+  VarPtr tau = varFactory.testVar("\\tau", HDIV);
+  VarPtr v = varFactory.testVar("v", HGRAD);
+  
+  // define trial variables
+  VarPtr uhat = varFactory.traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory.fieldVar("u");
+  
+  VarPtr sigma = varFactory.fieldVar("\\sigma", VECTOR_L2);
+  
+  // problem parameters:
+  double eps = 1e-4;
+  vector<double> beta_const;
+  beta_const.push_back(2.0);
+  beta_const.push_back(1.0);
+  
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma / eps, tau);
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(-uhat, tau->dot_normal());
+  
+  // v terms:
+  confusionBF->addTerm( sigma, v->grad() );
+  confusionBF->addTerm( beta_const * u, - v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+  
+  map<int, VarPtr > trialVars = varFactory.trialVars();
+
+  map<int, FunctionPtr > functionMap;
+  FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
+  FunctionPtr vectorFunction = Function::vectorize(Function::xn(1), quadraticFunction);
+  
+  for (map<int, VarPtr >::iterator varIt = trialVars.begin();
+       varIt != trialVars.end(); varIt++) {
+    VarPtr var = varIt->second;
+    int varID = var->ID();
+    if (var->space() == VECTOR_L2) {
+      functionMap[varID] = vectorFunction;
+    } else {
+      functionMap[varID] = quadraticFunction;
+    }
+  }
+  
+  int spaceDim = 2;
+  FieldContainer<double> quadPoints(4,spaceDim);
+  
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+  
+  int horizontalCells = 3;
+  int verticalCells = 3;
+  
+  int H1Order = 3; // that way, L^2 space contains quadratics
+  
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, confusionBF, H1Order, H1Order+1);
+
+  SolutionPtr confusionSoln = Teuchos::rcp( new Solution(mesh) );
+  
+  confusionSoln->projectOntoMesh(functionMap);
+  
+  if ( ! solutionCoefficientsAreConsistent(confusionSoln) ) {
+    cout << "testProjectVectorValuedSolution: for quadraticFunction projection, solution coefficients are inconsistent.\n";
+    success = false;
+  }
+  
+  for (int testIndex=0; testIndex<2; testIndex++) {
+    if (testIndex == 1) {
+      // test in which we project the Solution itself
+      // here, we just project the Solution onto itself, nothing terribly interesting, but should exercise the vector-valuedness anyway
+      // conveniently, this means that the expected values don't change, so we can use the same verification logic below
+      set<int> activeCellIDs = confusionSoln->mesh()->getActiveCellIDs();
+      for (set<int>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++) {
+        int cellID = *cellIDIt;
+        ElementTypePtr elemType = confusionSoln->mesh()->getElement(cellID)->elementType();
+        vector<int> childIDs;
+        childIDs.push_back(cellID);
+        confusionSoln->projectOldCellOntoNewCells(cellID, elemType, childIDs);
+      }
+    }
+    for (int i=0; i<confusionSoln->mesh()->numElements(); i++) {
+      int numCells = 1;
+      ElementPtr elem = confusionSoln->mesh()->getElement(i);
+      int cellID = elem->cellID();
+      vector<int> cellIDs(1,cellID);
+      BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),confusionSoln->mesh()) );
+      
+      basisCache->setPhysicalCellNodes( confusionSoln->mesh()->physicalCellNodesForCell(cellID),
+                                       cellIDs, true); // true: create side cache, too
+      int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+      int sideToTest = 2;
+      int numPointsSide = basisCache->getSideBasisCache(sideToTest)->getPhysicalCubaturePoints().dimension(1);
+      
+      FieldContainer<double> functionValues(numCells, numPoints);
+      quadraticFunction->values(functionValues,basisCache);
+      
+      FieldContainer<double> vectorFunctionValues(numCells, numPoints, spaceDim);
+      vectorFunction->values(vectorFunctionValues, basisCache);
+      
+      FieldContainer<double> functionValuesSide(numCells, numPointsSide);
+      quadraticFunction->values(functionValuesSide,basisCache->getSideBasisCache(sideToTest));
+
+      FieldContainer<double> vectorFunctionValuesSide(numCells, numPointsSide, spaceDim);
+      vectorFunction->values(vectorFunctionValuesSide, basisCache->getSideBasisCache(sideToTest));
+      
+      for (map<int, VarPtr >::iterator varIt = trialVars.begin();
+           varIt != trialVars.end(); varIt++) {
+        VarPtr var = varIt->second;
+        int varID = var->ID();
+        // for second test, we only want to test fields, since that's what's supported in projections...
+        if ((testIndex==1) && ((var->varType()==FLUX) || (var->varType()==TRACE))) continue;
+        FieldContainer<double> valuesExpected;
+        FieldContainer<double> valuesActual;
+        if ( confusionBF->isFluxOrTrace(varID) ) {
+          FieldContainer<double> values;
+          if (var->rank()==0) {
+            values = FieldContainer<double>(numCells, numPointsSide);
+            valuesExpected = functionValuesSide;
+          } else if (var->rank()==1) {
+            values = FieldContainer<double>(numCells, numPointsSide, spaceDim);
+            valuesExpected = vectorFunctionValuesSide;
+          }
+          confusionSoln->solutionValues(values, varID, basisCache->getSideBasisCache(sideToTest));
+          valuesActual = values;
+        } else { // volume
+          FieldContainer<double> values;
+          if (var->rank()==0) {
+            values = FieldContainer<double>(numCells, numPoints);
+            valuesExpected = functionValues;
+          } else if (var->rank()==1) {
+            values = FieldContainer<double>(numCells, numPoints, spaceDim);
+            valuesExpected = vectorFunctionValues;
+          }
+          confusionSoln->solutionValues(values, varID, basisCache);
+          valuesActual = values;
+        }
+        double maxDiff;
+        if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
+          cout << "testProjectVectorValuedSolution() failure: maxDiff is " << maxDiff << " for trial variable " << var->name() << endl;
+          cout << "expectedValues:\n" << valuesExpected << endl;
+          cout << "actualValues:\n" << valuesActual << endl;
+          success = false;
+        }
+      }
+    }
+  }
+  
+  return success;
 }
 
 bool SolutionTests::testNewProjectFunction() {
@@ -658,7 +830,7 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
   return success;
 }
 
-bool SolutionTests::testAddRefinedSolutions(){
+bool SolutionTests::testAddRefinedSolutions() {
   bool success = true;
 
   Teuchos::RCP<QuadraticFunction> quadraticFunction = Teuchos::rcp(new QuadraticFunction );
