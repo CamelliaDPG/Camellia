@@ -23,15 +23,42 @@ void BasisSumFunction::getValues(FieldContainer<double> &functionValues, const F
   
   int numDofs = _basis->getCardinality();
 
-  FieldContainer<double> basisValues(numDofs,numPoints);
+  FieldContainer<double> basisValues;
+  if (_basis->rangeRank()==0) {
+    basisValues = FieldContainer<double>(numDofs,numPoints);
+  } else if (_basis->rangeRank()==1) {
+    basisValues = FieldContainer<double>(numDofs,numPoints,_basis->rangeDimension());
+  } else if (_basis->rangeRank()==2) {
+    basisValues = FieldContainer<double>(numDofs,numPoints,_basis->rangeDimension(),_basis->rangeDimension());
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisSumFunction only supports bases with ranks <= 2.");
+  }
   _basis->getValues(basisValues, refElemPoints, Intrepid::OPERATOR_VALUE);
   
-  functionValues.resize(numCells,numPoints);
+  Teuchos::Array<int> dim;
+  basisValues.dimensions(dim);
+  dim[0] = 1; // replace numDofs with numCells (which == 1).
+  
+  functionValues.resize(dim);
   functionValues.initialize(0.0);
   int cellIndex = 0;
   for (int ptIndex=0;ptIndex<numPoints;ptIndex++) {
     for (int i=0;i<numDofs;i++){
-      functionValues(cellIndex,ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
+      if (_basis->rangeRank()==0) {
+        functionValues(cellIndex,ptIndex) += basisValues(i,ptIndex)*_coefficients(i);
+      } else if (_basis->rangeRank()==1) {
+        for (int d=0; d<_basis->rangeDimension(); d++) {
+          functionValues(cellIndex,ptIndex,d) += basisValues(i,ptIndex,d)*_coefficients(i);
+        }
+      } else if (_basis->rangeRank()==2) {
+        for (int d1=0; d1<_basis->rangeDimension(); d1++) {
+          for (int d2=0; d2<_basis->rangeDimension(); d2++) {
+            functionValues(cellIndex,ptIndex,d1,d2) += basisValues(i,ptIndex,d1,d2)*_coefficients(i);
+          }
+        }
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisSumFunction only supports bases with ranks <= 2.");
+      }
     }
   }
 }
@@ -49,6 +76,8 @@ NewBasisSumFunction::NewBasisSumFunction(BasisPtr basis, const FieldContainer<do
 }
 
 void NewBasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  CHECK_VALUES_RANK(values);
+  
   int numDofs = _basis->getCardinality();
   
   int spaceDim = basisCache->getSpaceDim();

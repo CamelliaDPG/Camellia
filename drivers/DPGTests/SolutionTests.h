@@ -34,6 +34,7 @@ public:
   bool testProjectFunction();
   bool testNewProjectFunction();
   bool testProjectSolutionOntoOtherMesh();
+  bool testProjectVectorValuedSolution();
   bool testAddRefinedSolutions();
   bool testEnergyError();
   bool testHRefinementInitialization();
