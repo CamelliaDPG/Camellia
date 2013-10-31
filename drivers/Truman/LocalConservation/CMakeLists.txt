@@ -38,4 +38,6 @@ add_executable(InviscidBurgers InviscidBurgers.cpp)
 
 add_executable(FlatPlateINS FlatPlateINS.cpp)
 
+add_executable(FlatPlateINS_Cons FlatPlateINS_Cons.cpp)
+
 add_executable(FlatPlateConfusion FlatPlateConfusion.cpp)

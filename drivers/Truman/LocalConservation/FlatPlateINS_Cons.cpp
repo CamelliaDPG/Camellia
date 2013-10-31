@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
+#include "PenaltyConstraints.h"
 #include "SolutionExporter.h"
 
 #ifdef HAVE_MPI
@@ -40,7 +41,7 @@ class BottomFree : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      return (abs(y) < tol && (x < 0));
+      return (abs(y) < tol && abs(x) > .5);
     }
 };
 
@@ -48,7 +49,26 @@ class BottomPlate : public SpatialFilter {
   public:
     bool matchesPoint(double x, double y) {
       double tol = 1e-14;
-      return (abs(y) < tol && (x >= 0));
+      return (abs(y) < tol && abs(x) <= 0.5);
+    }
+};
+
+class IPWeight : public Function {
+  public:
+    IPWeight() : Function(0) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      double tol=1e-14;
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          values(cellIndex, ptIndex) = 0.1+1-abs(x);
+        }
+      }
     }
 };
 
@@ -85,7 +105,7 @@ int main(int argc, char *argv[]) {
   VarPtr tau2 = varFactory.testVar("tau2", HDIV);
   VarPtr v1 = varFactory.testVar("v1", HGRAD);
   VarPtr v2 = varFactory.testVar("v2", HGRAD);
-  VarPtr vc = varFactory.testVar("vc", HGRAD);
+  VarPtr q = varFactory.testVar("q", HGRAD);
 
   // define trial variables
   VarPtr u1 = varFactory.fieldVar("u1");
@@ -137,8 +157,6 @@ int main(int argc, char *argv[]) {
 
   FunctionPtr u1_prev = Function::solution(u1, backgroundFlow);
   FunctionPtr u2_prev = Function::solution(u2, backgroundFlow);
-  FunctionPtr sigma1_prev = Function::solution(sigma1, backgroundFlow);
-  FunctionPtr sigma2_prev = Function::solution(sigma2, backgroundFlow);
 
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   FunctionPtr one = Teuchos::rcp( new ConstantScalarFunction(1.0) );
@@ -148,104 +166,57 @@ int main(int argc, char *argv[]) {
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[u1->ID()] = one;
   functionMap[u2->ID()] = zero;
-  functionMap[sigma1->ID()] = Function::vectorize(zero,zero);
-  functionMap[sigma2->ID()] = Function::vectorize(zero,zero);
-  functionMap[p->ID()] = zero;
 
   backgroundFlow->projectOntoMesh(functionMap);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
-  // // stress equation
-  // bf->addTerm( sigma1, tau1 );
-  // bf->addTerm( sigma2, tau2 );
-  // bf->addTerm( u1, tau1->div() );
-  // bf->addTerm( u2, tau2->div() );
-  // bf->addTerm( -u1hat, tau1->dot_normal() );
-  // bf->addTerm( -u2hat, tau2->dot_normal() );
-
-  // // momentum equation
-  // bf->addTerm( Function::xPart(sigma1_prev)*u1, v1 );
-  // bf->addTerm( Function::yPart(sigma1_prev)*u2, v1 );
-  // bf->addTerm( Function::xPart(sigma2_prev)*u1, v2 );
-  // bf->addTerm( Function::yPart(sigma2_prev)*u2, v2 );
-  // bf->addTerm( beta*sigma1, v1);
-  // bf->addTerm( beta*sigma2, v2);
-  // bf->addTerm( 1./Re*sigma1, v1->grad() );
-  // bf->addTerm( 1./Re*sigma2, v2->grad() );
-  // bf->addTerm( t1hat, v1);
-  // bf->addTerm( t2hat, v2);
-  // bf->addTerm( -p, v1->dx() );
-  // bf->addTerm( -p, v2->dy() );
-
-  // // continuity equation
-  // bf->addTerm( -u1, vc->dx() );
-  // bf->addTerm( -u2, vc->dy() );
-  // bf->addTerm( u1hat, vc->times_normal_x() );
-  // bf->addTerm( u2hat, vc->times_normal_y() );
-
   // stress equation
-  bf->addTerm( Re*sigma1, tau1 );
-  bf->addTerm( Re*sigma2, tau2 );
+  bf->addTerm( sigma1, tau1 );
+  bf->addTerm( sigma2, tau2 );
   bf->addTerm( u1, tau1->div() );
   bf->addTerm( u2, tau2->div() );
   bf->addTerm( -u1hat, tau1->dot_normal() );
   bf->addTerm( -u2hat, tau2->dot_normal() );
 
   // momentum equation
-  bf->addTerm( Re*Function::xPart(sigma1_prev)*u1, v1 );
-  bf->addTerm( Re*Function::yPart(sigma1_prev)*u2, v1 );
-  bf->addTerm( Re*Function::xPart(sigma2_prev)*u1, v2 );
-  bf->addTerm( Re*Function::yPart(sigma2_prev)*u2, v2 );
-  bf->addTerm( beta*Re*sigma1, v1);
-  bf->addTerm( beta*Re*sigma2, v2);
-  bf->addTerm( sigma1, v1->grad() );
-  bf->addTerm( sigma2, v2->grad() );
-  bf->addTerm( t1hat, v1);
-  bf->addTerm( t2hat, v2);
+  bf->addTerm( -0.5*u1_prev*u1, v1->dx() );
+  bf->addTerm( -0.5*u1_prev*u2, v1->dy() );
+  bf->addTerm( -0.5*u2_prev*u1, v2->dx() );
+  bf->addTerm( -0.5*u2_prev*u2, v2->dy() );
+  bf->addTerm( -0.5*u1_prev*u1, v1->dx() );
+  bf->addTerm( -0.5*u2_prev*u1, v1->dy() );
+  bf->addTerm( -0.5*u1_prev*u2, v2->dx() );
+  bf->addTerm( -0.5*u2_prev*u2, v2->dy() );
+  bf->addTerm( 1./Re*sigma1, v1->grad() );
+  bf->addTerm( 1./Re*sigma2, v2->grad() );
   bf->addTerm( -p, v1->dx() );
   bf->addTerm( -p, v2->dy() );
+  bf->addTerm( t1hat, v1);
+  bf->addTerm( t2hat, v2);
 
   // continuity equation
-  bf->addTerm( -u1, vc->dx() );
-  bf->addTerm( -u2, vc->dy() );
-  bf->addTerm( u1hat, vc->times_normal_x() );
-  bf->addTerm( u2hat, vc->times_normal_y() );
+  bf->addTerm( -u1, q->dx() );
+  bf->addTerm( -u2, q->dy() );
+  bf->addTerm( u1hat, q->times_normal_x() );
+  bf->addTerm( u2hat, q->times_normal_y() );
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
-  // // stress equation
-  // rhs->addTerm( -sigma1_prev * tau1 );
-  // rhs->addTerm( -sigma2_prev * tau2 );
-  // rhs->addTerm( -u1_prev * tau1->div() );
-  // rhs->addTerm( -u2_prev * tau2->div() );
-
-  // // momentum equation
-  // rhs->addTerm( -beta*sigma1_prev * v1 );
-  // rhs->addTerm( -beta*sigma2_prev * v2 );
-  // rhs->addTerm( -1./Re*sigma1_prev * v1->grad() );
-  // rhs->addTerm( -1./Re*sigma2_prev * v2->grad() );
-
-  // // continuity equation
-  // rhs->addTerm( u1_prev * vc->dx() );
-  // rhs->addTerm( u2_prev * vc->dy() );
-
   // stress equation
-  rhs->addTerm( -Re*sigma1_prev * tau1 );
-  rhs->addTerm( -Re*sigma2_prev * tau2 );
   rhs->addTerm( -u1_prev * tau1->div() );
   rhs->addTerm( -u2_prev * tau2->div() );
 
   // momentum equation
-  rhs->addTerm( -beta*Re*sigma1_prev * v1 );
-  rhs->addTerm( -beta*Re*sigma2_prev * v2 );
-  rhs->addTerm( -sigma1_prev * v1->grad() );
-  rhs->addTerm( -sigma2_prev * v2->grad() );
+  rhs->addTerm( 0.5*u1_prev*u1_prev * v1->dx() );
+  rhs->addTerm( 0.5*u1_prev*u2_prev * v1->dy() );
+  rhs->addTerm( 0.5*u2_prev*u1_prev * v2->dx() );
+  rhs->addTerm( 0.5*u2_prev*u2_prev * v2->dy() );
 
   // continuity equation
-  rhs->addTerm( u1_prev * vc->dx() );
-  rhs->addTerm( u2_prev * vc->dy() );
+  rhs->addTerm( u1_prev * q->dx() );
+  rhs->addTerm( u2_prev * q->dy() );
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
@@ -256,49 +227,29 @@ int main(int argc, char *argv[]) {
   else if (norm == 1)
   {
     // ip = bf->l2Norm();
-    // ip->addTerm( v1 );
-    // ip->addTerm( v2 );
-    // ip->addTerm( vc );
-    // ip->addTerm( sqrt(1./Re)*v1->grad() );
-    // ip->addTerm( sqrt(1./Re)*v2->grad() );
-    // ip->addTerm( beta*v1->grad() );
-    // ip->addTerm( beta*v2->grad() );
-    // ip->addTerm( tau1->div()-beta*v1->grad() );
-    // ip->addTerm( tau2->div()-beta*v2->grad() );
-    // ip->addTerm( tau1 );
-    // ip->addTerm( tau2 );
+    FunctionPtr ipw = Teuchos::rcp( new IPWeight );
+    ip->addTerm( ipw*tau1 );
+    ip->addTerm( ipw*tau2 );
+    ip->addTerm( ipw*sqrt(1./Re)*v1->grad() );
+    ip->addTerm( ipw*sqrt(1./Re)*v2->grad() );
+    ip->addTerm( ipw*tau1->div()
+        -0.5*ipw*u1_prev*v1->dx()
+        -0.5*ipw*u2_prev*v1->dy()
+        -0.5*ipw*u1_prev*v1->dx()
+        -0.5*ipw*u2_prev*v2->dx()
+        -ipw*q->dx() );
+    ip->addTerm( ipw*tau2->div()
+        -0.5*ipw*u1_prev*v2->dx()
+        -0.5*ipw*u2_prev*v2->dy()
+        -0.5*ipw*u1_prev*v1->dy()
+        -0.5*ipw*u2_prev*v2->dy()
+        -ipw*q->dy() );
+    ip->addTerm( ipw*v1->dx() );
+    ip->addTerm( ipw*v2->dy() );
+    ip->addTerm( ipw*v1 );
+    ip->addTerm( ipw*v2 );
+    ip->addTerm( ipw*q );
   }
-  // // Robust norm
-  // else if (norm == 1)
-  // {
-  //   // robust test norm
-  //   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-  //   // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
-  //   // if (!zeroL2)
-  //     ip->addTerm( v );
-  //   ip->addTerm( sqrt(epsilon) * v->grad() );
-  //   // Weight these two terms for inflow
-  //   ip->addTerm( beta * v->grad() );
-  //   ip->addTerm( tau->div() );
-  //   ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  //   // if (zeroL2)
-  //   //   ip->addZeroMeanTerm( h2_scaling*v );
-  // }
-  // // Modified robust norm
-  // else if (norm == 2)
-  // {
-  //   // robust test norm
-  //   FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-  //   // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
-  //   // if (!zeroL2)
-  //     ip->addTerm( v );
-  //   ip->addTerm( sqrt(epsilon) * v->grad() );
-  //   ip->addTerm( beta * v->grad() );
-  //   ip->addTerm( tau->div() - beta*v->grad() );
-  //   ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-  //   // if (zeroL2)
-  //   //   ip->addZeroMeanTerm( h2_scaling*v );
-  // }
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -307,22 +258,43 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr bottomFree = Teuchos::rcp( new BottomFree );
   SpatialFilterPtr bottomPlate = Teuchos::rcp( new BottomPlate );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(ymax) );
-  bc->addDirichlet(t2hat, bottomFree, zero);
   bc->addDirichlet(u2hat, bottomFree, zero);
+  // bc->addDirichlet(t2hat, bottomFree, zero);
   bc->addDirichlet(u1hat, bottomPlate, zero);
   bc->addDirichlet(u2hat, bottomPlate, zero);
   bc->addDirichlet(u1hat, top, one);
   bc->addDirichlet(t2hat, top, zero);
   bc->addDirichlet(u1hat, left, one);
   bc->addDirichlet(u2hat, left, zero);
-  // bc->addDirichlet(t1hat, left, zero);
-  // bc->addDirichlet(t2hat, left, zero);
-  bc->addDirichlet(t1hat, right, zero);
+  // bc->addDirichlet(t1hat, right, zero);
+
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+  // LinearTermPtr xflux = Teuchos::rcp<LinearTerm>( new LinearTerm(1, t1hat) );
+  // LinearTermPtr yflux = Teuchos::rcp<LinearTerm>( new LinearTerm(1, t1hat) );
+  // LinearTermPtr pTerm = Teuchos::rcp<LinearTerm>( new LinearTerm(-1, p) );
+  // LinearTermPtr uTerm = Teuchos::rcp<LinearTerm>( new LinearTerm(-0.5*u1_prev, u1) );
+  vector<double> weight1;
+  vector<double> weight2;
+  weight1.push_back(1);
+  weight1.push_back(0);
+  weight2.push_back(0);
+  weight2.push_back(1);
+  LinearTermPtr sigma1Term = Teuchos::rcp<LinearTerm>( new LinearTerm(weight1, sigma1) );
+  // LinearTermPtr sigma2Term = Teuchos::rcp<LinearTerm>( new LinearTerm(weight2, sigma2) );
+  // xflux->addTerm(pTerm, true);
+  // xflux->addTerm(uTerm, true);
+  // // yflux->addTerm(pTerm, true);
+  // pc->addConstraint(sigma1Term==zero, right);
+  // pc->addConstraint(sigma2Term==zero, top);
+  // pc->addConstraint(sigma2Term==zero, bottomFree);
+  // pc->addConstraint(yflux==zero, left);
+  // pc->addConstraint(t1hat+0.5*u1hat==zero, right);
 
   // zero mean constraint on pressure
-  bc->addZeroMeanConstraint(p);
+  // bc->addZeroMeanConstraint(p);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  // solution->setFilter(pc);
 
   // ==================== Register Solutions ==========================
   mesh->registerSolution(solution);

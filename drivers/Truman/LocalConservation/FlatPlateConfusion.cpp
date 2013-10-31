@@ -161,40 +161,40 @@ int main(int argc, char *argv[]) {
   if (norm == 0)
   {
     ip = bf->graphNorm();
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
-    ip->addZeroMeanTerm( h2_scaling*v );
+    // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
+    // ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Robust norm
   else if (norm == 1)
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
-    if (!zeroL2)
+    // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
+    // if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    if (zeroL2)
-      ip->addZeroMeanTerm( h2_scaling*v );
+    // if (zeroL2)
+    //   ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Modified robust norm
   else if (norm == 2)
   {
     // robust test norm
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
+    // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
-    if (!zeroL2)
+    // if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() - beta*v->grad() );
     ip->addTerm( ip_scaling/sqrt(epsilon) * tau );
-    if (zeroL2)
-      ip->addZeroMeanTerm( h2_scaling*v );
+    // if (zeroL2)
+    //   ip->addZeroMeanTerm( h2_scaling*v );
   }
 
   ////////////////////   SPECIFY RHS   ///////////////////////
