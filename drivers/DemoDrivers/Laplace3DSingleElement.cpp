@@ -100,6 +100,73 @@ double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
   return value[0];
 }
 
+bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
+                      BasisPtr basis2, int side2, int edge2, int dofOrdinal2) {
+  // sides are sides of the hex
+  // bases are defined on quad (sides of hex)
+  // and should agree on their shared edge
+  int edgeDim = 1;
+  int quadDim = 2;
+  int numPoints = 4;
+  double dxPerPoint = 2.0 / (numPoints - 1);
+  
+  double tol = 1e-14;
+  
+  FieldContainer<double> edgePoints(numPoints,edgeDim);
+  for (int i=0; i<numPoints; i++) {
+    // equispaced in (-1,1)
+    edgePoints(i,0) = dxPerPoint * i - 1;
+  }
+//  cout << "edgePoints:\n" << edgePoints;
+  
+  if ((basis1->rangeRank() != 0) || (basis2->rangeRank() != 0)) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basesAgreeOnEdge only supports scalar-valued bases");
+  }
+  FieldContainer<double> values1(basis1->getCardinality(),numPoints);
+  FieldContainer<double> values2(basis2->getCardinality(),numPoints);
+  
+  FieldContainer<double> quadPoints1(numPoints,quadDim);
+  FieldContainer<double> quadPoints2(numPoints,quadDim);
+  
+  // map from edge points to quadPoints1 and quadPoints2
+  shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
+  CellTools<double>::mapToReferenceSubcell(quadPoints1, edgePoints, edgeDim, edge1, quad_4);
+  CellTools<double>::mapToReferenceSubcell(quadPoints2, edgePoints, edgeDim, edge2, quad_4);
+  
+  basis1->getValues(values1, quadPoints1, OPERATOR_VALUE);
+  basis2->getValues(values2, quadPoints2, OPERATOR_VALUE);
+  
+  cout << "proposing to identify side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
+  cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << endl;
+  
+  cout << "quadPoints1:\n" << quadPoints1;
+  cout << "quadPoints2:\n" << quadPoints2;
+  
+  cout << "values1:\n" << values1;
+  cout << "values2:\n" << values2;
+  
+  bool success = true;
+  for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+    double diff = abs(values1(dofOrdinal1,ptIndex)-values2(dofOrdinal2,ptIndex));
+    if (diff > tol) {
+      success = false;
+      cout << "bases differ by " << diff << " at point " << edgePoints(ptIndex,0) << endl;
+    }
+  }
+  
+  if (success) {
+    cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
+    cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
+    cout << "bases agree\n";
+  } else {
+    cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
+    cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
+    cout << "bases disagree\n";
+  }
+  
+  return success;
+}
+
 int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
@@ -230,9 +297,6 @@ int main(int argc, char *argv[]) {
 //      cout << "Side " << sideOrdinal << endl;
       for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++) {
         // how does the hex identify this edge?
-        // that's not quite the right question to ask, I think, particularly since our Hexahedron<8> only has vertex nodes,
-        // but clearly Intrepid's basis classes have a way of ordering edges in each topology.
-        // TODO: fix this call (broken!)
         unsigned hexNodeForVertex0 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, edgeOrdinal);
         unsigned hexNodeForVertex1 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, (edgeOrdinal+1)%(sideTopo.getVertexCount()));
         
@@ -332,22 +396,51 @@ int main(int argc, char *argv[]) {
         for (int dofNumber=0; dofNumber<numDofs; dofNumber++) {
           // this is the point where we consider the relative permutation of the identified bases...
           // when we do this in a mesh, we'll need to do something more sophisticated.
+          unsigned firstDofOrdinal, secondDofOrdinal;
           if (orientationAgrees != firstOrientationAgrees) {
-            unsigned firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
-                                                 ->getDofOrdinal(edgeDim, edgeOrdinal, numDofs - dofNumber - 1);
-            unsigned edgeDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                                   ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
-            trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
-                                             sideOrdinal, edgeDofOrdinal);
+            firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, numDofs - dofNumber - 1);
+//                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber); // JUST A TEST
+            secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+                                            ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
           } else {
             cout << "Unexpectedly, two sides agree on edge orientation.\n";
-            unsigned firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+            firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+                                                    ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber);
+            secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
                                                     ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
-            unsigned edgeDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                                    ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
-            trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
-                                             sideOrdinal, edgeDofOrdinal);
           }
+          
+          if (! basesAgreeOnEdge(trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal), firstSideOrdinal, firstEdgeOrdinalInSide, firstDofOrdinal,
+                                 trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal), sideOrdinal, edgeOrdinal, secondDofOrdinal) ) {
+            cout << "identified basis dofs disagree on shared edge...\n";
+            // the commented out code below is hackish, and appears not to work anyway -- we pass the check, but the ultimate solution isn't right.
+            // need to work out how the mapping from physical space to the reference quad on a side works.  There may be something amiss with the
+            // way we treat this in BasisCache/BasisEvaluation.
+//            // try the opposite
+//            if (orientationAgrees != firstOrientationAgrees) {
+//              firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+//                                             ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber);
+//              secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+//                                              ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+//            } else {
+//              firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
+//                                             ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, numDofs - dofNumber - 1);
+//              //                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber); // JUST A TEST
+//              secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+//                                              ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+//            }
+//            if (! basesAgreeOnEdge(trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal), firstSideOrdinal, firstEdgeOrdinalInSide, firstDofOrdinal,
+//                                   trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal), sideOrdinal, edgeOrdinal, secondDofOrdinal) ) {
+//              cout << "after attempted correction, bases still disagree on shared edge.\n";
+//            } else {
+//              cout << "attempted correction of basis identification appears to have worked.\n";
+//            }
+            
+          }
+          trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstDofOrdinal,
+                                           sideOrdinal, secondDofOrdinal);
+          
           
         }
       }
@@ -436,6 +529,7 @@ int main(int argc, char *argv[]) {
     bcVector.resize(numTrialDofs,1); // vector as a 2D array
     FieldContainer<double> rhsAdjustment(numTrialDofs,1);
     SerialDenseWrapper::multiply(rhsAdjustment, finalStiffness, bcVector);
+    cout << "rhsAdjustment:\n" << rhsAdjustment;
     rhsAdjustment.resize(numTrialDofs);
     localRHSVector.resize(numTrialDofs);
     bcVector.resize(numTrialDofs);
@@ -472,7 +566,7 @@ int main(int argc, char *argv[]) {
       }
     }
     if (bcsCorrect)
-      cout << "BCs were correctly imposed.\n";
+      cout << "BCs were correctly imposed (insofar as bcVector matches solution in appropriate dof entries).\n";
     else
       cout << "BCs were NOT correctly imposed.\n";
     
