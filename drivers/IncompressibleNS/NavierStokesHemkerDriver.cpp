@@ -51,6 +51,7 @@ FunctionPtr inflowSpeed;
 bool velocityConditionsTopAndBottom;
 bool velocityConditionsRight;
 bool streamwiseGradientConditionsRight;
+bool noBCsRight;
 
 Teuchos::RCP<BCEasy> bc;
 Teuchos::RCP<PenaltyConstraints> pc;
@@ -603,6 +604,9 @@ void recreateBCs() { // recreates both bc and pc, as necessary
         cout << "Imposing streamwise gradient == 0 at outflow with penalty constraints.\n";
       pc->addConstraint(sigma11==zero, right);
       pc->addConstraint(sigma21==zero, right);
+    } else if (noBCsRight) {
+      if (rank==0)
+        cout << "Not imposing any BCs at outflow.\n";
     } else {
       if (rank==0)
         cout << "Imposing zero traction at outflow with penalty constraints.\n";
@@ -724,6 +728,8 @@ int main(int argc, char *argv[]) {
     velocityConditionsRight = args.Input<bool>("--velocityConditionsRight", "impose velocity BCs on right boundaries", false);
     
     streamwiseGradientConditionsRight = args.Input<bool>("--streamwiseGradientConditionsRight", "impose streamwise gradient BCs on right boundaries", false);
+    
+    noBCsRight = args.Input<bool>("--noBCsRight", "impose no BCs on right boundaries", false);
 
     bool skipPostProcessing = args.Input<bool>("--skipPostProcessing", "skip computations of mass flux, pressure, and stream solution", false);
     
@@ -806,6 +812,8 @@ int main(int argc, char *argv[]) {
         cout << "imposing velocity BCs on outflow boundary.\n";
       } else if (streamwiseGradientConditionsRight) {
         cout << "imposing streamwise gradient BCs on outflow boundary.\n";
+      } else if (noBCsRight) {
+        cout << "imposing no BCs on outflow boundary.\n";
       } else {
         cout << "imposing zero-traction BCs on outflow boundary.\n";
       }
@@ -984,7 +992,7 @@ int main(int argc, char *argv[]) {
     mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
     
     if (rank==0) {
-      GnuPlotUtil::writeComputationalMeshSkeleton("preliminaryHemkerMesh", mesh, true);
+      GnuPlotUtil::writeComputationalMeshSkeleton("preliminaryHemkerMesh", mesh, false);
     }
     
     // now, let's get the elements to be roughly isotropic
@@ -1001,7 +1009,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (rank==0) {
-      GnuPlotUtil::writeComputationalMeshSkeleton("initialHemkerMesh", mesh, true);
+      GnuPlotUtil::writeComputationalMeshSkeleton("initialHemkerMesh", mesh, false);
     }
     
     if (rank == 0) {
