@@ -34,6 +34,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   vector<vtkFloatArray*> fieldData;
   vtkPoints* points = vtkPoints::New();
   vtkIntArray* polyOrderData = vtkIntArray::New();
+  vtkIntArray* cellIDData = vtkIntArray::New();
 
   // Get trialIDs
   vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
@@ -56,6 +57,8 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   }
   polyOrderData->SetNumberOfComponents(1);
   polyOrderData->SetName("Polynomial Order");
+  cellIDData->SetNumberOfComponents(1);
+  cellIDData->SetName("Cell ID");
 
   unsigned int total_vertices = 0;
 
@@ -177,6 +180,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
                 ind1, ind2, ind3, ind4};
               ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
               polyOrderData->InsertNextValue(pOrder-1);
+              cellIDData->InsertNextValue(cellIDs[cellIndex]);
 
               subcellStartIndex++;
             }
@@ -195,6 +199,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
                 ind1, ind2, ind3};
               ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
               polyOrderData->InsertNextValue(pOrder-1);
+              cellIDData->InsertNextValue(cellIDs[cellIndex]);
 
               if (i < num1DPts-2-j)
               {
@@ -252,6 +257,7 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
     fieldData[varIdx]->Delete();
   }
   ug->GetCellData()->AddArray(polyOrderData);
+  ug->GetCellData()->AddArray(cellIDData);
 
   vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
 #if VTK_MAJOR_VERSION <= 5
