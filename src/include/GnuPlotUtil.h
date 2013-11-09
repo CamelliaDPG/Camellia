@@ -14,12 +14,67 @@
 #include "ParametricCurve.h"
 
 class GnuPlotUtil {
+  static FieldContainer<double> cellCentroids(MeshPtr mesh) {
+    // this only works on quads right now
+    
+    int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
+    int numActiveElements = mesh->numActiveElements();
+    
+    FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+    vector<int> cellIDs;
+    
+    for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+      ElementPtr cell = mesh->getActiveElement(cellIndex);
+      bool neglectCurves = true;
+      vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
+      int numEdges = edgeLines.size();
+      int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
+      // to start, compute edgePoints on the reference cell
+      int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
+      FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
+      
+      int ptIndex = 0;
+      for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
+        ParametricCurvePtr edge = edgeLines[edgeIndex];
+        double t = 0;
+        double increment = 1.0 / (numPointsPerEdge - 1);
+        // last edge gets one extra point (to connect to first edge):
+        int thisEdgePoints = (edgeIndex < edgeLines.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
+        for (int i=0; i<thisEdgePoints; i++) {
+          double x, y;
+          edge->value(t,x,y);
+          edgePoints(ptIndex,0) = x;
+          edgePoints(ptIndex,1) = y;
+          ptIndex++;
+          t += increment;
+        }
+      }
+      // make a one-cell BasisCache initialized with the edgePoints on the ref cell:
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cell->cellID());
+      basisCache->setRefCellPoints(edgePoints);
+      
+      //      cout << "transformedPoints:\n" << transformedPoints;
+      
+      // this only works on quads right now
+      FieldContainer<double> refCellCentroid(1,spaceDim);
+      for (int i=0; i<spaceDim; i++) {
+        refCellCentroid(0,i) = 0.0;
+      }
+      FieldContainer<double> transformedCentroid(1,spaceDim);
+      basisCache->setRefCellPoints(refCellCentroid);
+      for (int i=0; i<spaceDim; i++) {
+        cellCentroids(cellIndex,i) = basisCache->getPhysicalCubaturePoints()(0,0,i);
+      }
+    }
+    return cellCentroids;
+  }
+  
 public:
   static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false) {
     FunctionPtr transformationFunction = mesh->getTransformationFunction();
     if (transformationFunction.get()==NULL) {
       // then the computational and exact meshes are the same: call the other method:
-      writeExactMeshSkeleton(filePath,mesh,2);
+      writeExactMeshSkeleton(filePath,mesh,2,labelCells);
       return;
     }
     
@@ -35,12 +90,12 @@ public:
     
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
     
-    FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+    FieldContainer<double> cellCentroids;
     vector<int> cellIDs;
     
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
-      bool neglectCurves = true;
+      cellIDs.push_back(cell->cellID());
       vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
       int numEdges = edgeLines.size();
       int numPointsPerEdge = max(10,cell->elementType()->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
@@ -96,16 +151,7 @@ public:
       
       if (labelCells) {
         // this only works on quads right now
-        FieldContainer<double> refCellCentroid(1,spaceDim);
-        for (int i=0; i<spaceDim; i++) {
-          refCellCentroid(0,i) = 0.0;
-        }
-        FieldContainer<double> transformedCentroid(1,spaceDim);
-        basisCache->setRefCellPoints(refCellCentroid);
-        for (int i=0; i<spaceDim; i++) {
-          cellCentroids(cellIndex,i) = basisCache->getPhysicalCubaturePoints()(0,0,i);
-        }
-        cellIDs.push_back(cell->cellID());
+        cellCentroids = GnuPlotUtil::cellCentroids(mesh);
       }
     }
     
@@ -154,9 +200,7 @@ public:
     scriptOut.close();
   }
   
-  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge) {
-    int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
-    
+  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells=false) {
     ofstream fout(filePath.c_str());
     fout << setprecision(15);
     
@@ -164,11 +208,17 @@ public:
     fout << "# x                  y\n";
     
     int numActiveElements = mesh->numActiveElements();
+    FieldContainer<double> cellCentroids;
+    if (labelCells) {
+      cellCentroids = GnuPlotUtil::cellCentroids(mesh);
+    }
     
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
     
+    vector<int> cellIDs;
     for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
       ElementPtr cell = mesh->getActiveElement(cellIndex);
+      cellIDs.push_back(cell->cellID());
       vector< ParametricCurvePtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
       for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
         ParametricCurvePtr edge = edgeCurves[edgeIndex];
@@ -198,6 +248,13 @@ public:
     fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    if (labelCells) {
+      for (int i=0; i<cellIDs.size(); i++) {
+        int cellID = cellIDs[i];
+        fout << "# set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        fout << cellCentroids(i,1) << " center " << endl;
+      }
+    }
     fout.close();
     
     ofstream scriptOut((filePath + ".p").c_str());
@@ -205,6 +262,13 @@ public:
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
     scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
     scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines\n";
+    if (labelCells) {
+      for (int i=0; i<cellIDs.size(); i++) {
+        int cellID = cellIDs[i];
+        scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
+        scriptOut << cellCentroids(i,1) << " center " << endl;
+      }
+    }
     scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
 //    scriptOut << "replot\n";
