@@ -42,6 +42,10 @@ LinearTermPtr RieszRep::getRHS(){
   return _rhs;
 }
 
+MeshPtr RieszRep::mesh() {
+  return _mesh;
+}
+
 map<int,FieldContainer<double> > RieszRep::integrateRHS(){
 
   map<int,FieldContainer<double> > cellRHS;
@@ -84,8 +88,7 @@ void RieszRep::computeRieszRep(int cubatureEnrichment){
   Epetra_SerialComm Comm;
 #endif  
 
-  //  vector< ElementPtr > allElems = _mesh->activeElements(); // CHANGE TO DISTRIBUTED COMPUTATION
-  vector< ElementPtr > allElems = _mesh->elementsInPartition(rank); // CHANGE TO DISTRIBUTED COMPUTATION
+  vector< ElementPtr > allElems = _mesh->elementsInPartition(rank);
   vector< ElementPtr >::iterator elemIt;     
   for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
 
@@ -174,8 +177,7 @@ double RieszRep::getNorm(){
   return sqrt(normSum);
 }
 
-map<int,double> RieszRep::getNormsSquared(){
-
+const map<int,double> & RieszRep::getNormsSquared(){ // should be renamed getNormsSquaredGlobal()
   return _rieszRepNormSquaredGlobal;
 }
 
@@ -257,7 +259,10 @@ void RieszRep::distributeDofs(){
     int cellID = (*elemIt)->cellID();
     if (rank==_mesh->partitionForCellID(cellID)){ // if cell is in partition
       int ind = cellIndex;
-      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);      
+      int err = distributedRieszNorms.ReplaceGlobalValues(1,&_rieszRepNormSquared[cellID],&ind);
+      if (err != 0) {
+        cout << "RieszRep::distributeDofs(): on rank" << rank << ", ReplaceGlobalValues returned error code " << err << endl;
+      }
     }
     cellIndex++;
   }

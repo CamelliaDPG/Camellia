@@ -74,7 +74,7 @@ class RieszRep {
   
   MeshPtr _mesh;
   Teuchos::RCP< DPGInnerProduct > _ip;
-  LinearTermPtr _rhs;
+  LinearTermPtr _rhs;  // the RHS stuff here and below is misnamed -- should just be called functional
   bool _printAll;
   bool _repsNotComputed;
  
@@ -95,15 +95,17 @@ class RieszRep {
     _rhs = rhs;
   }
 
-  LinearTermPtr getRHS();
+  LinearTermPtr getRHS(); // getFunctional()
+  
+  MeshPtr mesh();
 
   // for testing
-  map<int,FieldContainer<double> > integrateRHS();
+  map<int,FieldContainer<double> > integrateRHS(); // integrateFunctional()
 
   void computeRieszRep(int cubatureEnrichment=0);
 
   double getNorm();
-  map<int,double> getNormsSquared();
+  const map<int,double> &getNormsSquared();
 
   void distributeDofs();
 
