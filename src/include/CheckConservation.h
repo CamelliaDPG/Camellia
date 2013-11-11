@@ -7,7 +7,7 @@
 
 #include <Teuchos_Tuple.hpp>
 
-Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, VarFactory& varFactory, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
+Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source, Teuchos::RCP<Mesh> mesh, int cubatureEnrichment = 0)
 {
   double maxMassFluxIntegral = 0.0;
   double totalMassFlux = 0.0;
@@ -40,6 +40,30 @@ Teuchos::Tuple<double, 3> checkConservation(FunctionPtr flux, FunctionPtr source
   Teuchos::Tuple<double, 3> fluxImbalances = Teuchos::tuple(maxMassFluxIntegral, totalMassFlux, totalAbsMassFlux);
 
   return fluxImbalances;
+}
+
+double computeFluxOverElementSides(FunctionPtr flux, Teuchos::RCP<Mesh> mesh, vector< pair<ElementPtr, int> > originalElemFaces, int cubatureEnrichment=0)
+{
+   double totalMassFlux = 0.0;
+   for (vector< pair<ElementPtr, int> >::iterator origIt = originalElemFaces.begin(); origIt != originalElemFaces.end(); ++origIt)
+   {
+      int originalSideIndex = origIt->second;
+      vector< pair<int, int> > cellFaces = origIt->first->getDescendantsForSide(originalSideIndex);
+      for (vector< pair<int, int> >::iterator it = cellFaces.begin(); it != cellFaces.end(); ++it)
+      {
+         int cellID = it->first;
+         int sideIndex = it->second;
+         BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
+         BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
+         // FieldContainer<double> physicalCubaturePoints = sideBasisCache->getPhysicalCubaturePoints();
+         // double xCell0 = physicalCubaturePoints(0,0,0);
+         // cout << physicalCubaturePoints << endl;
+         FieldContainer<double> sideIntegral(1);
+         flux->integrate(sideIntegral, sideBasisCache, true);
+         totalMassFlux += sideIntegral(0);
+      }
+   }
+   return totalMassFlux;
 }
 
 #endif /* end of include guard: CHECKCONSERVATION_H */

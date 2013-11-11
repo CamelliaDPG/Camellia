@@ -11,8 +11,22 @@
 #include "Solution.h"
 
 RefinementStrategy::RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h,
-                                       int max_p, bool preferPRefinements) {
+                                        int max_p, bool preferPRefinements) {
   _solution = solution;
+  _relativeEnergyThreshold = relativeEnergyThreshold;
+  _enforceOneIrregularity = true;
+  _reportPerCellErrors = false;
+  _anisotropicThreshhold = 10.0;
+  _maxAspectRatio = 2^5; // five anisotropic refinements of an element
+  _min_h = min_h;
+  _preferPRefinements = preferPRefinements;
+  _max_p = max_p;
+}
+
+RefinementStrategy::RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip,
+                                        double relativeEnergyThreshold, double min_h,
+                                        int max_p, bool preferPRefinements) {
+  _rieszRep = Teuchos::rcp( new RieszRep(mesh, ip, residual) );
   _relativeEnergyThreshold = relativeEnergyThreshold;
   _enforceOneIrregularity = true;
   _reportPerCellErrors = false;
@@ -43,10 +57,32 @@ void RefinementStrategy::setReportPerCellErrors(bool value) {
   _reportPerCellErrors = value;
 }
 
+MeshPtr RefinementStrategy::mesh() {
+  MeshPtr mesh;
+  if (_solution.get()) {
+    mesh = _solution->mesh();
+  } else {
+    mesh = _rieszRep->mesh();
+  }
+  return mesh;
+}
+
 void RefinementStrategy::refine(bool printToConsole) {
   // greedy refinement algorithm - mark cells for refinement
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
-  const map<int, double>* energyError = &(_solution->energyError());
+  MeshPtr mesh = this->mesh();
+  
+  map<int, double> energyError;
+  if (_rieszRep.get() != NULL) {
+    _rieszRep->computeRieszRep();
+    energyError = _rieszRep->getNormsSquared();
+    // take square roots:
+    for (map<int, double>::iterator energyEntryIt = energyError.begin();
+         energyEntryIt != energyError.end(); energyEntryIt++) {
+      energyEntryIt->second = sqrt( energyEntryIt->second );
+    }
+  } else {
+    energyError = _solution->energyError();
+  }
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
   double maxError = 0.0;
@@ -63,7 +99,7 @@ void RefinementStrategy::refine(bool printToConsole) {
        activeElemIt != activeElements.end(); activeElemIt++) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
-    double cellEnergyError = energyError->find(cellID)->second;
+    double cellEnergyError = energyError.find(cellID)->second;
     
     double h = sqrt(cellMeasures[cellID]);
     if (h > _min_h) {
@@ -78,7 +114,7 @@ void RefinementStrategy::refine(bool printToConsole) {
          activeElemIt != activeElements.end(); activeElemIt++) {
       Teuchos::RCP< Element > current_element = *(activeElemIt);
       int cellID = current_element->cellID();
-      double cellEnergyError = energyError->find(cellID)->second;
+      double cellEnergyError = energyError.find(cellID)->second;
       double percent = (cellEnergyError*cellEnergyError) / (totalEnergyError*totalEnergyError) * 100;
       if (percent > 0.1) {
         cout << cellID << ": " << cellEnergyError*cellEnergyError << " ( " << percent << " %)\n";
@@ -100,7 +136,7 @@ void RefinementStrategy::refine(bool printToConsole) {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
     double h = sqrt(cellMeasures[cellID]);
-    double cellEnergyError = energyError->find(cellID)->second;
+    double cellEnergyError = energyError.find(cellID)->second;
     int p = mesh->cellPolyOrder(cellID);
 
     if ( cellEnergyError >= maxError * _relativeEnergyThreshold ) {
@@ -135,7 +171,7 @@ void RefinementStrategy::refine(bool printToConsole) {
 
 void RefinementStrategy::getCellsAboveErrorThreshhold(vector<int> &cellsToRefine){
   // greedy refinement algorithm - mark cells for refinement
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
   const map<int, double>* energyError = &(_solution->energyError());
   vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
   
@@ -166,7 +202,7 @@ void RefinementStrategy::getCellsAboveErrorThreshhold(vector<int> &cellsToRefine
 
 // defaults to h-refinement
 void RefinementStrategy::refineCells(vector<int> &cellIDs) {
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
   hRefineCells(mesh, cellIDs);
 }
 
@@ -214,7 +250,7 @@ void RefinementStrategy::setResults(RefinementResults &solnResults, int numEleme
 // without variable anisotropic threshholding
 void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr) {
   // greedy refinement algorithm - mark cells for refinement
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
 
   vector<int> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells);
@@ -252,7 +288,7 @@ void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<
 void RefinementStrategy::refine(bool printToConsole, map<int,double> &xErr, map<int,double> &yErr, map<int,double> &threshMap, map<int, bool> useHRefMap) {
 
   // greedy refinement algorithm - mark cells for refinement
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
 
   vector<int> xCells, yCells, regCells;
   getAnisotropicCellsToRefine(xErr,yErr,xCells,yCells,regCells, threshMap);
@@ -315,7 +351,7 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
 // anisotropy with variable threshholding
 void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<int,double> &yErr, vector<int> &xCells, vector<int> &yCells, vector<int> &regCells, map<int,double> &threshMap){  
   map<int,double> energyError = _solution->energyError();  
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
   vector<int> cellsToRefine;
   getCellsAboveErrorThreshhold(cellsToRefine);
   for (vector<int>::iterator cellIt = cellsToRefine.begin();cellIt!=cellsToRefine.end();cellIt++){
@@ -354,7 +390,7 @@ void RefinementStrategy::getAnisotropicCellsToRefine(map<int,double> &xErr, map<
 // enforcing one-irregularity with anisotropy - ONLY FOR QUADS RIGHT NOW.  ALSO NOT PARALLELIZED
 bool RefinementStrategy::enforceAnisotropicOneIrregularity(vector<int> &xCells, vector<int> &yCells){
   bool success = true;
-  Teuchos::RCP< Mesh > mesh = _solution->mesh();
+  MeshPtr mesh = this->mesh();
   int maxIters = mesh->numActiveElements(); // should not refine more than the number of elements...
 
   // build children list - for use in "upgrading" refinements to prevent deadlocking

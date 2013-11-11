@@ -26,6 +26,8 @@
 
 #include "ParameterFunction.h"
 
+#include "MLSolver.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -355,6 +357,9 @@ int main(int argc, char *argv[]) {
   double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
   
   bool useMumps = args.Input<bool>("--useMumps", "use MUMPS for global linear solves", true);
+  bool useML = args.Input<bool>("--useML", "use ML for global linear solves", false);
+  double mlTol = args.Input<double>("--mlTol", "tolerance for ML convergence", 1e-6);
+  if (useML) useMumps = false; // mutually exclusive...
   
   args.Process();
   
@@ -380,6 +385,8 @@ int main(int argc, char *argv[]) {
       cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
     exit(1);
 #endif
+  } else if (useML) {
+    solver = Teuchos::rcp(new MLSolver(mlTol));
   } else {
     solver = Teuchos::rcp(new KluSolver());
   }
@@ -397,6 +404,13 @@ int main(int argc, char *argv[]) {
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOT starting with 0 solution after refinement...\n";
+    }
+    if (useMumps) {
+      cout << "Using MUMPS for global linear solves.\n";
+    } else if (useML) {
+      cout << "Using ML for global linear solves.\n";
+    } else {
+      cout << "Using KLU for global linear solves.\n";
     }
   }
   

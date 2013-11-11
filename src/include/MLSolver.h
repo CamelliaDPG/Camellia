@@ -59,6 +59,7 @@ public:
     
     ML_Epetra::MultiLevelPreconditioner* MLPrec;
     bool useAztecAsSolver = false;
+    bool useSADefaults = true;
     if (useAztecAsSolver) {
       ML_Epetra::SetDefaults("SA",MLList);
       int iters = 5;
@@ -70,6 +71,8 @@ public:
         sprintf(parameter,"smoother: sweeps (level %d)", ilevel);
         MLList.set(parameter, iters);
       }
+    } else if (useSADefaults) {
+      ML_Epetra::SetDefaults("SA",MLList);      
     } else {
       ML_Epetra::SetDefaults("SA",MLList);
       

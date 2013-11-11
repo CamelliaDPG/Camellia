@@ -11,9 +11,16 @@
 
 #include "Teuchos_RCP.hpp"
 
+#include "LinearTerm.h"
+
+#include "IP.h"
+
+#include "RieszRep.h"
+
 class Solution;
 class Mesh;
 typedef Teuchos::RCP<Solution> SolutionPtr;
+typedef Teuchos::RCP<Mesh> MeshPtr;
 
 using namespace std;
 
@@ -27,6 +34,9 @@ protected:
   
   static void setResults(RefinementResults &solnResults, int numElements, int numDofs, double totalEnergyError);
   SolutionPtr _solution;
+  
+  RieszRepPtr _rieszRep;
+  
   double _relativeEnergyThreshold;
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;  
@@ -36,8 +46,11 @@ protected:
   double _min_h;
   int _max_p;
   bool _preferPRefinements;
+  
+  MeshPtr mesh();
 public:
   RefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+  RefinementStrategy( MeshPtr mesh, LinearTermPtr residual, IPPtr ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   void setMaxAspectRatio(double value);

@@ -8,6 +8,7 @@
 \usepackage{subcaption}
 
 \def\btau{\boldsymbol\tau}
+\def\bftau{\boldsymbol\tau}
 \def\bsigma{\boldsymbol\sigma}
 \def\bbeta{\boldsymbol\beta}
 \def\blambda{\boldsymbol\lambda}
@@ -55,6 +56,10 @@
 \newcommand{\Oh}{\Omega_h}
 \newcommand{\ptl}{{\partial}}
 \newcommand{\bfsig}{\mbox{\boldmath $\sigma$}}
+\newcommand{\bfv}{\boldsymbol v}
+\newcommand{\bfu}{\boldsymbol u}
+\newcommand{\bfpsi}{\boldsymbol\psi}
+\newcommand{\bflambda}{\boldsymbol\lambda}
 \newcommand{\bfn}{\mbox{\boldmath $n$}}
 \newcommand{\bfH}{\mbox{\boldmath $H$}}
 \newcommand{\HdivK}{\bfH(\text{div},K)}
@@ -389,170 +394,235 @@ convection-diffusion, we get:
 \label{eq:conservativeConfusionSystem}
 \end{equation}
 
-% We can decompose the discrete flux space $\hat F_h$ into equilibriated fluxes
-% (zero net flux over each element) and some algebraic complement:
-% \begin{equation}
-% \hat F_h=\hat F_h^e\oplus\hat F_h^{ne}\,,\quad\hat
-% F_h^{e}:=\{\hat t:\langle\hat t,(1_K,\bs0)\rangle=0\quad\forall K\}\,.
-% \label{eq:decomposition}
-% \end{equation}
-% In theory, we could accomplish this by employing for fluxes in $\hat F_h^{e}$
-% traces of curls, $\nabla\times\phi$, but we don't do this in practice.
-%
-% \textcolor{red}{
-% In practice, we solve \eqref{eq:conservativeConfusionSystem} as a fully
-% coupled system of equations, but for didactic purposes, we can examine it one
-% piece at a time. If we restrict \eqref{eq:conservativeConfusionSystem}$_1$ to
-% $\delta\hat t\in\hat F_h^{ne}$, the Lagrange multiplier term drops out and we
-% are left with a system that we can solve for $u_h$, $\bsigma_h$, $\hat u_h$,
-% and $\hat t_h^e\in\hat F^e_h$.
-% }
-%
-% \textcolor{red}{
-% Restricting ourselves to $\delta\hat t\in\hat
-% F_h^{e}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a system  of
-% equations that can be solved for $u_h$, $\bsigma_h$, $\hat u$, and $\hat
-% t\in\hat F_h^e$. The remaining fluxes, $\hat t\in\hat F_h^{ne}$ are determined
-% from \eqref{eq:conservativeConfusionSystem}$_2$. Finally, testing with $\hat
-% t\in\hat F_h^{ne}$ in \eqref{eq:conservativeConfusionSystem}$_1$, we obtain a
-% system of equations that can be solved for Lagrange multipliers $\lambda_K$.
-% }
-%
-% \subsection{\textcolor{red}{Proof of Convergence}}
-% In the following discussion, we do not account for the error in approximating
-% the optimal test functions because $\dots$ (Need explanation).
-% We cannot directly use Brezzi's theorem, but we can reproduce his argument.
-% First of all, variational formulation \eqref{eq:variationalFormulation} is
-% equivalent to:
-%
-% Find $\bs u\in\bs U$ such that
-% \begin{equation}
-% b(\bs u,T(\delta\bs u))=(f,T(\delta\bs u))\quad\forall\bs v\in\bs V\,.
-% \label{eq:bilinearForm}
-% \end{equation}
-% This is because the trial-to-test operator $T=R_V^{-1}B$ is an isomorphism.
-%
-% Restricting ourselves to $\delta\hat t_h\in\hat F_h^e$, and subtracting
-% \eqref{eq:bilinearForm} from \eqref{eq:conservativeConfusionSystem}, we have
-% the Galerkin orthogonality condition:
-% \begin{align}
-% \label{eq:galerkinOrthogonality}
-% \frac{1}{\epsilon}(\bsigma_h-\bsigma,\taudeltau)
-% &+(u_h-u,\nabla\cdot\taudeltau)
-% -\langle\hat u_h-\hat u,\taudeltau\cdot\bs n\rangle
-% \nonumber\\
-% &-(\bbeta(u_h-u)-(\bsigma_h-\bsigma),\nabla\vdeltau)
-% +\langle\hat t_h-\hat t,\vdeltau\rangle
-% \\
-% &\hspace{25ex}\forall(\delta u_h,\delta\bsigma_h,\delta\hat u_h,\delta\hat t_h)
-% \in U_h\times\bs S_h\times\hat U_h\times\hat F_h^e\,.
-% \nonumber
-% \end{align}
-%
-% We begin with an equivalent of Brezzi's \emph{discrete inf-sup in kernel
-% condition}.
-% \begin{lemma}
-% \label{lemma:infsuplemma}
-% The following condition holds:
-% \begin{align}
-% \sup_{\stackrel{
-% (\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
-% {U_h\times\bs S_h\times\hat U_h\times\hat F_h^e}
-% }
-% \frac{\snorm{
-% b((u_h,\bsigma_h,\hat u_h,\hat t_h), (\vdeltau,\taudeltau))
-% % \frac{1}{\epsilon}(\bsigma_h,\taudeltau)
-% % +(u_h,\nabla \cdot\taudeltau)
-% % -\langle\hat u_h,\taudeltau\cdot\bs n\rangle
-% % -(\bbeta u_h-\bsigma_h,\nabla\vdeltau)
-% % +\langle\hat t_h,\vdeltau\rangle
-% }}
-% {\norm{(\vdeltau,\taudeltau)}}
-% \ge\alpha\norm{(u_h,\bsigma_h,\hat u_h,\hat t_h)}\quad\nonumber\\
-% \forall(u_h,\bsigma_h,\hat u_h,\hat t_h)
-% \in U_h\times\bs S_h\times\hat U_h\times\hat F_h^e\,.
-% \label{eq:infsup}
-% \end{align}
-%
-% \end{lemma}
-% \begin{proof}
-% By the very construction of the trial-to-test operator, the supremum on the
-% left is equal to
-% \begin{equation}
-% \norm{T(u_h,\bsigma_h,\hat u_h,\hat t_h)}_{V}
-% =\norm{R_V^{-1}B(u_h,\bsigma_h,\hat u_h, \hat t_h)}_{V}
-% =\norm{B(u_h,\bsigma_h,\hat u_h, \hat t_h)}_{V'}
-% \label{eq:infsupproof}
-% \end{equation}
-% The condition follows now from the fact that operator $B$ is bounded below,
-% i.e. bilinear form \linebreak$b((u_h,\bsigma_h,\hat u_h, \hat t_h),(v,\btau))$ satisfies
-% the inf-sup condition.
-% \end{proof}
-%
-% Assume additionally that flux decomposition \eqref{eq:decomposition} is
-% orthogonal. We begin by decomposing $\hat t_h$,
-% \begin{equation}
-% \hat t_h=\hat t_h^{e}+\hat t_h^{ne}\,.
-% \label{eq:fluxdecomposition}
-% \end{equation}
-% Next, we use the triangle inequality,
-% \begin{align}
-% \label{eq:triangle}
-% \norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h, \hat t-\hat t_h)}&=
-% \norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h, \hat t-(\hat t_h^e+\hat t_h^{ne}))}\nonumber\\
-% &\le\norm{(u-w_h,\bsigma-\bs s_h,\hat u-\hat w_h, \hat t-(\hat r_h^e+\hat t_h^{ne}))}\\
-% &\hspace{3ex}+\norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h, \hat r_h^e-\hat t_h^e)}\nonumber
-% \end{align}
-% where $w_h\in U_h$, $\bs s_h\in\bs S_h$, $\hat w_h\in\hat U_h$, and $\hat
-% r_h^{e}\in\hat F_h$ are arbitrary. The inf-sup in kernel condition now
-% implies:
-% \begin{align}
-% \label{eq:estimate}
-% &\norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h, \hat r_h^e-\hat t_h^e)}\\
-% &\hspace{8ex}\le\frac{1}{\alpha}
-% \sup_{\stackrel{
-% (\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
-% {U_h\times\bs S_h\times\hat U_h\times\hat F_h^e}
-% }
-% \frac{\snorm{
-% b( (w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat r_h^e-\hat t_h^e),
-% (\vdeltau,\taudeltau))
-% }}
-% {\norm{(\vdeltau,\taudeltau)}}\nonumber\\
-% &\hspace{8ex}\le\frac{1}{\alpha}
-% \sup_{\stackrel{
-% (\delta u_h,\delta\bsigma_h,\delta\hat u,\delta\hat t)\in}
-% {U_h\times\bs S_h\times\hat U_h\times\hat F_h^e}
-% }
-% \frac{\snorm{
-% b( (w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat r_h^e+\hat t_h^{ne}-\hat t),
-% (\vdeltau,\taudeltau))
-% }}
-% {\norm{(\vdeltau,\taudeltau)}}\nonumber\\
-% &\hspace{8ex}\le\frac{1}{\alpha}
-% \norm{(w_h-u_h,\bs s_h-\bsigma_h,\hat w_h-\hat u_h,\hat t-(\hat r_h^e+\hat
-% t_h^{ne}))}
-% \end{align}
-% % \frac{1}{\epsilon}(\bs s_h-\bsigma_h,\taudeltau)
-% % +(w_h-u_h,\nabla \cdot\taudeltau)
-% % -\langle\hat w_h-\hat u_h,\taudeltau\cdot\bs n\rangle
-% % -(\bbeta (w_h-u_h)-(\bs s_h-\bsigma_h),\nabla\vdeltau)
-% % +\langle\hat r_h^e-\hat t_h^e,\vdeltau\rangle
-% where the second step follows from the Galerkin orthogonality condition
-% \eqref{eq:galerkinOrthogonality}, and the last step is a consequence of the
-% minimum energy extension norm for fluxes. Combining with \eqref{eq:triangle},
-% we get the final stability result:
-% \begin{equation}
-% \norm{(u-u_h,\bsigma-\bsigma_h,\hat u-\hat u_h,\hat t-\hat t_h)}
-% \leq\left(1+\frac{1}{\alpha}\right)
-% \inf_{\stackrel{
-% (w_h,\bs s_h,\hat w,\hat r_h^e)\in}
-% {U_h\times\bs S_h\times\hat U_h\times\hat F_h^e}
-% }
-% \norm{(u-w_h,\bsigma-\bs s_h,\hat u-\hat w,\hat t-(\hat r_h^e+\hat t_h^{ne}))}
-% \,.
-% \label{eq:stability}
-% \end{equation}
+%%%%%%%%%%% Begin Demkowicz Section %%%%%%%%%%%%
+\subsection{Stability Analysis}
+
+In the following analysis, we neglect the error due to the approximation of optimal test functions.
+We follow the classical Brezzi's theory \cite{Brezzi1974,DBB05} for an abstract
+mixed problem:
+\begin{equation}
+\left\{
+\begin{array}{lll}
+u \in V, p \in Q\\
+a(u,v) + c(p,v) & = l(v) & \forall v \in V \\
+c(q,u) & = g(q) & \forall q \in Q
+\end{array}
+\right.
+\end{equation}
+where $V,Q$ are Hilbert spaces, and $a,c,l,q$ denote the appropriate
+bilinear and linear forms.
+
+The choice of norm for the Lagrange multipliers $\lambda_K$ is implied
+by the quotient norm used for $H^{-1/2}(\Gamma_h)$ and continuity
+bound for form $c(p,v)$ representing the constraint.
+\begin{equation}
+\begin{array}{lll}
+\vert b((u,\bfsig,\hat{u},\hat{t}),\sum_K \lambda_K (1_K,{\bf 0})) \vert
+& = \vert \sum_K \lambda_K \langle \hat{t}, 1_K \rangle_{\ptl K} \vert \\[8pt]
+& = \vert \sum_K \lambda_K \langle v_n , 1_K \rangle_{\ptl K} \vert \\[8pt]
+& = \vert \sum_K \lambda_K \int_K \text{div} \bfv \: 1_K  \vert \\[8pt]
+& \leq \sum_K  \lambda_K \Vert \text{div} \bfv \Vert_{L^2(K)} \mu(K)^{1/2} \\[8pt]
+& \leq (\sum_K \mu(K) \lambda_K^2)^{1/2} \: (\sum_K \Vert \text{div} \bfv \Vert_{L^2(K)}^2 )^{1/2} \\[8pt]
+& \leq \underbrace{(\sum_K \mu(K) \lambda_K^2)^{1/2}}_{=: \Vert \bflambda \Vert} \Vert \hat{t} \Vert_{H^{-1/2}(\Gamma_h)}
+\end{array}
+\end{equation}
+Above, function $\bfv$ denotes the $H(\text{div},\Omega)$ extension of flux $\hat{t}$
+that realizes the minimum in the definition of the quotient (minimum energy extension) norm,
+and $\mu(K)$ stands for the area (measure) of element $K$.
+
+We proceed now with the discussion of the discrete inf-sup stability constants. We skip
+index $h$ in the notation.
+
+\paragraph{Inf Sup Condition} relating spaces $V$ and $Q$ reads as follows,
+\begin{equation}
+\sup_{v \in V} \frac{\vert c(p,v) \vert}{\Vert v \Vert_V} \geq \beta \Vert p \Vert_Q
+\end{equation}
+Let
+\begin{equation}
+R\, : \, L^2(\Omega) \ni q \to \bfv \in \bfH(\text{div},\Omega) \cap \bfH^1(\Omega)
+\end{equation}
+be
+the continuous right inverse of the divergence operator constructed by
+Costabel and McIntosh in \cite{CostabelMcIntosh}.
+Let $\bfv_h$ denote the classical, lowest order Raviart-Thomas (RT) interpolant of
+function
+\begin{equation}
+\bfv = R (\sum_K \lambda_K 1_K) \: .
+\end{equation}
+Note that $\text{div} \bfv_h = \text{div} \bfv = \lambda_K$ in element $K$.
+
+Classical $h$-interpolation interpolation error estimate for the lowest error
+Raviart-Thomas elements and continuity of operator $R$ imply the stability estimate:
+\begin{equation}
+\begin{array}{lll}
+\Vert \bfv_h \Vert & \leq \Vert \bfv_h - \bfv \Vert + \Vert \bfv \Vert\\[8pt]
+&\leq C h \Vert \bfv \Vert_{H^1} +  \Vert \bfv \Vert \\[8pt]
+& \leq C \Vert \text{div} \bfv \Vert = C (\sum_K \mu(K) \lambda_K^2)^{1/2}
+\end{array}
+\label{eq:stab}
+\end{equation}
+Above, $C$ is a generic, mesh independent constant incorporating constant from
+the interpolation error estimate and continuity constant of $R$.
+Let $\hat{t}$ be now the trace of $\bfv_h$. We have then,
+\begin{equation}
+\sup_{\hat{t} \in H^{-1/2}(\Gamma_h)} \frac{\vert  \sum_K \lambda_K \langle \hat{t},1_K \rangle_{\ptl K} \vert}{\Vert \hat{t} \Vert_{H^{-1/2}(\Gamma_h)}}
+\geq \frac{\vert \sum_K \lambda_K \int_K \text{div} \bfv_h \: 1_K  \vert}
+{\Vert \bfv_h \Vert_{H(\text{div},\Omega)}}
+\geq \frac{1}{C} (\sum_K \mu(K) \lambda_K^2)^{1/2}
+\end{equation}
+where $C$ is the constant from stability estimate~(\ref{eq:stab}).
+
+Notice that we have considered traces of lowest order Raviart-Thomas elements for the
+discretization of flux $\hat{t}$. The inf-sup condition for the lowest order RT spaces implies
+automatically the analogous condition for elements of arbitrary order; increasing
+space $V$ makes only the discrete inf-sup constant bigger.
+
+
+
+
+\paragraph{Inf Sup in Kernel Condition} is satisfied automatically due to the use of optimal
+test functions. First of all, we characterize the ``kernel'' space:
+\begin{equation}
+\begin{array}{rl}
+V_0  := & \{ v \in V \, : \, c(v,u) = 0 \: \forall q \in Q\} \\[8pt]
+ = &\{ (u,\bfsig,\hat{u},\hat{t}) \, : \, \langle \hat{t},1_T \rangle = 0 \, \forall K \}
+\end{array}
+\end{equation}
+In other words, the kernel space contains only the equilibriated fluxes.
+With $u \in V_0$, we have then:
+\begin{equation}
+\sup_{v \in V_0} \frac{\vert a(u,v) \vert}{\Vert v \Vert_V }
+ \geq \frac{\vert b(\bfu,T \bfu) \vert}{\Vert T \bfu \Vert}
+= \sup_{(v,\bftau)}
+\frac{\vert b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) \vert}{\Vert (v,\bftau) \Vert}
+\geq \gamma \Vert (u,\bfsig,\hat{u},\hat{t}) \Vert
+\end{equation}
+where $\gamma$ is the stability constant for the standard continuous DPG formulation.
+
+With both discrete inf-sup constants in place, we have the standard result: the FE error
+is bounded by the best approximation error. Notice that the exact Lagrange multipliers
+are zero, so the best approximation error involves only solution $(u,\bfsig,\hat{u},\hat{t})$.
+
+
+\subsubsection{Robustness Analysis}
+
+Recall the main line of analysis in \cite{} leading to the construction of robust
+test norms. With the robust test norms, we have
+\begin{equation}
+\begin{array}{ll}
+\Vert u - u_h \Vert, \Vert \bfsig - \bfsig_h \Vert
+& \lesssim \Vert (u - u_h, \bfsig - \bfsig_h, \hat{u} - \hat{u}_h, \hat{t} - \hat{t}_h \Vert_E \\[8pt]
+&= \inf_{(v_h,\bftau_h,\hat{v},\hat{r}_h)}
+\Vert (u - v_h, \bfsig - \bftau_h, \hat{u} - \hat{v}_h, \hat{t} - \hat{r}_h \Vert_E
+\end{array}
+\end{equation}
+The last equality follows from the fact that DPG method delivers the best approximation
+error in the energy norm (minimizes the residual). This is not longer true for the
+conservative version. So, can we claim the robustness in the sense of the inequality above
+for the conservative version as well ?
+
+One possible way to attack the problem is to switch to the energy norm in the Brezzi's stability
+analysis. Dealing with the ``inf-sup in kernel'' condition is simple. Upon replacing
+the original norm of solution $u$ with the energy norm, both constant $\gamma$ and continuity
+constant become unity. In order to investigate the robustness of inf-sup  constant $\beta$,
+we need to realize first what the energy norm of flux $\hat{t}$ is. Given an element $K$,
+we solve for the optimal test functions corresponding to flux $\hat{t}$,
+\begin{equation}
+\left\{
+\begin{array}{ll}
+v_K \in H^1(K),\, \bftau_K \in \bfH(\text{div},K)\\[8pt]
+((v_K,\bftau_K), (\delta v,\delta \bftau)_V = \langle \hat{t},\delta v\rangle_{\ptl K}
+\quad \forall \delta v \in H^1(K), \delta \bftau \in \bfH(\text{div},K)
+\end{array}
+\right.
+\label{eq:local_problem}
+\end{equation}
+The energy norm of $\hat{t}$ is then equal to:
+\begin{equation}
+\Vert \hat{t} \Vert_E^2 = \sum_K \Vert (v_K,\bftau_K) \Vert_V^2
+\end{equation}
+We need to establish sufficient conditions under which inf-sup and continuity constants for
+the bilinear form representing the constraint are independent of viscosity $\epsilon$.
+
+Let us start with the inf-sup condition,
+\begin{equation}
+\sup_{\hat{t}} \frac{\vert \sum_K \lambda_K \langle \hat{t},1_K \rangle \vert}{\Vert \hat{t} \Vert_E}
+\geq  \beta (\sum_K \mu(K) \lambda_K^2)^{1/2}
+\end{equation}
+As in the previous analysis, we select for $\hat{t}$ the trace of Raviart-Thomas
+interpolant $\bfpsi_h$ of $\bfpsi = R (\sum_K \lambda_K 1_K)$ where $R$ is the right-inverse
+of the divergence operator constructed by Costabel and Mac Intosh. The only change compared
+with the previous analysis, is the evaluation of norm of $\hat{t}_h$. For this, we need
+to solve the local problems:
+\begin{equation}
+((v,\bftau), (\delta v, \delta \bftau)_V = \langle \hat{t}, \delta v \rangle_{\ptl K}
+= \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v = \int_K \lambda_K \delta v
+= \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in H^1(K)
+\label{eq:local}
+\end{equation}
+We need then an upper bound of the energy norm of $\bfv_h$:
+$$
+(\sum_K \Vert (v,\bftau) \Vert_V^2)^{1/2}
+$$
+Substituting $v$ for $\delta v$ in~(\ref{eq:local}), we get,
+\begin{equation}
+\Vert (v,\bftau) \Vert_V^2 = \lambda_K (1_K, v_K)
+\end{equation}
+If we have a robust stability estimate:
+\begin{equation}
+(1_K, v_K) \leq C \mu(K)^{1/2} \Vert (v,\bftau) \Vert_K
+\end{equation}
+(i.e. constant $C$ is independent of $\epsilon$) then
+\begin{equation}
+\Vert  (v,\bftau) \Vert_V \leq C \mu(K)^{1/2} \vert \lambda_K \vert
+\end{equation}
+and, eventually, as needed,
+\begin{equation}
+\sum_K \Vert (v,\bftau) \Vert_V^2  \leq C^2 \sum_K \mu(K) \lambda_K^2
+\end{equation}
+which leads to the robust estimate of inf-sup constant $\beta$. For example, it is sufficient if
+\begin{equation}
+\Vert v \Vert_{L^2(K)} \leq \Vert v \Vert_V \, .
+\label{eq:robust_est1}
+\end{equation}
+Notice that the stability analysis with the energy norm was, in a sense, easier than
+with the quotient norm. Only the divergence of the interpolant $\bfpsi_h$ enters~(\ref{eq:local})
+and it coincides with the divergence of $\bfpsi$.
+
+We arrive at a similar situation in the continuity estimate of
+$$
+\sum_K \lambda_K \langle \hat{t}, 1_K \rangle
+$$
+Testing with $(1_K,{\bf 0})$ in the local problem~(\ref{eq:local_problem}), we obtain,
+\begin{equation}
+((v,\bftau),(1_K,{\bf 0}))_V = \langle \hat{t}, 1_K \rangle_{\ptl K}
+\label{eq:local2}
+\end{equation}
+If we have a robust estimate,
+\begin{equation}
+\vert ((v,\bftau),(1_K,{\bf 0}))_V \vert \leq C \mu(K)^{1/2} \, \Vert (v,\bftau) \Vert_V
+\label{eq:robust_est2}
+\end{equation}
+then
+\begin{equation}
+\vert \sum_K \lambda_K \langle \hat{t}, 1_K \rangle \vert \leq C (\sum_K \mu(K) \lambda_K^2)^{1/2}
+\, (\sum_K \Vert (v,\bftau) \Vert_V^2)^{1/2}
+= C (\sum_K \mu(K) \lambda_K^2)^{1/2}  \Vert \hat{t} \Vert_E
+\end{equation}
+as needed.
+
+For instance, condition~(\ref{eq:robust_est2}) will be satisfied if the test inner product
+in~(\ref{eq:local2}) reduces to the $L^2$ term only,
+\begin{equation}
+((v,\bftau),(1_K,{\bf 0}))_V = (v,1_K)_{L^2(K)} \: .
+\end{equation}
+With the robust stability and continuity constants for the mixed problem, the energy error
+of solution $(u,\bfsig,\hat{u},\hat{t})$ (and Lagrange multipliers $\lambda_K$ as well)
+is bounded robustly by the {\em best approximation error} of  $(u,\bfsig,\hat{u},\hat{t})$
+measured in the energy norm. We arrive thus at the same situation as in the standard
+DPG method.
+
+% %%%%%%%%%%% End Demkowicz Section %%%%%%%%%%%%
 
 \section{Robust test norms}
 The optimal test functions are determined by solving local problems determined
