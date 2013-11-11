@@ -100,11 +100,57 @@ double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
   return value[0];
 }
 
+void determinePointPermutation(int* permutation, const FieldContainer<double> &points1,
+                      const FieldContainer<double> &points2) {
+  // this method is overkill for our purposes--so far, our only permutation should be a reversal--
+  // but we might like to reuse for point sets that might be permuted in other ways
+  int numPoints = points1.dimension(0);
+  int spaceDim = points1.dimension(1);
+  double tol = 1e-14;
+  for (int pt1Index=0; pt1Index<numPoints; pt1Index++) {
+    bool pt1Matched = false;
+    for (int pt2Index=0; pt2Index<numPoints; pt2Index++) {
+      bool match = true;
+      for (int d=0; d<spaceDim; d++) {
+        if ( abs(points1(pt1Index,d) - points2(pt2Index,d) ) > tol) {
+          match = false;
+        }
+      }
+      if (match) {
+        permutation[pt1Index] = pt2Index;
+        pt1Matched = true;
+        break;
+      }
+    }
+    if (!pt1Matched) {
+      cout << "ERROR: No match found for point " << pt1Index << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no match found for point");
+    }
+  }
+}
+
+void permutePoints(int *permutation, FieldContainer<double> &pointsToPermute) {
+  int numPoints = pointsToPermute.dimension(0);
+  int spaceDim = pointsToPermute.dimension(1);
+  FieldContainer<double> pointsCopy = pointsToPermute;
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int d=0; d<spaceDim; d++) {
+      pointsToPermute(ptIndex,d) = pointsCopy(permutation[ptIndex],d);
+    }
+  }
+}
+
 bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
                       BasisPtr basis2, int side2, int edge2, int dofOrdinal2) {
   // sides are sides of the hex
   // bases are defined on quad (sides of hex)
   // and should agree on their shared edge
+  
+  // TODO: work out how this method should depend on the side1 and side2 arguments
+  //       (somehow, this should determine whether the edge points are reversed or not)
+  //       I think what we need to do is map the quad points onto the cube--the requirement
+  //       is that the bases should match ultimately in physical space...  So where the points
+  //       in physical space are the same, bases should match.
   int edgeDim = 1;
   int quadDim = 2;
   int numPoints = 4;
@@ -113,9 +159,11 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   double tol = 1e-14;
   
   FieldContainer<double> edgePoints(numPoints,edgeDim);
+  FieldContainer<double> edgePointsReversed(numPoints,edgeDim);
   for (int i=0; i<numPoints; i++) {
     // equispaced in (-1,1)
     edgePoints(i,0) = dxPerPoint * i - 1;
+    edgePointsReversed(numPoints-i-1,0) = edgePoints(i,0);
   }
 //  cout << "edgePoints:\n" << edgePoints;
   
@@ -133,6 +181,18 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   CellTools<double>::mapToReferenceSubcell(quadPoints1, edgePoints, edgeDim, edge1, quad_4);
   CellTools<double>::mapToReferenceSubcell(quadPoints2, edgePoints, edgeDim, edge2, quad_4);
   
+  shards::CellTopology hex_8(shards::getCellTopologyData<shards::Hexahedron<8> >() );
+  FieldContainer<double> hexPoints1(numPoints,hex_8.getDimension());
+  FieldContainer<double> hexPoints2(numPoints,hex_8.getDimension());
+  
+  CellTools<double>::mapToReferenceSubcell(hexPoints1, quadPoints1, quadDim, side1, hex_8);
+  CellTools<double>::mapToReferenceSubcell(hexPoints2, quadPoints2, quadDim, side2, hex_8);
+  
+  int pointPermutation[numPoints];
+  determinePointPermutation(pointPermutation, hexPoints1, hexPoints2);
+  
+  permutePoints(pointPermutation, quadPoints2); // make the order of quadPoints2 match that of quadPoints1 once mapped to the reference hexahedron.
+  
   basis1->getValues(values1, quadPoints1, OPERATOR_VALUE);
   basis2->getValues(values2, quadPoints2, OPERATOR_VALUE);
   
@@ -142,15 +202,22 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   cout << "quadPoints1:\n" << quadPoints1;
   cout << "quadPoints2:\n" << quadPoints2;
   
+  cout << "hexPoints1:\n" << hexPoints1;
+  cout << "hexPoints2:\n" << hexPoints2;
+  
+  
   cout << "values1:\n" << values1;
   cout << "values2:\n" << values2;
   
   bool success = true;
-  for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-    double diff = abs(values1(dofOrdinal1,ptIndex)-values2(dofOrdinal2,ptIndex));
+  for (int pt1Index=0; pt1Index < numPoints; pt1Index++) {
+    int pt2Index = pointPermutation[pt1Index];
+    double diff = abs(values1(dofOrdinal1,pt1Index)-values2(dofOrdinal2,pt2Index));
     if (diff > tol) {
       success = false;
-      cout << "bases differ by " << diff << " at point " << edgePoints(ptIndex,0) << endl;
+      cout << "bases differ by " << diff << " at point (";
+      cout << hexPoints1(pt1Index,0) << "," << hexPoints1(pt1Index,1) << ",";
+      cout << hexPoints1(pt1Index,2) << ")" << endl;
     }
   }
   
@@ -291,6 +358,21 @@ int main(int argc, char *argv[]) {
     int vertexDim = 0;
     int edgeDim = 1;
     int faceDim = 2;
+    
+    // a little debugging code to figure out what order Intrepid puts the dofs in:
+    cout << "Assuming side topology data is the same for every side (getting side 2)\n";
+    int sideOrdinal = 2;
+    shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
+    for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++) {
+      int numDofs = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)->dofOrdinalsForSubcell(edgeDim, edgeOrdinal).size();
+      cout << "edge " << edgeOrdinal << " has " << numDofs << " dofs: ";
+      for (int edgeDofOrdinal = 0; edgeDofOrdinal < numDofs; edgeDofOrdinal++) {
+        unsigned dofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+                                           ->getDofOrdinal(edgeDim, edgeOrdinal, edgeDofOrdinal);
+        cout << dofOrdinal << " ";
+      }
+      cout << endl;
+    }
     
     for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
       shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
