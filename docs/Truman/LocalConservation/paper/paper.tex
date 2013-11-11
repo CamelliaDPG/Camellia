@@ -914,78 +914,78 @@ like Figure \ref{fig:erickson}.
 \label{ericksonFlux}
 \end{figure}
 
-\subsubsection{Skewed Convection-Diffusion Problem}
-This is a standard convection-diffusion problem with a skewed convection
-vector relative to the mesh. We take $\bbeta=(2,1)$, and on the left and
-bottom inflow boundaries we impose $\hat t=1-x-y$ while the right and top
-boundaries have $\hat u=0$. We solve for $\epsilon=10^{-4}$.
-
-\begin{figure}[p]
-\centering
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Confusion/modified8nc.png}
-\includegraphics[width=\textwidth]{figs/Confusion/modified8nc_mesh.png}
-\caption{Nonconservative}
-\label{fig:confusionModified8nc}
-\end{subfigure}
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Confusion/modified8c.png}
-\includegraphics[width=\textwidth]{figs/Confusion/modified8c_mesh.png}
-\caption{Conservative}
-\label{fig:confusionModified8c}
-\end{subfigure}
-\caption{Skewed convection-diffusion problem after 8 refinements}
-\label{fig:confusion}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/Confusion/modifiedFlux.pdf}
-\caption{Flux imbalance in skewed convection-diffusion solutions}
-\label{fig:confusionFlux}
-\end{figure}
-
-\subsubsection{Double Glazing Problem}
-This nominal problem definition takes the same unit square domain with
-\[
-\bbeta=\binom{2(2y-1)(1-(2x-1)^2)}{-2(2x-1)(1-(2y-1)^2)}\,;\quad
-\hat u=
-\begin{cases}
-1 & \mbox{on }\Gamma_{right}\\
-0 & \mbox{else }
-\end{cases}\,,
-\]
-except that this definition for the boundary is not legal for $\hat u\in
-H^{\frac{1}{2}}(\Gamma_h)$ which is continuous. Therefore we use a ramp of
-width $\sqrt{\epsilon}$ on the right edge to go from 0 to 1. The
-results are for $\epsilon=10^{-2}$.
-
-\begin{figure}[p]
-\centering
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/DoubleGlazing/modified5nc.png}
-\caption{Nonconservative}
-\label{fig:doubleglazingGraph6c}
-\end{subfigure}
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/DoubleGlazing/modified5c.png}
-\caption{Conservative}
-\label{fig:doubleglazingRobust6c}
-\end{subfigure}
-\caption{Double glazing problem after 5 refinements}
-\label{fig:doubleglazing}
-\end{figure}
-
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/DoubleGlazing/modifiedFlux.pdf}
-\caption{Flux imbalance in double glazing problem}
-\label{fig:doubleglazingFlux}
-\end{figure}
+% \subsubsection{Skewed Convection-Diffusion Problem}
+% This is a standard convection-diffusion problem with a skewed convection
+% vector relative to the mesh. We take $\bbeta=(2,1)$, and on the left and
+% bottom inflow boundaries we impose $\hat t=1-x-y$ while the right and top
+% boundaries have $\hat u=0$. We solve for $\epsilon=10^{-4}$.
+%
+% \begin{figure}[p]
+% \centering
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Confusion/modified8nc.png}
+% \includegraphics[width=\textwidth]{figs/Confusion/modified8nc_mesh.png}
+% \caption{Nonconservative}
+% \label{fig:confusionModified8nc}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Confusion/modified8c.png}
+% \includegraphics[width=\textwidth]{figs/Confusion/modified8c_mesh.png}
+% \caption{Conservative}
+% \label{fig:confusionModified8c}
+% \end{subfigure}
+% \caption{Skewed convection-diffusion problem after 8 refinements}
+% \label{fig:confusion}
+% \end{figure}
+%
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/Confusion/modifiedFlux.pdf}
+% \caption{Flux imbalance in skewed convection-diffusion solutions}
+% \label{fig:confusionFlux}
+% \end{figure}
+%
+% \subsubsection{Double Glazing Problem}
+% This nominal problem definition takes the same unit square domain with
+% \[
+% \bbeta=\binom{2(2y-1)(1-(2x-1)^2)}{-2(2x-1)(1-(2y-1)^2)}\,;\quad
+% \hat u=
+% \begin{cases}
+% 1 & \mbox{on }\Gamma_{right}\\
+% 0 & \mbox{else }
+% \end{cases}\,,
+% \]
+% except that this definition for the boundary is not legal for $\hat u\in
+% H^{\frac{1}{2}}(\Gamma_h)$ which is continuous. Therefore we use a ramp of
+% width $\sqrt{\epsilon}$ on the right edge to go from 0 to 1. The
+% results are for $\epsilon=10^{-2}$.
+%
+% \begin{figure}[p]
+% \centering
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/DoubleGlazing/modified5nc.png}
+% \caption{Nonconservative}
+% \label{fig:doubleglazingGraph6c}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/DoubleGlazing/modified5c.png}
+% \caption{Conservative}
+% \label{fig:doubleglazingRobust6c}
+% \end{subfigure}
+% \caption{Double glazing problem after 5 refinements}
+% \label{fig:doubleglazing}
+% \end{figure}
+%
+% \begin{figure}[p]
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/DoubleGlazing/modifiedFlux.pdf}
+% \caption{Flux imbalance in double glazing problem}
+% \label{fig:doubleglazingFlux}
+% \end{figure}
 
 \subsubsection{Vortex Problem}
 This problem models a mildly diffusive vortex convecting fluid in a circle. We
@@ -1021,79 +1021,79 @@ of boundary edges to 1 at corners. We don't enforce an outflow boundary.
 \label{fig:vortex_flux}
 \end{figure}
 
-\subsubsection{Wedge Problem}
-We devised this problem to examine some of the issues we were having blow up
-of the solution under the robust test norm. The domain is a rectangle
-$[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom edges with
-the origin at $(0,0)$ is removed. The convection vector $\bbeta=(1,0)^T$,
-$\epsilon=10^{-1}$, and we apply boundary conditions $\hat t=0$ on the left
-inflow edge, $\hat u=0$ on the top edge, $\bbeta\cdot\mathbf{n}\cdot\hat
-u-\hat t=\sigma_n=0$ on the right outflow edge, $\hat u=1$ on the leading edge
-of the wedge, and $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge
-of the wedge.
-
-\begin{figure}[p]
-\centering
-\begin{subfigure}[t]{0.4\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Wedge/modified16nc.png}
-\includegraphics[width=\textwidth]{figs/Wedge/modified16nc_mesh.png}
-\caption{Nonconservative}
-\label{fig:wedgeGraph16nc}
-\end{subfigure}
-\begin{subfigure}[t]{0.4\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Wedge/modified16c.png}
-\includegraphics[width=\textwidth]{figs/Wedge/modified16c_mesh.png}
-\caption{Conservative}
-\label{fig:wedgeRobust16nc}
-\end{subfigure}
-\caption{Wedge problem after 16 refinements}
-\label{fig:wedge}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/Wedge/modifiedFlux.pdf}
-\caption{Flux imbalance in wedge solutions}
-\label{fig:wedge_flux}
-\end{figure}
-
-\subsubsection{Inner Layer Problem}
-In this problem, $\bbeta=(\frac{\sqrt{3}}{2},\frac{1}{2})^T$ and we have a
-discontinuous flux inflow condition where $\hat t=0$ if $y\le0.2$ and $\hat
-t=\bbeta\cdot\mathbf{n}$ if $y>0.2$. On the outflow, $\hat u=0$. We use a very
-small diffusion scale of $\epsilon=10^{-6}$ which creates a very thin inner
-layer.
-% Nonconservative solution in range $[-0.38, 1.34]$.
-% Conservative solution in range $[-0.39, 1.38]$.
-
-\begin{figure}[p]
-\centering
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/InnerLayer/modified8nc.png}
-\includegraphics[width=\textwidth]{figs/InnerLayer/modified8nc_mesh.png}
-\caption{Nonconservative}
-\label{fig:innerlayer8nc}
-\end{subfigure}
-\begin{subfigure}[t]{0.45\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/InnerLayer/modified8c.png}
-\includegraphics[width=\textwidth]{figs/InnerLayer/modified8c_mesh.png}
-\caption{Conservative}
-\label{fig:innerlayer8c}
-\end{subfigure}
-\caption{Inner layer problem after 8 refinements}
-\label{fig:innerlayer}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/InnerLayer/modifiedFlux.pdf}
-\caption{Flux imbalance in inner layer solutions}
-\label{fig:innerlayer_flux}
-\end{figure}
+% \subsubsection{Wedge Problem}
+% We devised this problem to examine some of the issues we were having blow up
+% of the solution under the robust test norm. The domain is a rectangle
+% $[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom edges with
+% the origin at $(0,0)$ is removed. The convection vector $\bbeta=(1,0)^T$,
+% $\epsilon=10^{-1}$, and we apply boundary conditions $\hat t=0$ on the left
+% inflow edge, $\hat u=0$ on the top edge, $\bbeta\cdot\mathbf{n}\cdot\hat
+% u-\hat t=\sigma_n=0$ on the right outflow edge, $\hat u=1$ on the leading edge
+% of the wedge, and $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge
+% of the wedge.
+%
+% \begin{figure}[p]
+% \centering
+% \begin{subfigure}[t]{0.4\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Wedge/modified16nc.png}
+% \includegraphics[width=\textwidth]{figs/Wedge/modified16nc_mesh.png}
+% \caption{Nonconservative}
+% \label{fig:wedgeGraph16nc}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.4\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Wedge/modified16c.png}
+% \includegraphics[width=\textwidth]{figs/Wedge/modified16c_mesh.png}
+% \caption{Conservative}
+% \label{fig:wedgeRobust16nc}
+% \end{subfigure}
+% \caption{Wedge problem after 16 refinements}
+% \label{fig:wedge}
+% \end{figure}
+%
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/Wedge/modifiedFlux.pdf}
+% \caption{Flux imbalance in wedge solutions}
+% \label{fig:wedge_flux}
+% \end{figure}
+%
+% \subsubsection{Inner Layer Problem}
+% In this problem, $\bbeta=(\frac{\sqrt{3}}{2},\frac{1}{2})^T$ and we have a
+% discontinuous flux inflow condition where $\hat t=0$ if $y\le0.2$ and $\hat
+% t=\bbeta\cdot\mathbf{n}$ if $y>0.2$. On the outflow, $\hat u=0$. We use a very
+% small diffusion scale of $\epsilon=10^{-6}$ which creates a very thin inner
+% layer.
+% % Nonconservative solution in range $[-0.38, 1.34]$.
+% % Conservative solution in range $[-0.39, 1.38]$.
+%
+% \begin{figure}[p]
+% \centering
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/InnerLayer/modified8nc.png}
+% \includegraphics[width=\textwidth]{figs/InnerLayer/modified8nc_mesh.png}
+% \caption{Nonconservative}
+% \label{fig:innerlayer8nc}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.45\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/InnerLayer/modified8c.png}
+% \includegraphics[width=\textwidth]{figs/InnerLayer/modified8c_mesh.png}
+% \caption{Conservative}
+% \label{fig:innerlayer8c}
+% \end{subfigure}
+% \caption{Inner layer problem after 8 refinements}
+% \label{fig:innerlayer}
+% \end{figure}
+%
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/InnerLayer/modifiedFlux.pdf}
+% \caption{Flux imbalance in inner layer solutions}
+% \label{fig:innerlayer_flux}
+% \end{figure}
 
 \subsubsection{Discontinuous Source Problem}
 Here, $\bbeta=(0.5,1)^T/\sqrt{1.25}$, and we have a discontinuous source term
@@ -1128,58 +1128,58 @@ scaled to  $[-1.110,0.889]$.
 \label{fig:discontinuous_flux}
 \end{figure}
 
-\subsubsection{Hemker Problem}
-The Hemker problem is defined on a domain
-$\Omega=\{[-3,9]\times[-3,3]\}\setminus\{(x,y):x^2+y^2<1\}$, essentially a simplified
-model of flow past an infinite cylinder. We start with the initial mesh shown
-in Figure~\ref{fig:hemkerInitial} in which we approximate the circle by 8
-fifth order curvilinear polynomial segments. As we refine, the new elements are
-fitted to better approximate an exact circle.The boundary conditions are $\hat
-t=\bbeta\cdot\mathbf{n}\cdot 1$ on the left inflow boundary,
-$\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the right outflow
-boundary, $\hat t=0$ on the top and bottom edges, and $\hat u=1$ on the
-cylinder. We run with $\epsilon=10^{-3}$.
-
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/Hemker/initial_mesh.png}
-\caption{Initial mesh for the Hemker problem}
-\label{fig:hemkerInitial}
-\end{figure}
-
-\begin{figure}[p]
-\centering
-\centering
-\includegraphics[width=0.8\textwidth]{figs/Hemker/modifiedFlux.pdf}
-\caption{Flux imbalance in Hemker problem}
-\label{fig:hemkerFlux}
-\end{figure}
-
-\begin{figure}[p]
-\centering
-\begin{subfigure}[t]{0.6\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Hemker/modified8nc.png}
-\end{subfigure}
-\begin{subfigure}[t]{0.6\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Hemker/modified8nc_mesh.png}
-\caption{Nonconservative}
-\label{fig:hemkerModified8nc}
-\end{subfigure}
-\begin{subfigure}[t]{0.6\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Hemker/modified8c.png}
-\end{subfigure}
-\begin{subfigure}[t]{0.6\textwidth}
-\centering
-\includegraphics[width=\textwidth]{figs/Hemker/modified8c_mesh.png}
-\caption{Conservative}
-\label{fig:hemkerModified8c}
-\end{subfigure}
-\caption{Hemker problem after 8 refinements}
-\label{fig:hemker8}
-\end{figure}
+% \subsubsection{Hemker Problem}
+% The Hemker problem is defined on a domain
+% $\Omega=\{[-3,9]\times[-3,3]\}\setminus\{(x,y):x^2+y^2<1\}$, essentially a simplified
+% model of flow past an infinite cylinder. We start with the initial mesh shown
+% in Figure~\ref{fig:hemkerInitial} in which we approximate the circle by 8
+% fifth order curvilinear polynomial segments. As we refine, the new elements are
+% fitted to better approximate an exact circle.The boundary conditions are $\hat
+% t=\bbeta\cdot\mathbf{n}\cdot 1$ on the left inflow boundary,
+% $\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the right outflow
+% boundary, $\hat t=0$ on the top and bottom edges, and $\hat u=1$ on the
+% cylinder. We run with $\epsilon=10^{-3}$.
+%
+% \begin{figure}[p]
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/Hemker/initial_mesh.png}
+% \caption{Initial mesh for the Hemker problem}
+% \label{fig:hemkerInitial}
+% \end{figure}
+%
+% \begin{figure}[p]
+% \centering
+% \centering
+% \includegraphics[width=0.8\textwidth]{figs/Hemker/modifiedFlux.pdf}
+% \caption{Flux imbalance in Hemker problem}
+% \label{fig:hemkerFlux}
+% \end{figure}
+%
+% \begin{figure}[p]
+% \centering
+% \begin{subfigure}[t]{0.6\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Hemker/modified8nc.png}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.6\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Hemker/modified8nc_mesh.png}
+% \caption{Nonconservative}
+% \label{fig:hemkerModified8nc}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.6\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Hemker/modified8c.png}
+% \end{subfigure}
+% \begin{subfigure}[t]{0.6\textwidth}
+% \centering
+% \includegraphics[width=\textwidth]{figs/Hemker/modified8c_mesh.png}
+% \caption{Conservative}
+% \label{fig:hemkerModified8c}
+% \end{subfigure}
+% \caption{Hemker problem after 8 refinements}
+% \label{fig:hemker8}
+% \end{figure}
 
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
 % Solution quality
