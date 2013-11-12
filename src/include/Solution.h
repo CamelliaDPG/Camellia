@@ -48,6 +48,9 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Epetra_FECrsMatrix.h"
+#include "Epetra_FEVector.h"
+
 #include "Mesh.h"
 #include "ElementType.h"
 #include "DPGInnerProduct.h"
@@ -92,6 +95,9 @@ private:
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
+  Teuchos::RCP<Epetra_FECrsMatrix> _globalStiffMatrix;
+  Teuchos::RCP<Epetra_FEVector> _rhsVector;
+  
   bool _residualsComputed;
   bool _energyErrorComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
@@ -134,8 +140,14 @@ public:
 
   const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables
 
+  Epetra_Map getPartitionMap(bool zmcsAsRankOneUpdate = false);
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
+  // solve steps:
+  void initializeStiffnessAndLoad(bool zmcsAsRankOneUpdate = false);
+  void populateStiffnessAndLoad();
+  void solveWithPrepopulatedStiffnessAndLoad();
+  
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
   void solve(bool useMumps);
@@ -284,6 +296,7 @@ public:
 
   void writeStatsToFile(const string &filePath, int precision=4);
 
+  vector<int> getZeroMeanConstraints();
   void setZeroMeanConstraintRho(double value);
   double zeroMeanConstraintRho();
 };

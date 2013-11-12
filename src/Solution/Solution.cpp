@@ -63,8 +63,6 @@
 #else
 #include "Epetra_SerialComm.h"
 #endif
-#include "Epetra_FECrsMatrix.h"
-#include "Epetra_FEVector.h"
 #include "Epetra_Time.h"
 
 // EpetraExt includes
@@ -286,63 +284,44 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   clearComputedResiduals();
 }
 
-void Solution::solve(Teuchos::RCP<Solver> solver) {
-  bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
+void Solution::initializeStiffnessAndLoad(bool zmcsAsRankOneUpdate) {
+  Epetra_Map partMap = getPartitionMap(zmcsAsRankOneUpdate);
+  
+  int maxRowSize = _mesh->rowSizeUpperBound();
 
-  int numProcs=1;
-  int rank=0;
+  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(Copy, partMap, maxRowSize));
+  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
+  _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
+}
+
+void Solution::populateStiffnessAndLoad() {
+  
+}
+
+void Solution::solveWithPrepopulatedStiffnessAndLoad() {
+  
+}
+
+void Solution::solve(Teuchos::RCP<Solver> solver) {
+  int numProcs=Teuchos::GlobalMPISession::getNProc();;
+  int rank = Teuchos::GlobalMPISession::getRank();
 
 #ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
+  bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
 
+  initializeStiffnessAndLoad(zmcsAsRankOneUpdate);
+
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  Epetra_Map partMap = getPartitionMap(zmcsAsRankOneUpdate);
+  
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
-  // will want a CrsMatrix here in just a moment...
-
-  // determine any zero-mean constraints:
-  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-  vector< int > zeroMeanConstraints;
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *trialIt;
-    if (_bc->imposeZeroMeanConstraint(trialID)) {
-      zeroMeanConstraints.push_back(trialID);
-    }
-  }
-  int numGlobalDofs = _mesh->numGlobalDofs();
-  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  int numZMCDofs = zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
-
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);
-  //Epetra_Map globalMapG(numGlobalDofs+zeroMeanConstraints.size(), numGlobalDofs+zeroMeanConstraints.size(), 0, Comm);
-
-  int maxRowSize = _mesh->rowSizeUpperBound();
-  /*  if (zeroMeanConstraints.size() > 0) {
-   vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
-   int numEntries = 1; // 1 for the diagonal (stab. parameter)
-   int trialID = zeroMeanConstraints[0];
-   int sideIndex = 0; // zmc's are "inside" the cells
-   for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-   ElementTypePtr elemTypePtr = *(elemTypeIt);
-   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-   numEntries += basisCardinality * numCellsOfType;
-   FieldContainer<double> valuesForType(numCellsOfType, basisCardinality);
-   }
-   maxRowSize = max(numEntries,maxRowSize);
-   }*/
-
-  //cout << "max row size for mesh: " << maxRowSize << endl;
-  //cout << "process " << rank << " about to initialize globalStiffMatrix.\n";
-  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, maxRowSize);
-  //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
-  Epetra_FEVector rhsVector(partMap);
-
+  
   //cout << "process " << rank << " about to loop over elementTypes.\n";
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
@@ -447,8 +426,8 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         for (int i=0; i<numTrialDofs; i++) {
           globalDofIndices(i) = _mesh->globalDofIndex(cellID,i);
         }
-        globalStiffMatrix.InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
-        rhsVector.SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
+        _globalStiffMatrix->InsertGlobalValues(numTrialDofs,&globalDofIndices(0),numTrialDofs,&globalDofIndices(0),&finalStiffness(cellIndex,0,0));
+        _rhsVector->SumIntoGlobalValues(numTrialDofs,&globalDofIndices(0),&localRHSVector(cellIndex,0));
       }
       startCellIndexForBatch += numCells;
     }
@@ -508,12 +487,12 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
           nonzeroValues(nnz) = 1.0; // just put a 1 in the diagonal to avoid singular matrix
         }
         // insert row:
-        globalStiffMatrix.InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
+        _globalStiffMatrix->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
                                              &nonzeroValues(0));
         // insert column:
-        globalStiffMatrix.InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
+        _globalStiffMatrix->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
                                              &nonzeroValues(0));
-        rhsVector.ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
+        _rhsVector->ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
 
         localRowIndex++;
       }
@@ -545,6 +524,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   double min_h = sqrt(minCellMeasure);
   double max_h = sqrt(maxCellMeasure);
 
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
@@ -588,17 +568,17 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
             product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
           }
         }
-        globalStiffMatrix.SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
+        _globalStiffMatrix->SumIntoGlobalValues(numValues, &globalIndices(0), numValues, &globalIndices(0), &product(0,0));
       } else { // otherwise, we increase the size of the system to accomodate the zmc...
         // insert row:
-        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
+        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
         // insert column:
-        globalStiffMatrix.InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
+        _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
 
         //      cout << "in zmc, diagonal entry: " << rho << endl;
         //rho /= numValues;
         double rho_entry = - 1.0 / _zmcRho;
-        globalStiffMatrix.InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
+        _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,1,&zmcIndex,&rho_entry);
         localRowIndex++;
       }
     }
@@ -606,11 +586,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
 
   timer.ResetStartTime();
 
-  rhsVector.GlobalAssemble();
+  _rhsVector->GlobalAssemble();
 
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
 
-  globalStiffMatrix.GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
+  _globalStiffMatrix->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
 
   double timeGlobalAssembly = timer.ElapsedTime();
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
@@ -637,15 +617,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   }
 
   Epetra_MultiVector rhsDirichlet(partMap,1);
-  globalStiffMatrix.Apply(v,rhsDirichlet);
+  _globalStiffMatrix->Apply(v,rhsDirichlet);
 
   // Update right-hand side
-  rhsVector.Update(-1.0,rhsDirichlet,1.0);
+  _rhsVector->Update(-1.0,rhsDirichlet,1.0);
 
   if (numBCs == 0) {
     //cout << "Solution: Warning: Imposing no BCs." << endl;
   } else {
-    int err = rhsVector.ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
+    int err = _rhsVector->ReplaceGlobalValues(numBCs,&bcGlobalIndices(0),&bcGlobalValues(0));
     if (err != 0) {
       cout << "ERROR: rhsVector.ReplaceGlobalValues(): some indices non-local...\n";
     }
@@ -654,12 +634,12 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   //  and add one to diagonal.
   FieldContainer<int> bcLocalIndices(bcGlobalIndices.dimension(0));
   for (int i=0; i<bcGlobalIndices.dimension(0); i++) {
-    bcLocalIndices(i) = globalStiffMatrix.LRID(bcGlobalIndices(i));
+    bcLocalIndices(i) = _globalStiffMatrix->LRID(bcGlobalIndices(i));
   }
   if (numBCs == 0) {
-    ML_Epetra::Apply_OAZToMatrix(NULL, 0, globalStiffMatrix);
+    ML_Epetra::Apply_OAZToMatrix(NULL, 0, *_globalStiffMatrix);
   } else {
-    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, globalStiffMatrix);
+    ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, *_globalStiffMatrix);
   }
 
   double timeBCImposition = timer.ElapsedTime();
@@ -692,15 +672,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     }
   }
 
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&globalStiffMatrix, &lhsVector, &rhsVector));
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &lhsVector, &*_rhsVector));
 
-  rhsVector.GlobalAssemble();
+  _rhsVector->GlobalAssemble();
 
   if (_writeRHSToMatrixMarketFile) {
     if (rank==0) {
       cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
     }
-    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),rhsVector,0,0,false);
+    EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),*_rhsVector,0,0,false);
   }
 
   if (_reportConditionNumber) {
@@ -722,7 +702,6 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
 
-
   double timeSolve = timer.ElapsedTime();
   Epetra_Vector timeSolveVector(timeMap);
   timeSolveVector[0] = timeSolve;
@@ -737,11 +716,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   // Dump matrices to disk
   if (_writeMatrixToMatlabFile){
     //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
-    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),globalStiffMatrix);
+    EpetraExt::RowMatrixToMatlabFile(_matrixFilePath.c_str(),*_globalStiffMatrix);
     //    EpetraExt::MultiVectorToMatrixMarketFile("lhs_vector.dat",lhsVector,0,0,false);
   }
   if (_writeMatrixToMatrixMarketFile){
-    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),globalStiffMatrix);
+    EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),*_globalStiffMatrix);
   }
 
   // Import solution onto current processor
@@ -3614,6 +3593,24 @@ double Solution::minTimeDistributeSolution() {
   return _minTimeDistributeSolution;
 }
 
+Epetra_Map Solution::getPartitionMap(bool zmcsAsRankOneUpdate) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  vector<int> zeroMeanConstraints = getZeroMeanConstraints();
+  int numGlobalDofs = _mesh->numGlobalDofs();
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  int numZMCDofs = zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+  
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);
+  return partMap;
+}
+
 Epetra_Map Solution::getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs,
                                      int zeroMeanConstraintsSize, Epetra_Comm* Comm ) {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
@@ -3964,6 +3961,19 @@ void Solution::writeToFile(const string &filePath) {
   }
 
   fout.close();
+}
+
+vector<int> Solution::getZeroMeanConstraints() {
+  // determine any zero-mean constraints:
+  vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
+  vector< int > zeroMeanConstraints;
+  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    int trialID = *trialIt;
+    if (_bc->imposeZeroMeanConstraint(trialID)) {
+      zeroMeanConstraints.push_back(trialID);
+    }
+  }
+  return zeroMeanConstraints;
 }
 
 void Solution::setZeroMeanConstraintRho(double value) {
