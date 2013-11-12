@@ -2649,7 +2649,7 @@ void Solution::setWriteRHSToMatrixMarketFile(bool value, const string &filePath)
 // Jesse's additions below:
 
 // =================================== CONDENSED SOLVE ======================================
-void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory) {
+void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool reduceMemoryFootprint) { // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   int rank=0;
 
 #ifdef HAVE_MPI
@@ -2804,7 +2804,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
     // get elem data and submatrix data
     FieldContainer<double> K,rhs;
     getElemData(elem,K,rhs);
-    if (!saveMemory){
+    if (!reduceMemoryFootprint){
       elemMatrices[cellID] = K;
       elemLoads[cellID] = rhs;
     }
@@ -3038,24 +3038,6 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
     cout << "**** WARNING: in Solution.condensedSolve(), globalSolver->solve() failed with error code " << solveSuccess << ". ****\n";
   }
 
-  //  bool useIterativeSolver = false;
-  //  if (!useIterativeSolver){
-  //    Teuchos::RCP<Solver> solver = Teuchos::rcp(new KluSolver()); // default to KLU for now - most stable
-  //    solver->setProblem(problem_cond);
-  //    solver->solve();
-  //  }else{
-  //    // create the preconditioner object and compute hierarchy
-  //    ML_Epetra::MultiLevelPreconditioner * MLPrec =
-  //      new ML_Epetra::MultiLevelPreconditioner(K_cond, true);
-  //
-  //    AztecOO Solver((*problem_cond));
-  //    Solver.SetPrecOperator(MLPrec);
-  //    Solver.SetAztecOption(AZ_solver,AZ_cg);
-  //    Solver.SetAztecOption(AZ_output,AZ_last);
-  //    //    Solver.SetAztecOption(AZ_precond, AZ_Jacobi);
-  //    int maxIter = round(numGlobalFluxDofs/4);
-  //    Solver.Iterate(maxIter,1E-9);
-  //  }
   lhs_cond.GlobalAssemble();
 
   if (_reportTimingResults){
@@ -3116,7 +3098,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
 
     // get elem data and submatrix data
     FieldContainer<double> K,rhs;
-    if (saveMemory){
+    if (reduceMemoryFootprint){
       getElemData(elem,K,rhs);
     }else{
       K = elemMatrices[cellID];
@@ -3195,7 +3177,7 @@ void Solution::condensedSolve(Teuchos::RCP<Solver> globalSolver, bool saveMemory
   clearComputedResiduals();
 }
 
-void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
+void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> &K, Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux){
   int numFieldDofs = fieldInds.size();
   int numFluxDofs = fluxInds.size();
   K_field.Reshape(numFieldDofs,numFieldDofs);
@@ -3243,7 +3225,7 @@ void Solution::getSubmatrices(set<int> fieldInds, set<int> fluxInds, const Field
   }
 }
 
-void Solution::getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux){
+void Solution::getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux){
 
   int numFieldDofs = fieldInds.size();
   int numFluxDofs = fluxInds.size();
