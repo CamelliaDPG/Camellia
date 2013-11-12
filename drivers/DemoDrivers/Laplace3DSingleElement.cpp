@@ -68,6 +68,14 @@ FieldContainer<double> referenceCubeNodes() {
   return cubePoints;
 }
 
+FieldContainer<double> unitCubeNodes() {
+  FieldContainer<double> cubePoints = referenceCubeNodes();
+  for (int i=0; i<cubePoints.size(); i++) {
+    cubePoints[i] = (cubePoints[i]+1) / 2;
+  }
+  return cubePoints;
+}
+
 void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
@@ -281,8 +289,11 @@ int main(int argc, char *argv[]) {
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
 //  FunctionPtr phi_exact = Function::constant(2);
-//  FunctionPtr phi_exact = x;
-  FunctionPtr phi_exact = y;
+  //  FunctionPtr phi_exact = x;
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+//  FunctionPtr phi_exact = y*y + x*x + x * y * z;
+  FunctionPtr phi_exact = y*y + x*x + sin_x * cos_y * z;
 //  FunctionPtr phi_exact = z;
 
   FunctionPtr psi1_exact = phi_exact->dx();
@@ -314,7 +325,10 @@ int main(int argc, char *argv[]) {
   }
   
   // for now, let's use the reference cell.  (Jacobian should be the identity.)
-  FieldContainer<double> cubePoints = referenceCubeNodes();
+//  FieldContainer<double> cubePoints = referenceCubeNodes();
+  
+  // small upgrade: unit cube
+  FieldContainer<double> cubePoints = unitCubeNodes();
   
   int numCells = 1;
   cubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
