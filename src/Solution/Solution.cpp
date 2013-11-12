@@ -151,6 +151,7 @@ Solution::Solution(Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc, Teuchos::RCP<RH
   _rhs = rhs;
   _ip = ip;
   _lagrangeConstraints = Teuchos::rcp( new LagrangeConstraints ); // empty
+  
   initialize();
 }
 
@@ -173,6 +174,7 @@ void Solution::initialize() {
   _globalSystemConditionEstimate = -1;
   _cubatureEnrichmentDegree = 0;
 
+  _zmcsAsRankOneUpdate = false; // I believe this works, but it's slow!
   _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
 }
 
@@ -284,40 +286,33 @@ void Solution::setSolution(Teuchos::RCP<Solution> otherSoln) {
   clearComputedResiduals();
 }
 
-void Solution::initializeStiffnessAndLoad(bool zmcsAsRankOneUpdate) {
-  Epetra_Map partMap = getPartitionMap(zmcsAsRankOneUpdate);
+void Solution::initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
+  Epetra_Map partMap = getPartitionMap();
   
   int maxRowSize = _mesh->rowSizeUpperBound();
 
   _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(Copy, partMap, maxRowSize));
   //  Epetra_FECrsMatrix globalStiffMatrix(Copy, partMap, partMap, maxRowSize);
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
+  _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,true));
+  
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
+  solver->setProblem(problem);
 }
 
 void Solution::populateStiffnessAndLoad() {
-  
-}
-
-void Solution::solveWithPrepopulatedStiffnessAndLoad() {
-  
-}
-
-void Solution::solve(Teuchos::RCP<Solver> solver) {
   int numProcs=Teuchos::GlobalMPISession::getNProc();;
   int rank = Teuchos::GlobalMPISession::getRank();
-
+  
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
 #else
   Epetra_SerialComm Comm;
 #endif
-  bool zmcsAsRankOneUpdate = false; // seems to be working, but slow!!
-
-  initializeStiffnessAndLoad(zmcsAsRankOneUpdate);
-
+  
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  Epetra_Map partMap = getPartitionMap(zmcsAsRankOneUpdate);
+  Epetra_Map partMap = getPartitionMap();
   
   vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
   vector< ElementTypePtr >::iterator elemTypeIt;
@@ -332,7 +327,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, _mesh, false, _cubatureEnrichmentDegree));
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh,true, _cubatureEnrichmentDegree));
-
+    
     DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
     int numTrialDofs = trialOrderingPtr->totalDofs();
@@ -341,7 +336,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
     //cout << "numTestDofs^2:" << numTestDofs*numTestDofs << endl;
     //cout << "maxCellBatch: " << maxCellBatch << endl;
-
+    
     FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
     FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
@@ -352,29 +347,29 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     while (startCellIndexForBatch < totalCellsForType) {
       int cellsLeft = totalCellsForType - startCellIndexForBatch;
       int numCells = min(maxCellBatch,cellsLeft);
-
+      
       // determine cellIDs
       vector<int> cellIDs;
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         int cellID = _mesh->cellID(elemTypePtr, cellIndex+startCellIndexForBatch, rank);
         cellIDs.push_back(cellID);
       }
-
+      
       //cout << "testDofOrdering: " << *testOrderingPtr;
       //cout << "trialDofOrdering: " << *trialOrderingPtr;
       nodeDimensions[0] = numCells;
       parityDimensions[0] = numCells;
       FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
       FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
-
+      
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
       // hard-coding creating side cache for IP for now, since _ip->hasBoundaryTerms() only recognizes terms explicitly passed in as boundary terms:
       ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-
+      
       //int numCells = physicalCellNodes.dimension(0);
       CellTopoPtr cellTopoPtr = elemTypePtr->cellTopoPtr;
-
+      
       //      { // this block is not necessary for the solution.  Here just to produce debugging output
       //        FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
       //
@@ -387,39 +382,39 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       ////        cout << "preStiffness:\n" << preStiffness;
       //      }
       FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-
+      
       _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
-
+      
       //      cout << "ipMatrix:\n" << ipMatrix;
-
+      
       FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
-
+      
       int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
                                                                  cellSideParities, basisCache);
-
+      
       //      cout << "optTestCoeffs:\n" << optTestCoeffs;
-
+      
       if ( optSuccess != 0 ) {
         cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
       }
-
+      
       //cout << "optTestCoeffs\n" << optTestCoeffs;
-
+      
       FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
-
+      
       BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-
+      
       FieldContainer<double> localRHSVector(numCells, numTrialDofs);
       _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
-
+      
       // apply filter(s) (e.g. penalty method, preconditioners, etc.)
       if (_filter.get()) {
         _filter->filter(finalStiffness,localRHSVector,basisCache,_mesh,_bc);
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
-
+      
       FieldContainer<int> globalDofIndices(numTrialDofs);
-
+      
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
         int cellID = _mesh->cellID(elemTypePtr,cellIndex+startCellIndexForBatch,rank);
         // we have the same local-to-global map for both rows and columns
@@ -434,19 +429,18 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   }
   double timeLocalStiffness = timer.ElapsedTime();
   //  cout << "Done computing local matrices" << endl;
-
   Epetra_Vector timeLocalStiffnessVector(timeMap);
   timeLocalStiffnessVector[0] = timeLocalStiffness;
-
+  
   int localRowIndex = myGlobalIndicesSet.size(); // starts where the dofs left off
-
+  
   // order is: element-lagrange, then (on rank 0) global lagrange and ZMC
   for (int elementConstraintIndex = 0; elementConstraintIndex < _lagrangeConstraints->numElementConstraints();
        elementConstraintIndex++) {
     for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
       ElementTypePtr elemTypePtr = *(elemTypeIt);
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
-
+      
       // get cellIDs for basisCache
       vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
       int numCells = cells.size();
@@ -460,13 +454,13 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
       basisCache->setCellSideParities(_mesh->cellSideParities(elemTypePtr));
-
+      
       int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
       FieldContainer<double> lhs(numCells,numTrialDofs);
       FieldContainer<double> rhs(numCells);
       _lagrangeConstraints->getCoefficients(lhs,rhs,elementConstraintIndex,
                                             elemTypePtr->trialOrderPtr,basisCache);
-
+      
       FieldContainer<int> globalDofIndices(numTrialDofs+1); // max size
       FieldContainer<double> nonzeroValues(numTrialDofs+1);
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -488,56 +482,56 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         }
         // insert row:
         _globalStiffMatrix->InsertGlobalValues(1,&globalRowIndex,nnz+1,&globalDofIndices(0),
-                                             &nonzeroValues(0));
+                                               &nonzeroValues(0));
         // insert column:
         _globalStiffMatrix->InsertGlobalValues(nnz+1,&globalDofIndices(0),1,&globalRowIndex,
-                                             &nonzeroValues(0));
+                                               &nonzeroValues(0));
         _rhsVector->ReplaceGlobalValues(1,&globalRowIndex,&rhs(cellIndex));
-
+        
         localRowIndex++;
       }
     }
   }
-
-  // compute max, min h
-  // TODO: get rid of the Global calls below (MPI-enable this code)
-  double maxCellMeasure = 0;
-  double minCellMeasure = 1e300;
-  vector< ElementTypePtr > elemTypes = _mesh->elementTypes(); // global element types
-  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
-    ElementTypePtr elemType = *elemTypeIt;
-    vector< ElementPtr > elems = _mesh->elementsOfTypeGlobal(elemType);
-    vector<int> cellIDs;
-    for (int i=0; i<elems.size(); i++) {
-      cellIDs.push_back(elems[i]->cellID());
-    }
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemType);
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,_mesh) );
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
-    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-
-    for (int i=0; i<elems.size(); i++) {
-      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
-      minCellMeasure = min(minCellMeasure,cellMeasures(i));
-    }
-  }
-  double min_h = sqrt(minCellMeasure);
-  double max_h = sqrt(maxCellMeasure);
-
+  
+  //  // compute max, min h
+  //  // TODO: get rid of the Global calls below (MPI-enable this code)
+  //  double maxCellMeasure = 0;
+  //  double minCellMeasure = 1e300;
+  //  vector< ElementTypePtr > elemTypes = _mesh->elementTypes(); // global element types
+  //  for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+  //    ElementTypePtr elemType = *elemTypeIt;
+  //    vector< ElementPtr > elems = _mesh->elementsOfTypeGlobal(elemType);
+  //    vector<int> cellIDs;
+  //    for (int i=0; i<elems.size(); i++) {
+  //      cellIDs.push_back(elems[i]->cellID());
+  //    }
+  //    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemType);
+  //    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,_mesh) );
+  //    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
+  //    FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+  //
+  //    for (int i=0; i<elems.size(); i++) {
+  //      maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
+  //      minCellMeasure = min(minCellMeasure,cellMeasures(i));
+  //    }
+  //  }
+  //  double min_h = sqrt(minCellMeasure);
+  //  double max_h = sqrt(maxCellMeasure);
+  
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   if (rank == 0) {
     int numGlobalConstraints = _lagrangeConstraints->numGlobalConstraints();
     TEUCHOS_TEST_FOR_EXCEPTION(numGlobalConstraints != 0, std::invalid_argument, "global constraints not yet supported in Solution.");
     for (int lagrangeIndex = 0; lagrangeIndex < numGlobalConstraints; lagrangeIndex++) {
       int globalRowIndex = partMap.GID(localRowIndex);
-
+      
       localRowIndex++;
     }
-
+    
     // impose zero mean constraints:
     for (vector< int >::iterator trialIt = zeroMeanConstraints.begin(); trialIt != zeroMeanConstraints.end(); trialIt++) {
       int trialID = *trialIt;
-
+      
       // sample an element to make sure that the basis used for trialID is nodal
       // (this is assumed in our imposition mechanism)
       ElementTypePtr elemTypePtr = _mesh->getActiveElement(0)->elementType();
@@ -545,15 +539,15 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       if (!trialBasis->isNodal()) {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Zero-mean constraint imposition assumes a nodal basis, and this basis isn't nodal.");
       }
-
+      
       int zmcIndex = partMap.GID(localRowIndex);
       //      cout << "Imposing zero-mean constraint for variable " << _mesh->bilinearForm()->trialName(trialID) << endl;
       FieldContainer<double> basisIntegrals;
       FieldContainer<int> globalIndices;
       integrateBasisFunctions(globalIndices,basisIntegrals, trialID);
       int numValues = globalIndices.size();
-
-      if (zmcsAsRankOneUpdate) {
+      
+      if (_zmcsAsRankOneUpdate) {
         // TODO: debug this (not working)
         // first pass; can make more efficient by implementing as a symmetric SerialDenseMatrix
         FieldContainer<double> product(numValues,numValues);
@@ -562,7 +556,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
           denominator += basisIntegrals(i);
         }
         denominator *= denominator;
-
+        
         for (int i=0; i<numValues; i++) {
           for (int j=0; j<numValues; j++) {
             product(i,j) = _zmcRho * basisIntegrals(i) * basisIntegrals(j) / denominator;
@@ -574,7 +568,7 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
         _globalStiffMatrix->InsertGlobalValues(1,&zmcIndex,numValues,&globalIndices(0),&basisIntegrals(0));
         // insert column:
         _globalStiffMatrix->InsertGlobalValues(numValues,&globalIndices(0),1,&zmcIndex,&basisIntegrals(0));
-
+        
         //      cout << "in zmc, diagonal entry: " << rho << endl;
         //rho /= numValues;
         double rho_entry = - 1.0 / _zmcRho;
@@ -583,45 +577,45 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       }
     }
   }
-
+  
   timer.ResetStartTime();
-
+  
   _rhsVector->GlobalAssemble();
-
+  
   //  EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector_before_bcs.dat",rhsVector,0,0,false);
-
+  
   _globalStiffMatrix->GlobalAssemble(); // will call globalStiffMatrix.FillComplete();
-
+  
   double timeGlobalAssembly = timer.ElapsedTime();
   Epetra_Vector timeGlobalAssemblyVector(timeMap);
   timeGlobalAssemblyVector[0] = timeGlobalAssembly;
-
+  
   //  EpetraExt::RowMatrixToMatlabFile("stiff_matrix.dat",globalStiffMatrix);
-
+  
   // determine and impose BCs
-
+  
   timer.ResetStartTime();
-
+  
   FieldContainer<int> bcGlobalIndices;
   FieldContainer<double> bcGlobalValues;
-
+  
   _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet);
   int numBCs = bcGlobalIndices.size();
   //    cout << "bcGlobalIndices:" << endl << bcGlobalIndices;
   //    cout << "bcGlobalValues:" << endl << bcGlobalValues;
-
+  
   Epetra_MultiVector v(partMap,1);
   v.PutScalar(0.0);
   for (int i = 0; i < numBCs; i++) {
     v.ReplaceGlobalValue(bcGlobalIndices(i), 0, bcGlobalValues(i));
   }
-
+  
   Epetra_MultiVector rhsDirichlet(partMap,1);
   _globalStiffMatrix->Apply(v,rhsDirichlet);
-
+  
   // Update right-hand side
   _rhsVector->Update(-1.0,rhsDirichlet,1.0);
-
+  
   if (numBCs == 0) {
     //cout << "Solution: Warning: Imposing no BCs." << endl;
   } else {
@@ -641,17 +635,11 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
   } else {
     ML_Epetra::Apply_OAZToMatrix(&bcLocalIndices(0), numBCs, *_globalStiffMatrix);
   }
-
+  
   double timeBCImposition = timer.ElapsedTime();
   Epetra_Vector timeBCImpositionVector(timeMap);
   timeBCImpositionVector[0] = timeBCImposition;
-
-  //cout << "MPI rank " << rank << ", numBCs: " << numBCs << endl;
-
-  // solve the global matrix system..
-
-  Epetra_FEVector lhsVector(partMap, true);
-
+  
   // debug: check the consistency of the mesh's global -> partitionLocal index map
   for (int localIndex = partMap.MinLID(); localIndex < partMap.MaxLID(); localIndex++) {
     int globalIndex = partMap.GID(localIndex);
@@ -671,48 +659,17 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       // TODO: write some check on the map here...
     }
   }
-
-  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &lhsVector, &*_rhsVector));
-
   _rhsVector->GlobalAssemble();
-
+  
+  Epetra_FEVector lhsVector(partMap, true);
+  
   if (_writeRHSToMatrixMarketFile) {
     if (rank==0) {
       cout << "Solution: writing rhs to file: " << _rhsFilePath << endl;
     }
     EpetraExt::MultiVectorToMatrixMarketFile(_rhsFilePath.c_str(),*_rhsVector,0,0,false);
   }
-
-  if (_reportConditionNumber) {
-    //    double oneNorm = globalStiffMatrix.NormOne();
-    double condest = conditionNumberEstimate(*problem);
-    if (rank == 0) {
-      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
-      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
-    }
-    _globalSystemConditionEstimate = condest;
-  }
-
-  timer.ResetStartTime();
-  solver->setProblem(problem);
-
-  int solveSuccess = solver->solve();
-
-  if (solveSuccess != 0 ) {
-    cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
-  }
-
-  double timeSolve = timer.ElapsedTime();
-  Epetra_Vector timeSolveVector(timeMap);
-  timeSolveVector[0] = timeSolve;
-
-  timer.ResetStartTime();
-//  int maxLhsLength = 0;
-//  for (int i=0; i<numProcs; i++) {
-//    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
-//  }
-  lhsVector.GlobalAssemble();
-
+  
   // Dump matrices to disk
   if (_writeMatrixToMatlabFile){
     //    EpetraExt::MultiVectorToMatrixMarketFile("rhs_vector.dat",rhsVector,0,0,false);
@@ -723,13 +680,82 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     EpetraExt::RowMatrixToMatrixMarketFile(_matrixFilePath.c_str(),*_globalStiffMatrix);
   }
 
+  int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
+  err = timeBCImpositionVector.Norm1( &_totalTimeBCImposition );
+  
+  err = timeLocalStiffnessVector.MeanValue( &_meanTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MeanValue( &_meanTimeGlobalAssembly );
+  err = timeBCImpositionVector.MeanValue( &_meanTimeBCImposition );
+  
+  err = timeLocalStiffnessVector.MinValue( &_minTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MinValue( &_minTimeGlobalAssembly );
+  err = timeBCImpositionVector.MinValue( &_minTimeBCImposition );
+  
+  err = timeLocalStiffnessVector.MaxValue( &_maxTimeLocalStiffness );
+  err = timeGlobalAssemblyVector.MaxValue( &_maxTimeGlobalAssembly );
+  err = timeBCImpositionVector.MaxValue( &_maxTimeBCImposition );
+}
+
+void Solution::solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
+  Epetra_Map partMap = getPartitionMap();
+  
+  vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
+  vector< ElementTypePtr >::iterator elemTypeIt;
+  
+  //cout << "process " << rank << " about to loop over elementTypes.\n";
+  int indexBase = 0;
+  Epetra_Map timeMap(numProcs,indexBase,Comm);
+  Epetra_Time timer(Comm);
+  
+  Teuchos::RCP<Epetra_LinearProblem> problem = Teuchos::rcp( new Epetra_LinearProblem(&*_globalStiffMatrix, &*_lhsVector, &*_rhsVector));
+  if (_reportConditionNumber) {
+    //    double oneNorm = globalStiffMatrix.NormOne();
+    double condest = conditionNumberEstimate(*problem);
+    if (rank == 0) {
+      // cout << "(one-norm) of global stiffness matrix: " << oneNorm << endl;
+      cout << "condition # estimate for global stiffness matrix: " << condest << endl;
+    }
+    _globalSystemConditionEstimate = condest;
+  }
+  
+  timer.ResetStartTime();
+  
+  int solveSuccess = solver->solve();
+  
+  if (solveSuccess != 0 ) {
+    cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
+  }
+  
+  double timeSolve = timer.ElapsedTime();
+  Epetra_Vector timeSolveVector(timeMap);
+  timeSolveVector[0] = timeSolve;
+  
+  timer.ResetStartTime();
+  //  int maxLhsLength = 0;
+  //  for (int i=0; i<numProcs; i++) {
+  //    maxLhsLength = std::max( (int)_mesh->globalDofIndicesForPartition(i).size(), maxLhsLength );
+  //  }
+  _lhsVector->GlobalAssemble();
+  
   // Import solution onto current processor
   int numNodesGlobal = partMap.NumGlobalElements();
   Epetra_Map     solnMap(numNodesGlobal, numNodesGlobal, 0, Comm);
   Epetra_Import  solnImporter(solnMap, partMap);
   Epetra_Vector  solnCoeff(solnMap);
-  solnCoeff.Import(lhsVector, solnImporter, Insert);
-
+  solnCoeff.Import(*_lhsVector, solnImporter, Insert);
+  
   // copy the dof coefficients into our data structure
   // get ALL element types (not just ours)-- this is a global import that we should get rid of eventually...
   elementTypes = _mesh->elementTypes();
@@ -749,63 +775,60 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
       _solutionForCellIDGlobal[cellID] = elemDofs;
     }
   }
-
+  clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
+  
   double timeDistributeSolution = timer.ElapsedTime();
   Epetra_Vector timeDistributeSolutionVector(timeMap);
   timeDistributeSolutionVector[0] = timeDistributeSolution;
-
-  // DEBUGGING: print out solution coefficients
-  //    for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
-  //      ElementTypePtr elemTypePtr = *(elemTypeIt);
-  //      cout << "solution coeffs: " << endl << _solutionForElementType[elemTypePtr.get()];
-  //    }
-
-  int err = timeLocalStiffnessVector.Norm1( &_totalTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.Norm1( &_totalTimeGlobalAssembly );
-  err = timeBCImpositionVector.Norm1( &_totalTimeBCImposition );
-  err = timeSolveVector.Norm1( &_totalTimeSolve );
+  
+  int err = timeSolveVector.Norm1( &_totalTimeSolve );
   err = timeDistributeSolutionVector.Norm1( &_totalTimeDistributeSolution );
-
-  err = timeLocalStiffnessVector.MeanValue( &_meanTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MeanValue( &_meanTimeGlobalAssembly );
-  err = timeBCImpositionVector.MeanValue( &_meanTimeBCImposition );
+  
   err = timeSolveVector.MeanValue( &_meanTimeSolve );
   err = timeDistributeSolutionVector.MeanValue( &_meanTimeDistributeSolution );
-
-  err = timeLocalStiffnessVector.MinValue( &_minTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MinValue( &_minTimeGlobalAssembly );
-  err = timeBCImpositionVector.MinValue( &_minTimeBCImposition );
+  
   err = timeSolveVector.MinValue( &_minTimeSolve );
   err = timeDistributeSolutionVector.MinValue( &_minTimeDistributeSolution );
-
-  err = timeLocalStiffnessVector.MaxValue( &_maxTimeLocalStiffness );
-  err = timeGlobalAssemblyVector.MaxValue( &_maxTimeGlobalAssembly );
-  err = timeBCImpositionVector.MaxValue( &_maxTimeBCImposition );
+  
   err = timeSolveVector.MaxValue( &_maxTimeSolve );
   err = timeDistributeSolutionVector.MaxValue( &_maxTimeDistributeSolution );
+}
 
-  if ((rank == 0) && _reportTimingResults) {
+void Solution::solve(Teuchos::RCP<Solver> solver) {
+  initializeStiffnessAndLoad(solver);
+  populateStiffnessAndLoad();
+  solveWithPrepopulatedStiffnessAndLoad(solver);
+
+  if (_reportTimingResults ) {
+    reportTimings();
+  }
+}
+
+void Solution::reportTimings() {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (rank == 0) {
     cout << "****** SUM OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _totalTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _totalTimeGlobalAssembly << " sec." << endl;
     cout << "impose BCs:     " << _totalTimeBCImposition << " sec." << endl;
     cout << "solve:          " << _totalTimeSolve << " sec." << endl;
     cout << "dist. solution: " << _totalTimeDistributeSolution << " sec." << endl << endl;
-
+    
     cout << "****** MEAN OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _meanTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _meanTimeGlobalAssembly << " sec." << endl;
     cout << "impose BCs:     " << _meanTimeBCImposition << " sec." << endl;
     cout << "solve:          " << _meanTimeSolve << " sec." << endl;
     cout << "dist. solution: " << _meanTimeDistributeSolution << " sec." << endl << endl;
-
+    
     cout << "****** MAX OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _maxTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _maxTimeGlobalAssembly << " sec." << endl;
     cout << "impose BCs:     " << _maxTimeBCImposition << " sec." << endl;
     cout << "solve:          " << _maxTimeSolve << " sec." << endl;
     cout << "dist. solution: " << _maxTimeDistributeSolution << " sec." << endl << endl;
-
+    
     cout << "****** MIN OF TIMING REPORTS ******\n";
     cout << "localStiffness: " << _minTimeLocalStiffness << " sec." << endl;
     cout << "globalAssembly: " << _minTimeGlobalAssembly << " sec." << endl;
@@ -813,12 +836,10 @@ void Solution::solve(Teuchos::RCP<Solver> solver) {
     cout << "solve:          " << _minTimeSolve << " sec." << endl;
     cout << "dist. solution: " << _minTimeDistributeSolution << " sec." << endl;
   }
-
-  clearComputedResiduals(); // now that we've solved, will need to recompute residuals...
 }
 
 void Solution::clearComputedResiduals() {
-  _residualsComputed = false; // now that we've solved, will need to recompute residuals...
+  _residualsComputed = false;
   _energyErrorComputed = false;
   _energyErrorForCellIDGlobal.clear();
   _residualForElementType.clear();
@@ -3593,7 +3614,7 @@ double Solution::minTimeDistributeSolution() {
   return _minTimeDistributeSolution;
 }
 
-Epetra_Map Solution::getPartitionMap(bool zmcsAsRankOneUpdate) {
+Epetra_Map Solution::getPartitionMap() {
   int rank = Teuchos::GlobalMPISession::getRank();
   
 #ifdef HAVE_MPI
@@ -3605,7 +3626,7 @@ Epetra_Map Solution::getPartitionMap(bool zmcsAsRankOneUpdate) {
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   int numGlobalDofs = _mesh->numGlobalDofs();
   set<int> myGlobalIndicesSet = _mesh->globalDofIndicesForPartition(rank);
-  int numZMCDofs = zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
+  int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
   
   Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);
   return partMap;

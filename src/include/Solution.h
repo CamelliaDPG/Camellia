@@ -97,6 +97,7 @@ private:
 
   Teuchos::RCP<Epetra_FECrsMatrix> _globalStiffMatrix;
   Teuchos::RCP<Epetra_FEVector> _rhsVector;
+  Teuchos::RCP<Epetra_FEVector> _lhsVector;
   
   bool _residualsComputed;
   bool _energyErrorComputed;
@@ -116,6 +117,8 @@ private:
   bool _writeMatrixToMatlabFile;
   bool _writeMatrixToMatrixMarketFile;
   bool _writeRHSToMatrixMarketFile;
+  bool _zmcsAsRankOneUpdate;
+  
   string _matrixFilePath;
   string _rhsFilePath;
 
@@ -127,7 +130,7 @@ private:
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
 
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
-
+  
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
@@ -140,13 +143,13 @@ public:
 
   const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables
 
-  Epetra_Map getPartitionMap(bool zmcsAsRankOneUpdate = false);
+  Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
   // solve steps:
-  void initializeStiffnessAndLoad(bool zmcsAsRankOneUpdate = false);
+  void initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver);
   void populateStiffnessAndLoad();
-  void solveWithPrepopulatedStiffnessAndLoad();
+  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
   
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
@@ -294,6 +297,8 @@ public:
   double minTimeSolve();
   double minTimeDistributeSolution();
 
+  void reportTimings();
+  
   void writeStatsToFile(const string &filePath, int precision=4);
 
   vector<int> getZeroMeanConstraints();
