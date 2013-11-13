@@ -18,10 +18,15 @@ class BasisCacheTests : public TestSuite {
   ElementTypePtr _elemType;
   BasisCachePtr _basisCache;
   
+  FieldContainer<double> referenceCubeNodes();
+  FieldContainer<double> unitCubeNodes();
+  
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
+  
+  bool testJacobian3D();
   
   bool testSetRefCellPoints();
   
