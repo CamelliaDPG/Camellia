@@ -701,12 +701,18 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     if (! isSideCache()) {
       fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
     } else {
-      // compute weighted edge measure
-      FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
-                                                     _cellJacobian,
-                                                     _cubWeights,
-                                                     _sideIndex,
-                                                     _cellTopo);
+      if (_spaceDim==2) {
+        // compute weighted edge measure
+        FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
+                                                       _cellJacobian,
+                                                       _cubWeights,
+                                                       _sideIndex,
+                                                       _cellTopo);
+      } else if (_spaceDim==3) {
+        FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
+      }
 //      if (_sideIndex==0) {
 //        cout << "_cellJacobian:\n" << _cellJacobian;
 //        cout << "_cubWeights:\n" << _cubWeights;

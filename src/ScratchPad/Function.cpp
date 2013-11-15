@@ -2073,6 +2073,9 @@ FunctionPtr Sin_y::dx() {
 FunctionPtr Sin_y::dy() {
   return Teuchos::rcp( new Cos_y );
 }
+FunctionPtr Sin_y::dz() {
+  return Function::zero();
+}
 
 string Cos_y::displayString() {
   return "\\cos y";
@@ -2086,6 +2089,9 @@ FunctionPtr Cos_y::dx() {
 FunctionPtr Cos_y::dy() {
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
   return - sin_y;
+}
+FunctionPtr Cos_y::dz() {
+  return Function::zero();
 }
 
 string Sin_x::displayString() {
@@ -2101,6 +2107,9 @@ FunctionPtr Sin_x::dx() {
 FunctionPtr Sin_x::dy() {
   return Function::zero();
 }
+FunctionPtr Sin_x::dz() {
+  return Function::zero();
+}
 
 string Cos_x::displayString() {
   return "\\cos x";
@@ -2113,6 +2122,9 @@ FunctionPtr Cos_x::dx() {
   return - sin_x;
 }
 FunctionPtr Cos_x::dy() {
+  return Function::zero();
+}
+FunctionPtr Cos_x::dz() {
   return Function::zero();
 }
 

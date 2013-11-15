@@ -420,6 +420,7 @@ class Cos_y : public SimpleFunction {
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
@@ -427,6 +428,7 @@ class Sin_y : public SimpleFunction {
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
@@ -434,6 +436,7 @@ class Cos_x : public SimpleFunction {
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
@@ -441,6 +444,7 @@ class Sin_x : public SimpleFunction {
   double value(double x, double y);
   FunctionPtr dx();
   FunctionPtr dy();
+  FunctionPtr dz();
   string displayString();
 };
 
