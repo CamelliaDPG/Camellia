@@ -6,10 +6,13 @@
 \usepackage{caption}
 \usepackage{color}
 \usepackage{subcaption}
+\usepackage{morefloats}
+\usepackage{pgf,tikz}
+\usetikzlibrary{arrows}
 
 \def\btau{\boldsymbol\tau}
 \def\bftau{\boldsymbol\tau}
-\def\bsigma{\boldsymbol\sigma}
+\def\bfsigma{\boldsymbol\sigma}
 \def\bbeta{\boldsymbol\beta}
 \def\blambda{\boldsymbol\lambda}
 
@@ -58,6 +61,8 @@
 \newcommand{\bfsig}{\mbox{\boldmath $\sigma$}}
 \newcommand{\bfv}{\boldsymbol v}
 \newcommand{\bfu}{\boldsymbol u}
+\newcommand{\bff}{\boldsymbol f}
+\newcommand{\bft}{\boldsymbol t}
 \newcommand{\bfpsi}{\boldsymbol\psi}
 \newcommand{\bflambda}{\boldsymbol\lambda}
 \newcommand{\bfn}{\mbox{\boldmath $n$}}
@@ -97,12 +102,12 @@
 #3 & #4\\
 \end{array}
 \right]}
-\def\vecttwo#1#2{\left[
+\def\vecttwo#1#2{\left(
 \begin{array}{c}
 #1\\
 #2\\
 \end{array}
-\right]}
+\right)}
 \def\vectthree#1#2#3{\left[
 \begin{array}{c}
 #1\\
@@ -119,7 +124,7 @@
 \end{array}
 \right]}
 
-\renewcommand{\arraystretch}{2.0}
+% \renewcommand{\arraystretch}{2.0}
 
 \newtheorem{proposition}{Proposition}
 \newtheorem{corollary}{Corollary}
@@ -312,9 +317,9 @@ parts over each element $K$:
 \begin{equation}
 \label{eq:preultraweak}
 \begin{aligned}
--(\bbeta u-\bsigma,\nabla v)_K+((\bbeta
-u-\bsigma)\cdot\mathbf{n},v)_{\partial K}&=(f,v)_K\\
-\frac{1}{\epsilon}(\bsigma,\btau)_K+(u,\nabla\cdot\btau)_K
+-(\bbeta u-\bfsigma,\nabla v)_K+((\bbeta
+u-\bfsigma)\cdot\mathbf{n},v)_{\partial K}&=(f,v)_K\\
+\frac{1}{\epsilon}(\bfsigma,\btau)_K+(u,\nabla\cdot\btau)_K
 -(u,\tau_n)_{\partial K}&=0\,.
 \end{aligned}
 \end{equation}
@@ -329,20 +334,20 @@ We will follow the same derivation for the convection-diffusion equation, but
 we emphasize that other formulations are available (in particular, the
 Primal DPG\cite{PrimalDPG} method presents an alternative with
 continuous trial functions). Thus, we seek field variables $u\in L^2(K)$ and
-$\bsigma\in\mb{L^2}(K)$. Mathematically, this leaves their traces on element
+$\bfsigma\in\mb{L^2}(K)$. Mathematically, this leaves their traces on element
 boundaries undefined, and in a manner similar to the hybridized discontinuous
 Galerkin method, we define new unknowns for trace $\hat u$ and flux $\hat t$.
 Applying these definitions to \eqnref{preultraweak} and adding the two
 equations together, we arrive at our desired variational problem.
 
 Find
-$\bs u:=(u,\bsigma,\hat u,\hat t)
+$\bs u:=(u,\bfsigma,\hat u,\hat t)
 \in\bs U:=L^2(\Omega_h)\times \bs L^2(\Omega_h)\times H^{1/2}(\Gamma_h)\times H^{-1/2}(\Gamma_h)$
 such that
 \begin{align}
 \label{eq:variationalFormulation}
-\underbrace{-(\bbeta u-\bsigma,\nabla v)_K+(\hat t,v)_{\partial K}
-+ \frac{1}{\epsilon}(\bsigma,\btau)_K
+\underbrace{-(\bbeta u-\bfsigma,\nabla v)_K+(\hat t,v)_{\partial K}
++ \frac{1}{\epsilon}(\bfsigma,\btau)_K
 +(u,\nabla\cdot\btau)_K
 -(\hat u,\tau_n)_{\partial K}}_{b(\mathbf{u}, \mathbf{v})}
 &=\underbrace{\:(f,v)_K\genfrac{}{}{0pt}{}{}{}}_{l(\mathbf{v})} &\text{in }\Omega \\
@@ -353,7 +358,7 @@ for all $\bs v:=(v,\btau)\in
 
 Let $\bs U_h:=U_h\times\bs S_h\times\hat U_h\times\hat F_h\subset L^2(\Omega_h)\times\bs
 L^2(\Omega_h)\times H^{\frac{1}{2}}(\Gamma_h)\times H^{-\frac{1}{2}}(\Gamma_h)$
-be a finite-dimensional subspace, and let $\bs u_h:=(u_h.\bsigma_h,\hat
+be a finite-dimensional subspace, and let $\bs u_h:=(u_h.\bfsigma_h,\hat
 u_h\hat t_h)\in\bs U_h$ be a group variable. The element conservative DPG scheme is
 derived from the Lagrangian:
 \begin{equation}
@@ -382,8 +387,8 @@ convection-diffusion, we get:
 \begin{equation}
 \left\{
 \begin{array}[c]{rll}
--(\bbeta u-\bsigma,\nabla \vdeltau)+\langle\hat t,\vdeltau\rangle
-+ \frac{1}{\epsilon}(\bsigma,\taudeltau)
+-(\bbeta u-\bfsigma,\nabla \vdeltau)+\langle\hat t,\vdeltau\rangle
++ \frac{1}{\epsilon}(\bfsigma,\taudeltau)
 +(u,\nabla\cdot\taudeltau)
 -\langle\hat u,\taudeltau\cdot\bs n\rangle\\
 -\sum_K\lambda_K (\delta\hat t,(1_K,\bs0))
@@ -624,7 +629,7 @@ DPG method.
 
 % %%%%%%%%%%% End Demkowicz Section %%%%%%%%%%%%
 
-\section{Robust test norms}
+\subsection{Robust test norms}
 The optimal test functions are determined by solving local problems determined
 by the choice of test norm. There are several options to consider.
 The graph norm \cite{DPGOverview} is one of the most natural norms to consider
@@ -638,7 +643,7 @@ singularity issues with the Laplace equation, offer possible explanations for
 the phenomena observed, and propose a modification of the robust test norm,
 which we demonstrate eliminates the issues observed in numerical experiments.
 
-\subsection{A model problem}
+\subsubsection{A model problem}
 \seclab{sec:confusionPlate}
 We begin by first examining a different problem than convection-diffusion.
 We look at admissible solutions for the homogeneous Laplace's equation
@@ -767,7 +772,7 @@ under the theory underlying the robust test norm; the error in the $\L$-norm
 of the solution is guaranteed to be robustly bounded; however, the $\L$ norm
 does allow for the presence of weak singularities (singularities of order
 $x^{-\frac{1}{2}}$).  Apart from the oscillation of $u$ at the singular point,
-the solution is well-behaved, and the stress $\bsigma = \epsilon \Grad u$ is
+the solution is well-behaved, and the stress $\bfsigma = \epsilon \Grad u$ is
 very well represented, as indicated in Figure~\ref{fig:plateStresses}.
 
 \begin{figure}[!h]
@@ -778,7 +783,7 @@ very well represented, as indicated in Figure~\ref{fig:plateStresses}.
 \label{fig:plateStresses}
 \end{figure}
 
-\subsection{A modification of the robust test norm}
+\subsubsection{A modification of the robust test norm}
 
 While oscillations of this sort in a solution near a singular point may be
 acceptable in certain simulations, it is a big problem for the methods in
@@ -816,28 +821,28 @@ where $g$ is a load of the adjoint problem related to robustness described in
 While not rigorously understood, we believe the issues related to the
 appearance of non-physical singularities to be related to the uncoupled nature
 of the test norm.  Previous example problems exhibited boundary layers and
-sharp gradients in the stress $\bsigma$, but not singularities, which
+sharp gradients in the stress $\bfsigma$, but not singularities, which
 contribute significantly more error.  We expect that the oscillations observed
 in $u$ are a sort of \textit{pollution error}, where error in $u$ is tied to
-error in $\bsigma$.  If we consider the ultra-weak variational formulation for
+error in $\bfsigma$.  If we consider the ultra-weak variational formulation for
 convection-diffusion
 \[
-\LRp{u,\div \btau - \bbeta\cdot \grad v}_{\L} + \LRp{\bsigma,\frac{1}{\epsilon}
+\LRp{u,\div \btau - \bbeta\cdot \grad v}_{\L} + \LRp{\bfsigma,\frac{1}{\epsilon}
 \btau + \grad v}_{\L} + \ldots,
 \]
 we can see that it is a combination of test functions that corresponds to both
-$u$ and $\bsigma$.  Referring to \cite{ChanHeuerThanhDemkowicz2012}, we note
+$u$ and $\bfsigma$.  Referring to \cite{ChanHeuerThanhDemkowicz2012}, we note
 that, by choosing $\btau$
 and $v$ such that they satisfy the adjoint equation with forcing terms $u$ and
-$\bsigma$, we recover the best $L^2$ approximation.  In other words, achieving
+$\bfsigma$, we recover the best $L^2$ approximation.  In other words, achieving
 optimality in the $L^2$ norm requires coupling between $v$ and $\btau$, which
 is achieved under the graph norm, but not the robust norm derived in the
 previous section.
-If coupling of the test terms delivers optimality in $u$ and $\bsigma$
+If coupling of the test terms delivers optimality in $u$ and $\bfsigma$
 independently, we expect that decoupling
 $v$ and $\btau$ from each other in a test norm will have the
-effect of coupling error in $\bsigma$ to error in $u$, which would explain the
-spurious oscillations in $u$ in the presence of singularities in $\bsigma$.
+effect of coupling error in $\bfsigma$ to error in $u$, which would explain the
+spurious oscillations in $u$ in the presence of singularities in $\bfsigma$.
 Similar results have been observed in the Stokes equations, where error in $u$
 is coupled to the behavior of the pressure variable \cite{FLD:FLD582}.
 
@@ -865,7 +870,7 @@ however, the solution $u$ does not display spurious oscillations in either the
 underresolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
 the same quantities, but for $\epsilon = 10^{-4}$, in order to demonstrate
 that the new test norm removes spurious oscillations in $u$ (in the presence
-of singularities in $\bsigma$) independently of $\epsilon$.
+of singularities in $\bfsigma$) independently of $\epsilon$.
 
 \begin{figure}[!h]
 \centering
@@ -882,7 +887,7 @@ of singularities in $\bsigma$) independently of $\epsilon$.
 \label{fig:newNormSmallEps}
 \end{figure}
 
-\subsection{Adaptation for a Locally Conservative Formulation}
+\subsubsection{Adaptation for a Locally Conservative Formulation}
 With this choice of test norm, our local problem now becomes:
 
 Find $\vdeltau\in\HOneK,\,\taudeltau\in\HdivK$ such that:
@@ -923,10 +928,67 @@ numbers of the local solve.
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
 
+\section{Application to Other Fluid Model Problems}
+Extension of these ideas to other fluid flow problems is relatively trivial.
+For the following problems, we just use the graph norm for the local problems.
+
+\subsection{Inviscid Burgers' Equation}
+The inviscid Burger's equation is
+\[
+\frac{\partial u}{\partial t}+u\frac{\partial u}{\partial x}=f\,.
+\]
+Define the space-time gradient: $\Grad_{xt}=\LRp{\frac{\partial}{\partial
+x},\frac{\partial}{\partial t}}^T$. We can now rewrite this as
+\[
+\vecttwo{u}{1}\cdot\Grad_{xt}u=0\,.
+\]
+Multiplying by a test function $v$, and integrating by parts:
+\[
+-\LRp{\vecttwo{u}{1}u,\Grad_{xt}v}+\LRa{\hat t,v}=\LRp{f,v}\,,
+\]
+where $\hat t$ is the trace of $\vecttwo{u^2}{u}\cdot\mathbf{n}_{xt}$ on
+element boundaries, and $\mathbf{n}_{xt}$ is the space-time normal vector.
+As in convection-diffusion, local conservation implies that
+$\int_{\partial K}\hat t=\int_Kf$ for all elements, $K$.
+
+In order to solve this nonlinear problem, we linearize and do a simple Newton iteration
+until the solution converges. The results follow in Section \ref{sec:inviscidBurgers}.
+
+\subsection{Stokes Flow}
+We start with the VGP (velocity, gradient pressure) Stokes formulation:
+\begin{align*}
+   \mu\Delta \bfu+\Grad p&=\bff\\
+   \Div\bfu&=0\,,
+\end{align*}
+where $\bfu$ is the velocity vector field.
+% For the following discussion, we let $\mu=1$, though this is by no means
+% essential.
+As a first order system of equations, this is
+\begin{align*}
+   \frac{1}{\mu}\bfsigma-\Grad\bfu&=0\\
+   \Div\bfsigma+\Grad p&=\bff\\
+   \Div\bfu&=0\,,
+\end{align*}
+where $\bfsigma$ is a tensor valued stress field.
+Multiplying by test functions $\bftau$ (tensor valued), $\bfv$ (vector
+valued), and $q$ (scalar valued), and integrating by parts:
+\begin{align*}
+   \LRp{\frac{1}{\mu}\bfsigma,\bftau}+\LRp{\bfu,\Div\bftau}-\LRa{\hat
+   \bfu,\bftau\cdot\mathbf{n}}&=0\\
+   -\LRp{\bfsigma,\Grad\bfv}-\LRp{p,\Div\bfv}+\LRa{\hat \bft,\bfv}&=\LRp{\bff,\bfv}\\
+   -\LRp{\bfu,\Grad q}+\LRa{\hat\bfu\cdot\mathbf{n},q}&=0\,,
+\end{align*}
+where $\hat\bfu$ is the trace of $\bfu$, and $\hat\bft$ is the trace of
+$\LRp{\bfsigma+p\mathbf{I}}\cdot\mathbf{n}$. The solve for $p$ is only unique
+up to a constant, so we also impose a zero mean condition, $\int_\Omega p=0$.
+Local conservation for Stokes flow means that over each element,
+$\int_K\hat\bfu\cdot\mathbf{n}=0$. Results follow in Sections
+\ref{sec:stokesCylinder} and \ref{sec:stokesStep}.
+
 \section{Numerical Experiments}
 In \ref{sec:problemDescriptions} we define each numerical experiment, and in
 \ref{sec:problemAnalysis} we discuss the solution properties in general. We
-solve with second order field variables and flux ($u$, $\bsigma$, and $\hat
+solve with second order field variables and flux ($u$, $\bfsigma$, and $\hat
 t$), third order traces ($\hat t$), and fifth order test functions ($v$ and
 $\btau$).
 
@@ -940,9 +1002,10 @@ imbalances.
 
 \subsection{Description of Problems}\label{sec:problemDescriptions}
 Unless otherwise noted, the problem domain is $\Omega=[0,1]^2$ and $f=0$. Also
-note that except for the discontinuous source problem, for all of the
+note that unless otherwise noted, for all of the
 pseudo-color plots, blue corresponds to $0$ and red to $1$ with a linear
-scaling in between. Also, all plots are of the field variable $u$.
+scaling in between. Also, all convection-diffusion plots are of the field variable $u$.
+Inviscid Burgers' and Stokes results will be dealt with individually.
 
 \subsubsection{Erickson-Johnson Model Problem}
 The Erickson-Johnson problem is one of the few convection-diffusion problems
@@ -1249,6 +1312,178 @@ cylinder. We run with $\epsilon=10^{-3}$.
 \end{subfigure}
 \caption{Hemker problem after 8 refinements}
 \label{fig:hemker8}
+\end{figure}
+
+\subsubsection{Inviscid Burgers' Equation}\label{sec:inviscidBurgers}
+
+\subsubsection{Stokes Flow Around a Cylinder}\label{sec:stokesCylinder}
+This is a common problem used to stress-test local conservation properties of
+least squares finite element methods. Since DPG can be viewed as a generalized
+least squares methods\cite{DPGOverview}, we might expect it to struggle with
+this problem as well. The problem domain is detailed in
+Figure~\ref{fig:stokesCylinderDomain} with inlet and outlet velocity profiles
+\[
+\bfu_{in}=\bfu_{out}=\vecttwo{(1-y)(1+y)}{0}\,,
+\]
+and zero flow on the cylinder and at the top and bottom walls. We use $\mu=$
+with both Stokes problems.
+
+We measure mass loss much more directly in these two Stokes problems. Because
+fluid enters and leaves the domain only through the inlet and outlet
+boundaries, we should be able to integrate the mass flux over any
+cross-section of the mesh and get the same value. Unfortunately, it's not
+mathematically kosher to take line integrals of our field variables which only
+live in $L^2$. We can, however, integrate the flux over element boundaries.
+This carries the unfortunate limitation that we can only measure mass loss
+where there is a clear vertical mesh line. We therefore pick integration lines
+from the initial coarse mesh and measure the mass flux after each adaptive refinement
+step. The percent mass loss is thus
+\[
+\%m_{loss}=\frac{\int_{\Gamma_{in}}\bfu\cdot\bfn_{in}d\ell-\int_S\bfu\cdot\bfn_Sd\ell}
+{\int_{\Gamma_{in}}\bfu\cdot\bfn_{in}d\ell}\times100.
+\]
+
+\begin{figure}[p]
+\centering
+\begin{tikzpicture}[line cap=round,line join=round,>=triangle 45,x=2.5cm,y=2.5cm]
+\clip(-1.97,-1.48) rectangle (3.39,1.55);
+\draw(0,0) circle (1.5cm);
+\draw (-1,-1)-- (3,-1);
+\draw (3,1)-- (3,-1);
+\draw (-1,1)-- (3,1);
+\draw (-1,1)-- (-1,-1);
+\draw (0,0)-- (.3,0.5196);
+\draw (0.12,0.29) node[anchor=north west] {r};
+\draw (-1.3,-1.0) node[anchor=north west] {-1.0};
+\draw (-1.3,1.15) node[anchor=north west] {1.0};
+\draw (-1.3,0.0) node[anchor=north west] {$u_{in}$};
+\draw (0.6,0.0) node[anchor=north west] {$u_{cyl}$};
+\draw (3.0,-1.0) node[anchor=north west] {3.0};
+\draw (3.0,0.0) node[anchor=north west] {$u_{out}$};
+\draw (0.9,-1.03) node[anchor=north west] {$u_{wall}$};
+\draw (0.9,1.17) node[anchor=north west] {$u_{wall}$};
+\end{tikzpicture}
+\caption{Stokes cylinder domain}
+\label{fig:stokesCylinderDomain}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC0.png}
+\caption{Nonconservative on initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C0.png}
+\caption{Conservative on initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC6.png}
+\caption{Nonconservative after 6 refinement steps}
+\label{fig:stokesCylinderNC}
+\end{subfigure}
+\begin{subfigure}[t]{0.5\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C6.png}
+\caption{Conservative after 6 refinement steps}
+\label{fig:stokesCylinderC}
+\end{subfigure}
+\caption{Stokes flow around a cylinder - velocity magnitude}
+\label{fig:stokesCylinder}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/StokesCylinder/MassLoss9_NC.pdf}
+\caption{Mass loss in Stokes flow around a cylinder - nonconservative DPG}
+\label{fig:stokesCylinderMassLossNC}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/StokesCylinder/MassLoss9_C.pdf}
+\caption{Mass loss in Stokes flow around a cylinder - conservative DPG}
+\label{fig:stokesCylinderMassLossC}
+\end{figure}
+
+\subsubsection{Stokes Flow Over a Backward Facing Step}\label{sec:stokesStep}
+Similarly, least squares methods have historically performed very poorly when
+calculating Stokes flow over a backward facing step. The stress singularity at
+the reentrant corner, in particular, seems to destroy local conservation. We
+assign parabolic inlet and outlet velocity boundary conditions
+\[
+\bfu_{in}=\vecttwo{8(y-0.5)(1-y)}{0}
+\quad\text{ and }\quad
+\bfu_{out}=\vecttwo{y(1-y)}{0}
+\]
+and zero velocity on all other boundaries.
+
+\begin{figure}[p]
+\centering
+\begin{tikzpicture}[line cap=round,line join=round,>=triangle 45,x=1.3cm,y=1.3cm]
+\clip(-0.5,-0.3) rectangle (10.67,5);
+\draw [line width=1.0pt] (0,0.5)-- (2,0.5);
+\draw [line width=1.0pt] (2,0.5)-- (2,0);
+\draw [line width=1.0pt] (10,0)-- (2,0);
+\draw [line width=1.0pt] (10,1)-- (10,0);
+\draw [line width=1.0pt] (0,1)-- (10,1);
+\draw [line width=1.0pt] (0,0.5)-- (0,1);
+\draw (-0.6,0.6) node[anchor=north west] {0.5};
+\draw (-0.6,1.3) node[anchor=north west] {1.0};
+\draw (1.4,0.2) node[anchor=north west] {2.0};
+\draw (10.0,0.2) node[anchor=north west] {10.0};
+\draw (0.0,0.92) node[anchor=north west] {$u_{in}$};
+\draw (10.0,0.7) node[anchor=north west] {$u_{out}$};
+\draw (5.0,0.0) node[anchor=north west] {$u_{wall}$};
+\draw (5.0,1.35) node[anchor=north west] {$u_{wall}$};
+\end{tikzpicture}
+\caption{Stokes step domain}
+\label{fig:stokesStepDomain}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}[t]{0.8\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesStep/Quartic_NC0.png}
+\caption{Nonconservative on initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesStep/Quartic_C0.png}
+\caption{Conservative on initial mesh}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesStep/Quartic_NC8.png}
+\caption{Nonconservative after 8 refinement steps}
+\label{fig:stokesStepNC}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesStep/Quartic_C8.png}
+\caption{Conservative after 8 refinement steps}
+\label{fig:stokesStepC}
+\end{subfigure}
+\caption{Stokes backward facing step - velocity magnitude}
+\label{fig:stokesStep}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/StokesStep/MassLoss_NC.pdf}
+\caption{Mass loss in Stokes backward facing step - nonconservative DPG}
+\label{fig:stokesStepMassLossNC}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/StokesStep/MassLoss_C.pdf}
+\caption{Mass loss in Stokes backward facing step - conservative DPG}
+\label{fig:stokesStepMassLossC}
 \end{figure}
 
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
