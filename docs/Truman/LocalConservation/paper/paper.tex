@@ -184,6 +184,10 @@ numerical solution that violates the underlying physics (destroying mass or
 entropy, for example) is in many respects just as flawed as an unstable
 solution.
 \end{quote}
+There are also some mathematically attractive reasons to pursue local
+conservation. The Lax-Wendroff theorem guarantees that a convergent numerical
+solution to a system of hyperbolic conservation laws will converge to the
+correct weak solution.
 
 The discontinuous Petrov-Galerkin finite element method has been described as
 least squares finite elements with a twist. The key difference is that least
@@ -933,6 +937,9 @@ Extension of these ideas to other fluid flow problems is relatively trivial.
 For the following problems, we just use the graph norm for the local problems.
 
 \subsection{Inviscid Burgers' Equation}
+We include the inviscid Burgers' equation in our suite of tests because, being
+a nonlinear hyperbolic conservation law, it
+falls under the purvue of the Lax-Wendroff theorem.
 The inviscid Burger's equation is
 \[
 \frac{\partial u}{\partial t}+u\frac{\partial u}{\partial x}=f\,.
@@ -940,19 +947,25 @@ The inviscid Burger's equation is
 Define the space-time gradient: $\Grad_{xt}=\LRp{\frac{\partial}{\partial
 x},\frac{\partial}{\partial t}}^T$. We can now rewrite this as
 \[
-\vecttwo{u}{1}\cdot\Grad_{xt}u=0\,.
+\Grad_{xt}\cdot\vecttwo{u^2/2}{u}=0\,.
 \]
 Multiplying by a test function $v$, and integrating by parts:
 \[
--\LRp{\vecttwo{u}{1}u,\Grad_{xt}v}+\LRa{\hat t,v}=\LRp{f,v}\,,
+-\LRp{\vecttwo{u^2/2}{u},\Grad_{xt}v}+\LRa{\hat t,v}=\LRp{f,v}\,,
 \]
-where $\hat t$ is the trace of $\vecttwo{u^2}{u}\cdot\mathbf{n}_{xt}$ on
+where $\hat t$ is the trace of $\vecttwo{u^2/2}{u}\cdot\mathbf{n}_{xt}$ on
 element boundaries, and $\mathbf{n}_{xt}$ is the space-time normal vector.
 As in convection-diffusion, local conservation implies that
 $\int_{\partial K}\hat t=\int_Kf$ for all elements, $K$.
 
 In order to solve this nonlinear problem, we linearize and do a simple Newton iteration
-until the solution converges. The results follow in Section \ref{sec:inviscidBurgers}.
+until the solution converges. The linearized equation is
+\[
+-\LRp{\vecttwo{u}{1}\Delta u,\Grad_{xt}v}+\LRa{\hat t,v}=\LRp{f,v}
++\LRp{\vecttwo{u^2/2}{u},\Grad_{xt}v} \,,
+\]
+where $u$ is the previous solution iteration and $\Delta u$ is the update.
+The results follow in Section \ref{sec:inviscidBurgers}.
 
 \subsection{Stokes Flow}
 We start with the VGP (velocity, gradient pressure) Stokes formulation:
@@ -1042,7 +1055,7 @@ like Figure \ref{fig:erickson}.
 
 \begin{figure}[h!]
 \centering
-\includegraphics[width=0.8\textwidth]{figs/Erickson/graphFlux.pdf}
+\includegraphics[width=0.8\textwidth]{figs/Erickson/modifiedFlux.pdf}
 \caption{Flux imbalance in Erickson-Johnson solutions}
 \label{ericksonFlux}
 \end{figure}
@@ -1240,13 +1253,13 @@ scaled to  $[-1.110,0.889]$.
 \centering
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/Discontinuous/graph8nc.png}
+\includegraphics[width=\textwidth]{figs/Discontinuous/modified8nc.png}
 \caption{Nonconservative}
 \label{fig:discontinuousModified8nc}
 \end{subfigure}
 \begin{subfigure}[t]{0.45\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/Discontinuous/robust8nc.png}
+\includegraphics[width=\textwidth]{figs/Discontinuous/modified8c.png}
 \caption{Conservative}
 \label{fig:discontinuousModified8c}
 \end{subfigure}
@@ -1315,6 +1328,35 @@ cylinder. We run with $\epsilon=10^{-3}$.
 \end{figure}
 
 \subsubsection{Inviscid Burgers' Equation}\label{sec:inviscidBurgers}
+This is a standard test problem for Burgers' equation. The domain is a unit
+square. We assign boundary conditions $\hat t=-(1-2x)$ on the bottom, $\hat
+t=-1/2$ on the left, while $\hat t=1/2$ on the right. Since this is a
+hyperbolic equation, there is no need to set a boundary condition on the top.
+
+\begin{figure}[p]
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Burgers/graph8nc.png}
+\caption{Nonconservative}
+\label{fig:burgers8nc}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/Burgers/graph8c.png}
+\caption{Conservative}
+\label{fig:burgers8c}
+\end{subfigure}
+\caption{Burgers' problem after 8 refinements}
+\label{fig:burgers}
+\end{figure}
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/Burgers/graphFlux.pdf}
+\caption{Flux imbalance in Burgers' solutions}
+\label{fig:burgers_flux}
+\end{figure}
 
 \subsubsection{Stokes Flow Around a Cylinder}\label{sec:stokesCylinder}
 This is a common problem used to stress-test local conservation properties of
@@ -1326,22 +1368,30 @@ Figure~\ref{fig:stokesCylinderDomain} with inlet and outlet velocity profiles
 \bfu_{in}=\bfu_{out}=\vecttwo{(1-y)(1+y)}{0}\,,
 \]
 and zero flow on the cylinder and at the top and bottom walls. We use $\mu=$
-with both Stokes problems.
+with both Stokes problems and set velocity boundary conditions on $\hat\bfu$.
+
+Bochev \etal~\cite{Bochev2010} run this test with both $r=0.6$ and $r=0.9$; we
+repeat the same experiments with standard and locally conservative DPG methods
+starting from the very coarse meshes shown in Figure~\ref{fig:stokesMesh}
+while adaptively refining toward a resolved solution. The extreme pressure
+gradient in the $r=0.9$ case obviously makes local conservation more
+challenging.
 
 We measure mass loss much more directly in these two Stokes problems. Because
 fluid enters and leaves the domain only through the inlet and outlet
 boundaries, we should be able to integrate the mass flux over any
 cross-section of the mesh and get the same value. Unfortunately, it's not
 mathematically kosher to take line integrals of our field variables which only
-live in $L^2$. We can, however, integrate the flux over element boundaries.
+live in $L^2$. We can, however, integrate the trace and flux variables over element boundaries.
 This carries the unfortunate limitation that we can only measure mass loss
 where there is a clear vertical mesh line. We therefore pick integration lines
 from the initial coarse mesh and measure the mass flux after each adaptive refinement
 step. The percent mass loss is thus
 \[
 \%m_{loss}=\frac{\int_{\Gamma_{in}}\bfu\cdot\bfn_{in}d\ell-\int_S\bfu\cdot\bfn_Sd\ell}
-{\int_{\Gamma_{in}}\bfu\cdot\bfn_{in}d\ell}\times100.
+{\int_{\Gamma_{in}}\bfu\cdot\bfn_{in}d\ell}\times100,
 \]
+where $S$ is some vertical mesh line.
 
 \begin{figure}[p]
 \centering
@@ -1369,44 +1419,82 @@ step. The percent mass loss is thus
 
 \begin{figure}[p]
 \centering
+\begin{subfigure}[t]{0.6\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/mesh6_0.png}
+\caption{Mesh for $r=0.6$}
+\label{fig:stokesMesh6}
+\end{subfigure}
+\begin{subfigure}[t]{0.6\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/mesh9_0.png}
+\caption{Mesh for $r=0.9$}
+\label{fig:stokesMesh9}
+\end{subfigure}
+\caption{Initial mesh for Stokes flow over a cylinder}
+\label{fig:stokesMesh}
+\end{figure}
+
+\begin{figure}[p]
+\centering
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC0.png}
-\caption{Nonconservative on initial mesh}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_NC6.png}
+\caption{Nonconservative with $r=0.6$}
+\label{fig:stokesCylinderNC6}
 \end{subfigure}
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
-\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C0.png}
-\caption{Conservative on initial mesh}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_C6.png}
+\caption{Conservative with $r=0.6$}
+\label{fig:stokesCylinderC6}
 \end{subfigure}
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC6.png}
-\caption{Nonconservative after 6 refinement steps}
-\label{fig:stokesCylinderNC}
+\caption{Nonconservative with $r=0.9$}
+\label{fig:stokesCylinderNC9}
 \end{subfigure}
 \begin{subfigure}[t]{0.5\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C6.png}
-\caption{Conservative after 6 refinement steps}
-\label{fig:stokesCylinderC}
+\caption{Conservative with $r=0.9$}
+\label{fig:stokesCylinderC9}
 \end{subfigure}
-\caption{Stokes flow around a cylinder - velocity magnitude}
-\label{fig:stokesCylinder}
+\caption{Stokes flow around a cylinder after 6 refinement steps - velocity magnitude}
+\label{fig:stokesCylinder9}
 \end{figure}
 
 \begin{figure}[p]
 \centering
-\includegraphics[width=0.8\textwidth]{figs/StokesCylinder/MassLoss9_NC.pdf}
-\caption{Mass loss in Stokes flow around a cylinder - nonconservative DPG}
-\label{fig:stokesCylinderMassLossNC}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/MassLoss6_NC.pdf}
+\caption{Nonconservative}
+\label{fig:stokesCylinder6MassLossNC}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/MassLoss6_C.pdf}
+\caption{Conservative}
+\label{fig:stokesCylinder6MassLossC}
+\end{subfigure}
+\caption{Mass loss in Stokes flow around a cylinder of radius $0.6$}
+\label{fig:stokesCylinder6MassLoss}
 \end{figure}
 
 \begin{figure}[p]
 \centering
-\includegraphics[width=0.8\textwidth]{figs/StokesCylinder/MassLoss9_C.pdf}
-\caption{Mass loss in Stokes flow around a cylinder - conservative DPG}
-\label{fig:stokesCylinderMassLossC}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/MassLoss9_NC.pdf}
+\caption{Nonconservative}
+\label{fig:stokesCylinder9MassLossNC}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesCylinder/MassLoss9_C.pdf}
+\caption{Conservative}
+\label{fig:stokesCylinder9MassLossC}
+\end{subfigure}
+\caption{Mass loss in Stokes flow around a cylinder of radius $0.9$}
+\label{fig:stokesCylinder9MassLoss}
 \end{figure}
 
 \subsubsection{Stokes Flow Over a Backward Facing Step}\label{sec:stokesStep}
@@ -1419,7 +1507,9 @@ assign parabolic inlet and outlet velocity boundary conditions
 \quad\text{ and }\quad
 \bfu_{out}=\vecttwo{y(1-y)}{0}
 \]
-and zero velocity on all other boundaries.
+and zero velocity on all other boundaries. In this problem, we solve with
+fourth order field and flux variables, fifth order traces, and sixth order
+test functions.
 
 \begin{figure}[p]
 \centering
@@ -1474,22 +1564,26 @@ and zero velocity on all other boundaries.
 
 \begin{figure}[p]
 \centering
-\includegraphics[width=0.8\textwidth]{figs/StokesStep/MassLoss_NC.pdf}
-\caption{Mass loss in Stokes backward facing step - nonconservative DPG}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesStep/MassLoss_NC.pdf}
+\caption{Nonconservative DPG}
 \label{fig:stokesStepMassLossNC}
-\end{figure}
-
-\begin{figure}[p]
-\centering
-\includegraphics[width=0.8\textwidth]{figs/StokesStep/MassLoss_C.pdf}
-\caption{Mass loss in Stokes backward facing step - conservative DPG}
+\end{subfigure}
+\begin{subfigure}[t]{0.8\textwidth}
+\includegraphics[width=\textwidth]{figs/StokesStep/MassLoss_C.pdf}
+\caption{Conservative DPG}
 \label{fig:stokesStepMassLossC}
+\end{subfigure}
+\caption{Mass loss in Stokes backward facing step}
+\label{fig:stokesStepMassLoss}
 \end{figure}
 
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
+\subsubsection{Convection-Diffusion Results}
 % Solution quality
 The general trend we see looking at the results is that the solution quality
-of the conservative and nonconservative formulations is nearly identical. This
+of the conservative and nonconservative formulations is nearly identical once
+sufficiently resolved. This
 is ideal, as we wish to preserve the attractive features of DPG --
 namely that it minimizes error in the energy norm. In particular, when we
 examine the error convergence plots for the Erickson-Johnson problem, the
@@ -1499,13 +1593,13 @@ DPG too much.
 
 % Overshoots/undershoots
 Another measure of solution quality is to look at the magnitude of overshoots
-and undershoots in the solution. In most of the problems considered (barring
+and undershoots in the solution. In most of the convection-diffusion problems considered (barring
 the discontinuous source problem) the exact solution would range exactly
 between 0 and 1. In the resolved solutions, the divergence from these values
 would be negligible, but for the inner layer, in which $\epsilon=10^{-6}$, we
 get overshoots and undershoots along the separation line. For the
 nonconservative formulation, the solution range for $u$ was $[-0.392,1.342]$,
-while the conservative solution range was $[0.389,1.378]$. This difference is
+while the conservative solution range was $[-0.389,1.378]$. This difference is
 easily accounted for by the differences in refinement patterns between the two
 methods.
 
@@ -1537,26 +1631,52 @@ machine epsilon (plus a few orders of magnitude). The level of enforcement
 appears to creep up with more degrees of freedom, indicating possible
 accruement of numerical error.
 
+\subsubsection{Burgers' Results}
+Standard and locally conservative DPG perform nearly identically for the
+inviscid Burgers' problem. It's obvious that the Lax-Wendroff condition of
+local conservation is a sufficient, but not necessary condition for numerical
+solutions to hyperbolic conservation laws. We see the same behavior with the
+flux imbalance plots that was so common with convection-diffusion.
+
+\subsubsection{Stokes Results}
+The two Stokes problems are the first ones we encounter that really stress the local
+conservation property of standard DPG. With a cylinder radius of $0.6$,
+standard DPG loses nearly 30\% of the mass post-cylinder, but quickly recovers
+most of that with further refinement. As we increase the cylinder radius to
+$0.9$, the problem only exacerbates. Nearly 100\% of the mass is lost in the
+constricted region on coarse meshes. It takes a much higher level of
+resolution to recover the mass loss. The stress singularity at the reentrant
+corner of the backward facing step causes issues for standard DPG on coarse
+meshes. It seems that the error in approximating the singularity outweighs the
+error of missed mass conservation. If we focus refinements at the singularity,
+the error eventually drops far enough for the method to become nearly
+conservative.
+The small amount of mass loss for the conservative method is clearly due to
+accumulation of floating point error.
+
 \section{Conclusions}
 We've developed a locally conservative formulation of DPG by leveraging
-Lagrange multipliers. While the formulation is provably convergent, it does
+Lagrange multipliers. While the formulation is provably convergent and robust, it does
 increase the number of unkowns in the system and changes the structure from
 symmetric positive-definite to a saddlepoint problem. Numerical results
 indicate that the method delivers what it promises with local flux imbalances
-hovering close to machine precision, but they also indicate that for the
+hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
-with refinements. Probably the most encouraging result of these experiments is
+with refinements. For the Stokes problems, standard DPG suffered similar mass
+loss as standard least squares on coarse meshes, but made up the lost mass with further
+resolution.
+Probably the most encouraging result of these experiments is
 that enforcing local conservation did not change the nature of the solutions
 too significantly. Standard DPG has a lot of attractive features, and we wish
-to preserve thoes.
+to preserve those.
 
-Mass conservation is probably the foremost issue facing the class of Least
-Squares Finite Element Methods. And there are several benchmark problems in the
-literature where these methods have performed very poorly, particularly Stokes
-flow over a cylinder and the backward facing step problem. Extending our locally
-conservative formulation of DPG to these kinds of problems should be
-relatively straightforward. The real test of whether local conservation is
-worth it for DPG will come when we start doing more realistic problems.
+% Mass conservation is probably the foremost issue facing the class of Least
+% Squares Finite Element Methods. And there are several benchmark problems in the
+% literature where these methods have performed very poorly, particularly Stokes
+% flow over a cylinder and the backward facing step problem. Extending our locally
+% conservative formulation of DPG to these kinds of problems should be
+% relatively straightforward. The real test of whether local conservation is
+% worth it for DPG will come when we start doing more realistic problems.
 
 \bibliographystyle{plain}
 \bibliography{../../DPG}
