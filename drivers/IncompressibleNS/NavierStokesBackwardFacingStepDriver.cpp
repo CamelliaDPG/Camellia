@@ -391,6 +391,8 @@ int main(int argc, char *argv[]) {
   
   bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
   
+  double maxAspectRatioForGartling = args.Input<double>("--maxAspectRatioForGartling", "maximum allowable aspect ratio for initial mesh when using Gartling parameters", 2.0);
+  
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
   double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
   string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
@@ -601,12 +603,16 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
   if (useGartlingParameters) {
-    // our elements now have aspect ratio 30:1.  We want to do 5 sets of horizontal refinements to square them up.
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    // our elements now have aspect ratio 30:1.  We want to do 5 sets of horizontal refinements to square them up (less if the user relaxed the maxAspectRatioForGartling)
+    double aspectRatio = 30;
+    while (aspectRatio > maxAspectRatioForGartling) {
+      mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+      aspectRatio /= 2;
+    }
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
   } else if (! useBiswasGeometry) {
     // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
     mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
@@ -934,6 +940,8 @@ int main(int argc, char *argv[]) {
     }
 
     bfsRefinementStrategy->refine(false); //rank==0); // print to console on rank 0
+    if (rank==0)
+      cout << "After refinement " << refIndex + 1 << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " total dofs and " << mesh->numFluxDofs() << " flux dofs.\n";
     
     if (refIndex < numCornerRefinementsToInduce) {
       if (induceCornerRefinements) {
