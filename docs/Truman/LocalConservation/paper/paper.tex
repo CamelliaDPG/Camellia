@@ -362,6 +362,35 @@ such that
 for all $\bs v:=(v,\btau)\in
 \bs V:=H^1(\Omega_h)\times\bfH(\text{div},\Omega_h)$.
 
+% jesse robustness section
+
+We note that, for convection-diffusion problems, we are particularly interested in designing a \textit{robust} DPG method.  Specifically, we are interested in designing methods whose behavior does not change as the diffusion parameter $\epsilon$ becomes very small.  Naive Galerkin methods for convection-diffusion tend to suffer from a lack of robustness; specifically, the finite element error is bounded by a constant factor of the best approximation error, but the constant is often proportional to $\epsilon^{-1}$.  Our aim is to design a DPG method with this in mind.  We follow the methodology introduced by Heuer and Demkowicz in \cite{DemkowiczHeuer}: the ultra-weak variational formulation for convection-diffusion can be refactored as
+\[
+b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}} = \sum_{K\in \Oh}\LRs{\LRa{\fnh,v}_{\delta K} + \LRa{\uh,\tau_n}_{\delta K} + \LRp{u,\div \tau - \beta\cdot\grad v}_{L^2(K)} + \LRp{\sigma,\frac{1}{\epsilon} \tau + \grad v}_{L^2(K)}},
+\]
+modulo application of boundary data.  If we choose specific \textit{conforming} test functions satisfying the adjoint equations
+\begin{align*}
+\div \tau - \beta \cdot \grad v &= u,\\
+\frac{1}{\epsilon} \tau + \grad v &= \sigma,
+\end{align*}
+then evaluating $b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}$ at these specific test functions returns back $\norm{u}^2 + \norm{\sigma}^2$, the $L^2$ norm of our field variables.  Multiplying and dividing through by the test norm $\norm{v}_V$, we have
+\[
+\norm{u}_{\L}^2 + \norm{\sigma}_{\L}^2 = b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}} = \frac{b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}}{\norm{v}_V}\norm{v}_V \leq \norm{u,\sigma,\uh,\fnh}_E\norm{v}_V,
+\]
+where 
+\[
+\norm{u,\sigma,\uh,\fnh}_E = \sup_{v\in V\setminus\LRc{0}}\frac{b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}}{\norm{v}_V}
+\]
+is the DPG energy norm.  If we can robustly bound the test norm $\norm{v}_V \lesssim \LRp{\norm{u}_{\L}^2+\norm{\sigma}^2_{\L}}^{1/2}$ (i.e. derive a bound from above with a constant independent of $\epsilon$), then we can divide through to get
+\[
+\LRp{\norm{u}_{\L}^2 + \norm{\sigma}_{\L}^2}^{\frac{1}{2}} \lesssim \norm{u,\sigma,\uh,\fnh}_E.
+\]
+In other words, the energy norm in which DPG is optimal bounds independently of $\epsilon$ the $L^2$ norm; as we drive our energy error down to zero, we can expect that the $L^2$ error will also decrease regardless of $\epsilon$.  
+
+We note that the construction of the test norm $\norm{v}_V$ for a robust DPG method depends on two things: the test norm, as well as the adjoint equation.  In \cite{DemkowiczHeuer}, the standard problem with Dirichlet conditions enforced over the entire boundary was considered; in \cite{ChanHeuerThanhDemkowicz2012}, boundary conditions were chosen for the forward problem such that the induced adjoint problem was regularized and contained no strong boundary layers, allowing for the construction of a stronger test norm on $V$.  We adopt a slight modification of the test norm introduced in \cite{ChanHeuerThanhDemkowicz2012} for numerical experiments here, which is motivated and explained in more detail in Section~\secref{sec:confusionPlate}.  
+
+
+Having reviewed and laid the foundation for DPG methods, we can now formulate our conservative DPG scheme.  % added by Jesse
 Let $\bs U_h:=U_h\times\bs S_h\times\hat U_h\times\hat F_h\subset L^2(\Omega_h)\times\bs
 L^2(\Omega_h)\times H^{\frac{1}{2}}(\Gamma_h)\times H^{-\frac{1}{2}}(\Gamma_h)$
 be a finite-dimensional subspace, and let $\bs u_h:=(u_h.\bfsigma_h,\hat
