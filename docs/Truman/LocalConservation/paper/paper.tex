@@ -364,7 +364,17 @@ for all $\bs v:=(v,\btau)\in
 
 % jesse robustness section
 
-We note that, for convection-diffusion problems, we are particularly interested in designing a \textit{robust} DPG method.  Specifically, we are interested in designing methods whose behavior does not change as the diffusion parameter $\epsilon$ becomes very small.  Naive Galerkin methods for convection-diffusion tend to suffer from a lack of robustness; specifically, the finite element error is bounded by a constant factor of the best approximation error, but the constant is often proportional to $\epsilon^{-1}$.  Our aim is to design a DPG method with this in mind.  We follow the methodology introduced by Heuer and Demkowicz in \cite{DemkowiczHeuer}: the ultra-weak variational formulation for convection-diffusion can be refactored as
+We note that, for convection-diffusion problems, we are particularly
+interested in designing a \textit{robust} DPG method.  Specifically, we are
+interested in designing methods whose behavior does not change as the
+diffusion parameter $\epsilon$ becomes very small.  Naive Galerkin methods for
+convection-diffusion tend to suffer from a lack of robustness; specifically,
+the finite element error is bounded by a constant factor of the best
+approximation error, but the constant is often proportional to
+$\epsilon^{-1}$.  Our aim is to design a DPG method with this in mind.  We
+follow the methodology introduced by Heuer and Demkowicz in
+\cite{DemkowiczHeuer}: the ultra-weak variational formulation for
+convection-diffusion can be refactored as
 \[
 b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}} = \sum_{K\in \Oh}\LRs{\LRa{\fnh,v}_{\delta K} + \LRa{\uh,\tau_n}_{\delta K} + \LRp{u,\div \tau - \beta\cdot\grad v}_{L^2(K)} + \LRp{\sigma,\frac{1}{\epsilon} \tau + \grad v}_{L^2(K)}},
 \]
@@ -377,7 +387,7 @@ then evaluating $b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}$ at these specific 
 \[
 \norm{u}_{\L}^2 + \norm{\sigma}_{\L}^2 = b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}} = \frac{b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}}{\norm{v}_V}\norm{v}_V \leq \norm{u,\sigma,\uh,\fnh}_E\norm{v}_V,
 \]
-where 
+where
 \[
 \norm{u,\sigma,\uh,\fnh}_E = \sup_{v\in V\setminus\LRc{0}}\frac{b\LRp{\LRp{u,\sigma,\uh,\fnh},\LRp{\tau,v}}}{\norm{v}_V}
 \]
@@ -385,9 +395,9 @@ is the DPG energy norm.  If we can robustly bound the test norm $\norm{v}_V \les
 \[
 \LRp{\norm{u}_{\L}^2 + \norm{\sigma}_{\L}^2}^{\frac{1}{2}} \lesssim \norm{u,\sigma,\uh,\fnh}_E.
 \]
-In other words, the energy norm in which DPG is optimal bounds independently of $\epsilon$ the $L^2$ norm; as we drive our energy error down to zero, we can expect that the $L^2$ error will also decrease regardless of $\epsilon$.  
+In other words, the energy norm in which DPG is optimal bounds independently of $\epsilon$ the $L^2$ norm; as we drive our energy error down to zero, we can expect that the $L^2$ error will also decrease regardless of $\epsilon$.
 
-We note that the construction of the test norm $\norm{v}_V$ for a robust DPG method depends on two things: the test norm, as well as the adjoint equation.  In \cite{DemkowiczHeuer}, the standard problem with Dirichlet conditions enforced over the entire boundary was considered; in \cite{ChanHeuerThanhDemkowicz2012}, boundary conditions were chosen for the forward problem such that the induced adjoint problem was regularized and contained no strong boundary layers, allowing for the construction of a stronger test norm on $V$.  We adopt a slight modification of the test norm introduced in \cite{ChanHeuerThanhDemkowicz2012} for numerical experiments here, which is motivated and explained in more detail in Section~\secref{sec:confusionPlate}.  
+We note that the construction of the test norm $\norm{v}_V$ for a robust DPG method depends on two things: the test norm, as well as the adjoint equation.  In \cite{DemkowiczHeuer}, the standard problem with Dirichlet conditions enforced over the entire boundary was considered; in \cite{ChanHeuerThanhDemkowicz2012}, boundary conditions were chosen for the forward problem such that the induced adjoint problem was regularized and contained no strong boundary layers, allowing for the construction of a stronger test norm on $V$.  We adopt a slight modification of the test norm introduced in \cite{ChanHeuerThanhDemkowicz2012} for numerical experiments here, which is motivated and explained in more detail in Section~\secref{sec:confusionPlate}.
 
 
 Having reviewed and laid the foundation for DPG methods, we can now formulate our conservative DPG scheme.  % added by Jesse
@@ -770,8 +780,8 @@ issues present under the robust test norm using this problem setup.  }
 
 The above convection-diffusion problem is related back to the earlier
 Laplace/diffusion problem with a singularity -- in most of the domain,
-convective effects dominate; however, if we  localizing the behavior of
-Laplace's equation to a circle of $\epsilon$ around $(.5,0)$, then we again
+convective effects dominate; however, localizing the behavior of
+Laplace's equation to a circle of $\epsilon$ around $(.5,0)$, we again
 see a discontinuity in the stresses.  Asymptotic expansion techniques indicate
 that singularities in solutions are determined primarily by the highest order
 differential operator present in the equation -- in other words, the addition
@@ -958,11 +968,12 @@ test norm,
 v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K\\
 &+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber
 +\epsilon(\nabla\vdeltau,\nabla \delta v)_K
-+\frac{1}{|K|}\int_K\vdeltau\int_K\delta v
++\frac{1}{|K|^2}\int_K\vdeltau\int_K\delta v
 \label{eq:localSolveMod}
 \end{align}
 where the $\frac{1}{|K|^2}$ coefficient is needed to make the zero mean term
-scale correctly with $h$. Numerically this helps with the condition
+scale correctly since $\int_K\vdeltau$ and $\int_K\delta v$ both scale like
+$|K|$. Numerically this helps with the condition
 numbers of the local solve.
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
@@ -1071,8 +1082,8 @@ u(x,y)=C_0+\sum_{n=1}^\infty C_n\frac{\exp(s_n(x-1))-\exp(r_n(x-1))}
 {r_n\exp(-s_n)-s_n\exp(-s_n)}\cos(n\pi y)\,.
 \label{eq:ericksonExact}
 \end{equation}
-Taking $\epsilon=10^{-2}$, $C_1=1$, and $C_{n\neq1}=0$, the exact solution looks
-like Figure \ref{fig:erickson}.
+The exact solution for $\epsilon=10^{-2}$, $C_1=1$, and $C_{n\neq1}=0$ is
+shown in Figure \ref{fig:erickson}.
 
 \begin{figure}[p]
 \centering
@@ -1619,13 +1630,7 @@ test functions.
 % Solution quality
 The general trend we see looking at the results is that the solution quality
 of the standard and restricted formulations is nearly identical once
-sufficiently resolved. This
-is ideal, as we wish to preserve the attractive features of DPG --
-namely that it minimizes error in the energy norm. In particular, when we
-examine the error convergence plots for the Erickson-Johnson problem, the
-energy levels for the two methods lie nearly right on top of each other. This
-seems to indicate at the least that enforcing local conservation doesn't hurt
-DPG too much.
+sufficiently resolved.
 
 % Overshoots/undershoots
 Another measure of solution quality is to look at the magnitude of overshoots
