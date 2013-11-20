@@ -602,6 +602,20 @@ bool SolutionTests::testProjectVectorValuedSolution() {
         }
       }
     }
+    if (testIndex==1) {
+      // then let's try adding vector-valued Solutions together
+      // (just checking that this doesn't throw an exception)
+      SolutionPtr soln2 = Teuchos::rcp(new Solution(mesh));
+      map<int, FunctionPtr > functionMap;
+      functionMap[ sigma->ID() ] = Function::zero(1); // assumes 2D (tensor zero of rank 1)
+      functionMap[ u->ID() ] = Function::zero();
+      soln2->projectOntoMesh(functionMap);
+      
+      soln2->addSolution(confusionSoln, 1.0);
+      soln2 = Teuchos::rcp(new Solution(mesh));
+      soln2->projectOntoMesh(functionMap);
+      confusionSoln->addSolution(confusionSoln, 1.0);
+    }
   }
   
   return success;

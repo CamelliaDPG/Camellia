@@ -76,6 +76,14 @@ FieldContainer<double> unitCubeNodes() {
   return cubePoints;
 }
 
+FieldContainer<double> scaledRefCubeNodes(double weight) {
+  FieldContainer<double> cubePoints = referenceCubeNodes();
+  for (int i=0; i<cubePoints.size(); i++) {
+    cubePoints[i] = weight * cubePoints[i];
+  }
+  return cubePoints;
+}
+
 void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
@@ -250,13 +258,13 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 1;
-  int maxPolyOrder = 6;
+  int minH1Order = 1;
+  int maxH1Order = 6;
   int pToAdd = 2;
 
   if (rank==0) {
-    cout << "min H^1 Order: " << minPolyOrder << "\n";
-    cout << "max H^1 Order: " << maxPolyOrder << "\n";
+    cout << "min H^1 Order: " << minH1Order << "\n";
+    cout << "max H^1 Order: " << maxH1Order << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
   }
   
@@ -288,7 +296,7 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-//  FunctionPtr phi_exact = Function::constant(2);
+//  FunctionPtr phi_exact = Function::constant(2.3);
   //  FunctionPtr phi_exact = x;
   FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
   FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
@@ -299,6 +307,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   FunctionPtr psi3_exact = phi_exact->dz();
+  
+  int cubatureEnrichment = 5; // should be high enough to minimize error in computing the RHS and L^2 error
   
   // set up BCs
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -328,7 +338,8 @@ int main(int argc, char *argv[]) {
 //  FieldContainer<double> cubePoints = referenceCubeNodes();
   
   // small upgrade: unit cube
-  FieldContainer<double> cubePoints = unitCubeNodes();
+//  FieldContainer<double> cubePoints = unitCubeNodes();
+  FieldContainer<double> cubePoints = scaledRefCubeNodes(2.0);
   
   int numCells = 1;
   cubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
@@ -342,7 +353,7 @@ int main(int argc, char *argv[]) {
   int sideDim = 2;
   int delta_k = 2;
   
-  for (int polyOrder=minPolyOrder; polyOrder<=maxPolyOrder; polyOrder++) {
+  for (int polyOrder=minH1Order; polyOrder<=maxH1Order; polyOrder++) {
     BasisPtr hGradBasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     BasisPtr l2BasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     
@@ -583,10 +594,14 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(trialOrderPtr, testOrderPtr, hexTopoPtr) );
     
     // Create BasisCache for ElementType and cubePoints
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, Teuchos::rcp( (Mesh*) NULL ), false, cubatureEnrichment) );
     vector<int> cellIDs;
     cellIDs.push_back(0);
     basisCache->setPhysicalCellNodes(cubePoints, cellIDs, true);
+//    cout << "Jacobian for volume cache:\n" << basisCache->getJacobian();
+//    for (int sideIndex=0; sideIndex<6; sideIndex++) {
+//      cout << "Jacobian for side " << sideIndex << " cache:\n" << basisCache->getSideBasisCache(sideIndex)->getJacobian();
+//    }
     
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,Teuchos::rcp((Mesh*) NULL), true));
     ipBasisCache->setPhysicalCellNodes(cubePoints,cellIDs,false); // false: no side cache for IP

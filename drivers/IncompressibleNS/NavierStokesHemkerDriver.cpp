@@ -706,6 +706,7 @@ int main(int argc, char *argv[]) {
 
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-8);
+    double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment);
     
     meshHeight = args.Input<double>("--meshHeight", "mesh height", 30);
     
@@ -1206,7 +1207,7 @@ int main(int argc, char *argv[]) {
             cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
             flush(cout);
           }
-        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
       }
     }
