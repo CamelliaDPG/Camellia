@@ -94,12 +94,12 @@ private:
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   // TODO: refactor here to store trialOrdering, testOrdering, and testVsTest.
-  DofOrdering _trialOrdering;
-  DofOrdering _meshTrialOrdering; // since the _trialOrdering can be a lie (can be a test ordering) -- this is the truth...
+  
+  vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  int _cubDegree, _maxTestDegree;
+  int _cubDegree, _maxTestDegree, _maxTrialDegree;
   
   // containers specifically for sides:
   Intrepid::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -122,19 +122,18 @@ private:
   map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
   
-  // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
-  //  Teuchos::RCP< const Intrepid::FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const Intrepid::FieldContainer<double> > values,
-  //                                                                int componentOfInterest);
-  void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
+  void init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
 
   void determineJacobian();
   void determinePhysicalPoints();
   
   // (private) side cache constructor:
-  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis, bool testVsTest);
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
   
   int maxTestDegree();
-  void createSideCaches(bool testVsTest);
+  void createSideCaches();
+  
+  void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
 protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
 public:
