@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
+// #include "RefinementHistory.h"
 #include "SolutionExporter.h"
 #include "MeshFactory.h"
 #include "CheckConservation.h"
@@ -83,12 +84,15 @@ int main(int argc, char *argv[]) {
   int norm = args.Input<int>("--norm", "0 = graph\n    1 = robust\n    2 = coupled robust");
 
   // Optional arguments (have defaults)
+  int uniformRefinements = args.Input("--uniformRefinements", "number of uniform refinements", 0);
   bool enforceLocalConservation = args.Input<bool>("--conserve", "enforce local conservation", false);
   double radius = args.Input("--r", "cylinder radius", 0.6);
   int Re = args.Input("--Re", "Reynolds number", 1);
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 1);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
+  // string saveFile = args.Input<string>("--meshSaveFile", "file to which to save refinement history", "");
+  // string replayFile = args.Input<string>("--meshLoadFile", "file with refinement history to replay", "");
   args.Process();
 
   ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
@@ -245,6 +249,9 @@ int main(int argc, char *argv[]) {
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow);
 
+  // Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  // mesh->registerObserver(refHistory);
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -256,6 +263,8 @@ int main(int argc, char *argv[]) {
     errOut.open("stokeshemker_err.txt");
     fluxOut.open("stokeshemker_flux.txt");
   }
+  errOut.precision(15);
+  fluxOut.precision(15);
 
   // Cell IDs for flux calculations
   vector< pair<ElementPtr, int> > cellFace0;
@@ -283,6 +292,22 @@ int main(int argc, char *argv[]) {
   cellFace4.push_back(make_pair(mesh->getElement(8 ), 1));
   cellFace4.push_back(make_pair(mesh->getElement(19), 1));
   cellFace4.push_back(make_pair(mesh->getElement(18), 1));
+
+  // // for loading refinement history
+  // if (replayFile.length() > 0) {
+  //   RefinementHistory refHistory;
+  //   replayFile = replayFile;
+  //   refHistory.loadFromFile(replayFile);
+  //   refHistory.playback(mesh);
+  //   int numElems = mesh->numActiveElements();
+  //   if (commRank==0){
+  //     double minSideLength = meshInfo.getMinCellSideLength() ;
+  //     cout << "after replay, num elems = " << numElems << " and min side length = " << minSideLength << endl;
+  //   }
+  // }
+
+  for (int i = 0; i < uniformRefinements; i++)
+     refinementStrategy.hRefineUniformly(mesh);
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -318,6 +343,13 @@ int main(int argc, char *argv[]) {
         double massFlux4 = computeFluxOverElementSides(u1_prev, mesh, cellFace4);
         fluxOut << massFlux0 << " " << massFlux1 << " " << massFlux2 << " " << massFlux3 << " " << massFlux4 << " " << endl;
         cout << "Total mass flux = " << massFlux0 << " " << massFlux1 << " " << massFlux2 << " " << massFlux3 << " " << massFlux4 << " " << endl;
+
+        // if (saveFile.length() > 0) {
+        //   std::ostringstream oss;
+        //   oss << string(saveFile) << refIndex ;
+        //   cout << "on refinement " << refIndex << " saving mesh file to " << oss.str() << endl;
+        //   refHistory->saveToFile(oss.str());
+        // }
       }
 
       // line search algorithm
@@ -346,8 +378,8 @@ int main(int argc, char *argv[]) {
 
       backgroundFlow->addSolution(solution, alpha, false, true);
       iterCount++;
-      if (commRank == 0)
-        cout << "L2 Norm of Update = " << L2Update << endl;
+      // if (commRank == 0)
+      //   cout << "L2 Norm of Update = " << L2Update << endl;
     }
     if (commRank == 0)
       cout << endl;
@@ -355,7 +387,7 @@ int main(int argc, char *argv[]) {
     if (commRank == 0)
     {
       stringstream outfile;
-      outfile << "stokeshemker" << "_" << refIndex;
+      outfile << "stokeshemker" << uniformRefinements << "_" << refIndex;
       exporter.exportSolution(outfile.str());
     }
 
