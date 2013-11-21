@@ -48,6 +48,9 @@
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Epetra_FECrsMatrix.h"
+#include "Epetra_FEVector.h"
+
 #include "Mesh.h"
 #include "ElementType.h"
 #include "DPGInnerProduct.h"
@@ -92,6 +95,10 @@ private:
   Teuchos::RCP<LocalStiffnessMatrixFilter> _filter;
   Teuchos::RCP<LagrangeConstraints> _lagrangeConstraints;
 
+  Teuchos::RCP<Epetra_FECrsMatrix> _globalStiffMatrix;
+  Teuchos::RCP<Epetra_FEVector> _rhsVector;
+  Teuchos::RCP<Epetra_FEVector> _lhsVector;
+  
   bool _residualsComputed;
   bool _energyErrorComputed;
   // the  values of this map have dimensions (numCells, numTrialDofs)
@@ -110,6 +117,8 @@ private:
   bool _writeMatrixToMatlabFile;
   bool _writeMatrixToMatrixMarketFile;
   bool _writeRHSToMatrixMarketFile;
+  bool _zmcsAsRankOneUpdate;
+  
   string _matrixFilePath;
   string _rhsFilePath;
 
@@ -121,7 +130,7 @@ private:
   static double conditionNumberEstimate( Epetra_LinearProblem & problem );
 
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
-
+  
 protected:
   FieldContainer<double> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
   ElementTypePtr getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType);
@@ -134,8 +143,14 @@ public:
 
   const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables
 
+  Epetra_Map getPartitionMap();
   Epetra_Map getPartitionMap(int rank, set<int> & myGlobalIndicesSet, int numGlobalDofs, int zeroMeanConstraintsSize, Epetra_Comm* Comm );
 
+  // solve steps:
+  void initializeStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  void populateStiffnessAndLoad();
+  void solveWithPrepopulatedStiffnessAndLoad(Teuchos::RCP<Solver> solver);
+  
   void solve(); // could add arguments to allow different solution algorithms to be selected...
 
   void solve(bool useMumps);
@@ -240,10 +255,10 @@ public:
   void setIP( Teuchos::RCP<DPGInnerProduct>);
 
   // Jesse's additions:
-  void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new KluSolver()), bool saveMemory = false);
+  void condensedSolve(Teuchos::RCP<Solver> globalSolver = Teuchos::rcp(new KluSolver()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   void getElemData(ElementPtr elem, FieldContainer<double> &finalStiffness, FieldContainer<double> &localRHSVector);
-  void getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> K,Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
-  void getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
+  void getSubmatrices(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> &K,Epetra_SerialDenseMatrix &K_field, Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux);
+  void getSubvectors(set<int> fieldInds, set<int> fluxInds, const FieldContainer<double> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
 
   void readFromFile(const string &filePath);
   void writeToFile(const string &filePath);
@@ -282,8 +297,11 @@ public:
   double minTimeSolve();
   double minTimeDistributeSolution();
 
+  void reportTimings();
+  
   void writeStatsToFile(const string &filePath, int precision=4);
 
+  vector<int> getZeroMeanConstraints();
   void setZeroMeanConstraintRho(double value);
   double zeroMeanConstraintRho();
 };

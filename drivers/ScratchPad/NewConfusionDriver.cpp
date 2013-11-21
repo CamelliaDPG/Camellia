@@ -12,6 +12,8 @@
 
 #include "MeshUtilities.h"
 
+#include "GnuPlotUtil.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -122,9 +124,9 @@ int main(int argc, char *argv[]) {
 #endif
   bool useCompliantGraphNorm = false;
   bool enforceOneIrregularity = true;
-  bool writeStiffnessMatrices = true;
-  bool writeWorstCaseGramMatrices = true;
-  int numRefs = 0;
+  bool writeStiffnessMatrices = false;
+  bool writeWorstCaseGramMatrices = false;
+  int numRefs = 10;
   
   int H1Order = 3, pToAdd = 2;
   int horizontalCells = 1, verticalCells = 1;
@@ -244,8 +246,26 @@ int main(int argc, char *argv[]) {
   solution->setFilter(pc);
   
   double energyThreshold = 0.2; // for mesh refinements
-  RefinementStrategy refinementStrategy( solution, energyThreshold );
-  refinementStrategy.setEnforceOneIrregularity(enforceOneIrregularity);
+  
+  bool useRieszRepBasedRefStrategy = true;
+  
+  if (rank==0) {
+    if (useRieszRepBasedRefStrategy) {
+      cout << "using RieszRep-based refinement strategy.\n";
+    } else {
+      cout << "using solution-based refinement strategy.\n";
+    }
+  }
+  Teuchos::RCP<RefinementStrategy> refinementStrategy;
+  if (!useRieszRepBasedRefStrategy) {
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ) );
+  } else {
+    LinearTermPtr residual = confusionBF->testFunctional(solution) - rhs->linearTerm();
+    refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, qoptIP, energyThreshold ) );
+  }
+  
+  refinementStrategy->setReportPerCellErrors(true);
+  refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (writeStiffnessMatrices) {
@@ -262,7 +282,11 @@ int main(int argc, char *argv[]) {
         cout << "putative worst-case Gram matrix written to file " << gramFile << endl;
       }
     }
-    refinementStrategy.refine(rank==0); // print to console on rank 0
+    if (refIndex == numRefs-1) { // write out second-to-last mesh
+      if (rank==0)
+        GnuPlotUtil::writeComputationalMeshSkeleton("confusionMesh", mesh, true);
+    }
+    refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   if (writeStiffnessMatrices) {
     string stiffnessFile = fileNameForRefinement("confusion_stiffness", numRefs);

@@ -159,7 +159,7 @@ void DPGTests::runTests() {
   bool success;
   int numTestsTotal = 0;
   int numTestsPassed = 0;
-  bool skipSlowTests = true;
+  bool skipSlowTests = false;
   
   // set up a few special entries for BasisFactory first:
   createBases();
@@ -169,12 +169,13 @@ void DPGTests::runTests() {
   
 //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   
+  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) ); // temporarily taking a break from these.
+  testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
   testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
   
-  testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
@@ -187,7 +188,6 @@ void DPGTests::runTests() {
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
   testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
   testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
   
   if (skipSlowTests) {

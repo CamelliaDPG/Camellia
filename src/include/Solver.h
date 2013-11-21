@@ -17,7 +17,7 @@
 
 // abstract class for solving Epetra_LinearProblem problems
 class Solver {
-private:
+protected:
   Teuchos::RCP< Epetra_LinearProblem > _problem;
 public:
   virtual Epetra_LinearProblem & problem() { return *(_problem.get()); }

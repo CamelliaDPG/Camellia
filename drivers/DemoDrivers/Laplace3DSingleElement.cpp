@@ -68,6 +68,22 @@ FieldContainer<double> referenceCubeNodes() {
   return cubePoints;
 }
 
+FieldContainer<double> unitCubeNodes() {
+  FieldContainer<double> cubePoints = referenceCubeNodes();
+  for (int i=0; i<cubePoints.size(); i++) {
+    cubePoints[i] = (cubePoints[i]+1) / 2;
+  }
+  return cubePoints;
+}
+
+FieldContainer<double> scaledRefCubeNodes(double weight) {
+  FieldContainer<double> cubePoints = referenceCubeNodes();
+  for (int i=0; i<cubePoints.size(); i++) {
+    cubePoints[i] = weight * cubePoints[i];
+  }
+  return cubePoints;
+}
+
 void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
@@ -100,11 +116,57 @@ double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
   return value[0];
 }
 
+void determinePointPermutation(int* permutation, const FieldContainer<double> &points1,
+                      const FieldContainer<double> &points2) {
+  // this method is overkill for our purposes--so far, our only permutation should be a reversal--
+  // but we might like to reuse for point sets that might be permuted in other ways
+  int numPoints = points1.dimension(0);
+  int spaceDim = points1.dimension(1);
+  double tol = 1e-14;
+  for (int pt1Index=0; pt1Index<numPoints; pt1Index++) {
+    bool pt1Matched = false;
+    for (int pt2Index=0; pt2Index<numPoints; pt2Index++) {
+      bool match = true;
+      for (int d=0; d<spaceDim; d++) {
+        if ( abs(points1(pt1Index,d) - points2(pt2Index,d) ) > tol) {
+          match = false;
+        }
+      }
+      if (match) {
+        permutation[pt1Index] = pt2Index;
+        pt1Matched = true;
+        break;
+      }
+    }
+    if (!pt1Matched) {
+      cout << "ERROR: No match found for point " << pt1Index << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no match found for point");
+    }
+  }
+}
+
+void permutePoints(int *permutation, FieldContainer<double> &pointsToPermute) {
+  int numPoints = pointsToPermute.dimension(0);
+  int spaceDim = pointsToPermute.dimension(1);
+  FieldContainer<double> pointsCopy = pointsToPermute;
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int d=0; d<spaceDim; d++) {
+      pointsToPermute(ptIndex,d) = pointsCopy(permutation[ptIndex],d);
+    }
+  }
+}
+
 bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
                       BasisPtr basis2, int side2, int edge2, int dofOrdinal2) {
   // sides are sides of the hex
   // bases are defined on quad (sides of hex)
   // and should agree on their shared edge
+  
+  // TODO: work out how this method should depend on the side1 and side2 arguments
+  //       (somehow, this should determine whether the edge points are reversed or not)
+  //       I think what we need to do is map the quad points onto the cube--the requirement
+  //       is that the bases should match ultimately in physical space...  So where the points
+  //       in physical space are the same, bases should match.
   int edgeDim = 1;
   int quadDim = 2;
   int numPoints = 4;
@@ -113,9 +175,11 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   double tol = 1e-14;
   
   FieldContainer<double> edgePoints(numPoints,edgeDim);
+//  FieldContainer<double> edgePointsReversed(numPoints,edgeDim);
   for (int i=0; i<numPoints; i++) {
     // equispaced in (-1,1)
     edgePoints(i,0) = dxPerPoint * i - 1;
+//    edgePointsReversed(numPoints-i-1,0) = edgePoints(i,0);
   }
 //  cout << "edgePoints:\n" << edgePoints;
   
@@ -133,31 +197,54 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   CellTools<double>::mapToReferenceSubcell(quadPoints1, edgePoints, edgeDim, edge1, quad_4);
   CellTools<double>::mapToReferenceSubcell(quadPoints2, edgePoints, edgeDim, edge2, quad_4);
   
+  shards::CellTopology hex_8(shards::getCellTopologyData<shards::Hexahedron<8> >() );
+  FieldContainer<double> hexPoints1(numPoints,hex_8.getDimension());
+  FieldContainer<double> hexPoints2(numPoints,hex_8.getDimension());
+  
+  CellTools<double>::mapToReferenceSubcell(hexPoints1, quadPoints1, quadDim, side1, hex_8);
+  CellTools<double>::mapToReferenceSubcell(hexPoints2, quadPoints2, quadDim, side2, hex_8);
+  
+  int pointPermutation[numPoints];
+  determinePointPermutation(pointPermutation, hexPoints1, hexPoints2);
+  
+  permutePoints(pointPermutation, quadPoints2); // make the order of quadPoints2 match that of quadPoints1 once mapped to the reference hexahedron.
+  
   basis1->getValues(values1, quadPoints1, OPERATOR_VALUE);
   basis2->getValues(values2, quadPoints2, OPERATOR_VALUE);
   
-  cout << "proposing to identify side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
-  cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << endl;
-  
-  cout << "quadPoints1:\n" << quadPoints1;
-  cout << "quadPoints2:\n" << quadPoints2;
-  
-  cout << "values1:\n" << values1;
-  cout << "values2:\n" << values2;
+//  cout << "proposing to identify side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
+//  cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << endl;
+//  
+//  cout << "quadPoints1:\n" << quadPoints1;
+//  cout << "quadPoints2:\n" << quadPoints2;
+//  
+//  cout << "hexPoints1:\n" << hexPoints1;
+//  cout << "hexPoints2:\n" << hexPoints2;
+//  
+//  
+//  cout << "values1:\n" << values1;
+//  cout << "values2:\n" << values2;
   
   bool success = true;
-  for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
-    double diff = abs(values1(dofOrdinal1,ptIndex)-values2(dofOrdinal2,ptIndex));
+  for (int pt1Index=0; pt1Index < numPoints; pt1Index++) {
+//    int pt2Index = pointPermutation[pt1Index];
+//    double diff = abs(values1(dofOrdinal1,pt1Index)-values2(dofOrdinal2,pt2Index));
+    
+    // since quadPoints2 agrees in order with quadPoints1 when mapped, I believe
+    // values2 should likewise agree in order with values1...
+    double diff = abs(values1(dofOrdinal1,pt1Index)-values2(dofOrdinal2,pt1Index));
     if (diff > tol) {
       success = false;
-      cout << "bases differ by " << diff << " at point " << edgePoints(ptIndex,0) << endl;
+      cout << "bases differ by " << diff << " at point (";
+      cout << hexPoints1(pt1Index,0) << "," << hexPoints1(pt1Index,1) << ",";
+      cout << hexPoints1(pt1Index,2) << ")" << endl;
     }
   }
   
   if (success) {
-    cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
-    cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
-    cout << "bases agree\n";
+//    cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
+//    cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
+//    cout << "bases agree\n";
   } else {
     cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
     cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
@@ -171,13 +258,13 @@ int main(int argc, char *argv[]) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
   
-  int minPolyOrder = 3;
-  int maxPolyOrder = 3;
+  int minH1Order = 1;
+  int maxH1Order = 6;
   int pToAdd = 2;
 
   if (rank==0) {
-    cout << "min H^1 Order: " << minPolyOrder << "\n";
-    cout << "max H^1 Order: " << maxPolyOrder << "\n";
+    cout << "min H^1 Order: " << minH1Order << "\n";
+    cout << "max H^1 Order: " << maxH1Order << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
   }
   
@@ -209,14 +296,19 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-//  FunctionPtr phi_exact = Function::constant(2);
-//  FunctionPtr phi_exact = x;
-  FunctionPtr phi_exact = y;
+//  FunctionPtr phi_exact = Function::constant(2.3);
+  //  FunctionPtr phi_exact = x;
+  FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
+  FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
+//  FunctionPtr phi_exact = y*y + x*x + x * y * z;
+  FunctionPtr phi_exact = y*y + x*x + sin_x * cos_y * z;
 //  FunctionPtr phi_exact = z;
 
   FunctionPtr psi1_exact = phi_exact->dx();
   FunctionPtr psi2_exact = phi_exact->dy();
   FunctionPtr psi3_exact = phi_exact->dz();
+  
+  int cubatureEnrichment = 5; // should be high enough to minimize error in computing the RHS and L^2 error
   
   // set up BCs
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -243,7 +335,11 @@ int main(int argc, char *argv[]) {
   }
   
   // for now, let's use the reference cell.  (Jacobian should be the identity.)
-  FieldContainer<double> cubePoints = referenceCubeNodes();
+//  FieldContainer<double> cubePoints = referenceCubeNodes();
+  
+  // small upgrade: unit cube
+//  FieldContainer<double> cubePoints = unitCubeNodes();
+  FieldContainer<double> cubePoints = scaledRefCubeNodes(2.0);
   
   int numCells = 1;
   cubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
@@ -257,7 +353,7 @@ int main(int argc, char *argv[]) {
   int sideDim = 2;
   int delta_k = 2;
   
-  for (int polyOrder=minPolyOrder; polyOrder<=maxPolyOrder; polyOrder++) {
+  for (int polyOrder=minH1Order; polyOrder<=maxH1Order; polyOrder++) {
     BasisPtr hGradBasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     BasisPtr l2BasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     
@@ -292,6 +388,21 @@ int main(int argc, char *argv[]) {
     int edgeDim = 1;
     int faceDim = 2;
     
+    // a little debugging code to figure out what order Intrepid puts the dofs in:
+//    cout << "Assuming side topology data is the same for every side (getting side 2)\n";
+//    int sideOrdinal = 2;
+//    shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
+//    for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++) {
+//      int numDofs = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)->dofOrdinalsForSubcell(edgeDim, edgeOrdinal).size();
+//      cout << "edge " << edgeOrdinal << " has " << numDofs << " dofs: ";
+//      for (int edgeDofOrdinal = 0; edgeDofOrdinal < numDofs; edgeDofOrdinal++) {
+//        unsigned dofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
+//                                           ->getDofOrdinal(edgeDim, edgeOrdinal, edgeDofOrdinal);
+//        cout << dofOrdinal << " ";
+//      }
+//      cout << endl;
+//    }
+    
     for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
       shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
 //      cout << "Side " << sideOrdinal << endl;
@@ -302,6 +413,7 @@ int main(int argc, char *argv[]) {
         
         unsigned hexNodeMin = min(hexNodeForVertex0,hexNodeForVertex1);
         unsigned hexNodeMax = max(hexNodeForVertex0,hexNodeForVertex1);
+
         bool orientationAgreesWithNodeOrdering = (hexNodeForVertex0==hexNodeMin);
         
         pair< unsigned, unsigned > edge = make_pair(hexNodeMin, hexNodeMax);
@@ -321,7 +433,7 @@ int main(int argc, char *argv[]) {
       }
     }
     // DEBUG loop over vertexNodeToSideVertex:
-    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
+/*    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
          vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
       int hexNodeForVertex = vertexNodeIter->first;
       cout << "vertex " << hexNodeForVertex << ", (side, vertex) pairs: ";
@@ -349,7 +461,7 @@ int main(int argc, char *argv[]) {
         cout << "(" << sideOrdinal << ", " << edgeOrdinalInSide << ") ";
       }
       cout << endl;
-    }
+    }*/
     // now, we want to identify all those dofs:
     for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
          vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
@@ -367,8 +479,8 @@ int main(int argc, char *argv[]) {
                                                  ->getDofOrdinal(vertexDim, vertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
         trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstVertexDofOrdinal,
                                          sideOrdinal, vertexDofOrdinal);
-        cout << "(" << firstSideOrdinal << ", " << firstVertexOrdinal;
-        cout << ") <-> (" << sideOrdinal << ", " << vertexOrdinal << ")" << endl;
+//        cout << "(" << firstSideOrdinal << ", " << firstVertexOrdinal;
+//        cout << ") <-> (" << sideOrdinal << ", " << vertexOrdinal << ")" << endl;
       }
     }
 
@@ -392,19 +504,28 @@ int main(int argc, char *argv[]) {
       while (++edgeIter != edges.end()) {
         unsigned sideOrdinal = edgeIter->first.first;
         unsigned edgeOrdinal = edgeIter->first.second;
-        unsigned orientationAgrees = edgeIter->second;
+        bool orientationAgrees = edgeIter->second;
         for (int dofNumber=0; dofNumber<numDofs; dofNumber++) {
           // this is the point where we consider the relative permutation of the identified bases...
           // when we do this in a mesh, we'll need to do something more sophisticated.
           unsigned firstDofOrdinal, secondDofOrdinal;
-          if (orientationAgrees != firstOrientationAgrees) {
+          
+          // because Intrepid's quad basis appears to order edge dofs according to tensor product rather than the quad's CCW orientation,
+          // we need to swap things when we're on either side 2 or 3...
+          bool hexEdgeOrientationsAgree = orientationAgrees == firstOrientationAgrees;
+          bool quadEdgeOrientationsAgree = ((firstEdgeOrdinalInSide <= 1) && (edgeOrdinal <= 1))
+                                        || ((firstEdgeOrdinalInSide  > 1) && (edgeOrdinal  > 1));
+
+          bool swapDofOrder = hexEdgeOrientationsAgree ^ quadEdgeOrientationsAgree; // xor
+          
+          if (swapDofOrder) {
             firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
                                            ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, numDofs - dofNumber - 1);
 //                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber); // JUST A TEST
             secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
                                             ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
           } else {
-            cout << "Unexpectedly, two sides agree on edge orientation.\n";
+//            cout << "two sides agree on edge orientation.\n";
             firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
                                                     ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber);
             secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
@@ -448,12 +569,12 @@ int main(int argc, char *argv[]) {
     // after adding all those identifications, need to rebuild the DofOrdering's index:
     trialOrderPtr->rebuildIndex();
     
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 0);
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 1);
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 2);
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 3);
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 4);
-    printDofIndicesForVariable(trialOrderPtr, phi_hat, 5);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 0);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 1);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 2);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 3);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 4);
+//    printDofIndicesForVariable(trialOrderPtr, phi_hat, 5);
     
     // Define test discretization
     DofOrderingPtr testOrderPtr = Teuchos::rcp( new DofOrdering );
@@ -473,10 +594,14 @@ int main(int argc, char *argv[]) {
     Teuchos::RCP<ElementType> elemTypePtr = Teuchos::rcp( new ElementType(trialOrderPtr, testOrderPtr, hexTopoPtr) );
     
     // Create BasisCache for ElementType and cubePoints
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr) );
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, Teuchos::rcp( (Mesh*) NULL ), false, cubatureEnrichment) );
     vector<int> cellIDs;
     cellIDs.push_back(0);
     basisCache->setPhysicalCellNodes(cubePoints, cellIDs, true);
+//    cout << "Jacobian for volume cache:\n" << basisCache->getJacobian();
+//    for (int sideIndex=0; sideIndex<6; sideIndex++) {
+//      cout << "Jacobian for side " << sideIndex << " cache:\n" << basisCache->getSideBasisCache(sideIndex)->getJacobian();
+//    }
     
     BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemTypePtr,Teuchos::rcp((Mesh*) NULL), true));
     ipBasisCache->setPhysicalCellNodes(cubePoints,cellIDs,false); // false: no side cache for IP
@@ -529,8 +654,8 @@ int main(int argc, char *argv[]) {
     bcVector.resize(numTrialDofs,1); // vector as a 2D array
     FieldContainer<double> rhsAdjustment(numTrialDofs,1);
     SerialDenseWrapper::multiply(rhsAdjustment, finalStiffness, bcVector);
-    cout << "rhsAdjustment:\n" << rhsAdjustment;
-    rhsAdjustment.resize(numTrialDofs);
+//    cout << "rhsAdjustment:\n" << rhsAdjustment;
+//    rhsAdjustment.resize(numTrialDofs);
     localRHSVector.resize(numTrialDofs);
     bcVector.resize(numTrialDofs);
     
@@ -585,27 +710,27 @@ int main(int argc, char *argv[]) {
         }
         FunctionPtr solnFxn = NewBasisSumFunction::basisSumFunction(basis, solnCoefficients);
         FunctionPtr exactFxn = exactSolution->exactFunctions().find(var->ID())->second;
-        double integral = solnFxn->integrate(basisCache);
-        cout << "integral of solnFxn for " << var->name() << ": " << integral <<  "\n";
-        integral = exactFxn->integrate(basisCache);
-        cout << "integral of exactFxn for " << var->name() << ": " << integral << "\n";
+//        double integral = solnFxn->integrate(basisCache);
+//        cout << "integral of solnFxn for " << var->name() << ": " << integral <<  "\n";
+//        integral = exactFxn->integrate(basisCache);
+//        cout << "integral of exactFxn for " << var->name() << ": " << integral << "\n";
         double l2Error = ((exactFxn - solnFxn) * (exactFxn - solnFxn))->integrate(basisCache);
         cout << "L^2 error for trial variable " << var->name() << ": " << l2Error << endl;
-        cout << "exact at (0,0,0): "  << Function::evaluate(exactFxn, 0,0,0) << endl;
-        cout << "sol'n at (0,0,0): "  << evaluateSoln(solnFxn, 0,0,0) << endl;
-        cout << "exact at (0,0,1): "  << Function::evaluate(exactFxn, 0,0,1) << endl;
-        cout << "sol'n at (0,0,1): "  << evaluateSoln(solnFxn, 0,0,1) << endl;
-        cout << "exact at (0,1,0): "  << Function::evaluate(exactFxn, 0,1,0) << endl;
-        cout << "sol'n at (0,1,0): "  << evaluateSoln(solnFxn, 0,1,0) << endl;
-        
-        cout << "exact at (1,0,0): "  << Function::evaluate(exactFxn, 1,0,0) << endl;
-        cout << "sol'n at (1,0,0): "  << evaluateSoln(solnFxn, 1,0,0) << endl;
-        
-        cout << "exact at (1,1,0): "  << Function::evaluate(exactFxn, 1,1,0) << endl;
-        cout << "sol'n at (1,1,0): "  << evaluateSoln(solnFxn, 1,1,0) << endl;
-        
-        cout << "exact at (1,1,1): "  << Function::evaluate(exactFxn, 1,1,1) << endl;
-        cout << "sol'n at (1,1,1): "  << evaluateSoln(solnFxn, 1,1,1) << endl;
+//        cout << "exact at (0,0,0): "  << Function::evaluate(exactFxn, 0,0,0) << endl;
+//        cout << "sol'n at (0,0,0): "  << evaluateSoln(solnFxn, 0,0,0) << endl;
+//        cout << "exact at (0,0,1): "  << Function::evaluate(exactFxn, 0,0,1) << endl;
+//        cout << "sol'n at (0,0,1): "  << evaluateSoln(solnFxn, 0,0,1) << endl;
+//        cout << "exact at (0,1,0): "  << Function::evaluate(exactFxn, 0,1,0) << endl;
+//        cout << "sol'n at (0,1,0): "  << evaluateSoln(solnFxn, 0,1,0) << endl;
+//        
+//        cout << "exact at (1,0,0): "  << Function::evaluate(exactFxn, 1,0,0) << endl;
+//        cout << "sol'n at (1,0,0): "  << evaluateSoln(solnFxn, 1,0,0) << endl;
+//        
+//        cout << "exact at (1,1,0): "  << Function::evaluate(exactFxn, 1,1,0) << endl;
+//        cout << "sol'n at (1,1,0): "  << evaluateSoln(solnFxn, 1,1,0) << endl;
+//        
+//        cout << "exact at (1,1,1): "  << Function::evaluate(exactFxn, 1,1,1) << endl;
+//        cout << "sol'n at (1,1,1): "  << evaluateSoln(solnFxn, 1,1,1) << endl;
       }
     }
   }

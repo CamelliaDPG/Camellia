@@ -20,7 +20,7 @@ class MLSolver : public Solver {
   double _resTol;
   int _maxIters;
 public:
-  MLSolver(double residualTolerance = 1e-12, int maxIters = 10000) {
+  MLSolver(double residualTolerance = 1e-12, int maxIters = 50000) {
     _resTol = residualTolerance;
     _maxIters = maxIters;
   }
@@ -54,11 +54,13 @@ public:
     // Other sets of parameters are available for non-symmetric systems
     // ("DD" and "DD-ML"), and for the Maxwell equations ("maxwell").
     
-    int maxLevels = 2;
+    int maxLevels = 8;
     char parameter[80];
     
     ML_Epetra::MultiLevelPreconditioner* MLPrec;
     bool useAztecAsSolver = false;
+    bool useNSSADefaults = false;
+    bool useSADefaults = false;
     if (useAztecAsSolver) {
       ML_Epetra::SetDefaults("SA",MLList);
       int iters = 5;
@@ -70,6 +72,10 @@ public:
         sprintf(parameter,"smoother: sweeps (level %d)", ilevel);
         MLList.set(parameter, iters);
       }
+    } else if (useNSSADefaults) {
+      ML_Epetra::SetDefaults("NSSA",MLList);
+    } else if (useSADefaults) {
+      ML_Epetra::SetDefaults("SA",MLList);      
     } else {
       ML_Epetra::SetDefaults("SA",MLList);
       
@@ -144,7 +150,8 @@ public:
     
     // verify unused parameters on process 0 (put -1 to print on all
     // processes)
-    MLPrec->PrintUnused(0);
+//    MLPrec->PrintUnused(0);
+//    MLPrec->PrintList();
 #ifdef ML_SCALING
     timeVec[precBuild].value = MPI_Wtime() - timeVec[precBuild].value;
 #endif
@@ -173,8 +180,8 @@ public:
     timeVec[solve].value = MPI_Wtime();
 #endif
     solver.SetPrecOperator(MLPrec);
-    solver.SetAztecOption(AZ_solver, AZ_GMRESR); // could do AZ_cg -- we are SPD (but so far it seems cg takes a bit longer...)
-    solver.SetAztecOption(AZ_output, 32);
+//    solver.SetAztecOption(AZ_solver, AZ_GMRESR); // could do AZ_cg -- we are SPD (but so far it seems cg takes a bit longer...)
+    solver.SetAztecOption(AZ_output, 512);
     int result = solver.Iterate(_maxIters, _resTol);
 #ifdef ML_SCALING
     timeVec[solve].value = MPI_Wtime() - timeVec[solve].value;

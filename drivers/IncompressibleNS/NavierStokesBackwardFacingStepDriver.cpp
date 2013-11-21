@@ -26,6 +26,8 @@
 
 #include "ParameterFunction.h"
 
+#include "MLSolver.h"
+
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #else
@@ -276,6 +278,50 @@ void printLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance) {
   }
 }
 
+vector<double> verticalLinePoints() {
+  // points where values are often reported in the literature (in Gartling)
+  vector<double> yPoints;
+  double y = 0.50;
+  for (y = 0.5; y >= -0.5; y -= 0.05) {
+    yPoints.push_back(y);
+  }
+  return yPoints;
+}
+
+void reportVerticalLineSolutionValues(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
+                                      FunctionPtr p_prev, FunctionPtr vorticity, bool computePOffsetAtOrigin = true) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  // the next bit commented out -- Function::evaluate() must depend only on space, not on the mesh (prev soln depends on mesh)
+  vector<double> u1values, u2values, pValues, vorticityValues;
+  
+  double pOffset = computePOffsetAtOrigin ? Function::evaluate(p_prev, 0, 0) : 0; // Gartling sets p at (0,0) = 0.
+  
+  double x,y;
+  x = xValue;
+  vector<double> yPoints = verticalLinePoints();
+  for (int i=0; i<yPoints.size(); i++) {
+    y = yPoints[i];
+    u1values.push_back( Function::evaluate(u1_prev, x, y) );
+    u2values.push_back( Function::evaluate(u2_prev, x, y) );
+    pValues.push_back( Function::evaluate(p_prev, x, y) - pOffset );
+    vorticityValues.push_back( Function::evaluate(vorticity, x, y) );
+  }
+  
+  if (rank==0) {
+    cout << "**** x=" << xValue << ", values ****\n";
+    int w = 20;
+    cout << setw(w) << "y" << setw(w) << "u1" << setw(w) << "u2" << setw(w) << "p" << setw(w) << "omega" << endl;
+    for (int i=0; i<yPoints.size(); i++) {
+      cout << setw(w) << yPoints[i] << setw(w) << u1values[i] << setw(w) << u2values[i] << setw(w) << pValues[i] << setw(w) << vorticityValues[i] << endl;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0, numProcs = 1;
 #ifdef HAVE_MPI
@@ -315,7 +361,7 @@ int main(int argc, char *argv[]) {
   double Re = args.Input<double>("--Re", "Reynolds number", Re_default);
   
   int numRefs = args.Input<int>("--numRefs", "Number of refinements", 10);
-  int numStreamSolutionRefs = args.Input<int>("--numStreamRefs", "Number of refinements in stream solution", 3);
+  int numStreamSolutionRefs = args.Input<int>("--numStreamRefs", "Number of refinements in stream solution", 0);
   double energyThreshold = args.Input<double>("--adaptiveThreshold", "threshold parameter for greedy adaptivity", 0.20);
   bool enforceLocalConservation = args.Input<bool>("--enforceLocalConservation", "Enforce local conservation.", false);
   bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
@@ -345,6 +391,8 @@ int main(int argc, char *argv[]) {
   
   bool weightIncrementL2Norm = useCompliantGraphNorm; // if using the compliant graph norm, weight the measure of the L^2 increment accordingly
   
+  double maxAspectRatioForGartling = args.Input<double>("--maxAspectRatioForGartling", "maximum allowable aspect ratio for initial mesh when using Gartling parameters", 2.0);
+  
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
   double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 3e-8);
   string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
@@ -352,9 +400,10 @@ int main(int argc, char *argv[]) {
   string solnSaveFile = args.Input<string>("--solnSaveFile", "file to which to save solution data", "");
   string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
   
-  double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
-  
   bool useMumps = args.Input<bool>("--useMumps", "use MUMPS for global linear solves", true);
+  bool useML = args.Input<bool>("--useML", "use ML for global linear solves", false);
+  double mlTol = args.Input<double>("--mlTol", "tolerance for ML convergence", 1e-6);
+  if (useML) useMumps = false; // mutually exclusive...
   
   args.Process();
   
@@ -380,6 +429,8 @@ int main(int argc, char *argv[]) {
       cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
     exit(1);
 #endif
+  } else if (useML) {
+    solver = Teuchos::rcp(new MLSolver(mlTol));
   } else {
     solver = Teuchos::rcp(new KluSolver());
   }
@@ -397,6 +448,18 @@ int main(int argc, char *argv[]) {
     if (artificialTimeStepping) cout << "dt = " << dt << endl;
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOT starting with 0 solution after refinement...\n";
+    }
+    if (useCondensedSolve) {
+      cout << "Using condensed solve.\n";
+    } else {
+      cout << "Not using condensed solve.\n";
+    }
+    if (useMumps) {
+      cout << "Using MUMPS for global linear solves.\n";
+    } else if (useML) {
+      cout << "Using ML for global linear solves.\n";
+    } else {
+      cout << "Using KLU for global linear solves.\n";
     }
   }
   
@@ -545,12 +608,16 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
   if (useGartlingParameters) {
-    // our elements now have aspect ratio 30:1.  We want to do 5 sets of horizontal refinements to square them up.
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
-    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+    // our elements now have aspect ratio 30:1.  We want to do 5 sets of horizontal refinements to square them up (less if the user relaxed the maxAspectRatioForGartling)
+    double aspectRatio = 30;
+    while (aspectRatio > maxAspectRatioForGartling) {
+      mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+      aspectRatio /= 2;
+    }
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
+//    mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
   } else if (! useBiswasGeometry) {
     // our elements now have aspect ratio 4:1.  We want to do 2 sets of horizontal refinements to square them up.
     mesh->hRefine(mesh->getActiveCellIDs(), verticalCut);
@@ -743,13 +810,19 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
   FunctionPtr p_incr = Function::solution(p, solnIncrement);
   
-  FunctionPtr u1_prev = Function::solution(u1, solution);
-  FunctionPtr u2_prev = Function::solution(u2, solution);
+//  FunctionPtr u1_prev = Function::solution(u1, solution);
+//  FunctionPtr u2_prev = Function::solution(u2, solution);
   FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
   FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
   FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
   FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
-  FunctionPtr p_prev = Function::solution(p, solution);
+//  FunctionPtr p_prev = Function::solution(p, solution);
+
+  // Function::evaluate() can be used with PreviousSolutionFunction, not with SimpleSolutionFunction.
+  FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1 ) );
+  FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2 ) );
+  FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p ) );
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
   
   FunctionPtr l2_incr, l2_prev;
   
@@ -772,6 +845,15 @@ int main(int argc, char *argv[]) {
     + Re2 * sigma21_prev * sigma21_prev + Re2 * sigma22_prev * sigma22_prev;
   }
   
+  double initialMinL2Increment = minL2Increment;
+  if (rank==0) cout << "Initial relative L^2 tolerance: " << minL2Increment << endl;
+  
+  LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
+  RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
+  
+  LinearTermPtr incrementalSolnFunctional = problem.bf()->testFunctional(problem.solutionIncrement());
+  RieszRep incrementRieszRep(mesh, problem.solutionIncrement()->ip(), incrementalSolnFunctional);
+  
   for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (startWithZeroSolutionAfterRefinement) {
       // start with a fresh (zero) initial guess for each adaptive mesh:
@@ -790,7 +872,8 @@ int main(int argc, char *argv[]) {
     
     double incr_norm, prev_norm;
     do {
-      problem.iterate(useLineSearch, useCondensedSolve);
+      problem.iterate(useLineSearch, useCondensedSolve, false);
+//      problem.iterate(useLineSearch, useCondensedSolve, problem.iterationCount() >= 2); // skip initialization after the 0 and 1 guesses -- but so far, condensed solve doesn't support preconditioner reuse.
       
       incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
       prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
@@ -826,19 +909,45 @@ int main(int argc, char *argv[]) {
     //      solveStrategy->solve(printToConsole);
     
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+    solnRieszRep.computeRieszRep();
+    double solnEnergyNormTotal = solnRieszRep.getNorm();
+//    incrementRieszRep.computeRieszRep();
+//    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+    
+    double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+    minL2Increment = initialMinL2Increment * relativeEnergyError;
+    
     if (rank == 0) {
       cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
+//      cout << "  Incremental solution's energy is " << incrementEnergyNormTotal << ".\n";
       cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
+      cout << "  Background flow's energy norm is " << solnEnergyNormTotal << ".\n";
+//      cout << "  Relative energy of increment is " << incrementEnergyNormTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
+      cout << "  Relative energy error: " << incrementalEnergyErrorTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
+      cout << "  Updated L^2 tolerance for nonlinear iteration: " << minL2Increment << endl;
+      if (useGartlingParameters) {
+      }
     }
   
     if (useGartlingParameters) {
-//      if (rank==0) cout << "Using u1 sign reversals and .01 eps:\n";
-//      printLengthsForGartling(solution, u1, 0.01);
       if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
       printLengthsForGartling(solution, sigma12, 0);
+      reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
+      reportVerticalLineSolutionValues( 7.0, u1_prev, u2_prev, p_prev, vorticity);
+      reportVerticalLineSolutionValues(15.0, u1_prev, u2_prev, p_prev, vorticity);
+      
+      
+      ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+      double pOffset = Function::evaluate(p_prev, 0, 0); // Gartling sets p at (0,0) = 0.
+      if (rank==0) cout << "(pOffset for the above: " << pOffset << ")" << endl;
+      
+      reportVerticalLineSolutionValues(30.0, u1_prev, u2_prev, p_prev, vorticity, false);
+
     }
 
     bfsRefinementStrategy->refine(false); //rank==0); // print to console on rank 0
+    if (rank==0)
+      cout << "After refinement " << refIndex + 1 << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " total dofs and " << mesh->numFluxDofs() << " flux dofs.\n";
     
     if (refIndex < numCornerRefinementsToInduce) {
       if (induceCornerRefinements) {
@@ -881,7 +990,7 @@ int main(int argc, char *argv[]) {
       cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
       flush(cout);
     }
-  } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
+  } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
   if (rank==0) cout << endl;
   
   if (computeMaxConditionNumber) {
@@ -919,6 +1028,15 @@ int main(int argc, char *argv[]) {
 //    printLengthsForGartling(solution, u1, 0.01);
     if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
     printLengthsForGartling(solution, sigma12, 0);
+    reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
+    reportVerticalLineSolutionValues( 7.0, u1_prev, u2_prev, p_prev, vorticity);
+    reportVerticalLineSolutionValues(15.0, u1_prev, u2_prev, p_prev, vorticity);
+    
+    ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+    double pOffset = Function::evaluate(p_prev, 0, 0); // Gartling sets p at (0,0) = 0.
+    if (rank==0) cout << "(pOffset for the above: " << pOffset << ")" << endl;
+    
+    reportVerticalLineSolutionValues(30.0, u1_prev, u2_prev, p_prev, vorticity, false);
   }
   
   if (rank==0) {
@@ -927,7 +1045,6 @@ int main(int argc, char *argv[]) {
     }
   }
   
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
   Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
   streamRHS->addTerm(vorticity * q_s);
   ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);

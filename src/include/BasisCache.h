@@ -93,7 +93,9 @@ private:
   //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
+  // TODO: refactor here to store trialOrdering, testOrdering, and testVsTest.
   DofOrdering _trialOrdering;
+  DofOrdering _meshTrialOrdering; // since the _trialOrdering can be a lie (can be a test ordering) -- this is the truth...
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
@@ -129,10 +131,10 @@ private:
   void determinePhysicalPoints();
   
   // (private) side cache constructor:
-  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis);
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis, bool testVsTest);
   
   int maxTestDegree();
-  void createSideCaches();
+  void createSideCaches(bool testVsTest);
 protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
 public:

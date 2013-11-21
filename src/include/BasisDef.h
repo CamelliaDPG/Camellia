@@ -132,6 +132,63 @@ namespace Camellia {
   }
   
   template<class Scalar, class ArrayScalar>
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const {
+    if (minimumSubSubcellDimension > subcellDim) {
+      return std::set<int>();
+    }
+    // to start, get the ones defined on the subcell itself:
+    std::set<int> dofOrdinals = this->dofOrdinalsForSubcell(subcellDim, subcellIndex);
+    
+    const CellTopologyData *cellTopoData = this->domainTopology().getCellTopologyData();
+    const CellTopologyData *sideTopoData = this->domainTopology().getCellTopologyData(subcellDim, subcellIndex);
+    
+    // Now, we want to look up all the subcells of the "side" of dimension > minimumSubSubcellDimension
+    // For each of these, we need to:
+    //  - find the appropriate subcell index in the larger topology
+    //  - add all dof ordinals associated with that subcell index
+    
+    // ssc: sub-subcell
+    for (int d_ssc = minimumSubSubcellDimension; d_ssc < subcellDim; d_ssc++) {
+      int numSubSubcells_d = sideTopoData->subcell_count[d_ssc]; // numSubSubcells of dim d
+      for (int ssc=0; ssc<numSubSubcells_d; ssc++) { //
+        int numNodes_ssc = sideTopoData->subcell[d_ssc][ssc].topology->node_count;
+        std::set<int> cellNodeIndices;
+        for (int i=0; i < numNodes_ssc; i++) {
+          unsigned subcellNodeIndex = sideTopoData->subcell[d_ssc][ssc].node[i];
+          unsigned cellNodeIndex = cellTopoData->subcell[subcellDim][subcellIndex].node[subcellNodeIndex];
+          cellNodeIndices.insert(cellNodeIndex);
+        }
+        // this is a bit involved, because CellTopology doesn't give a way to go from a set of nodes to a subcell defined on those nodes
+        
+        // now, examine each of the d_ssc-dimensional subcells of cell to look for one that matches all cellNodeIndices
+        unsigned numSubcells = cellTopoData->subcell_count[d_ssc];
+        unsigned matchingSubcellIndex = numSubcells;
+        for (unsigned sc=0; sc<numSubcells; sc++) {
+          bool matches = true;
+          if (numNodes_ssc != cellTopoData->subcell[d_ssc][sc].topology->node_count) {
+            matches = false;
+          } else {
+            for (int i=0; i < numNodes_ssc; i++) {
+              unsigned cellNodeIndex = cellTopoData->subcell[d_ssc][sc].node[i];
+              if (cellNodeIndices.find(cellNodeIndex) == cellNodeIndices.end()) {
+                matches = false;
+                break;
+              }
+            }
+          }
+          if (matches == true) {
+            matchingSubcellIndex = sc;
+            break;
+          }
+        }
+        std::set<int> dofOrdinals_ssc = this->dofOrdinalsForSubcell(d_ssc,matchingSubcellIndex);
+        dofOrdinals.insert(dofOrdinals_ssc.begin(), dofOrdinals_ssc.end());
+      }
+    }
+    return dofOrdinals;
+  }
+  
+  template<class Scalar, class ArrayScalar>
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdge(int edgeIndex) const {
     int edgeDim = 1;
     return dofOrdinalsForSubcell(edgeDim, edgeIndex);
