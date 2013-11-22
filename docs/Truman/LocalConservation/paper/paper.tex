@@ -500,30 +500,33 @@ where $\bfU,Q$ are Hilbert spaces, and $a,c,l,q$ denote the appropriate
 bilinear and linear forms. Note that $a(\bfu,\bfw)=b(\bfu,T\bfw)=(T\bfu,T\bfw)_V$ in
 the notation from the previous section.
 
+Let function $\bfpsi$ denote the $H(\text{div},\Omega)$ extension of flux $\hat{t}$
+that realizes the minimum in the definition of the quotient (minimum energy
+extension) norm.
 The choice of norm for the Lagrange multipliers $\lambda_K$ is implied
 by the quotient norm used for $H^{-1/2}(\Gamma_h)$ and continuity
-bound for form $c(p,\bfw)$ representing the constraint.
+bound for form $c(p,\bfw)$ representing the constraint:
 \begin{equation}
 \begin{array}{lll}
 | c(\sum_K \lambda_K (1_K,{\bf 0}),(u,\bfsig,\hat{u},\hat{t})) |
 & = | \sum_K \lambda_K \langle \hat{t}, 1_K \rangle_{\ptl K} | \\[8pt]
 & = | \sum_K \lambda_K \langle v_n , 1_K \rangle_{\ptl K} | \\[8pt]
 & = | \sum_K \lambda_K \int_K \text{div} \bfpsi \: 1_K  | \\[8pt]
-& \leq \sum_K  \lambda_K | \text{div} \bfpsi |_{L^2(K)} \mu(K)^{1/2} \\[8pt]
-& \leq (\sum_K \mu(K) \lambda_K^2)^{1/2} \: (\sum_K | \text{div} \bfpsi |_{L^2(K)}^2 )^{1/2} \\[8pt]
-& \leq \underbrace{(\sum_K \mu(K) \lambda_K^2)^{1/2}}_{=: | \bflambda |} | \hat{t} |_{H^{-1/2}(\Gamma_h)}
+& \leq \sum_K  \lambda_K || \text{div} \bfpsi ||_{L^2(K)} \mu(K)^{1/2} \\[8pt]
+& \leq (\sum_K \mu(K) \lambda_K^2)^{1/2} \: (\sum_K || \text{div} \bfpsi ||_{L^2(K)}^2 )^{1/2} \\[8pt]
+& \leq \underbrace{(\sum_K \mu(K) \lambda_K^2)^{1/2}}_{=: || \bflambda ||} ||
+\hat{t} ||_{H^{-1/2}(\Gamma_h)}
 \end{array}
 \end{equation}
-Above, function $\bfpsi$ denotes the $H(\text{div},\Omega)$ extension of flux $\hat{t}$
-that realizes the minimum in the definition of the quotient (minimum energy extension) norm,
-and $\mu(K)$ stands for the area (measure) of element $K$.
+where $\mu(K)$ stands for the area (measure) of element $K$.
 
 We proceed now with the discussion of the discrete inf-sup stability constants. We skip
 index $h$ in the notation.
 
 \paragraph{Inf Sup Condition} relating spaces $\bfU$ and $Q$ reads as follows,
 \begin{equation}
-   \sup_{\bfw \in \bfU} \frac{| c(p,\bfw) |}{| \bfw |_{\bfU}} \geq \beta | p |_Q
+   \sup_{\bfw \in \bfU} \frac{| c(p,\bfw) |}{|| \bfw ||_{\bfU}} \geq \beta ||
+   p ||_Q
 \end{equation}
 Let
 \begin{equation}
@@ -544,9 +547,9 @@ Classical $h$-interpolation interpolation error estimate for the lowest error
 Raviart-Thomas elements and continuity of operator $R$ imply the stability estimate:
 \begin{equation}
 \begin{array}{lll}
-| \bfpsi_h | & \leq | \bfpsi_h - \bfpsi | + | \bfpsi |\\[8pt]
-&\leq C h | \bfpsi |_{H^1} +  | \bfpsi | \\[8pt]
-& \leq C | \text{div} \bfpsi | = C (\sum_K \mu(K) \lambda_K^2)^{1/2}
+|| \bfpsi_h || & \leq || \bfpsi_h - \bfpsi || + || \bfpsi ||\\[8pt]
+&\leq C h || \bfpsi ||_{H^1} +  || \bfpsi || \\[8pt]
+& \leq C || \text{div} \bfpsi || = C (\sum_K \mu(K) \lambda_K^2)^{1/2}
 \end{array}
 \label{eq:stab}
 \end{equation}
@@ -554,9 +557,10 @@ Above, $C$ is a generic, mesh independent constant incorporating constant from
 the interpolation error estimate and continuity constant of $R$.
 Let $\hat{t}$ be now the trace of $\bfpsi_h$. We have then,
 \begin{equation}
-\sup_{\hat{t} \in H^{-1/2}(\Gamma_h)} \frac{|  \sum_K \lambda_K \langle \hat{t},1_K \rangle_{\ptl K} |}{| \hat{t} |_{H^{-1/2}(\Gamma_h)}}
+\sup_{\hat{t} \in H^{-1/2}(\Gamma_h)} \frac{|  \sum_K \lambda_K \langle
+\hat{t},1_K \rangle_{\ptl K} |}{|| \hat{t} ||_{H^{-1/2}(\Gamma_h)}}
 \geq \frac{| \sum_K \lambda_K \int_K \text{div} \bfpsi_h \: 1_K  |}
-{| \bfpsi_h |_{H(\text{div},\Omega)}}
+{|| \bfpsi_h ||_{H(\text{div},\Omega)}}
 \geq \frac{1}{C} (\sum_K \mu(K) \lambda_K^2)^{1/2}
 \end{equation}
 where $C$ is the constant from stability estimate~(\ref{eq:stab}).
@@ -581,13 +585,20 @@ test functions. First of all, we characterize the ``kernel'' space:
 In other words, the kernel space contains only the equilibriated fluxes.
 With $\bfu \in \bfU_0$, we have then:
 \begin{equation}
-   \sup_{\bfw \in \bfU_0} \frac{| a(\bfu,\bfw) |}{| \bfw |_{\bfU} }
- \geq \frac{| b(\bfu,T \bfu) |}{| \bfu |}
-= \sup_{(v,\bftau)}
-\frac{| b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) |}{| (v,\bftau) |}
-\geq \gamma^2 | (u,\bfsig,\hat{u},\hat{t}) |
+   \sup_{\bfw \in \bfU_0} \frac{| a(\bfu,\bfw) |}{|| \bfw ||_{\bfU} }
+   \geq \frac{| b(\bfu,T \bfu) |}{|| \bfu ||}
+   = \frac{| b(\bfu,T \bfu) |}{|| T\bfu ||}\frac{||T\bfu||}{||\bfu||}
+   = \sup_{(v,\bftau)}\frac{| b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) |}{|| (v,\bftau) ||}
+   \frac{||T\bfu||}{||\bfu||}
+   \geq \gamma^2 || (u,\bfsig,\hat{u},\hat{t}) ||
 \end{equation}
 where $\gamma$ is the stability constant for the standard continuous DPG formulation.
+The first inequality follows as we plug in the definition for $a$ and pick
+$\bfw=\bfu$. The second equality is trivial, while the next one follows by definition of the optimal test
+functions given through the trial-to-test operator $T$. The finally inequality
+springs from the fact that
+$\sup_{\bfv}\frac{|b(\bfu,\bfv)|}{||\bfv||}\geq\gamma||\bfu||$ and
+$||T\bfu||_V=||R_V^{-1}B\bfu||_V=||B\bfu||_{V'}\geq\gamma||u||$.
 
 With both discrete inf-sup constants in place, we have the standard result: the FE error
 is bounded by the best approximation error. Notice that the exact Lagrange multipliers
@@ -601,11 +612,10 @@ test norms allowing us to bound the $L^2$ error of the field variables by the
 energy error, Equation \ref{eq:robustBound}. With robust test norms, we have
 \begin{equation}
 \begin{array}{ll}
-   \LRp{| u - u_h |^2+ | \bfsig - \bfsig_h
-   |^2}^{\frac{1}{2}}
-& \lesssim | (u - u_h, \bfsig - \bfsig_h, \hat{u} - \hat{u}_h, \hat{t} - \hat{t}_h |_E \\[8pt]
+   \LRp{|| u - u_h ||^2+ || \bfsig - \bfsig_h ||^2}^{\frac{1}{2}}
+& \lesssim || (u - u_h, \bfsig - \bfsig_h, \hat{u} - \hat{u}_h, \hat{t} - \hat{t}_h ||_E \\[8pt]
 &= \inf_{(w_h,\bfvarsigma_h,\hat{w},\hat{r}_h)}
-| (u - w_h, \bfsig - \bfvarsigma_h, \hat{u} - \hat{w}_h, \hat{t} - \hat{r}_h |_E\,.
+|| (u - w_h, \bfsig - \bfvarsigma_h, \hat{u} - \hat{w}_h, \hat{t} - \hat{r}_h ||_E\,.
 \end{array}
 \end{equation}
 The last equality follows from the fact that DPG method delivers the best approximation
@@ -631,14 +641,14 @@ v_K \in H^1(K),\, \bftau_K \in \bfH(\text{div},K)\\[8pt]
 \end{equation}
 The energy norm of $\hat{t}$ is then equal to
 \begin{equation}
-| \hat{t} |_E^2 = \sum_K | (v_K,\bftau_K) |_V^2\,.
+|| \hat{t} ||_E^2 = \sum_K || (v_K,\bftau_K) ||_V^2\,.
 \end{equation}
 We need to establish sufficient conditions under which the inf-sup and continuity constants for
 the bilinear form representing the constraint are independent of viscosity $\epsilon$.
 
 Let us start with the inf-sup condition,
 \begin{equation}
-\sup_{\hat{t}} \frac{| \sum_K \lambda_K \langle \hat{t},1_K \rangle |}{| \hat{t} |_E}
+\sup_{\hat{t}} \frac{| \sum_K \lambda_K \langle \hat{t},1_K \rangle |}{|| \hat{t} ||_E}
 \geq  \beta \LRp{\sum_K \mu(K) \lambda_K^2}^{1/2}\,.
 \end{equation}
 As in the previous analysis, we select for $\hat{t}$ the trace of Raviart-Thomas
@@ -654,27 +664,27 @@ to solve the local problems:
 \end{equation}
 We need then an upper bound of the energy norm of $(v_h,\bftau_h)$:
 $$
-\LRp{\sum_K | (v,\bftau) |_V^2}^{1/2}\,.
+\LRp{\sum_K || (v,\bftau) ||_V^2}^{1/2}\,.
 $$
 Substituting $(v,\bftau)$ for $(\delta v,\delta\bftau)$ in~(\ref{eq:local}), we get,
 \begin{equation}
-| (v,\bftau) |_V^2 = \lambda_K (1_K, v_K)
+|| (v,\bftau) ||_V^2 = \lambda_K (1_K, v_K)
 \end{equation}
 If we have a robust stability estimate:
 \begin{equation}
-(1_K, v_K) \leq C \mu(K)^{1/2} | (v,\bftau) |_K
+(1_K, v_K) \leq C \mu(K)^{1/2} || (v,\bftau) ||_K
 \end{equation}
 (i.e. constant $C$ is independent of $\epsilon$) then
 \begin{equation}
-|  (v,\bftau) |_V \leq C \mu(K)^{1/2} | \lambda_K |
+||  (v,\bftau) ||_V \leq C \mu(K)^{1/2} | \lambda_K |
 \end{equation}
 and, eventually, as needed,
 \begin{equation}
-\sum_K | (v,\bftau) |_V^2  \leq C^2 \sum_K \mu(K) \lambda_K^2
+\sum_K || (v,\bftau) ||_V^2  \leq C^2 \sum_K \mu(K) \lambda_K^2
 \end{equation}
 which leads to the robust estimate of inf-sup constant $\beta$. For example, it is sufficient if
 \begin{equation}
-| v |_{L^2(K)} \leq | (v,\bftau) |_V \, .
+|| v ||_{L^2(K)} \leq || (v,\bftau) ||_V \, .
 \label{eq:robust_est1}
 \end{equation}
 Notice that the stability analysis with the energy norm was, in a sense, easier than
@@ -692,14 +702,14 @@ Testing with $(1_K,{\bf 0})$ in the local problem~(\ref{eq:local_problem}), we o
 \end{equation}
 If we have a robust estimate,
 \begin{equation}
-| ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, | (v,\bftau) |_V
+| ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, || (v,\bftau) ||_V
 \label{eq:robust_est2}
 \end{equation}
 then
 \begin{equation}
 | \sum_K \lambda_K \langle \hat{t}, 1_K \rangle | \leq C (\sum_K \mu(K) \lambda_K^2)^{1/2}
-\, (\sum_K | (v,\bftau) |_V^2)^{1/2}
-= C (\sum_K \mu(K) \lambda_K^2)^{1/2}  | \hat{t} |_E
+\, (\sum_K || (v,\bftau) ||_V^2)^{1/2}
+= C (\sum_K \mu(K) \lambda_K^2)^{1/2}  || \hat{t} ||_E
 \end{equation}
 as needed.
 
