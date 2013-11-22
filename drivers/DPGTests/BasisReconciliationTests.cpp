@@ -52,7 +52,16 @@ bool BasisReconciliationTests::testP() {
   BasisReconciliation br;
   FieldContainer<double> weights = br.constrainedWeights(fineBasis, coarseBasis);
   
-  cout << "BasisReconciliation: weights: \n" << weights;
+  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
+  cout << "(still need to check that the weights are correct!)\n";
+  
+  // try it with sides
+  
+  SubBasisReconciliationWeights sideWeights = br.constrainedWeights(fineBasis, coarseBasis, 0, 0, 0);
+  
+//  cout << "sideWeights: \n" << sideWeights.weights;
+  
+  cout << "BasisReconciliation: computed weights when matching sides with the identity permutation.\n";
   cout << "(still need to check that the weights are correct!)\n";
   
   return success;
