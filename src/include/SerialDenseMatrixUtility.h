@@ -100,7 +100,11 @@ public:
     
     int N = A.dimension(0);
     int nRHS = b.dimension(1);
-
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(N != b.dimension(0), std::invalid_argument, "b's first dimension must match A's dimensions.");
+    TEUCHOS_TEST_FOR_EXCEPTION(N != x.dimension(0), std::invalid_argument, "x's first dimension must match A's dimensions.");
+    TEUCHOS_TEST_FOR_EXCEPTION(nRHS != x.dimension(1), std::invalid_argument, "x's second dimension must match b's second dimension.");
+    
     if (! useATranspose) {
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
