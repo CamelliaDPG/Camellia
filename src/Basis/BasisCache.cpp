@@ -6,7 +6,7 @@
 // @HEADER
 //
 // Original version copyright © 2011 Sandia Corporation. All Rights Reserved.
-// Revisions copyright © 2012 Nathan Roberts. All Rights Reserved.
+// Revisions copyright © 2013 Nathan Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -148,6 +148,15 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
+BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
+  // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
+  // of the sides; we may under-integrate for cells with broken sides...
+  _numSides = cellTopo.getSideCount();
+  DofOrdering trialOrdering; // dummy trialOrdering
+  findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
+  init(cellTopo, 0, cubDegree, createSideCacheToo);
+}
+
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
@@ -183,7 +192,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   DefaultCubatureFactory<double> cubFactory;
   Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
   int numCubPointsSide = sideCub->getNumPoints();
-  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
+  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
   _cubWeights.resize(numCubPointsSide);
   
   if ( multiBasisIfAny.get() == NULL ) {
@@ -855,3 +864,22 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
   return Teuchos::rcp(new BasisCache(physicalCellNodes, quad_4, cubDegree, createSideCacheToo));
 }
 
+BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
+  int numSides = volumeCache->cellTopology().getSideCount();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
+  
+  BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
+  BasisPtr multiBasisIfAny;
+  
+  int maxTestDegree = volumeCache->_maxTestDegree;
+  int maxTrialDegreeOnSide = volumeCache->_maxTrialDegree;
+  if (maxDegreeBasisOnSide.get() != NULL) {
+    if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+      multiBasisIfAny = maxDegreeBasisOnSide;
+    }
+    maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
+  }
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideIndex, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
+  return sideCache;
+}
