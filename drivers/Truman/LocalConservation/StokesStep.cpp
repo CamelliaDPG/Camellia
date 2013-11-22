@@ -5,6 +5,7 @@
 #include "InnerProductScratchPad.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
+#include "RefinementHistory.h"
 #include "SolutionExporter.h"
 #include "MeshFactory.h"
 #include "CheckConservation.h"
@@ -111,7 +112,15 @@ int main(int argc, char *argv[]) {
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 1);
   int polyOrder = args.Input("--polyOrder", "polynomial order for field variables", 2);
   int deltaP = args.Input("--deltaP", "how much to enrich test space", 2);
+  string saveFile = args.Input<string>("--meshSaveFile", "file to which to save refinement history", "");
+  string replayFile = args.Input<string>("--meshLoadFile", "file with refinement history to replay", "");
   args.Process();
+
+  if (commRank==0)
+  {
+    cout << "saveFile is " << saveFile << endl;
+    cout << "loadFile is " << replayFile << endl;
+  }
 
   ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
   int H1Order = polyOrder+1;
@@ -315,6 +324,9 @@ int main(int argc, char *argv[]) {
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow);
 
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
+  mesh->registerObserver(refHistory);
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
@@ -326,6 +338,8 @@ int main(int argc, char *argv[]) {
     errOut.open("stokesstep_err.txt");
     fluxOut.open("stokesstep_flux.txt");
   }
+  errOut.precision(15);
+  fluxOut.precision(15);
 
   // Cell IDs for flux calculations
   vector< vector< pair<ElementPtr, int> > > cellFaceSets;
@@ -344,6 +358,18 @@ int main(int argc, char *argv[]) {
      cellFaces.push_back(make_pair(mesh->getElement(2*c+4), 1));
      cellFaces.push_back(make_pair(mesh->getElement(2*c+5), 1));
      cellFaceSets.push_back(cellFaces);
+  }
+
+  // for loading refinement history
+  if (replayFile.length() > 0) {
+    RefinementHistory refHistory;
+    replayFile = replayFile;
+    refHistory.loadFromFile(replayFile);
+    refHistory.playback(mesh);
+    int numElems = mesh->numActiveElements();
+    if (commRank==0){
+      cout << "after replay, num elems = " << numElems << endl;
+    }
   }
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
@@ -382,6 +408,13 @@ int main(int argc, char *argv[]) {
         }
         cout << endl;
         fluxOut << endl;
+
+        if (saveFile.length() > 0) {
+          std::ostringstream oss;
+          oss << string(saveFile) << refIndex ;
+          cout << "on refinement " << refIndex << " saving mesh file to " << oss.str() << endl;
+          refHistory->saveToFile(oss.str());
+        }
       }
 
       // line search algorithm

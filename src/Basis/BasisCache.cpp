@@ -6,7 +6,7 @@
 // @HEADER
 //
 // Original version copyright © 2011 Sandia Corporation. All Rights Reserved.
-// Revisions copyright © 2012 Nathan Roberts. All Rights Reserved.
+// Revisions copyright © 2013 Nathan Roberts. All Rights Reserved.
 //
 // Redistribution and use in source and binary forms, with or without modification, are 
 // permitted provided that the following conditions are met:
@@ -61,21 +61,19 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey) {
 }
 
 // init is for volume caches.
-void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering,
-                      int maxTestDegree, bool createSideCacheToo) {
+void BasisCache::init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo) {
   _sideIndex = -1;
   _isSideCache = false; // VOLUME constructor
   
   _cellTopo = cellTopo;
   
-  // changed the following line from maxBasisDegree: we were generally overintegrating...
-  _cubDegree = trialOrdering.maxBasisDegreeForVolume() + maxTestDegree;
-  // limit cubature degree to max that Intrepid will support (TODO: case triangles and quads separately--this is for quads)
+  _cubDegree = maxTrialDegree + maxTestDegree;
+
   _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, cellTopo.getKey());
   _maxTestDegree = maxTestDegree;
+  _maxTrialDegree = maxTrialDegree;
   DefaultCubatureFactory<double> cubFactory;
-  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree); 
-  _trialOrdering = trialOrdering; // makes a copy--would be better to have an RCP here
+  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, _cubDegree);
   
   int cubDim       = cellTopoCub->getDimension();
   int numCubPoints = cellTopoCub->getNumPoints();
@@ -87,36 +85,28 @@ void BasisCache::init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering
   
   // now, create side caches
   if ( createSideCacheToo ) {
-    bool testVsTest = _trialOrdering.totalDofs() != _meshTrialOrdering.totalDofs();
-    createSideCaches(testVsTest);
+    createSideCaches();
   }
 }
 
-void BasisCache::createSideCaches(bool testVsTest) {
+void BasisCache::createSideCaches() {
   _basisCacheSides.clear();
   _numSides = _cellTopo.getSideCount();
-//  cout << "BasisCache::createSideCaches, numSides: " << _numSides << endl;
-  vector<int> sideTrialIDs;
-  set<int> trialIDs = _meshTrialOrdering.getVarIDs();
-  for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-    int trialID = *trialIt;
-    if (_meshTrialOrdering.getNumSidesForVarID(trialID) == _numSides) {
-      sideTrialIDs.push_back(trialID);
-    }
-  }
-  int numSideTrialIDs = sideTrialIDs.size();
+
   for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
-    BasisPtr maxDegreeBasisOnSide;
-    // loop through looking for highest-degree basis
-    int maxTrialDegree = -1;
-    for (int i=0; i<numSideTrialIDs; i++) {
-      if (_meshTrialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
-        maxDegreeBasisOnSide = _meshTrialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
-        maxTrialDegree = maxDegreeBasisOnSide->getDegree();
+    BasisPtr maxDegreeBasisOnSide = _maxDegreeBasisForSide[sideOrdinal];
+    BasisPtr multiBasisIfAny;
+    
+    int maxTrialDegreeOnSide = _maxTrialDegree;
+    if (maxDegreeBasisOnSide.get() != NULL) {
+      if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+        multiBasisIfAny = maxDegreeBasisOnSide;
       }
+      maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
     }
+    
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
-    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxDegreeBasisOnSide, testVsTest));
+    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, multiBasisIfAny));
     _basisCacheSides.push_back(sideCache);
   }
 }
@@ -124,97 +114,95 @@ void BasisCache::createSideCaches(bool testVsTest) {
 BasisCache::BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh, bool testVsTest, int cubatureDegreeEnrichment) {
   // use testVsTest=true for test space inner product (won't create side caches, and will use higher cubDegree)
   shards::CellTopology cellTopo = *(elemType->cellTopoPtr);
-    
-  int maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
+  _numSides = cellTopo.getSideCount();
+  
+  _maxTestDegree = elemType->testOrderPtr->maxBasisDegree();
   
   _mesh = mesh;
   if (_mesh.get()) {
     _transformationFxn = _mesh->getTransformationFunction();
     if (_transformationFxn.get()) {
       // assuming isoparametric:
-      cubatureDegreeEnrichment += maxTestDegree;
+      cubatureDegreeEnrichment += _maxTestDegree;
     }
     // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
     // one with potentially curved edges...
     _composeTransformationFxnWithMeshTransformation = true;
   }
 
-  DofOrdering trialOrdering;
-  if (testVsTest) {
-    trialOrdering = *(elemType->testOrderPtr); // bit of a lie here -- treat the testOrdering as trialOrdering
-    _meshTrialOrdering = *(elemType->trialOrderPtr); // tells the truth...
-  } else {
-    trialOrdering = *(elemType->trialOrderPtr);
-    _meshTrialOrdering = trialOrdering;
-  }
+  _maxTrialDegree = testVsTest ? _maxTestDegree : elemType->trialOrderPtr->maxBasisDegree();
   
-  bool createSideCacheToo = !testVsTest && trialOrdering.hasSideVarIDs();
+  findMaximumDegreeBasisForSides( *(elemType->trialOrderPtr) );
   
-  init(cellTopo,trialOrdering,maxTestDegree + cubatureDegreeEnrichment,createSideCacheToo);
+  bool createSideCacheToo = !testVsTest && elemType->trialOrderPtr->hasSideVarIDs();
+  
+  init(cellTopo,_maxTrialDegree,_maxTestDegree + cubatureDegreeEnrichment,createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, 
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo) {
-  _meshTrialOrdering = trialOrdering;
-  init(cellTopo, trialOrdering, maxTestDegree, createSideCacheToo);
+  _numSides = cellTopo.getSideCount();
+  findMaximumDegreeBasisForSides(trialOrdering);
+  init(cellTopo, trialOrdering.maxBasisDegree(), maxTestDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
+}
+
+BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
+  // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
+  // of the sides; we may under-integrate for cells with broken sides...
+  _numSides = cellTopo.getSideCount();
+  DofOrdering trialOrdering; // dummy trialOrdering
+  findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
+  init(cellTopo, 0, cubDegree, createSideCacheToo);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo) {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
+  _numSides = cellTopo.getSideCount();
   DofOrdering trialOrdering; // dummy trialOrdering
-  init(cellTopo, trialOrdering, cubDegree, createSideCacheToo);
+  findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
+  init(cellTopo, 0, cubDegree, createSideCacheToo);
   setPhysicalCellNodes(physicalCellNodes,vector<int>(),createSideCacheToo);
 }
 
 // side constructor
-BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, BasisPtr maxDegreeTrialBasis, bool testVsTest) {
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny) {
   _isSideCache = true;
   _sideIndex = sideIndex;
   _numSides = -1;
   _basisCacheVolume = volumeCache;
-  _maxTestDegree = volumeCache->maxTestDegree(); // maxTestDegree includes any cubature enrichment
+  _maxTestDegree = testDegree;
+  _maxTrialDegree = trialDegree;
   if (volumeCache->mesh().get()) {
     _transformationFxn = volumeCache->mesh()->getTransformationFunction();
     // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
     // one with potentially curved edges...
     _composeTransformationFxnWithMeshTransformation = true;
   }
-  if (testVsTest) {
-    // this is a "test-vs-test" type BasisCache: for IPs with boundary terms,
-    // we may have a side basis cache without any bases that live on the boundaries
-    // this is not quite right, in that we'll over-integrate if there's non-zero cubatureEnrichment
-    _cubDegree = _maxTestDegree * 2;
-  } else if ( maxDegreeTrialBasis.get() != NULL ) {
-    _cubDegree = maxDegreeTrialBasis->getDegree() + _maxTestDegree;
-  } else {
-    _cubDegree = _maxTestDegree * 2; // absent a max-degree trial basis, we'll over-integrate by doing test v. test anyway
-  }
-  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, shards::Line<2>::key); // assumes volume is 2D
-
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _spaceDim = _cellTopo.getDimension();
-  
   shards::CellTopology side(_cellTopo.getCellTopologyData(_spaceDim-1,sideIndex)); // create relevant subcell (side) topology
+  
+  _cubDegree = testDegree + trialDegree;
+  _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side.getBaseKey());
+
   int sideDim = side.getDimension();
   DefaultCubatureFactory<double> cubFactory;
   Teuchos::RCP<Cubature<double> > sideCub = cubFactory.create(side, _cubDegree);
   int numCubPointsSide = sideCub->getNumPoints();
-  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
+  _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
   _cubWeights.resize(numCubPointsSide);
   
-  if ( ! BasisFactory::isMultiBasis(maxDegreeTrialBasis) ) {
+  if ( multiBasisIfAny.get() == NULL ) {
     sideCub->getCubature(_cubPoints, _cubWeights);
   } else {
-    MultiBasis<>* multiBasis = (MultiBasis<>*) maxDegreeTrialBasis.get();
-    if (! testVsTest) {
-      multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree);
-    } else {
-      // enrich to account for the testVsTest functions.
-      multiBasis->getCubature(_cubPoints, _cubWeights, _cubDegree - multiBasis->getDegree());
-    }
+    MultiBasis<>* multiBasis = (MultiBasis<>*) multiBasisIfAny.get();
+    
+    int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
+    multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree + cubatureEnrichment);
+    
     numCubPointsSide = _cubPoints.dimension(0);
   }
   
@@ -251,6 +239,31 @@ FieldContainer<double> BasisCache::computeParametricPoints() {
 
 int BasisCache::cubatureDegree() {
   return _cubDegree;
+}
+
+void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering) {
+  _maxDegreeBasisForSide.clear();
+  vector<int> sideTrialIDs;
+  set<int> trialIDs = trialOrdering.getVarIDs();
+  for (set<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    int trialID = *trialIt;
+    if (trialOrdering.getNumSidesForVarID(trialID) > 1) {
+      sideTrialIDs.push_back(trialID);
+    }
+  }
+  int numSideTrialIDs = sideTrialIDs.size();
+  for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
+    BasisPtr maxDegreeBasisOnSide;
+    // loop through looking for highest-degree basis
+    int maxTrialDegree = -1;
+    for (int i=0; i<numSideTrialIDs; i++) {
+      if (trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal)->getDegree() > maxTrialDegree) {
+        maxDegreeBasisOnSide = trialOrdering.getBasis(sideTrialIDs[i],sideOrdinal);
+        maxTrialDegree = maxDegreeBasisOnSide->getDegree();
+      }
+    }
+    _maxDegreeBasisForSide.push_back(maxDegreeBasisOnSide);
+  }
 }
 
 Teuchos::RCP<Mesh> BasisCache::mesh() {
@@ -734,8 +747,7 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   if ( ! isSideCache() && createSideCacheToo ) {
     // we only actually create side caches anew if they don't currently exist
     if (_basisCacheSides.size() == 0) {
-      bool testVsTest = _trialOrdering.totalDofs() != _meshTrialOrdering.totalDofs();
-      createSideCaches(testVsTest);
+      createSideCaches();
     }
     for (int sideOrdinal=0; sideOrdinal<_numSides; sideOrdinal++) {
       _basisCacheSides[sideOrdinal]->setPhysicalCellNodes(physicalCellNodes, cellIDs, false);
@@ -850,4 +862,24 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
   physicalCellNodes(0,3,1) = height;
   
   return Teuchos::rcp(new BasisCache(physicalCellNodes, quad_4, cubDegree, createSideCacheToo));
+}
+
+BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex) {
+  int numSides = volumeCache->cellTopology().getSideCount();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(sideIndex >= numSides, std::invalid_argument, "sideIndex out of range");
+  
+  BasisPtr maxDegreeBasisOnSide = volumeCache->_maxDegreeBasisForSide[sideIndex];
+  BasisPtr multiBasisIfAny;
+  
+  int maxTestDegree = volumeCache->_maxTestDegree;
+  int maxTrialDegreeOnSide = volumeCache->_maxTrialDegree;
+  if (maxDegreeBasisOnSide.get() != NULL) {
+    if (BasisFactory::isMultiBasis(maxDegreeBasisOnSide)) {
+      multiBasisIfAny = maxDegreeBasisOnSide;
+    }
+    maxTrialDegreeOnSide = maxDegreeBasisOnSide->getDegree();
+  }
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideIndex, volumeCache, maxTrialDegreeOnSide, maxTestDegree, multiBasisIfAny));
+  return sideCache;
 }

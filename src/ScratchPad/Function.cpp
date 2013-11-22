@@ -546,9 +546,9 @@ double Function::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest)
       if (error > tol){
         allConverged = false;
         subCellsToRefine.insert(i);
-	tempIntegral += enrichedCellIntegral(0);
+        tempIntegral += enrichedCellIntegral(0);
       }else{
-	integral += enrichedCellIntegral(0);
+        integral += enrichedCellIntegral(0);
       }
     }
     if (iter == maxIter){

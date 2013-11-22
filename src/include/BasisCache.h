@@ -94,12 +94,11 @@ private:
   
   // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
   // TODO: refactor here to store trialOrdering, testOrdering, and testVsTest.
-  DofOrdering _trialOrdering;
-  DofOrdering _meshTrialOrdering; // since the _trialOrdering can be a lie (can be a test ordering) -- this is the truth...
+  
   
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
-  int _cubDegree, _maxTestDegree;
+  int _cubDegree;
   
   // containers specifically for sides:
   Intrepid::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
@@ -122,24 +121,27 @@ private:
   map< pair< Camellia::Basis<>*, IntrepidExtendedTypes::EOperatorExtended >,
   Teuchos::RCP< const Intrepid::FieldContainer<double> > > _knownValuesTransformedWeightedDottedWithNormal;
   
-  // Intrepid::EOperator relatedOperator(EOperatorExtended op, int &componentOfInterest);
-  //  Teuchos::RCP< const Intrepid::FieldContainer<double> > getComponentOfInterest(Teuchos::RCP< const Intrepid::FieldContainer<double> > values,
-  //                                                                int componentOfInterest);
-  void init(shards::CellTopology &cellTopo, DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo);
+  void init(shards::CellTopology &cellTopo, int maxTrialDegree, int maxTestDegree, bool createSideCacheToo);
 
   void determineJacobian();
   void determinePhysicalPoints();
   
   // (private) side cache constructor:
-  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, BasisPtr maxDegreeBasis, bool testVsTest);
+  BasisCache(int sideIndex, Teuchos::RCP<BasisCache> volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
   
   int maxTestDegree();
-  void createSideCaches(bool testVsTest);
+  void createSideCaches();
+  
+  void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
 protected:
   BasisCache() { _isSideCache = false; } // for the sake of some hackish subclassing
+  
+  vector< BasisPtr > _maxDegreeBasisForSide; // stored in volume cache so we can get cubature right on sides, including broken sides (if this is a multiBasis)
+  int _maxTestDegree, _maxTrialDegree;
 public:
   BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0); // use testVsTest=true for test space inner product
+  BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
@@ -217,6 +219,11 @@ public:
   static BasisCachePtr basisCacheForCellType(Teuchos::RCP<Mesh> mesh, ElementTypePtr elemType, bool testVsTest = false,
                                              int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
   static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
+  
+  // note that this does not inform the volumeCache about the created side cache:
+  // Intended for cases where you just want to create a BasisCache for one of the sides, not all of them.
+  // If you want one for all of them, you should pass createSideCacheToo = true to an appropriate volumeCache method.
+  static BasisCachePtr sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, int sideIndex);
 };
 
 #endif

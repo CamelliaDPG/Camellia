@@ -94,8 +94,8 @@ public:
   static void solveSystemMultipleRHS(FieldContainer<double> &x, FieldContainer<double> &A, FieldContainer<double> &b, bool useATranspose = false){
     // solves Ax = b, where
     // A = (N,N)
-    // b = N
-    // x = N
+    // b = (N,M)
+    // x = (N,M)
     Epetra_SerialDenseSolver solver;
     
     int N = A.dimension(0);
@@ -117,7 +117,14 @@ public:
 				      N,
 				      b.dimension(0),b.dimension(1));
     */
+    // Jesse wrote:
     // TODO: figure out why the above COPY doesn't work
+    // Nate answers:
+    // It must be because b's data is transposed relative to what SDM expects.
+    // If we required b's dimensions to be (M,N) instead, then we could get away with the copy as above.
+    //    (and maybe even a View)
+    // What's more, if we required x's dimensions also to be (M,N), we could do a view there, eliminating
+    // the copy and the malloc.  Probably not a big deal in terms of overall cost.
     Epetra_SerialDenseMatrix bVectors(N,nRHS);
     for (int i = 0;i<N;i++){
       for (int j = 0;j<nRHS;j++){

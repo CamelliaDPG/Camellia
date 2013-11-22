@@ -607,9 +607,10 @@ bool FunctionTests::testAdaptiveIntegrate(){
   double computedIntegral = boundaryLayerFunction->integrate(_spectralConfusionMesh,quadtol);
   double trueIntegral = (eps*(exp(1/eps) - exp(-1/eps)))*2.0;
   double diff = trueIntegral-computedIntegral;
+  double relativeError = abs(diff)/abs(trueIntegral); // relative error
   
   double tol = 1e-2;
-  if (abs(diff)>tol){ 
+  if (relativeError > tol){
     success = false;
     cout << "failing testAdaptiveIntegrate() with computed integral " << computedIntegral << " and true integral " << trueIntegral << endl;
   }

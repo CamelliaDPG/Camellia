@@ -449,6 +449,11 @@ int main(int argc, char *argv[]) {
     if (!startWithZeroSolutionAfterRefinement) {
       cout << "NOT starting with 0 solution after refinement...\n";
     }
+    if (useCondensedSolve) {
+      cout << "Using condensed solve.\n";
+    } else {
+      cout << "Not using condensed solve.\n";
+    }
     if (useMumps) {
       cout << "Using MUMPS for global linear solves.\n";
     } else if (useML) {
@@ -867,7 +872,8 @@ int main(int argc, char *argv[]) {
     
     double incr_norm, prev_norm;
     do {
-      problem.iterate(useLineSearch, useCondensedSolve);
+      problem.iterate(useLineSearch, useCondensedSolve, false);
+//      problem.iterate(useLineSearch, useCondensedSolve, problem.iterationCount() >= 2); // skip initialization after the 0 and 1 guesses -- but so far, condensed solve doesn't support preconditioner reuse.
       
       incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
       prev_norm = sqrt(l2_prev->integrate(problem.mesh()));

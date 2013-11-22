@@ -74,8 +74,9 @@ namespace Camellia {
     virtual std::set<int> dofOrdinalsForInterior() const;
     virtual std::set<int> dofOrdinalsForVertices() const;
     virtual std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
-    
-    virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int edgeIndex) const;
+
+    virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
+    virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
     virtual std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
     virtual std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
     
