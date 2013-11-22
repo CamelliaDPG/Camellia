@@ -1767,6 +1767,18 @@ conservative.
 The small amount of mass loss for the restricted method is clearly due to
 accumulation of floating point error.
 
+The most significant benefit of enforcing local conservation for these
+problems is that it allows us to recover the essential flow features with much
+coarser meshes. On the $r=0.6$ cylinder problem, the peak velocity magnitude
+of the conservative solution is fairly close on the coarsest mesh, while the
+nonconservative solution severely underpredicts the peak. With the $r=0.9$
+cylinder, this problem is only exacerbated. After just one adaptive
+refinement, the conservative solution nails the peak velocity. The
+nonconservative solution is completely useless at this point. We see the same
+thing with the backward facing step problem. The conservative solution is
+great on the coarsest mesh, while standard DPG needs a lot more resolution
+before it even starts to look right.
+
 \section{Conclusions}
 We've developed a locally conservative formulation of DPG by leveraging
 Lagrange multipliers. While the formulation is provably convergent and robust, it does
@@ -1777,7 +1789,9 @@ hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
 with refinements. For the Stokes problems, standard DPG suffered similar mass
 loss as standard least squares on coarse meshes, but made up the lost mass with further
-resolution.
+resolution. On problems where local conservation was really stressed,
+restricted DPG was able to deliver reasonable solutions with much less
+resolution than standard DPG.
 Probably the most encouraging result of these experiments is
 that enforcing local conservation did not change the nature of the solutions
 too significantly. Standard DPG has a lot of attractive features, and we wish
