@@ -63,7 +63,7 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   shards::CellTopology cellTopo = finerBasis->domainTopology();
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo.getBaseKey() != coarserBasis->domainTopology().getBaseKey(), std::invalid_argument, "Bases must agree on domain topology.");
   
-  int cubDegree = finerBasis->getDegree() + coarserBasis->getDegree();
+  int cubDegree = finerBasis->getDegree() * 2;
 
   DefaultCubatureFactory<double> cubFactory;
   Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree);
