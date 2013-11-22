@@ -656,12 +656,15 @@ interpolant $\bfpsi_h$ of $\bfpsi = R (\sum_K \lambda_K 1_K)$ where $R$ is the r
 of the divergence operator constructed by Costabel and McIntosh. The only change compared
 with the previous analysis, is the evaluation of norm of $\hat{t}_h$. For this, we need
 to solve the local problems:
-\begin{equation}
-((v,\bftau), (\delta v, \delta \bftau)_V = \langle \hat{t}, \delta v \rangle_{\ptl K}
-= \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v = \int_K \lambda_K \delta v
-= \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in H^1(K)
+\begin{align}
+((v,\bftau), (\delta v, \delta \bftau)_V &= \langle \hat{t}, \delta v \rangle_{\ptl K}
+= \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v
+\nonumber\\
+&= \int_K \lambda_K \delta v
+= \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in
+H^1(K)\,\forall\delta\bftau\in\bfH(\text{div},K)
 \label{eq:local}
-\end{equation}
+\end{align}
 We need then an upper bound of the energy norm of $(v_h,\bftau_h)$:
 $$
 \LRp{\sum_K || (v,\bftau) ||_V^2}^{1/2}\,.
