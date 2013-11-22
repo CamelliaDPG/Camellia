@@ -586,12 +586,19 @@ In other words, the kernel space contains only the equilibriated fluxes.
 With $\bfu \in \bfU_0$, we have then:
 \begin{equation}
    \sup_{\bfw \in \bfU_0} \frac{| a(\bfu,\bfw) |}{|| \bfw ||_{\bfU} }
- \geq \frac{| b(\bfu,T \bfu) |}{|| \bfu ||}
-= \sup_{(v,\bftau)}
-\frac{| b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) |}{|| (v,\bftau) ||}
-\geq \gamma^2 || (u,\bfsig,\hat{u},\hat{t}) ||
+   \geq \frac{| b(\bfu,T \bfu) |}{|| \bfu ||}
+   = \frac{| b(\bfu,T \bfu) |}{|| T\bfu ||}\frac{||T\bfu||}{||\bfu||}
+   = \sup_{(v,\bftau)}\frac{| b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) |}{|| (v,\bftau) ||}
+   \frac{||T\bfu||}{||\bfu||}
+   \geq \gamma^2 || (u,\bfsig,\hat{u},\hat{t}) ||
 \end{equation}
 where $\gamma$ is the stability constant for the standard continuous DPG formulation.
+The first inequality follows as we plug in the definition for $a$ and pick
+$\bfw=\bfu$. The second equality is trivial, while the next one follows by definition of the optimal test
+functions given through the trial-to-test operator $T$. The finally inequality
+springs from the fact that
+$\sup_{\bfv}\frac{|b(\bfu,\bfv)|}{||\bfv||}\geq\gamma||\bfu||$ and
+$||T\bfu||_V=||R_V^{-1}B\bfu||_V=||B\bfu||_{V'}\geq\gamma||u||$.
 
 With both discrete inf-sup constants in place, we have the standard result: the FE error
 is bounded by the best approximation error. Notice that the exact Lagrange multipliers
