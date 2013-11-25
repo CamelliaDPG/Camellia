@@ -35,7 +35,7 @@ public:
   BasisReconciliation(bool cacheResults = true) { _cacheResults = cacheResults; }
 
   const FieldContainer<double> &constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis); // requires these to be defined on the same topology
-  const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, int finerBasisSideIndex, int coarserBasisSideIndex, unsigned vertexNodePermutation); // requires the sides to have the same topology
+  const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation); // requires the sides to have the same topology
   
   // static workhorse methods:
   

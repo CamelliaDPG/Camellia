@@ -27,6 +27,11 @@ public:
   
   bool testP();
   bool testH();
+  
+private:
+  bool pConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
+                                   BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes);
+  bool pConstraintWholeBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis);
 };
 
 
