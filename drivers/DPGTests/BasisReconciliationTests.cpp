@@ -15,11 +15,19 @@
 
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testPSide()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testP()) {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
+  
   setup();
   if (testH()) {
     numTestsPassed++;
@@ -69,9 +77,34 @@ void interpretSideValues(SubBasisReconciliationWeights weights, const FieldConta
   fineValues.dimensions(dim);
   dim[0] = coarseCount; // the shape we want for the final container is now in dim
   filteredCoarseValues.resize(dim);
-  dim[0] = fineCount;
   interpretedFineValues.resize(dim);
   
+  dim[0] = fineCount;
+  FieldContainer<double> filteredFineValues(dim);
+  int numValuesPerBasisFunction = filteredFineValues.size() / fineCount;
+  int filteredIndex = 0;
+  for (set<int>::iterator fineIt = weights.fineOrdinals.begin(); fineIt != weights.fineOrdinals.end(); fineIt++) {
+    int fineIndex = *fineIt;
+    const double *fineValue = &fineValues[fineIndex * numValuesPerBasisFunction];
+    double * filteredFineValue = &filteredFineValues[filteredIndex * numValuesPerBasisFunction];
+    for (int i=0; i<numValuesPerBasisFunction; i++) {
+      *filteredFineValue++ = *fineValue++;
+    }
+    filteredIndex++;
+  }
+  
+  interpretedFineValues = interpretValues(filteredFineValues, weights.weights);
+
+  filteredIndex = 0;
+  for (set<int>::iterator coarseIt = weights.coarseOrdinals.begin(); coarseIt != weights.coarseOrdinals.end(); coarseIt++) {
+    int coarseIndex = *coarseIt;
+    const double *coarseValue = &coarseValues[coarseIndex * numValuesPerBasisFunction];
+    double * filteredCoarseValue = &filteredCoarseValues[filteredIndex * numValuesPerBasisFunction];
+    for (int i=0; i<numValuesPerBasisFunction; i++) {
+      *filteredCoarseValue++ = *coarseValue++;
+    }
+    filteredIndex++;
+  }
   
 }
 
@@ -162,7 +195,7 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
       unsigned permutedSideNode = sideTopo.getNodePermutation(permutation, sideNode);
       unsigned putativeCoarseNode = coarseTopo.getNodeMap(d-1, coarseSideIndex, permutedSideNode);
       for (int dim=0; dim<d; dim++) {
-        if (abs(fineCellNodes(fineNode,dim) - coarseCellNodes(putativeCoarseNode,dim)) > tol) {
+        if (abs(fineCellNodes(0,fineNode,dim) - coarseCellNodes(0,putativeCoarseNode,dim)) > tol) {
           // not a match
           matches = false;
           break;
@@ -206,6 +239,10 @@ bool BasisReconciliationTests::pConstraintSideBasisSubTest(BasisPtr fineBasis, u
 
   int d = fineBasis->domainTopology().getDimension();
   
+  int oneCell = 1;
+  fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
+  coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
+  
   // want to figure out a set of physical cell nodes that corresponds to this combination
   shards::CellTopology coarseTopo = coarseBasis->domainTopology();
   shards::CellTopology fineTopo = fineBasis->domainTopology();
@@ -226,14 +263,19 @@ bool BasisReconciliationTests::pConstraintSideBasisSubTest(BasisPtr fineBasis, u
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
   
+  FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
+  FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  
   FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
   FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
   
   // finePoints and coarsePoints should match
   double maxDiff;
   double tol = 1e-14;
-  if ( !fcsAgree(finePoints, coarsePoints, tol, maxDiff) ) {
+  if ( !fcsAgree(finePointsPhysical, coarsePointsPhysical, tol, maxDiff) ) {
     cout << "TEST failure in pConstraintSideBasisSubTest: points on fine and coarse topology do not match on side.\n";
+    cout << "finePoints:\n" << finePointsPhysical;
+    cout << "coarsePoints:\n" << coarsePointsPhysical;
     success = false;
     return success;
   }
@@ -241,19 +283,21 @@ bool BasisReconciliationTests::pConstraintSideBasisSubTest(BasisPtr fineBasis, u
   FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
   FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
   
-//  FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
-//  
-//  double maxDiff;
-//  double tol = 1e-14;
-//  if ( !fcsAgree(coarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
-//    success = false;
-//    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on quad.\n";
-//    cout << "points:\n" << points;
-//    cout << "weights:\n" << weights.weights;
-//    cout << "fineValues:\n" << fineBasisValues;
-//    cout << "coarseBasisValues:\n" << coarseBasisValues;
-//    cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
-//  }
+  FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
+  interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);
+
+  if ( !fcsAgree(filteredCoarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
+    success = false;
+    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on side.\n";
+    cout << "fine points:\n" << finePoints;
+    cout << "weights:\n" << weights.weights;
+    cout << "fineValues:\n" << fineBasisValues;
+    cout << "coarseBasisValues:\n" << coarseBasisValues;
+    cout << "filteredCoarseBasisValues:\n" << filteredCoarseBasisValues;
+    cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
+  }
+
+  
   return success;
 }
 
@@ -293,14 +337,95 @@ bool BasisReconciliationTests::testP() {
     }
   }
   
-  // try it with sides
-  BasisReconciliation br;
-  SubBasisReconciliationWeights sideWeights = br.constrainedWeights(fineBasis, 0, coarseBasis, 0, 0);
+  return success;
+}
+
+struct pSideTest {
+  BasisPtr fineBasis;
+  int fineSideIndex;
+  FieldContainer<double> fineCellNodes;
+  BasisPtr coarseBasis;
+  int coarseSideIndex;
+  FieldContainer<double> coarseCellNodes;
+};
+
+FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double x, double y) {
+  vector<double> translations;
+  translations.push_back(x);
+  translations.push_back(y);
+  FieldContainer<double> translatedQuad = quad;
+  for (int node=0; node < translatedQuad.dimension(0); node++) {
+    for (int d = 0; d < translatedQuad.dimension(1); d++) {
+      translatedQuad(node,d) += translations[d];
+    }
+  }
+//  cout << "translating quad:\n" << quad << "by (" << x << "," << y << ")\n";
+//  cout << "translated quad:\n" << translatedQuad;
   
-  cout << "sideWeights: \n" << sideWeights.weights;
+  return translatedQuad;
+}
+
+bool BasisReconciliationTests::testPSide() {
+  bool success = true;
   
-  cout << "BasisReconciliation: computed weights when matching sides with the identity permutation.\n";
-  cout << "(still need to check that the weights are correct!)\n";
+  int fineOrder = 5;
+  int coarseOrder = 3;
+  
+  double width = 5;
+  double height = 10;
+  FieldContainer<double> centeredQuad(4,2);
+  centeredQuad(0,0) = -width / 2;
+  centeredQuad(0,1) = -height / 2;
+  centeredQuad(1,0) = width / 2;
+  centeredQuad(1,1) = -height / 2;
+  centeredQuad(2,0) = width / 2;
+  centeredQuad(2,1) = height / 2;
+  centeredQuad(3,0) = -width / 2;
+  centeredQuad(3,1) = height / 2;
+  
+  FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
+  FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
+  FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
+  FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
+  
+  pSideTest test;
+  
+  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
+  
+  vector< pSideTest > sideTests;
+  
+  test.fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = EAST;
+  test.coarseCellNodes = eastQuad;
+  test.coarseSideIndex = WEST;
+  
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = EAST;
+  
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidQuadHDIV(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHDIV(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = EAST;
+  
+  sideTests.push_back(test);
+  
+  for (vector< pSideTest >::iterator testIt = sideTests.begin(); testIt != sideTests.end(); testIt++) {
+    test = *testIt;
+    pConstraintSideBasisSubTest(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
+                                test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes);
+  }
   
   return success;
 }

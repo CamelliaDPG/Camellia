@@ -26,6 +26,7 @@ public:
   string testSuiteName() { return "BasisReconciliationTests"; }
   
   bool testP();
+  bool testPSide();
   bool testH();
   
 private:

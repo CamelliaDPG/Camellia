@@ -129,7 +129,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
     case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV_FREE:
-      minSubcellDimension = 2; // faces
+      minSubcellDimension = d-1; // faces in 3D, edges in 2D.  (Unsure if this is right in 4D)
       break;
     case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
       minSubcellDimension = d; // i.e. no continuities enforced
@@ -168,6 +168,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   FieldContainer<double> permutedSideTopoNodes(sideTopo.getNodeCount(), sideTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedSideTopoNodes, sideTopo, vertexNodePermutation);
   sideCacheForPermutation->setRefCellPoints(fineSideBasisCache->getRefCellPoints()); // these should be the same, but doesn't hurt to be sure
+  permutedSideTopoNodes.resize(oneCell,permutedSideTopoNodes.dimension(0),permutedSideTopoNodes.dimension(1));
   sideCacheForPermutation->setPhysicalCellNodes(permutedSideTopoNodes, vector<int>(), false);
   FieldContainer<double> permutedSideCubaturePoints = sideCacheForPermutation->getPhysicalCubaturePoints();
   // resize for reference space (no cellIndex dimension):
@@ -175,6 +176,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
 
   FieldContainer<double> coarseVolumeRefCellNodes(coarseTopo.getNodeCount(), d);
   CamelliaCellTools::refCellNodesForTopology(coarseVolumeRefCellNodes, coarseTopo);
+  coarseVolumeRefCellNodes.resize(oneCell,coarseVolumeRefCellNodes.dimension(0), coarseVolumeRefCellNodes.dimension(1));
   coarseSideBasisCache->setPhysicalCellNodes(coarseVolumeRefCellNodes, vector<int>(), false);
   coarseSideBasisCache->setRefCellPoints(permutedSideCubaturePoints); // this makes computing weighted values illegal (the cubature weights are no longer valid, so they're cleared automatically)
   
