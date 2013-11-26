@@ -64,7 +64,16 @@ bool BF::isFluxOrTrace(int trialID) {
     return false;
   }
   VarType varType = trialVar->varType();
-  return (varType == FLUX) || (varType == TRACE);
+  return (varType == FLUX) || (varType == TRACE) || (varType == SPATIALTRACE);
+}
+
+bool BF::isSpatialTrace(int trialID) {
+  VarPtr trialVar = _varFactory.trial(trialID);
+  if (trialVar.get() == NULL) { // if unknown trial ID, then it's not a flux or a trace!
+    return false;
+  }
+  VarType varType = trialVar->varType();
+  return (varType == SPATIALTRACE);
 }
 
 void BF::printTrialTestInteractions() {
@@ -97,7 +106,7 @@ void BF::stiffnessMatrix(FieldContainer<double> &stiffness, Teuchos::RCP<Element
   // stiffness is sized as (C, FTest, FTrial)
   stiffness.initialize(0.0);
   basisCache->setCellSideParities(cellSideParities);
-  
+
   for ( vector< BilinearTerm >:: iterator btIt = _terms.begin();
        btIt != _terms.end(); btIt++) {
     BilinearTerm bt = *btIt;
@@ -132,7 +141,7 @@ void BF::bubnovStiffness(FieldContainer<double> &stiffness, Teuchos::RCP<Element
     trialTerm->integrate(stiffness, elemType->trialOrderPtr,
                          testTerm,  elemType->trialOrderPtr, basisCache);
   }
- 
+
 }
 
 IPPtr BF::graphNorm(double weightForL2TestTerms) {
@@ -182,7 +191,7 @@ IPPtr BF::graphNorm(const map<int, double> &varWeights, double weightForL2TestTe
   for ( map< int, VarPtr >::iterator testVarIt = testVars.begin(); testVarIt != testVars.end(); testVarIt++) {
     ip->addTerm( sqrt(weightForL2TestTerms) * testVarIt->second );
   }
-  
+
   return ip;
 }
 
@@ -213,7 +222,7 @@ IPPtr BF::naiveNorm() {
       ip->addTerm( var->div() );
     }
   }
-  return ip;  
+  return ip;
 }
 
 LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck) {

@@ -373,7 +373,12 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
       for (int i=0; i < numVars; i++)
       {
         computedValues[i].resize(numCells, numPoints);
-        _solution->solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
+        if (!_mesh->bilinearForm()->isSpatialTrace(traceTrialIDs[i]) || sideIndex == 1 || sideIndex == 3)
+          _solution->solutionValues(computedValues[i], traceTrialIDs[i], sideBasisCache);
+        else
+          for (int c=0; c < numCells; c++)
+            for (int p=0; p < numPoints; p++)
+              computedValues[i](c,p) = 0;
       }
       const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
       // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();

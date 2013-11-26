@@ -16,8 +16,8 @@ typedef Teuchos::RCP<Var> VarPtr;
 
 namespace VarFunctionSpaces {
   enum Space { HGRAD, HCURL, HDIV, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_L2, UNKNOWN_FS };
-  enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
-  
+  enum VarType { TEST, FIELD, TRACE, FLUX, SPATIALTRACE, UNKNOWN_TYPE, MIXED_TYPE };
+
   IntrepidExtendedTypes::EFunctionSpaceExtended efsForSpace(Space space);
 }
 
@@ -34,7 +34,7 @@ class Var { // really Var x Operator
 public:
   Var(int ID, int rank, string name, IntrepidExtendedTypes::EOperatorExtended op =  IntrepidExtendedTypes::OP_VALUE,
       Space fs = UNKNOWN_FS, VarType varType = UNKNOWN_TYPE);
-  
+
   int ID();
   const string & name();
   string displayString();
@@ -42,7 +42,7 @@ public:
   int rank();  // 0 for scalar, 1 for vector, etc.
   Space space();
   VarType varType();
-  
+
   VarPtr grad();
   VarPtr div();
   VarPtr curl();
@@ -52,14 +52,14 @@ public:
   VarPtr x();
   VarPtr y();
   VarPtr z();
-  
+
   VarPtr cross_normal();
   VarPtr dot_normal();
   VarPtr times_normal();
   VarPtr times_normal_x();
   VarPtr times_normal_y();
   VarPtr times_normal_z();
-  
+
   static VarPtr varForTrialID(int trialID, Teuchos::RCP<BilinearForm> bf);
 };
 

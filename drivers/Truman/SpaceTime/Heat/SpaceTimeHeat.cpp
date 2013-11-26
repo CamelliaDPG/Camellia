@@ -78,16 +78,16 @@ int main(int argc, char *argv[]) {
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
-  // VarPtr tau = varFactory.testVar("tau", HGRAD);
-  VarPtr tau = varFactory.testVar("tau", HDIV);
+  VarPtr tau = varFactory.testVar("tau", HGRAD);
+  // VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
 
   // define trial variables
   VarPtr u = varFactory.fieldVar("u");
-  // VarPtr sigma = varFactory.fieldVar("sigma", L2);
-  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
-  // VarPtr uhat = varFactory.spatialTraceVar("uhat");
-  VarPtr uhat = varFactory.traceVar("uhat");
+  VarPtr sigma = varFactory.fieldVar("sigma", L2);
+  // VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+  VarPtr uhat = varFactory.spatialTraceVar("uhat");
+  // VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr fhat = varFactory.fluxVar("fhat");
 
   ////////////////////   BUILD MESH   ///////////////////////
@@ -118,14 +118,14 @@ int main(int argc, char *argv[]) {
 
   // tau terms:
   bf->addTerm( sigma/epsilon, tau );
-  // bf->addTerm( u, tau->dx() );
-  bf->addTerm( u, tau->div() );
-  // bf->addTerm( -uhat, tau->times_normal_x() );
-  bf->addTerm( -uhat, tau->dot_normal() );
+  bf->addTerm( u, tau->dx() );
+  // bf->addTerm( u, tau->div() );
+  bf->addTerm( -uhat, tau->times_normal_x() );
+  // bf->addTerm( -uhat, tau->dot_normal() );
 
   // v terms:
-  // bf->addTerm( sigma, v->dx() );
-  bf->addTerm( sigma, v->grad() );
+  bf->addTerm( sigma, v->dx() );
+  // bf->addTerm( sigma, v->grad() );
   bf->addTerm( -u, v->dy() );
   bf->addTerm( fhat, v);
 

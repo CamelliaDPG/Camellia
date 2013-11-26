@@ -19,7 +19,7 @@ class VarFactory {
   map< int, VarPtr > _trialVarsByID;
   int _nextTrialID;
   int _nextTestID;
-  
+
   int getTestID(int IDarg) {
     if (IDarg == -1) {
       IDarg = _nextTestID++;
@@ -28,7 +28,7 @@ class VarFactory {
     }
     return IDarg;
   }
-  
+
   int getTrialID(int IDarg) {
     if (IDarg == -1) {
       IDarg = _nextTrialID++;
@@ -60,7 +60,7 @@ protected:
   }
 public:
   enum BubnovChoice { BUBNOV_TRIAL, BUBNOV_TEST };
-  
+
   VarFactory() {
     _nextTestID = 0;
     _nextTrialID = 0;
@@ -91,7 +91,7 @@ public:
     }
     return trialIt->second;
   }
-  
+
   vector<int> testIDs() {
     vector<int> testIDs;
     for ( map< int, VarPtr >::iterator testIt = _testVarsByID.begin();
@@ -100,7 +100,7 @@ public:
     }
     return testIDs;
   }
-  
+
   vector<int> trialIDs() {
     vector<int> trialIDs;
     for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
@@ -109,19 +109,19 @@ public:
     }
     return trialIDs;
   }
-  
+
   // when there are other scratchpads (e.g. BilinearFormScratchPad), we'll want to share
   // the variables.  The basic function of the factory is to assign unique test/trial IDs.
-  
+
   VarPtr testVar(string name, Space fs, int ID = -1) {
     if ( _testVars.find(name) != _testVars.end() ) {
       return _testVars[name];
     }
-    
+
     ID = getTestID(ID);
     int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR)) ? 0 : 1;
-    
-    _testVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+
+    _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                              IntrepidExtendedTypes::OP_VALUE, fs, TEST) );
     _testVarsByID[ID] = _testVars[name];
     return _testVarsByID[ID];
@@ -143,7 +143,7 @@ public:
     }
     int rank = 0;
     ID = getTrialID(ID);
-    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                               IntrepidExtendedTypes::OP_VALUE, fs, FLUX) );
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
@@ -154,20 +154,31 @@ public:
     }
     int rank = 0;
     ID = getTrialID(ID);
-    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name, 
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                               IntrepidExtendedTypes::OP_VALUE, fs, TRACE) );
     _trialVarsByID[ID] = _trialVars[name];
     return _trialVarsByID[ID];
   }
-  
+  VarPtr spatialTraceVar(string name, Space fs = L2, int ID = -1) { // trace of spatial HGRAD (implemented as HGRAD on spatial boundary)
+    if (_trialVars.find(name) != _trialVars.end() ) {
+      return _trialVars[name];
+    }
+    int rank = 0;
+    ID = getTrialID(ID);
+    _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                              IntrepidExtendedTypes::OP_VALUE, fs, SPATIALTRACE) );
+    _trialVarsByID[ID] = _trialVars[name];
+    return _trialVarsByID[ID];
+  }
+
   const map< int, VarPtr > & testVars() {
     return _testVarsByID;
   }
-  
+
   const map< int, VarPtr > & trialVars() {
     return _trialVarsByID;
   }
-  
+
   VarFactory trialSubFactory(vector< VarPtr > &trialVars) {
     // returns a new VarFactory with the same test space, and a subspace of the trial space
     VarFactory subFactory;
