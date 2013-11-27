@@ -15,6 +15,9 @@
 #endif
 
 int H1Order = 3, pToAdd = 2;
+double pi = 2.0*acos(0.0);
+
+double epsilon = 1e-2;
 
 class ConstantXBoundary : public SpatialFilter {
    private:
@@ -38,9 +41,9 @@ class ConstantYBoundary : public SpatialFilter {
       }
 };
 
-class InitialCondition : public Function {
+class UExact : public Function {
   public:
-    InitialCondition() : Function(0) {}
+    UExact() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -50,10 +53,7 @@ class InitialCondition : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1.0;
-          else
-            values(cellIndex, ptIndex) = 0;
+          values(cellIndex, ptIndex) = cos(2*pi*x)*exp(-4*pi*pi*epsilon*y);
         }
       }
     }
@@ -70,9 +70,11 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
 
   // Optional arguments (have defaults)
+  int numX = args.Input("--numX", "number of cells in x direction", 1);
+  int numY = numX;
+  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -94,8 +96,8 @@ int main(int argc, char *argv[]) {
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
-  double xmin = -0.5;
-  double xmax = 0.5;
+  double xmin = 0.0;
+  double xmax = 1.0;
   double tmax = 1.0;
 
   meshBoundary(0,0) =  xmin; // x1
@@ -107,15 +109,11 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) =  xmin;
   meshBoundary(3,1) =  tmax;
 
-  int horizontalCells = 8, verticalCells = 8;
-
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, numX, numY,
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  double epsilon = 1e-2;
-
   // tau terms:
   bf->addTerm( sigma/epsilon, tau );
   bf->addTerm( u, tau->dx() );
@@ -146,12 +144,12 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
   SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(0) );
   SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(tmax) );
-  FunctionPtr u0 = Teuchos::rcp( new InitialCondition );
+  FunctionPtr u_exact = Teuchos::rcp( new UExact );
   FunctionPtr uLeft = zero;
   FunctionPtr uRight = zero;
   bc->addDirichlet(fhat, right, zero);
   bc->addDirichlet(fhat, left, zero);
-  bc->addDirichlet(fhat, bottom, -u0);
+  bc->addDirichlet(fhat, bottom, -u_exact);
   // bc->addDirichlet(uhat, top, u0);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -168,11 +166,15 @@ int main(int argc, char *argv[]) {
   {
      solution->solve(false);
 
+     FunctionPtr u_soln = Function::solution(u, solution);
+     FunctionPtr u_diff = u_exact - u_soln;
+     cout << "L2 error = " << u_diff->l2norm(mesh, 5) << endl;
      if (commRank == 0)
      {
         stringstream outfile;
         outfile << "heat_" << refIndex;
         exporter.exportSolution(outfile.str());
+        exporter.exportFunction(u_exact, "heat_exact");
     }
 
     if (refIndex < numRefs)
