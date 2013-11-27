@@ -31,7 +31,7 @@ namespace IntrepidExtendedTypes {
     OP_TIMES_NORMAL_Z,  // 25
     OP_VECTORIZE_VALUE  // 26
   };
-  
+
   enum EFunctionSpaceExtended { // all but the last three copied from EFunctionSpace
     FUNCTION_SPACE_HGRAD = 0,
     FUNCTION_SPACE_HCURL,
@@ -43,9 +43,10 @@ namespace IntrepidExtendedTypes {
     FUNCTION_SPACE_TENSOR_HVOL,
     FUNCTION_SPACE_ONE,
     FUNCTION_SPACE_HDIV_FREE,
+    FUNCTION_SPACE_TRIVIAL,
     FUNCTION_SPACE_UNKNOWN
   };
-  
+
   bool functionSpaceIsVectorized(EFunctionSpaceExtended fs);
 }
 

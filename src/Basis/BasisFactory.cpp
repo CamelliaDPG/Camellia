@@ -2,26 +2,26 @@
 //
 // Original version copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
@@ -55,6 +55,8 @@
 
 #include "PointBasis.h"
 
+#include "TrivialBasis.h"
+
 //define the static maps:
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_conformingBases;
 map< pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended >, BasisPtr > BasisFactory::_existingBases;
@@ -79,15 +81,15 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
-  
+
   BasisPtr basis;
   pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
-  
+
   if ( _existingBases.find(key) != _existingBases.end() ) {
     basis = _existingBases[key];
     return basis;
   }
-  
+
   int spaceDim;
   bool threeD = (cellTopoKey == shards::Hexahedron<8>::key);
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
@@ -101,16 +103,16 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
   }
-  
+
   int scalarRank = 0, vectorRank = 1;
-  
+
   if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
     BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
   } else if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HVOL) {
     BasisPtr componentBasis = BasisFactory::getBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
-  } else { 
+  } else {
     switch (cellTopoKey) {
       case shards::Node::key: // point topology
         switch (fs) {
@@ -237,9 +239,9 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
           {
             int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
-            
+
             if (_useLobattoForLineHGRAD) {
-              // we use Legendre for HGRAD and HVOL both on the line--since we don't actually 
+              // we use Legendre for HGRAD and HVOL both on the line--since we don't actually
               // take derivatives of traces, this makes sense.
               // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
               // return value: the Intrepid guys will always say HGRAD, and the Legendre HVOL.  Need to look at the
@@ -262,7 +264,10 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
                                    );
             }
           break;
-          default:        
+          case(IntrepidExtendedTypes::FUNCTION_SPACE_TRIVIAL):
+          basis = Teuchos::rcp( new TrivialBasis<>(polyOrder-1, false) );
+          break;
+          default:
             TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD) &&
                                   (fs != IntrepidExtendedTypes::FUNCTION_SPACE_HVOL) ),
                                std::invalid_argument,
@@ -288,26 +293,26 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, IntrepidEx
 BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, IntrepidExtendedTypes::EFunctionSpaceExtended fs ) {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.
-  
+
   if (fs != IntrepidExtendedTypes::FUNCTION_SPACE_ONE) {
     TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
   }
-  
+
   BasisPtr basis;
   pair< pair<int,int>, IntrepidExtendedTypes::EFunctionSpaceExtended > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
-  
+
   // First, we call getBasis(), and if the one that it returns is conforming, we just use that.
   BasisPtr standardBasis = getBasis(polyOrder, cellTopoKey, fs);
   if (standardBasis->isConforming()) {
     _conformingBases[key] = standardBasis;
     return standardBasis;
   }
-  
+
   if ( _conformingBases.find(key) != _conformingBases.end() ) {
     basis = _conformingBases[key];
     return basis;
   }
-  
+
   int spaceDim;
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
@@ -318,9 +323,9 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
   }
-  
+
   int scalarRank = 0, vectorRank = 1;
-  
+
   if (fs == IntrepidExtendedTypes::FUNCTION_SPACE_VECTOR_HGRAD) {
     BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, cellTopoKey, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
@@ -421,7 +426,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
           case(IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD):
           {
             int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
-            
+
             if (_useLobattoForLineHGRAD) {
               // we use Legendre for HGRAD and HVOL both on the line--since we don't actually
               // take derivatives of traces, this makes sense.
@@ -459,7 +464,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
                                      (cellTopoKey != shards::Line<2>::key) ),
                                    std::invalid_argument,
                                    "Unknown cell topology for basis selction. Please use Line_2, Quadrilateral_4, or Triangle_3.");
-        
+
     }
   }
   _conformingBases[key] = basis;
@@ -478,30 +483,30 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   if (_multiBasesMap.find(key) != _multiBasesMap.end() ) {
     return _multiBasesMap[key];
   }
-  
+
   int polyOrder = 0;
   IntrepidExtendedTypes::EFunctionSpaceExtended fs;
   unsigned cellTopoKey;
-  
+
   if (numBases != 2) {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
   }
-  
+
   for (int i=0; i<numBases; i++) {
     if (! basisKnown(bases[i]) ) {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory can only make MultiBasis from registered Basis pointers.");
     }
-    
+
     polyOrder = max(polyOrder,_polyOrders[bases[i].get()]);
     fs = _functionSpaces[bases[i].get()];
     cellTopoKey = _cellTopoKeys[bases[i].get()];
   }
-  
+
   if ((_cellTopoKeys[bases[0].get()] != shards::Line<2>::key)
     || (_cellTopoKeys[bases[1].get()] != shards::Line<2>::key) )  {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"BasisFactory only supports lines divided in two right now.");
   }
-  int spaceDim=1, numNodesPerSubRefCell = 2; 
+  int spaceDim=1, numNodesPerSubRefCell = 2;
   FieldContainer<double> subRefNodes(numBases,numNodesPerSubRefCell,spaceDim);
   subRefNodes(0,0,0) = -1.0;
   subRefNodes(0,1,0) = 0.0;
@@ -511,11 +516,11 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases) {
   MultiBasisPtr multiBasis = Teuchos::rcp( new MultiBasis<>(bases, subRefNodes, line_2) );
   _multiBasesMap[key] = multiBasis;
   _multiBases.insert(multiBasis.get());
-  
+
   _polyOrders[multiBasis.get()] = polyOrder;
   _functionSpaces[multiBasis.get()] = fs;
   _cellTopoKeys[multiBasis.get()] = cellTopoKey;
-  
+
   return multiBasis;
 }
 
@@ -535,13 +540,13 @@ PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, FieldContainer<double
   }
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   PatchBasisPtr patchBasis = Teuchos::rcp( new PatchBasis<>(parent, patchNodesInParentRefCell, line_2));
-  
+
   _patchBasisSet.insert(patchBasis.get());
   _patchBases[key] = patchBasis;
   _polyOrders[patchBasis.get()] = _polyOrders[parent.get()];
   _functionSpaces[patchBasis.get()] = _functionSpaces[parent.get()];
   _cellTopoKeys[patchBasis.get()] = cellTopoKey;
-  
+
   return patchBasis;
 }
 

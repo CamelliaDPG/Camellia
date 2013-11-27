@@ -41,8 +41,6 @@
 
 #include "Basis.h"
 
-#include "TrivialBasis.h"
-
 DofOrderingFactory::DofOrderingFactory(Teuchos::RCP<BilinearForm> bilinearForm) {
   _bilinearForm = bilinearForm;
 }
@@ -100,7 +98,7 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(int polyOrder,
     if (_bilinearForm->isFluxOrTrace(trialID)) { //lines, in 2D case (TODO: extend to arbitrary dimension)
       int numSides = cellTopo.getSideCount();
       basis = BasisFactory::getConformingBasis( trialIDPolyOrder, shards::Line<2>::key, fs);
-      trivialBasis = Teuchos::rcp( new TrivialBasis<>(0, false) );
+      trivialBasis = BasisFactory::getBasis( trialIDPolyOrder, shards::Line<2>::key, IntrepidExtendedTypes::FUNCTION_SPACE_TRIVIAL);
       basisRank = basis->rangeRank();
       trivialBasisRank = trivialBasis->rangeRank();
       for (int j=0; j<numSides; j++) {
