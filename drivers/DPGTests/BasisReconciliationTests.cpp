@@ -359,10 +359,23 @@ FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double 
       translatedQuad(node,d) += translations[d];
     }
   }
-//  cout << "translating quad:\n" << quad << "by (" << x << "," << y << ")\n";
-//  cout << "translated quad:\n" << translatedQuad;
   
   return translatedQuad;
+}
+
+FieldContainer<double> translateHex(const FieldContainer<double> &hex, double x, double y, double z) {
+  vector<double> translations;
+  translations.push_back(x);
+  translations.push_back(y);
+  translations.push_back(z);
+  FieldContainer<double> translatedHex = hex;
+  for (int node=0; node < translatedHex.dimension(0); node++) {
+    for (int d = 0; d < translatedHex.dimension(1); d++) {
+      translatedHex(node,d) += translations[d];
+    }
+  }
+  
+  return translatedHex;
 }
 
 bool BasisReconciliationTests::testPSide() {
@@ -371,8 +384,8 @@ bool BasisReconciliationTests::testPSide() {
   int fineOrder = 5;
   int coarseOrder = 3;
   
-  double width = 5;
-  double height = 10;
+  double width = 2;
+  double height = 4;
   FieldContainer<double> centeredQuad(4,2);
   centeredQuad(0,0) = -width / 2;
   centeredQuad(0,1) = -height / 2;
@@ -417,6 +430,84 @@ bool BasisReconciliationTests::testPSide() {
   test.fineCellNodes = centeredQuad;
   test.fineSideIndex = WEST;
   test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = EAST;
+  
+  sideTests.push_back(test);
+  
+  /* ************** HEXES ************* */
+  
+  // redefine NORTH, SOUTH, EAST and WEST:
+  NORTH = 2;
+  SOUTH = 0;
+  EAST = 1;
+  WEST = 3;
+  int FRONT = 4; // FRONT is -z direction
+  int BACK = 5; // BACK is +z direction
+  
+  FieldContainer<double> centeredHex(8,3);
+  double depth = 8;
+  centeredHex(0,0) = -width / 2;
+  centeredHex(0,1) = -height / 2;
+  centeredHex(0,2) = -depth / 2;
+  
+  centeredHex(1,0) =  width / 2;
+  centeredHex(1,1) = -height / 2;
+  centeredHex(1,2) = -depth / 2;
+  
+  centeredHex(2,0) =  width / 2;
+  centeredHex(2,1) =  height / 2;
+  centeredHex(2,2) = -depth / 2;
+  
+  centeredHex(3,0) = -width / 2;
+  centeredHex(3,1) =  height / 2;
+  centeredHex(3,2) = -depth / 2;
+  
+  centeredHex(4,0) = -width / 2;
+  centeredHex(4,1) = -height / 2;
+  centeredHex(4,2) =  depth / 2;
+  
+  centeredHex(5,0) =  width / 2;
+  centeredHex(5,1) = -height / 2;
+  centeredHex(5,2) =  depth / 2;
+  
+  centeredHex(6,0) =  width / 2;
+  centeredHex(6,1) =  height / 2;
+  centeredHex(6,2) =  depth / 2;
+  
+  centeredHex(7,0) = -width / 2;
+  centeredHex(7,1) =  height / 2;
+  centeredHex(7,2) =  depth / 2;
+  
+  FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
+  FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
+  FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
+  FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
+  FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
+  FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
+  
+  test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westHex;
+  test.coarseSideIndex = EAST;
+  
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = BACK;
+  test.coarseCellNodes = backHex;
+  test.coarseSideIndex = FRONT;
+  
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidHexHDIV(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHDIV(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westHex;
   test.coarseSideIndex = EAST;
   
   sideTests.push_back(test);
