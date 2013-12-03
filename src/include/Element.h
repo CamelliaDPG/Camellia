@@ -59,7 +59,7 @@ private:
   Teuchos::RCP<RefinementPattern> _refPattern; // the refinement pattern that gives rise to _children
   vector< ElementPtr > _children;
   Element* _parent;
-  map<int, int> _parentSideLookupTable; // childSideIndex --> shared parentSideIndex
+  map<unsigned, unsigned> _parentSideLookupTable; // childSideIndex --> shared parentSideIndex
 public:
 //constructor:
   Element(int cellID, Teuchos::RCP< ElementType > elemType, int cellIndex, int globalCellIndex=-1);
@@ -88,11 +88,11 @@ public:
   //int subSideIndexInNeighbor(int neighborsSideIndexInMe);
   
   void setRefinementPattern(Teuchos::RCP<RefinementPattern> &refPattern);
-  vector< pair<int, int> > & childIndicesForSide(int sideIndex); // pair( child index, sideIndex in child of the side shared with parent)
+  vector< pair<unsigned, unsigned> > & childIndicesForSide(unsigned sideIndex); // pair( child index, sideIndex in child of the side shared with parent)
   
   void addChild(Teuchos::RCP< Element > childPtr);
   Element* getParent();
-  void setParent(Element* parentPtr, map<int,int> parentSideLookupTable);
+  void setParent(Element* parentPtr, map<unsigned,unsigned> parentSideLookupTable);
   int parentSideForSideIndex(int mySideIndex);
   int numChildren();
   Teuchos::RCP< Element > getChild(int childIndex);

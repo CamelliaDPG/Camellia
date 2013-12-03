@@ -61,8 +61,8 @@ Element::Element(int cellID, Teuchos::RCP< ElementType > elemTypePtr, int cellIn
 
 void Element::addChild(Teuchos::RCP< Element > childPtr) {
   _children.push_back(childPtr);
-  int childIndex = _children.size() - 1;
-  map<int,int> parentSideLookupTable = _refPattern->parentSideLookupForChild(childIndex);
+  unsigned childIndex = _children.size() - 1;
+  map<unsigned,unsigned> parentSideLookupTable = _refPattern->parentSideLookupForChild(childIndex);
   childPtr->setParent(this, parentSideLookupTable);
 }
 
@@ -187,7 +187,7 @@ void Element::setNeighbor(int neighborsSideIndexInMe, Teuchos::RCP< Element > el
 //  cout << " (neighbor's sideIndex: " << mySideIndexInNeighbor << ")" << endl;
 }
 
-void Element::setParent(Element* parent, map<int,int> parentSideLookupTable) {
+void Element::setParent(Element* parent, map<unsigned,unsigned> parentSideLookupTable) {
   _parent = parent;
   _parentSideLookupTable = parentSideLookupTable;
 }
@@ -205,7 +205,7 @@ void Element::setRefinementPattern(Teuchos::RCP<RefinementPattern> &refPattern) 
   _refPattern = refPattern;
 }
 
-vector< pair<int,int> > & Element::childIndicesForSide(int sideIndex) {
+vector< pair<unsigned,unsigned> > & Element::childIndicesForSide(unsigned sideIndex) {
   return _refPattern->childrenForSides()[sideIndex];
 }
 
@@ -234,12 +234,12 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
     return descendantsForSide;
   }
   
-  vector< pair<int,int> > childIndices = childIndicesForSide(sideIndex);
-  vector< pair<int,int> >::iterator entryIt;
+  vector< pair<unsigned,unsigned> > childIndices = childIndicesForSide(sideIndex);
+  vector< pair<unsigned,unsigned> >::iterator entryIt;
   
   for (entryIt=childIndices.begin(); entryIt != childIndices.end(); entryIt++) {
-    int childIndex = (*entryIt).first;
-    int childSideIndex = (*entryIt).second;
+    unsigned childIndex = (*entryIt).first;
+    unsigned childSideIndex = (*entryIt).second;
     if ( (! _children[childIndex]->isParent()) || (! leafNodesOnly ) ) {
       // (            leaf node              ) || ...
       descendantsForSide.push_back( make_pair( _children[childIndex]->cellID(), childSideIndex) );

@@ -128,7 +128,7 @@ class Mesh : public RefinementObserver {
   vector< ElementPtr > _elements;
   vector< ElementPtr > _activeElements;
   vector< vector< ElementPtr > > _partitions;
-  vector< vector<int> > _verticesForCellID;
+  vector< vector<unsigned> > _verticesForCellID;
 
   // the sorted list:
   map< vector<double>, long > _vertexMap; // maps into indices in the vertices list
@@ -173,7 +173,7 @@ class Mesh : public RefinementObserver {
   map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
 
-  map<int, int> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
+  map<unsigned, unsigned> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   void buildTypeLookups();
   void buildLocalToGlobalMap();
@@ -185,9 +185,9 @@ class Mesh : public RefinementObserver {
   ElementPtr _nullPtr;
 
   void addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve);
-  ElementPtr addElement(const vector<int> & vertexIndices, ElementTypePtr elemType);
-  void addChildren(ElementPtr parent, vector< vector<int> > &children,
-                   vector< vector< pair< int, int> > > &childrenForSide);
+  ElementPtr addElement(const vector<unsigned> & vertexIndices, ElementTypePtr elemType);
+  void addChildren(ElementPtr parent, vector< vector<unsigned> > &children,
+                   vector< vector< pair< unsigned, unsigned> > > &childrenForSide);
 
   void setElementType(int cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 
@@ -361,7 +361,7 @@ public:
   void setUsePatchBasis( bool value );
   bool usePatchBasis();
 
-  vector<int> vertexIndicesForCell(int cellID);
+  vector<unsigned> vertexIndicesForCell(int cellID);
   FieldContainer<double> vertexCoordinates(int vertexIndex);
 
   void verticesForCell(FieldContainer<double>& vertices, int cellID);

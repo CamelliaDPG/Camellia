@@ -16,12 +16,12 @@ using namespace Intrepid;
 class RefinementPattern {
   Teuchos::RCP< shards::CellTopology > _cellTopoPtr;
   FieldContainer<double> _nodes;
-  vector< vector< int > > _subCells;
+  vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
-  vector< vector< pair< int, int> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
+  vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
   
   // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the above)
-  map< pair<int,int>, int> _parentSideForChildSide;
+  map< pair<unsigned,unsigned>, unsigned> _parentSideForChildSide;
   bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
   
   double distance(const vector<double> &v1, const vector<double> &v2);
@@ -38,14 +38,16 @@ public:
   const FieldContainer<double> & verticesOnReferenceCell();
   FieldContainer<double> verticesForRefinement(FieldContainer<double> &cellNodes);
   
-  vector< vector<int> > children(map<int, int> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
+  vector< vector<unsigned> > children(map<unsigned, unsigned> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
   
-  vector< vector< pair< int, int> > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
-  map< int, int > parentSideLookupForChild(int childIndex); // inverse of childrenForSides
+  vector< vector< pair< unsigned, unsigned > > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
+  map< unsigned, unsigned > parentSideLookupForChild(unsigned childIndex); // inverse of childrenForSides
   
-  int numChildren();
+  unsigned numChildren();
   const FieldContainer<double> & refinedNodes();
 };
+
+typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 
 #endif

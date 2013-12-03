@@ -1930,7 +1930,7 @@ bool MeshTestSuite::testRefinementPattern() {
   }
   
   int sideIndex = 0;
-  vector< vector< pair<int,int> > > expectedChildrenForSide(4);
+  vector< vector< pair<unsigned,unsigned> > > expectedChildrenForSide(4);
   expectedChildrenForSide[sideIndex].push_back( make_pair(0, 0) );
   expectedChildrenForSide[sideIndex].push_back( make_pair(1, 0) );
   
@@ -1948,7 +1948,7 @@ bool MeshTestSuite::testRefinementPattern() {
   
   int numSides = 4;
   for (sideIndex = 0; sideIndex< numSides; sideIndex++) {
-    vector< pair< int, int> > childrenForSide = elem->childIndicesForSide(sideIndex);
+    vector< pair< unsigned, unsigned> > childrenForSide = elem->childIndicesForSide(sideIndex);
     if (! vectorPairsEqual(childrenForSide, expectedChildrenForSide[sideIndex])) {
       success = false;
       cout << "FAILURE: testRefinementPattern childrenForSide not the expected for side " << sideIndex << endl;
@@ -1961,7 +1961,7 @@ bool MeshTestSuite::testRefinementPattern() {
   return success;
 }
 
-bool MeshTestSuite::vectorPairsEqual( vector< pair<int,int> > &first, vector< pair<int,int> > &second) {
+bool MeshTestSuite::vectorPairsEqual( vector< pair<unsigned,unsigned> > &first, vector< pair<unsigned,unsigned> > &second) {
   if (first.size() != second.size() ) {
     return false;
   }

@@ -275,7 +275,7 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
   
   int cellID = 0;
-  vector<int> vertices = quadMesh->vertexIndicesForCell(cellID);
+  vector<unsigned> vertices = quadMesh->vertexIndicesForCell(cellID);
   pair<int,int> edge = make_pair(vertices[0],vertices[1]);
   map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
   edgeToCurveMap[edge] = bottomCurve;
@@ -410,7 +410,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
     MeshPtr quadMesh = MeshFactory::quadMesh(bf, quadraticOrder, physicalCellNodes, 0);
     
     int cellID = 0;
-    vector<int> vertices = quadMesh->vertexIndicesForCell(cellID);
+    vector<unsigned> vertices = quadMesh->vertexIndicesForCell(cellID);
     pair<int,int> edge = make_pair(vertices[0],vertices[1]);
     map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[edge] = bottomCurve;
@@ -515,7 +515,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
   
   int cellID = 0; // the only cell
   vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
-  vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+  vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
   
   for (int i=0; i<vertices.size(); i++) {
     int vertex = vertices[i];
@@ -700,7 +700,7 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     
     int cellID = 0; // the only cell
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
-    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     
     for (int i=0; i<vertices.size(); i++) {
       int vertex = vertices[i];
@@ -1173,7 +1173,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     ParametricCurvePtr halfCircleBottom = ParametricCurve::circularArc(width/2, width/2, 0, PI, 0); // PI to 0: from left vertex to right
     
     int cellID = 0;
-    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[0], vertices[1])] = halfCircleBottom;
     edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
@@ -1213,7 +1213,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     ParametricCurvePtr halfCircleTop = ParametricCurve::circularArc(width/2, width/2, height, 0, PI);
     
     int cellID = 0;
-    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[2], vertices[3])] = halfCircleTop;
     
@@ -1254,7 +1254,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     ParametricCurvePtr quarterCircleTop = ParametricCurve::circularArc(width, 0, width+height, 2*PI, 3*PI/2);
     
     int cellID = 0;
-    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
     edgeToCurveMap[make_pair(vertices[3], vertices[0])] = quarterCircleTop;
     
@@ -1295,7 +1295,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
 
     {
       int cellID = 0;
-      vector< int > vertices = mesh_pRefined->vertexIndicesForCell(cellID);
+      vector< unsigned > vertices = mesh_pRefined->vertexIndicesForCell(cellID);
       map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
       ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
       edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
@@ -1313,7 +1313,7 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
       ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
       
       int cellID = 0;
-      vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+      vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
       map< pair<int,int>, ParametricCurvePtr > edgeToCurveMap;
       edgeToCurveMap[make_pair(vertices[2], vertices[3])] = arcTop;
       
@@ -1412,7 +1412,7 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
     map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
     
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
-    vector< int > vertices = mesh->vertexIndicesForCell(cellID);
+    vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
     
     for (int i=0; i<vertices.size(); i++) {
       int vertex = vertices[i];

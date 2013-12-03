@@ -44,15 +44,15 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   
   unsigned cellKey = cellTopoPtr->getKey();
   
-  map< vector<double>, int> vertexLookup;
+  map< vector<double>, unsigned> vertexLookup;
   vector< vector<double> > vertices;
   for (int cellIndex=0; cellIndex<numSubCells; cellIndex++) {
-    vector<int> subCellNodes;
+    vector<unsigned> subCellNodes;
     for (int nodeIndex=0; nodeIndex<numNodesPerCell; nodeIndex++) {
       for (int dim=0; dim<spaceDim; dim++) {
         vertex[dim] = refinedNodes(cellIndex,nodeIndex,dim);
       }
-      int vertexIndex;
+      unsigned vertexIndex;
       if ( vertexLookup.find(vertex) == vertexLookup.end() ) {
         vertexIndex = vertices.size();
         vertices.push_back(vertex);
@@ -158,7 +158,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   } else {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern only supports quads and triangles right now.");
   }
-  _childrenForSides = vector< vector< pair< int, int> > >(numSides);
+  _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(numSides);
 
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     // find all the children that lie along this side....
@@ -205,13 +205,13 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   }
 }
 
-map< int, int > RefinementPattern::parentSideLookupForChild(int childIndex) {
+map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned childIndex) {
   // returns a map for the child: childSideIndex --> parentSideIndex
   // (only populated for childSideIndices that are shared with the parent)
-  map<int, int> lookupTable;
+  map<unsigned, unsigned> lookupTable;
   int numSides = _cellTopoPtr->getSideCount();
-  for (int childSideIndex = 0; childSideIndex<numSides; childSideIndex++) {
-    pair< int, int > entry = make_pair(childIndex,childSideIndex);
+  for (unsigned childSideIndex = 0; childSideIndex<numSides; childSideIndex++) {
+    pair< unsigned, unsigned > entry = make_pair(childIndex,childSideIndex);
     if ( _parentSideForChildSide.find(entry) != _parentSideForChildSide.end() ) {
       lookupTable[childSideIndex] = _parentSideForChildSide[entry];
     }
@@ -268,20 +268,20 @@ const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell() {
   return _vertices;
 }
 
-vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVertexIndex) { 
+vector< vector<unsigned> > RefinementPattern::children(map<unsigned, unsigned> &localToGlobalVertexIndex) {
   // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
   
   int numChildren = _subCells.size();
-  vector< vector<int> > children(numChildren);
-  vector< vector<int> >::iterator subCellIt;
-  vector< vector<int> >::iterator childIt = children.begin();
+  vector< vector<unsigned> > children(numChildren);
+  vector< vector<unsigned> >::iterator subCellIt;
+  vector< vector<unsigned> >::iterator childIt = children.begin();
   for (subCellIt=_subCells.begin(); subCellIt != _subCells.end(); subCellIt++) {
 //    cout << "child global vertex indices: ";
     int numVertices = (*subCellIt).size();
-    *childIt = vector<int>(numVertices);
-    vector<int>::iterator vertexIt;
-    vector<int>::iterator childVertexIt = (*childIt).begin();
+    *childIt = vector<unsigned>(numVertices);
+    vector<unsigned>::iterator vertexIt;
+    vector<unsigned>::iterator childVertexIt = (*childIt).begin();
     for (vertexIt = (*subCellIt).begin(); vertexIt != (*subCellIt).end(); vertexIt++) {
       int localIndex = *vertexIt;
       int globalIndex = localToGlobalVertexIndex[localIndex];
@@ -296,7 +296,7 @@ vector< vector<int> > RefinementPattern::children(map<int, int> &localToGlobalVe
   return children;
 }
 
-vector< vector< pair< int, int> > > & RefinementPattern::childrenForSides() {
+vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSides() {
   // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   
   return _childrenForSides;
@@ -323,7 +323,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternQuad() {
   return Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints) );
 }
 
-int RefinementPattern::numChildren() {
+unsigned RefinementPattern::numChildren() {
   return _nodes.dimension(0);
 }
 
