@@ -18,6 +18,8 @@ class RefinementPattern {
   FieldContainer<double> _nodes;
   vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
+  
+  vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
   vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
   
   // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the above)
@@ -25,11 +27,16 @@ class RefinementPattern {
   bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
   
   double distance(const vector<double> &v1, const vector<double> &v2);
-public:
-  RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes);
   
+public:
+  RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes,
+                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
+
+  static Teuchos::RCP<RefinementPattern> noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr);
+  static Teuchos::RCP<RefinementPattern> noRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> noRefinementPatternQuad();
+  static Teuchos::RCP<RefinementPattern> regularRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad();
