@@ -400,7 +400,7 @@ void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_ent
       local_ids[i] = i;   
     }
     //    cout << "initial element " << i << endl;
-    vector<int> vertIDs = mesh->vertexIndicesForCell(global_ids[i]);
+    vector<unsigned> vertIDs = mesh->vertexIndicesForCell(global_ids[i]);
     num_vert[i] = (int)vertIDs.size();
     
     //    cout << "vertices for cell " << global_ids[i] << " are ";
@@ -477,7 +477,7 @@ void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, in
       assigned[i]=1;
     }
     
-    vector<int> vertIDs = mesh->vertexIndicesForCell(child_gids[i]);
+    vector<unsigned> vertIDs = mesh->vertexIndicesForCell(child_gids[i]);
     num_vert[i] = (int)vertIDs.size();
     for (int j=0;j<num_vert[i];j++){
       //      cout << "vertex ids for child element " << child_gids[i] << " is " << vertIDs[j]<<endl;

@@ -56,7 +56,7 @@ using namespace Intrepid;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
+Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVerticesInt,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
 : _dofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) {
@@ -108,9 +108,19 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   ElementTypePtr quadElemTypePtr = _elementTypeFactory.getElementType(quadTrialOrderPtr, quadTestOrderPtr, quadTopoPtr );
   _nullPtr = Teuchos::rcp( new Element(-1,quadElemTypePtr,-1) );
   
-  vector< vector<int> >::iterator elemIt;
+  // want to change elementVertices argument to be unsigned, but I'm not quite ready to change the API for this method
+  // so we do a manual copy to convert...
+  vector< vector<unsigned> > elementVertices(elementVerticesInt.size());
+  for (unsigned i=0; i<elementVerticesInt.size(); i++) {
+    unsigned numVertices = elementVerticesInt[i].size();
+    for (unsigned j=0; j<numVertices; j++) {
+      elementVertices[i].push_back(elementVerticesInt[i][j]);
+    }
+  }
+  
+  vector< vector<unsigned> >::iterator elemIt;
   for (elemIt = elementVertices.begin(); elemIt != elementVertices.end(); elemIt++) {
-    vector<int> thisElementVertices = *elemIt;
+    vector<unsigned> thisElementVertices = *elemIt;
     if (thisElementVertices.size() == 3) {
       Teuchos::RCP<DofOrdering> triTestOrderPtr = _dofOrderingFactory.testOrdering(pTest, *(triTopoPtr.get()));
       Teuchos::RCP<DofOrdering> triTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(triTopoPtr.get()), _useConformingTraces);
@@ -529,7 +539,7 @@ void Mesh::addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2)
   }
 }
 
-void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vector< vector< pair< int, int> > > &childrenForSides) {
+void Mesh::addChildren(ElementPtr parent, vector< vector<unsigned> > &children, vector< vector< pair< unsigned, unsigned> > > &childrenForSides) {
   // childrenForSides: key is parent's side index, value is (child index in parent, child's side index for the same side)
   
   // probably the first step is to remove the parent's edges.  We will add them back in through the children...
@@ -539,7 +549,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   
   // this assumes 2D...
   // remove parent edges:
-  vector<int> parentVertices = _verticesForCellID[parent->cellID()];
+  vector<unsigned> parentVertices = _verticesForCellID[parent->cellID()];
   int numVertices = parentVertices.size();
   for (int i=0; i<numVertices; i++) {
     // in 2D, numVertices==numSides, so we can use the vertex index to iterate over sides...
@@ -586,9 +596,9 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   int numSides = childrenForSides.size();
   
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    vector< pair< int, int> > childrenForSide = childrenForSides[sideIndex];
+    vector< pair< unsigned, unsigned> > childrenForSide = childrenForSides[sideIndex];
     
-    vector< pair< int, int> >::iterator entryIt;
+    vector< pair< unsigned, unsigned> >::iterator entryIt;
     int childIndexInParentSide = 0;
     for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
       int childIndex = (*entryIt).first;
@@ -643,7 +653,7 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
         // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
         ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
         ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
-        vector<int> childVertices = _verticesForCellID[child->cellID()];
+        vector<unsigned> childVertices = _verticesForCellID[child->cellID()];
         pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)%child->numSides()] );
         addEdgeCurve(childEdge, childCurve);
         childrenWithCurvedEdges.insert(child->cellID());
@@ -659,9 +669,8 @@ void Mesh::addChildren(ElementPtr parent, vector< vector<int> > &children, vecto
   // check parent's neighbors along each side: if they are unbroken, then we need to assign an appropriate MultiBasis
   // (this is a job for DofOrderingFactory)
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    int childIndexInParentSide = 0;
-    vector< pair< int, int> > childrenForSide = childrenForSides[sideIndex];
-    vector< pair< int, int> >::iterator entryIt;
+    vector< pair< unsigned, unsigned> > childrenForSide = childrenForSides[sideIndex];
+    vector< pair< unsigned, unsigned> >::iterator entryIt;
     for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
       int childIndex = (*entryIt).first;
       int childSideIndex = (*entryIt).second;
@@ -731,7 +740,7 @@ void Mesh::addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve) {
   _cellIDsWithCurves.insert(cellID);
 }
 
-ElementPtr Mesh::addElement(const vector<int> & vertexIndices, ElementTypePtr elemType) {
+ElementPtr Mesh::addElement(const vector<unsigned> & vertexIndices, ElementTypePtr elemType) {
 //  int rank = 0;
 //#ifdef HAVE_MPI
 //  rank     = Teuchos::GlobalMPISession::getRank();
@@ -1668,10 +1677,10 @@ long Mesh::getVertexIndex(double x, double y, double tol) {
   return bestMatchIndex;
 }
 
-map<int, int> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
+map<unsigned, unsigned> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
   double tol = 1e-12; // tolerance for vertex equality
   
-  map<int, int> localToGlobalVertexIndex;
+  map<unsigned, unsigned> localToGlobalVertexIndex;
   int numVertices = vertices.dimension(0);
   for (int i=0; i<numVertices; i++) {
     localToGlobalVertexIndex[i] = getVertexIndex(vertices(i,0), vertices(i,1),tol);
@@ -1830,13 +1839,13 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
 //      }
     }
     
-    map<int, int> localToGlobalVertexIndex = getGlobalVertexIDs(vertices); // key: index in vertices; value: index in _vertices
+    map<unsigned, unsigned> localToGlobalVertexIndex = getGlobalVertexIDs(vertices); // key: index in vertices; value: index in _vertices
     
     // get the children, as vectors of vertex indices:
-    vector< vector<int> > children = refPattern->children(localToGlobalVertexIndex);
+    vector< vector<unsigned> > children = refPattern->children(localToGlobalVertexIndex);
     
     // get the (child, child side) pairs for each side of the parent
-    vector< vector< pair< int, int> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
+    vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
     
     _elements[cellID]->setRefinementPattern(refPattern);
     addChildren(_elements[cellID],children,childrenForSides);
@@ -2009,7 +2018,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
     
     if (bothBroken) {
       // match all the children -- we assume RefinementPatterns are compatible (e.g. divisions always by 1/2s)
-      vector< pair<int,int> > childrenForSide = elem->childIndicesForSide(sideIndex);
+      vector< pair<unsigned,unsigned> > childrenForSide = elem->childIndicesForSide(sideIndex);
       for (int childIndexInSide=0; childIndexInSide < childrenForSide.size(); childIndexInSide++) {
         int childIndex = childrenForSide[childIndexInSide].first;
         int childSideIndex = childrenForSide[childIndexInSide].second;
@@ -2018,7 +2027,7 @@ void Mesh::matchNeighbor(const ElementPtr &elem, int sideIndex) {
       // all our children matched => we're done:
       return;
     } else { // one broken
-      vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(neighborSideIndexInParent);
+      vector< pair< unsigned, unsigned> > childrenForSide = parent->childIndicesForSide(neighborSideIndexInParent);
       
       if ( childrenForSide.size() > 1 ) { // then parent is broken along side, and neighbor isn't...
         vector< pair< int, int> > descendantsForSide;
@@ -2239,10 +2248,10 @@ map< int, BasisPtr > Mesh::multiBasisUpgradeMap(ElementPtr parent, int sideIndex
     ElementPtr bigNeighbor = getElement(bigNeighborCellID);
     bigNeighborPolyOrder = _dofOrderingFactory.trialPolyOrder( bigNeighbor->elementType()->trialOrderPtr );
   }
-  vector< pair< int, int> > childrenForSide = parent->childIndicesForSide(sideIndex);
+  vector< pair< unsigned, unsigned> > childrenForSide = parent->childIndicesForSide(sideIndex);
   map< int, BasisPtr > varIDsToUpgrade;
   vector< map< int, BasisPtr > > childVarIDsToUpgrade;
-  vector< pair< int, int> >::iterator entryIt;
+  vector< pair< unsigned, unsigned> >::iterator entryIt;
   for ( entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
     int childCellIndex = (*entryIt).first;
     int childSideIndex = (*entryIt).second;
@@ -2627,7 +2636,7 @@ vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(int cellID, bool negle
   int numSides = cell->elementType()->cellTopoPtr->getSideCount();
   int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
-  vector<int> vertices = _verticesForCellID[cellID];
+  vector<unsigned> vertices = _verticesForCellID[cellID];
   for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
     int v0 = vertices[sideIndex];
     int v1 = vertices[(sideIndex+1)%numSides];
@@ -2742,7 +2751,7 @@ bool Mesh::usePatchBasis() {
   return _usePatchBasis;
 }
 
-vector<int> Mesh::vertexIndicesForCell(int cellID) {
+vector<unsigned> Mesh::vertexIndicesForCell(int cellID) {
   return _verticesForCellID[cellID];
 }
 
@@ -2751,12 +2760,12 @@ FieldContainer<double> Mesh::vertexCoordinates(int vertexIndex) {
 }
 
 void Mesh::verticesForCell(FieldContainer<double>& vertices, int cellID) {
-  vector<int> vertexIndices = _verticesForCellID[cellID];
+  vector<unsigned> vertexIndices = _verticesForCellID[cellID];
   ElementTypePtr elemType = _elements[cellID]->elementType();
   int dimension = elemType->cellTopoPtr->getDimension();
   int numVertices = elemType->cellTopoPtr->getVertexCount(dimension,0);
   //vertices.resize(numVertices,dimension);
-  for (int vertexIndex = 0; vertexIndex < numVertices; vertexIndex++) {
+  for (unsigned vertexIndex = 0; vertexIndex < numVertices; vertexIndex++) {
     for (int i=0; i<dimension; i++) {
       vertices(vertexIndex,i) = _vertices[vertexIndices[vertexIndex]](i);
     }

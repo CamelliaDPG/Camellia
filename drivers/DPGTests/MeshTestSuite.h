@@ -46,7 +46,7 @@ class MeshTestSuite : public TestSuite {
 private:
 //  static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh);
   static bool checkDofOrderingHasNoOverlap(Teuchos::RCP<DofOrdering> dofOrdering); 
-  static bool vectorPairsEqual( vector< pair<int,int> > &first, vector< pair<int,int> > &second);
+  static bool vectorPairsEqual( vector< pair<unsigned,unsigned> > &first, vector< pair<unsigned,unsigned> > &second);
   static void printParities(Teuchos::RCP<Mesh> mesh);
   // checkDofOrderingHasNoOverlap returns true if no two (varID,basisOrdinal,sideIndex) tuples map to same dofIndex
 public:

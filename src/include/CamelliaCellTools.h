@@ -95,8 +95,32 @@ public:
     }
   }
   
+  static unsigned permutationMatchingOrder( const shards::CellTopology &cellTopo, const vector<unsigned> &fromOrder, const vector<unsigned> &toOrder) {
+    if (cellTopo.getDimension() == 0) {
+      return 0;
+    }
+    unsigned permutationCount = cellTopo.getNodePermutationCount();
+    unsigned nodeCount = fromOrder.size();
+    for (unsigned permutation=0; permutation<permutationCount; permutation++) {
+      bool matches = true;
+      for (unsigned fromIndex=0; fromIndex<nodeCount; fromIndex++) {
+        unsigned toIndex = cellTopo.getNodePermutation(permutation, fromIndex);
+        if (fromOrder[fromIndex] != toOrder[toIndex]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return permutation;
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
+    return permutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
+  }
+  
   static unsigned matchingVolumePermutationForSidePermutation( const shards::CellTopology &volumeTopo, unsigned sideIndex, unsigned sidePermutation) {
     // brute force search for a volume permutation that will make side line up according to sidePermutation
+    // (I believe this works for cases when the volume topology has permutations defined (not actually true even for Hexahedron<8>),
+    //  but I'm not sure that this is actually legitimately useful--certainly it isn't the right thing in the case for which I originally
+    //  concocted it.) -- NVR 11/25/13
     int d = volumeTopo.getDimension();
     shards::CellTopology sideTopo = volumeTopo.getCellTopologyData(d-1, sideIndex);
     

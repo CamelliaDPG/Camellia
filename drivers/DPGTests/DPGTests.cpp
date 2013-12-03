@@ -64,6 +64,7 @@
 
 // test suite includes
 #include "BasisCacheTests.h"
+#include "BasisReconciliationTests.h"
 #include "CurvilinearMeshTests.h"
 #include "ElementTests.h"
 #include "FunctionTests.h"
@@ -169,6 +170,7 @@ void DPGTests::runTests() {
   
 //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   
+  testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
