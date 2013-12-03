@@ -13,8 +13,15 @@
 
 namespace Camellia {
   BasisPtr lobattoQuadHGRAD(int polyOrder, bool conforming=false);
-  BasisPtr intrepidQuadHGRAD(int polyOrder);
+  
   BasisPtr intrepidLineHGRAD(int polyOrder);
+  
+  BasisPtr intrepidQuadHGRAD(int polyOrder);
+  BasisPtr intrepidQuadHDIV(int polyOrder);
+  
+  BasisPtr intrepidHexHGRAD(int polyOrder);
+  BasisPtr intrepidHexHDIV(int polyOrder);
+  
 }
 
 #endif
