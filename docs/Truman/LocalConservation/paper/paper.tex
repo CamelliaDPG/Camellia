@@ -205,7 +205,7 @@ norm, while DPG seeks the minimization in a dual norm realized through the
 inverse Riesz map. Exact mass conservation has been an issue that has plagued
 least squares finite elements for a long time. Several approaches have been
 used to try to address this. Bochev \etal\cite{Bochev2010} accomplish local
-conservation by using a pointwise divergence free velocity space in the Stokes
+conservation by using a point-wise divergence free velocity space in the Stokes
 formulation.  Chang and Nelson\cite{ChangNelson1997} developed the
 \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
 equations with a Lagrange multiplier explicitly enforcing mass conservation
@@ -259,7 +259,7 @@ The DPG method then is to solve \eqnref{DPGmethod} with optimal test functions
 $v_{\delta u_h}\in V$ that solve the auxiliary problem
 \begin{equation}
 \LRp{v_{\delta u_h},\delta v}_V=\LRa{R_Vv_{\delta u_h},\delta v}
-=\LRa{B\delta u_h,\delta v}=b(\delta u_h,\delta v)\,,\quad\forall\delta v\in V.
+=\LRa{B\delta u_h,\delta v}=b(\delta u_h,\delta v)\quad\forall\delta v\in V.
 \label{eq:optimaltestproblem}
 \end{equation}
 Using a continuous test basis would result in a global solve for every optimal
@@ -518,7 +518,7 @@ bound for form $c(p,\bfw)$ representing the constraint:
 & \leq \sum_K  \lambda_K || \text{div} \bfpsi ||_{L^2(K)} \mu(K)^{1/2} \\[8pt]
 & \leq (\sum_K \mu(K) \lambda_K^2)^{1/2} \: (\sum_K || \text{div} \bfpsi ||_{L^2(K)}^2 )^{1/2} \\[8pt]
 & \leq \underbrace{\left(\sum_K \mu(K) \lambda_K^2\right)^{1/2}}_{=: || \bflambda ||} ||
-\hat{t} ||_{H^{-1/2}(\Gamma_h)}
+\hat{t} ||_{H^{-1/2}(\Gamma_h)}\,,
 \end{array}
 \end{equation}
 where $\mu(K)$ stands for the area (measure) of element $K$.
@@ -526,10 +526,10 @@ where $\mu(K)$ stands for the area (measure) of element $K$.
 We proceed now with the discussion of the discrete inf-sup stability constants. We skip
 index $h$ in the notation.
 
-\paragraph{Inf Sup Condition} relating spaces $\bfU$ and $Q$ reads as follows,
+\paragraph{Inf Sup Condition} relating spaces $\bfU$ and $Q$ reads as follows:
 \begin{equation}
    \sup_{\bfw \in \bfU} \frac{| c(p,\bfw) |}{|| \bfw ||_{\bfU}} \geq \beta ||
-   p ||_Q
+   p ||_Q\,.
 \end{equation}
 Let
 \begin{equation}
@@ -552,7 +552,7 @@ Raviart-Thomas elements and continuity of operator $R$ imply the stability estim
 \begin{array}{lll}
 || \bfpsi_h || & \leq || \bfpsi_h - \bfpsi || + || \bfpsi ||\\[8pt]
 &\leq C h || \bfpsi ||_{H^1} +  || \bfpsi || \\[8pt]
-& \leq C || \text{div} \bfpsi || = C (\sum_K \mu(K) \lambda_K^2)^{1/2}
+& \leq C || \text{div} \bfpsi || = C (\sum_K \mu(K) \lambda_K^2)^{1/2}\,.
 \end{array}
 \label{eq:stab}
 \end{equation}
@@ -564,7 +564,7 @@ Let $\hat{t}$ be the trace of $\bfpsi_h$. We have then,
 \hat{t},1_K \rangle_{\ptl K} |}{|| \hat{t} ||_{H^{-1/2}(\Gamma_h)}}
 \geq \frac{| \sum_K \lambda_K \int_K \text{div} \bfpsi_h \: 1_K  |}
 {|| \bfpsi_h ||_{H(\text{div},\Omega)}}
-\geq \frac{1}{C} (\sum_K \mu(K) \lambda_K^2)^{1/2}
+\geq \frac{1}{C} (\sum_K \mu(K) \lambda_K^2)^{1/2}\,,
 \end{equation}
 where $C$ is the constant from stability estimate~(\ref{eq:stab}).
 
@@ -582,7 +582,7 @@ test functions. First of all, we characterize the ``kernel'' space:
 \begin{array}{rl}
 \bfU_0  := & \{ \bfw \in \bfU \, : \, c(q,\bfw) = 0 \quad \forall q \in Q\} \\[8pt]
  = &\{ (u,\bfsig,\hat{u},\hat{t}) \, : \, \langle \hat{t},1_K \rangle = 0
- \quad \forall K \}
+ \quad \forall K \}\,.
 \end{array}
 \end{equation}
 In other words, the kernel space contains only the equilibrated fluxes.
@@ -593,7 +593,7 @@ With $\bfu \in \bfU_0$, we have then:
    = \frac{| b(\bfu,T \bfu) |}{|| T\bfu ||}\frac{||T\bfu||}{||\bfu||}
    = \sup_{(v,\bftau)}\frac{| b((u,\bfsig,\hat{u},\hat{t}), (v,\bftau)) |}{|| (v,\bftau) ||}
    \frac{||T\bfu||}{||\bfu||}
-   \geq \gamma^2 || (u,\bfsig,\hat{u},\hat{t}) ||
+   \geq \gamma^2 || (u,\bfsig,\hat{u},\hat{t}) ||\,,
 \end{equation}
 where $\gamma$ is the stability constant for the standard continuous DPG formulation.
 The first inequality follows as we plug in the definition for $a$ and pick
@@ -666,7 +666,7 @@ to solve the local problems:
 \nonumber\\
 &= \int_K \lambda_K \delta v
 = \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in
-H^1(K)\,\forall\delta\bftau\in\bfH(\text{div},K)
+H^1(K)\,\forall\delta\bftau\in\bfH(\text{div},K)\,.
 \label{eq:local}
 \end{align}
 We need then an upper bound of the energy norm of $(v_h,\bftau_h)$:
@@ -675,20 +675,20 @@ $$
 $$
 Substituting $(v,\bftau)$ for $(\delta v,\delta\bftau)$ in~(\ref{eq:local}), we get,
 \begin{equation}
-|| (v,\bftau) ||_V^2 = \lambda_K (1_K, v_K)
+|| (v,\bftau) ||_V^2 = \lambda_K (1_K, v_K)\,.
 \end{equation}
 If we have a robust stability estimate:
 \begin{equation}
 (1_K, v_K) \leq C \mu(K)^{1/2} || (v,\bftau) ||_K
 \label{eq:robustEst1}
 \end{equation}
-(i.e. constant $C$ is independent of $\epsilon$) then
+(i.e. constant $C$ is independent of $\epsilon$), then
 \begin{equation}
 ||  (v,\bftau) ||_V \leq C \mu(K)^{1/2} | \lambda_K |
 \end{equation}
-and, eventually, as needed,
+and, eventually as needed,
 \begin{equation}
-\sum_K || (v,\bftau) ||_V^2  \leq C^2 \sum_K \mu(K) \lambda_K^2
+\sum_K || (v,\bftau) ||_V^2  \leq C^2 \sum_K \mu(K) \lambda_K^2\,,
 \end{equation}
 which leads to the robust estimate of inf-sup constant $\beta$. For example, it is sufficient if
 \begin{equation}
@@ -705,19 +705,19 @@ $$
 $$
 Testing with $(1_K,{\bf 0})$ in the local problem~(\ref{eq:local_problem}), we obtain,
 \begin{equation}
-((v,\bftau),(1_K,{\bf 0}))_V = \langle \hat{t}, 1_K \rangle_{\ptl K}
+((v,\bftau),(1_K,{\bf 0}))_V = \langle \hat{t}, 1_K \rangle_{\ptl K}\,.
 \label{eq:local2}
 \end{equation}
 If we have a robust estimate,
 \begin{equation}
-| ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, || (v,\bftau) ||_V
+| ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, || (v,\bftau) ||_V\,,
 \label{eq:robust_est2}
 \end{equation}
 then
 \begin{equation}
 | \sum_K \lambda_K \langle \hat{t}, 1_K \rangle | \leq C (\sum_K \mu(K) \lambda_K^2)^{1/2}
 \, (\sum_K || (v,\bftau) ||_V^2)^{1/2}
-= C (\sum_K \mu(K) \lambda_K^2)^{1/2}  || \hat{t} ||_E
+= C (\sum_K \mu(K) \lambda_K^2)^{1/2}  || \hat{t} ||_E\,,
 \end{equation}
 as needed.
 
@@ -904,7 +904,7 @@ we refer to as the coupled robust test norm:
 + \norm{\div \btau - \bbeta\cdot\Grad v}_K^2 \\
 &+\norm{\bbeta\cdot \Grad v}_K^2
 + \epsilon\norm{\Grad v}_K^2
-+ \norm{v}^2_K
++ \norm{v}^2_K\,,
 \end{align}
 where $||\cdot||_K$ signifies the $L^2$ norm over element $K$.\footnote{
 We note that we have dropped the
@@ -1025,7 +1025,7 @@ test norm,
 v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K\\
 &+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber
 +\epsilon(\nabla\vdeltau,\nabla \delta v)_K
-+\frac{1}{\mu(K)}\int_K\vdeltau\int_K\delta v
++\frac{1}{\mu(K)}\int_K\vdeltau\int_K\delta v\,,
 \end{align}
 where the $\frac{1}{\mu(K)}$ coefficient is an arbitrary scaling condition
 that doesn't make a difference mathematically, but can affect the condition
@@ -1058,11 +1058,11 @@ verify condition (\ref{eq:robustEst1}) with the norm derived from this inner
 product on the right hand side. By Cauchy-Schwarz
 \begin{equation}
    \int_K v\cdot
-   1\leq\mu(K)^{1/2}\norm{v}_{L^2(K)}\leq\mu(K)^{1/2}\norm{(v,\btau)}_K
+   1\leq\mu(K)^{1/2}\norm{v}_{L^2(K)}\leq\mu(K)^{1/2}\norm{(v,\btau)}_K\,,
    \label{eq:robustProof}
 \end{equation}
 where $\norm{(v,\btau)}_K$ is the norm derived from the inner product.
-Condition~\ref{eq:robust_est2} comes out the same since
+Condition~(\ref{eq:robust_est2}) comes out the same since
 $$|(
 (v,\btau),(1_K,{\bf0}))| =
 \sum_K|(1_K,v_K)|\leq\sum_K\mu(K)^{1/2}\norm{v,\btau}_K
@@ -1074,7 +1074,7 @@ Equation~(\ref{eq:localSolveMod}). In this case,
 condition~(\ref{eq:robustEst1}) follows even more naturally as
 \begin{equation}
    \int_K v\cdot1\leq\mu(K)^{1/2}\frac{1}{\mu(K)^{1/2}}\LRl{\int_Kv}
-   \leq\norm{(v,\btau)}_K
+   \leq\norm{(v,\btau)}_K\,,
    \label{eq:robustProof2}
 \end{equation}
 where $\norm{(v,\btau)}$ now refers to the norm generated by inner product
