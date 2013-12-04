@@ -2,6 +2,7 @@
 %TODO: check for periods after equations
 %TODO: bold face proper variables
 %TODO: Make sure titles have consistent case
+%TODO: Make sure figures work in gray-scale
 \usepackage[margin=1.0in]{geometry}
 \usepackage{authblk}
 \usepackage{amsmath, amssymb, amsthm, mathtools}
@@ -165,7 +166,7 @@ experiments showing that the method is indeed locally conservative. We also
 show that standard DPG, while not guaranteed to be conservative, is nearly
 conservative for many of the benchmarks considered. The new method preserves many of
 the attractive features of DPG, but turns the normally symmetric
-positive-difinite DPG system into a saddlepoint problem.
+positive-definite DPG system into a saddle point problem.
 \end{abstract}
 
 \section{Introduction}
@@ -203,21 +204,21 @@ squares methods seek to minimize the residual of the solution in the $L^2$
 norm, while DPG seeks the minimization in a dual norm realized through the
 inverse Riesz map. Exact mass conservation has been an issue that has plagued
 least squares finite elements for a long time. Several approaches have been
-used to try to adress this. Bochev \etal\cite{Bochev2010} accomplish local
+used to try to address this. Bochev \etal\cite{Bochev2010} accomplish local
 conservation by using a pointwise divergence free velocity space in the Stokes
 formulation.  Chang and Nelson\cite{ChangNelson1997} developed the
 \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
 equations with a Lagrange multiplier explicitly enforcing mass conservation
 element-wise. Our conservative formulation of DPG takes a similar approach and
 both methods share similar negative of transforming a minimization method to a
-saddle-point problem. In the interest of crediting Chang and Nelson's
+saddle point problem. In the interest of crediting Chang and Nelson's
 restricted LSFEM, we call the following locally conservative DPG method the
 restricted DPG method (RDPG).
 
 \subsection{DPG is a Minimum Residual Method}
 Roberts \etal presents a brief history and derivation of DPG with optimal test functions in
 \cite{DPGStokes}. We follow his derivation of the standard DPG method as a
-minumum residual method. Let $U$ be the trial Hilbert space and $V$ the test
+minimum residual method. Let $U$ be the trial Hilbert space and $V$ the test
 Hilbert space for a well-posed variational problem $b(u,v)=l(v)$. In operator
 form this is $Bu=l$, where $B:U\rightarrow V'$ and $\LRa{Bu,v}=b(u,v)$. We seek to minimize the
 residual for the discrete space $U_h\subset U$:
@@ -498,7 +499,7 @@ c(q,\bfu) & = g(q) & \forall q \in Q
 \end{array}
 \right.
 \end{equation}
-where $\bfU,Q$ are Hilbert spaces, and $a,c,l,q$ denote the appropriate
+where $\bfU,Q$ are Hilbert spaces, and $a,c,l,g$ denote the appropriate
 bilinear and linear forms. Note that $a(\bfu,\bfw)=b(\bfu,T\bfw)=(T\bfu,T\bfw)_V$ in
 the notation from the previous section.
 
@@ -516,7 +517,7 @@ bound for form $c(p,\bfw)$ representing the constraint:
 & = | \sum_K \lambda_K \int_K \text{div} \bfpsi \: 1_K  | \\[8pt]
 & \leq \sum_K  \lambda_K || \text{div} \bfpsi ||_{L^2(K)} \mu(K)^{1/2} \\[8pt]
 & \leq (\sum_K \mu(K) \lambda_K^2)^{1/2} \: (\sum_K || \text{div} \bfpsi ||_{L^2(K)}^2 )^{1/2} \\[8pt]
-& \leq \underbrace{(\sum_K \mu(K) \lambda_K^2)^{1/2}}_{=: || \bflambda ||} ||
+& \leq \underbrace{\left(\sum_K \mu(K) \lambda_K^2\right)^{1/2}}_{=: || \bflambda ||} ||
 \hat{t} ||_{H^{-1/2}(\Gamma_h)}
 \end{array}
 \end{equation}
@@ -557,7 +558,7 @@ Raviart-Thomas elements and continuity of operator $R$ imply the stability estim
 \end{equation}
 Above, $C$ is a generic, mesh independent constant incorporating constant from
 the interpolation error estimate and continuity constant of $R$.
-Let $\hat{t}$ be now the trace of $\bfpsi_h$. We have then,
+Let $\hat{t}$ be the trace of $\bfpsi_h$. We have then,
 \begin{equation}
 \sup_{\hat{t} \in H^{-1/2}(\Gamma_h)} \frac{|  \sum_K \lambda_K \langle
 \hat{t},1_K \rangle_{\ptl K} |}{|| \hat{t} ||_{H^{-1/2}(\Gamma_h)}}
@@ -584,7 +585,7 @@ test functions. First of all, we characterize the ``kernel'' space:
  \quad \forall K \}
 \end{array}
 \end{equation}
-In other words, the kernel space contains only the equilibriated fluxes.
+In other words, the kernel space contains only the equilibrated fluxes.
 With $\bfu \in \bfU_0$, we have then:
 \begin{equation}
    \sup_{\bfw \in \bfU_0} \frac{| a(\bfu,\bfw) |}{|| \bfw ||_{\bfU} }
@@ -612,7 +613,7 @@ are zero, so the best approximation error involves only solution $(u,\bfsig,\hat
 
 Recall the line of analysis leading to the construction of robust
 test norms allowing us to bound the $L^2$ error of the field variables by the
-energy error, Equation \ref{eq:robustBound}. With robust test norms, we have
+energy error, Equation~(\ref{eq:robustBound}). With robust test norms, we have
 \begin{equation}
 \begin{array}{ll}
    \LRp{|| u - u_h ||^2+ || \bfsig - \bfsig_h ||^2}^{\frac{1}{2}}
@@ -733,7 +734,7 @@ DPG method.
 
 % %%%%%%%%%%% End Demkowicz Section %%%%%%%%%%%%
 
-\subsection{Robust test norms}
+\subsection{Robust Test Norms}
 The optimal test functions are determined by solving local problems determined
 by the choice of test norm. There are several options to consider.
 The graph norm \cite{DPGOverview} is one of the most natural norms to consider
@@ -747,7 +748,7 @@ singularity issues with the Laplace equation, offer possible explanations for
 the phenomena observed, and propose a modification of the robust test norm,
 which we demonstrate eliminates the issues observed in numerical experiments.
 
-\subsubsection{A model problem}
+\subsubsection{A Model Problem}
 \seclab{sec:confusionPlate}
 We begin by first examining a different problem than convection-diffusion.
 We look at admissible solutions for the homogeneous Laplace's equation
@@ -887,7 +888,7 @@ very well represented, as indicated in Figure~\ref{fig:plateStresses}.
 \label{fig:plateStresses}
 \end{figure}
 
-\subsubsection{A modification of the robust test norm}
+\subsubsection{A Modification of the Robust Test Norm}
 
 While oscillations of this sort in a solution near a singular point may be
 acceptable in certain simulations, it is a big problem for the methods in
@@ -966,12 +967,12 @@ future.
 \end{figure}
 
 Figure~\ref{fig:newNorm} shows the solution for $\epsilon = .01$, where the
-diffusion scale is both underresolved and resolved by $h$-adaptivity.  In both
+diffusion scale is both under-resolved and resolved by $h$-adaptivity.  In both
 cases, there are no oscillations near the plate tip --
 Figure~\ref{fig:newNormZoom} shows a zoomed image of the solution $u$ at the
 point $(.5,0)$.  The stress is resolved similarly to the previous case;
 however, the solution $u$ does not display spurious oscillations in either the
-underresolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
+under-resolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
 the same quantities, but for $\epsilon = 10^{-4}$, in order to demonstrate
 that the new test norm removes spurious oscillations in $u$ (in the presence
 of singularities in $\bfsigma$) independently of $\epsilon$.
@@ -1035,18 +1036,20 @@ next section.
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
 
-\subsubsection{Proof of Robust Stability Estimate}
+\subsubsection{Verification of Robust Stability Estimate}
 In the robustness analysis in Section~\ref{sec:robustnessAnalysis}, we argued
-that if we have a robust stability estimate:
+that if we have robust stability estimates:
 \begin{equation}
 (1_K, v_K) \leq C \mu(K)^{1/2} || (v,\bftau) ||_K
-\tag{\ref{eq:robustEst1}}
+\tag{\ref{eq:robustEst1} revisted}
 \end{equation}
 and
 \begin{equation}
 | ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, || (v,\bftau) ||_V\,.
-\tag{\ref{eq:robust_est2}}
+\tag{\ref{eq:robust_est2} revisted}
 \end{equation}
+then the restricted DPG method is robust.
+
 We now proceed to show that the robust norms we are using satisfy this
 requirement.
 Consider the inner product from Equation~(\ref{eq:localSolve}), with
@@ -1085,7 +1088,7 @@ For the following problems, we just use the graph norm for the local problems.
 \subsection{Inviscid Burgers' Equation}
 We include the inviscid Burgers' equation in our suite of tests because, being
 a nonlinear hyperbolic conservation law, it
-falls under the purvue of the Lax-Wendroff theorem.
+falls under the purview of the Lax-Wendroff theorem.
 The inviscid Burger's equation is
 \[
 \frac{\partial u}{\partial t}+u\frac{\partial u}{\partial x}=f\,.
@@ -1834,8 +1837,8 @@ before it even starts to look right.
 \section{Conclusions}
 We've developed a locally conservative formulation of DPG by leveraging
 Lagrange multipliers. While the formulation is provably convergent and robust, it does
-increase the number of unkowns in the system and changes the structure from
-symmetric positive-definite to a saddlepoint problem. Numerical results
+increase the number of unknowns in the system and changes the structure from
+symmetric positive-definite to a saddle point problem. Numerical results
 indicate that the method delivers what it promises with local flux imbalances
 hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
