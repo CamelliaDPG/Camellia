@@ -1,6 +1,7 @@
 \documentclass[letterpaper]{article}
 %TODO: check for periods after equations
 %TODO: bold face proper variables
+%TODO: Make sure titles have consistent case
 \usepackage[margin=1.0in]{geometry}
 \usepackage{authblk}
 \usepackage{amsmath, amssymb, amsthm, mathtools}
@@ -46,6 +47,7 @@
 \newcommand{\LRs}[1]{\left[ #1 \right]}
 \newcommand{\LRa}[1]{\left\langle #1 \right\rangle}
 \newcommand{\LRc}[1]{\left\{ #1 \right\}}
+\newcommand{\LRl}[1]{\left| #1 \right|}
 \newcommand{\tanbui}[2]{\textcolor{blue}{\sout{#1}} \textcolor{red}{#2}}
 \newcommand{\Grad} {\ensuremath{\nabla}}
 \newcommand{\Div} {\ensuremath{\nabla\cdot}}
@@ -166,7 +168,7 @@ the attractive features of DPG, but turns the normally symmetric
 positive-difinite DPG system into a saddlepoint problem.
 \end{abstract}
 
-\section{Intoduction}
+\section{Introduction}
 The discontinuous Petrov-Galerkin (DPG) method with optimal test functions has
 been under active development for convection-diffusion type systems
 \cite{DPG1, DPG2, DPG3, DPG5, DemkowiczHeuer, ChanHeuerThanhDemkowicz2012,
@@ -606,6 +608,7 @@ are zero, so the best approximation error involves only solution $(u,\bfsig,\hat
 
 
 \subsubsection{Robustness Analysis}
+\label{sec:robustnessAnalysis}
 
 Recall the line of analysis leading to the construction of robust
 test norms allowing us to bound the $L^2$ error of the field variables by the
@@ -656,12 +659,15 @@ interpolant $\bfpsi_h$ of $\bfpsi = R (\sum_K \lambda_K 1_K)$ where $R$ is the r
 of the divergence operator constructed by Costabel and McIntosh. The only change compared
 with the previous analysis, is the evaluation of norm of $\hat{t}_h$. For this, we need
 to solve the local problems:
-\begin{equation}
-((v,\bftau), (\delta v, \delta \bftau)_V = \langle \hat{t}, \delta v \rangle_{\ptl K}
-= \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v = \int_K \lambda_K \delta v
-= \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in H^1(K)
+\begin{align}
+((v,\bftau), (\delta v, \delta \bftau)_V &= \langle \hat{t}, \delta v \rangle_{\ptl K}
+= \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v
+\nonumber\\
+&= \int_K \lambda_K \delta v
+= \lambda_K (1_K,\delta v)_K  \quad \forall \delta v \in
+H^1(K)\,\forall\delta\bftau\in\bfH(\text{div},K)
 \label{eq:local}
-\end{equation}
+\end{align}
 We need then an upper bound of the energy norm of $(v_h,\bftau_h)$:
 $$
 \LRp{\sum_K || (v,\bftau) ||_V^2}^{1/2}\,.
@@ -673,6 +679,7 @@ Substituting $(v,\bftau)$ for $(\delta v,\delta\bftau)$ in~(\ref{eq:local}), we 
 If we have a robust stability estimate:
 \begin{equation}
 (1_K, v_K) \leq C \mu(K)^{1/2} || (v,\bftau) ||_K
+\label{eq:robustEst1}
 \end{equation}
 (i.e. constant $C$ is independent of $\epsilon$) then
 \begin{equation}
@@ -1011,20 +1018,65 @@ order to obtain a single function that we can deal with numerically, we
 replace the alpha term with a zero mean scaling condition to obtain the new
 test norm,
 \begin{align}
+\label{eq:localSolveMod}
 \min&\left\{\frac{1}{\epsilon},\frac{1}{\mu(K)}\right\}(\taudeltau,\delta\btau)_K
 +(\nabla\cdot\taudeltau-\bbeta\cdot\nabla
 v,\nabla\cdot\delta\btau-\bbeta\cdot\nabla v)_K\\
 &+(\bbeta\cdot\nabla\vdeltau,\bbeta\cdot\nabla \delta v)_K\nonumber
 +\epsilon(\nabla\vdeltau,\nabla \delta v)_K
-+\frac{1}{\mu(K)^2}\int_K\vdeltau\int_K\delta v
-\label{eq:localSolveMod}
++\frac{1}{\mu(K)}\int_K\vdeltau\int_K\delta v
 \end{align}
-where the $\frac{1}{\mu(K)^2}$ coefficient is needed to make the zero mean term
-scale correctly since $\int_K\vdeltau$ and $\int_K\delta v$ both scale like
-$\mu(K)$. Numerically this helps with the condition
-numbers of the local solve.
+where the $\frac{1}{\mu(K)}$ coefficient is an arbitrary scaling condition
+that doesn't make a difference mathematically, but can affect the condition
+number of the actual solve. In practice, we use $\frac{1}{\mu(K)^2}$
+since $\int_K\vdeltau$ and $\int_K\delta v$ both scale like
+$\mu(K)$, but $\frac{1}{\mu(K)}$ is more convenient more the analysis in the
+next section.
 It is convenient to be able to take $\alpha\rightarrow0$ as we will see in
 some later numerical experiments.
+
+\subsubsection{Proof of Robust Stability Estimate}
+In the robustness analysis in Section~\ref{sec:robustnessAnalysis}, we argued
+that if we have a robust stability estimate:
+\begin{equation}
+(1_K, v_K) \leq C \mu(K)^{1/2} || (v,\bftau) ||_K
+\tag{\ref{eq:robustEst1}}
+\end{equation}
+and
+\begin{equation}
+| ((v,\bftau),(1_K,{\bf 0}))_V | \leq C \mu(K)^{1/2} \, || (v,\bftau) ||_V\,.
+\tag{\ref{eq:robust_est2}}
+\end{equation}
+We now proceed to show that the robust norms we are using satisfy this
+requirement.
+Consider the inner product from Equation~(\ref{eq:localSolve}), with
+$\alpha=1$. We wish to
+verify condition (\ref{eq:robustEst1}) with the norm derived from this inner
+product on the right hand side. By Cauchy-Schwarz
+\begin{equation}
+   \int_K v\cdot
+   1\leq\mu(K)^{1/2}\norm{v}_{L^2(K)}\leq\mu(K)^{1/2}\norm{(v,\btau)}_K
+   \label{eq:robustProof}
+\end{equation}
+where $\norm{(v,\btau)}_K$ is the norm derived from the inner product.
+Condition~\ref{eq:robust_est2} comes out the same since
+$$|(
+(v,\btau),(1_K,{\bf0}))| =
+\sum_K|(1_K,v_K)|\leq\sum_K\mu(K)^{1/2}\norm{v,\btau}_K
+$$
+element-wise.
+
+Now we wish the perform the same analysis for the modified inner product in
+Equation~(\ref{eq:localSolveMod}). In this case,
+condition~(\ref{eq:robustEst1}) follows even more naturally as
+\begin{equation}
+   \int_K v\cdot1\leq\mu(K)^{1/2}\frac{1}{\mu(K)^{1/2}}\LRl{\int_Kv}
+   \leq\norm{(v,\btau)}_K
+   \label{eq:robustProof2}
+\end{equation}
+where $\norm{(v,\btau)}$ now refers to the norm generated by inner product
+(\ref{eq:localSolveMod}). Condition~(\ref{eq:robust_est2}) follows by the same
+reasoning.
 
 \section{Application to Other Fluid Model Problems}
 Extension of these ideas to other fluid flow problems is relatively trivial.
@@ -1531,32 +1583,56 @@ where $S$ is some vertical mesh line.
 
 \begin{figure}[p]
 \centering
-\begin{subfigure}[t]{0.5\textwidth}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_NC0.png}
+\caption{Nonconservative on initial mesh with $r=0.6$}
+\label{fig:stokesCylinder6NC0}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_C0.png}
+\caption{Conservative on initial mesh with $r=0.6$}
+\label{fig:stokesCylinder6C0}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_NC6.png}
-\caption{Nonconservative with $r=0.6$}
-\label{fig:stokesCylinderNC6}
+\caption{Nonconservative after 6 refinements with $r=0.6$}
+\label{fig:stokesCylinder6NC6}
 \end{subfigure}
-\begin{subfigure}[t]{0.5\textwidth}
+\begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag6_C6.png}
-\caption{Conservative with $r=0.6$}
-\label{fig:stokesCylinderC6}
+\caption{Conservative after 6 refinements with $r=0.6$}
+\label{fig:stokesCylinder6C6}
 \end{subfigure}
-\begin{subfigure}[t]{0.5\textwidth}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC1.png}
+\caption{Nonconservative after 1 refinement with $r=0.9$}
+\label{fig:stokesCylinder9NC1}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C1.png}
+\caption{Conservative after 1 refinement with $r=0.9$}
+\label{fig:stokesCylinder9C1}
+\end{subfigure}
+\begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_NC6.png}
-\caption{Nonconservative with $r=0.9$}
-\label{fig:stokesCylinderNC9}
+\caption{Nonconservative after 6 refinements with $r=0.9$}
+\label{fig:stokesCylinder9NC6}
 \end{subfigure}
-\begin{subfigure}[t]{0.5\textwidth}
+\begin{subfigure}[t]{0.45\textwidth}
 \centering
 \includegraphics[width=\textwidth]{figs/StokesCylinder/umag9_C6.png}
-\caption{Conservative with $r=0.9$}
-\label{fig:stokesCylinderC9}
+\caption{Conservative after 6 refinements with $r=0.9$}
+\label{fig:stokesCylinder9C6}
 \end{subfigure}
-\caption{Stokes flow around a cylinder after 6 refinement steps - velocity magnitude}
-\label{fig:stokesCylinder9}
+\caption{Stokes flow around a cylinder - velocity magnitude}
+\label{fig:stokesCylinder}
 \end{figure}
 
 \begin{figure}[p]
@@ -1743,6 +1819,18 @@ conservative.
 The small amount of mass loss for the restricted method is clearly due to
 accumulation of floating point error.
 
+The most significant benefit of enforcing local conservation for these
+problems is that it allows us to recover the essential flow features with much
+coarser meshes. On the $r=0.6$ cylinder problem, the peak velocity magnitude
+of the conservative solution is fairly close on the coarsest mesh, while the
+nonconservative solution severely underpredicts the peak. With the $r=0.9$
+cylinder, this problem is only exacerbated. After just one adaptive
+refinement, the conservative solution nails the peak velocity. The
+nonconservative solution is completely useless at this point. We see the same
+thing with the backward facing step problem. The conservative solution is
+great on the coarsest mesh, while standard DPG needs a lot more resolution
+before it even starts to look right.
+
 \section{Conclusions}
 We've developed a locally conservative formulation of DPG by leveraging
 Lagrange multipliers. While the formulation is provably convergent and robust, it does
@@ -1753,7 +1841,9 @@ hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
 with refinements. For the Stokes problems, standard DPG suffered similar mass
 loss as standard least squares on coarse meshes, but made up the lost mass with further
-resolution.
+resolution. On problems where local conservation was really stressed,
+restricted DPG was able to deliver reasonable solutions with much less
+resolution than standard DPG.
 Probably the most encouraging result of these experiments is
 that enforcing local conservation did not change the nature of the solutions
 too significantly. Standard DPG has a lot of attractive features, and we wish
