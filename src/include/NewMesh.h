@@ -69,17 +69,20 @@ class NewMeshCell {
   unsigned _cellIndex;
   CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
+  vector< vector<unsigned> > _entityIndices;  // indices: [subcdim][subcord]
   vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
   
   // for parents:
   vector< Teuchos::RCP< NewMeshCell > > _children;
   RefinementPatternPtr _refPattern;
 public:
-  NewMeshCell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations, unsigned cellIndex) {
+  NewMeshCell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+              unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
     _cellTopo = cellTopo;
     _vertices = vertices;
     _subcellPermutations = subcellPermutations;
     _cellIndex = cellIndex;
+    _entityIndices = entityIndices;
   }
   unsigned cellIndex() {
     return _cellIndex;
@@ -90,6 +93,10 @@ public:
   }
   void setChildren(vector< Teuchos::RCP< NewMeshCell > > children) {
     _children = children;
+  }
+  
+  unsigned entityIndex(unsigned subcdim, unsigned subcord) {
+    return _entityIndices[subcdim][subcord];
   }
   
   bool isParent() { return _children.size() > 0; }
@@ -120,13 +127,15 @@ class NewMesh {
   // the following entity vectors are indexed on dimension of the entities
   vector< vector< set<unsigned> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
   vector< map< set<unsigned>, unsigned > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
-  vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering;
+  vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
   vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
   vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
   vector< map< unsigned, unsigned > > _parentEntities; // map from entity to its parent.  (Not every entity has a parent.  Eventually, we may support entities having multiple parents.  Such things may be useful in the context of anisotropic refinements.)
+  vector< map< unsigned, pair< RefinementPatternPtr, vector<unsigned> > > > _childEntities; // map from parent to children, together with the RefinementPattern to get from one to the other.
   
   vector< NewMeshCellPtr > _cells;
+  set< unsigned > _activeCells;
   
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
@@ -138,6 +147,8 @@ class NewMesh {
 public:
   NewMesh(NewMeshGeometryPtr meshGeometry);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
+  unsigned cellCount();
+  unsigned activeCellCount();
 };
 
 #endif
