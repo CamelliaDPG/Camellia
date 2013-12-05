@@ -144,6 +144,62 @@ public:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No matching permutation found");
     return volumePermutationCount; // an impossible (out of bounds) answer: this line just to satisfy compilers that warn about missing return values.
   }
+  
+  static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord) {
+    typedef unsigned CellTopoKey;
+    typedef unsigned SubcellOrdinal;
+    typedef unsigned SubcellDimension;
+    typedef unsigned SubSubcellOrdinal;
+    typedef unsigned SubSubcellDimension;
+    typedef unsigned SubSubcellOrdinalInCellTopo;
+    typedef pair< SubcellDimension, SubcellOrdinal > SubcellIdentifier;    // dim, ord in cellTopo
+    typedef pair< SubSubcellDimension, SubSubcellOrdinal > SubSubcellIdentifier; // dim, ord in subcell
+    typedef map< SubcellIdentifier, map< SubSubcellIdentifier, SubSubcellOrdinalInCellTopo > > OrdinalMap;
+    static map< CellTopoKey, OrdinalMap > ordinalMaps;
+    
+    CellTopoKey key = cellTopo.getKey();
+    if (ordinalMaps.find(key) == ordinalMaps.end()) {
+      // then we construct the map for this cellTopo
+      OrdinalMap ordinalMap;
+      unsigned sideDim = cellTopo.getDimension();
+      typedef unsigned NodeOrdinal;
+      map< set<NodeOrdinal>, SubcellIdentifier > subcellMap; // given set of nodes in cellTopo, what subcell is it?
+      for (unsigned d=0; d<=sideDim; d++) {
+        unsigned subcellCount = cellTopo.getSubcellCount(d);
+        for (unsigned subcellOrdinal=0; subcellOrdinal<subcellCount; subcellOrdinal++) {
+          set<NodeOrdinal> nodes;
+          unsigned nodeCount = cellTopo.getNodeCount(d, subcellOrdinal);
+          for (NodeOrdinal subcNode=0; subcNode<nodeCount; subcNode++) {
+            nodes.insert(cellTopo.getNodeMap(d, subcellOrdinal, subcNode));
+          }
+          SubcellIdentifier subcell = make_pair(d, subcellOrdinal);
+          subcellMap[nodes] = subcell;
+          
+          shards::CellTopology subcellTopo = cellTopo.getCellTopologyData(d, subcellOrdinal);
+          // now, go over all the subsubcells, and look them up...
+          for (unsigned subsubcellDim=0; subsubcellDim<d; subsubcellDim++) {
+            unsigned subsubcellCount = subcellTopo.getSubcellCount(subsubcellDim);
+            for (unsigned subsubcellOrdinal=0; subsubcellOrdinal<subsubcellCount; subsubcellOrdinal++) {
+              unsigned nodeCount = subcellTopo.getNodeCount(subsubcellDim, subsubcellOrdinal);
+              set<NodeOrdinal> subcellNodes; // NodeOrdinals index into cellTopo, though!
+              for (NodeOrdinal subsubcNode=0; subsubcNode<nodeCount; subsubcNode++) {
+                NodeOrdinal subcNode = subcellTopo.getNodeMap(subsubcellDim, subsubcellOrdinal, subsubcNode);
+                NodeOrdinal node = cellTopo.getNodeMap(d, subcellOrdinal, subcNode);
+                subcellNodes.insert(node);
+              }
+              SubSubcellIdentifier subsubcell = make_pair(subsubcellDim,subsubcellCount);
+              SubcellIdentifier subsubcellInCellTopo = subcellMap[subcellNodes];
+              ordinalMap[ subcell ][ subsubcell ] = subsubcellInCellTopo.second;
+            }
+          }
+        }
+      }
+      ordinalMaps[key] = ordinalMap;
+    }
+    SubcellIdentifier subcell = make_pair(subcdim, subcord);
+    SubSubcellIdentifier subsubcell = make_pair(subsubcdim, subsubcord);
+    return ordinalMaps[key][subcell][subsubcell];
+  }
 };
 
 #endif
