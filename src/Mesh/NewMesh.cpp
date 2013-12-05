@@ -17,8 +17,7 @@ NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
   _entities = vector< vector< set< unsigned > > >(_spaceDim);
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
-  _activeEntities = vector< map< unsigned, ActiveEntityListEntry* > >(_spaceDim);
-//  _cellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
+  _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
@@ -36,59 +35,51 @@ NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
 unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices) {
   vector< map< unsigned, unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
-  vector< vector< ActiveEntityListEntry* > > entries(_spaceDim);
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
     cellEntityPermutations.push_back(map<unsigned, unsigned>());
     int entityCount = cellTopo->getSubcellCount(d);
-    entries[d] = vector<ActiveEntityListEntry *>(entityCount,NULL);
     for (int j=0; j<entityCount; j++) {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
       unsigned entityIndex, entityPermutation;
       int entityNodeCount = cellTopo->getNodeCount(d, j);
       vector< unsigned > nodes;
-      set< unsigned > nodeSet;
       for (int node=0; node<entityNodeCount; node++) {
         unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
         nodes.push_back(cellVertices[nodeIndexInCell]);
-        nodeSet.insert(cellVertices[nodeIndexInCell]);
       }
-      
-      if (_knownEntities[d].find(nodeSet) == _knownEntities[d].end()) {
-        // new entity
-        entityIndex = _entities[d].size();
-        _entities[d].push_back(nodeSet);
-        _knownEntities[d][nodeSet] = entityIndex;
-        _canonicalEntityOrdering[d][entityIndex] = nodes;
-        entityPermutation = 0;
-      } else {
-        // existing entity
-        entityIndex = _knownEntities[d][nodeSet];
-        entityPermutation = CamelliaCellTools::permutationMatchingOrder(cellTopo->getCellTopologyData(d, j), _canonicalEntityOrdering[d][entityIndex], nodes);
-      }
+
+      addEntity(cellTopo->getCellTopologyData(d, j), nodes, entityPermutation);
+
       cellEntityPermutations[d][entityIndex] = entityPermutation;
-      ActiveEntityListEntry* newListEntry = new ActiveEntityListEntry(); // TODO: add destructor with delete()s to mirror this new() -- also delete() on cell deactivation
-      ActiveEntityListEntry *firstEntry, *lastEntry;
-      newListEntry->cellIndex = cellIndex;
-      newListEntry->subcellOrdinal = j;
-      entries[d][j] = newListEntry;
-      if ( _activeEntities[d].find(entityIndex) == _activeEntities[d].end() ) {
-        _activeEntities[d][entityIndex] = newListEntry;
-        firstEntry = newListEntry;
-      } else {
-        firstEntry = _activeEntities[d][entityIndex];
-      }
-      lastEntry = firstEntry;
-      while (lastEntry->nextEntry != lastEntry) {
-        lastEntry = lastEntry->nextEntry;
-      }
-      lastEntry->nextEntry = newListEntry;
-      newListEntry->nextEntry = _activeEntities[d][entityIndex];
+      _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
     }
   }
   
-  NewMeshCellPtr cell = Teuchos::rcp( new NewMeshCell(cellTopo, cellVertices, cellEntityPermutations) );
+  NewMeshCellPtr cell = Teuchos::rcp( new NewMeshCell(cellTopo, cellVertices, cellEntityPermutations, cellIndex) );
   _cells.push_back(cell);
   return _cells.size() - 1;
+}
+
+unsigned NewMesh::addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
+  set< unsigned > nodeSet;
+  for (int nodeIndex=0; nodeIndex<entityVertices.size(); nodeIndex++) {
+    nodeSet.insert(entityVertices[nodeIndex]);
+  }
+  unsigned d  = entityTopo.getDimension();
+  unsigned entityIndex;
+  if (_knownEntities[d].find(nodeSet) == _knownEntities[d].end()) {
+    // new entity
+    entityIndex = _entities[d].size();
+    _entities[d].push_back(nodeSet);
+    _knownEntities[d][nodeSet] = entityIndex;
+    _canonicalEntityOrdering[d][entityIndex] = entityVertices;
+    entityPermutation = 0;
+  } else {
+    // existing entity
+    entityIndex = _knownEntities[d][nodeSet];
+    entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], entityVertices);
+  }
+  return entityIndex;
 }
 
 void NewMesh::addChildren(NewMeshCellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices) {
@@ -100,6 +91,47 @@ void NewMesh::addChildren(NewMeshCellPtr parentCell, const vector< CellTopoPtr >
     children.push_back(_cells[cellIndex]);
   }
   parentCell->setChildren(children);
+}
+
+void NewMesh::deactivateCell(NewMeshCellPtr cell) {
+  CellTopoPtr cellTopo = cell->topology();
+  for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
+    int entityCount = cellTopo->getSubcellCount(d);
+    for (int j=0; j<entityCount; j++) {
+      // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
+      int entityNodeCount = cellTopo->getNodeCount(d, j);
+      set< unsigned > nodeSet;
+      for (int node=0; node<entityNodeCount; node++) {
+        unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
+        nodeSet.insert(cell->vertices()[nodeIndexInCell]);
+      }
+      
+      map< set<unsigned>, unsigned >::iterator knownEntry = _knownEntities[d].find(nodeSet);
+      if (knownEntry == _knownEntities[d].end()) {
+        // entity not found: an error
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cell entity not found!");
+      }
+    
+      // delete from the _activeCellsForEntities store
+      unsigned entityIndex = knownEntry->second;
+      unsigned eraseCount = _activeCellsForEntities[d][entityIndex].erase(make_pair(cell->cellIndex(),j));
+      if (eraseCount==0) {
+        cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
+      }
+      if (_activeCellsForEntities[d][entityIndex].size() == 0) {
+        // the entity itself has been deactivated, and we should check whether we can relax any constraints imposed by it
+        // how do we know that?  what is the rule?
+        
+        // vertices are never constraining entities -- i.e. we can skip here
+        // edges are constraining entities if and only if they remain active but are broken in some cells
+        // faces are constraining entities if
+        
+        
+        // edges are constrained by their last (most distant) active ancestor
+        //
+      }
+    }
+  }
 }
 
 unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
@@ -137,14 +169,13 @@ unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
     }
     _vertexMap[vertex] = bestMatchIndex;
-    
-    //    cout << "Added vertex " << bestMatchIndex << " (" << x << "," << y << ")\n";
   }
   return bestMatchIndex;
 }
 
+// key: index in vertices; value: index in _vertices
 map<unsigned, unsigned> NewMesh::getVertexIndices(const FieldContainer<double> &vertices) {
-  double tol = 1e-12; // tolerance for vertex equality
+  double tol = 1e-14; // tolerance for vertex equality
   
   map<unsigned, unsigned> localToGlobalVertexIndex;
   int numVertices = vertices.dimension(0);
@@ -181,5 +212,77 @@ void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
   vector< CellTopoPtr > childTopos(numChildren,cell->topology());
   
   cell->setRefinementPattern(refPattern);
-  addChildren(cell, childTopos, childVertices);  
+  addChildren(cell, childTopos, childVertices);
+  deactivateCell(cell);
+  
+  
+}
+
+void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPattern) {
+  // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
+  
+  FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
+  
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(0); vertexIndex++) {
+    for (int d=0; d<_spaceDim; d++) {
+      cellNodes(0,vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
+    }
+  }
+  
+  CellTopoPtr cellTopo = cell->topology();
+  
+  vector< vector< RefinementPatternPtr > > refPatternForSubcell(_spaceDim+1); // outer vector: dimension; inner: subcord
+  refPatternForSubcell[_spaceDim] = vector< RefinementPatternPtr >(1,refPattern);
+  
+  for (unsigned d=_spaceDim-1; d>0; d--) {
+    unsigned subcellCount = cellTopo->getSubcellCount(d);
+    refPatternForSubcell[d] = vector< RefinementPatternPtr >(subcellCount);
+    for (unsigned subcord=0; subcord<subcellCount; subcord++) {
+      // TODO: work out how to implement filling in the RefinementPattern for each subcell.
+      // idea: look at previous iterate's refPattern->sideRefinementPatterns().  Trick is to figure out the map from sideOrdinal in subcell to subcord in cell
+    }
+  }
+
+  // let's start by implementing for sides.  We'll generalize from there
+  unsigned d = _spaceDim - 1;
+  unsigned sideCount = cellTopo->getSubcellCount(d);
+  for (unsigned sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++) {
+    RefinementPatternPtr sideRefPattern = refPattern->sideRefinementPatterns()[sideOrdinal];
+    FieldContainer<double> refinedNodes = sideRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
+    unsigned childCount = refinedNodes.dimension(0);
+    if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
+    
+    for (unsigned childIndex=0; childIndex<childCount; childIndex++) {
+      unsigned nodeCount = refinedNodes.dimension(1);
+      FieldContainer<double> nodesOnSide(nodeCount,d);
+      for (int nodeIndex=0; nodeIndex<nodeCount; nodeIndex++) {
+        for (int dimIndex=0; dimIndex<d; dimIndex++) {
+          nodesOnSide(nodeIndex,dimIndex) = refinedNodes(childIndex,nodeIndex,dimIndex);
+        }
+      }
+      FieldContainer<double> nodesOnRefCell(nodeCount,_spaceDim);
+      CellTools<double>::mapToReferenceSubcell(nodesOnRefCell, refinedNodes, d, sideOrdinal, *cellTopo);
+      FieldContainer<double> physicalNodes(1,nodeCount,_spaceDim);
+      // map to physical space:
+      CellTools<double>::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, *cellTopo);
+    }
+  }
+  
+  for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
+    int entityCount = cellTopo->getSubcellCount(d);
+    for (int j=0; j<entityCount; j++) {
+      unsigned entityIndex, entityPermutation;
+      int entityNodeCount = cellTopo->getNodeCount(d, j);
+      vector< unsigned > nodes;
+      set< unsigned > nodeSet;
+      for (int node=0; node<entityNodeCount; node++) {
+        unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
+        nodes.push_back(cell->vertices()[nodeIndexInCell]);
+      }
+      shards::CellTopology entityTopo = cellTopo->getCellTopologyData(d, j);
+      entityIndex = addEntity(entityTopo, nodes, entityPermutation); // this is actually just a lookup
+      
+    }
+  }
+
 }
