@@ -53,6 +53,8 @@ public:
   
   unsigned numChildren();
   const FieldContainer<double> & refinedNodes();
+  
+  const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

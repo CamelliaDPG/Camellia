@@ -540,3 +540,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
 const FieldContainer<double> & RefinementPattern::refinedNodes() {
   return _nodes;
 }
+
+const vector< Teuchos::RCP<RefinementPattern> > & RefinementPattern::sideRefinementPatterns() {
+  return _sideRefinementPatterns;
+}
