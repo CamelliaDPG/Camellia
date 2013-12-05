@@ -19,6 +19,7 @@ class RefinementPattern {
   vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
   
+  vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
   vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
   vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
   
@@ -55,6 +56,7 @@ public:
   const FieldContainer<double> & refinedNodes();
   
   const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
+  Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

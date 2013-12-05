@@ -41,7 +41,33 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   _sideRefinementPatterns = sideRefinementPatterns;
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
-  int spaceDim = refinedNodes.dimension(2);
+  unsigned spaceDim = refinedNodes.dimension(2);
+  unsigned sideCount = _cellTopoPtr->getSideCount();
+  
+  if (spaceDim > 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != cellTopo.getSideCount()");
+  }
+  
+  unsigned sideDim = spaceDim - 1;
+
+  // we will fill some entries in _patternForSubcell repeatedly/redundantly
+  _patternForSubcell = vector< vector< RefinementPatternPtr > >(spaceDim);
+  for (unsigned d=1; d<spaceDim; d++) {
+    _patternForSubcell[d] = vector< RefinementPatternPtr >(_cellTopoPtr->getSubcellCount(d));
+  }
+  _patternForSubcell[sideDim] = vector< RefinementPatternPtr >(sideCount);
+  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    _patternForSubcell[sideDim][sideOrdinal] = _sideRefinementPatterns[sideOrdinal];
+    for (unsigned d=1; d<sideDim; d++) {
+      shards::CellTopology sideTopo = _cellTopoPtr->getCellTopologyData(sideDim, sideOrdinal);
+      unsigned sideSubcellCount = sideTopo.getSubcellCount(d);
+      for (unsigned sideSubcellOrdinal=0; sideSubcellOrdinal<sideSubcellCount; sideSubcellOrdinal++) {
+        unsigned subcord = CamelliaCellTools::subcellOrdinalMap(*cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
+        _patternForSubcell[d][subcord] = _sideRefinementPatterns[sideOrdinal]->patternForSubcell(d, sideSubcellOrdinal);
+      }
+    }
+  }
+  
   vector<double> vertex(spaceDim);
   
   unsigned cellKey = cellTopoPtr->getKey();
@@ -535,6 +561,10 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
     refPattern = Teuchos::rcp( new RefinementPattern(quad_4_ptr,quadPoints, sideRefinements) );
   }
   return refPattern;
+}
+
+RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsigned subcord) {
+  return _patternForSubcell[subcdim][subcord];
 }
 
 const FieldContainer<double> & RefinementPattern::refinedNodes() {
