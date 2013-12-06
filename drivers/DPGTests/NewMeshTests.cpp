@@ -207,7 +207,80 @@ bool NewMeshTests::test2DMesh() {
 bool NewMeshTests::test3DMesh() {
   bool success = true;
   
-  CellTopoPtr hex_8 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
+  unsigned spaceDim = 3;
+  unsigned hexNodeCount = 1 << spaceDim;
+  FieldContainer<double> refHexPoints(hexNodeCount,spaceDim);
+  Teuchos::RCP< shards::CellTopology > hexTopo = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+  CamelliaCellTools::refCellNodesForTopology(refHexPoints, *hexTopo);
+ 
+  vector< vector<double> > vertices;
+  vector< unsigned > hexVertexIndices(hexNodeCount);
+  vector< vector<unsigned> > elementVertices;
+  for (unsigned nodeIndex=0; nodeIndex<hexNodeCount; nodeIndex++) {
+    vector<double> vertex(spaceDim);
+    for (unsigned d=0; d<spaceDim; d++) {
+      vertex[d] = refHexPoints(nodeIndex,d);
+    }
+    hexVertexIndices[nodeIndex] = vertices.size();
+    vertices.push_back(vertex);
+  }
+  elementVertices.push_back(hexVertexIndices);
   
+  
+//  // note that the following will create some repeated vertices, and that's not OK -- we'll need to do something different
+//  vector<double> eastOffset = makeVertex(2,0,0);
+//  for (unsigned nodeIndex=0; nodeIndex<hexNodeCount; nodeIndex++) {
+//    vector<double> vertex(spaceDim);
+//    for (unsigned d=0; d<spaceDim; d++) {
+//      vertex[d] = refHexPoints(nodeIndex,d) + eastOffset[d];
+//    }
+//    hexVertexIndices[nodeIndex] = vertices.size();
+//    vertices.push_back(vertex);
+//  }
+//  elementVertices.push_back(hexVertexIndices);
+ 
+  vector< CellTopoPtr > cellTopos(1,hexTopo);
+  NewMeshGeometryPtr meshGeometry = Teuchos::rcp( new NewMeshGeometry(vertices, elementVertices, cellTopos) );
+
+  NewMesh mesh(meshGeometry);
+  
+  if (mesh.cellCount() != 1) {
+    success = false;
+    cout << "After initialization, mesh doesn't have the expected number of cells.\n";
+  }
+  
+  if (mesh.activeCellCount() != 1) {
+    success = false;
+    cout << "After initialization, mesh doesn't have the expected number of active cells.\n";
+  }
+  
+  RefinementPatternPtr hexRefPattern = RefinementPattern::regularRefinementPatternHexahedron();
+
+  mesh.refineCell(0, hexRefPattern);
+
+  if (mesh.cellCount() != 9) {
+    success = false;
+    cout << "After refinement, mesh doesn't have the expected number of cells.\n";
+  }
+  
+  if (mesh.activeCellCount() != 8) {
+    success = false;
+    cout << "After refinement, mesh doesn't have the expected number of active cells.\n";
+  }
+  
+  mesh.refineCell(1, hexRefPattern);
+
+  if (mesh.cellCount() != 17) {
+    success = false;
+    cout << "After second refinement, mesh doesn't have the expected number of cells.\n";
+  }
+  
+  if (mesh.activeCellCount() != 15) {
+    success = false;
+    cout << "After second refinement, mesh doesn't have the expected number of active cells.\n";
+  }
+ 
+  // TODO: test more than just the count.  Test vertex locations, say.  Test constraint counts (should be 0 here after first refinement, and there should be some constraints after the second).
+
   return success;
 }
