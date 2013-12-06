@@ -40,6 +40,7 @@ public:
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
+  static Teuchos::RCP<RefinementPattern> regularRefinementPatternHexahedron();
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad();
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad();
 

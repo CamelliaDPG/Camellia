@@ -489,6 +489,49 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
   return refPattern;
 }
 
+Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexahedron() {
+  static RefinementPatternPtr refPattern;
+  
+  if (refPattern.get() == NULL) {
+    
+    // order of the sub-elements is CCW starting at bottom left
+    unsigned spaceDim = 3;
+    
+    // most of what follows should work for arbitrary spatial dimension -- could reimplement regular quad and line refinements in terms of this
+    // (exceptions: CellTopology object, and the CamelliaCellTools::refCellNodesForTopology() call.)
+    unsigned numChildren = 1 << spaceDim; // 2^3
+    unsigned numNodesPerChild = 1 << spaceDim; // 2^3
+    FieldContainer<double> hexPoints(numChildren,numNodesPerChild,spaceDim);
+    FieldContainer<double> refHexPoints(numNodesPerChild,spaceDim);
+    Teuchos::RCP< shards::CellTopology > hexTopo = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+    CamelliaCellTools::refCellNodesForTopology(refHexPoints, *hexTopo);
+    
+    // scale and shift ref points to be in the bottommost (in each spatial direction) corner.  xi --> (xi - 1) / 2
+    for (int nodeIndex=0; nodeIndex<numNodesPerChild; nodeIndex++) {
+      for (int d=0; d<spaceDim; d++) {
+        refHexPoints(nodeIndex,d) = (refHexPoints(nodeIndex,d) - 1) / 2;
+      }
+    }
+    
+    for (int childIndex=0; childIndex<numChildren; childIndex++) {
+      vector<double> offsets(spaceDim);
+      int childIndexShifted = childIndex;
+      for (int d=0; d<spaceDim; d++) {
+        offsets[d] = (childIndexShifted%2 == 0) ? 0.0 : 1.0;
+        childIndexShifted >>= 1;
+      }
+      for (int nodeIndex=0; nodeIndex<numNodesPerChild; nodeIndex++) {
+        for (int d=0; d<spaceDim; d++) {
+          hexPoints(childIndex,nodeIndex,d) = refHexPoints(nodeIndex,d) + offsets[d];
+        }
+      }
+    }
+    
+    refPattern = Teuchos::rcp( new RefinementPattern(hexTopo,hexPoints,vector<RefinementPatternPtr>(6,regularRefinementPatternQuad())) );
+  }
+  return refPattern;
+}
+
 // cuts a quad vertically (x-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
   static RefinementPatternPtr refPattern;
