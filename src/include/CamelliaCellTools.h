@@ -197,8 +197,8 @@ public:
 
               SubcellIdentifier subsubcellInCellTopo = subcellMap[subcellNodes];
               ordinalMap[ subcell ][ subsubcell ] = subsubcellInCellTopo.second;
-              cout << "ordinalMap( (" << subcell.first << "," << subcell.second << "), (" << subsubcell.first << "," << subsubcell.second << ")) ";
-              cout << " ---> " << subsubcellInCellTopo.second << endl;
+//              cout << "ordinalMap( (" << subcell.first << "," << subcell.second << "), (" << subsubcell.first << "," << subsubcell.second << ") ) ";
+//              cout << " ---> " << subsubcellInCellTopo.second << endl;
             }
           }
         }
