@@ -161,12 +161,14 @@ public:
     if (ordinalMaps.find(key) == ordinalMaps.end()) {
       // then we construct the map for this cellTopo
       OrdinalMap ordinalMap;
-      unsigned sideDim = cellTopo.getDimension();
+      unsigned sideDim = cellTopo.getDimension() - 1;
       typedef unsigned NodeOrdinal;
-      map< set<NodeOrdinal>, SubcellIdentifier > subcellMap; // given set of nodes in cellTopo, what subcell is it?
-      for (unsigned d=0; d<=sideDim; d++) {
+      map< set<NodeOrdinal>, SubcellIdentifier > subcellMap; // given set of nodes in cellTopo, what subcell is it?)
+      
+      for (unsigned d=1; d<=sideDim; d++) { // only things of dimension >= 1 will have subcells
         unsigned subcellCount = cellTopo.getSubcellCount(d);
         for (unsigned subcellOrdinal=0; subcellOrdinal<subcellCount; subcellOrdinal++) {
+          
           set<NodeOrdinal> nodes;
           unsigned nodeCount = cellTopo.getNodeCount(d, subcellOrdinal);
           for (NodeOrdinal subcNode=0; subcNode<nodeCount; subcNode++) {
@@ -180,6 +182,11 @@ public:
           for (unsigned subsubcellDim=0; subsubcellDim<d; subsubcellDim++) {
             unsigned subsubcellCount = subcellTopo.getSubcellCount(subsubcellDim);
             for (unsigned subsubcellOrdinal=0; subsubcellOrdinal<subsubcellCount; subsubcellOrdinal++) {
+              SubSubcellIdentifier subsubcell = make_pair(subsubcellDim,subsubcellOrdinal);
+              if (subsubcellDim==0) { // treat vertices separately
+                ordinalMap[subcell][subsubcell] = cellTopo.getNodeMap(subcell.first, subcell.second, subsubcellOrdinal);
+                continue;
+              }
               unsigned nodeCount = subcellTopo.getNodeCount(subsubcellDim, subsubcellOrdinal);
               set<NodeOrdinal> subcellNodes; // NodeOrdinals index into cellTopo, though!
               for (NodeOrdinal subsubcNode=0; subsubcNode<nodeCount; subsubcNode++) {
@@ -187,9 +194,11 @@ public:
                 NodeOrdinal node = cellTopo.getNodeMap(d, subcellOrdinal, subcNode);
                 subcellNodes.insert(node);
               }
-              SubSubcellIdentifier subsubcell = make_pair(subsubcellDim,subsubcellCount);
+
               SubcellIdentifier subsubcellInCellTopo = subcellMap[subcellNodes];
               ordinalMap[ subcell ][ subsubcell ] = subsubcellInCellTopo.second;
+              cout << "ordinalMap( (" << subcell.first << "," << subcell.second << "), (" << subsubcell.first << "," << subsubcell.second << ")) ";
+              cout << " ---> " << subsubcellInCellTopo.second << endl;
             }
           }
         }
