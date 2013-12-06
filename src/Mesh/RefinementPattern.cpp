@@ -332,6 +332,67 @@ vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSi
   return _childrenForSides;
 }
 
+void RefinementPattern::initializeAnisotropicRelationships() {
+  // quad and hex refinements
+  RefinementPatternPtr verticalCutQuad = xAnisotropicRefinementPatternQuad();
+  RefinementPatternPtr horizontalCutQuad = yAnisotropicRefinementPatternQuad();
+  RefinementPatternPtr isotropicRefinementQuad = regularRefinementPatternQuad();
+  
+  vector< RefinementPatternRecipe > quadRecipes;
+  RefinementPatternRecipe recipe;
+  vector< unsigned > initialCell; // empty to specify initial cell
+  vector< unsigned > firstCutChild0(1,0);  // 0 to pick first child
+  vector< unsigned > firstCutChild1(1,1);  // 1 to pick second child
+  
+  recipe.push_back(make_pair(verticalCutQuad,initialCell));
+  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild0));
+  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild1));
+  quadRecipes.push_back(recipe);
+  
+  recipe.clear();
+  recipe.push_back(make_pair(horizontalCutQuad,initialCell));
+  recipe.push_back(make_pair(verticalCutQuad,firstCutChild0));
+  recipe.push_back(make_pair(verticalCutQuad,firstCutChild1));
+  quadRecipes.push_back(recipe);
+  
+  recipe.clear();
+  recipe.push_back(make_pair(isotropicRefinementQuad,initialCell));
+  quadRecipes.push_back(recipe);
+  
+  verticalCutQuad->setRelatedRecipes(quadRecipes);
+  horizontalCutQuad->setRelatedRecipes(quadRecipes);
+  isotropicRefinementQuad->setRelatedRecipes(quadRecipes);
+  
+  // TODO: once we add anisotropic refinements for the hexahedron, marry them here -- uncomment the following:
+/*  RefinementPatternPtr isotropicRefinementHex = regularRefinementPatternHexahedron();
+  RefinementPatternPtr verticalCutHex = xAnisotropicRefinementPatternHexahedron();
+  RefinementPatternPtr horizontalCutHex = yAnisotropicRefinementPatternHexahedron();
+  RefinementPatternPtr depthCutHex = zAnisotropicRefinementPatternHexahedron();
+ 
+ vector< unsigned > secondCutChild00(2,0);
+ vector< unsigned > secondCutChild01(2);
+ secondCutChild01[0] = 0;
+ secondCutChild01[1] = 1;
+ vector< unsigned > secondCutChild10(2);
+ secondCutChild10[0] = 1;
+ secondCutChild10[1] = 0;
+ vector< unsigned > secondCutChild11(2);
+ secondCutChild11[0] = 1;
+ secondCutChild11[1] = 1;
+
+ 
+  vector< RefinementPatternPtr > hexRefs;
+  hexRefs.push_back(verticalCutHex);
+  hexRefs.push_back(horizontalCutHex);
+  hexRefs.push_back(depthCutHex);
+  hexRefs.push_back(isotropicRefinementHex);
+  
+  verticalCutHex->setRelatedRefinementPatterns(hexRefs);
+  horizontalCutHex->setRelatedRefinementPatterns(hexRefs);
+  depthCutHex->setRelatedRefinementPatterns(hexRefs);
+  isotropicRefinementHex->setRelatedRefinementPatterns(hexRefs);*/
+}
+
 RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
   static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
   unsigned key = cellTopoPtr->getKey();
@@ -612,6 +673,14 @@ RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsi
 
 const FieldContainer<double> & RefinementPattern::refinedNodes() {
   return _nodes;
+}
+
+vector< RefinementPatternRecipe > & RefinementPattern::relatedRecipes() {
+  // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  The current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)
+  return _relatedRecipes;
+}
+void RefinementPattern::setRelatedRecipes(vector<RefinementPatternRecipe> &recipes) {
+  _relatedRecipes = recipes;
 }
 
 const vector< Teuchos::RCP<RefinementPattern> > & RefinementPattern::sideRefinementPatterns() {

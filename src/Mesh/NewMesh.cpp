@@ -11,6 +11,8 @@
 #include "CamelliaCellTools.h"
 
 NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
+  RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
+  
   _vertices = meshGeometry->vertices();
   _spaceDim = _vertices[0].size();
   
@@ -19,8 +21,8 @@ NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
-  _parentEntities = vector< map< unsigned, unsigned > >(_spaceDim);
-  _childEntities = vector< map< unsigned, pair<RefinementPatternPtr, vector<unsigned> > > >(_spaceDim);
+  _parentEntities = vector< map< unsigned, vector<unsigned> > >(_spaceDim); // map to possible parents
+  _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
                              "length of cellTopos != length of elementVertices");
@@ -149,6 +151,11 @@ void NewMesh::deactivateCell(NewMeshCellPtr cell) {
   _activeCells.erase(cell->cellIndex());
 }
 
+unsigned NewMesh::findConstrainingEntity(unsigned d, unsigned entityIndex) {
+  if (d==0) return entityIndex; // no constraint for vertices
+  
+}
+
 unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
   vector<double> vertexForLowerBound;
   for (int d=0; d<_spaceDim; d++) {
@@ -244,6 +251,16 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
     }
   }
   
+  vector< RefinementPatternRecipe > relatedRecipes = refPattern->relatedRecipes();
+  if (relatedRecipes.size()==0) {
+    RefinementPatternRecipe recipe;
+    vector<unsigned> initialCell;
+    recipe.push_back(make_pair(refPattern,vector<unsigned>()));
+    relatedRecipes.push_back(recipe);
+  }
+  
+  // TODO generalize the below code to apply recipes instead of just the refPattern...
+  
   CellTopoPtr cellTopo = cell->topology();
   for (unsigned d=1; d<_spaceDim; d++) {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
@@ -253,6 +270,7 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
       unsigned childCount = refinedNodes.dimension(0);
       if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
       
+      vector<unsigned> parentIndices;
       unsigned parentIndex = cell->entityIndex(d, subcord);
       // if we ever allow multiple parentage, then we'll need to record things differently in both _childEntities and _parentEntities
       // (and the if statement just below will need to change in a corresponding way, indexed by the particular refPattern in question maybe
@@ -284,10 +302,12 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
           unsigned entityPermutation;
           shards::CellTopology childTopo = cellTopo->getCellTopologyData(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
-          _parentEntities[d][childEntityIndex] = parentIndex;
+          _parentEntities[d][childEntityIndex] = vector<unsigned>(1, parentIndex); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
           childEntityIndices[childIndex] = childEntityIndex;
+          set< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
         }
-        _childEntities[d][parentIndex] = make_pair(subcellRefPattern, childEntityIndices);
+        _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
+
       }
     }
   }

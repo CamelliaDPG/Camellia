@@ -128,11 +128,12 @@ class NewMesh {
   vector< vector< set<unsigned> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
   vector< map< set<unsigned>, unsigned > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
-  vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
+  vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
+  vector< set< unsigned > > _activeEntities; // see note above
   vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
   vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
-  vector< map< unsigned, unsigned > > _parentEntities; // map from entity to its parent.  (Not every entity has a parent.  Eventually, we may support entities having multiple parents.  Such things may be useful in the context of anisotropic refinements.)
-  vector< map< unsigned, pair< RefinementPatternPtr, vector<unsigned> > > > _childEntities; // map from parent to children, together with the RefinementPattern to get from one to the other.
+  vector< map< unsigned, vector<unsigned> > > _parentEntities; // map from entity to its possible parents.  (Not every entity has a parent.  Eventually, we may support entities having multiple parents.  Such things may be useful in the context of anisotropic refinements.)
+  vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   
   vector< NewMeshCellPtr > _cells;
   set< unsigned > _activeCells;
@@ -140,6 +141,7 @@ class NewMesh {
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(NewMeshCellPtr cell);
+  unsigned findConstrainingEntity(unsigned d, unsigned entityIndex);
   void addChildren(NewMeshCellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
   map<unsigned, unsigned> getVertexIndices(const FieldContainer<double> &vertices);
