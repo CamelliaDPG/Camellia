@@ -63,47 +63,56 @@ public:
 
 typedef Teuchos::RCP<NewMeshGeometry> NewMeshGeometryPtr;
 
-struct ActiveEntityListEntry { // linked list to connect the active cells that share topological entities (vertices, edges, etc.)
-  unsigned cellIndex;
-  unsigned subcellOrdinal;
-  ActiveEntityListEntry* nextEntry;
-};
-
 // "cells" are geometric entities -- they do not define any kind of basis
 // "elements" are cells endowed with a (local) functional discretization
 class NewMeshCell {
+  unsigned _cellIndex;
   CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
+  vector< vector<unsigned> > _entityIndices;  // indices: [subcdim][subcord]
   vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
-  vector< vector< ActiveEntityListEntry* > > _activeEntityEntries; // outer vector indexed by dim, inner by subcellOrdinal
   
   // for parents:
   vector< Teuchos::RCP< NewMeshCell > > _children;
   RefinementPatternPtr _refPattern;
 public:
-  NewMeshCell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations) {
+  NewMeshCell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+              unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
     _cellTopo = cellTopo;
     _vertices = vertices;
     _subcellPermutations = subcellPermutations;
+    _cellIndex = cellIndex;
+    _entityIndices = entityIndices;
   }
-  const vector< unsigned > &vertices() {return _vertices;}
-  bool isParent() { return _children.size() > 0; }
-  
-  void setActiveEntityEntries(vector< vector< ActiveEntityListEntry* > > entries) {
-    _activeEntityEntries = entries;
+  unsigned cellIndex() {
+    return _cellIndex;
+  }
+
+  const vector< Teuchos::RCP< NewMeshCell > > &children() {
+    return _children;
   }
   void setChildren(vector< Teuchos::RCP< NewMeshCell > > children) {
     _children = children;
   }
-  void setRefinementPattern(RefinementPatternPtr refPattern) {
-    _refPattern = refPattern;
+  
+  unsigned entityIndex(unsigned subcdim, unsigned subcord) {
+    return _entityIndices[subcdim][subcord];
   }
+  
+  bool isParent() { return _children.size() > 0; }
+  
   RefinementPatternPtr refinementPattern() {
     return _refPattern;
   }
+  void setRefinementPattern(RefinementPatternPtr refPattern) {
+    _refPattern = refPattern;
+  }
+  
   CellTopoPtr topology() {
     return _cellTopo;
   }
+  
+  const vector< unsigned > &vertices() {return _vertices;}
 };
 
 typedef Teuchos::RCP<NewMeshCell> NewMeshCellPtr;
@@ -118,20 +127,33 @@ class NewMesh {
   // the following entity vectors are indexed on dimension of the entities
   vector< vector< set<unsigned> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1)
   vector< map< set<unsigned>, unsigned > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
-  vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering;
-  vector< map< unsigned, ActiveEntityListEntry* > > _activeEntities;
-//  vector< map< unsigned, set< pair<unsigned, unsigned> > > > _cellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
+  vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
+  vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
+  vector< set< unsigned > > _activeEntities; // see note above
   vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
+  vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
+  vector< map< unsigned, vector<unsigned> > > _parentEntities; // map from entity to its possible parents.  (Not every entity has a parent.  Eventually, we may support entities having multiple parents.  Such things may be useful in the context of anisotropic refinements.)
+  vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   
   vector< NewMeshCellPtr > _cells;
-  
+  set< unsigned > _activeCells;
+
+  set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
+  set<unsigned> activeAncestors(unsigned d, unsigned entityIndex);
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
+  unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
+  void deactivateCell(NewMeshCellPtr cell);
+  set<unsigned> descendants(unsigned d, unsigned entityIndex);
+  unsigned findConstrainingEntity(unsigned d, unsigned entityIndex);
   void addChildren(NewMeshCellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
   map<unsigned, unsigned> getVertexIndices(const FieldContainer<double> &vertices);
+  void refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
 public:
   NewMesh(NewMeshGeometryPtr meshGeometry);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
+  unsigned cellCount();
+  unsigned activeCellCount();
 };
 
 #endif

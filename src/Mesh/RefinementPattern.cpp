@@ -41,7 +41,33 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   _sideRefinementPatterns = sideRefinementPatterns;
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
-  int spaceDim = refinedNodes.dimension(2);
+  unsigned spaceDim = refinedNodes.dimension(2);
+  unsigned sideCount = _cellTopoPtr->getSideCount();
+  
+  if (spaceDim > 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != cellTopo.getSideCount()");
+  }
+  
+  unsigned sideDim = spaceDim - 1;
+
+  // we will fill some entries in _patternForSubcell repeatedly/redundantly
+  _patternForSubcell = vector< vector< RefinementPatternPtr > >(spaceDim);
+  for (unsigned d=1; d<spaceDim; d++) {
+    _patternForSubcell[d] = vector< RefinementPatternPtr >(_cellTopoPtr->getSubcellCount(d));
+  }
+  _patternForSubcell[sideDim] = vector< RefinementPatternPtr >(sideCount);
+  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+    _patternForSubcell[sideDim][sideOrdinal] = _sideRefinementPatterns[sideOrdinal];
+    for (unsigned d=1; d<sideDim; d++) {
+      shards::CellTopology sideTopo = _cellTopoPtr->getCellTopologyData(sideDim, sideOrdinal);
+      unsigned sideSubcellCount = sideTopo.getSubcellCount(d);
+      for (unsigned sideSubcellOrdinal=0; sideSubcellOrdinal<sideSubcellCount; sideSubcellOrdinal++) {
+        unsigned subcord = CamelliaCellTools::subcellOrdinalMap(*cellTopoPtr, sideDim, sideOrdinal, d, sideSubcellOrdinal);
+        _patternForSubcell[d][subcord] = _sideRefinementPatterns[sideOrdinal]->patternForSubcell(d, sideSubcellOrdinal);
+      }
+    }
+  }
+  
   vector<double> vertex(spaceDim);
   
   unsigned cellKey = cellTopoPtr->getKey();
@@ -306,6 +332,67 @@ vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSi
   return _childrenForSides;
 }
 
+void RefinementPattern::initializeAnisotropicRelationships() {
+  // quad and hex refinements
+  RefinementPatternPtr verticalCutQuad = xAnisotropicRefinementPatternQuad();
+  RefinementPatternPtr horizontalCutQuad = yAnisotropicRefinementPatternQuad();
+  RefinementPatternPtr isotropicRefinementQuad = regularRefinementPatternQuad();
+  
+  vector< RefinementPatternRecipe > quadRecipes;
+  RefinementPatternRecipe recipe;
+  vector< unsigned > initialCell; // empty to specify initial cell
+  vector< unsigned > firstCutChild0(1,0);  // 0 to pick first child
+  vector< unsigned > firstCutChild1(1,1);  // 1 to pick second child
+  
+  recipe.push_back(make_pair(verticalCutQuad,initialCell));
+  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild0));
+  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild1));
+  quadRecipes.push_back(recipe);
+  
+  recipe.clear();
+  recipe.push_back(make_pair(horizontalCutQuad,initialCell));
+  recipe.push_back(make_pair(verticalCutQuad,firstCutChild0));
+  recipe.push_back(make_pair(verticalCutQuad,firstCutChild1));
+  quadRecipes.push_back(recipe);
+  
+  recipe.clear();
+  recipe.push_back(make_pair(isotropicRefinementQuad,initialCell));
+  quadRecipes.push_back(recipe);
+  
+  verticalCutQuad->setRelatedRecipes(quadRecipes);
+  horizontalCutQuad->setRelatedRecipes(quadRecipes);
+  isotropicRefinementQuad->setRelatedRecipes(quadRecipes);
+  
+  // TODO: once we add anisotropic refinements for the hexahedron, marry them here -- uncomment the following:
+/*  RefinementPatternPtr isotropicRefinementHex = regularRefinementPatternHexahedron();
+  RefinementPatternPtr verticalCutHex = xAnisotropicRefinementPatternHexahedron();
+  RefinementPatternPtr horizontalCutHex = yAnisotropicRefinementPatternHexahedron();
+  RefinementPatternPtr depthCutHex = zAnisotropicRefinementPatternHexahedron();
+ 
+ vector< unsigned > secondCutChild00(2,0);
+ vector< unsigned > secondCutChild01(2);
+ secondCutChild01[0] = 0;
+ secondCutChild01[1] = 1;
+ vector< unsigned > secondCutChild10(2);
+ secondCutChild10[0] = 1;
+ secondCutChild10[1] = 0;
+ vector< unsigned > secondCutChild11(2);
+ secondCutChild11[0] = 1;
+ secondCutChild11[1] = 1;
+
+ 
+  vector< RefinementPatternPtr > hexRefs;
+  hexRefs.push_back(verticalCutHex);
+  hexRefs.push_back(horizontalCutHex);
+  hexRefs.push_back(depthCutHex);
+  hexRefs.push_back(isotropicRefinementHex);
+  
+  verticalCutHex->setRelatedRefinementPatterns(hexRefs);
+  horizontalCutHex->setRelatedRefinementPatterns(hexRefs);
+  depthCutHex->setRelatedRefinementPatterns(hexRefs);
+  isotropicRefinementHex->setRelatedRefinementPatterns(hexRefs);*/
+}
+
 RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
   static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
   unsigned key = cellTopoPtr->getKey();
@@ -463,6 +550,49 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
   return refPattern;
 }
 
+Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexahedron() {
+  static RefinementPatternPtr refPattern;
+  
+  if (refPattern.get() == NULL) {
+    
+    // order of the sub-elements is CCW starting at bottom left
+    unsigned spaceDim = 3;
+    
+    // most of what follows should work for arbitrary spatial dimension -- could reimplement regular quad and line refinements in terms of this
+    // (exceptions: CellTopology object, and the CamelliaCellTools::refCellNodesForTopology() call.)
+    unsigned numChildren = 1 << spaceDim; // 2^3
+    unsigned numNodesPerChild = 1 << spaceDim; // 2^3
+    FieldContainer<double> hexPoints(numChildren,numNodesPerChild,spaceDim);
+    FieldContainer<double> refHexPoints(numNodesPerChild,spaceDim);
+    Teuchos::RCP< shards::CellTopology > hexTopo = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
+    CamelliaCellTools::refCellNodesForTopology(refHexPoints, *hexTopo);
+    
+    // scale and shift ref points to be in the bottommost (in each spatial direction) corner.  xi --> (xi - 1) / 2
+    for (int nodeIndex=0; nodeIndex<numNodesPerChild; nodeIndex++) {
+      for (int d=0; d<spaceDim; d++) {
+        refHexPoints(nodeIndex,d) = (refHexPoints(nodeIndex,d) - 1) / 2;
+      }
+    }
+    
+    for (int childIndex=0; childIndex<numChildren; childIndex++) {
+      vector<double> offsets(spaceDim);
+      int childIndexShifted = childIndex;
+      for (int d=0; d<spaceDim; d++) {
+        offsets[d] = (childIndexShifted%2 == 0) ? 0.0 : 1.0;
+        childIndexShifted >>= 1;
+      }
+      for (int nodeIndex=0; nodeIndex<numNodesPerChild; nodeIndex++) {
+        for (int d=0; d<spaceDim; d++) {
+          hexPoints(childIndex,nodeIndex,d) = refHexPoints(nodeIndex,d) + offsets[d];
+        }
+      }
+    }
+    
+    refPattern = Teuchos::rcp( new RefinementPattern(hexTopo,hexPoints,vector<RefinementPatternPtr>(6,regularRefinementPatternQuad())) );
+  }
+  return refPattern;
+}
+
 // cuts a quad vertically (x-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
   static RefinementPatternPtr refPattern;
@@ -537,6 +667,22 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
   return refPattern;
 }
 
+RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsigned subcord) {
+  return _patternForSubcell[subcdim][subcord];
+}
+
 const FieldContainer<double> & RefinementPattern::refinedNodes() {
   return _nodes;
+}
+
+vector< RefinementPatternRecipe > & RefinementPattern::relatedRecipes() {
+  // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  The current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)
+  return _relatedRecipes;
+}
+void RefinementPattern::setRelatedRecipes(vector<RefinementPatternRecipe> &recipes) {
+  _relatedRecipes = recipes;
+}
+
+const vector< Teuchos::RCP<RefinementPattern> > & RefinementPattern::sideRefinementPatterns() {
+  return _sideRefinementPatterns;
 }
