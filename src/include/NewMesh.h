@@ -137,10 +137,13 @@ class NewMesh {
   
   vector< NewMeshCellPtr > _cells;
   set< unsigned > _activeCells;
-  
+
+  set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
+  set<unsigned> activeAncestors(unsigned d, unsigned entityIndex);
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(NewMeshCellPtr cell);
+  set<unsigned> descendants(unsigned d, unsigned entityIndex);
   unsigned findConstrainingEntity(unsigned d, unsigned entityIndex);
   void addChildren(NewMeshCellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
