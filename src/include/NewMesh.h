@@ -94,6 +94,13 @@ public:
   void setChildren(vector< Teuchos::RCP< NewMeshCell > > children) {
     _children = children;
   }
+  vector<unsigned> getChildIndices() {
+    vector<unsigned> indices(_children.size());
+    for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++) {
+      indices[childOrdinal] = _children[childOrdinal]->cellIndex();
+    }
+    return indices;
+  }
   
   unsigned entityIndex(unsigned subcdim, unsigned subcord) {
     return _entityIndices[subcdim][subcord];
@@ -134,9 +141,12 @@ class NewMesh {
   vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
   vector< map< unsigned, vector< pair<unsigned, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementIndex), where the refinementIndex is the index into the _childEntities[d][parentEntityIndex] vector.
   vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
+  vector< map< unsigned, unsigned > > _entityCellTopologyKeys;
   
   vector< NewMeshCellPtr > _cells;
   set< unsigned > _activeCells;
+  
+  map< unsigned, shards::CellTopology > _knownTopologies; // key -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
 
   set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
   set<unsigned> activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet);
@@ -145,16 +155,38 @@ class NewMesh {
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(NewMeshCellPtr cell);
   set<unsigned> descendants(unsigned d, unsigned entityIndex);
-  unsigned findConstrainingEntity(unsigned d, unsigned entityIndex);
+  pair< unsigned, set<unsigned> > determineEntityConstraints(unsigned d, unsigned entityIndex);
   void addChildren(NewMeshCellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
-  map<unsigned, unsigned> getVertexIndices(const FieldContainer<double> &vertices);
+  vector<unsigned> getVertexIndices(const FieldContainer<double> &vertices);
+  vector<unsigned> getVertexIndices(const vector< vector<double> > &vertices);
+  map<unsigned, unsigned> getVertexIndicesMap(const FieldContainer<double> &vertices);
+  void init(unsigned spaceDim);
+  void printVertex(unsigned vertexIndex);
+  void printVertices(set<unsigned> vertexIndices);
   void refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
+  void updateConstraintsForCells(const set<unsigned> &cellIndices);
 public:
+  NewMesh(unsigned spaceDim);
   NewMesh(NewMeshGeometryPtr meshGeometry);
+  NewMeshCellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
+  bool entityHasParent(unsigned d, unsigned entityIndex);
+  unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
+  NewMeshCellPtr getCell(unsigned cellIndex);
+  set<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
+  unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
+  unsigned getEntityCount(unsigned d);
+  unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
+  unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
+  unsigned getSpaceDim();
+  unsigned getSubEntityIndex(unsigned d, unsigned entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();
+  
+  void printEntityVertices(unsigned d, unsigned entityIndex);
 };
+
+typedef Teuchos::RCP<NewMesh> NewMeshPtr;
 
 #endif

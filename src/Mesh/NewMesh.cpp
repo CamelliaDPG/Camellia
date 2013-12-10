@@ -10,20 +10,31 @@
 
 #include "CamelliaCellTools.h"
 
-NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
+void NewMesh::init(unsigned spaceDim) {
   RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
   
-  _vertices = meshGeometry->vertices();
-  _spaceDim = _vertices[0].size();
-  
+  _spaceDim = spaceDim;
   _entities = vector< vector< set< unsigned > > >(_spaceDim);
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _activeEntities = vector< set<unsigned > >(_spaceDim);
   _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
+  _constrainedEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim); // map from constraining entity to all broken ones constrained by it.
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
+  _entityCellTopologyKeys = vector< map< unsigned, unsigned > >(_spaceDim);
+}
+
+NewMesh::NewMesh(unsigned spaceDim) {
+  init(spaceDim);
+}
+
+NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
+  unsigned spaceDim = meshGeometry->vertices()[0].size();
+
+  init(spaceDim);
+  _vertices = meshGeometry->vertices();
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
                              "length of cellTopos != length of elementVertices");
@@ -82,6 +93,12 @@ unsigned NewMesh::eldestActiveAncestor(unsigned d, unsigned entityIndex) {
   return entityIndex;
 }
 
+NewMeshCellPtr NewMesh::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
+  vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
+  unsigned cellIndex = addCell(cellTopo, vertexIndices);
+  return _cells[cellIndex];
+}
+
 unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices) {
   vector< map< unsigned, unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
@@ -117,8 +134,9 @@ unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVert
 
 unsigned NewMesh::addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
   set< unsigned > nodeSet;
-  for (int nodeIndex=0; nodeIndex<entityVertices.size(); nodeIndex++) {
-    nodeSet.insert(entityVertices[nodeIndex]);
+  nodeSet.insert(entityVertices.begin(),entityVertices.end());
+  if (nodeSet.size() != entityVertices.size()) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo.getDimension();
   unsigned entityIndex;
@@ -129,6 +147,12 @@ unsigned NewMesh::addEntity(const shards::CellTopology &entityTopo, const vector
     _knownEntities[d][nodeSet] = entityIndex;
     _canonicalEntityOrdering[d][entityIndex] = entityVertices;
     entityPermutation = 0;
+    if (_knownTopologies.find(entityTopo.getKey()) == _knownTopologies.end()) {
+      _knownTopologies[entityTopo.getKey()] = entityTopo;
+    }
+    _entityCellTopologyKeys[d][entityIndex] = entityTopo.getKey();
+//    cout << "NewMesh::addEntity: added entity of dimension " << d << " with index " << entityIndex << " and vertices:" << endl;
+//    printVertices(nodeSet);
   } else {
     // existing entity
     entityIndex = _knownEntities[d][nodeSet];
@@ -210,6 +234,7 @@ void NewMesh::deactivateCell(NewMeshCellPtr cell) {
 set<unsigned> NewMesh::descendants(unsigned d, unsigned entityIndex) {
   set<unsigned> allDescendants;
 
+  allDescendants.insert(entityIndex);
   if (_childEntities[d].find(entityIndex) != _childEntities[d].end()) {
     set<unsigned> unfollowedDescendants;
     for (unsigned i=0; i<_childEntities[d][entityIndex].size(); i++) {
@@ -225,14 +250,19 @@ set<unsigned> NewMesh::descendants(unsigned d, unsigned entityIndex) {
   return allDescendants;
 }
 
-unsigned NewMesh::findConstrainingEntity(unsigned d, unsigned entityIndex) {
-  // this method is just a proof of concept, not the way we want to do it ultimately.
-  // (we want at least to *assign* constraining entities in a method like this--we don't want to have to do this for every active entity separately.)
-  if (d==0) return entityIndex; // no constraint for vertices
+pair< unsigned, set<unsigned> > NewMesh::determineEntityConstraints(unsigned d, unsigned entityIndex) {
+  // pair.first:  index of the constraining entity.
+  // pair.second: the set of all constrained entities (does not include the constraining entity).
+  pair< unsigned, set<unsigned> > constraints;
+  if (d==0) { // no constraints for vertices
+    constraints.first = entityIndex;
+    constraints.second = set<unsigned>();
+    return constraints;
+  }
   
   unsigned ancestor = eldestActiveAncestor(d,entityIndex);
   
-  set<unsigned> markedEntities; // entities already taken care of
+  set<unsigned> markedEntities; // entities we already know about
   set<unsigned> elderDescendants = activeDescendants(d, ancestor);
   markedEntities.insert(elderDescendants.begin(), elderDescendants.end());
   
@@ -272,7 +302,58 @@ unsigned NewMesh::findConstrainingEntity(unsigned d, unsigned entityIndex) {
       parentExists = false;
     }
   }
-  return constrainingIndex;
+  constraints.first = constrainingIndex;
+  // if the constraingIndex is in the constrained set, remove it:
+  markedEntities.erase(constrainingIndex);
+  constraints.second = markedEntities;
+  return constraints;
+}
+
+bool NewMesh::entityHasParent(unsigned d, unsigned entityIndex) {
+  if (_parentEntities[d].find(entityIndex) == _parentEntities[d].end()) return false;
+  return _parentEntities[d][entityIndex].size() > 0;
+}
+
+unsigned NewMesh::getActiveCellCount(unsigned int d, unsigned int entityIndex) {
+  return _activeCellsForEntities[d][entityIndex].size();
+}
+
+NewMeshCellPtr NewMesh::getCell(unsigned cellIndex) {
+  return _cells[cellIndex];
+}
+
+unsigned NewMesh::getEntityCount(unsigned int d) {
+  return _entities[d].size();
+}
+
+unsigned NewMesh::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal) {
+  TEUCHOS_TEST_FOR_EXCEPTION(! entityHasParent(d, entityIndex), std::invalid_argument, "entity does not have parent");
+  return _parentEntities[d][entityIndex][parentOrdinal].first;
+}
+
+unsigned NewMesh::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdinalInFace) {
+  return getSubEntityIndex(2, faceIndex, 1, edgeOrdinalInFace);
+}
+
+unsigned NewMesh::getSpaceDim() {
+  return _spaceDim;
+}
+unsigned NewMesh::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
+  shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  set<unsigned> subEntityNodes;
+  unsigned nodeCount = entityTopo->getNodeCount(subEntityDim, subEntityOrdinal);
+  vector<unsigned> entityNodes = _canonicalEntityOrdering[d][entityIndex];
+  for (unsigned nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++) {
+    unsigned nodeIndexInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
+    unsigned nodeIndexInMesh = entityNodes[nodeIndexInEntity];
+    subEntityNodes.insert(nodeIndexInMesh);
+  }
+  if (_knownEntities[subEntityDim].find(subEntityNodes) == _knownEntities[d].end()) {
+    cout << "sub-entity not found with vertices:\n";
+    printVertices(subEntityNodes);
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found");
+  }
+  return _knownEntities[subEntityDim][subEntityNodes];
 }
 
 unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
@@ -315,11 +396,11 @@ unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol)
 }
 
 // key: index in vertices; value: index in _vertices
-map<unsigned, unsigned> NewMesh::getVertexIndices(const FieldContainer<double> &vertices) {
+vector<unsigned> NewMesh::getVertexIndices(const FieldContainer<double> &vertices) {
   double tol = 1e-14; // tolerance for vertex equality
   
-  map<unsigned, unsigned> localToGlobalVertexIndex;
   int numVertices = vertices.dimension(0);
+  vector<unsigned> localToGlobalVertexIndex(numVertices);
   for (int i=0; i<numVertices; i++) {
     vector<double> vertex;
     for (int d=0; d<_spaceDim; d++) {
@@ -328,6 +409,71 @@ map<unsigned, unsigned> NewMesh::getVertexIndices(const FieldContainer<double> &
     localToGlobalVertexIndex[i] = getVertexIndexAdding(vertex,tol);
   }
   return localToGlobalVertexIndex;
+}
+
+// key: index in vertices; value: index in _vertices
+map<unsigned, unsigned> NewMesh::getVertexIndicesMap(const FieldContainer<double> &vertices) {
+  map<unsigned, unsigned> vertexMap;
+  vector<unsigned> vertexVector = getVertexIndices(vertices);
+  unsigned numVertices = vertexVector.size();
+  for (unsigned i=0; i<numVertices; i++) {
+    vertexMap[i] = vertexVector[i];
+  }
+  return vertexMap;
+}
+
+vector<unsigned> NewMesh::getVertexIndices(const vector< vector<double> > &vertices) {
+  double tol = 1e-14; // tolerance for vertex equality
+  
+  int numVertices = vertices.size();
+  vector<unsigned> localToGlobalVertexIndex(numVertices);
+  for (int i=0; i<numVertices; i++) {
+    localToGlobalVertexIndex[i] = getVertexIndexAdding(vertices[i],tol);
+  }
+  return localToGlobalVertexIndex;
+}
+
+set<unsigned> NewMesh::getChildEntities(unsigned int d, unsigned int entityIndex) {
+  set<unsigned> childIndices;
+  if (d==0) return childIndices;
+  if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
+  vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];
+  for (vector< pair< RefinementPatternPtr, vector<unsigned> > >::iterator entryIt = childEntries.begin();
+       entryIt != childEntries.end(); entryIt++) {
+    childIndices.insert(entryIt->second.begin(),entryIt->second.end());
+  }
+  return childIndices;
+}
+
+unsigned NewMesh::getConstrainingEntityIndex(unsigned int d, unsigned int entityIndex) {
+  if (_constrainingEntities[d].find(entityIndex) != _constrainingEntities[d].end()) {
+    return _constrainingEntities[d][entityIndex];
+  } else {
+    return entityIndex;
+  }
+}
+
+void NewMesh::printVertex(unsigned int vertexIndex) {
+  cout << "vertex " << vertexIndex << ": (";
+  for (unsigned d=0; d<_spaceDim; d++) {
+    cout << _vertices[vertexIndex][d];
+    if (d != _spaceDim-1) cout << ",";
+  }
+  cout << ")\n";
+}
+
+void NewMesh::printVertices(set<unsigned int> vertexIndices) {
+  for (set<unsigned>::iterator indexIt=vertexIndices.begin(); indexIt!=vertexIndices.end(); indexIt++) {
+    unsigned vertexIndex = *indexIt;
+    printVertex(vertexIndex);
+  }
+}
+
+void NewMesh::printEntityVertices(unsigned int d, unsigned int entityIndex) {
+  vector<unsigned> entityVertices = _canonicalEntityOrdering[d][entityIndex];
+  for (vector<unsigned>::iterator vertexIt=entityVertices.begin(); vertexIt !=entityVertices.end(); vertexIt++) {
+    printVertex(*vertexIt);
+  }
 }
 
 void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
@@ -343,7 +489,7 @@ void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
   }
   
   FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
-  map<unsigned, unsigned> localToGlobalVertexIndex = getVertexIndices(vertices); // key: index in vertices; value: index in _vertices
+  map<unsigned, unsigned> localToGlobalVertexIndex = getVertexIndicesMap(vertices); // key: index in vertices; value: index in _vertices
   
   // get the children, as vectors of vertex indices:
   vector< vector<unsigned> > childVertices = refPattern->children(localToGlobalVertexIndex);
@@ -357,6 +503,12 @@ void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
   
   addChildren(cell, childTopos, childVertices);
   deactivateCell(cell);
+  
+  set<unsigned> cellsAffected;
+  cellsAffected.insert(cellIndex);
+  vector<unsigned> childIndices = cell->getChildIndices();
+  cellsAffected.insert(childIndices.begin(), childIndices.end());
+  updateConstraintsForCells(cellsAffected);
 }
 
 void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPattern) {
@@ -364,7 +516,7 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
   
   FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
   
-  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(0); vertexIndex++) {
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++) {
     for (int d=0; d<_spaceDim; d++) {
       cellNodes(0,vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
     }
@@ -389,6 +541,8 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
       unsigned childCount = refinedNodes.dimension(0);
       if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
       
+//      cout << "Refined nodes:\n" << refinedNodes;
+      
       vector<unsigned> parentIndices;
       unsigned parentIndex = cell->entityIndex(d, subcord);
       // if we ever allow multiple parentage, then we'll need to record things differently in both _childEntities and _parentEntities
@@ -403,32 +557,67 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
               nodesOnSubcell(nodeIndex,dimIndex) = refinedNodes(childIndex,nodeIndex,dimIndex);
             }
           }
+//          cout << "nodesOnSubcell:\n" << nodesOnSubcell;
           FieldContainer<double> nodesOnRefCell(nodeCount,_spaceDim);
           CellTools<double>::mapToReferenceSubcell(nodesOnRefCell, nodesOnSubcell, d, subcord, *cellTopo);
+//          cout << "nodesOnRefCell:\n" << nodesOnRefCell;
           FieldContainer<double> physicalNodes(1,nodeCount,_spaceDim);
           // map to physical space:
           CellTools<double>::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, *cellTopo);
+//          cout << "physicalNodes:\n" << physicalNodes;
+          
+//          cout << "cellNodes:\n" << cellNodes;
           
           // add vertices as necessary and get their indices
           physicalNodes.resize(nodeCount,_spaceDim);
-          map<unsigned, unsigned> localToGlobalVertexIndex = getVertexIndices(physicalNodes); // key: index in physicalNodes; value: index in _vertices
-          // could save ourselves the following few lines if getVertexIndices return a vector, which would be sensible
-          vector<unsigned> childEntityVertices(nodeCount);
-          for (unsigned node=0; node<nodeCount; node++) {
-            childEntityVertices[node] = localToGlobalVertexIndex[node];
-          }
+          vector<unsigned> childEntityVertices = getVertexIndices(physicalNodes); // key: index in physicalNodes; value: index in _vertices
           
           unsigned entityPermutation;
           shards::CellTopology childTopo = cellTopo->getCellTopologyData(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
+//          cout << "for d=" << d << ", entity index " << childEntityIndex << " is child of " << parentIndex << endl;
           _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
           childEntityIndices[childIndex] = childEntityIndex;
           set< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
         }
         _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
-
       }
     }
   }
-  
+}
+
+void NewMesh::updateConstraintsForCells(const set<unsigned> &cellIndices) {
+  for (unsigned d=1; d<_spaceDim; d++) {
+    set<unsigned> entitiesEncountered;
+    map< unsigned, set<unsigned > > constraints;
+    for (set<unsigned>::iterator cellIt=cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+      NewMeshCellPtr cell = _cells[*cellIt];
+      unsigned numEntities = cell->topology()->getSubcellCount(d);
+      for (unsigned entityOrdinal=0; entityOrdinal < numEntities; entityOrdinal++) {
+        unsigned entityIndex = cell->entityIndex(d, entityOrdinal);
+        if (getActiveCellCount(d, entityIndex) > 0) {
+          if (entitiesEncountered.find(entityIndex) == entitiesEncountered.end()) {
+            pair<unsigned, set<unsigned> > constraint = determineEntityConstraints(d, entityIndex);
+            constraints.insert(constraint);
+            entitiesEncountered.insert(constraint.second.begin(), constraint.second.end());
+            entitiesEncountered.insert(constraint.first);
+          }
+        }
+      }
+    }
+    for (map< unsigned, set<unsigned > >::iterator constraintIt = constraints.begin();
+         constraintIt != constraints.end(); constraintIt++) {
+      unsigned constrainingEntity = constraintIt->first;
+      set<unsigned> *constrainedEntities = &(constraintIt->second);
+      _constrainingEntities[d].erase(constrainingEntity); // if prior to update, this entity was constrained, clear that out
+      _constrainedEntities[d][constrainingEntity] = *constrainedEntities;
+      for (set<unsigned>::iterator constrainedIt=constrainedEntities->begin(); constrainedIt != constrainedEntities->end(); constrainedIt++) {
+        unsigned constrainedEntityIndex = *constrainedIt;
+        // if prior to update, this entity functioned as a constraint, clear that out
+        _constrainedEntities[d].erase(constrainedEntityIndex);
+        _constrainingEntities[d][constrainedEntityIndex] = constrainingEntity;
+//        cout << "for d=" << d << ", entity " << constrainedEntityIndex << " is constrained by " << constrainingEntity << endl;
+      }
+    }
+  }
 }

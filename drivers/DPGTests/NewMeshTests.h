@@ -20,6 +20,8 @@ public:
   bool test1DMesh();
   bool test2DMesh();
   bool test3DMesh();
+  
+  bool testEntityConstraints();
 };
 
 #endif
