@@ -132,14 +132,15 @@ class NewMesh {
   vector< set< unsigned > > _activeEntities; // see note above
   vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
   vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
-  vector< map< unsigned, vector<unsigned> > > _parentEntities; // map from entity to its possible parents.  (Not every entity has a parent.  Eventually, we may support entities having multiple parents.  Such things may be useful in the context of anisotropic refinements.)
+  vector< map< unsigned, vector< pair<unsigned, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementIndex), where the refinementIndex is the index into the _childEntities[d][parentEntityIndex] vector.
   vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   
   vector< NewMeshCellPtr > _cells;
   set< unsigned > _activeCells;
 
   set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
-  set<unsigned> activeAncestors(unsigned d, unsigned entityIndex);
+  set<unsigned> activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet);
+  unsigned eldestActiveAncestor(unsigned d, unsigned entityIndex);
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(NewMeshCellPtr cell);

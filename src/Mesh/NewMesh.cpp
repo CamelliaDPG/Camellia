@@ -22,7 +22,7 @@ NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
   _activeEntities = vector< set<unsigned > >(_spaceDim);
   _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
-  _parentEntities = vector< map< unsigned, vector<unsigned> > >(_spaceDim); // map to possible parents
+  _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
   _childEntities = vector< map< unsigned, vector< pair<RefinementPatternPtr, vector<unsigned> > > > >(_spaceDim);
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
@@ -52,25 +52,34 @@ set<unsigned> NewMesh::activeDescendants(unsigned d, unsigned entityIndex) {
   return filteredDescendants;
 }
 
-set<unsigned> NewMesh::activeAncestors(unsigned d, unsigned entityIndex) {
-  set<unsigned> ancestors;
+set<unsigned> NewMesh::activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet) {
+  set<unsigned> filteredDescendants;
   
+  set<unsigned> activeDesc = activeDescendants(d, entityIndex);
+  for (set<unsigned>::iterator myDesc=activeDesc.begin(); myDesc !=activeDesc.end(); myDesc++) {
+    if (excludedSet.find(*myDesc)==excludedSet.end()) {
+      filteredDescendants.insert(*myDesc);
+    }
+  }
+  return filteredDescendants;
+}
+
+unsigned NewMesh::eldestActiveAncestor(unsigned d, unsigned entityIndex) {
   bool hasActiveParent = false;
   while (hasActiveParent) {
-    map< unsigned, vector<unsigned> >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
+    map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
     if (parentEntityIt != _parentEntities[d].end()) {
-      vector<unsigned> possibleParents = parentEntityIt->second;
-      for (vector<unsigned>::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
-        unsigned possibleParentIndex = *possibleParentIt;
+      vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
+      for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
+        unsigned possibleParentIndex = possibleParentIt->first;
         if (_activeEntities[d].find(possibleParentIndex) != _activeEntities[d].end()) {
           hasActiveParent = true;
-          ancestors.insert(possibleParentIndex);
-          entityIndex = possibleParentIndex; // the new entityIndex will be the last found active parent (which is the finest one)
+          entityIndex = possibleParentIndex; // the new entityIndex will be the last found active parent (which is the coarsest/eldest one)
         }
       }
     }
   }
-  return ancestors;
+  return entityIndex;
 }
 
 unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices) {
@@ -175,11 +184,11 @@ void NewMesh::deactivateCell(NewMeshCellPtr cell) {
         // That's what's implemented below, but I don't think that's quite the right rule.  Is it?
 
         bool hasActiveParent = false;
-        map< unsigned, vector<unsigned> >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
+        map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
         if (parentEntityIt != _parentEntities[d].end()) {
-          vector<unsigned> possibleParents = parentEntityIt->second;
-          for (vector<unsigned>::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
-            unsigned possibleParentIndex = *possibleParentIt;
+          vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
+          for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
+            unsigned possibleParentIndex = possibleParentIt->first;
             if (_activeEntities[d].find(possibleParentIndex) != _activeEntities[d].end()) {
               hasActiveParent = true;
             }
@@ -217,9 +226,53 @@ set<unsigned> NewMesh::descendants(unsigned d, unsigned entityIndex) {
 }
 
 unsigned NewMesh::findConstrainingEntity(unsigned d, unsigned entityIndex) {
+  // this method is just a proof of concept, not the way we want to do it ultimately.
+  // (we want at least to *assign* constraining entities in a method like this--we don't want to have to do this for every active entity separately.)
   if (d==0) return entityIndex; // no constraint for vertices
   
-  // TODO implement this...
+  unsigned ancestor = eldestActiveAncestor(d,entityIndex);
+  
+  set<unsigned> markedEntities; // entities already taken care of
+  set<unsigned> elderDescendants = activeDescendants(d, ancestor);
+  markedEntities.insert(elderDescendants.begin(), elderDescendants.end());
+  
+  unsigned constrainingIndex = ancestor;
+  
+  bool parentExists = true;
+  while (parentExists) {
+    map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentsEntry = _parentEntities[d].find(ancestor);
+    if (parentsEntry != _parentEntities[d].end()) {
+      vector< pair<unsigned,unsigned> > parents = parentsEntry->second;
+      for (vector< pair<unsigned,unsigned> >::iterator parentIt = parents.begin(); parentIt != parents.end(); parentIt++) {
+        unsigned parentEntityIndex = parentIt->first;
+        unsigned refinementIndex = parentIt->second;
+        vector< pair< RefinementPatternPtr, vector<unsigned> > > refinements = _childEntities[d][parentEntityIndex];
+        bool parentHasAlternateChildren = false;
+        for (unsigned refIndex=0; refIndex<refinements.size(); refIndex++) {
+          if (refIndex != refinementIndex) {
+            vector<unsigned> children = refinements[refIndex].second;
+            for (unsigned childOrdinal=0; childOrdinal<children.size(); childOrdinal++) {
+              unsigned childIndex = children[childOrdinal];
+              set<unsigned> additionalConstrainedEntities = activeDescendantsNotInSet(d, childIndex, markedEntities);
+              if (additionalConstrainedEntities.size() > 0) {
+                parentHasAlternateChildren = true;
+                markedEntities.insert(additionalConstrainedEntities.begin(),additionalConstrainedEntities.end());
+              }
+            }
+          }
+        }
+        if (parentHasAlternateChildren) {
+          // parent is the new constrainingIndex
+          constrainingIndex = parentEntityIndex;
+        }
+        ancestor = parentEntityIndex; // this will end up meaning that by the time we look up in _parentEntities again, we're pointing to the coarsest of the possible parents.  I believe that's correct...
+      }
+    }
+    else {
+      parentExists = false;
+    }
+  }
+  return constrainingIndex;
 }
 
 unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
@@ -368,7 +421,7 @@ void NewMesh::refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPa
           unsigned entityPermutation;
           shards::CellTopology childTopo = cellTopo->getCellTopologyData(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
-          _parentEntities[d][childEntityIndex] = vector<unsigned>(1, parentIndex); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
+          _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
           childEntityIndices[childIndex] = childEntityIndex;
           set< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
         }
