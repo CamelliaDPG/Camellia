@@ -172,9 +172,10 @@ positive-difinite DPG system into a saddlepoint problem.
 The discontinuous Petrov-Galerkin (DPG) method with optimal test functions has
 been under active development for convection-diffusion type systems
 \cite{DPG1, DPG2, DPG3, DPG5, DemkowiczHeuer, ChanHeuerThanhDemkowicz2012,
-MoroNguyenPeraire11}. In this paper, we develop a theory for the locally conservative
-formulation of DPG for convection-diffusion type equations and supplement this
-with extensive numerical results.
+MoroNguyenPeraire11}. In this paper, we develop a theory for the locally
+conservative formulation of DPG for convection-diffusion type equations
+(including Burgers' Equation and Stokes flow) and supplement this with
+extensive numerical results.
 
 \subsection{Importance of Local Conservation}
 Locally conservative methods hold a special place for numerical analysts in
@@ -201,15 +202,15 @@ The discontinuous Petrov-Galerkin finite element method has been described as
 least squares finite elements with a twist. The key difference is that least
 squares methods seek to minimize the residual of the solution in the $L^2$
 norm, while DPG seeks the minimization in a dual norm realized through the
-inverse Riesz map. Exact mass conservation has been an issue that has plagued
-least squares finite elements for a long time. Several approaches have been
+inverse Riesz map. Exact mass conservation has been an issue that has long plagued
+least squares finite elements. Several approaches have been
 used to try to adress this. Bochev \etal\cite{Bochev2010} accomplish local
 conservation by using a pointwise divergence free velocity space in the Stokes
 formulation.  Chang and Nelson\cite{ChangNelson1997} developed the
 \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
-equations with a Lagrange multiplier explicitly enforcing mass conservation
+equations with Lagrange multipliers explicitly enforcing mass conservation
 element-wise. Our conservative formulation of DPG takes a similar approach and
-both methods share similar negative of transforming a minimization method to a
+both methods similarly share the disadvantage of transforming a minimization method to a
 saddle-point problem. In the interest of crediting Chang and Nelson's
 restricted LSFEM, we call the following locally conservative DPG method the
 restricted DPG method (RDPG).
@@ -266,7 +267,7 @@ test function. Therefore DPG uses a discontinuous test basis which makes each
 solve element-local and much more computationally tractable. Of course,
 \eqnref{optimaltestproblem} still requires the inversion of the
 infinite-dimensional Riesz map, but approximating $V$ by a finite
-dimensional $V_h$ which is of a higher polynomial degree than $U_h$ (hence
+dimensional space, $V_h$, which is of a higher polynomial degree than $U_h$ (hence
 ``enriched space'') works well in practice.
 
 No assumptions have been made so far on the definition of the inner product on
@@ -325,7 +326,7 @@ order equations:
 \div(\bs\beta u-\bs\sigma)&=f\\
 \frac{1}{\epsilon}\bs\sigma-\grad u&=\bs0\,.
 \end{align*}
-If we then multiply the top equation by some scalar test function $v$ and the
+If we then multiply the first equation by some scalar test function $v$ and the
 bottom equation by some vector-valued test function $\btau$, we can integrate by
 parts over each element $K$:
 \begin{equation}
@@ -340,7 +341,7 @@ u-\bfsigma)\cdot\mathbf{n},v)_{\partial K}&=(f,v)_K\\
 The discontinuous Petrov-Galerkin method refers to the fact that we are using
 discontinuous optimal test functions that come from a space differing from the
 trial space. It does not specify our choice of trial space. Nevertheless, many
-considerations of DPG in the literature (convection-diffusion \cite{DPG6},
+versions of DPG in the literature (convection-diffusion \cite{DPG6},
 linear elasticity \cite{BramwellDemkowiczGopalakrishnanQiu11}, linear
 acoustics \cite{DemkowiczGopalakrishnanMugaZitelli12}, Stokes
 \cite{DPGStokes}) associate DPG with the so-called ``ultra-weak formulation.''
@@ -545,7 +546,7 @@ function
 \end{equation}
 Note that $\text{div} \bfpsi_h = \text{div} \bfpsi = \lambda_K$ in element $K$.
 
-Classical $h$-interpolation interpolation error estimate for the lowest error
+Classical $h$-interpolation interpolation error estimates for the lowest error
 Raviart-Thomas elements and continuity of operator $R$ imply the stability estimate:
 \begin{equation}
 \begin{array}{lll}
@@ -567,10 +568,11 @@ Let $\hat{t}$ be now the trace of $\bfpsi_h$. We have then,
 \end{equation}
 where $C$ is the constant from stability estimate~(\ref{eq:stab}).
 
-Notice that we have considered traces of lowest order Raviart-Thomas elements for the
-discretization of flux $\hat{t}$. The inf-sup condition for the lowest order RT spaces implies
-automatically the analogous condition for elements of arbitrary order; increasing
-space $U$ only makes the discrete inf-sup constant bigger.
+Notice that we have considered traces of lowest order Raviart-Thomas elements
+for the discretization of flux $\hat{t}$. The inf-sup condition for the lowest
+order RT spaces implies automatically the analogous condition for elements of
+arbitrary order; increasing the dimension of space $U$ only makes the discrete
+inf-sup constant bigger.
 
 
 
@@ -769,7 +771,7 @@ of the form
 \[
 u = \sum_{n=0} x^{n+\frac{1}{2}} \sin\LRp{\LRp{n+\frac{1}{2}}\theta}.
 \]
-Note that even in the lowest-order term, the gradient of $u$ displays a
+Note that in the lowest-order term, the gradient of $u$ displays a
 singularity at $r = 0$. It is well known that, for smooth boundary data,
 solutions to Laplace’s equation can be decomposed into the linear combination
 of smooth and singular contributions; the above analysis implies that, when
@@ -1148,7 +1150,7 @@ $\int_K\hat\bfu\cdot\mathbf{n}=0$. Results follow in Sections
 In \ref{sec:problemDescriptions} we define each numerical experiment, and in
 \ref{sec:problemAnalysis} we discuss the solution properties in general. We
 solve with second order field variables and flux ($u$, $\bfsigma$, and $\hat
-t$), third order traces ($\hat t$), and fifth order test functions ($v$ and
+t$), third order traces ($\hat u$), and fifth order test functions ($v$ and
 $\btau$).
 
 We measure flux imbalance by looping over each element in the mesh and
@@ -1314,15 +1316,15 @@ of boundary edges to 1 at corners. We don't enforce an outflow boundary.
 \end{figure}
 
 \subsubsection{Wedge Problem}
-We devised this problem to examine some of the issues we were having blow up
-of the solution under the robust test norm. The domain is a rectangle
-$[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom edges with
-the origin at $(0,0)$ is removed. The convection vector $\bbeta=(1,0)^T$,
-$\epsilon=10^{-1}$, and we apply boundary conditions $\hat t=0$ on the left
-inflow edge, $\hat u=0$ on the top edge, $\bbeta\cdot\mathbf{n}\cdot\hat
-u-\hat t=\sigma_n=0$ on the right outflow edge, $\hat u=1$ on the leading edge
-of the wedge, and $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge
-of the wedge.
+We devised this problem to examine some of the issues we were having with the
+singularity in the solution under the robust test norm. The domain is a
+rectangle $[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom
+edges with the origin at $(0,0)$ is removed. The convection vector
+$\bbeta=(1,0)^T$, $\epsilon=10^{-1}$, and we apply boundary conditions $\hat
+t=0$ on the left inflow edge, $\hat u=0$ on the top edge,
+$\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the right outflow
+edge, $\hat u=1$ on the leading edge of the wedge, and $\hat
+t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge of the wedge.
 
 \begin{figure}[p]
 \centering
@@ -1526,7 +1528,7 @@ challenging.
 We measure mass loss much more directly in these two Stokes problems. Because
 fluid enters and leaves the domain only through the inlet and outlet
 boundaries, we should be able to integrate the mass flux over any
-cross-section of the mesh and get the same value. Unfortunately, it's not
+cross-section of the mesh and get the same value. Unfortunately, it is not
 mathematically kosher to take line integrals of our field variables which only
 live in $L^2$. We can, however, integrate the trace and flux variables over element boundaries.
 This carries the unfortunate limitation that we can only measure mass loss
