@@ -165,7 +165,7 @@ experiments showing that the method is indeed locally conservative. We also
 show that standard DPG, while not guaranteed to be conservative, is nearly
 conservative for many of the benchmarks considered. The new method preserves many of
 the attractive features of DPG, but turns the normally symmetric
-positive-difinite DPG system into a saddlepoint problem.
+positive-definite DPG system into a saddle-point problem.
 \end{abstract}
 
 \section{Introduction}
@@ -218,7 +218,7 @@ restricted DPG method (RDPG).
 \subsection{DPG is a Minimum Residual Method}
 Roberts \etal presents a brief history and derivation of DPG with optimal test functions in
 \cite{DPGStokes}. We follow his derivation of the standard DPG method as a
-minumum residual method. Let $U$ be the trial Hilbert space and $V$ the test
+minimum residual method. Let $U$ be the trial Hilbert space and $V$ the test
 Hilbert space for a well-posed variational problem $b(u,v)=l(v)$. In operator
 form this is $Bu=l$, where $B:U\rightarrow V'$ and $\LRa{Bu,v}=b(u,v)$. We seek to minimize the
 residual for the discrete space $U_h\subset U$:
@@ -773,10 +773,10 @@ u = \sum_{n=0} x^{n+\frac{1}{2}} \sin\LRp{\LRp{n+\frac{1}{2}}\theta}.
 \]
 Note that in the lowest-order term, the gradient of $u$ displays a
 singularity at $r = 0$. It is well known that, for smooth boundary data,
-solutions to Laplace’s equation can be decomposed into the linear combination
+solutions to Laplace's equation can be decomposed into the linear combination
 of smooth and singular contributions; the above analysis implies that, when
 boundary conditions change from Dirichlet to Neumann on the half-plane, the
-Laplace’s equation will always develop a singularity in the stresses.
+Laplace's equation will always develop a singularity in the stresses.
 
 Consider now Laplace's equation $\del u = f$ on the box domain $\Omega =
 [0,1]^2$ with boundary conditions
@@ -968,12 +968,12 @@ future.
 \end{figure}
 
 Figure~\ref{fig:newNorm} shows the solution for $\epsilon = .01$, where the
-diffusion scale is both underresolved and resolved by $h$-adaptivity.  In both
+diffusion scale is both under-resolved and resolved by $h$-adaptivity.  In both
 cases, there are no oscillations near the plate tip --
 Figure~\ref{fig:newNormZoom} shows a zoomed image of the solution $u$ at the
 point $(.5,0)$.  The stress is resolved similarly to the previous case;
 however, the solution $u$ does not display spurious oscillations in either the
-underresolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
+under-resolved or resolved cases.  Figure~\ref{fig:newNormSmallEps} displays
 the same quantities, but for $\epsilon = 10^{-4}$, in order to demonstrate
 that the new test norm removes spurious oscillations in $u$ (in the presence
 of singularities in $\bfsigma$) independently of $\epsilon$.
@@ -1087,7 +1087,7 @@ For the following problems, we just use the graph norm for the local problems.
 \subsection{Inviscid Burgers' Equation}
 We include the inviscid Burgers' equation in our suite of tests because, being
 a nonlinear hyperbolic conservation law, it
-falls under the purvue of the Lax-Wendroff theorem.
+falls under the scope of the Lax-Wendroff theorem. %replaced purvue with purview, but I think scope might be more easily understood -JC
 The inviscid Burger's equation is
 \[
 \frac{\partial u}{\partial t}+u\frac{\partial u}{\partial x}=f\,.
@@ -1316,7 +1316,7 @@ of boundary edges to 1 at corners. We don't enforce an outflow boundary.
 \end{figure}
 
 \subsubsection{Wedge Problem}
-We devised this problem to examine some of the issues we were having with the
+We devised this problem to examine the issues we were having with the
 singularity in the solution under the robust test norm. The domain is a
 rectangle $[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom
 edges with the origin at $(0,0)$ is removed. The convection vector
@@ -1529,7 +1529,8 @@ We measure mass loss much more directly in these two Stokes problems. Because
 fluid enters and leaves the domain only through the inlet and outlet
 boundaries, we should be able to integrate the mass flux over any
 cross-section of the mesh and get the same value. Unfortunately, it is not
-mathematically kosher to take line integrals of our field variables which only
+%mathematically kosher to take line integrals of our field variables which only
+mathematically well-defined to take line integrals of our field variables which only
 live in $L^2$. We can, however, integrate the trace and flux variables over element boundaries.
 This carries the unfortunate limitation that we can only measure mass loss
 where there is a clear vertical mesh line. We therefore pick integration lines
@@ -1754,7 +1755,7 @@ test functions.
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
 \subsubsection{Convection-Diffusion Results}
 % Solution quality
-The general trend we see looking at the results is that the solution quality
+The general trend we observe from the results is that the solution quality
 of the standard and restricted formulations is nearly identical once
 sufficiently resolved.
 
@@ -1775,20 +1776,21 @@ It is clear when comparing the refinement patterns that the two methods appear
 to calculate slightly different error representation functions (which
 determine which elements to adaptively refine). Standard DPG minimizes the
 error in the energy norm, but the Lagrange multipliers in the restricted
-formulation shift the solution slightly. So we should see somewhat higher
+formulation shift the solution slightly, so we should see somewhat higher
 error and different elements will get chosen for refinement. The choice of
 test norm also plays into this calculation of the error representation
 function. As discussed earlier, the restricted formulation allows us to
 throw away the $L^2$ term on $v$. The inclusion of this term required certain
 assumptions on $\bbeta$ \cite{ChanHeuerThanhDemkowicz2012} that break down for
-the vortex problem. Here we see the standard method needlessly refines
+the vortex problem, where $\snorm{\bbeta}\rightarrow 0$ in the center of the domain. 
+Here, we see the standard method needlessly refines
 in the center of the domain where the solution is constant. The restricted
 scheme is more discerning about refinements and focuses them where
 solution features are changing. In general, though, both methods appear to
 follow very similar refinement patterns.
 
 % Mass conservation
-It shouldn't come as a surprise that the standard and restricted
+It should not come as a surprise that the standard and restricted
 solutions match each other so closely. The restricted formulation
 enforces local conservation more strictly, but if we examine the flux
 imbalance plots, the standard DPG formulation is nearly conservative on its
@@ -1800,13 +1802,13 @@ accruement of numerical error.
 
 \subsubsection{Burgers' Results}
 Standard and restricted DPG perform nearly identically for the
-inviscid Burgers' problem. It's obvious that the Lax-Wendroff condition of
+inviscid Burgers' problem. It is obvious that the Lax-Wendroff condition of
 local conservation is a sufficient, but not necessary condition for numerical
 solutions to hyperbolic conservation laws. We see the same behavior with the
 flux imbalance plots that was so common with convection-diffusion.
 
 \subsubsection{Stokes Results}
-The two Stokes problems are the first ones we encounter that really stress the local
+The two Stokes problems are the first ones we encounter that stress the local
 conservation property of standard DPG. With a cylinder radius of $0.6$,
 standard DPG loses nearly 30\% of the mass post-cylinder, but quickly recovers
 most of that with further refinement. As we increase the cylinder radius to
@@ -1829,21 +1831,21 @@ nonconservative solution severely underpredicts the peak. With the $r=0.9$
 cylinder, this problem is only exacerbated. After just one adaptive
 refinement, the conservative solution nails the peak velocity. The
 nonconservative solution is completely useless at this point. We see the same
-thing with the backward facing step problem. The conservative solution is
-great on the coarsest mesh, while standard DPG needs a lot more resolution
-before it even starts to look right.
+thing with the backward facing step problem. The conservative solution preserves
+qualitative features even on the coarsest mesh, while standard DPG requires far higher resolution
+to achieve a similar solution. 
 
 \section{Conclusions}
-We've developed a locally conservative formulation of DPG by leveraging
+We have developed a locally conservative formulation of DPG by leveraging
 Lagrange multipliers. While the formulation is provably convergent and robust, it does
-increase the number of unkowns in the system and changes the structure from
-symmetric positive-definite to a saddlepoint problem. Numerical results
+increase the number of unknowns in the system and changes the structure from
+symmetric positive-definite to a saddle-point problem. Numerical results
 indicate that the method delivers what it promises with local flux imbalances
 hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
 with refinements. For the Stokes problems, standard DPG suffered similar mass
 loss as standard least squares on coarse meshes, but made up the lost mass with further
-resolution. On problems where local conservation was really stressed,
+resolution. For problems where local conservation was stressed,
 restricted DPG was able to deliver reasonable solutions with much less
 resolution than standard DPG.
 Probably the most encouraging result of these experiments is
