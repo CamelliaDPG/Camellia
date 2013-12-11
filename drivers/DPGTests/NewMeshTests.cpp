@@ -402,6 +402,11 @@ bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigne
     } else {
       if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
         cout << "Unexpected entity constraint is imposed in mesh.\n";
+        cout << "Entity " << entityIndex << " unexpectedly constrained by entity " << constrainingEntityIndex << endl;
+        cout << "Entity " << entityIndex << " vertices:\n";
+        mesh->printEntityVertices(entityDim, entityIndex);
+        cout << "Entity " << constrainingEntityIndex << " vertices:\n";
+        mesh->printEntityVertices(entityDim, constrainingEntityIndex);
         success = false;
       } else {
         unsigned expectedConstrainingEntity = expectedConstraints[entityIndex];
@@ -702,6 +707,7 @@ bool NewMeshTests::testEntityConstraints() {
     edgeChildren2D.insert(edgeConstraint->first);
     unsigned cellIndex = mesh2D->getActiveCellIndices(edgeDim, edgeConstraint->first).begin()->first;
     cellsForEdgeChildren2D.insert(cellIndex);
+    cout << "cellsForEdgeChildren2D: " << cellIndex << endl;
   }
   
   // one of these has (1,0) as one of its vertices.  Let's figure out which one:
@@ -712,8 +718,13 @@ bool NewMeshTests::testEntityConstraints() {
   }
   
   set< pair<unsigned,unsigned> > cellsForVertex = mesh2D->getActiveCellIndices(vertexDim, vertexIndex);
+  if (cellsForVertex.size() != 2) {
+    cout << "cellsForVertex should have 2 entries; has " << cellsForVertex.size() << endl;
+    success = false;
+  }
   unsigned childCellForVertex, childCellConstrainedEdge;
   for (set< pair<unsigned,unsigned> >::iterator cellIt=cellsForVertex.begin(); cellIt != cellsForVertex.end(); cellIt++) {
+    cout << "cellsForVertex: " << cellIt->first << endl;
     if ( cellsForEdgeChildren2D.find( cellIt->first ) != cellsForEdgeChildren2D.end() ) {
       // found match
       childCellForVertex = cellIt->first;

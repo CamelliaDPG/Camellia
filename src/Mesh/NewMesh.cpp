@@ -110,11 +110,15 @@ unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVert
     for (int j=0; j<entityCount; j++) {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
       unsigned entityIndex, entityPermutation;
-      int entityNodeCount = cellTopo->getNodeCount(d, j);
       vector< unsigned > nodes;
-      for (int node=0; node<entityNodeCount; node++) {
-        unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
-        nodes.push_back(cellVertices[nodeIndexInCell]);
+      if (d != 0) {
+        int entityNodeCount = cellTopo->getNodeCount(d, j);
+        for (int node=0; node<entityNodeCount; node++) {
+          unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
+          nodes.push_back(cellVertices[nodeIndexInCell]);
+        }
+      } else {
+        nodes.push_back(cellVertices[j]);
       }
       
       entityIndex = addEntity(cellTopo->getCellTopologyData(d, j), nodes, entityPermutation);
@@ -184,9 +188,13 @@ void NewMesh::deactivateCell(NewMeshCellPtr cell) {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
       int entityNodeCount = cellTopo->getNodeCount(d, j);
       set< unsigned > nodeSet;
-      for (int node=0; node<entityNodeCount; node++) {
-        unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
-        nodeSet.insert(cell->vertices()[nodeIndexInCell]);
+      if (d != 0) {
+        for (int node=0; node<entityNodeCount; node++) {
+          unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
+          nodeSet.insert(cell->vertices()[nodeIndexInCell]);
+        }
+      } else {
+        nodeSet.insert(cell->vertices()[j]);
       }
       
       map< set<unsigned>, unsigned >::iterator knownEntry = _knownEntities[d].find(nodeSet);
