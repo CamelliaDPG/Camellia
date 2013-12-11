@@ -383,6 +383,38 @@ void printMeshInfo(NewMeshPtr mesh) {
   }
 }
 
+bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints) {
+  bool success = true;
+  unsigned entityCount = mesh->getEntityCount(entityDim);
+  for (unsigned entityIndex=0; entityIndex<entityCount; entityIndex++) {
+    unsigned constrainingEntityIndex = mesh->getConstrainingEntityIndex(entityDim, entityIndex);
+    if (constrainingEntityIndex==entityIndex) {
+      // then we should expect not to have an entry in expectedConstraints:
+      if (expectedConstraints.find(entityIndex) != expectedConstraints.end()) {
+        cout << "Expected entity constraint is not imposed in mesh.\n";
+        cout << "Expected entity " << entityIndex << " to be constrained by entity " << expectedConstraints[entityIndex] << endl;
+        cout << "Entity " << entityIndex << " vertices:\n";
+        mesh->printEntityVertices(entityDim, entityIndex);
+        cout << "Entity " << expectedConstraints[entityIndex] << " vertices:\n";
+        mesh->printEntityVertices(entityDim, expectedConstraints[entityIndex]);
+        success = false;
+      }
+    } else {
+      if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
+        cout << "Unexpected entity constraint is imposed in mesh.\n";
+        success = false;
+      } else {
+        unsigned expectedConstrainingEntity = expectedConstraints[entityIndex];
+        if (expectedConstrainingEntity != constrainingEntityIndex) {
+          cout << "The constraining entity is not the expected one in mesh.\n";
+          success = false;
+        }
+      }
+    }
+  }
+  return success;
+}
+
 bool NewMeshTests::testEntityConstraints() {
   bool success = true;
   
@@ -475,8 +507,9 @@ bool NewMeshTests::testEntityConstraints() {
   }
   
   // now, make a single refinement in each mesh:
-  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad());
-  mesh3D->refineCell(3, RefinementPattern::regularRefinementPatternHexahedron());
+  unsigned cellToRefine2D = 0, cellToRefine3D = 3;
+  mesh2D->refineCell(cellToRefine2D, RefinementPattern::regularRefinementPatternQuad());
+  mesh3D->refineCell(cellToRefine3D, RefinementPattern::regularRefinementPatternHexahedron());
   
 //  printMeshInfo(mesh2D);
   
@@ -660,6 +693,56 @@ bool NewMeshTests::testEntityConstraints() {
       }
     }
   }
+  
+  // now, we refine one of the children of the refined cells in each mesh, to produce a 2-level constraint
+  set<unsigned> edgeChildren2D;
+  set<unsigned> cellsForEdgeChildren2D;
+  for (map<unsigned,unsigned>::iterator edgeConstraint=expectedEdgeConstraints2D.begin();
+       edgeConstraint != expectedEdgeConstraints2D.end(); edgeConstraint++) {
+    edgeChildren2D.insert(edgeConstraint->first);
+    unsigned cellIndex = mesh2D->getActiveCellIndices(edgeDim, edgeConstraint->first).begin()->first;
+    cellsForEdgeChildren2D.insert(cellIndex);
+  }
+  
+  // one of these has (1,0) as one of its vertices.  Let's figure out which one:
+  unsigned vertexIndex;
+  if (! mesh2D->getVertexIndex(makeVertex(1, 0), vertexIndex) ) {
+    cout << "Error: vertex not found.\n";
+    success = false;
+  }
+  
+  set< pair<unsigned,unsigned> > cellsForVertex = mesh2D->getActiveCellIndices(vertexDim, vertexIndex);
+  unsigned childCellForVertex, childCellConstrainedEdge;
+  for (set< pair<unsigned,unsigned> >::iterator cellIt=cellsForVertex.begin(); cellIt != cellsForVertex.end(); cellIt++) {
+    if ( cellsForEdgeChildren2D.find( cellIt->first ) != cellsForEdgeChildren2D.end() ) {
+      // found match
+      childCellForVertex = cellIt->first;
+      // now, figure out which of the "edgeChildren2D" is shared by this cell:
+      NewMeshCellPtr cell = mesh2D->getCell(childCellForVertex);
+      unsigned numEdges = cell->topology()->getSideCount();
+      for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
+        unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+        if (edgeChildren2D.find(edgeIndex) != edgeChildren2D.end()) {
+          childCellConstrainedEdge = edgeIndex;
+        }
+      }
+    }
+  }
+  
+  // refine the cell that matches (1,0):
+  mesh2D->refineCell(childCellForVertex, RefinementPattern::regularRefinementPatternQuad());
+  
+  // now, fix the expected edge constraints, then check them...
+  set<unsigned> childEdges = mesh2D->getChildEntities(edgeDim, childCellConstrainedEdge);
+  if (childEdges.size() != 2) {
+    cout << "Expected 2 child edges, but found " << childEdges.size() << ".\n";
+  }
+  for (set<unsigned>::iterator edgeIt = childEdges.begin(); edgeIt != childEdges.end(); edgeIt++) {
+    expectedEdgeConstraints2D[*edgeIt] = expectedEdgeConstraints2D[childCellConstrainedEdge];
+  }
+  expectedEdgeConstraints2D.erase(childCellConstrainedEdge);
+  
+  checkConstraints(mesh2D, edgeDim, expectedEdgeConstraints2D);
   
   return success;
 }

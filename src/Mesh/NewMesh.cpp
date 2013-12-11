@@ -318,6 +318,10 @@ unsigned NewMesh::getActiveCellCount(unsigned int d, unsigned int entityIndex) {
   return _activeCellsForEntities[d][entityIndex].size();
 }
 
+const set< pair<unsigned,unsigned> > & NewMesh::getActiveCellIndices(unsigned d, unsigned entityIndex) {
+  return _activeCellsForEntities[d][entityIndex];
+}
+
 NewMeshCellPtr NewMesh::getCell(unsigned cellIndex) {
   return _cells[cellIndex];
 }
@@ -356,7 +360,7 @@ unsigned NewMesh::getSubEntityIndex(unsigned int d, unsigned int entityIndex, un
   return _knownEntities[subEntityDim][subEntityNodes];
 }
 
-unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
+bool NewMesh::getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol) {
   vector<double> vertexForLowerBound;
   for (int d=0; d<_spaceDim; d++) {
     vertexForLowerBound.push_back(vertex[d]-tol);
@@ -381,18 +385,29 @@ unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol)
     xDist = abs(lowerBoundIt->first[0] - vertex[0]);
     lowerBoundIt++;
   }
-  // if we get here and bestMatchIndex == -1, then we should add
   if (bestMatchIndex == -1) {
-    bestMatchIndex = _vertices.size();
-    _vertices.push_back(vertex);
-    
-    if (_vertexMap.find(vertex) != _vertexMap.end() ) {
-      cout << "Mesh error: attempting to add existing vertex.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
-    }
-    _vertexMap[vertex] = bestMatchIndex;
+    return false;
+  } else {
+    vertexIndex = bestMatchIndex;
+    return true;
   }
-  return bestMatchIndex;
+}
+
+unsigned NewMesh::getVertexIndexAdding(const vector<double> &vertex, double tol) {
+  unsigned vertexIndex;
+  if (getVertexIndex(vertex, vertexIndex, tol)) {
+    return vertexIndex;
+  }
+  // if we get here, then we should add
+  vertexIndex = _vertices.size();
+  _vertices.push_back(vertex);
+  
+  if (_vertexMap.find(vertex) != _vertexMap.end() ) {
+    cout << "Mesh error: attempting to add existing vertex.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
+  }
+  _vertexMap[vertex] = vertexIndex;
+  return vertexIndex;
 }
 
 // key: index in vertices; value: index in _vertices

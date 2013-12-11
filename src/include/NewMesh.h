@@ -172,6 +172,7 @@ public:
   NewMeshCellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, unsigned entityIndex);
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
+  const set< pair<unsigned,unsigned> > &getActiveCellIndices(unsigned d, unsigned entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   NewMeshCellPtr getCell(unsigned cellIndex);
   set<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
   unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
@@ -180,6 +181,7 @@ public:
   unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   unsigned getSpaceDim();
   unsigned getSubEntityIndex(unsigned d, unsigned entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
+  bool getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol=1e-14);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();
