@@ -182,8 +182,10 @@ public:
   unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
   unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   unsigned getSpaceDim();
+  unsigned getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim);
   unsigned getSubEntityIndex(unsigned d, unsigned entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol=1e-14);
+  FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();

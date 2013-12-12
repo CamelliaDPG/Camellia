@@ -350,6 +350,12 @@ unsigned NewMesh::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdi
 unsigned NewMesh::getSpaceDim() {
   return _spaceDim;
 }
+
+unsigned NewMesh::getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim) {
+  shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
+  return entityTopo->getSubcellCount(subEntityDim);
+}
+
 unsigned NewMesh::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
   shards::CellTopology *entityTopo = &_knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
   set<unsigned> subEntityNodes;
@@ -497,6 +503,19 @@ void NewMesh::printEntityVertices(unsigned int d, unsigned int entityIndex) {
   for (vector<unsigned>::iterator vertexIt=entityVertices.begin(); vertexIt !=entityVertices.end(); vertexIt++) {
     printVertex(*vertexIt);
   }
+}
+
+FieldContainer<double> NewMesh::physicalCellNodesForCell(unsigned int cellIndex) {
+  NewMeshCellPtr cell = getCell(cellIndex);
+  unsigned vertexCount = cell->vertices().size();
+  FieldContainer<double> nodes(vertexCount, _spaceDim);
+  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+    unsigned vertexIndex = cell->vertices()[vertexOrdinal];
+    for (unsigned d=0; d<_spaceDim; d++) {
+      nodes(vertexOrdinal,d) = _vertices[vertexIndex][d];
+    }
+  }
+  return nodes;
 }
 
 void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
