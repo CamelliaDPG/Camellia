@@ -9,34 +9,72 @@
 #ifndef Camellia_debug_ElementModifier_h
 #define Camellia_debug_ElementModifier_h
 
+#include "BasisReconciliation.h"
+
 class ElementModifier {
 public:
-  // "owned" means that the buck stops here--it's our discretization that others reconcile to.
-  //  But it's worth noting that even for owned dofs, there may not be a one-to-one correspondence to
-  //  the global degrees of freedom.  E.g. traces of H^1 in 2D will have their vertex dofs identified with each
-  //  other, eliminating a global dof.
-  
-  // "unowned" means the opposite--so between these two methods, all local dofs are accounted for
-  set<int> &ownedLocalDofs();    // local dof indices, as seen by DofOrdering
-  set<int> &unownedLocalDofs(); // local dof indices which are owned by other elements
-  
-  map<int, int> &localDofOwner(); // key: local dof index.  Value: neighbor cellID
-  
-  set<int> &modifiedGlobalDofIndices();
-  void getModifiedValues(FieldContainer<double> &modifiedValues, const FieldContainer<double> &localValues);
+  virtual const vector<unsigned> &modifiedGlobalDofIndices();
+  virtual void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues);
+};
 
-// steps:
-/*
- 1. On each element side, check neighbor to determine ownership.  (Rule: the coarser neighbor wins.  For ties, the neighbor with smaller cellID wins.)
- 2. Run BasisReconciliation on element sides to determine internal weights and owned global dof count.
- 3. Run BasisReconciliation to determine weights between neighbors.
- 
- Once 1-3 have been done for every element:
- 4. For each element, determine a "net" modification matrix that goes from local dof indices to globally modified values.  To do this, we must walk the ownership graph.  This will be more efficient if we special-case dof identifications.
- 
- 
- */
+class DofIdentificationModifier : ElementModifier {
+  vector<unsigned> _globalDofIndices;
+public:
+  DofIdentificationModifier(vector<unsigned> &globalDofIndices) {
+    _globalDofIndices = globalDofIndices;
+  }
+  const vector<unsigned> &modifiedGlobalDofIndices() {
+    return _globalDofIndices;
+  }
+  void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues) {
+    // two possibilities: shaped like stiffness (localDofs, localDofs) or shaped like load (localDofs)
+    for (unsigned dofOrdinal=0; dofOrdinal < _globalDofIndices.size(); dofOrdinal++) {
+      dofIndicesForModifiedValues[dofOrdinal] = _globalDofIndices[dofOrdinal];
+    }
+    // for this case, we don't worry about the shape...
+    unsigned numEntries = localValues.size();
+    for (unsigned i=0; i<numEntries; i++) {
+      modifiedValues[i] = localValues[i];
+    }
+  }
+};
 
+class ConstrainedElementModifier : ElementModifier {
+  vector<unsigned> _globalDofIndices;
+  map<unsigned, unsigned> _localDofOrdinalToSubBasisWeightIndex;
+  vector< SubBasisReconciliationWeights* > _weightedSubBases;
+  map<unsigned,unsigned> _permutedSubBasis;
+  unsigned _localDofCount;
+public:
+  ConstrainedElementModifier(vector< SubBasisReconciliationWeights* > &weightedSubBases, map<unsigned,unsigned> &permutedSubBasis) {
+    _weightedSubBases = weightedSubBases;
+    _permutedSubBasis = permutedSubBasis;
+    
+    unsigned weightsCount = weightedSubBases.size();
+    // requirement: each local dof appears exactly once in weightedSubBases or permutedSubBasis
+    for (unsigned weightsOrdinal = 0; weightsOrdinal < weightsCount; weightsOrdinal++) {
+      // "fine ordinals" are the local ones
+      set<int>* fineOrdinals = &(weightedSubBases[weightsOrdinal]->fineOrdinals);
+      for (set<int>::iterator localOrdinalIt = fineOrdinals->begin(); localOrdinalIt != fineOrdinals->end(); localOrdinalIt++) {
+        _localDofOrdinalToSubBasisWeightIndex[*localOrdinalIt] = weightsOrdinal;
+      }
+    }
+    
+    // if we knew how big the local basis is supposed to be, we could check that the total entry count matches this.
+    // but I don't think we have this -- we settle for storing the total entry count, so that we can check that the inputs to getModifiedValues() match
+    _localDofCount = _localDofOrdinalToSubBasisWeightIndex.size() + permutedSubBasis.size();
+  }
+  const vector<unsigned> &modifiedGlobalDofIndices() {
+    return _globalDofIndices;
+  }
+  void getModifiedValues(FieldContainer<double> &modifiedValues, FieldContainer<int> &dofIndicesForModifiedValues, const FieldContainer<double> &localValues) {
+    // two possibilities: shaped like stiffness (localDofs, localDofs) or shaped like load (localDofs)
+    for (unsigned dofOrdinal=0; dofOrdinal < _globalDofIndices.size(); dofOrdinal++) {
+      dofIndicesForModifiedValues[dofOrdinal] = _globalDofIndices[dofOrdinal];
+    }
+
+    // TODO: finish this method
+  }
 };
 
 #endif
