@@ -136,7 +136,7 @@ class NewMesh {
   vector< map< set<unsigned>, unsigned > > _knownEntities; // map keys are sets of vertices, values are entity indices in _entities[d]
   vector< map< unsigned, vector<unsigned> > > _canonicalEntityOrdering; // since we'll have one of these for each entity, could replace map with a vector
   vector< map< unsigned, set< pair<unsigned, unsigned> > > > _activeCellsForEntities; // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)--I'm vascillating on whether this should contain entries for active ancestral cells.  Today, I think it should not.  I think we should have another set of activeEntities.  Things in that list either themselves have active cells or an ancestor that has an active cell.  So if your parent is inactive and you don't have any active cells of your own, then you know you can deactivate.
-  vector< set< unsigned > > _activeEntities; // see note above
+  vector< set< unsigned > > _entitiesWithActiveAncestors; // see note above -- this includes the active entities themselves
   vector< map< unsigned, unsigned > > _constrainingEntities; // map from broken entity to the whole (constraining) one.  May be "virtual" in the sense that there are no active cells that have the constraining entity as a subcell topology.
   vector< map< unsigned, set< unsigned > > > _constrainedEntities; // map from constraining entity to all broken ones constrained by it.
   vector< map< unsigned, vector< pair<unsigned, unsigned> > > > _parentEntities; // map from entity to its possible parents.  Not every entity has a parent.  We support entities having multiple parents.  Such things will be useful in the context of anisotropic refinements.  The pair entries here are (parentEntityIndex, refinementIndex), where the refinementIndex is the index into the _childEntities[d][parentEntityIndex] vector.
@@ -161,6 +161,8 @@ class NewMesh {
   vector<unsigned> getVertexIndices(const FieldContainer<double> &vertices);
   vector<unsigned> getVertexIndices(const vector< vector<double> > &vertices);
   map<unsigned, unsigned> getVertexIndicesMap(const FieldContainer<double> &vertices);
+  bool entityHasActiveParent(unsigned spaceDim, unsigned entityIndex);
+  bool entityIsActive(unsigned spaceDim, unsigned entityIndex);
   void init(unsigned spaceDim);
   void printVertex(unsigned vertexIndex);
   void printVertices(set<unsigned> vertexIndices);
@@ -180,8 +182,10 @@ public:
   unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
   unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   unsigned getSpaceDim();
+  unsigned getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim);
   unsigned getSubEntityIndex(unsigned d, unsigned entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol=1e-14);
+  FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();
