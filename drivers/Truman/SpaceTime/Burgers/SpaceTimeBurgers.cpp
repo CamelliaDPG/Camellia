@@ -167,6 +167,8 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+  mesh->registerSolution(backgroundFlow);
+  mesh->registerSolution(solution);
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(backgroundFlow, mesh, varFactory);

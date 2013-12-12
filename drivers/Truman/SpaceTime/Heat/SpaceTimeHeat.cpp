@@ -59,6 +59,24 @@ class UExact : public Function {
     }
 };
 
+class Forcing : public Function {
+  public:
+    Forcing() : Function(0) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          values(cellIndex, ptIndex) = exp(-50*(x-.5)*(x-.5))*sin(1./(y+1e-2));
+        }
+      }
+    }
+};
+
 int main(int argc, char *argv[]) {
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -132,7 +150,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr f = Teuchos::rcp( new Forcing );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
@@ -167,14 +185,14 @@ int main(int argc, char *argv[]) {
      solution->solve(false);
 
      FunctionPtr u_soln = Function::solution(u, solution);
-     FunctionPtr u_diff = u_exact - u_soln;
-     cout << "L2 error = " << u_diff->l2norm(mesh, 5) << endl;
+     // FunctionPtr u_diff = u_exact - u_soln;
+     // cout << "L2 error = " << u_diff->l2norm(mesh, 5) << endl;
      if (commRank == 0)
      {
         stringstream outfile;
         outfile << "heat_" << refIndex;
         exporter.exportSolution(outfile.str());
-        exporter.exportFunction(u_exact, "heat_exact");
+        // exporter.exportFunction(u_exact, "heat_exact");
     }
 
     if (refIndex < numRefs)
