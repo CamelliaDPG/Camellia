@@ -5,7 +5,6 @@
  *
  */
 
-//#include "VTKExporterCamellia.h"
 #include "SolutionExporter.h"
 #include "CamelliaConfig.h"
 
