@@ -383,7 +383,7 @@ void printMeshInfo(NewMeshPtr mesh) {
   }
 }
 
-bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints) {
+bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints, string meshName = "mesh") {
   bool success = true;
   unsigned entityCount = mesh->getEntityCount(entityDim);
   for (unsigned entityIndex=0; entityIndex<entityCount; entityIndex++) {
@@ -391,7 +391,7 @@ bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigne
     if (constrainingEntityIndex==entityIndex) {
       // then we should expect not to have an entry in expectedConstraints:
       if (expectedConstraints.find(entityIndex) != expectedConstraints.end()) {
-        cout << "Expected entity constraint is not imposed in mesh.\n";
+        cout << "Expected entity constraint is not imposed in " << meshName << ".\n";
         cout << "Expected entity " << entityIndex << " to be constrained by entity " << expectedConstraints[entityIndex] << endl;
         cout << "Entity " << entityIndex << " vertices:\n";
         mesh->printEntityVertices(entityDim, entityIndex);
@@ -401,7 +401,7 @@ bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigne
       }
     } else {
       if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
-        cout << "Unexpected entity constraint is imposed in mesh.\n";
+        cout << "Unexpected entity constraint is imposed in " << meshName << ".\n";
         cout << "Entity " << entityIndex << " unexpectedly constrained by entity " << constrainingEntityIndex << endl;
         cout << "Entity " << entityIndex << " vertices:\n";
         mesh->printEntityVertices(entityDim, entityIndex);
@@ -411,7 +411,7 @@ bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigne
       } else {
         unsigned expectedConstrainingEntity = expectedConstraints[entityIndex];
         if (expectedConstrainingEntity != constrainingEntityIndex) {
-          cout << "The constraining entity is not the expected one in mesh.\n";
+          cout << "The constraining entity is not the expected one in " << meshName << ".\n";
           success = false;
         }
       }
@@ -545,41 +545,42 @@ bool NewMeshTests::testEntityConstraints() {
     success = false;
     cout << "After initial refinement, 2D mesh has " << refinedEdges.size() << " refined edges (expected 4).\n";
   }
-  set<unsigned> allEdges2D;
-  allEdges2D.insert(boundaryEdges.begin(), boundaryEdges.end());
-  allEdges2D.insert(internalEdges.begin(), internalEdges.end());
-  for (set<unsigned>::iterator edgeIt=allEdges2D.begin(); edgeIt != allEdges2D.end(); edgeIt++) {
-    unsigned edgeIndex = *edgeIt;
-    unsigned constrainingEntityIndex = mesh2D->getConstrainingEntityIndex(edgeDim, edgeIndex);
-    if (constrainingEntityIndex==edgeIndex) {
-      // then we should expect not to have an entry in expectedEdgeConstraints2D:
-      if (expectedEdgeConstraints2D.find(edgeIndex) != expectedEdgeConstraints2D.end()) {
-        cout << "Expected edge constraint is not imposed in refined 2D mesh.\n";
-        cout << "Expected edge " << edgeIndex << " to be constrained by edge " << expectedEdgeConstraints2D[edgeIndex] << endl;
-        cout << "Edge " << edgeIndex << " vertices:\n";
-        mesh2D->printEntityVertices(edgeDim, edgeIndex);
-        cout << "Edge " << expectedEdgeConstraints2D[edgeIndex] << " vertices:\n";
-        mesh2D->printEntityVertices(edgeDim, expectedEdgeConstraints2D[edgeIndex]);
-        success = false;
-      }
-    } else {
-      if (expectedEdgeConstraints2D.find(edgeIndex) == expectedEdgeConstraints2D.end()) {
-        cout << "Unexpected edge constraint is imposed in refined 2D mesh.\n";
-        cout << "Edge " << edgeIndex << " unexpectedly constrained by edge " << constrainingEntityIndex << endl;
-        cout << "Edge " << edgeIndex << " vertices:\n";
-        mesh2D->printEntityVertices(edgeDim, edgeIndex);
-        cout << "Edge " << constrainingEntityIndex << " vertices:\n";
-        mesh2D->printEntityVertices(edgeDim, constrainingEntityIndex);
-        success = false;
-      } else {
-        unsigned expectedConstrainingEntity = expectedEdgeConstraints2D[edgeIndex];
-        if (expectedConstrainingEntity != constrainingEntityIndex) {
-          cout << "The constraining edge is not the expected one in refined 2D mesh.\n";
-          success = false;
-        }
-      }
-    }
-  }
+  checkConstraints(mesh2D, edgeDim, expectedEdgeConstraints2D);
+//  set<unsigned> allEdges2D;
+//  allEdges2D.insert(boundaryEdges.begin(), boundaryEdges.end());
+//  allEdges2D.insert(internalEdges.begin(), internalEdges.end());
+//  for (set<unsigned>::iterator edgeIt=allEdges2D.begin(); edgeIt != allEdges2D.end(); edgeIt++) {
+//    unsigned edgeIndex = *edgeIt;
+//    unsigned constrainingEntityIndex = mesh2D->getConstrainingEntityIndex(edgeDim, edgeIndex);
+//    if (constrainingEntityIndex==edgeIndex) {
+//      // then we should expect not to have an entry in expectedEdgeConstraints2D:
+//      if (expectedEdgeConstraints2D.find(edgeIndex) != expectedEdgeConstraints2D.end()) {
+//        cout << "Expected edge constraint is not imposed in refined 2D mesh.\n";
+//        cout << "Expected edge " << edgeIndex << " to be constrained by edge " << expectedEdgeConstraints2D[edgeIndex] << endl;
+//        cout << "Edge " << edgeIndex << " vertices:\n";
+//        mesh2D->printEntityVertices(edgeDim, edgeIndex);
+//        cout << "Edge " << expectedEdgeConstraints2D[edgeIndex] << " vertices:\n";
+//        mesh2D->printEntityVertices(edgeDim, expectedEdgeConstraints2D[edgeIndex]);
+//        success = false;
+//      }
+//    } else {
+//      if (expectedEdgeConstraints2D.find(edgeIndex) == expectedEdgeConstraints2D.end()) {
+//        cout << "Unexpected edge constraint is imposed in refined 2D mesh.\n";
+//        cout << "Edge " << edgeIndex << " unexpectedly constrained by edge " << constrainingEntityIndex << endl;
+//        cout << "Edge " << edgeIndex << " vertices:\n";
+//        mesh2D->printEntityVertices(edgeDim, edgeIndex);
+//        cout << "Edge " << constrainingEntityIndex << " vertices:\n";
+//        mesh2D->printEntityVertices(edgeDim, constrainingEntityIndex);
+//        success = false;
+//      } else {
+//        unsigned expectedConstrainingEntity = expectedEdgeConstraints2D[edgeIndex];
+//        if (expectedConstrainingEntity != constrainingEntityIndex) {
+//          cout << "The constraining edge is not the expected one in refined 2D mesh.\n";
+//          success = false;
+//        }
+//      }
+//    }
+//  }
   
   set<unsigned> refinedFaces;
   map<unsigned,unsigned> expectedFaceConstraints3D;
@@ -636,67 +637,13 @@ bool NewMeshTests::testEntityConstraints() {
     success = false;
     cout << "After initial refinement, 3D mesh has " << refinedFaces.size() << " refined faces (expected 6).\n";
   }
-  set<unsigned> allFaces3D;
-  allFaces3D.insert(boundaryFaces.begin(), boundaryFaces.end());
-  allFaces3D.insert(internalFaces.begin(), internalFaces.end());
-  for (set<unsigned>::iterator faceIt=allFaces3D.begin(); faceIt != allFaces3D.end(); faceIt++) {
-    unsigned faceIndex = *faceIt;
-    unsigned constrainingEntityIndex = mesh3D->getConstrainingEntityIndex(faceDim, faceIndex);
-    if (constrainingEntityIndex==faceIndex) {
-      // then we should expect not to have an entry in expectedFaceConstraints3D:
-      if (expectedFaceConstraints3D.find(faceIndex) != expectedFaceConstraints3D.end()) {
-        cout << "Expected face constraint is not imposed in refined 3D mesh.\n";
-        cout << "Expected face " << faceIndex << " to be constrained by face " << expectedFaceConstraints3D[faceIndex] << ".\n";
-        cout << "Face " << faceIndex << " vertices:\n";
-        mesh3D->printEntityVertices(faceDim, faceIndex);
-        cout << "Face " << expectedFaceConstraints3D[faceIndex] << " vertices:\n";
-        mesh3D->printEntityVertices(faceDim, expectedFaceConstraints3D[faceIndex]);
-        success = false;
-      }
-    } else {
-      if (expectedFaceConstraints3D.find(faceIndex) == expectedFaceConstraints3D.end()) {
-        cout << "Unexpected face constraint is imposed in refined 3D mesh.\n";
-        cout << "Face " << faceIndex << " unexpectedly constrained by face " << constrainingEntityIndex << endl;
-        cout << "Face " << faceIndex << " vertices:\n";
-        mesh3D->printEntityVertices(faceDim, faceIndex);
-        cout << "Face " << constrainingEntityIndex << " vertices:\n";
-        mesh3D->printEntityVertices(faceDim, constrainingEntityIndex);
-        success = false;
-      } else {
-        unsigned expectedConstrainingEntity = expectedFaceConstraints3D[faceIndex];
-        if (expectedConstrainingEntity != constrainingEntityIndex) {
-          cout << "The constraining face is not the expected one in refined 3D mesh.\n";
-          success = false;
-        }
-      }
-    }
+  if (! checkConstraints(mesh3D, faceDim, expectedFaceConstraints3D, "refined 3D mesh") ) {
+    cout << "Failed face constraint check for refined 3D mesh." << endl;
+    success = false;
   }
-  unsigned edgeCount3D = mesh3D->getEntityCount(edgeDim);
-  for (unsigned edgeIndex=0; edgeIndex<edgeCount3D; edgeIndex++) {
-    unsigned constrainingEntityIndex = mesh3D->getConstrainingEntityIndex(edgeDim, edgeIndex);
-    if (constrainingEntityIndex==edgeIndex) {
-      // then we should expect not to have an entry in expectedEdgeConstraints3D:
-      if (expectedEdgeConstraints3D.find(edgeIndex) != expectedEdgeConstraints3D.end()) {
-        cout << "Expected edge constraint is not imposed in refined 3D mesh.\n";
-        cout << "Expected edge " << edgeIndex << " to be constrained by edge " << expectedEdgeConstraints3D[edgeIndex] << endl;
-        cout << "Edge " << edgeIndex << " vertices:\n";
-        mesh3D->printEntityVertices(edgeDim, edgeIndex);
-        cout << "Edge " << expectedEdgeConstraints3D[edgeIndex] << " vertices:\n";
-        mesh3D->printEntityVertices(edgeDim, expectedEdgeConstraints3D[edgeIndex]);
-        success = false;
-      }
-    } else {
-      if (expectedEdgeConstraints3D.find(edgeIndex) == expectedEdgeConstraints3D.end()) {
-        cout << "Unexpected edge constraint is imposed in refined 3D mesh.\n";
-        success = false;
-      } else {
-        unsigned expectedConstrainingEntity = expectedEdgeConstraints3D[edgeIndex];
-        if (expectedConstrainingEntity != constrainingEntityIndex) {
-          cout << "The constraining edge is not the expected one in refined 3D mesh.\n";
-          success = false;
-        }
-      }
-    }
+  if (! checkConstraints(mesh3D, edgeDim, expectedEdgeConstraints3D, "refined 3D mesh") ) {
+    cout << "Failed edge constraint check for refined 3D mesh." << endl;
+    success = false;
   }
   
   // now, we refine one of the children of the refined cells in each mesh, to produce a 2-level constraint
@@ -707,7 +654,7 @@ bool NewMeshTests::testEntityConstraints() {
     edgeChildren2D.insert(edgeConstraint->first);
     unsigned cellIndex = mesh2D->getActiveCellIndices(edgeDim, edgeConstraint->first).begin()->first;
     cellsForEdgeChildren2D.insert(cellIndex);
-    cout << "cellsForEdgeChildren2D: " << cellIndex << endl;
+//    cout << "cellsForEdgeChildren2D: " << cellIndex << endl;
   }
   
   // one of these has (1,0) as one of its vertices.  Let's figure out which one:
@@ -723,8 +670,9 @@ bool NewMeshTests::testEntityConstraints() {
     success = false;
   }
   unsigned childCellForVertex, childCellConstrainedEdge;
+  set<unsigned> childNewlyConstrainingEdges; // the two interior edges that we break
   for (set< pair<unsigned,unsigned> >::iterator cellIt=cellsForVertex.begin(); cellIt != cellsForVertex.end(); cellIt++) {
-    cout << "cellsForVertex: " << cellIt->first << endl;
+//    cout << "cellsForVertex: " << cellIt->first << endl;
     if ( cellsForEdgeChildren2D.find( cellIt->first ) != cellsForEdgeChildren2D.end() ) {
       // found match
       childCellForVertex = cellIt->first;
@@ -735,9 +683,15 @@ bool NewMeshTests::testEntityConstraints() {
         unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
         if (edgeChildren2D.find(edgeIndex) != edgeChildren2D.end()) {
           childCellConstrainedEdge = edgeIndex;
+        } else if ( mesh2D->getActiveCellCount(edgeDim, edgeIndex) == 2 ) {
+          childNewlyConstrainingEdges.insert(edgeIndex);
         }
       }
     }
+  }
+  if (childNewlyConstrainingEdges.size() != 2) {
+    cout << "Expected 2 newly constraining edges after 2nd refinement of 2D mesh, but found " << childNewlyConstrainingEdges.size() << endl;
+    success = false;
   }
   
   // refine the cell that matches (1,0):
@@ -747,13 +701,23 @@ bool NewMeshTests::testEntityConstraints() {
   set<unsigned> childEdges = mesh2D->getChildEntities(edgeDim, childCellConstrainedEdge);
   if (childEdges.size() != 2) {
     cout << "Expected 2 child edges, but found " << childEdges.size() << ".\n";
+    success = false;
   }
   for (set<unsigned>::iterator edgeIt = childEdges.begin(); edgeIt != childEdges.end(); edgeIt++) {
     expectedEdgeConstraints2D[*edgeIt] = expectedEdgeConstraints2D[childCellConstrainedEdge];
   }
   expectedEdgeConstraints2D.erase(childCellConstrainedEdge);
+  for (set<unsigned>::iterator edgeIt = childNewlyConstrainingEdges.begin(); edgeIt != childNewlyConstrainingEdges.end(); edgeIt++) {
+    set<unsigned> newChildEdges = mesh2D->getChildEntities(edgeDim, *edgeIt);
+    for (set<unsigned>::iterator newEdgeIt = newChildEdges.begin(); newEdgeIt != newChildEdges.end(); newEdgeIt++) {
+      expectedEdgeConstraints2D[*newEdgeIt] = *edgeIt;
+    }
+  }
   
-  checkConstraints(mesh2D, edgeDim, expectedEdgeConstraints2D);
+  if (! checkConstraints(mesh2D, edgeDim, expectedEdgeConstraints2D, "twice-refined 2D mesh") ) {
+    cout << "Failed constraint check for twice-refined 2D mesh." << endl;
+    success = false;
+  }
   
   return success;
 }

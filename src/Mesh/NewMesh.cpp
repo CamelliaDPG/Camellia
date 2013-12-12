@@ -18,7 +18,7 @@ void NewMesh::init(unsigned spaceDim) {
   _knownEntities = vector< map< set<unsigned>, unsigned > >(_spaceDim); // map keys are sets of vertices, values are entity indices in _entities[d]
   _canonicalEntityOrdering = vector< map< unsigned, vector<unsigned> > >(_spaceDim);
   _activeCellsForEntities = vector< map< unsigned, set< pair<unsigned, unsigned> > > >(_spaceDim); // set entries are (cellIndex, entityIndexInCell) (entityIndexInCell aka subcord)
-  _activeEntities = vector< set<unsigned > >(_spaceDim);
+  _entitiesWithActiveAncestors = vector< set<unsigned > >(_spaceDim);
   _constrainingEntities = vector< map< unsigned, unsigned > >(_spaceDim); // map from broken entity to the whole (constraining) one.
   _constrainedEntities = vector< map< unsigned, set< unsigned > > >(_spaceDim); // map from constraining entity to all broken ones constrained by it.
   _parentEntities = vector< map< unsigned, vector< pair<unsigned, unsigned> > > >(_spaceDim); // map to possible parents
@@ -56,8 +56,9 @@ set<unsigned> NewMesh::activeDescendants(unsigned d, unsigned entityIndex) {
   set<unsigned> allDescendants = descendants(d,entityIndex);
   set<unsigned> filteredDescendants;
   for (set<unsigned>::iterator descIt=allDescendants.begin(); descIt!=allDescendants.end(); descIt++) {
-    if (_activeEntities[d].find(*descIt) != _activeEntities[d].end()) {
-      filteredDescendants.insert(*descIt);
+    unsigned descIndex = *descIt;
+    if ( entityIsActive(d, descIndex) ) {
+      filteredDescendants.insert(descIndex);
     }
   }
   return filteredDescendants;
@@ -76,20 +77,21 @@ set<unsigned> NewMesh::activeDescendantsNotInSet(unsigned d, unsigned entityInde
 }
 
 unsigned NewMesh::eldestActiveAncestor(unsigned d, unsigned entityIndex) {
-  bool hasActiveParent = false;
-  while (hasActiveParent) {
+  bool hasActiveParent;
+  do {
+    hasActiveParent = false;
     map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
     if (parentEntityIt != _parentEntities[d].end()) {
       vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
       for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
         unsigned possibleParentIndex = possibleParentIt->first;
-        if (_activeEntities[d].find(possibleParentIndex) != _activeEntities[d].end()) {
+        if (_entitiesWithActiveAncestors[d].find(possibleParentIndex) != _entitiesWithActiveAncestors[d].end()) {
           hasActiveParent = true;
           entityIndex = possibleParentIndex; // the new entityIndex will be the last found active parent (which is the coarsest/eldest one)
         }
       }
-    }
-  }
+    } 
+  } while (hasActiveParent);
   return entityIndex;
 }
 
@@ -126,7 +128,7 @@ unsigned NewMesh::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVert
 
       cellEntityPermutations[d][entityIndex] = entityPermutation;
       _activeCellsForEntities[d][entityIndex].insert(make_pair(cellIndex,j));
-      _activeEntities[d].insert(entityIndex);
+      _entitiesWithActiveAncestors[d].insert(entityIndex);
     }
   }
   
@@ -208,31 +210,6 @@ void NewMesh::deactivateCell(NewMeshCellPtr cell) {
       unsigned eraseCount = _activeCellsForEntities[d][entityIndex].erase(make_pair(cell->cellIndex(),j));
       if (eraseCount==0) {
         cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
-      }
-      if (_activeCellsForEntities[d][entityIndex].size() == 0) {
-        // the entity itself has been deactivated, and we should check whether we can relax any constraints imposed by it
-        // the rule is: if there is an active parent, then we cannot deactivate.  Otherwise, we can.
-        
-        // That's what's implemented below, but I don't think that's quite the right rule.  Is it?
-
-        bool hasActiveParent = false;
-        map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
-        if (parentEntityIt != _parentEntities[d].end()) {
-          vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
-          for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
-            unsigned possibleParentIndex = possibleParentIt->first;
-            if (_activeEntities[d].find(possibleParentIndex) != _activeEntities[d].end()) {
-              hasActiveParent = true;
-            }
-          }
-        }
-        
-        if (! hasActiveParent) {
-          // then we can deactivate, provided that there are no children that properly have this as a constraining entity.
-          // it's that "properly" that's the challenge.
-          _activeEntities[d].erase(entityIndex);
-        }
-        
       }
     }
   }
@@ -320,6 +297,29 @@ pair< unsigned, set<unsigned> > NewMesh::determineEntityConstraints(unsigned d, 
 bool NewMesh::entityHasParent(unsigned d, unsigned entityIndex) {
   if (_parentEntities[d].find(entityIndex) == _parentEntities[d].end()) return false;
   return _parentEntities[d][entityIndex].size() > 0;
+}
+
+bool NewMesh::entityHasActiveParent(unsigned int d, unsigned int entityIndex) {
+  bool hasActiveParent = false;
+  map< unsigned, vector< pair<unsigned,unsigned> > >::iterator parentEntityIt = _parentEntities[d].find(entityIndex);
+  if (parentEntityIt != _parentEntities[d].end()) {
+    vector< pair<unsigned,unsigned> > possibleParents = parentEntityIt->second;
+    for (vector< pair<unsigned,unsigned> >::iterator possibleParentIt = possibleParents.begin(); possibleParentIt != possibleParents.end(); possibleParentIt++) {
+      unsigned possibleParentIndex = possibleParentIt->first;
+      if (_entitiesWithActiveAncestors[d].find(possibleParentIndex) != _entitiesWithActiveAncestors[d].end()) {
+        hasActiveParent = true;
+      }
+    }
+  }
+  return hasActiveParent;
+}
+
+bool NewMesh::entityIsActive(unsigned d, unsigned entityIndex) {
+  if (_activeCellsForEntities[d].find(entityIndex) != _activeCellsForEntities[d].end() ) {
+    return _activeCellsForEntities[d][entityIndex].size() > 0;
+  } else {
+    return false;
+  }
 }
 
 unsigned NewMesh::getActiveCellCount(unsigned int d, unsigned int entityIndex) {
@@ -529,6 +529,9 @@ void NewMesh::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
   
   set<unsigned> cellsAffected;
   cellsAffected.insert(cellIndex);
+  // first update for the deactivated cell
+  updateConstraintsForCells(cellsAffected);
+  
   vector<unsigned> childIndices = cell->getChildIndices();
   cellsAffected.insert(childIndices.begin(), childIndices.end());
   updateConstraintsForCells(cellsAffected);
@@ -625,6 +628,22 @@ void NewMesh::updateConstraintsForCells(const set<unsigned> &cellIndices) {
             entitiesEncountered.insert(constraint.second.begin(), constraint.second.end());
             entitiesEncountered.insert(constraint.first);
           }
+        } else { // entity has no active cells
+          // the entity itself has been deactivated in the sense that there are no active cells that use it,
+          // but to speed up certain checks, we only count an entity as deactivated if its ancestors are inactive.
+          // (because of this rule, we only have to check immediate parents.)
+          
+          bool hasActiveParent = entityHasActiveParent(d, entityIndex);
+          bool isConstrainingEntity = _constrainedEntities[d].find(entityIndex) != _constrainedEntities[d].end();
+          
+          // since the entity no longer has any active cells, it is no longer constrained:
+          _constrainingEntities[d].erase(entityIndex);
+          
+          if (!hasActiveParent && !isConstrainingEntity) {
+            // then we can deactivate, provided that there are no children that properly have this as a constraining entity.
+            // it's that "properly" that's the challenge.
+            _entitiesWithActiveAncestors[d].erase(entityIndex);
+          }
         }
       }
     }
@@ -633,13 +652,18 @@ void NewMesh::updateConstraintsForCells(const set<unsigned> &cellIndices) {
       unsigned constrainingEntity = constraintIt->first;
       set<unsigned> *constrainedEntities = &(constraintIt->second);
       _constrainingEntities[d].erase(constrainingEntity); // if prior to update, this entity was constrained, clear that out
-      _constrainedEntities[d][constrainingEntity] = *constrainedEntities;
-      for (set<unsigned>::iterator constrainedIt=constrainedEntities->begin(); constrainedIt != constrainedEntities->end(); constrainedIt++) {
-        unsigned constrainedEntityIndex = *constrainedIt;
-        // if prior to update, this entity functioned as a constraint, clear that out
-        _constrainedEntities[d].erase(constrainedEntityIndex);
-        _constrainingEntities[d][constrainedEntityIndex] = constrainingEntity;
-//        cout << "for d=" << d << ", entity " << constrainedEntityIndex << " is constrained by " << constrainingEntity << endl;
+      if (constrainedEntities->size() == 0) {
+        // no entities constrained, so erase...
+        _constrainedEntities[d].erase(constrainingEntity);
+      } else {
+        _constrainedEntities[d][constrainingEntity] = *constrainedEntities;
+        for (set<unsigned>::iterator constrainedIt=constrainedEntities->begin(); constrainedIt != constrainedEntities->end(); constrainedIt++) {
+          unsigned constrainedEntityIndex = *constrainedIt;
+          // if prior to update, this entity functioned as a constraint, clear that out
+          _constrainedEntities[d].erase(constrainedEntityIndex);
+          _constrainingEntities[d][constrainedEntityIndex] = constrainingEntity;
+  //        cout << "for d=" << d << ", entity " << constrainedEntityIndex << " is constrained by " << constrainingEntity << endl;
+        }
       }
     }
   }
