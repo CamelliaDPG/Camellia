@@ -719,5 +719,110 @@ bool NewMeshTests::testEntityConstraints() {
     success = false;
   }
   
+  // now, do a second level of refinement for 3D mesh
+  // one of these has (1,2,0) as one of its vertices.  Let's figure out which one:
+  if (! mesh3D->getVertexIndex(makeVertex(1, 2, 0), vertexIndex) ) {
+    cout << "Error: vertex not found.\n";
+    success = false;
+  }
+  
+  cellsForVertex = mesh3D->getActiveCellIndices(vertexDim, vertexIndex);
+  if (cellsForVertex.size() != 4) {
+    cout << "cellsForVertex should have 4 entries; has " << cellsForVertex.size() << endl;
+    success = false;
+  }
+
+  vector<unsigned> justCellsForVertex;
+  for (set< pair<unsigned,unsigned> >::iterator entryIt = cellsForVertex.begin(); entryIt != cellsForVertex.end(); entryIt++) {
+    justCellsForVertex.push_back(entryIt->first);
+  }
+  vector<unsigned> childCellIndices = mesh3D->getCell(cellToRefine3D)->getChildIndices();
+  std::sort(childCellIndices.begin(), childCellIndices.end());
+  vector<unsigned> matches(childCellIndices.size() + cellsForVertex.size());
+  vector<unsigned>::iterator matchEnd = std::set_intersection(justCellsForVertex.begin(), justCellsForVertex.end(), childCellIndices.begin(), childCellIndices.end(), matches.begin());
+  matches.resize(matchEnd-matches.begin());
+  
+  if (matches.size() != 1) {
+    cout << "matches should have exactly one entry, but has " << matches.size();
+    success = false;
+  }
+  unsigned childCellIndex = matches[0];
+  NewMeshCellPtr childCell = mesh3D->getCell(childCellIndex);
+  set<unsigned> childInteriorUnconstrainedFaces;
+  set<unsigned> childInteriorConstrainedFaces;
+  unsigned faceCount = childCell->topology()->getSideCount();
+  for (unsigned faceOrdinal=0; faceOrdinal<faceCount; faceOrdinal++) {
+    unsigned faceIndex = childCell->entityIndex(faceDim, faceOrdinal);
+    if (mesh3D->getActiveCellCount(faceDim, faceIndex) == 1) {
+      // that's an interior constrained face, or a boundary face
+      if (expectedFaceConstraints3D.find(faceIndex) != expectedFaceConstraints3D.end()) {
+        // constrained face
+        childInteriorConstrainedFaces.insert(faceIndex);
+      }
+    } else if (mesh3D->getActiveCellCount(faceDim, faceIndex) == 2) {
+      // an interior unconstrained face
+      childInteriorUnconstrainedFaces.insert(faceIndex);
+    } else {
+      cout << "Error: unexpected active cell count.  Expected 1 or 2, but was " << mesh3D->getActiveCellCount(faceDim, faceIndex) << endl;
+      success = false;
+    }
+  }
+  mesh3D->refineCell(childCellIndex, RefinementPattern::regularRefinementPatternHexahedron());
+  
+  // update expected face and edge constraints
+  set<unsigned> edgeConstraintsToDrop;
+  for (set<unsigned>::iterator faceIt=childInteriorConstrainedFaces.begin(); faceIt != childInteriorConstrainedFaces.end(); faceIt++) {
+    unsigned faceIndex = *faceIt;
+    set<unsigned> newChildFaces = mesh3D->getChildEntities(faceDim, faceIndex);
+    for (set<unsigned>::iterator newChildIt=newChildFaces.begin(); newChildIt != newChildFaces.end(); newChildIt++) {
+      unsigned newChildIndex = *newChildIt;
+      expectedFaceConstraints3D[newChildIndex] = expectedFaceConstraints3D[faceIndex];
+    }
+    expectedFaceConstraints3D.erase(faceIndex);
+    unsigned numEdges = mesh3D->getSubEntityCount(faceDim, faceIndex, edgeDim);
+    for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
+      unsigned edgeIndex = mesh3D->getSubEntityIndex(faceDim, faceIndex, edgeDim, edgeOrdinal);
+      set<unsigned> newChildEdges = mesh3D->getChildEntities(edgeDim, edgeIndex);
+      for (set<unsigned>::iterator newChildIt=newChildEdges.begin(); newChildIt != newChildEdges.end(); newChildIt++) {
+        unsigned newChildIndex = *newChildIt;
+        expectedEdgeConstraints3D[newChildIndex] = expectedEdgeConstraints3D[edgeIndex];
+        edgeConstraintsToDrop.insert(edgeIndex);
+      }
+    }
+  }
+  for (set<unsigned>::iterator edgeToDropIt=edgeConstraintsToDrop.begin(); edgeToDropIt != edgeConstraintsToDrop.end(); edgeToDropIt++) {
+    expectedEdgeConstraints3D.erase(*edgeToDropIt);
+  }
+  for (set<unsigned>::iterator faceIt=childInteriorUnconstrainedFaces.begin(); faceIt != childInteriorUnconstrainedFaces.end(); faceIt++) {
+    unsigned faceIndex = *faceIt;
+    set<unsigned> newChildFaces = mesh3D->getChildEntities(faceDim, faceIndex);
+    for (set<unsigned>::iterator newChildIt=newChildFaces.begin(); newChildIt != newChildFaces.end(); newChildIt++) {
+      unsigned newChildIndex = *newChildIt;
+      expectedFaceConstraints3D[newChildIndex] = faceIndex;
+    }
+    expectedFaceConstraints3D.erase(faceIndex);
+    unsigned numEdges = mesh3D->getSubEntityCount(faceDim, faceIndex, edgeDim);
+    for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
+      unsigned edgeIndex = mesh3D->getSubEntityIndex(faceDim, faceIndex, edgeDim, edgeOrdinal);
+      set<unsigned> newChildEdges = mesh3D->getChildEntities(edgeDim, edgeIndex);
+      for (set<unsigned>::iterator newChildIt=newChildEdges.begin(); newChildIt != newChildEdges.end(); newChildIt++) {
+        unsigned newChildIndex = *newChildIt;
+        expectedEdgeConstraints3D[newChildIndex] = edgeIndex;
+      }
+    }
+  }
+  
+  if (! checkConstraints(mesh3D, edgeDim, expectedEdgeConstraints3D, "twice-refined 3D mesh") ) {
+    cout << "Failed edge constraint check for twice-refined 3D mesh." << endl;
+    success = false;
+  }
+  
+  if (! checkConstraints(mesh3D, faceDim, expectedFaceConstraints3D, "twice-refined 3D mesh") ) {
+    cout << "Failed face constraint check for twice-refined 3D mesh." << endl;
+    success = false;
+  }
+  
+  
+
   return success;
 }
