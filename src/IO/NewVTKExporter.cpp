@@ -37,17 +37,18 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
       continue;
 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
-    cout << physicalCellNodes << endl;
 
     // unsigned sideCount = cell->topology()->getSideCount();
     // const vector< unsigned > vertices = cell->vertices();
     CellTopoPtr cellTopoPtr = cell->topology();
     unsigned cellTopoKey = cellTopoPtr->getKey();
     int numPoints = 0;
-    int pOrder = 2;
+    int pOrder = 4;
     if (defaultPts)
-      num1DPts = pow(2.0, pOrder-1);
-
+      num1DPts = pow(2.0, pOrder);
+    
+    if (physicalCellNodes.rank() == 2)
+      physicalCellNodes.resize(1,physicalCellNodes.dimension(0), physicalCellNodes.dimension(1));
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, *cellTopoPtr, 1, false) );
 
     switch (cellTopoKey)
@@ -97,10 +98,117 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
     }
 
-    // basisCache->setRefCellPoints(refPoints);
-  }
+    basisCache->setRefCellPoints(refPoints);
+    const FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
 
-  cout << "Wrote " <<  functionName << ".vtu" << endl;
-}
+    FieldContainer<double> computedValues;
+    if (function->rank() == 0)
+      computedValues.resize(1, numPoints);
+    else if (function->rank() == 1)
+      computedValues.resize(1, numPoints, spaceDim);
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled function rank");
+
+    function->values(computedValues, basisCache);
+
+    int subcellStartIndex = total_vertices;
+    switch (cellTopoKey)
+    {
+      case shards::Quadrilateral<4>::key:
+        {
+          for (int j=0; j < num1DPts-1; j++)
+          {
+            for (int i=0; i < num1DPts-1; i++)
+            {
+              int ind1 = subcellStartIndex;
+              int ind2 = ind1 + 1;
+              int ind3 = ind2 + num1DPts;
+              int ind4 = ind1 + num1DPts;
+              vtkIdType subCell[4] = {
+                ind1, ind2, ind3, ind4};
+              ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
+
+              subcellStartIndex++;
+            }
+            subcellStartIndex++;
+          }
+        }
+        break;
+      case shards::Triangle<3>::key:
+        {
+          for (int j=0; j < num1DPts-1; j++)
+          {
+            for (int i=0; i < num1DPts-1-j; i++)
+            {
+              int ind1 = subcellStartIndex;
+              int ind2 = ind1 + 1;
+              int ind3 = ind1 + num1DPts-j;
+              vtkIdType subCell[3] = {
+                ind1, ind2, ind3};
+              ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+
+              if (i < num1DPts-2-j)
+              {
+                int ind1 = subcellStartIndex+1;
+                int ind2 = ind1 + num1DPts - j;
+                int ind3 = ind1 + num1DPts -j - 1;
+                vtkIdType subCell[3] = {
+                  ind1, ind2, ind3};
+                ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+              }
+
+              subcellStartIndex++;
+            }
+            subcellStartIndex++;
+          }
+        }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+      }
+      for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      {
+        points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
+          (*physicalPoints)(0, pointIndex, 1), 0.0);
+        switch(vals->GetNumberOfComponents())
+        {
+          case 1:
+          vals->InsertNextTuple1(computedValues(0, pointIndex));
+          break;
+          case 2:
+          vals->InsertNextTuple2(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1));
+          break;
+          case 3:
+          vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), 0);
+          break;
+          default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
+        }
+        total_vertices++;
+      }
+    }
+
+    ug->SetPoints(points);
+    points->Delete();
+
+    ug->GetPointData()->AddArray(vals);
+    vals->Delete();
+
+    vtkXMLUnstructuredGridWriter* wr = vtkXMLUnstructuredGridWriter::New();
+#if VTK_MAJOR_VERSION <= 5
+    wr->SetInput(ug);
+#else
+    wr->SetInputData(ug);
+#endif
+    ug->Delete();
+    wr->SetFileName((functionName+".vtu").c_str());
+  // wr->SetDataModeToBinary();
+    wr->SetDataModeToAscii();
+    wr->Update();
+    wr->Write();
+    wr->Delete();
+
+    cout << "Wrote " <<  functionName << ".vtu" << endl;
+  }
 
 #endif
