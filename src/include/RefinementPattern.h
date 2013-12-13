@@ -13,12 +13,19 @@
 using namespace std;
 using namespace Intrepid;
 
+class RefinementPattern;
+typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
+
+typedef vector< pair<RefinementPatternPtr, vector<unsigned> > > RefinementPatternRecipe;
+
 class RefinementPattern {
   Teuchos::RCP< shards::CellTopology > _cellTopoPtr;
   FieldContainer<double> _nodes;
   vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
   
+  vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
+  vector< RefinementPatternRecipe > _relatedRecipes;
   vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
   vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
   
@@ -39,8 +46,11 @@ public:
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternLine();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
-  static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad();
-  static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad();
+  static Teuchos::RCP<RefinementPattern> regularRefinementPatternHexahedron();
+  static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
+  static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
+  
+  static void initializeAnisotropicRelationships();
 
   const FieldContainer<double> & verticesOnReferenceCell();
   FieldContainer<double> verticesForRefinement(FieldContainer<double> &cellNodes);
@@ -53,6 +63,12 @@ public:
   
   unsigned numChildren();
   const FieldContainer<double> & refinedNodes();
+  
+  const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
+  Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
+  
+  vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
+  void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

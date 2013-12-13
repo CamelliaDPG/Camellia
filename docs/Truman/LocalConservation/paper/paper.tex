@@ -166,16 +166,21 @@ experiments showing that the method is indeed locally conservative. We also
 show that standard DPG, while not guaranteed to be conservative, is nearly
 conservative for many of the benchmarks considered. The new method preserves many of
 the attractive features of DPG, but turns the normally symmetric
+<<<<<<< HEAD
 positive-definite DPG system into a saddle point problem.
+=======
+positive-definite DPG system into a saddle-point problem.
+>>>>>>> c0555dd502009489de326e7d9ed795c6513bc4ae
 \end{abstract}
 
 \section{Introduction}
 The discontinuous Petrov-Galerkin (DPG) method with optimal test functions has
 been under active development for convection-diffusion type systems
 \cite{DPG1, DPG2, DPG3, DPG5, DemkowiczHeuer, ChanHeuerThanhDemkowicz2012,
-MoroNguyenPeraire11}. In this paper, we develop a theory for the locally conservative
-formulation of DPG for convection-diffusion type equations and supplement this
-with extensive numerical results.
+MoroNguyenPeraire11}. In this paper, we develop a theory for the locally
+conservative formulation of DPG for convection-diffusion type equations
+(including Burgers' Equation and Stokes flow) and supplement this with
+extensive numerical results.
 
 \subsection{Importance of Local Conservation}
 Locally conservative methods hold a special place for numerical analysts in
@@ -202,16 +207,28 @@ The discontinuous Petrov-Galerkin finite element method has been described as
 least squares finite elements with a twist. The key difference is that least
 squares methods seek to minimize the residual of the solution in the $L^2$
 norm, while DPG seeks the minimization in a dual norm realized through the
+<<<<<<< HEAD
 inverse Riesz map. Exact mass conservation has been an issue that has plagued
 least squares finite elements for a long time. Several approaches have been
 used to try to address this. Bochev \etal\cite{Bochev2010} accomplish local
 conservation by using a point-wise divergence free velocity space in the Stokes
+=======
+inverse Riesz map. Exact mass conservation has been an issue that has long plagued
+least squares finite elements. Several approaches have been
+used to try to adress this. Bochev \etal\cite{Bochev2010} accomplish local
+conservation by using a pointwise divergence free velocity space in the Stokes
+>>>>>>> c0555dd502009489de326e7d9ed795c6513bc4ae
 formulation.  Chang and Nelson\cite{ChangNelson1997} developed the
 \emph{restricted LSFEM}\cite{ChangNelson1997} by augmenting the least squares
-equations with a Lagrange multiplier explicitly enforcing mass conservation
+equations with Lagrange multipliers explicitly enforcing mass conservation
 element-wise. Our conservative formulation of DPG takes a similar approach and
+<<<<<<< HEAD
 both methods share similar negative of transforming a minimization method to a
 saddle point problem. In the interest of crediting Chang and Nelson's
+=======
+both methods similarly share the disadvantage of transforming a minimization method to a
+saddle-point problem. In the interest of crediting Chang and Nelson's
+>>>>>>> c0555dd502009489de326e7d9ed795c6513bc4ae
 restricted LSFEM, we call the following locally conservative DPG method the
 restricted DPG method (RDPG).
 
@@ -267,7 +284,7 @@ test function. Therefore DPG uses a discontinuous test basis which makes each
 solve element-local and much more computationally tractable. Of course,
 \eqnref{optimaltestproblem} still requires the inversion of the
 infinite-dimensional Riesz map, but approximating $V$ by a finite
-dimensional $V_h$ which is of a higher polynomial degree than $U_h$ (hence
+dimensional space, $V_h$, which is of a higher polynomial degree than $U_h$ (hence
 ``enriched space'') works well in practice.
 
 No assumptions have been made so far on the definition of the inner product on
@@ -326,7 +343,7 @@ order equations:
 \div(\bs\beta u-\bs\sigma)&=f\\
 \frac{1}{\epsilon}\bs\sigma-\grad u&=\bs0\,.
 \end{align*}
-If we then multiply the top equation by some scalar test function $v$ and the
+If we then multiply the first equation by some scalar test function $v$ and the
 bottom equation by some vector-valued test function $\btau$, we can integrate by
 parts over each element $K$:
 \begin{equation}
@@ -341,7 +358,7 @@ u-\bfsigma)\cdot\mathbf{n},v)_{\partial K}&=(f,v)_K\\
 The discontinuous Petrov-Galerkin method refers to the fact that we are using
 discontinuous optimal test functions that come from a space differing from the
 trial space. It does not specify our choice of trial space. Nevertheless, many
-considerations of DPG in the literature (convection-diffusion \cite{DPG6},
+versions of DPG in the literature (convection-diffusion \cite{DPG6},
 linear elasticity \cite{BramwellDemkowiczGopalakrishnanQiu11}, linear
 acoustics \cite{DemkowiczGopalakrishnanMugaZitelli12}, Stokes
 \cite{DPGStokes}) associate DPG with the so-called ``ultra-weak formulation.''
@@ -546,7 +563,7 @@ function
 \end{equation}
 Note that $\text{div} \bfpsi_h = \text{div} \bfpsi = \lambda_K$ in element $K$.
 
-Classical $h$-interpolation interpolation error estimate for the lowest error
+Classical $h$-interpolation interpolation error estimates for the lowest error
 Raviart-Thomas elements and continuity of operator $R$ imply the stability estimate:
 \begin{equation}
 \begin{array}{lll}
@@ -568,10 +585,11 @@ Let $\hat{t}$ be the trace of $\bfpsi_h$. We have then,
 \end{equation}
 where $C$ is the constant from stability estimate~\eqref{eq:stab}.
 
-Notice that we have considered traces of lowest order Raviart-Thomas elements for the
-discretization of flux $\hat{t}$. The inf-sup condition for the lowest order RT spaces implies
-automatically the analogous condition for elements of arbitrary order; increasing
-space $U$ only makes the discrete inf-sup constant bigger.
+Notice that we have considered traces of lowest order Raviart-Thomas elements
+for the discretization of flux $\hat{t}$. The inf-sup condition for the lowest
+order RT spaces implies automatically the analogous condition for elements of
+arbitrary order; increasing the dimension of space $U$ only makes the discrete
+inf-sup constant bigger.
 
 
 
@@ -771,12 +789,12 @@ of the form
 \[
 u = \sum_{n=0} x^{n+\frac{1}{2}} \sin\LRp{\LRp{n+\frac{1}{2}}\theta}.
 \]
-Note that even in the lowest-order term, the gradient of $u$ displays a
+Note that in the lowest-order term, the gradient of $u$ displays a
 singularity at $r = 0$. It is well known that, for smooth boundary data,
-solutions to Laplace’s equation can be decomposed into the linear combination
+solutions to Laplace's equation can be decomposed into the linear combination
 of smooth and singular contributions; the above analysis implies that, when
 boundary conditions change from Dirichlet to Neumann on the half-plane, the
-Laplace’s equation will always develop a singularity in the stresses.
+Laplace's equation will always develop a singularity in the stresses.
 
 Consider now Laplace's equation $\del u = f$ on the box domain $\Omega =
 [0,1]^2$ with boundary conditions
@@ -1089,7 +1107,11 @@ For the following problems, we just use the graph norm for the local problems.
 \subsection{Inviscid Burgers' Equation}
 We include the inviscid Burgers' equation in our suite of tests because, being
 a nonlinear hyperbolic conservation law, it
+<<<<<<< HEAD
 falls under the purview of the Lax-Wendroff theorem.
+=======
+falls under the scope of the Lax-Wendroff theorem. %replaced purvue with purview, but I think scope might be more easily understood -JC
+>>>>>>> c0555dd502009489de326e7d9ed795c6513bc4ae
 The inviscid Burger's equation is
 \[
 \frac{\partial u}{\partial t}+u\frac{\partial u}{\partial x}=f\,.
@@ -1152,7 +1174,7 @@ $\int_K\hat\bfu\cdot\mathbf{n}=0$. Results follow in Sections
 In \ref{sec:problemDescriptions} we define each numerical experiment, and in
 \ref{sec:problemAnalysis} we discuss the solution properties in general. We
 solve with second order field variables and flux ($u$, $\bfsigma$, and $\hat
-t$), third order traces ($\hat t$), and fifth order test functions ($v$ and
+t$), third order traces ($\hat u$), and fifth order test functions ($v$ and
 $\btau$).
 
 We measure flux imbalance by looping over each element in the mesh and
@@ -1318,15 +1340,15 @@ of boundary edges to 1 at corners. We don't enforce an outflow boundary.
 \end{figure}
 
 \subsubsection{Wedge Problem}
-We devised this problem to examine some of the issues we were having blow up
-of the solution under the robust test norm. The domain is a rectangle
-$[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom edges with
-the origin at $(0,0)$ is removed. The convection vector $\bbeta=(1,0)^T$,
-$\epsilon=10^{-1}$, and we apply boundary conditions $\hat t=0$ on the left
-inflow edge, $\hat u=0$ on the top edge, $\bbeta\cdot\mathbf{n}\cdot\hat
-u-\hat t=\sigma_n=0$ on the right outflow edge, $\hat u=1$ on the leading edge
-of the wedge, and $\hat t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge
-of the wedge.
+We devised this problem to examine the issues we were having with the
+singularity in the solution under the robust test norm. The domain is a
+rectangle $[-0.5,0.5]\times[-1,0.5]$ where the triangle connecting the bottom
+edges with the origin at $(0,0)$ is removed. The convection vector
+$\bbeta=(1,0)^T$, $\epsilon=10^{-1}$, and we apply boundary conditions $\hat
+t=0$ on the left inflow edge, $\hat u=0$ on the top edge,
+$\bbeta\cdot\mathbf{n}\cdot\hat u-\hat t=\sigma_n=0$ on the right outflow
+edge, $\hat u=1$ on the leading edge of the wedge, and $\hat
+t=\bbeta\cdot\mathbf{n}\cdot 1$ on the trailing edge of the wedge.
 
 \begin{figure}[p]
 \centering
@@ -1530,8 +1552,9 @@ challenging.
 We measure mass loss much more directly in these two Stokes problems. Because
 fluid enters and leaves the domain only through the inlet and outlet
 boundaries, we should be able to integrate the mass flux over any
-cross-section of the mesh and get the same value. Unfortunately, it's not
-mathematically kosher to take line integrals of our field variables which only
+cross-section of the mesh and get the same value. Unfortunately, it is not
+%mathematically kosher to take line integrals of our field variables which only
+mathematically well-defined to take line integrals of our field variables which only
 live in $L^2$. We can, however, integrate the trace and flux variables over element boundaries.
 This carries the unfortunate limitation that we can only measure mass loss
 where there is a clear vertical mesh line. We therefore pick integration lines
@@ -1756,7 +1779,7 @@ test functions.
 \subsection{Analysis of Results}\label{sec:problemAnalysis}
 \subsubsection{Convection-Diffusion Results}
 % Solution quality
-The general trend we see looking at the results is that the solution quality
+The general trend we observe from the results is that the solution quality
 of the standard and restricted formulations is nearly identical once
 sufficiently resolved.
 
@@ -1777,20 +1800,21 @@ It is clear when comparing the refinement patterns that the two methods appear
 to calculate slightly different error representation functions (which
 determine which elements to adaptively refine). Standard DPG minimizes the
 error in the energy norm, but the Lagrange multipliers in the restricted
-formulation shift the solution slightly. So we should see somewhat higher
+formulation shift the solution slightly, so we should see somewhat higher
 error and different elements will get chosen for refinement. The choice of
 test norm also plays into this calculation of the error representation
 function. As discussed earlier, the restricted formulation allows us to
 throw away the $L^2$ term on $v$. The inclusion of this term required certain
 assumptions on $\bbeta$ \cite{ChanHeuerThanhDemkowicz2012} that break down for
-the vortex problem. Here we see the standard method needlessly refines
+the vortex problem, where $\snorm{\bbeta}\rightarrow 0$ in the center of the domain. 
+Here, we see the standard method needlessly refines
 in the center of the domain where the solution is constant. The restricted
 scheme is more discerning about refinements and focuses them where
 solution features are changing. In general, though, both methods appear to
 follow very similar refinement patterns.
 
 % Mass conservation
-It shouldn't come as a surprise that the standard and restricted
+It should not come as a surprise that the standard and restricted
 solutions match each other so closely. The restricted formulation
 enforces local conservation more strictly, but if we examine the flux
 imbalance plots, the standard DPG formulation is nearly conservative on its
@@ -1802,13 +1826,13 @@ accruement of numerical error.
 
 \subsubsection{Burgers' Results}
 Standard and restricted DPG perform nearly identically for the
-inviscid Burgers' problem. It's obvious that the Lax-Wendroff condition of
+inviscid Burgers' problem. It is obvious that the Lax-Wendroff condition of
 local conservation is a sufficient, but not necessary condition for numerical
 solutions to hyperbolic conservation laws. We see the same behavior with the
 flux imbalance plots that was so common with convection-diffusion.
 
 \subsubsection{Stokes Results}
-The two Stokes problems are the first ones we encounter that really stress the local
+The two Stokes problems are the first ones we encounter that stress the local
 conservation property of standard DPG. With a cylinder radius of $0.6$,
 standard DPG loses nearly 30\% of the mass post-cylinder, but quickly recovers
 most of that with further refinement. As we increase the cylinder radius to
@@ -1831,21 +1855,25 @@ nonconservative solution severely underpredicts the peak. With the $r=0.9$
 cylinder, this problem is only exacerbated. After just one adaptive
 refinement, the conservative solution nails the peak velocity. The
 nonconservative solution is completely useless at this point. We see the same
-thing with the backward facing step problem. The conservative solution is
-great on the coarsest mesh, while standard DPG needs a lot more resolution
-before it even starts to look right.
+thing with the backward facing step problem. The conservative solution preserves
+qualitative features even on the coarsest mesh, while standard DPG requires far higher resolution
+to achieve a similar solution. 
 
 \section{Conclusions}
-We've developed a locally conservative formulation of DPG by leveraging
+We have developed a locally conservative formulation of DPG by leveraging
 Lagrange multipliers. While the formulation is provably convergent and robust, it does
 increase the number of unknowns in the system and changes the structure from
+<<<<<<< HEAD
 symmetric positive-definite to a saddle point problem. Numerical results
+=======
+symmetric positive-definite to a saddle-point problem. Numerical results
+>>>>>>> c0555dd502009489de326e7d9ed795c6513bc4ae
 indicate that the method delivers what it promises with local flux imbalances
 hovering close to machine precision, but they also indicate that for most of the
 problems considered, standard DPG is close to conservative and becomes more so
 with refinements. For the Stokes problems, standard DPG suffered similar mass
 loss as standard least squares on coarse meshes, but made up the lost mass with further
-resolution. On problems where local conservation was really stressed,
+resolution. For problems where local conservation was stressed,
 restricted DPG was able to deliver reasonable solutions with much less
 resolution than standard DPG.
 Probably the most encouraging result of these experiments is
