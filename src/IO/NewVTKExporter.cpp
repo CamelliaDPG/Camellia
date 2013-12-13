@@ -32,6 +32,13 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
 
   for (unsigned cellIndex=0; cellIndex<_mesh->cellCount(); cellIndex++) {
     NewMeshCellPtr cell = _mesh->getCell(cellIndex);
+    // Skip the rest of the block if cell is a parent cell
+    if (cell->isParent())
+      continue;
+
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
+    cout << physicalCellNodes << endl;
+
     // unsigned sideCount = cell->topology()->getSideCount();
     // const vector< unsigned > vertices = cell->vertices();
     CellTopoPtr cellTopoPtr = cell->topology();
@@ -40,6 +47,8 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     int pOrder = 2;
     if (defaultPts)
       num1DPts = pow(2.0, pOrder-1);
+
+    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(physicalCellNodes, *cellTopoPtr, 1, false) );
 
     switch (cellTopoKey)
     {
@@ -87,6 +96,8 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
     }
+
+    // basisCache->setRefCellPoints(refPoints);
   }
 
   cout << "Wrote " <<  functionName << ".vtu" << endl;
