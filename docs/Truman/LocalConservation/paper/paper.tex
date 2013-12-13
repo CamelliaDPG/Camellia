@@ -503,7 +503,7 @@ where $\bfU,Q$ are Hilbert spaces, and $a,c,l,g$ denote the appropriate
 bilinear and linear forms. Note that $a(\bfu,\bfw)=b(\bfu,T\bfw)=(T\bfu,T\bfw)_V$ in
 the notation from the previous section.
 
-Let function $\bfpsi$ denote the $H(\text{div},\Omega)$ extension of flux $\hat{t}$
+Let function $\bfpsi$ denote the $\bfH(\text{div},\Omega)$ extension of flux $\hat{t}$
 that realizes the minimum in the definition of the quotient (minimum energy
 extension) norm.
 The choice of norm for the Lagrange multipliers $\lambda_K$ is implied
@@ -627,7 +627,7 @@ error in the energy norm (minimizes the residual). This is no longer true for th
 restricted version. So, can we claim robustness in the sense of the inequality above
 for the restricted version as well?
 
-One possible way to attack the problem is to switch to the energy norm in the Brezzi's stability
+One possible way to attack the problem is to switch to the energy norm in the Brezzi stability
 analysis. Dealing with the ``inf-sup in kernel'' condition is simple. Upon replacing
 the original norm of solution $\bfu$ with the energy norm, both constant $\gamma$ and continuity
 constant become unity. In order to investigate the robustness of inf-sup  constant $\beta$,
@@ -661,7 +661,7 @@ of the divergence operator constructed by Costabel and McIntosh. The only change
 with the previous analysis, is the evaluation of norm of $\hat{t}_h$. For this, we need
 to solve the local problems:
 \begin{align}
-((v,\bftau), (\delta v, \delta \bftau)_V &= \langle \hat{t}, \delta v \rangle_{\ptl K}
+((v,\bftau), (\delta v, \delta \bftau))_V &= \langle \hat{t}, \delta v \rangle_{\ptl K}
 = \int_K \text{div} \bfpsi_h \, \delta v = \int_K \text{div} \bfpsi \, \delta v
 \nonumber\\
 &= \int_K \lambda_K \delta v
