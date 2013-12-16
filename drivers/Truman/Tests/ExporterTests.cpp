@@ -37,6 +37,44 @@ int main(int argc, char *argv[])
 
   {
   // 2D tests
+    CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
+
+  // let's draw a little house
+    vector<double> v0 = makeVertex(0);
+    vector<double> v1 = makeVertex(1);
+    vector<double> v2 = makeVertex(2);
+
+    vector< vector<double> > vertices;
+    vertices.push_back(v0);
+    vertices.push_back(v1);
+    vertices.push_back(v2);
+
+    vector<unsigned> line1VertexList;
+    vector<unsigned> line2VertexList;
+    line1VertexList.push_back(0);
+    line1VertexList.push_back(1);
+    line2VertexList.push_back(1);
+    line2VertexList.push_back(2);
+
+    vector< vector<unsigned> > elementVertices;
+    elementVertices.push_back(line1VertexList);
+    elementVertices.push_back(line2VertexList);
+
+    vector< CellTopoPtr > cellTopos;
+    cellTopos.push_back(line_2);
+    cellTopos.push_back(line_2);
+    NewMeshGeometryPtr meshGeometry = Teuchos::rcp( new NewMeshGeometry(vertices, elementVertices, cellTopos) );
+
+    NewMeshPtr mesh = Teuchos::rcp( new NewMesh(meshGeometry) );
+
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr function = x;
+
+    NewVTKExporter exporter(mesh);
+    exporter.exportFunction(function, "function1");
+  }
+  {
+  // 2D tests
     CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
 

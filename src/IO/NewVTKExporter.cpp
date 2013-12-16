@@ -51,6 +51,9 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
 
     switch (cellTopoKey)
     {
+      case shards::Line<2>::key:
+        numPoints = num1DPts;
+        break;
       case shards::Quadrilateral<4>::key:
         numPoints = num1DPts*num1DPts;
         break;
@@ -68,6 +71,16 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     FieldContainer<double> refPoints(numPoints,spaceDim);
     switch (cellTopoKey)
     {
+      case shards::Line<2>::key:
+        {
+          for (int i=0; i < num1DPts; i++)
+          {
+            int pointIndex = i;
+            double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+            refPoints(pointIndex,0) = x;
+          }
+        }
+        break;
       case shards::Quadrilateral<4>::key:
         {
           for (int j = 0; j < num1DPts; j++)
@@ -131,6 +144,17 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     int subcellStartIndex = total_vertices;
     switch (cellTopoKey)
     {
+      case shards::Line<2>::key:
+      {
+        for (int i=0; i < num1DPts-1; i++)
+        {
+          int ind1 = total_vertices + i;
+          int ind2 = ind1 + 1;
+          vtkIdType subCell[2] = {ind1, ind2};
+          ug->InsertNextCell((int)VTK_LINE, 2, subCell);
+        }
+      }
+      break;
       case shards::Quadrilateral<4>::key:
       {
         for (int j=0; j < num1DPts-1; j++)
@@ -202,7 +226,9 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     }
     for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
       {
-        if (spaceDim == 2)
+        if (spaceDim == 1)
+          points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0), 0.0, 0.0);
+        else if (spaceDim == 2)
           points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
             (*physicalPoints)(0, pointIndex, 1), 0.0);
         else
