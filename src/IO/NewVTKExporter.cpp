@@ -38,8 +38,6 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
 
     FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellIndex);
 
-    // unsigned sideCount = cell->topology()->getSideCount();
-    // const vector< unsigned > vertices = cell->vertices();
     CellTopoPtr cellTopoPtr = cell->topology();
     unsigned cellTopoKey = cellTopoPtr->getKey();
     int numPoints = 0;
@@ -59,6 +57,9 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
       case shards::Triangle<3>::key:
         for (int i=1; i <= num1DPts; i++)
           numPoints += i;
+        break;
+      case shards::Hexahedron<8>::key:
+        numPoints = num1DPts*num1DPts*num1DPts;
         break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
@@ -94,6 +95,22 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
             }
         }
         break;
+      case shards::Hexahedron<8>::key:
+        {
+          for (int k = 0; k < num1DPts; k++)
+            for (int j=0; j < num1DPts; j++)
+              for (int i=0; i < num1DPts; i++)
+              {
+                int pointIndex = k*num1DPts*num1DPts + j*num1DPts + i;
+                double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
+                double y = -1.0 + 2.0*(double(j)/double(num1DPts-1));
+                double z = -1.0 + 2.0*(double(k)/double(num1DPts-1));
+                refPoints(pointIndex,0) = x;
+                refPoints(pointIndex,1) = y;
+                refPoints(pointIndex,2) = z;
+              }
+            }
+        break;
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
     }
@@ -115,62 +132,83 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
     switch (cellTopoKey)
     {
       case shards::Quadrilateral<4>::key:
+      {
+        for (int j=0; j < num1DPts-1; j++)
+        {
+          for (int i=0; i < num1DPts-1; i++)
+          {
+            int ind1 = total_vertices + i + j*num1DPts;
+            int ind2 = ind1 + 1;
+            int ind3 = ind2 + num1DPts;
+            int ind4 = ind1 + num1DPts;
+            vtkIdType subCell[4] = {ind1, ind2, ind3, ind4};
+            ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
+          }
+        }
+      }
+      break;
+      case shards::Triangle<3>::key:
+      {
+        for (int j=0; j < num1DPts-1; j++)
+        {
+          for (int i=0; i < num1DPts-1-j; i++)
+          {
+            int ind1 = subcellStartIndex;
+            int ind2 = ind1 + 1;
+            int ind3 = ind1 + num1DPts-j;
+            vtkIdType subCell[3] = {ind1, ind2, ind3};
+            ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+
+            if (i < num1DPts-2-j)
+            {
+              int ind1 = subcellStartIndex+1;
+              int ind2 = ind1 + num1DPts - j;
+              int ind3 = ind1 + num1DPts -j - 1;
+              vtkIdType subCell[3] = {ind1, ind2, ind3};
+              ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
+            }
+
+            subcellStartIndex++;
+          }
+          subcellStartIndex++;
+        }
+      }
+      break;
+      case shards::Hexahedron<8>::key:
+      {
+        for (int k=0; k < num1DPts-1; k++)
         {
           for (int j=0; j < num1DPts-1; j++)
           {
             for (int i=0; i < num1DPts-1; i++)
             {
-              int ind1 = subcellStartIndex;
+              int ind1 = total_vertices + i + j*num1DPts + k*num1DPts*num1DPts;
               int ind2 = ind1 + 1;
               int ind3 = ind2 + num1DPts;
               int ind4 = ind1 + num1DPts;
-              vtkIdType subCell[4] = {
-                ind1, ind2, ind3, ind4};
-              ug->InsertNextCell((int)VTK_QUAD, 4, subCell);
-
-              subcellStartIndex++;
+              int ind5 = ind1 + num1DPts*num1DPts;
+              int ind6 = ind5 + 1;
+              int ind7 = ind6 + num1DPts;
+              int ind8 = ind5 + num1DPts;
+              vtkIdType subCell[8] = {ind1, ind2, ind3, ind4, ind5, ind6, ind7, ind8};
+              ug->InsertNextCell((int)VTK_HEXAHEDRON, 8, subCell);
             }
-            subcellStartIndex++;
           }
         }
-        break;
-      case shards::Triangle<3>::key:
-        {
-          for (int j=0; j < num1DPts-1; j++)
-          {
-            for (int i=0; i < num1DPts-1-j; i++)
-            {
-              int ind1 = subcellStartIndex;
-              int ind2 = ind1 + 1;
-              int ind3 = ind1 + num1DPts-j;
-              vtkIdType subCell[3] = {
-                ind1, ind2, ind3};
-              ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
-
-              if (i < num1DPts-2-j)
-              {
-                int ind1 = subcellStartIndex+1;
-                int ind2 = ind1 + num1DPts - j;
-                int ind3 = ind1 + num1DPts -j - 1;
-                vtkIdType subCell[3] = {
-                  ind1, ind2, ind3};
-                ug->InsertNextCell((int)VTK_TRIANGLE, 3, subCell);
-              }
-
-              subcellStartIndex++;
-            }
-            subcellStartIndex++;
-          }
-        }
-        break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
       }
-      for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
+      break;
+      default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
+    }
+    for (int pointIndex = 0; pointIndex < numPoints; pointIndex++)
       {
-        points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
-          (*physicalPoints)(0, pointIndex, 1), 0.0);
-        switch(vals->GetNumberOfComponents())
+        if (spaceDim == 2)
+          points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
+            (*physicalPoints)(0, pointIndex, 1), 0.0);
+        else
+          points->InsertNextPoint((*physicalPoints)(0, pointIndex, 0),
+            (*physicalPoints)(0, pointIndex, 1), (*physicalPoints)(0, pointIndex, 2));
+          switch(vals->GetNumberOfComponents())
         {
           case 1:
           vals->InsertNextTuple1(computedValues(0, pointIndex));
@@ -179,7 +217,7 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
           vals->InsertNextTuple2(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1));
           break;
           case 3:
-          vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), 0);
+          vals->InsertNextTuple3(computedValues(0, pointIndex, 0), computedValues(0, pointIndex, 1), computedValues(0, pointIndex, 2));
           break;
           default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported number of components");
@@ -202,8 +240,8 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
 #endif
     ug->Delete();
     wr->SetFileName((functionName+".vtu").c_str());
-  // wr->SetDataModeToBinary();
-    wr->SetDataModeToAscii();
+    wr->SetDataModeToBinary();
+    // wr->SetDataModeToAscii();
     wr->Update();
     wr->Write();
     wr->Delete();
