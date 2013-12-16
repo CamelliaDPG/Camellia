@@ -187,8 +187,9 @@ double findHorizontalSignReversal(double y, double xGuessLeft, double xGuessRigh
     double xGuess = (xGuessLeft + xGuessRight) / 2;
     if (rank==0) {
       cout << "Error: u1(" << xGuessLeft << ") = " << leftValue << " and u1(" << xGuessRight << ") = " << rightValue;
-      cout << " have the same sign.  Returning " << xGuess << endl;
+      cout << " have the same sign.  Returning " << -xGuess << endl;
     }
+    return -xGuess;
   }
   int numIterations = 30;
   double x = 0;
@@ -258,6 +259,16 @@ void computeRecirculationRegion(double &xPoint, double &yPoint, SolutionPtr stre
   }
 }
 
+void computeLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance,
+                               double &primaryReattachmentLength, double &secondarySeparationLength, double &secondaryReattachmentLength) {
+  // find the sign reversals in u1
+  double yNearBottom = MESH_BOTTOM + epsDistance;
+  double yNearTop = MESH_TOP - epsDistance;
+  primaryReattachmentLength = findHorizontalSignReversal(yNearBottom, 1.0, 15.0, soln, u1);
+  secondarySeparationLength = findHorizontalSignReversal(yNearTop, 1.0, 7, soln, u1);
+  secondaryReattachmentLength = findHorizontalSignReversal(yNearTop, 7, 15, soln, u1);
+}
+
 void printLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance) {
   // find the sign reversals in u1
   double yNearBottom = MESH_BOTTOM + epsDistance;
@@ -286,6 +297,43 @@ vector<double> verticalLinePoints() {
     yPoints.push_back(y);
   }
   return yPoints;
+}
+
+struct VerticalLineSolutionValues {
+  double x;
+  vector<double> yPoints;
+  vector<double> u1;
+  vector<double> u2;
+  vector<double> omega;
+  vector<double> p;
+};
+
+VerticalLineSolutionValues computeVerticalLineSolutionValues(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
+                                      FunctionPtr p_prev, FunctionPtr vorticity, bool computePOffsetAtOrigin = true) {
+  
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  // the next bit commented out -- Function::evaluate() must depend only on space, not on the mesh (prev soln depends on mesh)
+  
+  double pOffset = computePOffsetAtOrigin ? Function::evaluate(p_prev, 0, 0) : 0; // Gartling sets p at (0,0) = 0.
+  
+  VerticalLineSolutionValues values;
+  
+  double y;
+  double x = xValue;
+  values.x = xValue;
+  values.yPoints = verticalLinePoints();
+  for (int i=0; i<values.yPoints.size(); i++) {
+    y = values.yPoints[i];
+    values.u1.push_back( Function::evaluate(u1_prev, x, y) );
+    values.u2.push_back( Function::evaluate(u2_prev, x, y) );
+    values.p.push_back( Function::evaluate(p_prev, x, y) - pOffset );
+    values.omega.push_back( Function::evaluate(vorticity, x, y) );
+  }
+  return values;
 }
 
 void reportVerticalLineSolutionValues(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
@@ -418,6 +466,26 @@ int main(int argc, char *argv[]) {
     STEP_X = 0.0;
     MESH_TOP = 0.5;
     MESH_BOTTOM = -0.5;
+  }
+  
+  vector<double> relativeEnergyErrors(numRefs + 1);
+  vector<long> dofCounts(numRefs+1);
+  vector<long> fluxDofCounts(numRefs+1);
+  vector<long> elementCounts(numRefs+1);
+  vector<int> iterationCounts(numRefs+1);
+  vector<double> tolerances(numRefs+1);
+  
+  map<double, vector< VerticalLineSolutionValues > > verticalCutValues; // keys are x locations
+  
+  vector<double> gartlingPrimaryReattachmentLengths,gartlingSecondarySeparationLengths,gartlingSecondaryReattachmentLengths;
+  if (useGartlingParameters) {
+    gartlingPrimaryReattachmentLengths = vector<double>(numRefs + 1);
+    gartlingSecondarySeparationLengths = vector<double>(numRefs + 1);
+    gartlingSecondaryReattachmentLengths = vector<double>(numRefs + 1);
+    verticalCutValues[0] = vector< VerticalLineSolutionValues >();
+    verticalCutValues[7] = vector< VerticalLineSolutionValues >();
+    verticalCutValues[15] = vector< VerticalLineSolutionValues >();
+    verticalCutValues[30] = vector< VerticalLineSolutionValues >();
   }
   
   Teuchos::RCP<Solver> solver;
@@ -585,7 +653,6 @@ int main(int argc, char *argv[]) {
   mesh->registerObserver(refHistory);
   
   FunctionPtr one = Function::constant(1.0);
-  double meshMeasure = one->integrate(mesh);
   
   ParameterFunctionPtr dt_inv = ParameterFunction::parameterFunction(1.0 / dt);
   if (artificialTimeStepping) {
@@ -822,7 +889,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr u1_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u1 ) );
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2 ) );
   FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p ) );
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
+  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, (-Re) * sigma12 + Re * sigma21 ) );
+//  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
   
   FunctionPtr l2_incr, l2_prev;
   
@@ -853,6 +921,8 @@ int main(int argc, char *argv[]) {
   
   LinearTermPtr incrementalSolnFunctional = problem.bf()->testFunctional(problem.solutionIncrement());
   RieszRep incrementRieszRep(mesh, problem.solutionIncrement()->ip(), incrementalSolnFunctional);
+  
+  tolerances[0] = initialMinL2Increment;
   
   for (int refIndex=0; refIndex<numRefs; refIndex++){
     if (startWithZeroSolutionAfterRefinement) {
@@ -901,13 +971,6 @@ int main(int argc, char *argv[]) {
       }
     }
     
-    // reset iteration count to 1 (for the background flow):
-    problem.setIterationCount(1);
-    // reset iteration count to 0 (to start from 0 initial guess):
-    //      problem.setIterationCount(0);
-    
-    //      solveStrategy->solve(printToConsole);
-    
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
     solnRieszRep.computeRieszRep();
     double solnEnergyNormTotal = solnRieszRep.getNorm();
@@ -916,6 +979,23 @@ int main(int argc, char *argv[]) {
     
     double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
     minL2Increment = initialMinL2Increment * relativeEnergyError;
+    
+    relativeEnergyErrors[refIndex] = relativeEnergyError;
+    dofCounts[refIndex] = mesh->numGlobalDofs();
+    fluxDofCounts[refIndex] = mesh->numFluxDofs();
+    elementCounts[refIndex] = mesh->numActiveElements();
+    
+    iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
+    tolerances[refIndex+1] = minL2Increment;
+    
+    
+    // reset iteration count to 1 (for the background flow):
+    problem.setIterationCount(1);
+    // reset iteration count to 0 (to start from 0 initial guess):
+    //      problem.setIterationCount(0);
+    
+    //      solveStrategy->solve(printToConsole);
+    
     
     if (rank == 0) {
       cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
@@ -932,6 +1012,19 @@ int main(int argc, char *argv[]) {
     if (useGartlingParameters) {
       if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
       printLengthsForGartling(solution, sigma12, 0);
+      
+      computeLengthsForGartling(solution, sigma12, 0,
+                                gartlingPrimaryReattachmentLengths[refIndex],
+                                gartlingSecondarySeparationLengths[refIndex],
+                                gartlingSecondaryReattachmentLengths[refIndex]);
+      
+      for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+           cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+        double x = cutVectorsIt->first;
+        VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
+        cutVectorsIt->second.push_back(values);
+      }
+      
       reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
       reportVerticalLineSolutionValues( 7.0, u1_prev, u2_prev, p_prev, vorticity);
       reportVerticalLineSolutionValues(15.0, u1_prev, u2_prev, p_prev, vorticity);
@@ -1015,8 +1108,20 @@ int main(int argc, char *argv[]) {
     }
   }
   
+  solnRieszRep.computeRieszRep();
+  double solnEnergyNormTotal = solnRieszRep.getNorm();
+  
   double energyErrorTotal = solution->energyErrorTotal();
   double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+  
+  double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+  
+  relativeEnergyErrors[numRefs] = relativeEnergyError;
+  dofCounts[numRefs] = mesh->numGlobalDofs();
+  fluxDofCounts[numRefs] = mesh->numFluxDofs();
+  elementCounts[numRefs] = mesh->numActiveElements();
+  iterationCounts[numRefs] = (numRefs > 0) ? problem.iterationCount() - 1 : problem.iterationCount();
+  
   if (rank == 0) {
     cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
     cout << "Final energy error: " << energyErrorTotal << endl;
@@ -1028,6 +1133,18 @@ int main(int argc, char *argv[]) {
 //    printLengthsForGartling(solution, u1, 0.01);
     if (rank==0) cout << "Using sigma12 sign reversals and 0 eps:\n";
     printLengthsForGartling(solution, sigma12, 0);
+    computeLengthsForGartling(solution, sigma12, 0,
+                              gartlingPrimaryReattachmentLengths[numRefs],
+                              gartlingSecondarySeparationLengths[numRefs],
+                              gartlingSecondaryReattachmentLengths[numRefs]);
+    
+    for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+         cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+      double x = cutVectorsIt->first;
+      VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
+      cutVectorsIt->second.push_back(values);
+    }
+    
     reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
     reportVerticalLineSolutionValues( 7.0, u1_prev, u2_prev, p_prev, vorticity);
     reportVerticalLineSolutionValues(15.0, u1_prev, u2_prev, p_prev, vorticity);
@@ -1267,6 +1384,52 @@ int main(int argc, char *argv[]) {
     //    writePatchValues(0, .01, 0, .01, streamSolution, phi, "phi_patch_minute_detail.m");
     //    writePatchValues(0, .001, 0, .001, streamSolution, phi, "phi_patch_minute_minute_detail.m");
     
+    // write out the separation values
+    if (useGartlingParameters) {
+      if (rank==0) {
+        ofstream fout("backstepSeparationLengths.txt");
+        fout << "ref. #\tprimary reattachment\tsecondary separation\tsecondary reattachment\trel. energy error\tL^2 tol.\tNR iterations\telements\tdofs\tflux dofs\n";
+        for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+          fout << setprecision(8) << fixed;
+          fout << refIndex << "\t" << gartlingPrimaryReattachmentLengths[refIndex];
+          fout << "\t" << gartlingSecondarySeparationLengths[refIndex];
+          fout << "\t" << gartlingSecondaryReattachmentLengths[refIndex];
+          fout << setprecision(3) << scientific;;
+          fout << "\t" << relativeEnergyErrors[refIndex];
+          fout << "\t" << tolerances[refIndex];
+          fout << "\t" << iterationCounts[refIndex];
+          fout << "\t" << elementCounts[refIndex];
+          fout << "\t" << dofCounts[refIndex];
+          fout << "\t" << fluxDofCounts[refIndex];
+          fout << endl;
+        }
+        fout.close();
+        
+        fout.open("backStepVerticalCutData.txt");
+        fout << "ref. #\tx\ty\tu1\tu2\t|u|\tp\tomega\n";
+        for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+          for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+               cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+            double x = cutVectorsIt->first;
+            vector< VerticalLineSolutionValues > valuesList = cutVectorsIt->second;
+            VerticalLineSolutionValues values = valuesList[refIndex];
+            int yCount = values.yPoints.size();
+            for (int yIndex=0; yIndex<yCount; yIndex++) {
+              double y = values.yPoints[yIndex];
+              double u1 = values.u1[yIndex];
+              double u2 = values.u2[yIndex];
+              double u = sqrt(u1*u1 + u2*u2);
+              double p = values.p[yIndex];
+              double omega = values.omega[yIndex];
+              fout << refIndex << "\t" << x << "\t" << y;
+              fout << "\t" << u1 << "\t" << u2 << "\t" << u;
+              fout << "\t" << p << "\t" << omega << endl;
+            }
+          }
+        }
+        fout.close();
+      }
+    }
     
     if (compareWithOverkill) {
       if (rank==0) {
