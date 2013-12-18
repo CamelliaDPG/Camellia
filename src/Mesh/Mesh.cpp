@@ -46,6 +46,8 @@
 
 #include "MeshTransformationFunction.h"
 
+#include "CamelliaCellTools.h"
+
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 #ifdef HAVE_MPI
@@ -1222,9 +1224,9 @@ double Mesh::distance(double x0, double y0, double x1, double y1) {
 }
 
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
-  if (_edgeToCurveMap.size() > 0) {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elementsForPoints does not support curvilinear meshes");
-  }
+//  if (_edgeToCurveMap.size() > 0) {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "elementsForPoints does not support curvilinear meshes");
+//  }
   
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<ElementPtr> elemsForPoints;
@@ -1291,7 +1293,21 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
   return elemsForPoints;
 }
 
-bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {  
+bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
+  // 12-18-13 revision: to use Intrepid's facilities and to allow curvilinear geometry
+  // note that this design, with a single point being passed in, will be quite inefficient
+  // if there are many points.  TODO: revise to allow multiple points (returning vector<bool>, maybe)
+  int numCells = 1, numPoints=1, spaceDim = 2;
+  FieldContainer<double> physicalPoints(numCells,numPoints,spaceDim);
+  physicalPoints(0,0,0) = x;
+  physicalPoints(0,0,1) = y;
+  FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
+  MeshPtr thisPtr = Teuchos::rcp(this,false);
+  CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, elem->cellID());
+  
+  int result = CellTools<double>::checkPointInclusion(&refPoints[0], spaceDim, *(elem->elementType()->cellTopoPtr));
+  return result == 1;
+  
   // the following commented-out bit is the start of a more efficient version of this method:
 //  vector<int> vertexIndices = _verticesForCellID[elem->cellID()];
 //  int numVertices = vertexIndices.size();
@@ -1318,8 +1334,11 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
 //  CellTools<double>::checkPointwiseInclusion(inCell, point, nodes, *(elem->elementType()->cellTopoPtr),cellIndex);
 //  return inCell(0) == 1;
   
+  /********************************************************/
+  // what follows is the pre-12/18/13 version of the method
+  
   // first, check whether x or y is outside the axis-aligned bounding box for the element
-  int numVertices = elem->numSides();
+/*  int numVertices = elem->numSides();
   int spaceDim = 2;
   FieldContainer<double> vertices(numVertices,spaceDim);
   verticesForCell(vertices, elem->cellID());
@@ -1367,7 +1386,7 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
     }
   }
   
-  return result;  
+  return result;  */
 }
 
 //void Mesh::enforceOneIrregularity() {

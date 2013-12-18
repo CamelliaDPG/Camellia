@@ -11,6 +11,8 @@
 
 #include "Shards_CellTopology.hpp"
 
+#include "Mesh.h"
+
 class CamelliaCellTools {
 public:
   static void refCellNodesForTopology(FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation = 0) { // 0 permutation is the identity
@@ -209,6 +211,166 @@ public:
     SubSubcellIdentifier subsubcell = make_pair(subsubcdim, subsubcord);
     return ordinalMaps[key][subcell][subsubcell];
   }
+  
+  // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
+  static void mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
+                                     const FieldContainer<double>  &        initGuess,
+                                     const FieldContainer<double>  &        physPoints,
+                                           MeshPtr mesh, int cellID)
+  {
+    ElementPtr elem = mesh->getElement(cellID);
+    int spaceDim  = elem->elementType()->cellTopoPtr->getDimension();
+    int numPoints;
+    int numCells=1;
+    
+    // Temp arrays for Newton iterates and Jacobians. Resize according to rank of ref. point array
+    FieldContainer<double> xOld;
+    FieldContainer<double> xTem;
+    FieldContainer<double> error;
+    FieldContainer<double> cellCenter(spaceDim);
+    
+    // Default: map (C,P,D) array of physical pt. sets to (C,P,D) array. Requires (C,P,D) temp arrays and (C,P,D,D) Jacobians.
+    numPoints = physPoints.dimension(1);
+    xOld.resize(numCells, numPoints, spaceDim);
+    xTem.resize(numCells, numPoints, spaceDim);
+    error.resize(numCells,numPoints);
+    // Set initial guess to xOld
+    for(int c = 0; c < numCells; c++){
+      for(int p = 0; p < numPoints; p++){
+        for(int d = 0; d < spaceDim; d++){
+          xOld(c, p, d) = initGuess(c, p, d);
+        }// d
+      }// p
+    }// c
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    // Newton method to solve the equation F(refPoints) - physPoints = 0:
+    // refPoints = xOld - DF^{-1}(xOld)*(F(xOld) - physPoints) = xOld + DF^{-1}(xOld)*(physPoints - F(xOld))
+    for(int iter = 0; iter < INTREPID_MAX_NEWTON; ++iter) {
+
+      // compute Jacobians at the old iterates and their inverses.
+      basisCache->setRefCellPoints(xOld);
+
+      // The Newton step.
+      xTem = basisCache->getPhysicalCubaturePoints();                    // xTem <- F(xOld)
+      RealSpaceTools<double>::subtract( xTem, physPoints, xTem );        // xTem <- physPoints - F(xOld)
+      RealSpaceTools<double>::matvec( refPoints, basisCache->getJacobianInv(), xTem);        // refPoints <- DF^{-1}( physPoints - F(xOld) )
+      RealSpaceTools<double>::add( refPoints, xOld );                    // refPoints <- DF^{-1}( physPoints - F(xOld) ) + xOld
+      
+      // l2 error (Euclidean distance) between old and new iterates: |xOld - xNew|
+      RealSpaceTools<double>::subtract( xTem, xOld, refPoints );
+      RealSpaceTools<double>::vectorNorm( error, xTem, NORM_TWO );
+      
+      // Average L2 error for a multiple sets of physical points: error is rank-2 (C,P) array
+      double totalError;
+      FieldContainer<double> cellWiseError(numCells);
+      // error(C,P) -> cellWiseError(P)
+      RealSpaceTools<double>::vectorNorm( cellWiseError, error, NORM_ONE );
+      totalError = RealSpaceTools<double>::vectorNorm( cellWiseError, NORM_ONE );
+      
+      // Stopping criterion:
+      if (totalError < INTREPID_TOL) {
+        break;
+      } 
+      else if ( iter > INTREPID_MAX_NEWTON) {
+        INTREPID_VALIDATE(std::cout << " CamelliaCellTools::mapToReferenceFrameInitGuess failed to converge to desired tolerance within " 
+                          << INTREPID_MAX_NEWTON  << " iterations\n" );
+        break;
+      }
+      
+      // initialize next Newton step
+      xOld = refPoints;
+    } // for(iter)
+  }
+
+  // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
+  static void mapToReferenceFrame(          FieldContainer<double>      &        refPoints,
+                               const FieldContainer<double>      &        physPoints,
+                               MeshPtr mesh, int cellID)
+  {
+    ElementPtr elem = mesh->getElement(cellID);
+    shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr);
+    int spaceDim  = cellTopo.getDimension();
+    int numPoints;
+    int numCells;
+    
+    // Define initial guesses to be  the Cell centers of the reference cell topology
+    FieldContainer<double> cellCenter(spaceDim);
+    switch( cellTopo.getKey() ){
+        // Standard Base topologies (number of cellWorkset = number of vertices)
+      case shards::Line<2>::key:
+        cellCenter(0) = 0.0;    break;
+        
+      case shards::Triangle<3>::key:
+      case shards::Triangle<6>::key:
+        cellCenter(0) = 1./3.;    cellCenter(1) = 1./3.;  break;
+        
+      case shards::Quadrilateral<4>::key:
+      case shards::Quadrilateral<9>::key:
+        cellCenter(0) = 0.0;      cellCenter(1) = 0.0;    break;
+        
+      case shards::Tetrahedron<4>::key:
+      case shards::Tetrahedron<10>::key:
+      case shards::Tetrahedron<11>::key:
+        cellCenter(0) = 1./6.;    cellCenter(1) =  1./6.;    cellCenter(2) =  1./6.;  break;
+        
+      case shards::Hexahedron<8>::key:
+      case shards::Hexahedron<27>::key:
+        cellCenter(0) = 0.0;      cellCenter(1) =  0.0;       cellCenter(2) =  0.0;   break;
+        
+      case shards::Wedge<6>::key:
+      case shards::Wedge<18>::key:
+        cellCenter(0) = 1./3.;    cellCenter(1) =  1./3.;     cellCenter(2) = 0.0;    break;
+        
+        // These extended topologies are not used for mapping purposes
+      case shards::Quadrilateral<8>::key:
+      case shards::Hexahedron<20>::key:
+      case shards::Wedge<15>::key:
+        TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+                                   ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported. ");
+        break;
+        
+        // Base and Extended Line, Beam and Shell topologies
+      case shards::Line<3>::key:
+      case shards::Beam<2>::key:
+      case shards::Beam<3>::key:
+      case shards::ShellLine<2>::key:
+      case shards::ShellLine<3>::key:
+      case shards::ShellTriangle<3>::key:
+      case shards::ShellTriangle<6>::key:
+      case shards::ShellQuadrilateral<4>::key:
+      case shards::ShellQuadrilateral<8>::key:
+      case shards::ShellQuadrilateral<9>::key:
+        TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+                                   ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported. ");
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+                                   ">>> ERROR (CamelliaCellTools::mapToReferenceFrame): Cell topology not supported.");
+    }// switch key
+    
+    // Resize initial guess depending on the rank of the physical points array
+    FieldContainer<double> initGuess;
+    
+    // Default: map (C,P,D) array of physical pt. sets to (C,P,D) array. Requires (C,P,D) initial guess.
+    numPoints = physPoints.dimension(1);
+    numCells = 1;
+    initGuess.resize(numCells, numPoints, spaceDim);
+    // Set initial guess:
+    for(int c = 0; c < numCells; c++){
+      for(int p = 0; p < numPoints; p++){
+        for(int d = 0; d < spaceDim; d++){
+          initGuess(c, p, d) = cellCenter(d);
+        }// d
+      }// p
+    }// c
+    
+    // Call method with initial guess
+    mapToReferenceFrameInitGuess(refPoints, initGuess, physPoints, mesh, cellID);
+  }
 };
 
 #endif
+
+
