@@ -91,11 +91,7 @@ private:
   bool _composeTransformationFxnWithMeshTransformation;
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
   //                                                                true means it goes from the straight-edge mesh to the curvilinear one)
-  
-  // eventually, will likely want to have _testOrdering, too--and RCP's would be better than copies (need to change constructors)
-  // TODO: refactor here to store trialOrdering, testOrdering, and testVsTest.
-  
-  
+    
   vector<int> _cellIDs; // the list of cell IDs corresponding to the physicalCellNodes
   
   int _cubDegree;
