@@ -289,11 +289,11 @@ void printLengthsForGartling(SolutionPtr soln, VarPtr u1, double epsDistance) {
   }
 }
 
-vector<double> verticalLinePoints() {
+vector<double> verticalLinePoints(double pointIncrement = .05) {
   // points where values are often reported in the literature (in Gartling)
   vector<double> yPoints;
   double y = 0.50;
-  for (y = 0.5; y >= -0.5; y -= 0.05) {
+  for (y = 0.5; y >= -0.5; y -= pointIncrement) {
     yPoints.push_back(y);
   }
   return yPoints;
@@ -306,7 +306,46 @@ struct VerticalLineSolutionValues {
   vector<double> u2;
   vector<double> omega;
   vector<double> p;
+  vector<double> sigma11; // these last 4 are only populated by the "Exhaustive" guy
+  vector<double> sigma12;
+  vector<double> sigma21;
+  vector<double> sigma22;
 };
+
+VerticalLineSolutionValues computeVerticalLineSolutionValuesExhaustive(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
+                                                                       FunctionPtr p_prev, FunctionPtr vorticity,
+                                                                       FunctionPtr sigma11_prev, FunctionPtr sigma12_prev,
+                                                                       FunctionPtr sigma21_prev, FunctionPtr sigma22_prev) {
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma11_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma12_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma21_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma22_prev.get())->setOverrideMeshCheck(false);
+  
+  double pOffset = Function::evaluate(p_prev, 0, MESH_TOP); // Gartling sets p at (0,0) = 0, but that's where the geometric singularity lies.
+  VerticalLineSolutionValues values;
+  
+  double y;
+  double x = xValue;
+  values.x = xValue;
+  values.yPoints = verticalLinePoints(); // matches Gartling's points
+  for (int i=0; i<values.yPoints.size(); i++) {
+    y = values.yPoints[i];
+    values.u1.push_back( Function::evaluate(u1_prev, x, y) );
+    values.u2.push_back( Function::evaluate(u2_prev, x, y) );
+    values.p.push_back( Function::evaluate(p_prev, x, y) - pOffset );
+    values.omega.push_back( Function::evaluate(vorticity, x, y) );
+    values.sigma11.push_back( Function::evaluate(sigma11_prev, x, y) );
+    values.sigma12.push_back( Function::evaluate(sigma12_prev, x, y) );
+    values.sigma21.push_back( Function::evaluate(sigma21_prev, x, y) );
+    values.sigma22.push_back( Function::evaluate(sigma22_prev, x, y) );
+  }
+  return values;
+}
 
 VerticalLineSolutionValues computeVerticalLineSolutionValues(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
                                       FunctionPtr p_prev, FunctionPtr vorticity, bool computePOffsetAtOrigin = true) {
@@ -325,7 +364,8 @@ VerticalLineSolutionValues computeVerticalLineSolutionValues(double xValue, Func
   double y;
   double x = xValue;
   values.x = xValue;
-  values.yPoints = verticalLinePoints();
+  double pointIncrement = .005; // this one for file output, ultimately visualization; 200 points seems a reasonable number
+  values.yPoints = verticalLinePoints(pointIncrement);
   for (int i=0; i<values.yPoints.size(); i++) {
     y = values.yPoints[i];
     values.u1.push_back( Function::evaluate(u1_prev, x, y) );
@@ -476,6 +516,8 @@ int main(int argc, char *argv[]) {
   vector<double> tolerances(numRefs+1);
   
   map<double, vector< VerticalLineSolutionValues > > verticalCutValues; // keys are x locations
+  vector< VerticalLineSolutionValues > verticalCutValuesExhaustive;
+
   
   vector<double> gartlingPrimaryReattachmentLengths,gartlingSecondarySeparationLengths,gartlingSecondaryReattachmentLengths;
   if (useGartlingParameters) {
@@ -879,10 +921,10 @@ int main(int argc, char *argv[]) {
   
 //  FunctionPtr u1_prev = Function::solution(u1, solution);
 //  FunctionPtr u2_prev = Function::solution(u2, solution);
-  FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
-  FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
-  FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
-  FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
+//  FunctionPtr sigma11_prev = Function::solution(sigma11, solution);
+//  FunctionPtr sigma12_prev = Function::solution(sigma12, solution);
+//  FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
+//  FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
 //  FunctionPtr p_prev = Function::solution(p, solution);
 
   // Function::evaluate() can be used with PreviousSolutionFunction, not with SimpleSolutionFunction.
@@ -890,6 +932,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr u2_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, u2 ) );
   FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p ) );
   FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, (-Re) * sigma12 + Re * sigma21 ) );
+  
+  FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma11 ) );
+  FunctionPtr sigma12_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma12 ) );
+  FunctionPtr sigma21_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma21 ) );
+  FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma22 ) );
+  
 //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, -u1->dy() + u2->dx() ) );
   
   FunctionPtr l2_incr, l2_prev;
@@ -1023,6 +1071,8 @@ int main(int argc, char *argv[]) {
         double x = cutVectorsIt->first;
         VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
         cutVectorsIt->second.push_back(values);
+        VerticalLineSolutionValues valuesExhaustive = computeVerticalLineSolutionValuesExhaustive(x, u1_prev, u2_prev, p_prev, vorticity, sigma11_prev, sigma12_prev, sigma21_prev, sigma22_prev);
+        verticalCutValuesExhaustive.push_back(valuesExhaustive);
       }
       
       reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
@@ -1143,6 +1193,8 @@ int main(int argc, char *argv[]) {
       double x = cutVectorsIt->first;
       VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
       cutVectorsIt->second.push_back(values);
+      VerticalLineSolutionValues valuesExhaustive = computeVerticalLineSolutionValuesExhaustive(x, u1_prev, u2_prev, p_prev, vorticity, sigma11_prev, sigma12_prev, sigma21_prev, sigma22_prev);
+      verticalCutValuesExhaustive.push_back(valuesExhaustive);
     }
     
     reportVerticalLineSolutionValues( 0.0, u1_prev, u2_prev, p_prev, vorticity);
@@ -1276,11 +1328,18 @@ int main(int argc, char *argv[]) {
   // commenting out the recirculation region computation, because it doesn't work yet.
 //  double x,y;
 //  computeRecirculationRegion(x, y, streamSolution, phi);
-  if (rank == 0) {  
+  if (rank == 0) {
     cout << "...solved.\n";
     cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
 //    cout << "Recirculation region top: y=" << y << endl;
 //    cout << "Recirculation region right: x=" << x << endl;
+  }
+  
+  // add our "exhaustive" (that is, benchmark) data to the end of the verticalCutValues lists
+  for (vector<VerticalLineSolutionValues>::iterator exhaustiveIt=verticalCutValuesExhaustive.begin();
+       exhaustiveIt != verticalCutValuesExhaustive.end(); exhaustiveIt++) {
+    double x = exhaustiveIt->x;
+    verticalCutValues[x].push_back(*exhaustiveIt);
   }
   
   if (rank==0){
@@ -1309,59 +1368,26 @@ int main(int argc, char *argv[]) {
 //    writePatchValues(0, RIGHT_OUTFLOW, 0, 2, streamSolution, phi, "phi_patch.m");
 //    writePatchValues(4, 5, 0, 1, streamSolution, phi, "phi_patch_east.m");
     
-    FieldContainer<double> eastPoints = pointGrid(4, RIGHT_OUTFLOW, 0, 2, 100);
-    FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_east.dat", eastPointData);
+    bool skipWritingPatchData = true;
+    
+    if (!skipWritingPatchData) {
+      FieldContainer<double> eastPoints = pointGrid(4, RIGHT_OUTFLOW, 0, 2, 100);
+      FieldContainer<double> eastPointData = solutionData(eastPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_east.dat", eastPointData);
 
-    FieldContainer<double> westPoints = pointGrid(0, 4, 1, 2, 100);
-    FieldContainer<double> westPointData = solutionData(westPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_west.dat", westPointData);
-    
-    set<double> contourLevels = diagonalContourLevels(eastPointData,4);
-    
-    vector<string> dataPaths;
-    dataPaths.push_back("phi_east.dat");
-    dataPaths.push_back("phi_west.dat");
-    GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
-    
-    double xTics = 0.1, yTics = -1;
-    FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, 0.45, 200);
-    FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
-    GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
-    set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
-    // be sure to the 0 contour, where the direction should change:
-    patchContourLevels.insert(0);
-    
-    vector<string> patchDataPath;
-    patchDataPath.push_back("phi_patch_east.dat");
-    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
-
-    {
-      map< pair<double,double> ,string> scaleToName;
-      scaleToName[make_pair(1.05, 1.20)]   = "bfsPatch";
-      scaleToName[make_pair(0.22, 0.20)] = "bfsPatchEddy1";
-      scaleToName[make_pair(0.05, 0.05)] = "bfsPatchEddy2";
+      FieldContainer<double> westPoints = pointGrid(0, 4, 1, 2, 100);
+      FieldContainer<double> westPointData = solutionData(westPoints, streamSolution, phi);
+      GnuPlotUtil::writeXYPoints("phi_west.dat", westPointData);
       
-      for (map< pair<double,double>, string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
-        double scaleX = (entryIt->first).first;
-        double scaleY = (entryIt->first).second;
-        string name = entryIt->second;
-        double xTics = scaleX / 4, yTics = -1;
-        ostringstream fileNameStream;
-        fileNameStream << name << ".dat";
-        FieldContainer<double> patchPoints = pointGrid(4, 4+scaleX, MESH_BOTTOM, MESH_BOTTOM + scaleY, 200);
-        FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
-        GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
-        ostringstream scriptNameStream;
-        scriptNameStream << name << ".p";
-        set<double> contourLevels = diagonalContourLevels(patchPointData,4);
-        vector<string> dataPaths;
-        dataPaths.push_back(fileNameStream.str());
-        GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str(), xTics, yTics);
-      }
+      set<double> contourLevels = diagonalContourLevels(eastPointData,4);
+      
+      vector<string> dataPaths;
+      dataPaths.push_back("phi_east.dat");
+      dataPaths.push_back("phi_west.dat");
+      GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, "backStepContourPlot.p");
       
       double xTics = 0.1, yTics = -1;
-      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, MESH_BOTTOM + 0.45, 200);
+      FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, 0.45, 200);
       FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
       GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
       set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
@@ -1371,6 +1397,43 @@ int main(int argc, char *argv[]) {
       vector<string> patchDataPath;
       patchDataPath.push_back("phi_patch_east.dat");
       GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+
+      {
+        map< pair<double,double> ,string> scaleToName;
+        scaleToName[make_pair(1.05, 1.20)]   = "bfsPatch";
+        scaleToName[make_pair(0.22, 0.20)] = "bfsPatchEddy1";
+        scaleToName[make_pair(0.05, 0.05)] = "bfsPatchEddy2";
+        
+        for (map< pair<double,double>, string>::iterator entryIt=scaleToName.begin(); entryIt != scaleToName.end(); entryIt++) {
+          double scaleX = (entryIt->first).first;
+          double scaleY = (entryIt->first).second;
+          string name = entryIt->second;
+          double xTics = scaleX / 4, yTics = -1;
+          ostringstream fileNameStream;
+          fileNameStream << name << ".dat";
+          FieldContainer<double> patchPoints = pointGrid(4, 4+scaleX, MESH_BOTTOM, MESH_BOTTOM + scaleY, 200);
+          FieldContainer<double> patchPointData = solutionData(patchPoints, streamSolution, phi);
+          GnuPlotUtil::writeXYPoints(fileNameStream.str(), patchPointData);
+          ostringstream scriptNameStream;
+          scriptNameStream << name << ".p";
+          set<double> contourLevels = diagonalContourLevels(patchPointData,4);
+          vector<string> dataPaths;
+          dataPaths.push_back(fileNameStream.str());
+          GnuPlotUtil::writeContourPlotScript(contourLevels, dataPaths, scriptNameStream.str(), xTics, yTics);
+        }
+        
+        double xTics = 0.1, yTics = -1;
+        FieldContainer<double> eastPatchPoints = pointGrid(4, 4.4, MESH_BOTTOM, MESH_BOTTOM + 0.45, 200);
+        FieldContainer<double> eastPatchPointData = solutionData(eastPatchPoints, streamSolution, phi);
+        GnuPlotUtil::writeXYPoints("phi_patch_east.dat", eastPatchPointData);
+        set<double> patchContourLevels = diagonalContourLevels(eastPatchPointData,4);
+        // be sure to the 0 contour, where the direction should change:
+        patchContourLevels.insert(0);
+        
+        vector<string> patchDataPath;
+        patchDataPath.push_back("phi_patch_east.dat");
+        GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPath, "backStepEastContourPlot.p", xTics, yTics);
+      }
     }
     
     GnuPlotUtil::writeComputationalMeshSkeleton("backStepMesh", mesh);
@@ -1404,15 +1467,27 @@ int main(int argc, char *argv[]) {
           fout << endl;
         }
         fout.close();
-        
-        fout.open("backStepVerticalCutData.txt");
-        fout << "ref. #\tx\ty\tu1\tu2\t|u|\tp\tomega\n";
-        for (int refIndex=0; refIndex<=numRefs; refIndex++) {
-          for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
-               cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
-            double x = cutVectorsIt->first;
+
+        for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+             cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+          double x = cutVectorsIt->first;
+          int listSize = cutVectorsIt->second.size();
+          for (int refIndex=0; refIndex<listSize; refIndex++) {
+            ostringstream fileName;
+            int modifiedRefIndex = (refIndex > numRefs) ? refIndex - (numRefs + 1) : refIndex;
+            if (refIndex <= numRefs)
+              fileName << "backStepVerticalCutData_x" << (int) x << "ref" << refIndex << ".txt";
+            else {
+              fileName << "backStepVerticalCutDataExhaustive_x" << (int) x << "ref" << modifiedRefIndex << ".txt";
+            }
+            fout.open(fileName.str().c_str());
+            fout << setprecision(15);
             vector< VerticalLineSolutionValues > valuesList = cutVectorsIt->second;
             VerticalLineSolutionValues values = valuesList[refIndex];
+            if (values.sigma11.size() == 0)
+              fout << "refno\txval\tyval\tu1\tu2\t|u|\tp\tomega\n";
+            else
+              fout << "refno\txval\tyval\tu1\tu2\t|u|\tp\tomega\tsigma11\tsigma12\tsigma21\tsigma22\n";
             int yCount = values.yPoints.size();
             for (int yIndex=0; yIndex<yCount; yIndex++) {
               double y = values.yPoints[yIndex];
@@ -1421,13 +1496,48 @@ int main(int argc, char *argv[]) {
               double u = sqrt(u1*u1 + u2*u2);
               double p = values.p[yIndex];
               double omega = values.omega[yIndex];
-              fout << refIndex << "\t" << x << "\t" << y;
+
+              fout << modifiedRefIndex << "\t" << x << "\t" << y;
               fout << "\t" << u1 << "\t" << u2 << "\t" << u;
-              fout << "\t" << p << "\t" << omega << endl;
+              fout << "\t" << p << "\t" << omega;
+              
+              if (values.sigma11.size() > 0) {
+                double sigma11 = values.sigma11[yIndex];
+                double sigma12 = values.sigma12[yIndex];
+                double sigma21 = values.sigma21[yIndex];
+                double sigma22 = values.sigma22[yIndex];
+                fout << "\t" << sigma11 << "\t" << sigma12;
+                fout << "\t" << sigma21 << "\t" << sigma22;
+              }
+              fout << endl;
             }
+            fout.close();
           }
         }
-        fout.close();
+        
+//        fout.open("backStepVerticalCutData.txt");
+//        fout << "ref. #\tx\ty\tu1\tu2\t|u|\tp\tomega\n";
+//        for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+//          for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+//               cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+//            double x = cutVectorsIt->first;
+//            vector< VerticalLineSolutionValues > valuesList = cutVectorsIt->second;
+//            VerticalLineSolutionValues values = valuesList[refIndex];
+//            int yCount = values.yPoints.size();
+//            for (int yIndex=0; yIndex<yCount; yIndex++) {
+//              double y = values.yPoints[yIndex];
+//              double u1 = values.u1[yIndex];
+//              double u2 = values.u2[yIndex];
+//              double u = sqrt(u1*u1 + u2*u2);
+//              double p = values.p[yIndex];
+//              double omega = values.omega[yIndex];
+//              fout << refIndex << "\t" << x << "\t" << y;
+//              fout << "\t" << u1 << "\t" << u2 << "\t" << u;
+//              fout << "\t" << p << "\t" << omega << endl;
+//            }
+//          }
+//        }
+//        fout.close();
       }
     }
     
