@@ -33,6 +33,7 @@ public:
   
   static MeshGeometryPtr shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius);
 
+  static MeshGeometryPtr shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius, double embeddedSquareSideLength);
 
 
 };
