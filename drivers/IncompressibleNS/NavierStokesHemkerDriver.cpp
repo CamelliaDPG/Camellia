@@ -480,10 +480,14 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
     double xDiff = abs(vertices(1,0)-vertices(0,0));
     double yDiff = abs(vertices(2,1)-vertices(1,1));
     
+//    cout << "xDiff: " << xDiff << endl;
+//    cout << "yDiff: " << yDiff << endl;
+    
     set<int> cellIDsToRefine;
     cellIDsToRefine.insert(cellID);
     double aspect = xDiff / yDiff;
     while (aspect > 2.0) {
+//      cout << "aspect ratio: " << aspect << endl;
       hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
       
       // the next set of cellIDsToRefine are the children of the ones just refined
@@ -872,7 +876,8 @@ int main(int argc, char *argv[]) {
       if (rank==0) cout << "WARNING: parabolicInflow known not to be fully consistent with Schäfer and Turek's results!\n";
     }
     
-    MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, radius); //MeshFactory::hemkerGeometry(width,height,radius);
+    double embeddedSideLength = 3 * radius;
+    MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, radius, embeddedSideLength); //MeshFactory::hemkerGeometry(width,height,radius);
     
 
 
@@ -995,7 +1000,7 @@ int main(int argc, char *argv[]) {
     if (rank==0) {
       GnuPlotUtil::writeComputationalMeshSkeleton("preliminaryHemkerMesh", mesh, false);
     }
-    
+
     // now, let's get the elements to be roughly isotropic
     // to do spatial lookups, we need a mesh without curves (this is a bit ugly)
     // we don't care which BF we use, so we use streamBF because it's cheaper
