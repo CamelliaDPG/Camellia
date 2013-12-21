@@ -9,6 +9,8 @@
 #ifndef Camellia_debug_StreamDriverUtil_h
 #define Camellia_debug_StreamDriverUtil_h
 
+#include "ParametricCurve.h"
+
 FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints) {
   vector<double> points1D_x, points1D_y;
   for (int i=0; i<numPoints; i++) {
@@ -101,6 +103,63 @@ double getSolutionValueAtPoint(double x, double y, SolutionPtr soln, VarPtr var)
   point(0,1) = y;
   soln->solutionValues(value, var->ID(), point);
   return value[0];
+}
+
+double getFunctionValueAtPoint(FunctionPtr scalarFunction, double x, double y, MeshPtr mesh) {
+  static FieldContainer<double> value(1,1);
+  static FieldContainer<double> physPoint(1,2);
+  physPoint[0] = x;
+  physPoint[1] = y;
+  
+  ElementPtr elem = mesh->elementsForPoints(physPoint)[0];
+  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, elem->cellID());
+  FieldContainer<double> refPoint = basisCache->getRefCellPointsForPhysicalPoints(physPoint);
+  basisCache->setRefCellPoints(refPoint);
+  
+  if (scalarFunction->rank() != 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
+  }
+  scalarFunction->values(value,basisCache);
+  return value[0];
+}
+
+double findSignReversal(ParametricCurvePtr arc, double tGuessLeft, double tGuessRight, FunctionPtr scalarFunction, MeshPtr mesh) {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  double xLeft, yLeft, xRight, yRight;
+  
+  arc->value(tGuessLeft, xLeft, yLeft);
+  arc->value(tGuessRight, xRight, yRight);
+  
+  double leftValue = getFunctionValueAtPoint(scalarFunction, xLeft, yLeft, mesh); // getSolutionValueAtPoint(xLeft, yLeft, soln, u1);
+  double rightValue = getFunctionValueAtPoint(scalarFunction, xRight, yRight, mesh); // getSolutionValueAtPoint(xRight, yRight, soln, u1);
+  if (leftValue * rightValue > 0) {
+    double tGuess = (tGuessLeft + tGuessRight) / 2;
+    if (rank==0) {
+      string fxnName = scalarFunction->displayString();
+      cout << "Error: " << fxnName << " at t=" << tGuessLeft << " = " << leftValue << " and " << fxnName << " at t=" << tGuessRight << ") = " << rightValue;
+      cout << " have the same sign.  Returning " << -tGuess << endl;
+    }
+    return -tGuess;
+  }
+  int numIterations = 30;
+  double t = 0;
+  for (int i=0; i<numIterations; i++) {
+    double tGuess = (tGuessLeft + tGuessRight) / 2;
+    double x,y;
+    arc->value(tGuess,x,y);
+    double middleValue = getFunctionValueAtPoint(scalarFunction, x, y, mesh); // getSolutionValueAtPoint(x, y, soln, u1);
+    if (middleValue * leftValue > 0) { // same sign
+      tGuessLeft = tGuess;
+      leftValue = middleValue;
+    }
+    if (middleValue * rightValue > 0) {
+      tGuessRight = tGuess;
+      rightValue = middleValue;
+    }
+    t = tGuess;
+  }
+  return t;
 }
 
 #endif

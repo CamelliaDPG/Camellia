@@ -36,11 +36,14 @@
 
 #include "MassFluxFunction.h"
 
+#include "StreamDriverUtil.h"
+
 #include "choice.hpp"
 #include "mpi_choice.hpp"
 
 using namespace std;
 
+const static double PI  = 3.141592653589793238462;
 static double Re = 40;
 
 double radius = 0.5; // cylinder radius; 0.5 because Re is relative to *diameter*
@@ -51,6 +54,7 @@ FunctionPtr inflowSpeed;
 bool velocityConditionsTopAndBottom;
 bool velocityConditionsRight;
 bool streamwiseGradientConditionsRight;
+bool symmetryConditionsTopAndBottom;
 bool noBCsRight;
 
 Teuchos::RCP<BCEasy> bc;
@@ -170,24 +174,6 @@ public:
     }
   }
 };
-
-FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints) {
-  vector<double> points1D_x, points1D_y;
-  for (int i=0; i<numPoints; i++) {
-    points1D_x.push_back( xMin + (xMax - xMin) * ((double) i) / (numPoints-1) );
-    points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
-  }
-  int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
-  for (int i=0; i<numPoints; i++) {
-    for (int j=0; j<numPoints; j++) {
-      int pointIndex = i*numPoints + j;
-      points(pointIndex,0) = points1D_x[i];
-      points(pointIndex,1) = points1D_y[j];
-    }
-  }
-  return points;
-}
 
 FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoints, SolutionPtr solution, VarPtr u) {
   int numPointsPerCell = refPoints.dimension(0);
@@ -619,6 +605,10 @@ void recreateBCs() { // recreates both bc and pc, as necessary
       pc->addConstraint(t2==zero, right);
       
     }
+  } else if (symmetryConditionsTopAndBottom) {
+    // at top and bottom, we impose u2 = 0, t2n = 0
+    bc->addDirichlet(u2hat, topAndBottom, zero);
+    bc->addDirichlet(t2n, topAndBottom, zero);
   } else { // else, no-traction conditions
     // t1n, t2n are *pseudo*-tractions
     // we use penalty conditions for the true traction
@@ -685,7 +675,24 @@ void recreateStreamBCs() {
   streamBC->addDirichlet(phi_hat, bottom, y);
 }
 
+double separationAngleInDegrees(ParametricCurvePtr searchArcForSeparationAngle, FunctionPtr vorticity, MeshPtr mesh) {
+  double t_zeroVorticity = findSignReversal(searchArcForSeparationAngle, 0, 1, vorticity, mesh);
+  double x_zeroVorticity, y_zeroVorticity;
+  searchArcForSeparationAngle->value(t_zeroVorticity, x_zeroVorticity, y_zeroVorticity);
+  double separationAngleRadians = atan(y_zeroVorticity / x_zeroVorticity);
+  return separationAngleRadians * (180.0 / PI);
+}
+
+double wakeLengthFromCylinder(ParametricCurvePtr searchLineForWakeLength, double radius, FunctionPtr u1, MeshPtr mesh) {
+  double t_zero_x_velocity = findSignReversal(searchLineForWakeLength, 0, 1, u1, mesh);
+  double x_zero_x_velocity, y_zero_x_velocity;
+  searchLineForWakeLength->value(t_zero_x_velocity, x_zero_x_velocity, y_zero_x_velocity);
+  return (x_zero_x_velocity - radius) / radius; // wake lengths in literature are relative to unit radius.
+}
+
 int main(int argc, char *argv[]) {
+//  signal(SIGSEGV, errorhandler);   // install error handler
+  
   int rank = 0;
   
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -710,7 +717,6 @@ int main(int argc, char *argv[]) {
 
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-8);
-    double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment);
     
     meshHeight = args.Input<double>("--meshHeight", "mesh height", 30);
     
@@ -729,6 +735,8 @@ int main(int argc, char *argv[]) {
     bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
     
     velocityConditionsTopAndBottom = args.Input<bool>("--velocityConditionsTopAndBottom", "impose velocity BCs on top and bottom boundaries", false);
+    
+    symmetryConditionsTopAndBottom = args.Input<bool>("--symmetryConditionsTopAndBottom", "impose symmetry BCs on top and bottom boundaries", false);
 
     velocityConditionsRight = args.Input<bool>("--velocityConditionsRight", "impose velocity BCs on right boundaries", false);
     
@@ -741,6 +749,8 @@ int main(int argc, char *argv[]) {
     bool useMumps = args.Input<bool>("--useMumps", "use MUMPS as global linear solver", true);
     
     bool useZeroInitialGuess = args.Input<bool>("--useZeroInitialGuess", "use zero initial guess (incompatible with BCs, but they're weakly enforced so it's OK)", true);
+
+    bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use condensed solve", true);
     
     args.Process();
     
@@ -752,8 +762,6 @@ int main(int argc, char *argv[]) {
     bool reportPerCellErrors  = true;
 
     bool startWithZeroSolutionAfterRefinement = false;
-    
-    bool useCondensedSolve = true;
     
     bool useScaleCompliantGraphNorm = false;
     bool enrichVelocity = useScaleCompliantGraphNorm;
@@ -810,6 +818,8 @@ int main(int argc, char *argv[]) {
       }
       if (velocityConditionsTopAndBottom) {
         cout << "imposing velocity BCs on top and bottom boundaries.\n";
+      } else if (symmetryConditionsTopAndBottom) {
+        cout << "imposing symmetry BCs on top and bottom boundaries.\n";
       } else {
         cout << "imposing zero-traction BCs on top and bottom boundaries.\n";
       }
@@ -848,11 +858,8 @@ int main(int argc, char *argv[]) {
     tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
     q = varFactory.testVar(VGP_Q_S, HGRAD);
     
-  //  double width = 60, height = 20;
     FunctionPtr zero = Function::zero();
     
-//    double xLeft = -7.5;
-//    double xRight = 42.5;
     double yTop = meshHeight / 2.0;
     double yBottom = - meshHeight / 2.0;
     
@@ -879,7 +886,11 @@ int main(int argc, char *argv[]) {
     double embeddedSideLength = 3 * radius;
     MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, radius, embeddedSideLength); //MeshFactory::hemkerGeometry(width,height,radius);
     
-
+    double theta0 = PI / 8, theta1 = 3 * PI / 8;
+    // tweak the radius slightly to ensure that we get inside the elements...
+    ParametricCurvePtr searchArcForSeparationAngle = ParametricCurve::circularArc(radius * 1.0000001, 0, 0, theta0, theta1);
+    
+    ParametricCurvePtr searchLineForWakeLength = ParametricCurve::line(radius * 2, 0, xRight * .9999999, 0); // cheat the xRight inside to guarantee inclusion in the mesh...
 
     {
       // print out some geometry info (checking something)
@@ -1058,7 +1069,7 @@ int main(int argc, char *argv[]) {
     if (rank==0) cout << "using sigma-based vorticity definition.\n";
     FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - Re * sigma12 + Re * sigma21 ) ); // Re because sigma = 1/Re grad u
     FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p) );
-    
+
     double delta = pressureDifference(p_prev, radius, mesh);
     if (rank==0) cout << "computed pressure delta on initial solution as " << delta << endl;
     
@@ -1076,7 +1087,7 @@ int main(int argc, char *argv[]) {
     refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
     
     if (true) { // do regular refinement strategy...
-      bool printToConsole = rank==0;
+//      bool printToConsole = rank==0;
       FunctionPtr u1_incr = Function::solution(u1, solnIncrement);
       FunctionPtr u2_incr = Function::solution(u2, solnIncrement);
       FunctionPtr sigma11_incr = Function::solution(sigma11, solnIncrement);
@@ -1100,6 +1111,15 @@ int main(int argc, char *argv[]) {
       FunctionPtr l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
       + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
       + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
+      
+      double initialMinL2Increment = minL2Increment;
+      if (rank==0) cout << "Initial relative L^2 tolerance: " << minL2Increment << endl;
+      
+      LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
+      RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
+      
+      LinearTermPtr incrementalSolnFunctional = problem.bf()->testFunctional(problem.solutionIncrement());
+      RieszRep incrementRieszRep(mesh, problem.solutionIncrement()->ip(), incrementalSolnFunctional);
       
       for (int refIndex=0; refIndex<numRefs; refIndex++){
         if (startWithZeroSolutionAfterRefinement) {
@@ -1130,8 +1150,38 @@ int main(int argc, char *argv[]) {
           }
         } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
 
+        double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+        solnRieszRep.computeRieszRep();
+        double solnEnergyNormTotal = solnRieszRep.getNorm();
+        //    incrementRieszRep.computeRieszRep();
+        //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+        
+        double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+        minL2Increment = initialMinL2Increment * relativeEnergyError;
+        
         if (rank==0) {
           cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
+        }
+        
+        if (rank == 0) {
+          cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
+          cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
+          cout << "  Background flow's energy norm is " << solnEnergyNormTotal << ".\n";
+          cout << "  Relative energy error: " << incrementalEnergyErrorTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
+          cout << "  Updated L^2 tolerance for nonlinear iteration: " << minL2Increment << endl;
+        }
+        
+//        double t_zeroVorticity = findSignReversal(searchArcForSeparationAngle, 0, 1, vorticity, mesh);
+//        double x_zeroVorticity, y_zeroVorticity;
+//        searchArcForSeparationAngle->value(t_zeroVorticity, x_zeroVorticity, y_zeroVorticity);
+        double separationAngle = separationAngleInDegrees(searchArcForSeparationAngle, vorticity, mesh); // atan(y_zeroVorticity / x_zeroVorticity);
+        if (rank==0) {
+          cout << "separation angle = " << separationAngle << " degrees." << endl;
+        }
+
+        double wakeLength = wakeLengthFromCylinder(searchLineForWakeLength, radius, u1_prev, mesh);
+        if (rank==0) {
+          cout << "wake length = " << wakeLength << "." << endl;
         }
         
         // compute pressure difference between front and back of cylinder
@@ -1212,7 +1262,7 @@ int main(int argc, char *argv[]) {
             cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
             flush(cout);
           }
-        } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
+        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
       }
     }
@@ -1222,7 +1272,17 @@ int main(int argc, char *argv[]) {
         solution->writeToFile(solnSaveFile);
       }
     }
-
+    
+    double separationAngle = separationAngleInDegrees(searchArcForSeparationAngle, vorticity, mesh);
+    if (rank==0) {
+      cout << "separation angle = " << separationAngle << " degrees." << endl;
+    }
+    
+    double wakeLength = wakeLengthFromCylinder(searchLineForWakeLength, radius, u1_prev, mesh);
+    if (rank==0) {
+      cout << "wake length = " << wakeLength << "." << endl;
+    }
+    
     // compute pressure difference between front and back of cylinder
     double delta_pressure = pressureDifference(p_prev, radius, mesh);
     if (rank==0) {
@@ -1245,11 +1305,20 @@ int main(int argc, char *argv[]) {
 //      cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
     }
     
-    double energyErrorTotal = solution->energyErrorTotal();
+    LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
+    RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
+    solnRieszRep.computeRieszRep();
+    double solnEnergyNormTotal = solnRieszRep.getNorm();
+    //    incrementRieszRep.computeRieszRep();
+    //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+
     if (rank == 0) {
       cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
-      cout << "Final incremental energy error: " << incrementalEnergyErrorTotal << ".)\n";
+      cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
+      cout << "  Background flow's energy norm is " << solnEnergyNormTotal << ".\n";
+      cout << "  Relative energy error: " << incrementalEnergyErrorTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
     }
     
     if (!skipPostProcessing) {
@@ -1349,7 +1418,7 @@ int main(int argc, char *argv[]) {
       } else {
         streamSolution->solve(solver);
       }
-      energyErrorTotal = streamSolution->energyErrorTotal();
+      double energyErrorTotal = streamSolution->energyErrorTotal();
       if (rank == 0) {
         cout << "...solved.\n";
         cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
