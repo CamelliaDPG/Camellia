@@ -1301,9 +1301,11 @@ bool Mesh::elementContainsPoint(ElementPtr elem, double x, double y) {
   FieldContainer<double> physicalPoints(numCells,numPoints,spaceDim);
   physicalPoints(0,0,0) = x;
   physicalPoints(0,0,1) = y;
+//  cout << "cell " << elem->cellID() << ": (" << x << "," << y << ") --> ";
   FieldContainer<double> refPoints(numCells,numPoints,spaceDim);
   MeshPtr thisPtr = Teuchos::rcp(this,false);
   CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, elem->cellID());
+//  cout << "(" << refPoints[0] << "," << refPoints[1] << ")\n";
   
   int result = CellTools<double>::checkPointInclusion(&refPoints[0], spaceDim, *(elem->elementType()->cellTopoPtr));
   return result == 1;
