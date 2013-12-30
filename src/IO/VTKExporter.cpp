@@ -354,8 +354,8 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
     for (int i=0; i < num1DPts; i++)
     {
       //      double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
-      double a = -.99;
-      double b = .99;
+      double a = -1;
+      double b = 1;
       double x = a + (b-a)*(double(i)/double(num1DPts-1));
       refPoints(i,0) = x;
     }
@@ -378,7 +378,7 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
         else
           for (int c=0; c < numCells; c++)
             for (int p=0; p < numPoints; p++)
-              computedValues[i](c,p) = 0;
+              computedValues[i](c,p) = NAN;
       }
       const FieldContainer<double> *physicalPoints = &sideBasisCache->getPhysicalCubaturePoints();
       // FieldContainer<double> physCubPoints = sideBasisCache->getPhysicalCubaturePoints();

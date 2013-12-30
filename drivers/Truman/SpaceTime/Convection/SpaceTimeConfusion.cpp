@@ -15,29 +15,35 @@
 #endif
 
 int H1Order = 3, pToAdd = 2;
+double pi = 2.0*acos(0.0);
 
-class TimeZeroBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol);
-    }
-};
+double epsilon = 1e-2;
 
 class ConstantXBoundary : public SpatialFilter {
    private:
-      double xval;
+      double val;
    public:
-      ConstantXBoundary(double xval): xval(xval) {};
+      ConstantXBoundary(double val): val(val) {};
       bool matchesPoint(double x, double y) {
          double tol = 1e-14;
-         return (abs(x-xval) < tol);
+         return (abs(x-val) < tol);
       }
 };
 
-class InitialCondition : public Function {
+class ConstantYBoundary : public SpatialFilter {
+   private:
+      double val;
+   public:
+      ConstantYBoundary(double val): val(val) {};
+      bool matchesPoint(double x, double y) {
+         double tol = 1e-14;
+         return (abs(y-val) < tol);
+      }
+};
+
+class UExact : public Function {
   public:
-    InitialCondition() : Function(0) {}
+    UExact() : Function(0) {}
     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);
@@ -47,8 +53,28 @@ class InitialCondition : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1.0;
+          values(cellIndex, ptIndex) = cos(2*pi*x)*exp(-4*pi*pi*epsilon*y);
+        }
+      }
+    }
+};
+
+class Forcing : public Function {
+  public:
+    Forcing() : Function(0) {}
+    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          double x = (*points)(cellIndex,ptIndex,0);
+          double y = (*points)(cellIndex,ptIndex,1);
+          if (y >= .25 && y <= 0.5 && x >= 0.5-1./8. && x <= 0.5+1./8.)
+            values(cellIndex, ptIndex) = 1;
+          // else if (y >= .5 && y <= 0.75 && x >= 0.5-1./8. && x <= 0.5+1./8.)
+          //   values(cellIndex, ptIndex) = -1;
           else
             values(cellIndex, ptIndex) = 0;
         }
@@ -67,33 +93,34 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
 
   // Optional arguments (have defaults)
-  double alpha = args.Input<double>("--alpha", "dudx multiplier", 1);
+  int numX = args.Input("--numX", "number of cells in x direction", 1);
+  int numY = numX;
+  int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   args.Process();
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactory varFactory;
-  VarPtr tau = varFactory.testVar("tau", HDIV);
+  VarPtr tau = varFactory.testVar("tau", HGRAD);
+  // VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  // VarPtr tau = varFactory.testVar("tau", VECTOR_HGRAD);
 
   // define trial variables
-  VarPtr uhat = varFactory.traceVar("uhat");
-  VarPtr fhat = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
-  VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
-  // VarPtr sigma_x = varFactory.fieldVar("sigma_x");
-  // VarPtr sigma_t = varFactory.fieldVar("sigma_t");
+  VarPtr sigma = varFactory.fieldVar("sigma", L2);
+  // VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+  VarPtr uhat = varFactory.spatialTraceVar("uhat");
+  // VarPtr uhat = varFactory.traceVar("uhat");
+  VarPtr fhat = varFactory.fluxVar("fhat");
 
   ////////////////////   BUILD MESH   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
-  double xmin = -0.5;
-  double xmax = 0.5;
+  double xmin = 0.0;
+  double xmax = 1.0;
   double tmax = 1.0;
 
   meshBoundary(0,0) =  xmin; // x1
@@ -105,76 +132,46 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) =  xmin;
   meshBoundary(3,1) =  tmax;
 
-  int horizontalCells = 8, verticalCells = 8;
-
   // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, numX, numY,
                                                 bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-  double epsilon_x = 1e-2;
-  double epsilon_t = 1e-2;
+  // tau terms:
+  bf->addTerm( sigma/epsilon, tau );
+  bf->addTerm( u, tau->dx() );
+  bf->addTerm( -uhat, tau->times_normal_x() );
 
   // v terms:
-  bf->addTerm( -alpha*u, v->dx() );
+  bf->addTerm( -u, v->dx() );
+  bf->addTerm( sigma, v->dx() );
   bf->addTerm( -u, v->dy() );
-  bf->addTerm( sigma, v->grad() );
-  // bf->addTerm( sigma_x, v->dx() );
-  // bf->addTerm( sigma_t, v->dy() );
   bf->addTerm( fhat, v);
 
-  // tau terms:
-  bf->addTerm( sigma/epsilon_x, tau );
-  // bf->addTerm( sigma_x/epsilon_x, tau->x() );
-  // bf->addTerm( sigma_t/epsilon_t, tau->y() );
-  bf->addTerm( u, tau->div() );
-  bf->addTerm( -uhat, tau->dot_normal() );
-
-  // FunctionPtr n = Function::normal();
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr zero = Function::zero();
-  // FunctionPtr one_zero = Function::vectorize(one,zero);
-  // FunctionPtr zero_one = Function::vectorize(zero,one);
-  // FunctionPtr zero_zero = Function::vectorize(zero,zero);
-  // FunctionPtr xxPart = sqrt(epsilon_x)*Function::vectorize(one_zero, zero_zero);
-  // FunctionPtr yyPart = sqrt(epsilon_t)*Function::vectorize(zero_zero, zero_one);
-  // FunctionPtr Dsqrt = xxPart + yyPart;
-
-  // // tau terms:
-  // bf->addTerm( sigma, tau );
-  // bf->addTerm( sigma_x, tau->x() );
-  // bf->addTerm( sigma_t, tau->y() );
-  // bf->addTerm( u, Dsqrt*tau->grad() );
-  // bf->addTerm( -uhat, sqrt(epsilon_x)*n->x()*tau->x()+sqrt(epsilon_t)*n->y()*tau->y() );
-
-  // // v terms:
-  // bf->addTerm( -alpha*u, v->dx() );
-  // bf->addTerm( -u, v->dy() );
-  // bf->addTerm( sqrt(epsilon_x)*sigma_x, v->dx() );
-  // bf->addTerm( sqrt(epsilon_t)*sigma_t, v->dy() );
-  // bf->addTerm( fhat, v);
 
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
+  FunctionPtr f = Teuchos::rcp( new Forcing );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = bf->graphNorm();
-  // ip->addTerm(v);
-  // ip->addTerm(beta*v->grad());
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
-  SpatialFilterPtr timezero = Teuchos::rcp( new TimeZeroBoundary );
   SpatialFilterPtr left = Teuchos::rcp( new ConstantXBoundary(xmin) );
   SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
-  FunctionPtr u0 = Teuchos::rcp( new InitialCondition );
+  SpatialFilterPtr bottom = Teuchos::rcp( new ConstantYBoundary(0) );
+  SpatialFilterPtr top = Teuchos::rcp( new ConstantYBoundary(tmax) );
+  FunctionPtr u_exact = Teuchos::rcp( new UExact );
   FunctionPtr uLeft = zero;
   FunctionPtr uRight = zero;
-  bc->addDirichlet(fhat, timezero, -u0);
   bc->addDirichlet(uhat, right, zero);
   bc->addDirichlet(fhat, left, zero);
+  // bc->addDirichlet(fhat, bottom, -u_exact);
+  bc->addDirichlet(fhat, bottom, zero);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
@@ -190,10 +187,11 @@ int main(int argc, char *argv[]) {
   {
      solution->solve(false);
 
+     FunctionPtr u_soln = Function::solution(u, solution);
      if (commRank == 0)
      {
         stringstream outfile;
-        outfile << "Confusion_" << refIndex;
+        outfile << "confusion_" << refIndex;
         exporter.exportSolution(outfile.str());
     }
 

@@ -71,7 +71,12 @@ class Forcing : public Function {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = exp(-50*(x-.5)*(x-.5))*sin(1./(y+1e-2));
+          if (y >= .25 && y <= 0.5 && x >= 0.5-1./8. && x <= 0.5+1./8.)
+            values(cellIndex, ptIndex) = 1;
+          // else if (y >= .5 && y <= 0.75 && x >= 0.5-1./8. && x <= 0.5+1./8.)
+          //   values(cellIndex, ptIndex) = -1;
+          else
+            values(cellIndex, ptIndex) = 0;
         }
       }
     }
@@ -167,7 +172,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr uRight = zero;
   bc->addDirichlet(fhat, right, zero);
   bc->addDirichlet(fhat, left, zero);
-  bc->addDirichlet(fhat, bottom, -u_exact);
+  // bc->addDirichlet(fhat, bottom, -u_exact);
+  bc->addDirichlet(fhat, bottom, zero);
   // bc->addDirichlet(uhat, top, u0);
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
