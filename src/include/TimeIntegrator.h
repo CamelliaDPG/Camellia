@@ -37,6 +37,7 @@ class SteadyResidual
 class TimeIntegrator
 {
   protected:
+    int _commRank;
     BFPtr _steadyJacobian;
     SteadyResidual &_steadyResidual;
     Teuchos::RCP<RHSEasy> _rhs;

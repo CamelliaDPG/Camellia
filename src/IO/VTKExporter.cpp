@@ -19,6 +19,13 @@
 #include "vtkIdList.h"
 #include "vtkVersion.h"
 
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
+#else
+#include "choice.hpp"
+#endif
+
 void VTKExporter::exportSolution(const string& filePath, unsigned int num1DPts)
 {
   exportFields(filePath, num1DPts);
@@ -271,7 +278,9 @@ void VTKExporter::exportFields(const string& filePath, unsigned int num1DPts)
   wr->Write();
   wr->Delete();
 
-  cout << "    wrote field variables to " << filePath << ".vtu" << endl;
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  if (commRank == 0)
+    cout << "    wrote field variables to " << filePath << ".vtu" << endl;
 }
 
 void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
@@ -426,7 +435,9 @@ void VTKExporter::exportTraces(const string& filePath, unsigned int num1DPts)
   trace_wr->Write();
   trace_wr->Delete();
 
-  cout << "    wrote trace variables to " << "trace_"+filePath << ".vtu" << endl;
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  if (commRank == 0)
+    cout << "    wrote trace variables to " << "trace_"+filePath << ".vtu" << endl;
 }
 
 void VTKExporter::exportFunction(FunctionPtr function, const string& functionName, unsigned int num1DPts)
@@ -637,7 +648,9 @@ void VTKExporter::exportFunction(FunctionPtr function, const string& functionNam
   wr->Write();
   wr->Delete();
 
-  cout << "Wrote " <<  functionName << ".vtu" << endl;
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  if (commRank == 0)
+    cout << "Wrote " <<  functionName << ".vtu" << endl;
 }
 
 void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions, const string& filePath, unsigned int num1DPts) {
@@ -764,7 +777,9 @@ void VTKExporter::exportBoundaryValuedFunctions(vector< FunctionPtr > &functions
   wr->Write();
   wr->Delete();
 
-  cout << "Wrote " << filePath << ".vtu" << endl;
+  int commRank = Teuchos::GlobalMPISession::getRank();
+  if (commRank == 0)
+    cout << "Wrote " << filePath << ".vtu" << endl;
 }
 
 #endif
