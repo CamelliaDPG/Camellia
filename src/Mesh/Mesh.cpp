@@ -58,11 +58,20 @@ using namespace Intrepid;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVerticesInt,
+Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
 : _dofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) {
-  _vertices = vertices;
+  int numVertices = vertices.size();
+  _vertices.clear();
+  int spaceDim = 2;
+  FieldContainer<double> vertexFC(spaceDim);
+  for (int i=0; i<numVertices; i++) {
+    for (int d=0; d<spaceDim; d++) {
+      vertexFC[d] = vertices[i][d];
+    }
+    _vertices.push_back(vertexFC);
+  }
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
   _enforceMBFluxContinuity = false;  
@@ -74,20 +83,18 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   _numPartitions = 1;
 #endif
 
-  int spaceDim = 2;
-  vector<double> vertexCoords(spaceDim);
-  int numVertices = vertices.size();
+  vector<double> vertex(spaceDim);
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
     for (int j=0; j<spaceDim; j++) {
-      vertexCoords[j] = vertices[vertexIndex](j);
+      vertex[j] = _vertices[vertexIndex](j);
     }
-    _vertexMap[vertexCoords] = vertexIndex;
+    _vertexMap[vertex] = vertexIndex;
   }
   
   // DEBUGGING: check how we did:
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
-    double x = vertices[vertexIndex](0);
-    double y = vertices[vertexIndex](1);
+    double x = _vertices[vertexIndex](0);
+    double y = _vertices[vertexIndex](1);
     long assignedVertexIndex = getVertexIndex(x, y);
     if (assignedVertexIndex != vertexIndex) {
       cout << "INTERNAL ERROR: assigned vertex index is incorrect.\n";
@@ -109,16 +116,17 @@ Mesh::Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> 
   Teuchos::RCP<DofOrdering> quadTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(quadTopoPtr.get()), _useConformingTraces);
   ElementTypePtr quadElemTypePtr = _elementTypeFactory.getElementType(quadTrialOrderPtr, quadTestOrderPtr, quadTopoPtr );
   _nullPtr = Teuchos::rcp( new Element(-1,quadElemTypePtr,-1) );
-  
-  // want to change elementVertices argument to be unsigned, but I'm not quite ready to change the API for this method
-  // so we do a manual copy to convert...
-  vector< vector<unsigned> > elementVertices(elementVerticesInt.size());
-  for (unsigned i=0; i<elementVerticesInt.size(); i++) {
-    unsigned numVertices = elementVerticesInt[i].size();
-    for (unsigned j=0; j<numVertices; j++) {
-      elementVertices[i].push_back(elementVerticesInt[i][j]);
-    }
-  }
+
+  // 1-4-13 have just changed the API for this method, but keeping the commented-out code below in case I think better of it.
+//  // want to change elementVertices argument to be unsigned, but I'm not quite ready to change the API for this method
+//  // so we do a manual copy to convert...
+//  vector< vector<unsigned> > elementVertices(elementVerticesInt.size());
+//  for (unsigned i=0; i<elementVerticesInt.size(); i++) {
+//    unsigned numVertices = elementVerticesInt[i].size();
+//    for (unsigned j=0; j<numVertices; j++) {
+//      elementVertices[i].push_back(elementVerticesInt[i][j]);
+//    }
+//  }
   
   vector< vector<unsigned> >::iterator elemIt;
   for (elemIt = elementVertices.begin(); elemIt != elementVertices.end(); elemIt++) {
@@ -163,13 +171,13 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   }
   int numNodes;
   mshFile >> numNodes;
-  vector<FieldContainer<double> > vertices;
+  vector<vector<double> > vertices;
   int dummy;
   for (int i=0; i < numNodes; i++)
   {
-    FieldContainer<double> vertex(2);
+    vector<double> vertex(2);
     mshFile >> dummy;
-    mshFile >> vertex(0) >> vertex(1) >> dummy;
+    mshFile >> vertex[0] >> vertex[1] >> dummy;
     vertices.push_back(vertex);
   }
   while (line != "$Elements")
@@ -180,7 +188,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
   mshFile >> numElems;
   int elemType;
   int numTags;
-  vector< vector<int> > elementIndices;
+  vector< vector<unsigned> > elementIndices;
   for (int i=0; i < numElems; i++)
   {
     mshFile >> dummy >> elemType >> numTags;
@@ -188,7 +196,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
       mshFile >> dummy;
     if (elemType == 2)
     {
-      vector<int> elemIndices(3);
+      vector<unsigned> elemIndices(3);
       mshFile >> elemIndices[0] >> elemIndices[1] >> elemIndices[2];
       elemIndices[0]--;
       elemIndices[1]--;
@@ -197,7 +205,7 @@ Teuchos::RCP<Mesh> Mesh::readMsh(string filePath, Teuchos::RCP< BilinearForm > b
     }
     if (elemType == 4)
     {
-      vector<int> elemIndices(3);
+      vector<unsigned> elemIndices(3);
       mshFile >> elemIndices[0] >> elemIndices[1] >> elemIndices[2];
       elemIndices[0]--;
       elemIndices[1]--;
@@ -230,12 +238,13 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
   int numNodes;
   nodeFile >> numNodes;
   getline(nodeFile, line);
-  vector<FieldContainer<double> > vertices;
+  vector<vector<double> > vertices;
   int dummy;
-  FieldContainer<double> pt(2);
+  int spaceDim = 2;
+  vector<double> pt(spaceDim);
   for (int i=0; i < numNodes; i++)
   {
-    nodeFile >> dummy >> pt(0) >> pt(1);
+    nodeFile >> dummy >> pt[0] >> pt[1];
     getline(nodeFile, line);
     vertices.push_back(pt);
   }
@@ -244,8 +253,8 @@ Teuchos::RCP<Mesh> Mesh::readTriangle(string filePath, Teuchos::RCP< BilinearFor
   int numElems;
   eleFile >> numElems;
   getline(eleFile, line);
-  vector< vector<int> > elementIndices;
-  vector<int> el(3);
+  vector< vector<unsigned> > elementIndices;
+  vector<unsigned> el(3);
   for (int i=0; i < numElems; i++)
   {
     eleFile >> dummy >> el[0] >> el[1] >> el[2];
@@ -271,8 +280,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   int spaceDim = 2;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
   
-  vector<FieldContainer<double> > vertices;
-  vector< vector<int> > allElementVertices;
+  vector<vector<double> > vertices;
+  vector< vector<unsigned> > allElementVertices;
   
   TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
                      std::invalid_argument,
@@ -300,9 +309,9 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
   for (int i=0; i<=horizontalElements; i++) {
     for (int j=0; j<=verticalElements; j++) {
       vertexIndices[i][j] = vertices.size();
-      FieldContainer<double> vertex(spaceDim);
-      vertex(0) = southWest_x + elemWidth*i;
-      vertex(1) = southWest_y + elemHeight*j;
+      vector<double> vertex(spaceDim);
+      vertex[0] = southWest_x + elemWidth*i;
+      vertex[1] = southWest_y + elemHeight*j;
       vertices.push_back(vertex);
 //      cout << "Mesh: vertex " << vertices.size() - 1 << ": (" << vertex(0) << "," << vertex(1) << ")\n";
     }
@@ -312,7 +321,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
     int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
     for (int i=0; i<horizontalElements; i++) {
       for (int j=0; j<verticalElements; j++) {
-        vector<int> elemVertices;
+        vector<unsigned> elemVertices;
         elemVertices.push_back(vertexIndices[i][j]);
         elemVertices.push_back(vertexIndices[i+1][j]);
         elemVertices.push_back(vertexIndices[i+1][j+1]);
@@ -326,7 +335,7 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
       for (int j=0; j<verticalElements; j++) {
         bool diagonalUp = (i%2 == j%2); // criss-cross pattern
         
-        vector<int> elemVertices1, elemVertices2;
+        vector<unsigned> elemVertices1, elemVertices2;
         if (diagonalUp) {
           // elem1 is SE of quad, elem2 is NW
           elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
@@ -362,8 +371,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadB
   int spaceDim = 2;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
   
-  vector<FieldContainer<double> > vertices;
-  vector< vector<int> > allElementVertices;
+  vector<vector<double> > vertices;
+  vector< vector<unsigned> > allElementVertices;
   
   TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
                      std::invalid_argument,
@@ -391,9 +400,9 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadB
   for (int i=0; i<=horizontalElements; i++) {
     for (int j=0; j<=verticalElements; j++) {
       vertexIndices[i][j] = vertices.size();
-      FieldContainer<double> vertex(spaceDim);
-      vertex(0) = southWest_x + elemWidth*i;
-      vertex(1) = southWest_y + elemHeight*j;
+      vector<double> vertex(spaceDim);
+      vertex[0] = southWest_x + elemWidth*i;
+      vertex[1] = southWest_y + elemHeight*j;
       vertices.push_back(vertex);
     }
   }
@@ -404,14 +413,14 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadB
     for (int j=0; j<verticalElements; j++) {
       bool triangulate = (i >= horizontalElements / 2); // triangles on right half of mesh
       if ( ! triangulate ) {
-        vector<int> elemVertices;
+        vector<unsigned> elemVertices;
         elemVertices.push_back(vertexIndices[i][j]);
         elemVertices.push_back(vertexIndices[i+1][j]);
         elemVertices.push_back(vertexIndices[i+1][j+1]);
         elemVertices.push_back(vertexIndices[i][j+1]);
         allElementVertices.push_back(elemVertices);
       } else {
-        vector<int> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
+        vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
         elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
         elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
         elemVertices1.push_back(vertexIndices[i+1][j+1]); // SIDE3 is diagonal

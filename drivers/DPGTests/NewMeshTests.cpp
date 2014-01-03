@@ -69,7 +69,7 @@ bool NewMeshTests::test1DMesh() {
   
   vector< CellTopoPtr > cellTopos(2,line_2);
   
-  NewMeshGeometryPtr meshGeometry = Teuchos::rcp( new NewMeshGeometry(vertices, elementVertices, cellTopos) );
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
   NewMesh mesh(meshGeometry);
   
@@ -171,7 +171,7 @@ bool NewMeshTests::test2DMesh() {
   vector< CellTopoPtr > cellTopos;
   cellTopos.push_back(quad_4);
   cellTopos.push_back(tri_3);
-  NewMeshGeometryPtr meshGeometry = Teuchos::rcp( new NewMeshGeometry(vertices, elementVertices, cellTopos) );
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
   NewMesh mesh(meshGeometry);
   
@@ -250,7 +250,7 @@ bool NewMeshTests::test3DMesh() {
 //  elementVertices.push_back(hexVertexIndices);
  
   vector< CellTopoPtr > cellTopos(1,hexTopo);
-  NewMeshGeometryPtr meshGeometry = Teuchos::rcp( new NewMeshGeometry(vertices, elementVertices, cellTopos) );
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
   NewMesh mesh(meshGeometry);
   
