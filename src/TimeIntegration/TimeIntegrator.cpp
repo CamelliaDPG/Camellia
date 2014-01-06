@@ -272,8 +272,11 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
     }
     for (int j=0; j < k; j++)
     {
-      FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
-      _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
+      if (a[k][j] != 0)
+      {
+        FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
+        _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
+      }
     }
   }
 }
