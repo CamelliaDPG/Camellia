@@ -62,15 +62,15 @@ MeshPtr MeshFactory::quadMesh(BilinearFormPtr bf, int H1Order, FieldContainer<do
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "quadNodes must be 4 x 2");
   }
   int spaceDim = 2;
-  vector< FieldContainer<double> > vertices;
+  vector< vector<double> > vertices;
   for (int i=0; i<4; i++) {
-    FieldContainer<double> vertex(spaceDim);
+    vector<double> vertex(spaceDim);
     vertex[0] = quadNodes[2*i];
     vertex[1] = quadNodes[2*i+1];
     vertices.push_back(vertex);
   }
-  vector< vector<int> > elementVertices;
-  vector<int> cell0;
+  vector< vector<unsigned> > elementVertices;
+  vector<unsigned> cell0;
   cell0.push_back(0);
   cell0.push_back(1);
   cell0.push_back(2);
@@ -117,19 +117,19 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
 
   int numPoints = 8; // 8 points on rect, 8 on circle
   int spaceDim = 2;
-  vector< FieldContainer<double> > vertices;
-  FieldContainer<double> innerVertex(spaceDim), outerVertex(spaceDim);
+  vector< vector<double> > vertices;
+  vector<double> innerVertex(spaceDim), outerVertex(spaceDim);
   FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
 
-  vector<int> innerVertexIndices;
-  vector<int> outerVertexIndices;
+  vector<unsigned> innerVertexIndices;
+  vector<unsigned> outerVertexIndices;
 
   double t = 0;
   for (int i=0; i<numPoints; i++) {
     circle->value(t, innerVertices(i,0), innerVertices(i,1));
     rect  ->value(t, outerVertices(i,0), outerVertices(i,1));
-    circle->value(t, innerVertex(0), innerVertex(1));
-    rect  ->value(t, outerVertex(0), outerVertex(1));
+    circle->value(t, innerVertex[0], innerVertex[1]);
+    rect  ->value(t, outerVertex[0], outerVertex[1]);
     innerVertexIndices.push_back(vertices.size());
     vertices.push_back(innerVertex);
     outerVertexIndices.push_back(vertices.size());
@@ -143,14 +143,14 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
 //  GnuPlotUtil::writeXYPoints("/tmp/innerVertices.dat", innerVertices);
 //  GnuPlotUtil::writeXYPoints("/tmp/outerVertices.dat", outerVertices);
 
-  vector< vector<int> > elementVertices;
+  vector< vector<unsigned> > elementVertices;
 
   int totalVertices = vertices.size();
 
   t = 0;
   map< pair<int, int>, ParametricCurvePtr > edgeToCurveMap;
   for (int i=0; i<numPoints; i++) { // numPoints = numElements
-    vector<int> vertexIndices;
+    vector<unsigned> vertexIndices;
     int innerIndex0 = (i * 2) % totalVertices;
     int innerIndex1 = ((i+1) * 2) % totalVertices;
     int outerIndex0 = (i * 2 + 1) % totalVertices;
@@ -174,57 +174,57 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   int boundaryVertexOffset = vertices.size();
   // make some new vertices, going counter-clockwise:
   ParametricCurvePtr meshRect = parametricRect(xRight-xLeft, meshHeight, 0.5*(xLeft+xRight), 0.5*(yBottom + yTop));
-  FieldContainer<double> boundaryVertex(spaceDim);
-  boundaryVertex(0) = xRight;
-  boundaryVertex(1) = 0;
+  vector<double> boundaryVertex(spaceDim);
+  boundaryVertex[0] = xRight;
+  boundaryVertex[1] = 0;
   vertices.push_back(boundaryVertex);
 
-  boundaryVertex(1) = embeddedSquareSideLength / 2.0;
+  boundaryVertex[1] = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = meshHeight / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = xLeft;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = -meshHeight / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = -embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = 0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = embeddedSquareSideLength / 2.0;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[0] = xRight;
+  vertices.push_back(boundaryVertex);
+  
+  boundaryVertex[1] = -embeddedSquareSideLength / 2.0;
   vertices.push_back(boundaryVertex);
 
-  boundaryVertex(1) = meshHeight / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = 0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = -embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = xLeft;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(1) = embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(1) = 0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(1) = -embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(1) = -meshHeight / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = -embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = 0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(0) = xRight;
-  vertices.push_back(boundaryVertex);
-
-  boundaryVertex(1) = -embeddedSquareSideLength / 2.0;
-  vertices.push_back(boundaryVertex);
-
-  vector<int> vertexIndices(4);
+  vector<unsigned> vertexIndices(4);
   vertexIndices[0] = outerVertexIndices[0];
   vertexIndices[1] = boundaryVertexOffset;
   vertexIndices[2] = boundaryVertexOffset + 1;

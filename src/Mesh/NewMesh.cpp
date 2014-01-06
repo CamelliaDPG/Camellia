@@ -30,7 +30,7 @@ NewMesh::NewMesh(unsigned spaceDim) {
   init(spaceDim);
 }
 
-NewMesh::NewMesh(NewMeshGeometryPtr meshGeometry) {
+NewMesh::NewMesh(MeshGeometryPtr meshGeometry) {
   unsigned spaceDim = meshGeometry->vertices()[0].size();
 
   init(spaceDim);

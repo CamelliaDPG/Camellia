@@ -12,56 +12,11 @@
 #include "Shards_CellTopology.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
-#include "ParametricCurve.h"
+#include "MeshGeometry.h"
+
 #include "RefinementPattern.h"
 
 using namespace std;
-
-typedef pair<int, int> Edge;
-typedef Teuchos::RCP< shards::CellTopology > CellTopoPtr;
-
-class NewMeshGeometry {
-  vector< vector<double> > _vertices;
-  vector< vector<unsigned> > _elementVertices;
-  map< Edge, ParametricCurvePtr > _edgeToCurveMap;
-  vector< CellTopoPtr > _cellTopos;
-public:
-  NewMeshGeometry(const vector< vector<double> > &vertices,
-                  const vector< vector<unsigned> > &elementVertices,
-                  const vector< CellTopoPtr > &cellTopos,
-                  const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
-    _vertices = vertices;
-    _elementVertices = elementVertices;
-    _cellTopos = cellTopos;
-    _edgeToCurveMap = edgeToCurveMap;
-  }
-  
-  NewMeshGeometry(const vector< vector<double> > &vertices,
-                  const vector< vector<unsigned> > &elementVertices,
-                  const vector< CellTopoPtr > &cellTopos) {
-    _vertices = vertices;
-    _elementVertices = elementVertices;
-    _cellTopos = cellTopos;
-  }
-  
-  map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
-    return _edgeToCurveMap;
-  }
-  
-  vector< vector<unsigned> > &elementVertices() {
-    return _elementVertices;
-  }
-  
-  vector< vector<double> > &vertices() {
-    return _vertices;
-  }
-  
-  const vector< CellTopoPtr > &cellTopos() {
-    return _cellTopos;
-  }
-};
-
-typedef Teuchos::RCP<NewMeshGeometry> NewMeshGeometryPtr;
 
 // "cells" are geometric entities -- they do not define any kind of basis
 // "elements" are cells endowed with a (local) functional discretization
@@ -170,7 +125,7 @@ class NewMesh {
   void updateConstraintsForCells(const set<unsigned> &cellIndices);
 public:
   NewMesh(unsigned spaceDim);
-  NewMesh(NewMeshGeometryPtr meshGeometry);
+  NewMesh(MeshGeometryPtr meshGeometry);
   NewMeshCellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, unsigned entityIndex);
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);

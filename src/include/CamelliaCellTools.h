@@ -250,7 +250,9 @@ public:
     for(int iter = 0; iter < INTREPID_MAX_NEWTON; ++iter) {
 
       // compute Jacobians at the old iterates and their inverses.
+      xOld.resize(numPoints,spaceDim); // BasisCache expects (P,D) sizing...
       basisCache->setRefCellPoints(xOld);
+      xOld.resize(numCells,numPoints,spaceDim);
 
       // The Newton step.
       xTem = basisCache->getPhysicalCubaturePoints();                    // xTem <- F(xOld)

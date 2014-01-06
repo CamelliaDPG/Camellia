@@ -63,49 +63,14 @@
 #include "Function.h"
 #include "ParametricCurve.h"
 
+#include "MeshGeometry.h"
+
 class Mesh;
 typedef Teuchos::RCP<Mesh> MeshPtr;
 
 class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
-
-typedef Teuchos::RCP<shards::CellTopology> CellTopoPtr;
-typedef pair<int,int> Edge;
-
-class MeshGeometry {
-  vector<FieldContainer<double> > _vertices;
-  vector< vector<int> > _elementVertices;
-  map< Edge, ParametricCurvePtr > _edgeToCurveMap;
-public:
-  MeshGeometry(const vector<FieldContainer<double> > &vertices,
-               const vector< vector<int> > &elementVertices,
-               const map< Edge, ParametricCurvePtr > &edgeToCurveMap) {
-    _vertices = vertices;
-    _elementVertices = elementVertices;
-    _edgeToCurveMap = edgeToCurveMap;
-  }
-
-  MeshGeometry(const vector<FieldContainer<double> > &vertices,
-               const vector< vector<int> > &elementVertices) {
-    _vertices = vertices;
-    _elementVertices = elementVertices;
-  }
-
-  map< Edge, ParametricCurvePtr > &edgeToCurveMap() {
-    return _edgeToCurveMap;
-  }
-
-  vector< vector<int> > &elementVertices() {
-    return _elementVertices;
-  }
-
-  vector<FieldContainer<double> > &vertices() {
-    return _vertices;
-  }
-};
-
-typedef Teuchos::RCP<MeshGeometry> MeshGeometryPtr;
 
 class Mesh : public RefinementObserver {
   int _pToAddToTest;
@@ -200,7 +165,12 @@ class Mesh : public RefinementObserver {
   static double distance(double x0, double y0, double x1, double y1);
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
-  Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<int> > &elementVertices,
+//  Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<unsigned> > &elementVertices,
+//       Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+//       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
+  
+  // new constructor for compatibility with new MeshGeometry:
+  Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
        Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap);
   //,
