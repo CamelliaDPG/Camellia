@@ -541,6 +541,117 @@ void reportVelocityExtrema(FunctionPtr u1, FunctionPtr u1dy, FunctionPtr u1dydy,
   }
 }
 
+vector<double> verticalLinePoints(double pointIncrement = -1) {
+  vector<double> yPoints;
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+//  if (rank==0) cout << "verticalLinePoints: pointIncrement " << pointIncrement << endl;
+  if (pointIncrement < 0) {
+    // points where values are often reported in the literature (in Botella and Peyret)
+    yPoints.push_back(1.0000);
+    yPoints.push_back(0.9766);
+    yPoints.push_back(0.9688);
+    yPoints.push_back(.9609);
+    yPoints.push_back(.9531);
+    yPoints.push_back(.8516);
+    yPoints.push_back(.7344);
+    yPoints.push_back(.6172);
+    yPoints.push_back(.5000);
+    yPoints.push_back(.4531);
+    yPoints.push_back(.2813);
+    yPoints.push_back(.1719);
+    yPoints.push_back(.1016);
+    yPoints.push_back(.0703);
+    yPoints.push_back(.0625);
+    yPoints.push_back(.0547);
+    yPoints.push_back(0);
+  } else {
+    double y;
+    for (y = 1.0; y >= 0; y -= pointIncrement) {
+      yPoints.push_back(y);
+    }
+  }
+  
+  return yPoints;
+}
+
+struct VerticalLineSolutionValues {
+  double x;
+  vector<double> yPoints;
+  vector<double> u1;
+  vector<double> u2;
+  vector<double> omega;
+  vector<double> p;
+  vector<double> sigma11; // these last 4 are only populated by the "Exhaustive" guy
+  vector<double> sigma12;
+  vector<double> sigma21;
+  vector<double> sigma22;
+};
+
+VerticalLineSolutionValues computeVerticalLineSolutionValuesExhaustive(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
+                                                                       FunctionPtr p_prev, FunctionPtr vorticity,
+                                                                       FunctionPtr sigma11_prev, FunctionPtr sigma12_prev,
+                                                                       FunctionPtr sigma21_prev, FunctionPtr sigma22_prev) {
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma11_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma12_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma21_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) sigma22_prev.get())->setOverrideMeshCheck(false);
+  
+  double pOffset = Function::evaluate(p_prev, 0.5, 0.5);
+  VerticalLineSolutionValues values;
+  
+  double y;
+  double x = xValue;
+  values.x = xValue;
+  values.yPoints = verticalLinePoints(); // matches Botella & Peyret's points
+  for (int i=0; i<values.yPoints.size(); i++) {
+    y = values.yPoints[i];
+    values.u1.push_back( Function::evaluate(u1_prev, x, y) );
+    values.u2.push_back( Function::evaluate(u2_prev, x, y) );
+    values.p.push_back( Function::evaluate(p_prev, x, y) - pOffset );
+    values.omega.push_back( Function::evaluate(vorticity, x, y) );
+    values.sigma11.push_back( Function::evaluate(sigma11_prev, x, y) );
+    values.sigma12.push_back( Function::evaluate(sigma12_prev, x, y) );
+    values.sigma21.push_back( Function::evaluate(sigma21_prev, x, y) );
+    values.sigma22.push_back( Function::evaluate(sigma22_prev, x, y) );
+  }
+  return values;
+}
+
+VerticalLineSolutionValues computeVerticalLineSolutionValues(double xValue, FunctionPtr u1_prev, FunctionPtr u2_prev,
+                                                             FunctionPtr p_prev, FunctionPtr vorticity) {
+  
+  
+  ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(false); // allows Function::evaluate() call, below
+  ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) p_prev.get())->setOverrideMeshCheck(false);
+  ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(false);
+  // the next bit commented out -- Function::evaluate() must depend only on space, not on the mesh (prev soln depends on mesh)
+  
+  double pOffset = Function::evaluate(p_prev, 0.5, 0.5);
+  
+  VerticalLineSolutionValues values;
+  
+  double y;
+  double x = xValue;
+  values.x = xValue;
+  double pointIncrement = .005; // this one for file output, ultimately visualization; 200 points seems a reasonable number
+  values.yPoints = verticalLinePoints(pointIncrement);
+  for (int i=0; i<values.yPoints.size(); i++) {
+    y = values.yPoints[i];
+    values.u1.push_back( Function::evaluate(u1_prev, x, y) );
+    values.u2.push_back( Function::evaluate(u2_prev, x, y) );
+    values.p.push_back( Function::evaluate(p_prev, x, y) - pOffset );
+    values.omega.push_back( Function::evaluate(vorticity, x, y) );
+  }
+  return values;
+}
+
 int main(int argc, char *argv[]) {
   int rank = 0;
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -565,11 +676,14 @@ int main(int argc, char *argv[]) {
     bool useCompliantGraphNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' graph norm", false);
     bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use static condensation", true);
     bool reportConditionNumber = args.Input<bool>("--reportGlobalConditionNumber", "report the 2-norm condition number for the global system matrix", false);
+    
+    bool enhanceFluxOrders = args.Input<bool>("--enhanceFluxOrders", "enhance flux polynomial orders to match test space", false);
 
     //bool adaptForLRCornerVorticity = args.Input<bool>("--adaptForLRCornerVorticity", "do goal-oriented ", false);
     
     bool reportStreamfunctionMax = args.Input<bool>("--reportStreamfunctionMax", "report streamfunction max value", true);
     bool reportCenterlineVelocities = args.Input<bool>("--reportCenterlineVelocities", "report centerline velocities", true);
+    bool reportVelocityExtremeValues = args.Input<bool>("--reportVelocityExtrema", "report velocity extrema", false);
     
     double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
 
@@ -584,7 +698,7 @@ int main(int argc, char *argv[]) {
     string solnSaveFile = args.Input<string>("--solnSaveFile", "file to which to save solution data", "");
     string saveFile = args.Input<string>("--saveReplay", "file to which to save refinement history", "");
     
-    double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
+//    double finalSolveMinL2Increment = args.Input<double>("--finalNRtol", "Newton-Raphson tolerance for final solve, L^2 norm of increment", minL2Increment / 10);
     
     bool useAdHocHPRefinements = args.Input<bool>("--useAdHocHPRefinements", "use ad hoc hp refinements", false);
     
@@ -682,7 +796,8 @@ int main(int argc, char *argv[]) {
                                                             H1Order, pToAdd,
                                                             u1_0, u2_0,  // BC for u
                                                             zero, zero,  // zero forcing function
-                                                            useCompliantGraphNorm); // enrich velocity if using compliant graph norm
+                                                            useCompliantGraphNorm, // enrich velocity if using compliant graph norm
+                                                            enhanceFluxOrders);
     
     SolutionPtr solution = problem.backgroundFlow();
     solution->setReportConditionNumber(reportConditionNumber);
@@ -843,7 +958,10 @@ int main(int argc, char *argv[]) {
     FunctionPtr sigma12_dy = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma12->dy()) );
     FunctionPtr sigma21_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma21) );
     FunctionPtr sigma21_dx = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma21->dx()) );
-      
+    
+    FunctionPtr sigma11_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma11 ) );
+    FunctionPtr sigma22_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma22 ) );
+    
   //  if ( ! usePicardIteration ) {
   //    bc->addDirichlet(u1hat, entireBoundary, u1_0 - u1hat_prev);
   //    bc->addDirichlet(u2hat, entireBoundary, u2_0 - u2hat_prev);
@@ -885,7 +1003,7 @@ int main(int argc, char *argv[]) {
 //    cout << "Processor #" << rank << " got to: " << __LINE__ << endl;
     ////////////////////   SOLVE & REFINE   ///////////////////////
     
-    FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+    FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, (-Re) * sigma12 + Re * sigma21 ) );
     //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution,sigma12 - sigma21) );
     Teuchos::RCP<RHSEasy> streamRHS = Teuchos::rcp( new RHSEasy );
     streamRHS->addTerm(vorticity * q_s);
@@ -950,6 +1068,30 @@ int main(int argc, char *argv[]) {
   //  }
   //  solveStrategy->solve(rank==0);
     
+    vector<double> relativeEnergyErrors(numRefs + 1);
+    vector<long> dofCounts(numRefs+1);
+    vector<long> fluxDofCounts(numRefs+1);
+    vector<long> elementCounts(numRefs+1);
+    vector<int> iterationCounts(numRefs+1);
+    vector<double> tolerances(numRefs+1);
+    
+    map<double, vector< VerticalLineSolutionValues > > verticalCutValues; // keys are x locations
+    vector< VerticalLineSolutionValues > verticalCutValuesExhaustive;
+    
+    // just one x location of interest for cavity flow -- the center line:
+    verticalCutValues[0.5] = vector< VerticalLineSolutionValues >();
+    
+    double initialMinL2Increment = minL2Increment;
+    if (rank==0) cout << "Initial relative L^2 tolerance: " << minL2Increment << endl;
+    
+    LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
+    RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
+    
+    LinearTermPtr incrementalSolnFunctional = problem.bf()->testFunctional(problem.solutionIncrement());
+    RieszRep incrementRieszRep(mesh, problem.solutionIncrement()->ip(), incrementalSolnFunctional);
+    
+    tolerances[0] = initialMinL2Increment;
+    
     if (true) { // do regular refinement strategy...
       FieldContainer<double> bottomCornerPoints(2,2);
       bottomCornerPoints(0,0) = 1e-10;
@@ -988,7 +1130,7 @@ int main(int argc, char *argv[]) {
         + Re2 * sigma11_incr * sigma11_incr + Re2 * sigma12_incr * sigma12_incr
         + Re2 * sigma21_incr * sigma21_incr + Re2 * sigma22_incr * sigma22_incr;
       }
-
+      
       for (int refIndex=0; refIndex<numRefs; refIndex++){
         if (startWithZeroSolutionAfterRefinement) {
           // start with a fresh (zero) initial guess for each adaptive mesh:
@@ -1009,9 +1151,6 @@ int main(int argc, char *argv[]) {
         do {
           problem.iterate(useLineSearch, useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
-//          // update time step
-//          double new_dt = min(1.0/incr_norm, 1000.0);
-//          dt_inv->setValue(1/new_dt);
           
           if (rank==0) {
             cout << "\x1B[2K"; // Erase the entire current line.
@@ -1020,7 +1159,10 @@ int main(int argc, char *argv[]) {
             flush(cout);
           }
         } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        
+        iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
 
+        
         if (rank==0)
           cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
         
@@ -1036,6 +1178,10 @@ int main(int argc, char *argv[]) {
         if (reportCenterlineVelocities) {
           double u1_max_y, u2_max_x, u2_min_x; // the maxes and mins we find along the reported centerline points
           reportCenterlineVelocityValues(u1_prev,u2_prev,p_prev,vorticity, u1_max_y, u2_max_x, u2_min_x);
+        }
+        
+        if (reportVelocityExtremeValues) {
+          double u1_max_y, u2_max_x, u2_min_x; // the maxes and mins we find along the reported centerline points
           reportVelocityExtrema(u1_prev, sigma12_prev, sigma12_dy,
                                 u2_prev, sigma21_prev, sigma21_dx,
                                 u1_max_y, u2_max_x, u2_min_x);
@@ -1065,6 +1211,32 @@ int main(int argc, char *argv[]) {
           }
           
           reportStreamfunctionMaxValue(streamSolution,phi,vorticity,Re);
+        }
+        
+        double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+        solnRieszRep.computeRieszRep();
+        double solnEnergyNormTotal = solnRieszRep.getNorm();
+        //    incrementRieszRep.computeRieszRep();
+        //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+        
+        double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+        minL2Increment = initialMinL2Increment * relativeEnergyError;
+        
+        relativeEnergyErrors[refIndex] = relativeEnergyError;
+        dofCounts[refIndex] = mesh->numGlobalDofs();
+        fluxDofCounts[refIndex] = mesh->numFluxDofs();
+        elementCounts[refIndex] = mesh->numActiveElements();
+        
+        iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
+        tolerances[refIndex+1] = minL2Increment;
+        
+        for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+             cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+          double x = cutVectorsIt->first;
+          VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
+          cutVectorsIt->second.push_back(values);
+          VerticalLineSolutionValues valuesExhaustive = computeVerticalLineSolutionValuesExhaustive(x, u1_prev, u2_prev, p_prev, vorticity, sigma11_prev, sigma12_prev, sigma21_prev, sigma22_prev);
+          verticalCutValuesExhaustive.push_back(valuesExhaustive);
         }
         
         // reset iteration count to 1 (for the background flow):
@@ -1120,8 +1292,33 @@ int main(int argc, char *argv[]) {
             cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
             flush(cout);
           }
-        } while ((incr_norm > finalSolveMinL2Increment ) && (problem.iterationCount() < maxIters));
+        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
+        
+        double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+        solnRieszRep.computeRieszRep();
+        double solnEnergyNormTotal = solnRieszRep.getNorm();
+        //    incrementRieszRep.computeRieszRep();
+        //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+        
+        double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+        minL2Increment = initialMinL2Increment * relativeEnergyError;
+        
+        int refIndex = numRefs;
+        relativeEnergyErrors[refIndex] = relativeEnergyError;
+        dofCounts[refIndex] = mesh->numGlobalDofs();
+        fluxDofCounts[refIndex] = mesh->numFluxDofs();
+        elementCounts[refIndex] = mesh->numActiveElements();
+        iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
+        
+        for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+             cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+          double x = cutVectorsIt->first;
+          VerticalLineSolutionValues values = computeVerticalLineSolutionValues(x, u1_prev, u2_prev, p_prev, vorticity);
+          cutVectorsIt->second.push_back(values);
+          VerticalLineSolutionValues valuesExhaustive = computeVerticalLineSolutionValuesExhaustive(x, u1_prev, u2_prev, p_prev, vorticity, sigma11_prev, sigma12_prev, sigma21_prev, sigma22_prev);
+          verticalCutValuesExhaustive.push_back(valuesExhaustive);
+        }
       }
       
       if (computeMaxConditionNumber) {
@@ -1184,6 +1381,83 @@ int main(int argc, char *argv[]) {
     if (rank==0) {
       if (solnSaveFile.length() > 0) {
         solution->writeToFile(solnSaveFile);
+      }
+    }
+    
+    if (rank==0) {
+      ofstream fout;
+      ostringstream fileName;
+      fileName << "cavityRefinements_Re" << Re << ".txt";
+
+      fout.open(fileName.str().c_str());
+      fout << "ref. #\trel. energy error\tL^2 tol.\tNR iterations\telements\tdofs\tflux dofs\n";
+      for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+        fout << setprecision(8) << fixed;
+        fout << refIndex << "\t";
+        fout << setprecision(3) << scientific;;
+        fout << "\t" << relativeEnergyErrors[refIndex];
+        fout << "\t" << tolerances[refIndex];
+        fout << "\t" << iterationCounts[refIndex];
+        fout << "\t" << elementCounts[refIndex];
+        fout << "\t" << dofCounts[refIndex];
+        fout << "\t" << fluxDofCounts[refIndex];
+        fout << endl;
+      }
+      fout.close();
+      
+      
+      // add our "exhaustive" (that is, benchmark) data to the end of the verticalCutValues lists
+      for (vector<VerticalLineSolutionValues>::iterator exhaustiveIt=verticalCutValuesExhaustive.begin();
+           exhaustiveIt != verticalCutValuesExhaustive.end(); exhaustiveIt++) {
+        double x = exhaustiveIt->x;
+        verticalCutValues[x].push_back(*exhaustiveIt);
+      }
+      
+      for (map<double, vector< VerticalLineSolutionValues > >::iterator cutVectorsIt = verticalCutValues.begin();
+           cutVectorsIt != verticalCutValues.end(); cutVectorsIt++) {
+        double x = cutVectorsIt->first;
+        int listSize = cutVectorsIt->second.size();
+        for (int refIndex=0; refIndex<listSize; refIndex++) {
+          ostringstream fileName;
+          int modifiedRefIndex = (refIndex > numRefs) ? refIndex - (numRefs + 1) : refIndex;
+          if (refIndex <= numRefs)
+            fileName << "cavityVerticalCutData_Re" << Re << "ref" << refIndex << ".txt";
+          else {
+            fileName << "cavityVerticalCutDataExhaustive_Re" << Re << "ref" << modifiedRefIndex << ".txt";
+          }
+          fout.open(fileName.str().c_str());
+          fout << setprecision(15);
+          vector< VerticalLineSolutionValues > valuesList = cutVectorsIt->second;
+          VerticalLineSolutionValues values = valuesList[refIndex];
+          if (values.sigma11.size() == 0)
+            fout << "refno\txval\tyval\tu1\tu2\t|u|\tp\tomega\n";
+          else
+            fout << "refno\txval\tyval\tu1\tu2\t|u|\tp\tomega\tsigma11\tsigma12\tsigma21\tsigma22\n";
+          int yCount = values.yPoints.size();
+          for (int yIndex=0; yIndex<yCount; yIndex++) {
+            double y = values.yPoints[yIndex];
+            double u1 = values.u1[yIndex];
+            double u2 = values.u2[yIndex];
+            double u = sqrt(u1*u1 + u2*u2);
+            double p = values.p[yIndex];
+            double omega = values.omega[yIndex];
+            
+            fout << modifiedRefIndex << "\t" << x << "\t" << y;
+            fout << "\t" << u1 << "\t" << u2 << "\t" << u;
+            fout << "\t" << p << "\t" << omega;
+            
+            if (values.sigma11.size() > 0) {
+              double sigma11 = values.sigma11[yIndex];
+              double sigma12 = values.sigma12[yIndex];
+              double sigma21 = values.sigma21[yIndex];
+              double sigma22 = values.sigma22[yIndex];
+              fout << "\t" << sigma11 << "\t" << sigma12;
+              fout << "\t" << sigma21 << "\t" << sigma22;
+            }
+            fout << endl;
+          }
+          fout.close();
+        }
       }
     }
     

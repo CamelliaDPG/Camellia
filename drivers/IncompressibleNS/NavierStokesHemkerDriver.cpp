@@ -57,6 +57,13 @@ bool streamwiseGradientConditionsRight;
 bool symmetryConditionsTopAndBottom;
 bool noBCsRight;
 
+vector<double> relativeEnergyErrors;
+vector<long> dofCounts;
+vector<long> fluxDofCounts;
+vector<long> elementCounts;
+vector<int> iterationCounts;
+vector<double> tolerances;
+
 Teuchos::RCP<BCEasy> bc;
 Teuchos::RCP<PenaltyConstraints> pc;
 
@@ -544,6 +551,32 @@ int cornerDescendantID(ElementPtr cell, int side1, int side2) {
   return cornerCellID;
 }
 
+void saveRefinementInfo() {
+  int rank     = Teuchos::GlobalMPISession::getRank();
+  if (rank==0){
+    ofstream fout;
+    ostringstream fileName;
+    fileName << "hemkerRefinements.txt";
+    
+    fout.open(fileName.str().c_str());
+    fout << "ref. #\trel. energy error\tL^2 tol.\tNR iterations\telements\tdofs\tflux dofs\n";
+    int numRefs = relativeEnergyErrors.size() - 1; // will output zeros for refinements that haven't been done yet...
+    for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+      fout << setprecision(8) << fixed;
+      fout << refIndex << "\t";
+      fout << setprecision(3) << scientific;;
+      fout << "\t" << relativeEnergyErrors[refIndex];
+      fout << "\t" << tolerances[refIndex];
+      fout << "\t" << iterationCounts[refIndex];
+      fout << "\t" << elementCounts[refIndex];
+      fout << "\t" << dofCounts[refIndex];
+      fout << "\t" << fluxDofCounts[refIndex];
+      fout << endl;
+    }
+    fout.close();
+  }
+}
+
 void printNeighbors(ElementPtr cell) {
   cout << "cell " << cell->cellID() << " neighbors: ";
   for (int i=0; i<4; i++) {
@@ -769,6 +802,13 @@ int main(int argc, char *argv[]) {
     if (useScaleCompliantGraphNorm) {
       cout << "WARNING: useScaleCompliantGraphNorm = true, but support for this is not yet implemented in Hemker driver.\n";
     }
+    
+    relativeEnergyErrors = vector<double>(numRefs + 1);
+    dofCounts = vector<long>(numRefs+1);
+    fluxDofCounts = vector<long>(numRefs+1);
+    elementCounts = vector<long>(numRefs+1);
+    iterationCounts = vector<int>(numRefs+1);
+    tolerances = vector<double>(numRefs+1);
     
     Teuchos::RCP<Solver> solver;
     if (useMumps) {
@@ -1113,6 +1153,7 @@ int main(int argc, char *argv[]) {
       + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
       
       double initialMinL2Increment = minL2Increment;
+      tolerances[0] = initialMinL2Increment;
       if (rank==0) cout << "Initial relative L^2 tolerance: " << minL2Increment << endl;
       
       LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
@@ -1158,6 +1199,16 @@ int main(int argc, char *argv[]) {
         
         double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
         minL2Increment = initialMinL2Increment * relativeEnergyError;
+        
+        relativeEnergyErrors[refIndex] = relativeEnergyError;
+        dofCounts[refIndex] = mesh->numGlobalDofs();
+        fluxDofCounts[refIndex] = mesh->numFluxDofs();
+        elementCounts[refIndex] = mesh->numActiveElements();
+        
+        iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
+        tolerances[refIndex+1] = minL2Increment;
+        
+        saveRefinementInfo();
         
         if (rank==0) {
           cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
@@ -1264,6 +1315,24 @@ int main(int argc, char *argv[]) {
           }
         } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
+        
+        double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
+        solnRieszRep.computeRieszRep();
+        double solnEnergyNormTotal = solnRieszRep.getNorm();
+        //    incrementRieszRep.computeRieszRep();
+        //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
+        
+        double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
+        minL2Increment = initialMinL2Increment * relativeEnergyError;
+        
+        int refIndex = numRefs;
+        relativeEnergyErrors[refIndex] = relativeEnergyError;
+        dofCounts[refIndex] = mesh->numGlobalDofs();
+        fluxDofCounts[refIndex] = mesh->numFluxDofs();
+        elementCounts[refIndex] = mesh->numActiveElements();
+        
+        iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
+        saveRefinementInfo();
       }
     }
 
@@ -1370,6 +1439,8 @@ int main(int argc, char *argv[]) {
         cout << "ratio of largest / smallest h: " << sqrt(maxCellMeasure) / sqrt(minCellMeasure) << endl;
       }
     }
+
+    saveRefinementInfo();
     
     if (rank==0){
       GnuPlotUtil::writeComputationalMeshSkeleton("finalHemkerMesh", mesh);
