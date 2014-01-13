@@ -302,7 +302,7 @@ class VGPNavierStokesProblem {
   Teuchos::RCP<Solver> _solver;
   
   void init(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
-            FunctionPtr f1, FunctionPtr f2, bool enrichVelocity) {
+            FunctionPtr f1, FunctionPtr f2, bool enrichVelocity, bool enhanceFluxes) {
     _neglectFluxesOnRHS = true;
     FunctionPtr mu = 1.0 / Re;
     _iterations = 0;
@@ -318,6 +318,16 @@ class VGPNavierStokesProblem {
     if (enrichVelocity) {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
+    }
+    if (enhanceFluxes) {
+      VarPtr t1n = vgpStokesFormulation->t1var();
+      VarPtr t2n = vgpStokesFormulation->t2var();
+      trialOrderEnhancements[t1n->ID()] = pToAdd + 1; // +1 gets us to H1 order, pToAdd matches test order
+      trialOrderEnhancements[t2n->ID()] = pToAdd + 1;
+      VarPtr u1hat = vgpStokesFormulation->u1hatvar();
+      VarPtr u2hat = vgpStokesFormulation->u2hatvar();
+      trialOrderEnhancements[u1hat->ID()] = pToAdd;
+      trialOrderEnhancements[u2hat->ID()] = pToAdd;
     }
     _mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
                                    vgpStokesFormulation->bf(), H1Order, pToAdd,
@@ -348,7 +358,8 @@ class VGPNavierStokesProblem {
   
   void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
-            FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2, bool useEnrichedVelocity) {
+            FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2, bool useEnrichedVelocity,
+            bool enhanceFluxes) {
     _neglectFluxesOnRHS = true;
     FunctionPtr mu = 1.0/Re;
     _iterations = 0;
@@ -365,6 +376,16 @@ class VGPNavierStokesProblem {
     if (useEnrichedVelocity) {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
+    }
+    if (enhanceFluxes) {
+      VarPtr t1n = vgpStokesFormulation->t1var();
+      VarPtr t2n = vgpStokesFormulation->t2var();
+      trialOrderEnhancements[t1n->ID()] = pToAdd + 1; // +1 gets us to H1 order, pToAdd matches test order
+      trialOrderEnhancements[t2n->ID()] = pToAdd + 1;
+      VarPtr u1hat = vgpStokesFormulation->u1hatvar();
+      VarPtr u2hat = vgpStokesFormulation->u2hatvar();
+      trialOrderEnhancements[u1hat->ID()] = pToAdd;
+      trialOrderEnhancements[u2hat->ID()] = pToAdd;
     }
     _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
@@ -395,7 +416,8 @@ class VGPNavierStokesProblem {
   }
   void init(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
              int verticalCells, int H1Order, int pToAdd,
-             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
+             FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity,
+            bool enhanceFluxes) {
     _neglectFluxesOnRHS = false; // main reason we don't neglect fluxes is because exact solution isn't yet set up to handle that
     FunctionPtr mu = 1/Re;
     _iterations = 0;
@@ -416,6 +438,16 @@ class VGPNavierStokesProblem {
     if (enrichVelocity) {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
+    }
+    if (enhanceFluxes) {
+      VarPtr t1n = vgpStokesFormulation->t1var();
+      VarPtr t2n = vgpStokesFormulation->t2var();
+      trialOrderEnhancements[t1n->ID()] = pToAdd + 1; // +1 gets us to H1 order, pToAdd matches test order
+      trialOrderEnhancements[t2n->ID()] = pToAdd + 1;
+      VarPtr u1hat = vgpStokesFormulation->u1hatvar();
+      VarPtr u2hat = vgpStokesFormulation->u2hatvar();
+      trialOrderEnhancements[u1hat->ID()] = pToAdd;
+      trialOrderEnhancements[u2hat->ID()] = pToAdd;
     }
     _mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
                                 vgpStokesFormulation->bf(), H1Order, H1Order+pToAdd,
@@ -445,36 +477,37 @@ class VGPNavierStokesProblem {
 public:
   VGPNavierStokesProblem(FunctionPtr Re, MeshGeometryPtr geometry, int H1Order, int pToAdd,
                          FunctionPtr f1 = Function::zero(), FunctionPtr f2=Function::zero(),
-                         bool enrichVelocity = false) {
-    init(Re,geometry,H1Order,pToAdd, f1,f2, enrichVelocity);
+                         bool enrichVelocity = false, bool enhanceFluxes = false) {
+    init(Re,geometry,H1Order,pToAdd, f1,f2, enrichVelocity, enhanceFluxes);
     // note that this constructor leaves BC enforcement up to the user
   }
   
   VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
-                         bool enrichVelocity = false) {
-    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2,enrichVelocity);
+                         bool enrichVelocity = false, bool enhanceFluxes = false) {
+    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2,enrichVelocity, enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
   VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          FunctionPtr u1_0, FunctionPtr u2_0, FunctionPtr f1, FunctionPtr f2,
-                         bool enrichVelocity = false) {
-    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity);
+                         bool enrichVelocity = false, bool enhanceFluxes = false) {
+    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity, enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
   VGPNavierStokesProblem(FunctionPtr Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity);
+                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity,
+                         bool enhanceFluxes) {
+    init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
             
   VGPNavierStokesProblem(double Re, FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
-                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity) {
-    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity);
+                         FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, bool enrichVelocity, bool enhanceFluxes) {
+    init(Function::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact,enrichVelocity,enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
             
