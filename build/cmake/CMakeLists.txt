@@ -228,6 +228,10 @@ set( STOKES_CAVITY_FLOW_DRIVER
 set( STOKES_STUDY
   "${STOKES_DIR}/StokesStudy.cpp"
   )
+
+set( STOKES_STUDY_FOR_LESZEK
+  "${STOKES_DIR}/StokesStudyForLeszek.cpp"
+  )
   
 set( INCOMP_NS_STUDY
   "${INCOMPRESSIBLE_NS_DIR}/NavierStokesStudy.cpp"
@@ -236,6 +240,10 @@ set( INCOMP_NS_STUDY
 set( OSEEN_STUDY
   "${INCOMPRESSIBLE_NS_DIR}/OseenStudy.cpp"
   )
+
+set( TRUMAN_FLAT_PLATE_INS
+  "${DRIVERS_DIR}/Truman/LocalConservation/FlatPlateINS.cpp"
+)
 
 set( uBLAS_CHOLESKY_TEST
   "${DRIVERS_DIR}/uBLAS/cholesky_test.cpp"
@@ -318,6 +326,7 @@ add_executable(LSQRConditioningDriver ${LSQR_CONDITIONING_EXPERIMENT_DRIVER})
 add_executable(LaplaceCurvilinear ${LAPLACE_CURVILINEAR_DRIVER})
 add_executable(Laplace3DSingleElement ${LAPLACE_3D_SINGLE_ELEMENT_DRIVER})
 add_executable(StokesStudy ${STOKES_SOURCES} ${MULTI_ORDER_STUDY_SOURCES} ${STOKES_STUDY})
+add_executable(StokesStudyForLeszek ${STOKES_SOURCES} ${STOKES_STUDY_FOR_LESZEK})
 add_executable(NavierStokesStudy ${INCOMP_NS_STUDY})
 add_executable(OseenStudy ${OSEEN_STUDY})
 add_executable(StokesBackwardFacingStepDriver ${STOKES_SOURCES} ${STOKES_BACKWARD_FACING_STEP_DRIVER})
@@ -332,6 +341,7 @@ add_executable(ConfusionIterationExperiment ${CONFUSION_ITERATION_EXPERIMENT})
 add_executable(NewConfusionDriver ${NEW_CONFUSION_DRIVER})
 add_executable(NewBurgersDriver ${NEW_BURGERS_DRIVER})
 add_executable(DPGTests ${TEST_SOURCES} ${POISSON_SOURCES} ${CONFUSION_SOURCES})
+add_executable(FlatPlateINS ${TRUMAN_FLAT_PLATE_INS})
 add_executable(ublas_cholesky ${uBLAS_CHOLESKY_TEST})
 
 #
@@ -445,7 +455,17 @@ target_link_libraries(StokesStudy
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
   )
+target_link_libraries(StokesStudyForLeszek
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
 target_link_libraries(NavierStokesStudy
+  ${Trilinos_LIBRARIES} 
+  ${Trilinos_TPL_LIBRARIES}
+  ${CAMELLIA_LIBRARY_NAME}
+  )
+target_link_libraries(FlatPlateINS
   ${Trilinos_LIBRARIES} 
   ${Trilinos_TPL_LIBRARIES}
   ${CAMELLIA_LIBRARY_NAME}
