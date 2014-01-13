@@ -223,6 +223,7 @@ void HConvergenceStudy::computeErrors() {
   _bestApproximationErrors.clear();
   _bestApproximationRates.clear();
   
+  
   for (vector<int>::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
     int trialID = *trialIt;
     vector< Teuchos::RCP<Solution> >::iterator solutionIt;
@@ -456,7 +457,9 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
   ostringstream texString;
   texString << scientific;
   
-  int numColumns = trialIDs.size() * 2 + 1;
+  bool reportCombinedRelativeError = true;
+  
+  int numColumns = reportCombinedRelativeError ?  trialIDs.size() * 2 + 3 : trialIDs.size() * 2 + 1;
   string newLine = "\\\\\n";
   texString << "\\multicolumn{" << numColumns << "}{| c |}{k=" << _H1Order-1 << "} " << newLine;
 
@@ -466,15 +469,23 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
     int trialID = *trialIt;
     texString << "& $" << _bilinearForm->trialName(trialID) << "$ & rate ";
   }
+  if (reportCombinedRelativeError) {
+    texString << "& Combined relative error & rate ";
+  }
   texString << newLine;
   texString << "\\hline \n";
   vector<int> meshSizes = this->meshSizes();
+  double previousRelativeError = -1;
   for (int i=0; i<meshSizes.size(); i++) {
     int size = meshSizes[i];
     texString << size << " $\\times$ " << size;
+    double totalErrorSquared = 0;
+    double totalSolutionNormSquared = 0;
     for (vector<int>::const_iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
       int trialID = *trialIt;
       double l2error = _solutionErrors[trialID][i];
+      totalErrorSquared += l2error * l2error;
+      totalSolutionNormSquared += _exactSolutionNorm[trialID] * _exactSolutionNorm[trialID];
       if (_reportRelativeErrors) {
         l2error /= _exactSolutionNorm[trialID];
       }
@@ -485,6 +496,22 @@ string HConvergenceStudy::TeXErrorRateTable( const vector<int> &trialIDs, const 
       } else {
         texString << "\t&-";
       }
+    }
+    if (reportCombinedRelativeError) {
+      double combinedRelativeError = sqrt( totalErrorSquared / totalSolutionNormSquared );
+      texString << setprecision(1) << scientific << "\t&" << combinedRelativeError;
+      if (i > 0) {
+        if (previousRelativeError >= 0.0) {
+          double rate = - log(combinedRelativeError/previousRelativeError) / log(2.0);
+          texString << "\t&" << setprecision(2) << fixed << rate;
+        } else {
+          // bad practice: defensive coding...
+          cout << "Unexpected previousRelativeError.\n";
+        }
+      } else {
+        texString << "\t&-";
+      }
+      previousRelativeError = combinedRelativeError;
     }
     texString << newLine;
   }
