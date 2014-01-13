@@ -712,6 +712,18 @@ public:
   VarPtr pvar() {
     return p;
   }
+  VarPtr t1var() {
+    return t1n;
+  }
+  VarPtr t2var() {
+    return t2n;
+  }
+  VarPtr u1hatvar() {
+    return u1hat;
+  }
+  VarPtr u2hatvar() {
+    return u1hat;
+  }
 };
 
 const static string VGPF_V1_S = "v_1";
