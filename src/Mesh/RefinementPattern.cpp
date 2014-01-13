@@ -30,6 +30,8 @@
 
 #include "RefinementPattern.h"
 
+#include "NewMesh.h"
+
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 
@@ -43,6 +45,12 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
   int numNodesPerCell = refinedNodes.dimension(1);
   unsigned spaceDim = refinedNodes.dimension(2);
   unsigned sideCount = _cellTopoPtr->getSideCount();
+  
+  if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
+    _childTopos = vector< CellTopoPtr >(numSubCells, _cellTopoPtr);
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementPattern: Still need to implement support for child topos that have different topology than parent...");
+  }
   
   if (spaceDim > 1) {
     TEUCHOS_TEST_FOR_EXCEPTION(sideRefinementPatterns.size() != sideCount, std::invalid_argument, "sideRefinementPatterns length != cellTopo.getSideCount()");
@@ -330,6 +338,10 @@ vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSi
   // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   
   return _childrenForSides;
+}
+
+Teuchos::RCP< shards::CellTopology > RefinementPattern::childTopology(unsigned childIndex) {
+  return _childTopos[childIndex];
 }
 
 void RefinementPattern::initializeAnisotropicRelationships() {
@@ -667,6 +679,10 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
   return refPattern;
 }
 
+CellTopoPtr RefinementPattern::parentTopology() {
+  return _cellTopoPtr;
+}
+
 RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsigned subcord) {
   return _patternForSubcell[subcdim][subcord];
 }
@@ -685,4 +701,46 @@ void RefinementPattern::setRelatedRecipes(vector<RefinementPatternRecipe> &recip
 
 const vector< Teuchos::RCP<RefinementPattern> > & RefinementPattern::sideRefinementPatterns() {
   return _sideRefinementPatterns;
+}
+
+FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch) {
+  CellTopoPtr parentTopo = refinementBranch[0].first->parentTopology();
+  FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
+  CamelliaCellTools::refCellNodesForTopology(ancestorNodes, *parentTopo);
+  
+  return descendantNodes(refinementBranch, ancestorNodes);
+}
+
+FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refinementBranch, const FieldContainer<double> &ancestorNodes) {
+  vector< vector<double> > vertices;
+  vector< vector<unsigned> > elementVertices;
+  int numNodes = ancestorNodes.dimension(0);
+  int spaceDim = ancestorNodes.dimension(1);
+  
+  vector<unsigned> ancestorVertexIndices;
+  for (int nodeIndex = 0; nodeIndex < numNodes; nodeIndex++) {
+    vector<double> node;
+    for (int d=0; d<spaceDim; d++) {
+      node.push_back(ancestorNodes(nodeIndex,d));
+    }
+    vertices.push_back(node);
+    ancestorVertexIndices.push_back(nodeIndex);
+  }
+  elementVertices.push_back(ancestorVertexIndices);
+  
+  CellTopoPtr ancestorTopo = refinementBranch[0].first->parentTopology();
+  vector< CellTopoPtr > cellTopos(1, ancestorTopo);
+  
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+  
+  NewMeshPtr mesh = Teuchos::rcp( new NewMesh(meshGeometry) );
+  
+  unsigned cellIndex = 0; // cellIndex of the current parent in the RefinementBranch
+  for (int refIndex=0; refIndex<refinementBranch.size(); refIndex++) {
+    RefinementPatternPtr tempRefPatternPtr = Teuchos::rcp(refinementBranch[refIndex].first, false);
+    mesh->refineCell(cellIndex, tempRefPatternPtr);
+    cellIndex = mesh->getCell(cellIndex)->getChildIndices()[refinementBranch[refIndex].second];
+  }
+
+  return mesh->physicalCellNodesForCell(cellIndex);
 }

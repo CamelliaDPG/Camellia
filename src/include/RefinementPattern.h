@@ -16,6 +16,8 @@ using namespace Intrepid;
 class RefinementPattern;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 
+typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch;
+
 typedef vector< pair<RefinementPatternPtr, vector<unsigned> > > RefinementPatternRecipe;
 
 class RefinementPattern {
@@ -23,6 +25,8 @@ class RefinementPattern {
   FieldContainer<double> _nodes;
   vector< vector< unsigned > > _subCells;
   FieldContainer<double> _vertices;
+  
+  vector< Teuchos::RCP< shards::CellTopology > > _childTopos;
   
   vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
   vector< RefinementPatternRecipe > _relatedRecipes;
@@ -60,6 +64,9 @@ public:
   
   vector< vector< pair< unsigned, unsigned > > > & childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   map< unsigned, unsigned > parentSideLookupForChild(unsigned childIndex); // inverse of childrenForSides
+
+  Teuchos::RCP< shards::CellTopology > childTopology(unsigned childIndex);
+  Teuchos::RCP< shards::CellTopology > parentTopology();
   
   unsigned numChildren();
   const FieldContainer<double> & refinedNodes();
@@ -69,6 +76,10 @@ public:
   
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);
+  
+  static FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch);
+  
+  static FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const FieldContainer<double> &ancestorNodes);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

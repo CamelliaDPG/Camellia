@@ -108,7 +108,7 @@ FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr f
   return constrainedWeights;
 }
 
-SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis, int finerBasisSideIndex, int coarserBasisSideIndex,
+SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, BasisPtr coarserBasis, int coarserBasisSideIndex,
                                                                              unsigned vertexNodePermutation) {
   SubBasisReconciliationWeights weights;
   
@@ -210,6 +210,77 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   return weights;
 }
 
+
+FieldContainer<double> BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis) {
+  
+  // there's a LOT of code duplication between this and the p-oriented computeConstrainedWeights(finerBasis,coarserBasis)
+  // would be pretty easy to refactor to make them share the common code -- this one just needs an additional distinction between the cubature points for coarserBasis and those for finerBasis...
+  
+  // we could define things in terms of Functions, and then use Projector class.  But this is simple enough that it's probably worth it to do it more manually.
+  // (also, I'm a bit concerned about the expense here, and the present implementation hopefully will be a bit lighter weight.)
+  
+  shards::CellTopology cellTopo = finerBasis->domainTopology();
+  
+  int cubDegree = finerBasis->getDegree() * 2;
+  
+  DefaultCubatureFactory<double> cubFactory;
+  Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(cellTopo, cubDegree);
+  
+  int cubDim       = cellTopoCub->getDimension();
+  int numCubPoints = cellTopoCub->getNumPoints();
+  
+  FieldContainer<double> cubPointsFineBasis(numCubPoints, cubDim);
+  FieldContainer<double> cubWeights(numCubPoints);
+  
+  cellTopoCub->getCubature(cubPointsFineBasis, cubWeights);
+  
+  FieldContainer<double> fineCellNodesInCoarseRefCell = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
+  fineCellNodesInCoarseRefCell.resize(1,fineCellNodesInCoarseRefCell.dimension(0),fineCellNodesInCoarseRefCell.dimension(1));
+  FieldContainer<double> cubPointsCoarseBasis(1,numCubPoints,cubDim);
+  CellTools<double>::mapToPhysicalFrame(cubPointsCoarseBasis,cubPointsFineBasis,fineCellNodesInCoarseRefCell,cellTopo);
+  cubPointsCoarseBasis.resize(numCubPoints,cubDim);
+  
+  FieldContainer<double> finerBasisValues;
+  FieldContainer<double> finerBasisValuesWeighted;
+  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints);
+  
+  FieldContainer<double> coarserBasisValues;
+  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints);
+  
+  finerBasis->getValues(finerBasisValues, cubPointsFineBasis, OPERATOR_VALUE);
+  coarserBasis->getValues(coarserBasisValues, cubPointsCoarseBasis, OPERATOR_VALUE);
+  
+  // resize things with dummy cell dimension:
+  sizeFCForBasisValues(coarserBasisValues, coarserBasis, numCubPoints, true);
+  sizeFCForBasisValues(finerBasisValues, finerBasis, numCubPoints, true);
+  sizeFCForBasisValues(finerBasisValuesWeighted, finerBasis, numCubPoints, true);
+  cubWeights.resize(1,numCubPoints); // dummy cell dimension
+  FunctionSpaceTools::multiplyMeasure<double>(finerBasisValuesWeighted, cubWeights, finerBasisValues);
+  
+  FieldContainer<double> constrainedWeights(finerBasis->getCardinality(),coarserBasis->getCardinality());
+  
+  FieldContainer<double> lhsValues(1,finerBasis->getCardinality(),finerBasis->getCardinality());
+  FieldContainer<double> rhsValues(1,finerBasis->getCardinality(),coarserBasis->getCardinality());
+  
+  FunctionSpaceTools::integrate<double>(lhsValues,finerBasisValues,finerBasisValuesWeighted,COMP_CPP);
+  FunctionSpaceTools::integrate<double>(rhsValues,finerBasisValuesWeighted,coarserBasisValues,COMP_CPP);
+  
+  lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
+  rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
+  SerialDenseMatrixUtility::solveSystemMultipleRHS(constrainedWeights, lhsValues, rhsValues);
+  
+  return constrainedWeights;
+}
+
+// matching along sides:
+SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch refinements,
+                                                                             BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation) {
+
+  cout << "WARNING: BasisReconciliation::computeConstrainedWeights not yet implemented for side-restricted h-refinements.\n";
+  
+}
+
+
 const FieldContainer<double>& BasisReconciliation::constrainedWeights(BasisPtr finerBasis, BasisPtr coarserBasis) {
   FieldContainer<double> weights;
   
@@ -236,7 +307,38 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
     return _sideReconciliationWeights.find(cacheKey)->second;
   }
   
-  _sideReconciliationWeights[cacheKey] = computeConstrainedWeights(finerBasis, coarserBasis, finerBasisSideIndex, coarserBasisSideIndex, vertexNodePermutation);
+  _sideReconciliationWeights[cacheKey] = computeConstrainedWeights(finerBasis, finerBasisSideIndex, coarserBasis, coarserBasisSideIndex, vertexNodePermutation);
   
   return _sideReconciliationWeights[cacheKey];
+}
+
+const FieldContainer<double> & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis) {
+  BasisPair basisPair = make_pair(finerBasis.get(), coarserBasis.get());
+  RefinedBasisPair refinedBasisPair = make_pair(basisPair, refinements);
+
+  if (_simpleReconcilationWeights_h.find(refinedBasisPair) == _simpleReconcilationWeights_h.end()) {
+    FieldContainer<double> weights = computeConstrainedWeights(finerBasis,refinements,coarserBasis);
+    _simpleReconcilationWeights_h[refinedBasisPair] = weights;
+  }
+
+  return _simpleReconcilationWeights_h[refinedBasisPair];
+}
+
+const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch refinements,
+                                                                              BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation) { // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
+  
+  SideBasisRestriction fineRestriction = make_pair(finerBasis.get(), finerBasisSideIndex);
+  SideBasisRestriction coarseRestriction = make_pair(coarserBasis.get(), coarserBasisSideIndex);
+  
+  SideRefinedBasisPair refinedBasisPair = make_pair(make_pair(fineRestriction, coarseRestriction), refinements);
+
+  pair< SideRefinedBasisPair, unsigned > cacheKey = make_pair(refinedBasisPair, vertexNodePermutation);
+  
+  if (_sideReconcilationWeights_h.find(cacheKey) == _sideReconcilationWeights_h.end()) {
+    SubBasisReconciliationWeights weights = computeConstrainedWeights(finerBasis, finerBasisSideIndex, refinements,
+                                                                      coarserBasis, coarserBasisSideIndex, vertexNodePermutation);
+    _sideReconcilationWeights_h[cacheKey] = weights;
+  }
+  
+  return _sideReconcilationWeights_h[cacheKey];
 }

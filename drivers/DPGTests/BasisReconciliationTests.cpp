@@ -11,9 +11,18 @@
 #include "CamelliaCellTools.h"
 #include "doubleBasisConstruction.h"
 
+#include "RefinementPattern.h"
+
 #include "SerialDenseWrapper.h"
 
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
+  setup();
+  if (testH()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
   setup();
   if (testPSide()) {
     numTestsPassed++;
@@ -27,13 +36,6 @@ void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   }
   numTestsRun++;
   teardown();
-  
-  setup();
-  if (testH()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
 }
 
 void BasisReconciliationTests::setup() {
@@ -43,10 +45,75 @@ void BasisReconciliationTests::teardown() {
   
 }
 
+RefinementBranch makeRefinementBranch( RefinementPatternPtr refPattern, vector<unsigned> childChoices ) {
+  // make branch with the same refinement pattern all the way down...
+  RefinementBranch branch;
+  for (vector<unsigned>::iterator childIndexIt = childChoices.begin(); childIndexIt != childChoices.end(); childIndexIt++) {
+    branch.push_back( make_pair(refPattern.get(), *childIndexIt));
+  }
+  return branch;
+}
+
 bool BasisReconciliationTests::testH() {
   bool success = true;
   
-  cout << "WARNING: BasisReconciliationTests::testH() not yet implemented.\n";
+  int fineOrder = 3;
+  int coarseOrder = 3;
+  
+  RefinementBranch lineRefinementsZero = makeRefinementBranch(RefinementPattern::regularRefinementPatternLine(), vector<unsigned>(4,0));
+  vector<unsigned> alternatingZeroOne;
+  alternatingZeroOne.push_back(0);
+  alternatingZeroOne.push_back(1);
+  alternatingZeroOne.push_back(0);
+  alternatingZeroOne.push_back(1);
+  RefinementBranch lineRefinementsAlternating = makeRefinementBranch(RefinementPattern::regularRefinementPatternLine(), alternatingZeroOne);
+
+  RefinementBranch quadRefinementsZero = makeRefinementBranch(RefinementPattern::regularRefinementPatternQuad(), vector<unsigned>(4,0));
+  vector<unsigned> zeroOneTwoThree;
+  zeroOneTwoThree.push_back(0);
+  zeroOneTwoThree.push_back(1);
+  zeroOneTwoThree.push_back(2);
+  zeroOneTwoThree.push_back(3);
+  RefinementBranch quadRefinementsVarious = makeRefinementBranch(RefinementPattern::regularRefinementPatternQuad(), zeroOneTwoThree);
+  
+  RefinementBranch hexRefinementsZero = makeRefinementBranch(RefinementPattern::regularRefinementPatternHexahedron(), vector<unsigned>(4,0));
+  RefinementBranch hexRefinementsVarious = makeRefinementBranch(RefinementPattern::regularRefinementPatternHexahedron(), zeroOneTwoThree);
+  
+  vector< pair< pair< BasisPtr, BasisPtr >, RefinementBranch > > basisPairsToCheck;
+  
+  BasisPtr fineBasis = Camellia::intrepidLineHGRAD(fineOrder);
+  BasisPtr coarseBasis = Camellia::intrepidLineHGRAD(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), lineRefinementsZero ) );
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), lineRefinementsAlternating ) );
+  
+  fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
+  coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), quadRefinementsZero ) );
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), quadRefinementsVarious ) );
+
+  fineBasis = Camellia::intrepidQuadHDIV(fineOrder);
+  coarseBasis = Camellia::intrepidQuadHDIV(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), quadRefinementsZero ) );
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), quadRefinementsVarious ) );
+  
+  fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
+  coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), hexRefinementsZero ) );
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), hexRefinementsVarious ) );
+  
+  fineBasis = Camellia::intrepidHexHDIV(fineOrder);
+  coarseBasis = Camellia::intrepidHexHDIV(coarseOrder);
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), hexRefinementsZero ) );
+  basisPairsToCheck.push_back( make_pair(make_pair(fineBasis, coarseBasis), hexRefinementsVarious ) );
+  
+  for (vector< pair< pair< BasisPtr, BasisPtr >, RefinementBranch > >::iterator bpIt = basisPairsToCheck.begin(); bpIt != basisPairsToCheck.end(); bpIt++) {
+    fineBasis = bpIt->first.first;
+    coarseBasis = bpIt->first.second;
+    RefinementBranch refinements = bpIt->second;
+    if (! hConstraintWholeBasisSubTest(fineBasis, refinements, coarseBasis)) {
+      success = false;
+    }
+  }
   
   return success;
 }
@@ -119,6 +186,21 @@ FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, int cubatur
   return permutedCubaturePoints;
 }
 
+FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cubatureDegree, shards::CellTopology coarseCellTopo, unsigned nodePermutation, RefinementBranch &refinements) {
+  BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(fineCellTopo, cubatureDegree, false) );
+  FieldContainer<double> coarseCellNodes(coarseCellTopo.getNodeCount(),coarseCellTopo.getDimension());
+  CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo, nodePermutation);
+  
+  FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
+  fineCellNodesInCoarseCell.resize(1,fineCellNodesInCoarseCell.dimension(0),fineCellNodesInCoarseCell.dimension(1));
+  
+  fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<int>(), false);
+  FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
+  fineCubPoints.resize(fineCubPoints.dimension(1), fineCubPoints.dimension(2));
+  
+  return fineCubPoints;
+}
+
 FieldContainer<double> basisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnRefCell) {
   shards::CellTopology cellTopo = basis->domainTopology();
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, basis->getDegree(), false) );
@@ -137,6 +219,48 @@ FieldContainer<double> basisValuesAtSidePoints(BasisPtr basis, unsigned sideInde
   
   return *(basisCache->getSideBasisCache(sideIndex)->getValues(basis, OP_VALUE, true).get());
 }
+
+bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
+                                                           RefinementBranch &refinements,
+                                                           BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes) {
+  bool success = true;
+  
+  cout << "WARNING: hConstraintSideBasisSubTest not yet implemented.\n";
+  
+  return success;
+}
+
+bool BasisReconciliationTests::hConstraintWholeBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis) {
+  bool success = true;
+  
+  BasisReconciliation br;
+  FieldContainer<double> weights = br.constrainedWeights(fineBasis, refinements, coarseBasis);
+  
+  //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
+  
+  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology(), 5, 0);
+  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology(), 5, coarseBasis->domainTopology(), 0, refinements);
+  
+  FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
+  FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  
+  FieldContainer<double> interpretedFineBasisValues = interpretValues(fineBasisValues, weights);
+  
+  double maxDiff;
+  double tol = 1e-14;
+  if ( !fcsAgree(coarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
+    success = false;
+    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on h-refined quad.\n";
+    cout << "fine points:\n" << finePoints;
+    cout << "coarse points:\n" << coarsePoints;
+    cout << "weights:\n" << weights;
+    cout << "fineValues:\n" << fineBasisValues;
+    cout << "coarseBasisValues:\n" << coarseBasisValues;
+    cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
+  }
+  return success;
+}
+
 
 bool BasisReconciliationTests::pConstraintWholeBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis) {
   bool success = true;
