@@ -1,6 +1,13 @@
 #include "TimeIntegrator.h"
 #include "DPGInnerProduct.h"
 
+#ifdef HAVE_MPI
+#include <Teuchos_GlobalMPISession.hpp>
+#include "mpi_choice.hpp"
+#else
+#include "choice.hpp"
+#endif
+
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
     Teuchos::RCP<BCEasy> bc, IPPtr ip, map<int, FunctionPtr> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
@@ -10,6 +17,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   _timestep = 0;
   _nlTolerance = 1e-6;
   _nlIterationMax = 20;
+  _commRank = Teuchos::GlobalMPISession::getRank();
 
   _rhs = Teuchos::rcp( new RHSEasy );
   _solution = Teuchos::rcp( new Solution(mesh, _bc, _rhs, ip) );
@@ -84,7 +92,10 @@ void TimeIntegrator::calcNextTimeStep(double dt)
     {
       if (_nlIteration > _nlIterationMax)
       {
-        cout << "Hit maximum number of iterations" << endl;
+        if (_commRank == 0)
+        {
+          cout << "Hit maximum number of iterations" << endl;
+        }
         break;
       }
       _solution->solve(false);
@@ -106,13 +117,19 @@ void TimeIntegrator::calcNextTimeStep(double dt)
 
 void TimeIntegrator::printTimeStepMessage()
 {
-  cout << endl;
-  cout << "timestep: " << _timestep << " t = " << _t+_dt << " dt = " << _dt << endl;
+  if (_commRank == 0)
+  {
+    cout << endl;
+    cout << "timestep: " << _timestep << " t = " << _t+_dt << " dt = " << _dt << endl;
+  }
 }
 
 void TimeIntegrator::printNLMessage()
 {
-  cout << "    iteration: " << _nlIteration << " error = " << _nlL2Error << endl;
+  if (_commRank == 0)
+  {
+    cout << "    iteration: " << _nlIteration << " error = " << _nlL2Error << endl;
+  }
 }
 
 ImplicitEulerIntegrator::ImplicitEulerIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
@@ -255,8 +272,11 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
     }
     for (int j=0; j < k; j++)
     {
-      FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
-      _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
+      if (a[k][j] != 0)
+      {
+        FunctionPtr aFunc = Function::constant(a[k][j]/a[k][k]);
+        _stageRHS[k]->addTerm( -aFunc*_steadyLinearTerm[j] );
+      }
     }
   }
 }
@@ -278,7 +298,10 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
 {
   for (int k=1; k < _numStages; k++)
   {
-    cout << "    stage " << k+1 << endl;
+    if (_commRank == 0)
+    {
+      cout << "    stage " << k+1 << endl;
+    }
     _nlIteration = 1;
     dynamic_cast< InvDtFunction* >(_invDt.get())->setDt(a[k][k]*dt);
     _bc->setTime(_t+c[k]*dt);
@@ -295,8 +318,11 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
         _nlIteration++;
         if (_nlIteration > _nlIterationMax)
         {
-          cout << "Hit maximum number of iterations" << endl;
-          break;
+          if (_commRank == 0)
+          {
+            cout << "Hit maximum number of iterations" << endl;
+          }
+            break;
         }
       }
       _stageSolution[k]->setSolution(_prevNLSolution);

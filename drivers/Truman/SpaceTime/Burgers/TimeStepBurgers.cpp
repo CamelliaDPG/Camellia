@@ -16,7 +16,7 @@
 
 double pi = 2.0*acos(0.0);
 
-int H1Order = 3, pToAdd = 2;
+int H1Order = 4, pToAdd = 2;
 
 class ConstantXBoundary : public SpatialFilter {
    private:
@@ -194,7 +194,9 @@ int main(int argc, char *argv[]) {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
   // Required arguments
-  // int numRefs = args.Input<int>("--numRefs", "number of refinement steps");
+  int numX = args.Input<int>("--numX", "number of cells in X");
+  // double dt = args.Input<double>("--dt", "time step");
+  double dt = 1./numX;
 
   // Optional arguments (have defaults)
   double R = args.Input<double>("--R", "effective Reynolds number", 80);
@@ -249,9 +251,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,0) =  xmin;
   meshBoundary(3,1) =  ymax;
 
-  int horizontalCells = 8, verticalCells = 8;
-
-  MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
+  MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, numX, numX,
       steadyJacobian, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SET INITIAL CONDITIONS   ///////////////////////
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   // Set up problem
   // ImplicitEulerIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, true);
-  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 4, true);
+  ESDIRKIntegrator timeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialConditions, 6, true);
 
   FunctionPtr u1_prev     = Function::solution(u1, timeIntegrator.prevSolution());
   FunctionPtr u2_prev     = Function::solution(u2, timeIntegrator.prevSolution());
@@ -324,8 +324,9 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(u2hat, top,    u2Exact);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  double dt = 5e-1;
+  // double dt = 5e-1;
   double Dt = 5e-1;
+  timeIntegrator.setNLTolerance(1e-10);
   VTKExporter exporter(timeIntegrator.solution(), mesh, varFactory);
   VTKExporter prevExporter(timeIntegrator.prevSolution(), mesh, varFactory);
 
@@ -338,8 +339,23 @@ int main(int argc, char *argv[]) {
   timeIntegrator.runToTime(2*Dt, dt);
   exporter.exportSolution("timestep_burgers2");
 
-  timeIntegrator.runToTime(3*Dt, dt);
-  exporter.exportSolution("timestep_burgers3");
+  // timeIntegrator.runToTime(3*Dt, dt);
+  // exporter.exportSolution("timestep_burgers3");
+
+  if (commRank == 0)
+  {
+    FunctionPtr u1Solution = Function::solution(u1, timeIntegrator.solution());
+    FunctionPtr u2Solution = Function::solution(u2, timeIntegrator.solution());
+    FunctionPtr u1Diff = u1Solution - u1Exact;
+    FunctionPtr u2Diff = u2Solution - u2Exact;
+    FunctionPtr u1Sqr = u1Diff*u1Diff;
+    FunctionPtr u2Sqr = u2Diff*u2Diff;
+
+    double u1Error = u1Sqr->integrate(mesh);
+    double u2Error = u2Sqr->integrate(mesh);
+    double L2Error = sqrt(u1Error + u2Error);
+    cout << "L2 Error = " << L2Error << endl;
+  }
 
   return 0;
 }
