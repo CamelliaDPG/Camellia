@@ -66,10 +66,11 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   quadPointsKovasznay(3,1) =  0.5;
   
   FunctionPtr zero = Function::zero();
+  bool dontEnhanceFluxes = false;
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                               numCellsFineMesh, numCellsFineMesh,
                                                               H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero, enrichVelocity);
+                                                              zero, zero, zero, enrichVelocity, dontEnhanceFluxes);
   
   FunctionPtr u1_exact, u2_exact, p_exact;
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
@@ -78,7 +79,7 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
                                                           numCells1D,numCells1D,
                                                           H1Order, pToAdd,
-                                                          u1_exact, u2_exact, p_exact, enrichVelocity);
+                                                          u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
 
   HConvergenceStudy study(problem.exactSolution(),
                           problem.mesh()->bilinearForm(),

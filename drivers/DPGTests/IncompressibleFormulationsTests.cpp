@@ -824,10 +824,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
             double mu = *muIt;
             double Re = 1 / mu;
             
+            bool dontEnhanceFluxes = false;
             VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                     horizontalCells, verticalCells,
                                                                     H1Order, pToAdd,
-                                                                    u1_exact, u2_exact, p_exact, enrichVelocity);
+                                                                    u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
             
             
             SolutionPtr solnIncrement = problem.solutionIncrement();
@@ -1002,10 +1003,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
       vgpStokesFormulation = Teuchos::rcp( new VGPStokesFormulation(mu) );
       int H1Order = maxPolyOrder + 1;
       int pToAdd = 1;
+      bool dontEnhanceFluxes = false;
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
                                                                horizontalCells, verticalCells,
                                                                H1Order, pToAdd,
-                                                               u1_exact, u2_exact, p_exact, enrichVelocity);
+                                                               u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
       SolutionPtr backgroundFlow = problem.backgroundFlow();
       SolutionPtr solnIncrement = problem.solutionIncrement();
       RHSPtr rhs = problem.exactSolution()->rhs();
@@ -1488,17 +1490,18 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
           double mu = *muIt;
           
           double Re = 1.0 / mu;
+          bool dontEnhanceFluxes = false;
           VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                       horizontalCells, verticalCells,
                                                                       H1Order, pToAdd,
-                                                                      zero, zero, zero, enrichVelocity);
+                                                                      zero, zero, zero, enrichVelocity, dontEnhanceFluxes);
           
           NavierStokesFormulation::setKovasznay( Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact );
           
           VGPNavierStokesProblem kProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
                                                                    horizontalCells, verticalCells,
                                                                    H1Order, pToAdd,
-                                                                   u1_exact, u2_exact, p_exact, enrichVelocity);
+                                                                   u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
           
           if (printToConsole) {
             cout << "VGP Navier-Stokes consistency tests for Kovasznay solution with Re = " << Re << endl;
