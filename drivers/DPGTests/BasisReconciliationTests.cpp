@@ -17,6 +17,13 @@
 
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testHSide()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testH()) {
     numTestsPassed++;
   }
@@ -111,6 +118,201 @@ bool BasisReconciliationTests::testH() {
     coarseBasis = bpIt->first.second;
     RefinementBranch refinements = bpIt->second;
     if (! hConstraintWholeBasisSubTest(fineBasis, refinements, coarseBasis)) {
+      success = false;
+    }
+  }
+  
+  return success;
+}
+
+struct hSideTest {
+  BasisPtr fineBasis;
+  int fineSideIndex;
+  FieldContainer<double> fineCellNodes;
+  BasisPtr coarseBasis;
+  int coarseSideIndex;
+  FieldContainer<double> coarseCellNodes;
+  
+  RefinementBranch volumeRefinements; // how the ancestor topology of fineCellNodes has been refined to get to the descendant of interest...
+};
+
+RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned sideIndex, int numRefinements) {
+  RefinementBranch demoRefinements;
+  for (int refIndex = 0; refIndex < numRefinements; refIndex++) {
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo.getKey());
+    vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[sideIndex];
+    // pick one randomly
+    unsigned indexOfChildInSide = rand() % childrenForSide.size();
+    unsigned childIndex = childrenForSide[indexOfChildInSide].first;
+    cellTopo = *(refPattern->childTopology(childIndex));
+    sideIndex = childrenForSide[indexOfChildInSide].second; // the side child shares with parent...
+    demoRefinements.push_back(make_pair(refPattern.get(),childIndex));
+  }
+  return demoRefinements;
+}
+
+bool BasisReconciliationTests::testHSide() {
+  bool success = true;
+  
+  int fineOrder = 3;
+  int coarseOrder = 3;
+  
+  shards::CellTopology line = shards::getCellTopologyData< shards::Line<2> >();
+  shards::CellTopology quad = shards::getCellTopologyData< shards::Quadrilateral<4> >();
+  shards::CellTopology hex = shards::getCellTopologyData< shards::Hexahedron<8> >();
+  
+  double width = 2;
+  double height = 4;
+  FieldContainer<double> centeredQuad(4,2);
+  centeredQuad(0,0) = -width / 2;
+  centeredQuad(0,1) = -height / 2;
+  centeredQuad(1,0) = width / 2;
+  centeredQuad(1,1) = -height / 2;
+  centeredQuad(2,0) = width / 2;
+  centeredQuad(2,1) = height / 2;
+  centeredQuad(3,0) = -width / 2;
+  centeredQuad(3,1) = height / 2;
+  
+  FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
+  FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
+  FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
+  FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
+  
+  hSideTest test;
+  
+  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
+  
+  vector< hSideTest > sideTests;
+  
+  test.fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = EAST;
+  test.coarseCellNodes = eastQuad;
+  test.coarseSideIndex = WEST;
+  
+  test.volumeRefinements = demoRefinementsOnSide(quad, EAST, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(quad, EAST, 3);
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidQuadHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHGRAD(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = EAST;
+  
+  test.volumeRefinements = demoRefinementsOnSide(quad, WEST, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(quad, WEST, 3);
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidQuadHDIV(fineOrder);
+  test.coarseBasis = Camellia::intrepidQuadHDIV(coarseOrder);
+  test.fineCellNodes = centeredQuad;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westQuad;
+  test.coarseSideIndex = EAST;
+  
+  test.volumeRefinements = demoRefinementsOnSide(quad, WEST, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(quad, WEST, 3);
+  sideTests.push_back(test);
+
+  
+  /* ************** HEXES ************* */
+  
+  // redefine NORTH, SOUTH, EAST and WEST:
+  NORTH = 2;
+  SOUTH = 0;
+  EAST = 1;
+  WEST = 3;
+  int FRONT = 4; // FRONT is -z direction
+  int BACK = 5; // BACK is +z direction
+  
+  FieldContainer<double> centeredHex(8,3);
+  double depth = 8;
+  centeredHex(0,0) = -width / 2;
+  centeredHex(0,1) = -height / 2;
+  centeredHex(0,2) = -depth / 2;
+  
+  centeredHex(1,0) =  width / 2;
+  centeredHex(1,1) = -height / 2;
+  centeredHex(1,2) = -depth / 2;
+  
+  centeredHex(2,0) =  width / 2;
+  centeredHex(2,1) =  height / 2;
+  centeredHex(2,2) = -depth / 2;
+  
+  centeredHex(3,0) = -width / 2;
+  centeredHex(3,1) =  height / 2;
+  centeredHex(3,2) = -depth / 2;
+  
+  centeredHex(4,0) = -width / 2;
+  centeredHex(4,1) = -height / 2;
+  centeredHex(4,2) =  depth / 2;
+  
+  centeredHex(5,0) =  width / 2;
+  centeredHex(5,1) = -height / 2;
+  centeredHex(5,2) =  depth / 2;
+  
+  centeredHex(6,0) =  width / 2;
+  centeredHex(6,1) =  height / 2;
+  centeredHex(6,2) =  depth / 2;
+  
+  centeredHex(7,0) = -width / 2;
+  centeredHex(7,1) =  height / 2;
+  centeredHex(7,2) =  depth / 2;
+  
+  FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
+  FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
+  FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
+  FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
+  FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
+  FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
+  
+  test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westHex;
+  test.coarseSideIndex = EAST;
+  
+  test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 3);
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = BACK;
+  test.coarseCellNodes = backHex;
+  test.coarseSideIndex = FRONT;
+  
+  test.volumeRefinements = demoRefinementsOnSide(hex, BACK, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(hex, BACK, 3);
+  sideTests.push_back(test);
+  
+  test.fineBasis = Camellia::intrepidHexHDIV(fineOrder);
+  test.coarseBasis = Camellia::intrepidHexHDIV(coarseOrder);
+  test.fineCellNodes = centeredHex;
+  test.fineSideIndex = WEST;
+  test.coarseCellNodes = westHex;
+  test.coarseSideIndex = EAST;
+  
+  test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 1);
+  sideTests.push_back(test);
+  test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 3);
+  sideTests.push_back(test);
+  
+  for (vector< hSideTest >::iterator testIt = sideTests.begin(); testIt != sideTests.end(); testIt++) {
+    test = *testIt;
+    if (! hConstraintSideBasisSubTest(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
+                                      test.volumeRefinements,
+                                      test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes) ) {
       success = false;
     }
   }
@@ -220,12 +422,154 @@ FieldContainer<double> basisValuesAtSidePoints(BasisPtr basis, unsigned sideInde
   return *(basisCache->getSideBasisCache(sideIndex)->getValues(basis, OP_VALUE, true).get());
 }
 
-bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
-                                                           RefinementBranch &refinements,
-                                                           BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes) {
+RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, unsigned sideIndex) {
+  // this method is fairly involved.  It would probably be good to have tests against it...
+  RefinementBranch sideRefinements;
+  CellTopoPtr volumeTopo = volumeRefinements[0].first->parentTopology();
+  unsigned sideDim = volumeTopo->getDimension() - 1;
+  for (int refIndex=0; refIndex<sideRefinements.size(); refIndex++) {
+    RefinementPattern* refPattern = volumeRefinements[refIndex].first;
+    unsigned volumeBranchChild = volumeRefinements[refIndex].second;
+    vector< pair< unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[sideIndex];
+    RefinementPattern* sideRefPattern = refPattern->patternForSubcell(sideDim, sideIndex).get();
+    int branchChildSideIndex = -1;
+    for (vector< pair< unsigned, unsigned> >::iterator childIt = childrenForSide.begin(); childIt != childrenForSide.end(); childIt++) {
+      unsigned childIndex = childIt->first; // in parent/in refPattern
+      unsigned childSideIndex = childIt->second; // the side shared with parent
+      if (childIndex==volumeBranchChild) {
+        branchChildSideIndex = childSideIndex;
+      }
+    }
+    if (branchChildSideIndex < 0) {
+      cout << "WARNING: child not found on side where expected.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found");
+    }
+    // now that we know the child's sideIndex, we need to figure out which sideRefPattern child corresponds to that.
+    // (this is a fairly brute force approach; it may be worth revisiting this)
+    CellTopoPtr childVolumeTopo = refPattern->childTopology(volumeBranchChild);
+    shards::CellTopology childSideTopo = childVolumeTopo->getCellTopologyData(sideDim, branchChildSideIndex);
+    FieldContainer<double> childSideVerticesInVolume(childSideTopo.getNodeCount(),sideDim+1);
+    for (int sideNodeIndex=0; sideNodeIndex<childSideTopo.getNodeCount(); sideNodeIndex++) {
+      unsigned volumeNodeIndex = childVolumeTopo->getNodeMap(sideDim, branchChildSideIndex, sideNodeIndex);
+      for (int d=0; d<sideDim+1; d++) {
+        childSideVerticesInVolume(sideNodeIndex,d) = refPattern->refinedNodes()(volumeNodeIndex,d);
+      }
+    }
+    // now, map the volume vertices to the side
+    FieldContainer<double> childSideVertices(childSideTopo.getNodeCount(),sideDim);
+    CellTools<double>::mapToReferenceSubcell(childSideVertices, childSideVerticesInVolume, sideDim, branchChildSideIndex, *childVolumeTopo);
+    int sideBranchChild = -1;
+    
+    double tol = 1e-12;
+    // brute force search through the sideRefPattern's children to find one that matches all the vertices in childSideVertices
+    for (int sideRefChildIndex = 0; sideRefChildIndex < sideRefPattern->numChildren(); sideRefChildIndex++) {
+      unsigned topoKey = sideRefPattern->childTopology(sideRefChildIndex)->getBaseKey();
+      bool nodesMatch;
+      if (topoKey == childSideTopo.getBaseKey()) {
+        for (int refPatternNodeIndex = 0; refPatternNodeIndex < childSideTopo.getNodeCount(); refPatternNodeIndex++) {
+          for (int nodeIndex=0; nodeIndex < childSideTopo.getNodeCount(); nodeIndex++) {
+            nodesMatch = true;
+            for (int d=0; d<sideDim; d++) {
+              double diff = sideRefPattern->refinedNodes()(sideRefChildIndex,refPatternNodeIndex,d) - childSideVertices(nodeIndex,d);
+              if (abs(diff) > tol) {
+                nodesMatch = false;
+              }
+            }
+            if (nodesMatch) break; // found a matching node
+          }
+          if (! nodesMatch) {
+            // exited loop without finding a matching node -- can exclude this sideRefChildIndex;
+            break;
+          }
+        }
+        if (nodesMatch) { // then *ALL* nodes match -- we've found the guy
+          sideBranchChild = sideRefChildIndex;
+          break;
+        }
+      }
+    }
+    
+    if (sideBranchChild < 0) {
+      cout << "Warning: restriction of volume refinement to side doesn't match any on the side ref pattern.\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found");
+    }
+    
+    sideRefinements.push_back(make_pair(sideRefPattern,sideBranchChild));
+  }
+  return sideRefinements;
+}
+
+bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &fineCellAncestralNodes,
+                                                           RefinementBranch &volumeRefinements,
+                                                           BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes) {
   bool success = true;
   
-  cout << "WARNING: hConstraintSideBasisSubTest not yet implemented.\n";
+  BasisReconciliation br;
+  
+  RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineSideIndex);
+  
+  FieldContainer<double> fineCellNodes = RefinementPattern::descendantNodes(volumeRefinements, fineCellAncestralNodes);
+
+  int spaceDim = fineBasis->domainTopology().getDimension();
+  int sideDim = spaceDim - 1;
+  
+    // want to figure out a set of physical cell nodes that corresponds to this combination
+  shards::CellTopology coarseTopo = coarseBasis->domainTopology();
+  shards::CellTopology fineTopo = fineBasis->domainTopology();
+  
+  shards::CellTopology fineSideTopo = fineTopo.getBaseCellTopologyData(sideDim, fineSideIndex);
+  shards::CellTopology coarseSideTopo = coarseTopo.getBaseCellTopologyData(sideDim, coarseSideIndex);
+  
+  unsigned permutation = vertexPermutation(fineTopo, fineSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
+  
+  cout << "WARNING: meta-test code enabled (calls the wrong constrainedWeights to confirm that the rest of the code executes safely).\n";
+  //   SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineSideIndex, sideRefinements, coarseBasis, coarseSideIndex, permutation);
+  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineSideIndex, coarseBasis, coarseSideIndex, permutation);
+  
+  int cubDegree = 5;
+  FieldContainer<double> sidePointsFine = cubaturePoints(fineSideTopo, cubDegree, 0);
+  FieldContainer<double> sidePointsCoarse = cubaturePoints(fineSideTopo, cubDegree, coarseSideTopo, permutation, sideRefinements);
+  
+  cubDegree = fineBasis->getDegree() * 2;
+  BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, fineTopo, cubDegree, true) );
+  BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, coarseTopo, cubDegree, true) );
+  
+  fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
+  coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
+  
+  FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
+  FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  
+  FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  
+  // finePoints and coarsePoints should match
+  double maxDiff;
+  double tol = 1e-14;
+  if ( !fcsAgree(finePointsPhysical, coarsePointsPhysical, tol, maxDiff) ) {
+    cout << "TEST failure in hConstraintSideBasisSubTest: points on fine and coarse topology do not match on side.\n";
+    cout << "finePoints:\n" << finePointsPhysical;
+    cout << "coarsePoints:\n" << coarsePointsPhysical;
+    success = false;
+    return success;
+  }
+  
+  FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
+  FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  
+  FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
+  interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);
+  
+  if ( !fcsAgree(filteredCoarseBasisValues, interpretedFineBasisValues, tol, maxDiff) ) {
+    success = false;
+    cout << "FAILURE: BasisReconciliation's interpreted fine basis values do not match coarse values on side.\n";
+    cout << "fine points:\n" << finePoints;
+    cout << "weights:\n" << weights.weights;
+    cout << "fineValues:\n" << fineBasisValues;
+    cout << "coarseBasisValues:\n" << coarseBasisValues;
+    cout << "filteredCoarseBasisValues:\n" << filteredCoarseBasisValues;
+    cout << "interpretedFineBasisValues:\n" << interpretedFineBasisValues;
+  }
   
   return success;
 }
@@ -304,8 +648,8 @@ bool BasisReconciliationTests::pConstraintWholeBasisSubTest(BasisPtr fineBasis, 
 //  }
 //}
 
-unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
-                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes) {
+unsigned BasisReconciliationTests::vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
+                                                     shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes) {
   int d = fineTopo.getDimension();
   shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
 
@@ -339,7 +683,7 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matching permutation not found");
 }
 
-FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, FieldContainer<double> &pointsRefCell, unsigned permutation) {
+FieldContainer<double> BasisReconciliationTests::permutedSidePoints(shards::CellTopology &sideTopo, FieldContainer<double> &pointsRefCell, unsigned permutation) {
   FieldContainer<double> sideNodes (sideTopo.getNodeCount(), sideTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(sideNodes, sideTopo, permutation);
   
@@ -473,7 +817,7 @@ struct pSideTest {
   FieldContainer<double> coarseCellNodes;
 };
 
-FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double x, double y) {
+FieldContainer<double> BasisReconciliationTests::translateQuad(const FieldContainer<double> &quad, double x, double y) {
   vector<double> translations;
   translations.push_back(x);
   translations.push_back(y);
@@ -487,7 +831,7 @@ FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double 
   return translatedQuad;
 }
 
-FieldContainer<double> translateHex(const FieldContainer<double> &hex, double x, double y, double z) {
+FieldContainer<double> BasisReconciliationTests::translateHex(const FieldContainer<double> &hex, double x, double y, double z) {
   vector<double> translations;
   translations.push_back(x);
   translations.push_back(y);
@@ -638,8 +982,11 @@ bool BasisReconciliationTests::testPSide() {
   
   for (vector< pSideTest >::iterator testIt = sideTests.begin(); testIt != sideTests.end(); testIt++) {
     test = *testIt;
-    pConstraintSideBasisSubTest(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
-                                test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes);
+    
+    if (! pConstraintSideBasisSubTest(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
+                                      test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes) ) {
+      success = false;
+    }
   }
   
   return success;

@@ -28,16 +28,26 @@ public:
   bool testP();
   bool testPSide();
   bool testH();
+  bool testHSide();
   
 private:
   bool pConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
                                    BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes);
   bool pConstraintWholeBasisSubTest(BasisPtr fineBasis, BasisPtr coarseBasis);
-  
-  bool hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &finePhysicalCellNodes,
-                                   RefinementBranch &refinements,
-                                   BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarsePhysicalCellNodes);
+
+  bool hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &fineCellAncestralNodes,
+                                   RefinementBranch &volumeRefinements,
+                                   BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes);
   bool hConstraintWholeBasisSubTest(BasisPtr fineBasis, RefinementBranch &refinements, BasisPtr coarseBasis);
+  
+  FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, FieldContainer<double> &pointsRefCell, unsigned permutation);
+  
+  FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double x, double y);
+  FieldContainer<double> translateHex(const FieldContainer<double> &hex, double x, double y, double z);
+
+  unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
+                             shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes);
+  
 };
 
 
