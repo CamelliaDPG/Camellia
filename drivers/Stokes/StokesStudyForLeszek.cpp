@@ -61,12 +61,18 @@ int main(int argc, char *argv[]) {
     cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
   }
   
+  bool includePressure = true;
+  
   VarFactory varFactory;
   VarPtr u1 = varFactory.fieldVar("u_1");
   VarPtr u2 = varFactory.fieldVar("u_2");
   VarPtr sigma11 = varFactory.fieldVar("\\sigma_{11}");
   VarPtr sigma12 = varFactory.fieldVar("\\sigma_{12}");
   VarPtr sigma22 = varFactory.fieldVar("\\sigma_{22}");
+  
+  VarPtr p;
+  if (includePressure)
+    p = varFactory.fieldVar("p"); // pressure
   
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
@@ -78,6 +84,10 @@ int main(int argc, char *argv[]) {
   VarPtr tau22 = varFactory.testVar("\\tau_{22}", HGRAD);
   VarPtr v1 = varFactory.testVar("v_1", HGRAD);
   VarPtr v2 = varFactory.testVar("v_2", HGRAD);
+  
+  VarPtr v3;
+  if (includePressure)
+    v3 = varFactory.testVar("v_3", HGRAD);
   
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   
@@ -96,6 +106,9 @@ int main(int argc, char *argv[]) {
   
   bf->addTerm(-sigma12, v2->dx());
   bf->addTerm(-sigma22, v2->dy());
+  
+  if (includePressure)
+    bf->addTerm(p + 0.5 * sigma11 + 0.5 * sigma22, v3); // algebraic definition of pressure
   
   FunctionPtr n = Function::normal();
   FunctionPtr n1 = n->x();
@@ -116,6 +129,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma12_exact = x * x;
   FunctionPtr sigma22_exact = zero;
   
+  FunctionPtr p_exact = - 0.5 * sigma11_exact - 0.5 * sigma22_exact;
+  
   FunctionPtr t1_exact = sigma11_exact * n1 + sigma12_exact * n2;
   FunctionPtr t2_exact = sigma12_exact * n1 + sigma22_exact * n2;
   
@@ -125,11 +140,15 @@ int main(int argc, char *argv[]) {
   
   bc->addDirichlet(u1hat, southWest, u1_exact);
   bc->addDirichlet(u2hat, southWest, u2_exact);
-//  bc->addDirichlet(u1hat, northEast, u1_exact);
-//  bc->addDirichlet(u2hat, northEast, u2_exact);
   
-  bc->addDirichlet(t1, northEast, t1_exact);
-  bc->addDirichlet(t2, northEast, t2_exact);
+  if (includePressure) {
+    bc->addDirichlet(u1hat, northEast, u1_exact);
+    bc->addDirichlet(u2hat, northEast, u2_exact);
+    bc->addZeroMeanConstraint(p);
+  } else {
+    bc->addDirichlet(t1, northEast, t1_exact);
+    bc->addDirichlet(t2, northEast, t2_exact);
+  }
 
   int H1OrderOfExactSolution = 3;
   
@@ -148,6 +167,9 @@ int main(int argc, char *argv[]) {
   mySolution->setSolutionFunction(sigma11, sigma11_exact);
   mySolution->setSolutionFunction(sigma12, sigma12_exact);
   mySolution->setSolutionFunction(sigma22, sigma22_exact);
+  if (includePressure) {
+    mySolution->setSolutionFunction(p, p_exact);
+  }
   
   double beta = 0.1; // weight for L2 terms in graph norm
   IPPtr graphNorm = bf->graphNorm(beta);
@@ -199,7 +221,7 @@ int main(int argc, char *argv[]) {
   double f4Integral = f4->integrate(minMesh);
   double f5Integral = (f5-Function::constant(1.0))->integrate(minMesh);
   if (rank == 0) {
-    cout << "Errors in load on minimal mesh:\n";
+    cout << "Errors in load (assuming exact solution of sigma12 = x) on minimal mesh:\n";
     cout << "f1: " << f1Integral << endl;
     cout << "f2: " << f2Integral << endl;
     cout << "f3: " << f3Integral << endl;
