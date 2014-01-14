@@ -605,6 +605,20 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
   return refPattern;
 }
 
+Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPattern(unsigned cellTopoKey) {
+  switch (cellTopoKey) {
+    case shards::Line<2>::key :
+      return regularRefinementPatternLine();
+    case shards::Quadrilateral<4>::key :
+      return regularRefinementPatternQuad();
+    case shards::Hexahedron<8>::key :
+      return regularRefinementPatternHexahedron();
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported cellTopology");
+  }
+  return Teuchos::rcp( (RefinementPattern*) NULL );
+}
+
 // cuts a quad vertically (x-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPatternQuad() {
   static RefinementPatternPtr refPattern;

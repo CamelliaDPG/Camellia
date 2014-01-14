@@ -51,6 +51,7 @@ public:
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternTriangle();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternQuad();
   static Teuchos::RCP<RefinementPattern> regularRefinementPatternHexahedron();
+  static Teuchos::RCP<RefinementPattern> regularRefinementPattern(unsigned cellTopoKey);
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
   
