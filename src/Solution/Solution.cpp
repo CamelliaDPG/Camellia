@@ -413,6 +413,9 @@ void Solution::populateStiffnessAndLoad() {
         //        _filter->filter(localRHSVector,physicalCellNodes,cellIDs,_mesh,_bc);
       }
       
+//      cout << "local stiffness matrices:\n" << finalStiffness;
+//      cout << "local loads:\n" << localRHSVector;
+      
       FieldContainer<int> globalDofIndices(numTrialDofs);
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
