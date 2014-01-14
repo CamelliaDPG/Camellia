@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
   bool computeRelativeErrors = false; // we'll say false when one of the exact solution components is 0
   
   int polyOrder = 0;
-  int minLogElements = 1;
+  int minLogElements = 0;
   int maxLogElements = 6;
   
   bool useTriangles = true;
@@ -101,8 +101,8 @@ int main(int argc, char *argv[]) {
   FunctionPtr n1 = n->x();
   FunctionPtr n2 = n->y();
   
-  bf->addTerm(u1hat, sigma11 * n1 + sigma12 * n2);
-  bf->addTerm(u2hat, sigma12 * n1 + sigma22 * n2);
+  bf->addTerm(-u1hat, tau11 * n1 + tau12 * n2);
+  bf->addTerm(-u2hat, tau12 * n1 + tau22 * n2);
   
   bf->addTerm(t1, v1);
   bf->addTerm(t2, v2);
@@ -125,10 +125,12 @@ int main(int argc, char *argv[]) {
   
   bc->addDirichlet(u1hat, southWest, u1_exact);
   bc->addDirichlet(u2hat, southWest, u2_exact);
+//  bc->addDirichlet(u1hat, northEast, u1_exact);
+//  bc->addDirichlet(u2hat, northEast, u2_exact);
   
   bc->addDirichlet(t1, northEast, t1_exact);
   bc->addDirichlet(t2, northEast, t2_exact);
-  
+
   int H1OrderOfExactSolution = 3;
   
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp(new RHSEasy );
@@ -152,6 +154,7 @@ int main(int argc, char *argv[]) {
   
   if (rank==0)
     graphNorm->printInteractions();
+
   
   FieldContainer<double> quadPoints(4,2); // NOTE: quadPoints unused for HDGSingular (there, we set the mesh more manually)
   
@@ -170,8 +173,10 @@ int main(int argc, char *argv[]) {
                           bc, graphNorm,
                           minLogElements, maxLogElements,
                           polyOrder+1, pToAdd, false, useTriangles, false);
-  study.setUseCondensedSolve(true);
+  study.setUseCondensedSolve(false);
   study.setReportRelativeErrors(computeRelativeErrors);
+  
+//  study.setWriteGlobalStiffnessToDisk(true, "stokeStudyForLeszek");
   
   int maxTestDegree = polyOrder + 1 + pToAdd;
   int cubatureDegreeInMesh = polyOrder + maxTestDegree;
@@ -183,6 +188,24 @@ int main(int argc, char *argv[]) {
   }
   
   study.solve(quadPoints,useConformingTraces);
+
+  // test that the computed loads agree with the exact solution sigma11 = x:
+  // f1, f3, f4 = 0; f2 = 2x; f5 = 1
+  
+  MeshPtr minMesh = study.getSolution(minLogElements)->mesh();
+  double f1Integral = f1->integrate(minMesh);
+  double f2Integral = (f2-2*x)->integrate(minMesh);
+  double f3Integral = f3->integrate(minMesh);
+  double f4Integral = f4->integrate(minMesh);
+  double f5Integral = (f5-Function::constant(1.0))->integrate(minMesh);
+  if (rank == 0) {
+    cout << "Errors in load on minimal mesh:\n";
+    cout << "f1: " << f1Integral << endl;
+    cout << "f2: " << f2Integral << endl;
+    cout << "f3: " << f3Integral << endl;
+    cout << "f4: " << f4Integral << endl;
+    cout << "f5: " << f5Integral << endl;
+  }
   
   vector<int> primaryVariables;
   primaryVariables.push_back(u1->ID());
