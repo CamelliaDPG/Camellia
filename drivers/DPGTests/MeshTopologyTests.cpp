@@ -523,14 +523,14 @@ bool MeshTopologyTests::testEntityConstraints() {
   map<unsigned,unsigned> expectedEdgeConstraints2D;
   set<unsigned> refinedEdges;
   for (set<unsigned>::iterator edgeIt=boundaryEdges.begin(); edgeIt != boundaryEdges.end(); edgeIt++) {
-    set<unsigned> children = mesh2D->getChildEntities(edgeDim, *edgeIt);
+    set<unsigned> children = mesh2D->getChildEntitiesSet(edgeDim, *edgeIt);
     if (children.size() > 0) {
       refinedEdges.insert(*edgeIt);
       boundaryEdges.insert(children.begin(), children.end());
     }
   }
   for (set<unsigned>::iterator edgeIt=internalEdges.begin(); edgeIt != internalEdges.end(); edgeIt++) {
-    set<unsigned> children = mesh2D->getChildEntities(edgeDim, *edgeIt);
+    set<unsigned> children = mesh2D->getChildEntitiesSet(edgeDim, *edgeIt);
     if (children.size() > 0) {
       refinedEdges.insert(*edgeIt);
       internalEdges.insert(children.begin(), children.end());
@@ -587,7 +587,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   map<unsigned,unsigned> expectedEdgeConstraints3D;
   
   for (set<unsigned>::iterator faceIt=boundaryFaces.begin(); faceIt != boundaryFaces.end(); faceIt++) {
-    set<unsigned> children = mesh3D->getChildEntities(faceDim, *faceIt);
+    set<unsigned> children = mesh3D->getChildEntitiesSet(faceDim, *faceIt);
     if (children.size() > 0) {
       refinedFaces.insert(*faceIt);
       boundaryFaces.insert(children.begin(), children.end());
@@ -595,7 +595,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   }
   
   for (set<unsigned>::iterator faceIt=internalFaces.begin(); faceIt != internalFaces.end(); faceIt++) {
-    set<unsigned> children = mesh3D->getChildEntities(faceDim, *faceIt);
+    set<unsigned> children = mesh3D->getChildEntitiesSet(faceDim, *faceIt);
     if (children.size() > 0) {
       refinedFaces.insert(*faceIt);
       internalFaces.insert(children.begin(), children.end());
@@ -698,7 +698,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   mesh2D->refineCell(childCellForVertex, RefinementPattern::regularRefinementPatternQuad());
   
   // now, fix the expected edge constraints, then check them...
-  set<unsigned> childEdges = mesh2D->getChildEntities(edgeDim, childCellConstrainedEdge);
+  set<unsigned> childEdges = mesh2D->getChildEntitiesSet(edgeDim, childCellConstrainedEdge);
   if (childEdges.size() != 2) {
     cout << "Expected 2 child edges, but found " << childEdges.size() << ".\n";
     success = false;
@@ -708,7 +708,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   }
   expectedEdgeConstraints2D.erase(childCellConstrainedEdge);
   for (set<unsigned>::iterator edgeIt = childNewlyConstrainingEdges.begin(); edgeIt != childNewlyConstrainingEdges.end(); edgeIt++) {
-    set<unsigned> newChildEdges = mesh2D->getChildEntities(edgeDim, *edgeIt);
+    set<unsigned> newChildEdges = mesh2D->getChildEntitiesSet(edgeDim, *edgeIt);
     for (set<unsigned>::iterator newEdgeIt = newChildEdges.begin(); newEdgeIt != newChildEdges.end(); newEdgeIt++) {
       expectedEdgeConstraints2D[*newEdgeIt] = *edgeIt;
     }
@@ -773,7 +773,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   set<unsigned> edgeConstraintsToDrop;
   for (set<unsigned>::iterator faceIt=childInteriorConstrainedFaces.begin(); faceIt != childInteriorConstrainedFaces.end(); faceIt++) {
     unsigned faceIndex = *faceIt;
-    set<unsigned> newChildFaces = mesh3D->getChildEntities(faceDim, faceIndex);
+    set<unsigned> newChildFaces = mesh3D->getChildEntitiesSet(faceDim, faceIndex);
     for (set<unsigned>::iterator newChildIt=newChildFaces.begin(); newChildIt != newChildFaces.end(); newChildIt++) {
       unsigned newChildIndex = *newChildIt;
       expectedFaceConstraints3D[newChildIndex] = expectedFaceConstraints3D[faceIndex];
@@ -782,7 +782,7 @@ bool MeshTopologyTests::testEntityConstraints() {
     unsigned numEdges = mesh3D->getSubEntityCount(faceDim, faceIndex, edgeDim);
     for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
       unsigned edgeIndex = mesh3D->getSubEntityIndex(faceDim, faceIndex, edgeDim, edgeOrdinal);
-      set<unsigned> newChildEdges = mesh3D->getChildEntities(edgeDim, edgeIndex);
+      set<unsigned> newChildEdges = mesh3D->getChildEntitiesSet(edgeDim, edgeIndex);
       for (set<unsigned>::iterator newChildIt=newChildEdges.begin(); newChildIt != newChildEdges.end(); newChildIt++) {
         unsigned newChildIndex = *newChildIt;
         expectedEdgeConstraints3D[newChildIndex] = expectedEdgeConstraints3D[edgeIndex];
@@ -795,7 +795,7 @@ bool MeshTopologyTests::testEntityConstraints() {
   }
   for (set<unsigned>::iterator faceIt=childInteriorUnconstrainedFaces.begin(); faceIt != childInteriorUnconstrainedFaces.end(); faceIt++) {
     unsigned faceIndex = *faceIt;
-    set<unsigned> newChildFaces = mesh3D->getChildEntities(faceDim, faceIndex);
+    set<unsigned> newChildFaces = mesh3D->getChildEntitiesSet(faceDim, faceIndex);
     for (set<unsigned>::iterator newChildIt=newChildFaces.begin(); newChildIt != newChildFaces.end(); newChildIt++) {
       unsigned newChildIndex = *newChildIt;
       expectedFaceConstraints3D[newChildIndex] = faceIndex;
@@ -804,7 +804,7 @@ bool MeshTopologyTests::testEntityConstraints() {
     unsigned numEdges = mesh3D->getSubEntityCount(faceDim, faceIndex, edgeDim);
     for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
       unsigned edgeIndex = mesh3D->getSubEntityIndex(faceDim, faceIndex, edgeDim, edgeOrdinal);
-      set<unsigned> newChildEdges = mesh3D->getChildEntities(edgeDim, edgeIndex);
+      set<unsigned> newChildEdges = mesh3D->getChildEntitiesSet(edgeDim, edgeIndex);
       for (set<unsigned>::iterator newChildIt=newChildEdges.begin(); newChildIt != newChildEdges.end(); newChildIt++) {
         unsigned newChildIndex = *newChildIt;
         expectedEdgeConstraints3D[newChildIndex] = edgeIndex;
