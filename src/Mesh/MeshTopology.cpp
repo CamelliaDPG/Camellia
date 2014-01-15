@@ -462,7 +462,19 @@ vector<unsigned> MeshTopology::getVertexIndices(const vector< vector<double> > &
   return localToGlobalVertexIndex;
 }
 
-set<unsigned> MeshTopology::getChildEntities(unsigned int d, unsigned int entityIndex) {
+vector<unsigned> MeshTopology::getChildEntities(unsigned int d, unsigned int entityIndex) {
+  vector<unsigned> childIndices;
+  if (d==0) return childIndices;
+  if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
+  vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];
+  for (vector< pair< RefinementPatternPtr, vector<unsigned> > >::iterator entryIt = childEntries.begin();
+       entryIt != childEntries.end(); entryIt++) {
+    childIndices.insert(childIndices.end(),entryIt->second.begin(),entryIt->second.end());
+  }
+  return childIndices;
+}
+
+set<unsigned> MeshTopology::getChildEntitiesSet(unsigned int d, unsigned int entityIndex) {
   set<unsigned> childIndices;
   if (d==0) return childIndices;
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;

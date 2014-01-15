@@ -131,7 +131,8 @@ public:
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
   const set< pair<unsigned,unsigned> > &getActiveCellIndices(unsigned d, unsigned entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(unsigned cellIndex);
-  set<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
+  vector<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
+  set<unsigned> getChildEntitiesSet(unsigned d, unsigned entityIndex);
   unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
   unsigned getEntityCount(unsigned d);
   unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
