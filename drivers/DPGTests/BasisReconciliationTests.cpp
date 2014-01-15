@@ -127,8 +127,8 @@ bool BasisReconciliationTests::testH() {
 
 struct hSideTest {
   BasisPtr fineBasis;
-  int fineSideIndex;
-  FieldContainer<double> fineCellNodes;
+  int fineSideIndex; // ancestral side index
+  FieldContainer<double> fineCellNodes; // these are actually the ancestral nodes
   BasisPtr coarseBasis;
   int coarseSideIndex;
   FieldContainer<double> coarseCellNodes;
@@ -423,75 +423,22 @@ FieldContainer<double> basisValuesAtSidePoints(BasisPtr basis, unsigned sideInde
 }
 
 RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, unsigned sideIndex) {
-  // this method is fairly involved.  It would probably be good to have tests against it...
   RefinementBranch sideRefinements;
   CellTopoPtr volumeTopo = volumeRefinements[0].first->parentTopology();
   unsigned sideDim = volumeTopo->getDimension() - 1;
-  for (int refIndex=0; refIndex<sideRefinements.size(); refIndex++) {
+  for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
     RefinementPattern* refPattern = volumeRefinements[refIndex].first;
     unsigned volumeBranchChild = volumeRefinements[refIndex].second;
-    vector< pair< unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[sideIndex];
     RefinementPattern* sideRefPattern = refPattern->patternForSubcell(sideDim, sideIndex).get();
-    int branchChildSideIndex = -1;
-    for (vector< pair< unsigned, unsigned> >::iterator childIt = childrenForSide.begin(); childIt != childrenForSide.end(); childIt++) {
-      unsigned childIndex = childIt->first; // in parent/in refPattern
-      unsigned childSideIndex = childIt->second; // the side shared with parent
-      if (childIndex==volumeBranchChild) {
-        branchChildSideIndex = childSideIndex;
-      }
-    }
-    if (branchChildSideIndex < 0) {
-      cout << "WARNING: child not found on side where expected.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found");
-    }
-    // now that we know the child's sideIndex, we need to figure out which sideRefPattern child corresponds to that.
-    // (this is a fairly brute force approach; it may be worth revisiting this)
-    CellTopoPtr childVolumeTopo = refPattern->childTopology(volumeBranchChild);
-    shards::CellTopology childSideTopo = childVolumeTopo->getCellTopologyData(sideDim, branchChildSideIndex);
-    FieldContainer<double> childSideVerticesInVolume(childSideTopo.getNodeCount(),sideDim+1);
-    for (int sideNodeIndex=0; sideNodeIndex<childSideTopo.getNodeCount(); sideNodeIndex++) {
-      unsigned volumeNodeIndex = childVolumeTopo->getNodeMap(sideDim, branchChildSideIndex, sideNodeIndex);
-      for (int d=0; d<sideDim+1; d++) {
-        childSideVerticesInVolume(sideNodeIndex,d) = refPattern->refinedNodes()(volumeNodeIndex,d);
-      }
-    }
-    // now, map the volume vertices to the side
-    FieldContainer<double> childSideVertices(childSideTopo.getNodeCount(),sideDim);
-    CellTools<double>::mapToReferenceSubcell(childSideVertices, childSideVerticesInVolume, sideDim, branchChildSideIndex, *childVolumeTopo);
+
     int sideBranchChild = -1;
-    
-    double tol = 1e-12;
-    // brute force search through the sideRefPattern's children to find one that matches all the vertices in childSideVertices
-    for (int sideRefChildIndex = 0; sideRefChildIndex < sideRefPattern->numChildren(); sideRefChildIndex++) {
-      unsigned topoKey = sideRefPattern->childTopology(sideRefChildIndex)->getBaseKey();
-      bool nodesMatch;
-      if (topoKey == childSideTopo.getBaseKey()) {
-        for (int refPatternNodeIndex = 0; refPatternNodeIndex < childSideTopo.getNodeCount(); refPatternNodeIndex++) {
-          for (int nodeIndex=0; nodeIndex < childSideTopo.getNodeCount(); nodeIndex++) {
-            nodesMatch = true;
-            for (int d=0; d<sideDim; d++) {
-              double diff = sideRefPattern->refinedNodes()(sideRefChildIndex,refPatternNodeIndex,d) - childSideVertices(nodeIndex,d);
-              if (abs(diff) > tol) {
-                nodesMatch = false;
-              }
-            }
-            if (nodesMatch) break; // found a matching node
-          }
-          if (! nodesMatch) {
-            // exited loop without finding a matching node -- can exclude this sideRefChildIndex;
-            break;
-          }
-        }
-        if (nodesMatch) { // then *ALL* nodes match -- we've found the guy
-          sideBranchChild = sideRefChildIndex;
-          break;
-        }
+    for (int sideChildIndex = 0; sideChildIndex < sideRefPattern->numChildren(); sideChildIndex++) {
+      if (refPattern->mapSideChildIndex(sideIndex, sideChildIndex) == volumeBranchChild) {
+        sideBranchChild = sideChildIndex;
       }
     }
-    
-    if (sideBranchChild < 0) {
-      cout << "Warning: restriction of volume refinement to side doesn't match any on the side ref pattern.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found");
+    if (sideBranchChild == -1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Did not find child");
     }
     
     sideRefinements.push_back(make_pair(sideRefPattern,sideBranchChild));
@@ -519,6 +466,11 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
   
   shards::CellTopology fineSideTopo = fineTopo.getBaseCellTopologyData(sideDim, fineSideIndex);
   shards::CellTopology coarseSideTopo = coarseTopo.getBaseCellTopologyData(sideDim, coarseSideIndex);
+
+  int oneCell = 1;
+  fineCellAncestralNodes.resize(oneCell, fineCellAncestralNodes.dimension(0), fineCellAncestralNodes.dimension(1));
+  fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
+  coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
   
   unsigned permutation = vertexPermutation(fineTopo, fineSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
   
