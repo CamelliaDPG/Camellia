@@ -380,6 +380,15 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
 }
 
 void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool useConformingTraces) {
+  // empty enhancements by default
+  map<int,int> trialOrderEnhancements;
+  map<int,int> testOrderEnhancements;
+  this->solve(quadPoints, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
+}
+
+void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool useConformingTraces,
+                              map<int,int> trialOrderEnhancements,
+                              map<int,int> testOrderEnhancements) {
   _solutions.clear();
   int minNumElements = 1;
   for (int i=0; i<_minLogElements; i++) {
@@ -391,7 +400,8 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
     Teuchos::RCP<Mesh> mesh;
     if (! _useHybrid ) {
       mesh = Mesh::buildQuadMesh(quadPoints, numElements, numElements, 
-                                 _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces);
+                                 _bilinearForm, _H1Order, _H1Order + _pToAdd, _useTriangles, useConformingTraces,
+                                 trialOrderEnhancements,testOrderEnhancements);
     } else {
       mesh = Mesh::buildQuadMeshHybrid(quadPoints, numElements, numElements, 
                                        _bilinearForm, _H1Order, _H1Order + _pToAdd, useConformingTraces);

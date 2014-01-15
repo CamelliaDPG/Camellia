@@ -116,6 +116,9 @@ public:
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
+  void solve(const FieldContainer<double> &quadPoints, bool useConformingTraces,
+             map<int,int> trialOrderEnhancements,
+             map<int,int> testOrderEnhancements);
   void solve(const FieldContainer<double> &quadPoints, bool useConformingTraces = true);
   void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
   Teuchos::RCP<Solution> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
