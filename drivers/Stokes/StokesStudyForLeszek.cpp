@@ -50,6 +50,8 @@ int main(int argc, char *argv[]) {
   
   bool useTriangles = true;
   
+  bool useEnhancedFluxes = false;
+  
   bool useConformingTraces = true;
   
   if (rank == 0) {
@@ -59,9 +61,10 @@ int main(int argc, char *argv[]) {
     cout << "maxLogElements = " << maxLogElements << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useConformingTraces = " << (useConformingTraces ? "true" : "false") << endl;
+    cout << "useEnhancedFluxes = " << (useEnhancedFluxes ? "true" : "false") << endl;
   }
   
-  bool includePressure = true;
+  bool includePressure = false;
   
   VarFactory varFactory;
   VarPtr u1 = varFactory.fieldVar("u_1");
@@ -209,7 +212,14 @@ int main(int argc, char *argv[]) {
     study.setCubatureDegreeForExact(cubEnrichment);
   }
   
-  study.solve(quadPoints,useConformingTraces);
+  map<int, int> trialOrderEnhancements;
+  map<int, int> testOrderEnhancements;
+  if (useEnhancedFluxes) {
+    trialOrderEnhancements[t1->ID()] = 1;
+    trialOrderEnhancements[t2->ID()] = 1;
+  }
+  
+  study.solve(quadPoints,useConformingTraces,trialOrderEnhancements,testOrderEnhancements);
 
   // test that the computed loads agree with the exact solution sigma11 = x:
   // f1, f3, f4 = 0; f2 = 2x; f5 = 1

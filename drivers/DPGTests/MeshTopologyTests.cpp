@@ -1,12 +1,12 @@
-#include "NewMeshTests.h"
+#include "MeshTopologyTests.h"
 
 #include "CamelliaCellTools.h"
 
-NewMeshTests::NewMeshTests() {
+MeshTopologyTests::MeshTopologyTests() {
 
 }
 
-void NewMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void MeshTopologyTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testEntityConstraints()) {
     numTestsPassed++;
@@ -37,15 +37,15 @@ void NewMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
   
 
 }
-void NewMeshTests::setup() {
+void MeshTopologyTests::setup() {
   
 }
 
-void NewMeshTests::teardown() {
+void MeshTopologyTests::teardown() {
   
 }
 
-bool NewMeshTests::test1DMesh() {
+bool MeshTopologyTests::test1DMesh() {
   bool success = true;
   
   CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
@@ -71,7 +71,7 @@ bool NewMeshTests::test1DMesh() {
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
-  NewMesh mesh(meshGeometry);
+  MeshTopology mesh(meshGeometry);
   
   if (mesh.cellCount() != 2) {
     success = false;
@@ -131,7 +131,7 @@ vector<double> makeVertex(double v0, double v1, double v2) {
 
 
 
-bool NewMeshTests::test2DMesh() {
+bool MeshTopologyTests::test2DMesh() {
   bool success = true;
 
   CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
@@ -173,7 +173,7 @@ bool NewMeshTests::test2DMesh() {
   cellTopos.push_back(tri_3);
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
-  NewMesh mesh(meshGeometry);
+  MeshTopology mesh(meshGeometry);
   
   if (mesh.cellCount() != 2) {
     success = false;
@@ -214,7 +214,7 @@ bool NewMeshTests::test2DMesh() {
   return success;
 }
 
-bool NewMeshTests::test3DMesh() {
+bool MeshTopologyTests::test3DMesh() {
   bool success = true;
   
   unsigned spaceDim = 3;
@@ -252,7 +252,7 @@ bool NewMeshTests::test3DMesh() {
   vector< CellTopoPtr > cellTopos(1,hexTopo);
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
-  NewMesh mesh(meshGeometry);
+  MeshTopology mesh(meshGeometry);
   
   if (mesh.cellCount() != 1) {
     success = false;
@@ -317,9 +317,9 @@ vector< vector<double> > hexPoints(double x0, double y0, double z0, double width
   return v;
 }
 
-Teuchos::RCP<NewMesh> makeRectMesh(double x0, double y0, double width, double height, unsigned horizontalCells, unsigned verticalCells) {
+Teuchos::RCP<MeshTopology> makeRectMesh(double x0, double y0, double width, double height, unsigned horizontalCells, unsigned verticalCells) {
   unsigned spaceDim = 2;
-  Teuchos::RCP<NewMesh> mesh = Teuchos::rcp( new NewMesh(spaceDim) );
+  Teuchos::RCP<MeshTopology> mesh = Teuchos::rcp( new MeshTopology(spaceDim) );
   double dx = width / horizontalCells;
   double dy = height / verticalCells;
   CellTopoPtr quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
@@ -334,10 +334,10 @@ Teuchos::RCP<NewMesh> makeRectMesh(double x0, double y0, double width, double he
   return mesh;
 }
 
-Teuchos::RCP<NewMesh> makeHexMesh(double x0, double y0, double z0, double width, double height, double depth,
+Teuchos::RCP<MeshTopology> makeHexMesh(double x0, double y0, double z0, double width, double height, double depth,
                                   unsigned horizontalCells, unsigned verticalCells, unsigned depthCells) {
   unsigned spaceDim = 3;
-  Teuchos::RCP<NewMesh> mesh = Teuchos::rcp( new NewMesh(spaceDim) );
+  Teuchos::RCP<MeshTopology> mesh = Teuchos::rcp( new MeshTopology(spaceDim) );
   double dx = width / horizontalCells;
   double dy = height / verticalCells;
   double dz = depth / depthCells;
@@ -356,7 +356,7 @@ Teuchos::RCP<NewMesh> makeHexMesh(double x0, double y0, double z0, double width,
   return mesh;
 }
 
-void printMeshInfo(NewMeshPtr mesh) {
+void printMeshInfo(MeshTopologyPtr mesh) {
   unsigned spaceDim = mesh->getSpaceDim();
   unsigned vertexCount = mesh->getEntityCount(0);
   unsigned edgeCount = (spaceDim > 1) ? mesh->getEntityCount(1) : 0;
@@ -383,7 +383,7 @@ void printMeshInfo(NewMeshPtr mesh) {
   }
 }
 
-bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints, string meshName = "mesh") {
+bool checkConstraints( MeshTopologyPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints, string meshName = "mesh") {
   bool success = true;
   unsigned entityCount = mesh->getEntityCount(entityDim);
   for (unsigned entityIndex=0; entityIndex<entityCount; entityIndex++) {
@@ -420,13 +420,13 @@ bool checkConstraints( NewMeshPtr mesh, unsigned entityDim, map<unsigned,unsigne
   return success;
 }
 
-bool NewMeshTests::testEntityConstraints() {
+bool MeshTopologyTests::testEntityConstraints() {
   bool success = true;
   
   // make two simple meshes
-  NewMeshPtr mesh2D = makeRectMesh(0.0, 0.0, 2.0, 1.0,
+  MeshTopologyPtr mesh2D = makeRectMesh(0.0, 0.0, 2.0, 1.0,
                                    2, 1);
-  NewMeshPtr mesh3D = makeHexMesh(0.0, 0.0, 0.0, 2.0, 4.0, 3.0,
+  MeshTopologyPtr mesh3D = makeHexMesh(0.0, 0.0, 0.0, 2.0, 4.0, 3.0,
                                   2, 2, 1);
   
   unsigned vertexDim = 0;
@@ -439,7 +439,7 @@ bool NewMeshTests::testEntityConstraints() {
   set< unsigned > internalEdges;
 
   for (unsigned cellIndex=0; cellIndex<mesh2D->cellCount(); cellIndex++) {
-    NewMeshCellPtr cell = mesh2D->getCell(cellIndex);
+    CellPtr cell = mesh2D->getCell(cellIndex);
     unsigned sideCount = cell->topology()->getSideCount();
 
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
@@ -472,7 +472,7 @@ bool NewMeshTests::testEntityConstraints() {
   set<unsigned> internalFaces;
   map<unsigned, vector<unsigned> > faceToEdges;
   for (unsigned cellIndex=0; cellIndex<mesh3D->cellCount(); cellIndex++) {
-    NewMeshCellPtr cell = mesh3D->getCell(cellIndex);
+    CellPtr cell = mesh3D->getCell(cellIndex);
     unsigned sideCount = cell->topology()->getSideCount();
     
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
@@ -677,7 +677,7 @@ bool NewMeshTests::testEntityConstraints() {
       // found match
       childCellForVertex = cellIt->first;
       // now, figure out which of the "edgeChildren2D" is shared by this cell:
-      NewMeshCellPtr cell = mesh2D->getCell(childCellForVertex);
+      CellPtr cell = mesh2D->getCell(childCellForVertex);
       unsigned numEdges = cell->topology()->getSideCount();
       for (unsigned edgeOrdinal=0; edgeOrdinal<numEdges; edgeOrdinal++) {
         unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
@@ -747,7 +747,7 @@ bool NewMeshTests::testEntityConstraints() {
     success = false;
   }
   unsigned childCellIndex = matches[0];
-  NewMeshCellPtr childCell = mesh3D->getCell(childCellIndex);
+  CellPtr childCell = mesh3D->getCell(childCellIndex);
   set<unsigned> childInteriorUnconstrainedFaces;
   set<unsigned> childInteriorConstrainedFaces;
   unsigned faceCount = childCell->topology()->getSideCount();

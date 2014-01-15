@@ -16,11 +16,18 @@ using namespace Intrepid;
 class RefinementPattern;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
 
+class MeshTopology;
+typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
+
+#include "MeshTopology.h"
+
 typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch;
 
 typedef vector< pair<RefinementPatternPtr, vector<unsigned> > > RefinementPatternRecipe;
 
 class RefinementPattern {
+  MeshTopologyPtr _refinementTopology; // ultimately, this may be able to supplant a number of structures here...
+  
   Teuchos::RCP< shards::CellTopology > _cellTopoPtr;
   FieldContainer<double> _nodes;
   vector< vector< unsigned > > _subCells;

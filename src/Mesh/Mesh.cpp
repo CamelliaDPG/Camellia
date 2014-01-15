@@ -334,8 +334,8 @@ Teuchos::RCP<Mesh> Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundar
     for (int i=0; i<horizontalElements; i++) {
       for (int j=0; j<verticalElements; j++) {
         // TEST CODE FOR LESZEK: match Leszek's meshes by setting diagonalUp = true here...
-//        bool diagonalUp = true;
-        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
+        bool diagonalUp = true;
+//        bool diagonalUp = (i%2 == j%2); // criss-cross pattern
         
         vector<unsigned> elemVertices1, elemVertices2;
         if (diagonalUp) {

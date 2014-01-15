@@ -30,21 +30,45 @@
 
 #include "RefinementPattern.h"
 
-#include "NewMesh.h"
+#include "MeshTopology.h"
 
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 
 using namespace Intrepid;
 
+void print(string name, vector<int> data) {
+  cout << name << ": ";
+  for (int i=0; i<data.size(); i++) {
+    cout << data[i] << " ";
+  }
+  cout << endl;
+}
+void print(string name, vector<unsigned> data) {
+  cout << name << ": ";
+  for (int i=0; i<data.size(); i++) {
+    cout << data[i] << " ";
+  }
+  cout << endl;
+}
+void print(string name, set<unsigned> data) {
+  cout << name << ": ";
+  for (set<unsigned>::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++) {
+    cout << *dataIt << " ";
+  }
+  cout << endl;
+}
+
 RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) {
   _cellTopoPtr = cellTopoPtr;
   _nodes = refinedNodes;
   _sideRefinementPatterns = sideRefinementPatterns;
+  
   int numSubCells = refinedNodes.dimension(0);
   int numNodesPerCell = refinedNodes.dimension(1);
   unsigned spaceDim = refinedNodes.dimension(2);
   unsigned sideCount = _cellTopoPtr->getSideCount();
+  _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(sideCount); // will populate below..
   
   if (_cellTopoPtr->getNodeCount() == numNodesPerCell) {
     _childTopos = vector< CellTopoPtr >(numSubCells, _cellTopoPtr);
@@ -108,113 +132,158 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
       _vertices(vertexIndex,dim) = vertices[vertexIndex][dim];
     }
   }
-  if (spaceDim==2) {
   
-    // determine which subcells are along each of parent's sides...
-    int numSides;
-    vector< vector< int > > refSides;
-    if (cellKey == shards::Quadrilateral<4>::key ) {
-      numSides = 4;
-      vector<double> v0, v1, v2, v3;
-      v0.push_back(-1.0);
-      v0.push_back(-1.0);
-      v1.push_back(1.0);
-      v1.push_back(-1.0);
-      v2.push_back(1.0);
-      v2.push_back(1.0);
-      v3.push_back(-1.0);
-      v3.push_back(1.0);
-      
-      if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
-      }
-      if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
-      }
-      if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
-      }
-      if ( vertexLookup.find(v3) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
-      }
-      
-      int v0_index = vertexLookup[v0];
-      int v1_index = vertexLookup[v1];
-      int v2_index = vertexLookup[v2];
-      int v3_index = vertexLookup[v3];
-      
-      // first side: v0 to v1
-      vector<int> side0, side1, side2, side3;
-      side0.push_back(v0_index);
-      side0.push_back(v1_index);
-      side1.push_back(v1_index);
-      side1.push_back(v2_index);
-      side2.push_back(v2_index);
-      side2.push_back(v3_index);
-      side3.push_back(v3_index);
-      side3.push_back(v0_index);
-      refSides.push_back(side0);
-      refSides.push_back(side1);
-      refSides.push_back(side2);
-      refSides.push_back(side3);
-    } else if (cellKey == shards::Triangle<3>::key) {
-      numSides = 3;
-      vector<double> v0, v1, v2, v3;
-      v0.push_back(0.0);
-      v0.push_back(0.0);
-      v1.push_back(1.0);
-      v1.push_back(0.0);
-      v2.push_back(0.0);
-      v2.push_back(1.0);
-      
-      if ( vertexLookup.find(v0) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
-      }
-      if ( vertexLookup.find(v1) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
-      }
-      if ( vertexLookup.find(v2) == vertexLookup.end() ) {
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
-      }
-      
-      int v0_index = vertexLookup[v0];
-      int v1_index = vertexLookup[v1];
-      int v2_index = vertexLookup[v2];
-      
-      // first side: v0 to v1
-      vector<int> side0, side1, side2, side3;
-      side0.push_back(v0_index);
-      side0.push_back(v1_index);
-      side1.push_back(v1_index);
-      side1.push_back(v2_index);
-      side2.push_back(v2_index);
-      side2.push_back(v0_index);
-      refSides.push_back(side0);
-      refSides.push_back(side1);
-      refSides.push_back(side2);
-    } else {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "In 2D, RefinementPattern only supports quads and triangles.  This is for legacy reasons to do with childrenForSides, and probably this restriction can soon be eliminated.");
+  // create MeshTopology
+  _refinementTopology = Teuchos::rcp( new MeshTopology(spaceDim) );
+  RefinementPatternPtr thisPtr = Teuchos::rcp( this, false );
+  
+  FieldContainer<double> refCellNodes(cellTopoPtr->getNodeCount(),spaceDim);
+  CamelliaCellTools::refCellNodesForTopology(refCellNodes, *cellTopoPtr);
+  vector< vector<double> > refCellNodesVector;
+  for (int nodeIndex=0; nodeIndex<refCellNodes.dimension(0); nodeIndex++) {
+    vector<double> node;
+    for (int d=0; d<spaceDim; d++) {
+      node.push_back(refCellNodes(nodeIndex,d));
     }
-    _childrenForSides = vector< vector< pair< unsigned, unsigned> > >(numSides);
-
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      // find all the children that lie along this side....
-      vector<double> v0 = vertices[refSides[sideIndex][0]];
-      vector<double> v1 = vertices[refSides[sideIndex][1]];
-      for (int childIndex=0; childIndex<numSubCells; childIndex++) {
-        int numChildVertices = _subCells[childIndex].size();
-        for (int childSideIndex=0; childSideIndex<numChildVertices; childSideIndex++) {
-          vector<double> child_v0 = vertices[_subCells[childIndex][childSideIndex]];
-          vector<double> child_v1 = vertices[_subCells[childIndex][(childSideIndex+1)%numChildVertices]];
-          if ( colinear(v0,v1,child_v0) && colinear(v0,v1,child_v1) ) {
-            // add this side...
-            pair< int, int > entry = make_pair(childIndex,childSideIndex);
-            _childrenForSides[sideIndex].push_back(entry);
-            _parentSideForChildSide[entry] = sideIndex;
-          }
+    refCellNodesVector.push_back(node);
+  }
+  
+  _refinementTopology->addCell(cellTopoPtr, refCellNodesVector);
+  _refinementTopology->refineCell(0, thisPtr);
+  
+  CellPtr parentCell = _refinementTopology->getCell(0);
+  
+  // populate _childrenForSides and _parentSideForChildSide
+  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
+//    cout << "sideIndex " << sideIndex << endl;
+    int sideEntityIndex = parentCell->entityIndex(sideDim, sideIndex);
+//    cout << "sideEntityIndex " << sideEntityIndex << endl;
+    // determine which sides are children (refinements) of the side:
+    set<unsigned> sideChildEntities = _refinementTopology->getChildEntities(sideDim, sideEntityIndex);
+    if (sideChildEntities.size() == 0) { // unrefined side; for our purposes it is its own parent
+      sideChildEntities.insert(sideEntityIndex);
+    }
+//    print("sideChildEntities", sideChildEntities);
+    // search for these entities within the (volume) children
+    vector<unsigned> childCellIndices = parentCell->getChildIndices();
+//    print("childCellIndices", childCellIndices);
+    for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
+      unsigned childCellIndex = childCellIndices[childIndexInParent];
+      CellPtr childCell = _refinementTopology->getCell(childCellIndex);
+      int childSideCount = childCell->topology()->getSideCount();
+      for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
+        unsigned childSideEntityIndex = childCell->entityIndex(sideDim, childSideIndex);
+        if (sideChildEntities.find(childSideEntityIndex) != sideChildEntities.end()) {
+          // this child shares side with parent
+          pair<int,int> entry = make_pair(childIndexInParent, childSideIndex);
+          _childrenForSides[sideIndex].push_back(entry);
+          _parentSideForChildSide[entry] = sideIndex;
         }
       }
-      
+    }
+  }
+  
+//  cout << "Before sorting (2D), _childrenForSides:\n";
+//  for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+//    cout << "sideIndex " << sideIndex << ":\n";
+//    for (int entryIndex=0; entryIndex<_childrenForSides[sideIndex].size(); entryIndex++) {
+//      int childIndex = _childrenForSides[sideIndex][entryIndex].first;
+//      int childSideIndex = _childrenForSides[sideIndex][entryIndex].second;
+//      cout << "childIndex " << childIndex << ", childSideIndex " << childSideIndex << endl;
+//    }
+//  }
+  
+  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
+    // the following code is replicated from the old code populating _childrenForSides
+    // the upshot is that it sorts _childrenForSides in a particular way.  It seems likely this is
+    // important to some legacy code, so I'm leaving it in place.  But probably we should remove it
+    // at some point...
+    if (spaceDim==2) {
+      vector< vector< int > > refSides;
+      if (cellKey == shards::Quadrilateral<4>::key ) {
+        vector<double> v0, v1, v2, v3;
+        v0.push_back(-1.0);
+        v0.push_back(-1.0);
+        v1.push_back(1.0);
+        v1.push_back(-1.0);
+        v2.push_back(1.0);
+        v2.push_back(1.0);
+        v3.push_back(-1.0);
+        v3.push_back(1.0);
+        
+        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+        }
+        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+        }
+        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+        }
+        if ( vertexLookup.find(v3) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v3 not found!");
+        }
+        
+        int v0_index = vertexLookup[v0];
+        int v1_index = vertexLookup[v1];
+        int v2_index = vertexLookup[v2];
+        int v3_index = vertexLookup[v3];
+        
+        // first side: v0 to v1
+        vector<int> side0, side1, side2, side3;
+        side0.push_back(v0_index);
+        side0.push_back(v1_index);
+        side1.push_back(v1_index);
+        side1.push_back(v2_index);
+        side2.push_back(v2_index);
+        side2.push_back(v3_index);
+        side3.push_back(v3_index);
+        side3.push_back(v0_index);
+        refSides.push_back(side0);
+        refSides.push_back(side1);
+        refSides.push_back(side2);
+        refSides.push_back(side3);
+      } else if (cellKey == shards::Triangle<3>::key) {
+        vector<double> v0, v1, v2, v3;
+        v0.push_back(0.0);
+        v0.push_back(0.0);
+        v1.push_back(1.0);
+        v1.push_back(0.0);
+        v2.push_back(0.0);
+        v2.push_back(1.0);
+        
+        if ( vertexLookup.find(v0) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v0 not found!");
+        }
+        if ( vertexLookup.find(v1) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v1 not found!");
+        }
+        if ( vertexLookup.find(v2) == vertexLookup.end() ) {
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"v2 not found!");
+        }
+        
+        int v0_index = vertexLookup[v0];
+        int v1_index = vertexLookup[v1];
+        int v2_index = vertexLookup[v2];
+        
+        // first side: v0 to v1
+        vector<int> side0, side1, side2, side3;
+        side0.push_back(v0_index);
+        side0.push_back(v1_index);
+        side1.push_back(v1_index);
+        side1.push_back(v2_index);
+        side2.push_back(v2_index);
+        side2.push_back(v0_index);
+        refSides.push_back(side0);
+        refSides.push_back(side1);
+        refSides.push_back(side2);
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "In 2D, RefinementPattern only supports quads and triangles.  This is for legacy reasons to do with childrenForSides, and probably this restriction can soon be eliminated.");
+      }
+
+      vector<double> v0 = vertices[refSides[sideIndex][0]];
+      vector<double> v1 = vertices[refSides[sideIndex][1]];
+    
       // sort _childrenForSides[sideIndex] according to child_v0's proximity to v0
       // bubble sort (we're likely to have at most a handful)
       int numEntriesForSideIndex = _childrenForSides[sideIndex].size();
@@ -241,6 +310,16 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
       }
     }
   }
+  
+//  cout << "At end of RefinementPattern construction, _childrenForSides:\n";
+//  for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+//    cout << "sideIndex " << sideIndex << ":\n";
+//    for (int entryIndex=0; entryIndex<_childrenForSides[sideIndex].size(); entryIndex++) {
+//      int childIndex = _childrenForSides[sideIndex][entryIndex].first;
+//      int childSideIndex = _childrenForSides[sideIndex][entryIndex].second;
+//      cout << "childIndex " << childIndex << ", childSideIndex " << childSideIndex << endl;
+//    }
+//  }
 }
 
 map< unsigned, unsigned > RefinementPattern::parentSideLookupForChild(unsigned childIndex) {
@@ -345,64 +424,70 @@ Teuchos::RCP< shards::CellTopology > RefinementPattern::childTopology(unsigned c
 }
 
 void RefinementPattern::initializeAnisotropicRelationships() {
-  // quad and hex refinements
-  RefinementPatternPtr verticalCutQuad = xAnisotropicRefinementPatternQuad();
-  RefinementPatternPtr horizontalCutQuad = yAnisotropicRefinementPatternQuad();
-  RefinementPatternPtr isotropicRefinementQuad = regularRefinementPatternQuad();
+  static bool initialized = false;
   
-  vector< RefinementPatternRecipe > quadRecipes;
-  RefinementPatternRecipe recipe;
-  vector< unsigned > initialCell; // empty to specify initial cell
-  vector< unsigned > firstCutChild0(1,0);  // 0 to pick first child
-  vector< unsigned > firstCutChild1(1,1);  // 1 to pick second child
-  
-  recipe.push_back(make_pair(verticalCutQuad,initialCell));
-  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild0));
-  recipe.push_back(make_pair(horizontalCutQuad,firstCutChild1));
-  quadRecipes.push_back(recipe);
-  
-  recipe.clear();
-  recipe.push_back(make_pair(horizontalCutQuad,initialCell));
-  recipe.push_back(make_pair(verticalCutQuad,firstCutChild0));
-  recipe.push_back(make_pair(verticalCutQuad,firstCutChild1));
-  quadRecipes.push_back(recipe);
-  
-  recipe.clear();
-  recipe.push_back(make_pair(isotropicRefinementQuad,initialCell));
-  quadRecipes.push_back(recipe);
-  
-  verticalCutQuad->setRelatedRecipes(quadRecipes);
-  horizontalCutQuad->setRelatedRecipes(quadRecipes);
-  isotropicRefinementQuad->setRelatedRecipes(quadRecipes);
-  
-  // TODO: once we add anisotropic refinements for the hexahedron, marry them here -- uncomment the following:
-/*  RefinementPatternPtr isotropicRefinementHex = regularRefinementPatternHexahedron();
-  RefinementPatternPtr verticalCutHex = xAnisotropicRefinementPatternHexahedron();
-  RefinementPatternPtr horizontalCutHex = yAnisotropicRefinementPatternHexahedron();
-  RefinementPatternPtr depthCutHex = zAnisotropicRefinementPatternHexahedron();
- 
- vector< unsigned > secondCutChild00(2,0);
- vector< unsigned > secondCutChild01(2);
- secondCutChild01[0] = 0;
- secondCutChild01[1] = 1;
- vector< unsigned > secondCutChild10(2);
- secondCutChild10[0] = 1;
- secondCutChild10[1] = 0;
- vector< unsigned > secondCutChild11(2);
- secondCutChild11[0] = 1;
- secondCutChild11[1] = 1;
+  // guard to avoid nested calls to this method...
+  if (!initialized) {
+    initialized = true;
+    // quad and hex refinements
+    RefinementPatternPtr verticalCutQuad = xAnisotropicRefinementPatternQuad();
+    RefinementPatternPtr horizontalCutQuad = yAnisotropicRefinementPatternQuad();
+    RefinementPatternPtr isotropicRefinementQuad = regularRefinementPatternQuad();
+    
+    vector< RefinementPatternRecipe > quadRecipes;
+    RefinementPatternRecipe recipe;
+    vector< unsigned > initialCell; // empty to specify initial cell
+    vector< unsigned > firstCutChild0(1,0);  // 0 to pick first child
+    vector< unsigned > firstCutChild1(1,1);  // 1 to pick second child
+    
+    recipe.push_back(make_pair(verticalCutQuad,initialCell));
+    recipe.push_back(make_pair(horizontalCutQuad,firstCutChild0));
+    recipe.push_back(make_pair(horizontalCutQuad,firstCutChild1));
+    quadRecipes.push_back(recipe);
+    
+    recipe.clear();
+    recipe.push_back(make_pair(horizontalCutQuad,initialCell));
+    recipe.push_back(make_pair(verticalCutQuad,firstCutChild0));
+    recipe.push_back(make_pair(verticalCutQuad,firstCutChild1));
+    quadRecipes.push_back(recipe);
+    
+    recipe.clear();
+    recipe.push_back(make_pair(isotropicRefinementQuad,initialCell));
+    quadRecipes.push_back(recipe);
+    
+    verticalCutQuad->setRelatedRecipes(quadRecipes);
+    horizontalCutQuad->setRelatedRecipes(quadRecipes);
+    isotropicRefinementQuad->setRelatedRecipes(quadRecipes);
+    
+    // TODO: once we add anisotropic refinements for the hexahedron, marry them here -- uncomment the following:
+  /*  RefinementPatternPtr isotropicRefinementHex = regularRefinementPatternHexahedron();
+    RefinementPatternPtr verticalCutHex = xAnisotropicRefinementPatternHexahedron();
+    RefinementPatternPtr horizontalCutHex = yAnisotropicRefinementPatternHexahedron();
+    RefinementPatternPtr depthCutHex = zAnisotropicRefinementPatternHexahedron();
+   
+   vector< unsigned > secondCutChild00(2,0);
+   vector< unsigned > secondCutChild01(2);
+   secondCutChild01[0] = 0;
+   secondCutChild01[1] = 1;
+   vector< unsigned > secondCutChild10(2);
+   secondCutChild10[0] = 1;
+   secondCutChild10[1] = 0;
+   vector< unsigned > secondCutChild11(2);
+   secondCutChild11[0] = 1;
+   secondCutChild11[1] = 1;
 
- 
-  vector< RefinementPatternPtr > hexRefs;
-  hexRefs.push_back(verticalCutHex);
-  hexRefs.push_back(horizontalCutHex);
-  hexRefs.push_back(depthCutHex);
-  hexRefs.push_back(isotropicRefinementHex);
-  
-  verticalCutHex->setRelatedRefinementPatterns(hexRefs);
-  horizontalCutHex->setRelatedRefinementPatterns(hexRefs);
-  depthCutHex->setRelatedRefinementPatterns(hexRefs);
-  isotropicRefinementHex->setRelatedRefinementPatterns(hexRefs);*/
+   
+    vector< RefinementPatternPtr > hexRefs;
+    hexRefs.push_back(verticalCutHex);
+    hexRefs.push_back(horizontalCutHex);
+    hexRefs.push_back(depthCutHex);
+    hexRefs.push_back(isotropicRefinementHex);
+    
+    verticalCutHex->setRelatedRefinementPatterns(hexRefs);
+    horizontalCutHex->setRelatedRefinementPatterns(hexRefs);
+    depthCutHex->setRelatedRefinementPatterns(hexRefs);
+    isotropicRefinementHex->setRelatedRefinementPatterns(hexRefs);*/
+  }
 }
 
 RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
@@ -747,7 +832,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
   
-  NewMeshPtr mesh = Teuchos::rcp( new NewMesh(meshGeometry) );
+  MeshTopologyPtr mesh = Teuchos::rcp( new MeshTopology(meshGeometry) );
   
   unsigned cellIndex = 0; // cellIndex of the current parent in the RefinementBranch
   for (int refIndex=0; refIndex<refinementBranch.size(); refIndex++) {

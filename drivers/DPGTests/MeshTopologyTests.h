@@ -6,16 +6,16 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "NewMesh.h"
+#include "MeshTopology.h"
 
-class NewMeshTests : public TestSuite {
+class MeshTopologyTests : public TestSuite {
 private:
   void setup();
   void teardown();
 public:
-  NewMeshTests();
+  MeshTopologyTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
-  string testSuiteName() { return "NewMeshTests"; }
+  string testSuiteName() { return "MeshTopologyTests"; }
   
   bool test1DMesh();
   bool test2DMesh();

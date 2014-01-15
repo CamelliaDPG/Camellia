@@ -31,7 +31,7 @@ void NewVTKExporter::exportFunction(FunctionPtr function, const string& function
   unsigned int total_vertices = 0;
 
   for (unsigned cellIndex=0; cellIndex<_mesh->cellCount(); cellIndex++) {
-    NewMeshCellPtr cell = _mesh->getCell(cellIndex);
+    CellPtr cell = _mesh->getCell(cellIndex);
     // Skip the rest of the block if cell is a parent cell
     if (cell->isParent())
       continue;

@@ -1,13 +1,13 @@
 //
-//  NewMesh.h
+//  MeshTopology.h
 //  Camellia-debug
 //
 //  Created by Nate Roberts on 12/2/13.
 //
 //
 
-#ifndef Camellia_debug_NewMesh_h
-#define Camellia_debug_NewMesh_h
+#ifndef Camellia_debug_MeshTopology_h
+#define Camellia_debug_MeshTopology_h
 
 #include "Shards_CellTopology.hpp"
 #include "Intrepid_FieldContainer.hpp"
@@ -20,7 +20,7 @@ using namespace std;
 
 // "cells" are geometric entities -- they do not define any kind of basis
 // "elements" are cells endowed with a (local) functional discretization
-class NewMeshCell {
+class Cell {
   unsigned _cellIndex;
   CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
@@ -28,10 +28,10 @@ class NewMeshCell {
   vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
   
   // for parents:
-  vector< Teuchos::RCP< NewMeshCell > > _children;
+  vector< Teuchos::RCP< Cell > > _children;
   RefinementPatternPtr _refPattern;
 public:
-  NewMeshCell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
+  Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
               unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
     _cellTopo = cellTopo;
     _vertices = vertices;
@@ -43,10 +43,10 @@ public:
     return _cellIndex;
   }
 
-  const vector< Teuchos::RCP< NewMeshCell > > &children() {
+  const vector< Teuchos::RCP< Cell > > &children() {
     return _children;
   }
-  void setChildren(vector< Teuchos::RCP< NewMeshCell > > children) {
+  void setChildren(vector< Teuchos::RCP< Cell > > children) {
     _children = children;
   }
   vector<unsigned> getChildIndices() {
@@ -77,9 +77,9 @@ public:
   const vector< unsigned > &vertices() {return _vertices;}
 };
 
-typedef Teuchos::RCP<NewMeshCell> NewMeshCellPtr;
+typedef Teuchos::RCP<Cell> CellPtr;
 
-class NewMesh {
+class MeshTopology {
   unsigned _spaceDim; // dimension of the mesh
   
   map< vector<double>, unsigned > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
@@ -98,7 +98,7 @@ class NewMesh {
   vector< map< unsigned, vector< pair< RefinementPatternPtr, vector<unsigned> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   vector< map< unsigned, unsigned > > _entityCellTopologyKeys;
   
-  vector< NewMeshCellPtr > _cells;
+  vector< CellPtr > _cells;
   set< unsigned > _activeCells;
   
   map< unsigned, shards::CellTopology > _knownTopologies; // key -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
@@ -108,10 +108,10 @@ class NewMesh {
   unsigned eldestActiveAncestor(unsigned d, unsigned entityIndex);
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
-  void deactivateCell(NewMeshCellPtr cell);
+  void deactivateCell(CellPtr cell);
   set<unsigned> descendants(unsigned d, unsigned entityIndex);
   pair< unsigned, set<unsigned> > determineEntityConstraints(unsigned d, unsigned entityIndex);
-  void addChildren(NewMeshCellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
+  void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices);
   unsigned getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<unsigned> getVertexIndices(const FieldContainer<double> &vertices);
   vector<unsigned> getVertexIndices(const vector< vector<double> > &vertices);
@@ -121,16 +121,16 @@ class NewMesh {
   void init(unsigned spaceDim);
   void printVertex(unsigned vertexIndex);
   void printVertices(set<unsigned> vertexIndices);
-  void refineCellEntities(NewMeshCellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
+  void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
   void updateConstraintsForCells(const set<unsigned> &cellIndices);
 public:
-  NewMesh(unsigned spaceDim);
-  NewMesh(MeshGeometryPtr meshGeometry);
-  NewMeshCellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
+  MeshTopology(unsigned spaceDim);
+  MeshTopology(MeshGeometryPtr meshGeometry);
+  CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   bool entityHasParent(unsigned d, unsigned entityIndex);
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
   const set< pair<unsigned,unsigned> > &getActiveCellIndices(unsigned d, unsigned entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
-  NewMeshCellPtr getCell(unsigned cellIndex);
+  CellPtr getCell(unsigned cellIndex);
   set<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
   unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
   unsigned getEntityCount(unsigned d);
@@ -148,6 +148,6 @@ public:
   void printEntityVertices(unsigned d, unsigned entityIndex);
 };
 
-typedef Teuchos::RCP<NewMesh> NewMeshPtr;
+typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 #endif

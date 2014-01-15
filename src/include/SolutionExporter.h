@@ -40,7 +40,7 @@
 
 #include "Solution.h"
 #include "Mesh.h"
-#include "NewMesh.h"
+#include "MeshTopology.h"
 #include "VarFactory.h"
 
 class SolutionExporter {
@@ -71,18 +71,18 @@ public:
 class NewExporter {
 protected:
   // SolutionPtr _solution;
-  NewMeshPtr _mesh;
+  MeshTopologyPtr _mesh;
   // VarFactory& _varFactory;
 
 public:
-  NewExporter(NewMeshPtr mesh) :
+  NewExporter(MeshTopologyPtr mesh) :
     _mesh(mesh) {}
   virtual void exportFunction(FunctionPtr function, const string& functionName="function", unsigned int num1DPts=0) = 0;
 };
 
 class NewVTKExporter : public NewExporter {
 public:
-  NewVTKExporter(NewMeshPtr mesh) :
+  NewVTKExporter(MeshTopologyPtr mesh) :
     NewExporter(mesh) {}
   void exportFunction(FunctionPtr function, const string& functionName="function", unsigned int num1DPts=0);
 };
