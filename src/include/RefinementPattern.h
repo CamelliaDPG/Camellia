@@ -40,6 +40,8 @@ class RefinementPattern {
   vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
   vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
   
+  vector< vector<unsigned> > _sideRefinementChildIndices; // maps from index of child in side refinement to the index in volume refinement pattern
+  
   // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the above)
   map< pair<unsigned,unsigned>, unsigned> _parentSideForChildSide;
   bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
@@ -75,12 +77,15 @@ public:
 
   Teuchos::RCP< shards::CellTopology > childTopology(unsigned childIndex);
   Teuchos::RCP< shards::CellTopology > parentTopology();
+  MeshTopologyPtr refinementMeshTopology();
   
   unsigned numChildren();
   const FieldContainer<double> & refinedNodes();
   
   const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
   Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
+  
+  unsigned mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex);
   
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);

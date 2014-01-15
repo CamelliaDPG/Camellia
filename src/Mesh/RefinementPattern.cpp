@@ -159,7 +159,7 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
     int sideEntityIndex = parentCell->entityIndex(sideDim, sideIndex);
 //    cout << "sideEntityIndex " << sideEntityIndex << endl;
     // determine which sides are children (refinements) of the side:
-    set<unsigned> sideChildEntities = _refinementTopology->getChildEntities(sideDim, sideEntityIndex);
+    set<unsigned> sideChildEntities = _refinementTopology->getChildEntitiesSet(sideDim, sideEntityIndex);
     if (sideChildEntities.size() == 0) { // unrefined side; for our purposes it is its own parent
       sideChildEntities.insert(sideEntityIndex);
     }
@@ -181,6 +181,31 @@ RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTo
         }
       }
     }
+  }
+  
+  _sideRefinementChildIndices = vector< vector<unsigned> >(sideCount); // maps from index of child in side refinement to the index in volume refinement pattern
+  for (int sideIndex = 0; sideIndex < sideCount; sideIndex++) { // sideIndices in parent
+    int sideEntityIndex = parentCell->entityIndex(sideDim, sideIndex);
+    vector<unsigned> sideChildEntities = _refinementTopology->getChildEntities(sideDim, sideEntityIndex); // these are in the order of the side refinement pattern
+    if (sideChildEntities.size() == 0) { // unrefined side; for our purposes it is its own parent
+      sideChildEntities.push_back(sideEntityIndex);
+    }
+    for (vector<unsigned>::iterator sideEntityIndexIt = sideChildEntities.begin(); sideEntityIndexIt != sideChildEntities.end(); sideEntityIndexIt++) {
+      unsigned sideChildEntityIndex = *sideEntityIndexIt;
+      // need to find the volume child that has this side
+      vector<unsigned> childCellIndices = parentCell->getChildIndices();
+      for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++) {
+        unsigned childCellIndex = childCellIndices[childIndexInParent];
+        CellPtr childCell = _refinementTopology->getCell(childCellIndex);
+        int childSideCount = childCell->topology()->getSideCount();
+        for (int childSideIndex=0; childSideIndex<childSideCount; childSideIndex++) {
+          if ( sideChildEntityIndex == childCell->entityIndex(sideDim, childSideIndex) ) {
+            _sideRefinementChildIndices[sideIndex].push_back(childIndexInParent);
+          }
+        }
+      }
+    }
+//    print("_sideRefinementChildIndices[sideIndex]",_sideRefinementChildIndices[sideIndex]);
   }
   
 //  cout << "Before sorting (2D), _childrenForSides:\n";
@@ -490,6 +515,11 @@ void RefinementPattern::initializeAnisotropicRelationships() {
   }
 }
 
+unsigned RefinementPattern::mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex) {
+//  print("sideRefinementChildIndices[sideIndex]",_sideRefinementChildIndices[sideIndex]);
+  return _sideRefinementChildIndices[sideIndex][sideRefinementChildIndex];
+}
+
 RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr) {
   static map< unsigned, RefinementPatternPtr > knownRefinementPatterns;
   unsigned key = cellTopoPtr->getKey();
@@ -788,6 +818,10 @@ RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsi
 
 const FieldContainer<double> & RefinementPattern::refinedNodes() {
   return _nodes;
+}
+
+MeshTopologyPtr RefinementPattern::refinementMeshTopology() {
+  return _refinementTopology;
 }
 
 vector< RefinementPatternRecipe > & RefinementPattern::relatedRecipes() {
