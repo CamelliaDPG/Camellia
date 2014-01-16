@@ -465,19 +465,19 @@ void RefinementPattern::initializeAnisotropicRelationships() {
     vector< unsigned > firstCutChild0(1,0);  // 0 to pick first child
     vector< unsigned > firstCutChild1(1,1);  // 1 to pick second child
     
-    recipe.push_back(make_pair(verticalCutQuad,initialCell));
-    recipe.push_back(make_pair(horizontalCutQuad,firstCutChild0));
-    recipe.push_back(make_pair(horizontalCutQuad,firstCutChild1));
+    recipe.push_back(make_pair(verticalCutQuad.get(),initialCell));
+    recipe.push_back(make_pair(horizontalCutQuad.get(),firstCutChild0));
+    recipe.push_back(make_pair(horizontalCutQuad.get(),firstCutChild1));
     quadRecipes.push_back(recipe);
     
     recipe.clear();
-    recipe.push_back(make_pair(horizontalCutQuad,initialCell));
-    recipe.push_back(make_pair(verticalCutQuad,firstCutChild0));
-    recipe.push_back(make_pair(verticalCutQuad,firstCutChild1));
+    recipe.push_back(make_pair(horizontalCutQuad.get(),initialCell));
+    recipe.push_back(make_pair(verticalCutQuad.get(),firstCutChild0));
+    recipe.push_back(make_pair(verticalCutQuad.get(),firstCutChild1));
     quadRecipes.push_back(recipe);
     
     recipe.clear();
-    recipe.push_back(make_pair(isotropicRefinementQuad,initialCell));
+    recipe.push_back(make_pair(isotropicRefinementQuad.get(),initialCell));
     quadRecipes.push_back(recipe);
     
     verticalCutQuad->setRelatedRecipes(quadRecipes);
@@ -876,4 +876,28 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   }
 
   return mesh->physicalCellNodesForCell(cellIndex);
+}
+
+RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volumeRefinementBranch, unsigned sideIndex) {
+  RefinementBranch sideRefinements;
+  CellTopoPtr volumeTopo = volumeRefinementBranch[0].first->parentTopology();
+  unsigned sideDim = volumeTopo->getDimension() - 1;
+  for (int refIndex=0; refIndex<volumeRefinementBranch.size(); refIndex++) {
+    RefinementPattern* refPattern = volumeRefinementBranch[refIndex].first;
+    unsigned volumeBranchChild = volumeRefinementBranch[refIndex].second;
+    RefinementPattern* sideRefPattern = refPattern->patternForSubcell(sideDim, sideIndex).get();
+    
+    int sideBranchChild = -1;
+    for (int sideChildIndex = 0; sideChildIndex < sideRefPattern->numChildren(); sideChildIndex++) {
+      if (refPattern->mapSideChildIndex(sideIndex, sideChildIndex) == volumeBranchChild) {
+        sideBranchChild = sideChildIndex;
+      }
+    }
+    if (sideBranchChild == -1) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Did not find child");
+    }
+    
+    sideRefinements.push_back(make_pair(sideRefPattern,sideBranchChild));
+  }
+  return sideRefinements;
 }

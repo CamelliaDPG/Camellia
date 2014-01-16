@@ -23,7 +23,7 @@ typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 
 typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch;
 
-typedef vector< pair<RefinementPatternPtr, vector<unsigned> > > RefinementPatternRecipe;
+typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
 class RefinementPattern {
   MeshTopologyPtr _refinementTopology; // ultimately, this may be able to supplant a number of structures here...

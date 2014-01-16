@@ -583,7 +583,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
   if (relatedRecipes.size()==0) {
     RefinementPatternRecipe recipe;
     vector<unsigned> initialCell;
-    recipe.push_back(make_pair(refPattern,vector<unsigned>()));
+    recipe.push_back(make_pair(refPattern.get(),vector<unsigned>()));
     relatedRecipes.push_back(recipe);
   }
   
