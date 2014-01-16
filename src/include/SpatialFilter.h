@@ -75,6 +75,8 @@ public:
   
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
+  
+  virtual ~SpatialFilter() {}
 };
 
 class SpatialFilterUnfiltered : public SpatialFilter {

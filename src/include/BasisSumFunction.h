@@ -28,6 +28,7 @@ private:
 public:
   BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, const FieldContainer<double> &physicalCellNodes);
   virtual void getValues(FieldContainer<double> &functionValues, const FieldContainer<double> &physicalPoints);
+  virtual ~BasisSumFunction() {}
 };
 
 class NewBasisSumFunction : public Function {
