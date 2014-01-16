@@ -123,6 +123,8 @@ void RefinementHistory::playback(MeshPtr mesh) {
       case H_UNREFINEMENT:
         mesh->hUnrefine(cellIDs);
         break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
     }
   }
 }
