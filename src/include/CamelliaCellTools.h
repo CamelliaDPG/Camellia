@@ -37,6 +37,7 @@ public:
         
         cellNodes(2,0) =  0;
         cellNodes(2,1) =  1;
+        break;
       case shards::Quadrilateral<4>::key:
         cellNodes(0,0) = -1.0; // x1
         cellNodes(0,1) = -1.0; // y1
