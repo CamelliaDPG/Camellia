@@ -23,11 +23,13 @@ protected:
 public:
   NavierStokesFormulation(double Reynolds, SolutionPtr soln) {
     _Re = Function::constant(Reynolds);
-    _soln = soln;
+    // to break circular references (graphNorm to solution and back), make a new RCP that doesn't own memory...
+    _soln = Teuchos::rcp(soln.get(), false);
   }
   NavierStokesFormulation(FunctionPtr Reynolds, SolutionPtr soln) {
     _Re = Reynolds;
-    _soln = soln;
+    // to break circular references (graphNorm to solution and back), make a new RCP that doesn't own memory...
+    _soln = Teuchos::rcp(soln.get(), false);
   }
   
   virtual BFPtr bf() = 0;
