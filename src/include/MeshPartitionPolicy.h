@@ -18,6 +18,7 @@ using namespace Intrepid;
 
 class MeshPartitionPolicy {
 public:
+  virtual ~MeshPartitionPolicy() {}
   virtual void partitionMesh(Mesh *mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells);
 };
 

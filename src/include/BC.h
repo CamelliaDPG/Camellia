@@ -33,6 +33,8 @@ public:
   
   // basisCoefficients has dimensions (C,F)
   virtual void coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
+  
+  virtual ~BC() {}
 };
 
 typedef Teuchos::RCP<BC> BCPtr;

@@ -21,6 +21,7 @@ namespace Camellia {
   template<class Scalar, class ArrayScalar> class Basis {
   protected:
     Basis();
+    
     int _basisCardinality;
     int _basisDegree;
     
@@ -98,6 +99,8 @@ namespace Camellia {
     virtual void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const = 0;
     
     virtual void CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+    
+    virtual ~Basis() {}
   };
   
                 /***************** IntrepidBasisWrapper ******************/

@@ -22,6 +22,7 @@ protected:
   void initializeTags() const;
 public:
   VectorizedBasis(BasisPtr basis, int numComponents = 2);
+  virtual ~VectorizedBasis() {}
   
   int getCardinality() const;
   int getDegree() const;

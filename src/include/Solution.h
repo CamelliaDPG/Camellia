@@ -139,6 +139,7 @@ public:
            Teuchos::RCP<RHS> rhs = Teuchos::rcp( (RHS*) NULL),
            Teuchos::RCP<DPGInnerProduct> ip = Teuchos::rcp( (DPGInnerProduct*)NULL) );
   Solution(const Solution &soln);
+  virtual ~Solution() {}
 //  bool equals(Solution& otherSolution, double tol=0.0);
 
   const FieldContainer<double>& allCoefficientsForCellID(int cellID); // coefficients for all solution variables

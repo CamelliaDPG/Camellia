@@ -67,6 +67,7 @@ public:
     // innerProduct dimensions are (numCells, numFunctions, numFunctions)
   
   DPGInnerProduct(Teuchos::RCP< BilinearForm > bfs);
+  virtual ~DPGInnerProduct() {}
   
   virtual void computeInnerProductMatrix(FieldContainer<double> &innerProduct,
                                          Teuchos::RCP<DofOrdering> dofOrdering,

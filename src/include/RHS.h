@@ -77,6 +77,7 @@ public:
   virtual void integrateAgainstOptimalTests(FieldContainer<double> &rhsVector, const FieldContainer<double> &optimalTestWeights,
                                             Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
 
+  virtual ~RHS() {}
 };
 
 typedef Teuchos::RCP<RHS> RHSPtr;

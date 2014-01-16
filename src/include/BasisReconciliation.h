@@ -49,7 +49,7 @@ public:
 
   // h
   const FieldContainer<double> &constrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis); // requires these to be defined on the same topology
-  const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch refinements, BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation); // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
+  const SubBasisReconciliationWeights &constrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements, BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation); // vertexPermutation is for the fine basis's ancestral orientation (how to permute side as seen by fine's ancestor to produce side as seen by coarse)...
   
   // static workhorse methods:
   
@@ -63,7 +63,8 @@ public:
   // matching the whole bases:
   static FieldContainer<double> computeConstrainedWeights(BasisPtr finerBasis, RefinementBranch refinements, BasisPtr coarserBasis);
   // matching along sides:
-  static SubBasisReconciliationWeights computeConstrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch refinements,
+  static SubBasisReconciliationWeights computeConstrainedWeights(BasisPtr finerBasis, int finerBasisSideIndex, RefinementBranch &volumeRefinements,
+                                                                 RefinementBranch &sideRefinements,
                                                                  BasisPtr coarserBasis, int coarserBasisSideIndex, unsigned vertexNodePermutation);
   // it's worth noting that these FieldContainer arguments are not especially susceptible to caching
 };

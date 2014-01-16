@@ -16,6 +16,7 @@ using namespace std;
 
 class RefinementObserver {
 public:
+  virtual ~RefinementObserver() {}
   virtual void hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern) = 0;
   virtual void pRefine(const set<int> &cellIDs) = 0;
   virtual void hUnrefine(const set<int> &cellIDs) = 0;

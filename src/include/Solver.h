@@ -20,6 +20,7 @@ class Solver {
 protected:
   Teuchos::RCP< Epetra_LinearProblem > _problem;
 public:
+  virtual ~Solver() {}
   virtual Epetra_LinearProblem & problem() { return *(_problem.get()); }
   virtual void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
     _problem = problem;

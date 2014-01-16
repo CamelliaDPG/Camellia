@@ -36,6 +36,7 @@ protected:
 public:
   Function();
   Function(int rank);
+  virtual ~Function() {}
 
   virtual void setTime(double time);
   virtual double getTime();
@@ -199,6 +200,7 @@ class InternalBoundaryFunction : public BoundaryFunction{
 
 class SimpleFunction : public Function {
 public:
+  virtual ~SimpleFunction() {}
   virtual double value(double x);
   virtual double value(double x, double y);
   virtual double value(double x, double y, double z);

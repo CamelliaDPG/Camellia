@@ -116,6 +116,8 @@ public:
   void setUseIterativeRefinementsWithSPDSolve(bool value);
   void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
   void setWarnAboutZeroRowsAndColumns(bool value);
+  
+  virtual ~BilinearForm() {}
 protected:
  
   vector< int > _trialIDs, _testIDs;
