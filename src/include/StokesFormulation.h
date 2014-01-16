@@ -34,6 +34,8 @@ public:
   virtual void trialIDs(vector<int> &fieldIDs, vector<int> &correspondingTraceIDs, vector<string> &fileFriendlyNames) = 0; // corr. ID == -1 if there isn't one
   virtual Teuchos::RCP<ExactSolution> exactSolution(FunctionPtr u1, FunctionPtr u2, FunctionPtr p, 
                                                     SpatialFilterPtr entireBoundary) = 0;
+  
+  virtual ~StokesFormulation() {}
 };
 
 class VSPStokesFormulation : public StokesFormulation {

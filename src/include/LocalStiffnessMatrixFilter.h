@@ -24,6 +24,7 @@ public:
     // localStiffnessMatrix has dimensions (numCells, numTrialDofs, numTrialDofs)
     // physicalCellNodes has dimensions (numCells, numVerticesPerCell, numDimensions)
 
+  virtual ~LocalStiffnessMatrixFilter() {}
 };
 
 #endif

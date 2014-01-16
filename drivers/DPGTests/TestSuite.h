@@ -129,6 +129,7 @@ public:
       }
     }
   }
+  virtual ~TestSuite() {}
 };
 
 #endif

@@ -89,6 +89,8 @@ public:
   virtual int H1Order(); // return -1 for non-polynomial solutions
   double L2NormOfError(Solution &solution, int trialID, int cubDegree=-1);
   void L2NormOfError(FieldContainer<double> &errorSquaredPerCell, Solution &solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
+  
+  virtual ~ExactSolution() {}
 };
 
 #endif

@@ -67,6 +67,8 @@ public:
     double pMeasure = p_exact->integrate(mesh, cubatureEnrichment);
     p_exact = p_exact - Function::constant(pMeasure / meshMeasure);
   }
+  
+  virtual ~NavierStokesFormulation() {}
 };
 
 class VGPNavierStokesFormulation : public NavierStokesFormulation {
