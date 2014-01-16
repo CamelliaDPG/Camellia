@@ -75,6 +75,7 @@
 #include "MeshRefinementTests.h"
 #include "MPIWrapperTests.h"
 #include "MultiBasisTests.h"
+#include "MeshTopologyTests.h"
 #include "PatchBasisTests.h"
 #include "ParametricCurveTests.h"
 #include "RHSTests.h"
@@ -86,6 +87,8 @@
 #include "BasisCache.h"
 
 #include "Basis.h"
+
+#include <vector>
 
 using namespace std;
 using namespace Intrepid;
@@ -171,13 +174,14 @@ void DPGTests::runTests() {
 //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   
   testSuites.push_back( Teuchos::rcp( new BasisReconciliationTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
   testSuites.push_back( Teuchos::rcp( new BasisCacheTests ) );
   testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
   testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
-  
+
   testSuites.push_back( Teuchos::rcp( new ElementTests ) );
   testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
   testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
@@ -200,15 +204,16 @@ void DPGTests::runTests() {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
 
-  for ( vector< Teuchos::RCP< TestSuite > >::iterator testSuiteIt = testSuites.begin();
-       testSuiteIt != testSuites.end(); testSuiteIt++) {
-    Teuchos::RCP< TestSuite > testSuite = *testSuiteIt;
+  int numTestSuites = testSuites.size();
+  for (int testSuiteIndex = 0; testSuiteIndex < numTestSuites; testSuiteIndex++) {
+    Teuchos::RCP< TestSuite > testSuite = testSuites[testSuiteIndex];
     int numSuiteTests = 0, numSuiteTestsPassed = 0;
     testSuite->runTests(numSuiteTests, numSuiteTestsPassed);
     string name = testSuite->testSuiteName();
     if (rank==0) cout << name << ": passed " << numSuiteTestsPassed << "/" << numSuiteTests << " tests." << endl;
     numTestsTotal  += numSuiteTests;
     numTestsPassed += numSuiteTestsPassed;
+    testSuites[testSuiteIndex] = Teuchos::rcp((TestSuite*) NULL); // allows memory to be reclaimed
   }
   
   success = testOptimalStiffnessByIntegrating();

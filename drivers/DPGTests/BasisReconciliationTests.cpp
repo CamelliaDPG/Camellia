@@ -446,14 +446,14 @@ RefinementBranch determineSideRefinements(RefinementBranch volumeRefinements, un
   return sideRefinements;
 }
 
-bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &fineCellAncestralNodes,
+bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, unsigned fineAncestralSideIndex, FieldContainer<double> &fineCellAncestralNodes,
                                                            RefinementBranch &volumeRefinements,
                                                            BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes) {
   bool success = true;
   
   BasisReconciliation br;
   
-  RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineSideIndex);
+  RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineAncestralSideIndex);
   
   FieldContainer<double> fineCellNodes = RefinementPattern::descendantNodes(volumeRefinements, fineCellAncestralNodes);
 
@@ -463,20 +463,34 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
     // want to figure out a set of physical cell nodes that corresponds to this combination
   shards::CellTopology coarseTopo = coarseBasis->domainTopology();
   shards::CellTopology fineTopo = fineBasis->domainTopology();
+  shards::CellTopology ancestralTopo = *volumeRefinements[0].first->parentTopology();
+
+  // figure out fineSideIndex
+  unsigned fineSideIndex = fineAncestralSideIndex;
+  for (int refIndex=0; refIndex<volumeRefinements.size(); refIndex++) {
+    RefinementPattern* refPattern = volumeRefinements[refIndex].first;
+    unsigned childIndex = volumeRefinements[refIndex].second;
+    vector< pair<unsigned, unsigned> > childrenForSide = refPattern->childrenForSides()[fineSideIndex];
+    for (vector< pair<unsigned, unsigned> >::iterator entryIt=childrenForSide.begin(); entryIt != childrenForSide.end(); entryIt++) {
+      if (entryIt->first == childIndex) {
+        fineSideIndex = entryIt->second;
+      }
+    }
+  }
   
   shards::CellTopology fineSideTopo = fineTopo.getBaseCellTopologyData(sideDim, fineSideIndex);
   shards::CellTopology coarseSideTopo = coarseTopo.getBaseCellTopologyData(sideDim, coarseSideIndex);
-
+  
   int oneCell = 1;
   fineCellAncestralNodes.resize(oneCell, fineCellAncestralNodes.dimension(0), fineCellAncestralNodes.dimension(1));
   fineCellNodes.resize(oneCell, fineCellNodes.dimension(0), fineCellNodes.dimension(1));
   coarseCellNodes.resize(oneCell, coarseCellNodes.dimension(0), coarseCellNodes.dimension(1));
   
-  unsigned permutation = vertexPermutation(fineTopo, fineSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
+  unsigned permutation = vertexPermutation(ancestralTopo, fineAncestralSideIndex, fineCellAncestralNodes, coarseTopo, coarseSideIndex, coarseCellNodes);
   
-  cout << "WARNING: meta-test code enabled (calls the wrong constrainedWeights to confirm that the rest of the code executes safely).\n";
-  //   SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineSideIndex, sideRefinements, coarseBasis, coarseSideIndex, permutation);
-  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineSideIndex, coarseBasis, coarseSideIndex, permutation);
+  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, volumeRefinements, coarseBasis, coarseSideIndex, permutation);
+//  cout << "WARNING: meta-test code enabled (calls the wrong constrainedWeights to confirm that the rest of the code executes safely).\n";
+//  SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineAncestralSideIndex, coarseBasis, coarseSideIndex, permutation);
   
   int cubDegree = 5;
   FieldContainer<double> sidePointsFine = cubaturePoints(fineSideTopo, cubDegree, 0);
