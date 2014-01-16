@@ -1881,7 +1881,7 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
     
     _elements[cellID]->setRefinementPattern(refPattern);
     addChildren(_elements[cellID],children,childrenForSides);
-    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
        // do projection
       int numChildren = _elements[cellID]->numChildren();
@@ -1906,7 +1906,7 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
   }
   rebuildLookups();
   // now discard any old coefficients
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
@@ -1995,7 +1995,7 @@ void Mesh::hUnrefine(const set<int> &cellIDs) {
   rebuildLookups();
 
   // now discard any old coefficients
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }
@@ -2483,7 +2483,7 @@ void Mesh::registerObserver(Teuchos::RCP<RefinementObserver> observer) {
 }
 
 void Mesh::registerSolution(Teuchos::RCP<Solution> solution) {
-  _registeredSolutions.push_back( solution );
+  _registeredSolutions.push_back( solution.get() );
 }
 
 void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
@@ -2498,9 +2498,9 @@ void Mesh::unregisterObserver(Teuchos::RCP<RefinementObserver> mesh) {
 }
 
 void Mesh::unregisterSolution(Teuchos::RCP<Solution> solution) {
-  for (vector< Teuchos::RCP<Solution> >::iterator solnIt = _registeredSolutions.begin();
+  for (vector< Solution* >::iterator solnIt = _registeredSolutions.begin();
        solnIt != _registeredSolutions.end(); solnIt++) {
-    if ( (*solnIt).get() == solution.get() ) {
+    if ( *solnIt == solution.get() ) {
       _registeredSolutions.erase(solnIt);
       return;
     }
@@ -2581,7 +2581,7 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
       }
     }
     
-    for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+    for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
          solutionIt != _registeredSolutions.end(); solutionIt++) {
       // do projection: for p-refinements, the "child" is the same cell
       vector<int> childIDs(1,cellID);
@@ -2601,7 +2601,7 @@ void Mesh::pRefine(const set<int> &cellIDsForPRefinements, int pToAdd) {
   }
   
   // now discard any old coefficients
-  for (vector< Teuchos::RCP<Solution> >::iterator solutionIt = _registeredSolutions.begin();
+  for (vector< Solution* >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++) {
     (*solutionIt)->discardInactiveCellCoefficients();
   }

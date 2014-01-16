@@ -130,7 +130,9 @@ class Mesh : public RefinementObserver {
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   vector< set<int> > _partitionedGlobalDofIndices;
 
-  vector< Teuchos::RCP<Solution> > _registeredSolutions; // solutions that should be modified upon refinement
+  // to avoid circular references, we do not store an RCP here
+  // assumption is, Solution already has an RCP to Mesh...
+  vector< Solution* > _registeredSolutions; // solutions that should be modified upon refinement
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
