@@ -167,23 +167,30 @@ namespace Camellia {
         // now, examine each of the d_ssc-dimensional subcells of cell to look for one that matches all cellNodeIndices
         unsigned numSubcells = cellTopoData->subcell_count[d_ssc];
         unsigned matchingSubcellIndex = numSubcells;
-        for (unsigned sc=0; sc<numSubcells; sc++) {
-          bool matches = true;
-          if (numNodes_ssc != cellTopoData->subcell[d_ssc][sc].topology->node_count) {
-            matches = false;
-          } else {
-            for (int i=0; i < numNodes_ssc; i++) {
-              unsigned cellNodeIndex = cellTopoData->subcell[d_ssc][sc].node[i];
-              if (cellNodeIndices.find(cellNodeIndex) == cellNodeIndices.end()) {
-                matches = false;
-                break;
+        
+        if (d_ssc==0) { // vertex
+          // map the nodeIndex ssc in the subcell to the cellNodeIndex in the cell
+          matchingSubcellIndex = cellTopoData->subcell[subcellDim][subcellIndex].node[ssc];
+        } else {
+          for (unsigned sc=0; sc<numSubcells; sc++) {
+            bool matches = true;
+            if (numNodes_ssc != cellTopoData->subcell[d_ssc][sc].topology->node_count) {
+              matches = false;
+            } else {
+              for (int i=0; i < numNodes_ssc; i++) {
+                unsigned cellNodeIndex = cellTopoData->subcell[d_ssc][sc].node[i];
+                if (cellNodeIndices.find(cellNodeIndex) == cellNodeIndices.end()) {
+                  matches = false;
+                  break;
+                }
               }
             }
+            if (matches == true) {
+              matchingSubcellIndex = sc;
+              break;
+            }
           }
-          if (matches == true) {
-            matchingSubcellIndex = sc;
-            break;
-          }
+          TEUCHOS_TEST_FOR_EXCEPTION(matchingSubcellIndex >= numSubcells, std::invalid_argument, "matching subcell not found");
         }
         std::set<int> dofOrdinals_ssc = this->dofOrdinalsForSubcell(d_ssc,matchingSubcellIndex);
         dofOrdinals.insert(dofOrdinals_ssc.begin(), dofOrdinals_ssc.end());
