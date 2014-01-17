@@ -35,29 +35,9 @@
 #include "Intrepid_CellTools.hpp"
 #include "CamelliaCellTools.h"
 
-using namespace Intrepid;
+//#include "CamelliaDebugUtility.h" // includes print() methods.
 
-void print(string name, vector<int> data) {
-  cout << name << ": ";
-  for (int i=0; i<data.size(); i++) {
-    cout << data[i] << " ";
-  }
-  cout << endl;
-}
-void print(string name, vector<unsigned> data) {
-  cout << name << ": ";
-  for (int i=0; i<data.size(); i++) {
-    cout << data[i] << " ";
-  }
-  cout << endl;
-}
-void print(string name, set<unsigned> data) {
-  cout << name << ": ";
-  for (set<unsigned>::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++) {
-    cout << *dataIt << " ";
-  }
-  cout << endl;
-}
+using namespace Intrepid;
 
 RefinementPattern::RefinementPattern(Teuchos::RCP< shards::CellTopology > cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns) {
   _cellTopoPtr = cellTopoPtr;
