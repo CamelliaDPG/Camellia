@@ -18,21 +18,7 @@
 
 #include "CamelliaCellTools.h"
 
-FieldContainer<double> mapFineCubaturePointsToCoarseCell(shards::CellTopology &fineCellTopo, int cubatureDegree, shards::CellTopology &coarseCellTopo,
-                                                         unsigned nodePermutation, RefinementBranch &refinements) {
-  BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(fineCellTopo, cubatureDegree, false) );
-  FieldContainer<double> coarseCellNodes(coarseCellTopo.getNodeCount(),coarseCellTopo.getDimension());
-  CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo, nodePermutation);
-  
-  FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
-  fineCellNodesInCoarseCell.resize(1,fineCellNodesInCoarseCell.dimension(0),fineCellNodesInCoarseCell.dimension(1));
-  
-  fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<int>(), false);
-  FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
-  fineCubPoints.resize(fineCubPoints.dimension(1), fineCubPoints.dimension(2));
-  
-  return fineCubPoints;
-}
+#include "CamelliaDebugUtility.h" // includes print() methods
 
 void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1) {
   // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
@@ -371,6 +357,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   weights.fineOrdinals = finerBasis->dofOrdinalsForSubcell(sideDimension, fineSideIndex, minSubcellDimension);
   weights.coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(sideDimension, coarserBasisSideIndex, minSubcellDimension);
   
+//  print("fineOrdinals", weights.fineOrdinals);
+  
   int cubDegree = finerBasis->getDegree() * 2; // on LHS, will integrate finerBasis against itself
   unsigned oneCell = 1;
   
@@ -434,6 +422,9 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(Bas
   filterFCValues(fineBasisValuesFiltered, *(finerBasisValues.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(coarserBasisValuesFiltered, *(coarserBasisValues.get()), weights.coarseOrdinals, coarserBasis->getCardinality());
+  
+//  cout << "fineBasisValues:\n" << *finerBasisValues;
+//  cout << "fineBasisValuesFiltered:\n" << fineBasisValuesFiltered;
   
   FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());

@@ -15,6 +15,25 @@
 
 #include "SerialDenseWrapper.h"
 
+void BasisReconciliationTests::addDummyCellDimensionToFC(FieldContainer<double> &fc) {
+  Teuchos::Array<int> dim;
+  int oneCell = 1;
+  fc.dimensions(dim);
+  dim.insert(dim.begin(), oneCell);
+  fc.resize(dim);
+}
+
+void BasisReconciliationTests::stripDummyCellDimensionFromFC(FieldContainer<double> &fc) {
+  Teuchos::Array<int> dim;
+  int oneCell = 1;
+  fc.dimensions(dim);
+  if (dim[0] != oneCell) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "'dummy' cell dimension isn't unit-sized!");
+  }
+  dim.remove(0);
+  fc.resize(dim);
+}
+
 void BasisReconciliationTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
   if (testHSide()) {
@@ -308,13 +327,18 @@ bool BasisReconciliationTests::testHSide() {
   test.volumeRefinements = demoRefinementsOnSide(hex, WEST, 3);
   sideTests.push_back(test);
   
+  int testIndex = 0;
   for (vector< hSideTest >::iterator testIt = sideTests.begin(); testIt != sideTests.end(); testIt++) {
     test = *testIt;
     if (! hConstraintSideBasisSubTest(test.fineBasis, test.fineSideIndex, test.fineCellNodes,
                                       test.volumeRefinements,
                                       test.coarseBasis, test.coarseSideIndex, test.coarseCellNodes) ) {
       success = false;
+      cout << "testHSide: failed subtest " << testIndex << endl;
+    } else {
+//      cout << "testHSide: passed subtest " << testIndex << endl;
     }
+    testIndex++;
   }
   
   return success;
@@ -520,8 +544,11 @@ bool BasisReconciliationTests::hConstraintSideBasisSubTest(BasisPtr fineBasis, u
     return success;
   }
   
-  FieldContainer<double> fineBasisValues = basisValuesAtPoints(fineBasis, finePoints);
-  FieldContainer<double> coarseBasisValues = basisValuesAtPoints(coarseBasis, coarsePoints);
+  bool useVolumeCoordinates = true;
+  FieldContainer<double> fineBasisValues = *fineCache->getSideBasisCache(fineSideIndex)->getTransformedValues(fineBasis, OP_VALUE, useVolumeCoordinates);
+  FieldContainer<double> coarseBasisValues = *coarseCache->getSideBasisCache(coarseSideIndex)->getTransformedValues(coarseBasis, OP_VALUE, useVolumeCoordinates); // basisValuesAtPoints(coarseBasis, coarsePoints);
+  stripDummyCellDimensionFromFC(fineBasisValues);
+  stripDummyCellDimensionFromFC(coarseBasisValues);
   
   FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
   interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);

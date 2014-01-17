@@ -48,6 +48,9 @@ private:
   unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
                              shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes);
   
+  void addDummyCellDimensionToFC(FieldContainer<double> &fc);
+  void stripDummyCellDimensionFromFC(FieldContainer<double> &fc);
+  
 };
 
 
