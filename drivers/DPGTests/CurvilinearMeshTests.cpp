@@ -425,8 +425,7 @@ bool CurvilinearMeshTests::testEdgeLength() {
     
     // the length of the sloped edge is 2 sqrt (2)
     // and the other edges have total length of 5:
-    double expectedPerimeter = 4 + 2
-    * sqrt(5);
+    double expectedPerimeter = 4 + 2 * sqrt(5);
     
     // since our map from straight edges is the identity,
     // the expected jacobian function everywhere, including along the side, is
