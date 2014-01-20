@@ -99,12 +99,6 @@ class Mesh : public RefinementObserver {
   vector< vector< ElementPtr > > _partitions;
   vector< vector<unsigned> > _verticesForCellID;
 
-  // the sorted list:
-  map< vector<double>, long > _vertexMap; // maps into indices in the vertices list
-
-  // the chronologically ordered list:
-  vector< FieldContainer<double> > _vertices;
-
   //set< pair<int,int> > _edges;
   map< pair<int,int>, vector< pair<int, int> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
                                                                   //values are (cellID, sideIndex)

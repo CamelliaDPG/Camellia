@@ -62,19 +62,10 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
            Teuchos::RCP< BilinearForm > bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
 : _dofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) {
+
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices,elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
   
-  int numVertices = vertices.size();
-  _vertices.clear();
-  int spaceDim = 2;
-  FieldContainer<double> vertexFC(spaceDim);
-  for (int i=0; i<numVertices; i++) {
-    for (int d=0; d<spaceDim; d++) {
-      vertexFC[d] = vertices[i][d];
-    }
-    _vertices.push_back(vertexFC);
-  }
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
   _enforceMBFluxContinuity = false;  
@@ -85,21 +76,11 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 #else
   _numPartitions = 1;
 #endif
-
-  vector<double> vertex(spaceDim);
-  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
-    for (int j=0; j<spaceDim; j++) {
-      vertex[j] = _vertices[vertexIndex](j);
-    }
-    _vertexMap[vertex] = vertexIndex;
-  }
   
   // DEBUGGING: check how we did:
+  int numVertices = vertices.size();
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++ ) {
-    vector<double> vertex(spaceDim);
-    for (int d=0; d<spaceDim; d++) {
-      vertex[d] = _vertices[vertexIndex](d);
-    }
+    vector<double> vertex = _meshTopology->getVertex(vertexIndex);
 
     unsigned assignedVertexIndex;
     bool vertexFound = _meshTopology->getVertexIndex(vertex, assignedVertexIndex);
@@ -1580,48 +1561,16 @@ ElementTypeFactory & Mesh::getElementTypeFactory() {
 }
 
 long Mesh::getVertexIndex(double x, double y, double tol) {
-  int spaceDim = 2;
-  vector<double> vertexForLowerBound;
-  vertexForLowerBound.push_back(x-tol);
-  vertexForLowerBound.push_back(y-tol);
+  vector<double> vertex;
+  vertex.push_back(x);
+  vertex.push_back(y);
   
-  map< vector<double>, long >::iterator lowerBoundIt = _vertexMap.lower_bound(vertexForLowerBound);
-  double dist = 0;
-  long bestMatchIndex = -1;
-  double bestMatchDistance = tol;
-  double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
-                    // all the vertices that are near (x,y) in x...
-  while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol)) {
-    double xDiff = lowerBoundIt->first[0] - x;
-    double yDiff = lowerBoundIt->first[1] - y;
-    dist = sqrt( xDiff * xDiff + yDiff * yDiff );
-    if (dist < bestMatchDistance) {
-      bestMatchDistance = dist;
-      bestMatchIndex = lowerBoundIt->second;
-    }
-    xDist = abs(xDiff);
-    lowerBoundIt++;
+  unsigned vertexIndex;
+  if (! _meshTopology->getVertexIndex(vertex, vertexIndex) ) {
+    return -1;
+  } else {
+    return vertexIndex;
   }
-  // if we get here and bestMatchIndex == -1, then we should add
-  if (bestMatchIndex == -1) {
-    FieldContainer<double> vertexFC(spaceDim);
-    vector<double> vertex;
-    vertex.push_back(x);
-    vertex.push_back(y);
-    vertexFC[0] = x;
-    vertexFC[1] = y;
-    bestMatchIndex = _vertices.size();
-    _vertices.push_back(vertexFC);
-    
-    if (_vertexMap.find(vertex) != _vertexMap.end() ) {
-      cout << "Mesh error: attempting to add existing vertex.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
-    }
-    _vertexMap[vertex] = bestMatchIndex;
-    
-//    cout << "Added vertex " << bestMatchIndex << " (" << x << "," << y << ")\n";
-  }
-  return bestMatchIndex;
 }
 
 map<unsigned, unsigned> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices) {
@@ -1767,21 +1716,23 @@ void Mesh::hRefine(const set<int> &cellIDs, Teuchos::RCP<RefinementPattern> refP
     }
     
     int spaceDim = elemType->cellTopoPtr->getDimension();
-    int numSides = elemType->cellTopoPtr->getSideCount();
+    int vertexCount = elemType->cellTopoPtr->getVertexCount();
     
-    FieldContainer<double> cellNodes(numSides,spaceDim);
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    FieldContainer<double> cellVertices(vertexCount,spaceDim);
+    vector<unsigned> vertexIndices = _meshTopology->getCell(cellID)->vertices();
+    for (int vertex=0; vertex<vertexCount; vertex++) {
+      unsigned vertexIndex = vertexIndices[vertex];
       for (int i=0; i<spaceDim; i++) {
-        cellNodes(sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
+        cellVertices(vertex,i) = _meshTopology->getVertex(vertexIndex)[i];
       }
     }
     
-    FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
+    FieldContainer<double> vertices = refPattern->verticesForRefinement(cellVertices);
     if (_transformationFunction.get()) {
       bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellID);
     }
     
-    map<unsigned, unsigned> localToGlobalVertexIndex = getGlobalVertexIDs(vertices); // key: index in vertices; value: index in _vertices
+    map<unsigned, unsigned> localToGlobalVertexIndex = getGlobalVertexIDs(vertices); // key: index in vertices; value: index in _meshTopology
     
     // get the children, as vectors of vertex indices:
     vector< vector<unsigned> > children = refPattern->children(localToGlobalVertexIndex);
@@ -2342,14 +2293,17 @@ FieldContainer<double> & Mesh::physicalCellNodes( Teuchos::RCP< ElementType > el
 
 FieldContainer<double> Mesh::physicalCellNodesForCell( int cellID ) {
   ElementPtr elem = _elements[cellID];
-  int numSides = elem->numSides();
+  int vertexCount = elem->elementType()->cellTopoPtr->getVertexCount();
   int spaceDim = elem->elementType()->cellTopoPtr->getDimension();
   int numCells = 1;
-  FieldContainer<double> physicalCellNodes(numCells,numSides,spaceDim);
+  FieldContainer<double> physicalCellNodes(numCells,vertexCount,spaceDim);
   
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+  FieldContainer<double> cellVertices(vertexCount,spaceDim);
+  vector<unsigned> vertexIndices = _meshTopology->getCell(cellID)->vertices();
+  for (int vertex=0; vertex<vertexCount; vertex++) {
+    unsigned vertexIndex = vertexIndices[vertex];
     for (int i=0; i<spaceDim; i++) {
-      physicalCellNodes(0,sideIndex,i) = _vertices[_verticesForCellID[cellID][sideIndex]](i);
+      physicalCellNodes(0,vertex,i) = _meshTopology->getVertex(vertexIndex)[i];
     }
   }
   return physicalCellNodes;
@@ -2370,12 +2324,12 @@ void Mesh::printLocalToGlobalMap() {
 }
 
 void Mesh::printVertices() {
-  int vertexIndex = 0;
   cout << "Vertices:\n";
-  for (vector< FieldContainer<double> >::iterator vertexFCIt = _vertices.begin();
-       vertexFCIt != _vertices.end(); vertexFCIt++) {
-    cout << vertexIndex << ": (" << (*vertexFCIt)[0] << ", " << (*vertexFCIt)[1] << ")\n";
-    vertexIndex++;
+  unsigned vertexDim = 0;
+  unsigned vertexCount = _meshTopology->getEntityCount(vertexDim);
+  for (unsigned vertexIndex=0; vertexIndex<vertexCount; vertexIndex++) {
+    vector<double> vertex = _meshTopology->getVertex(vertexIndex);
+    cout << vertexIndex << ": (" << vertex[0] << ", " << vertex[1] << ")\n";
   }
 }
 
@@ -2576,19 +2530,22 @@ int Mesh::rowSizeUpperBound() {
 vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(int cellID, bool neglectCurves) {
   vector< ParametricCurvePtr > edges;
   ElementPtr cell = getElement(cellID);
-  int numSides = cell->elementType()->cellTopoPtr->getSideCount();
+  int numNodes = cell->elementType()->cellTopoPtr->getVertexCount();
   int spaceDim = cell->elementType()->cellTopoPtr->getDimension();
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
   vector<unsigned> vertices = _verticesForCellID[cellID];
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    int v0 = vertices[sideIndex];
-    int v1 = vertices[(sideIndex+1)%numSides];
-    pair<int, int> edge = make_pair(v0, v1);
-    pair<int, int> reverse_edge = make_pair(v1, v0);
+  for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++) {
+    int v0_index = vertices[nodeIndex];
+    int v1_index = vertices[(nodeIndex+1)%numNodes];
+    vector<double> v0 = _meshTopology->getVertex(v0_index);
+    vector<double> v1 = _meshTopology->getVertex(v1_index);
+    
+    pair<int, int> edge = make_pair(v0_index, v1_index);
+    pair<int, int> reverse_edge = make_pair(v1_index, v0_index);
     ParametricCurvePtr edgeFxn;
     
-    double x0 = _vertices[v0](0), y0 = _vertices[v0](1);
-    double x1 = _vertices[v1](0), y1 = _vertices[v1](1);
+    double x0 = v0[0], y0 = v0[1];
+    double x1 = v1[0], y1 = v1[1];
     
     ParametricCurvePtr straightEdgeFxn = ParametricCurve::line(x0, y0, x1, y1);
     
