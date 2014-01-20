@@ -387,6 +387,10 @@ public:
   int dim();
   
   bool isZero();
+  
+  virtual ~VectorizedFunction() {
+//    cout << "VectorizedFunction destructor.\n";
+  }
 };
 
 //ConstantScalarFunctionPtr operator*(ConstantScalarFunctionPtr f1, ConstantScalarFunctionPtr f2);
