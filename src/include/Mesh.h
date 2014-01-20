@@ -65,6 +65,8 @@
 
 #include "MeshGeometry.h"
 
+#include "MeshTopology.h"
+
 class Mesh;
 typedef Teuchos::RCP<Mesh> MeshPtr;
 
@@ -73,6 +75,8 @@ class MeshTransformationFunction;
 class MeshPartitionPolicy;
 
 class Mesh : public RefinementObserver {
+  MeshTopologyPtr _meshTopology;
+  
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)
   bool _usePatchBasis; // use MultiBasis if this is false.
@@ -137,6 +141,7 @@ class Mesh : public RefinementObserver {
 
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
 
+  // the following is only supported in 2D right now:
   map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
 
@@ -161,6 +166,8 @@ class Mesh : public RefinementObserver {
   void setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr, int neighborSide);
 
   long getVertexIndex(double x, double y, double tol=1e-14);
+  
+  void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
 
   // simple utility functions:
   static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);

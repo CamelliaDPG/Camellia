@@ -368,6 +368,11 @@ void Boundary::bcsToImpose( map<  int, double > &globalDofIndicesAndValues, BC &
                   if (abs(basisValues(i,ptIndex)-1.0) < tol ) {
                     basisOrdinalForPoint = i;
                   } else if (abs(basisValues(i,ptIndex) > tol) ) {
+                    cout << "basis value at node " << ptIndex << " is neither 1 nor 0.  Values:" << endl;
+                    cout << basisValues;
+                    cout << "Reference points:\n" << refPoints;
+                    cout << "Physical cell nodes:\n" << physicalCellNodes;
+                    
                     TEUCHOS_TEST_FOR_EXCEPTION(true,
                                        std::invalid_argument,
                                        "basis value at node neither 1.0 nor 0.0"); 

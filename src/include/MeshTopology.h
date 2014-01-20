@@ -79,6 +79,11 @@ public:
 
 typedef Teuchos::RCP<Cell> CellPtr;
 
+class MeshTransformationFunction;
+class Mesh;
+
+typedef Teuchos::RCP<Mesh> MeshPtr;
+
 class MeshTopology {
   unsigned _spaceDim; // dimension of the mesh
   
@@ -100,13 +105,19 @@ class MeshTopology {
   
   vector< CellPtr > _cells;
   set< unsigned > _activeCells;
+
+  // these guys presently only support 2D:
+  set< int > _cellIDsWithCurves;
+  map< pair<unsigned, unsigned>, ParametricCurvePtr > _edgeToCurveMap;
+  Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
   
   map< unsigned, shards::CellTopology > _knownTopologies; // key -> topo.  Might want to move this to a CellTopoFactory, but it is fairly simple
-
+  
   set<unsigned> activeDescendants(unsigned d, unsigned entityIndex);
   set<unsigned> activeDescendantsNotInSet(unsigned d, unsigned entityIndex, const set<unsigned> &excludedSet);
   unsigned eldestActiveAncestor(unsigned d, unsigned entityIndex);
   unsigned addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices);
+  void addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve);
   unsigned addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
   void deactivateCell(CellPtr cell);
   set<unsigned> descendants(unsigned d, unsigned entityIndex);
@@ -136,17 +147,27 @@ public:
   unsigned getConstrainingEntityIndex(unsigned d, unsigned entityIndex);
   unsigned getEntityCount(unsigned d);
   unsigned getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal=0);
+  const vector<unsigned> &getEntityVertexIndices(unsigned d, unsigned entityIndex);
   unsigned getFaceEdgeIndex(unsigned faceIndex, unsigned edgeOrdinalInFace);
   unsigned getSpaceDim();
   unsigned getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim);
   unsigned getSubEntityIndex(unsigned d, unsigned entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol=1e-14);
+  const vector<double>& getVertex(unsigned vertexIndex);
   FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex);
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();
   
+  // 2D only:
+  void setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh);
+  
   void printEntityVertices(unsigned d, unsigned entityIndex);
+  
+  // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()
+  // (will be transitioning from having MeshTransformationFunction talk to Mesh to having it talk to MeshTopology)
+  Teuchos::RCP<MeshTransformationFunction> transformationFunction();
+  
 };
 
 typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;

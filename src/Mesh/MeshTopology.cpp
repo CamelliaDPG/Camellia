@@ -8,6 +8,8 @@
 
 #include "MeshTopology.h"
 
+#include "MeshTransformationFunction.h"
+
 #include "CamelliaCellTools.h"
 
 void MeshTopology::init(unsigned spaceDim) {
@@ -35,6 +37,10 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry) {
 
   init(spaceDim);
   _vertices = meshGeometry->vertices();
+  
+  for (int vertexIndex=0; vertexIndex<_vertices.size(); vertexIndex++) {
+    _vertexMap[_vertices[vertexIndex]] = vertexIndex;
+  }
   
   TEUCHOS_TEST_FOR_EXCEPTION(meshGeometry->cellTopos().size() != meshGeometry->elementVertices().size(), std::invalid_argument,
                              "length of cellTopos != length of elementVertices");
@@ -136,6 +142,61 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   _cells.push_back(cell);
   _activeCells.insert(cellIndex);
   return cellIndex;
+}
+
+void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve) {
+  // note: does NOT update the MeshTransformationFunction.  That's caller's responsibility,
+  // because we don't know whether there are more curves coming for the affected elements.
+  
+  unsigned edgeDim = 1;
+  set<unsigned> edgeNodes;
+  edgeNodes.insert(edge.first);
+  edgeNodes.insert(edge.second);
+  
+  if (_knownEntities[edgeDim].find(edgeNodes) == _knownEntities[edgeDim].end() ) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
+  }
+  unsigned edgeIndex = _knownEntities[edgeDim][edgeNodes];
+  if (getChildEntities(edgeDim, edgeIndex).size() > 0) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setting curves along broken edges not supported.  Should set for each piece separately.");
+  }
+  
+  // check that the curve agrees with the vertices in the mesh:
+  vector<double> v0 = getVertex(edge.first);
+  vector<double> v1 = getVertex(edge.second);
+  
+  int spaceDim = v0.size();
+  FieldContainer<double> curve0(spaceDim);
+  FieldContainer<double> curve1(spaceDim);
+  curve->value(0, curve0(0), curve0(1));
+  curve->value(1, curve1(0), curve1(1));
+  double maxDiff = 0;
+  double tol = 1e-14;
+  for (int d=0; d<spaceDim; d++) {
+    maxDiff = max(maxDiff, abs(curve0(d)-v0[d]));
+    maxDiff = max(maxDiff, abs(curve1(d)-v1[d]));
+  }
+  if (maxDiff > tol) {
+    cout << "Error: curve's endpoints do not match edge vertices (maxDiff in coordinates " << maxDiff << ")" << endl;
+    cout << "curve0:\n" << curve0;
+    cout << "v0: (" << v0[0] << ", " << v0[1] << ")\n";
+    cout << "curve1:\n" << curve1;
+    cout << "v1: (" << v1[0] << ", " << v1[1] << ")\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Curve does not match vertices");
+  }
+  
+  _edgeToCurveMap[edge] = curve;
+  
+  set< pair<unsigned, unsigned> > cellIDsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
+//  (cellIndex, entityIndexInCell)
+  unsigned cellID;
+  if (cellIDsForEdge.size() != 1) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "right now, only edges belonging to exactly one cell are supported by curvilinear geometry...");
+  }
+  for (set< pair<unsigned, unsigned> >::iterator edgeCellIt = cellIDsForEdge.begin(); edgeCellIt != cellIDsForEdge.end(); edgeCellIt++) {
+    cellID = edgeCellIt->first;
+  }
+  _cellIDsWithCurves.insert(cellID);
 }
 
 unsigned MeshTopology::addEntity(const shards::CellTopology &entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
@@ -343,6 +404,10 @@ unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigne
   return _parentEntities[d][entityIndex][parentOrdinal].first;
 }
 
+const vector<unsigned> & MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
+  return _canonicalEntityOrdering[d][entityIndex];
+}
+
 unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdinalInFace) {
   return getSubEntityIndex(2, faceIndex, 1, edgeOrdinalInFace);
 }
@@ -372,6 +437,10 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found");
   }
   return _knownEntities[subEntityDim][subEntityNodes];
+}
+
+const vector<double>& MeshTopology::getVertex(unsigned vertexIndex) {
+  return _vertices[vertexIndex];
 }
 
 bool MeshTopology::getVertexIndex(const vector<double> &vertex, unsigned &vertexIndex, double tol) {
@@ -543,6 +612,10 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   }
   
   FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
+  if (_transformationFunction.get()) {
+    bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellIndex);
+//    cout << "transformed vertices:\n" << vertices;
+  }
   map<unsigned, unsigned> localToGlobalVertexIndex = getVertexIndicesMap(vertices); // key: index in vertices; value: index in _vertices
   
   // get the children, as vectors of vertex indices:
@@ -558,6 +631,45 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   addChildren(cell, childTopos, childVertices);
   deactivateCell(cell);
   
+  if (_edgeToCurveMap.size() > 0) {
+    vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
+    // handle any broken curved edges
+    set<int> childrenWithCurvedEdges;
+    vector<unsigned> parentVertices = cell->vertices();
+    int numVertices = parentVertices.size();
+    for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++) {
+      int numChildrenForSide = childrenForSides[edgeIndex].size();
+      if (numChildrenForSide==1) continue; // unbroken edge: no treatment necessary
+      int v0 = parentVertices[edgeIndex];
+      int v1 = parentVertices[ (edgeIndex+1) % numVertices];
+      pair<int,int> edge = make_pair(v0, v1);
+      if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end()) {
+        // then define the new curves
+        double child_t0 = 0.0;
+        double increment = 1.0 / numChildrenForSide;
+        for (int i=0; i<numChildrenForSide; i++) {
+          int childIndex = childrenForSides[edgeIndex][i].first;
+          int childSideIndex = childrenForSides[edgeIndex][i].second;
+          int childCellIndex = cell->getChildIndices()[childIndex];
+          CellPtr child = getCell(childCellIndex);
+          // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
+          ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
+          ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
+          vector<unsigned> childVertices = child->vertices();
+          pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)% childVertices.size()] );
+          addEdgeCurve(childEdge, childCurve);
+          childrenWithCurvedEdges.insert(childCellIndex);
+          child_t0 += increment;
+        }
+      }
+    }
+    // TODO: once the mesh relies fully on MeshTopology for curvilinear geometry, enable this code (not safe now, because updateCells() talks to mesh, and we get called here
+    //                                                                                              before mesh has completed its updates).
+    //  if (_transformationFunction.get()) {
+    //    _transformationFunction->updateCells(childrenWithCurvedEdges);
+    //  }
+  }
+
   set<unsigned> cellsAffected;
   cellsAffected.insert(cellIndex);
   // first update for the deactivated cell
@@ -600,7 +712,6 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
       
 //      cout << "Refined nodes:\n" << refinedNodes;
       
-      vector<unsigned> parentIndices;
       unsigned parentIndex = cell->entityIndex(d, subcord);
       // if we ever allow multiple parentage, then we'll need to record things differently in both _childEntities and _parentEntities
       // (and the if statement just below will need to change in a corresponding way, indexed by the particular refPattern in question maybe
@@ -623,6 +734,11 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           CellTools<double>::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, *cellTopo);
 //          cout << "physicalNodes:\n" << physicalNodes;
           
+          if (_transformationFunction.get()) {
+            physicalNodes.resize(nodeCount,_spaceDim);
+            bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(physicalNodes, nodesOnRefCell, cell->cellIndex());
+//            cout << "physicalNodes after transformation:\n" << physicalNodes;
+          }
 //          cout << "cellNodes:\n" << cellNodes;
           
           // add vertices as necessary and get their indices
@@ -641,6 +757,17 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
       }
     }
   }
+}
+
+void MeshTopology::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh) {
+  _edgeToCurveMap.clear();
+  map< pair<int, int>, ParametricCurvePtr >::const_iterator edgeIt;
+  _cellIDsWithCurves.clear();
+  
+  for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++) {
+    addEdgeCurve(edgeIt->first, edgeIt->second);
+  }
+  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, _cellIDsWithCurves));
 }
 
 void MeshTopology::updateConstraintsForCells(const set<unsigned> &cellIndices) {
@@ -698,4 +825,8 @@ void MeshTopology::updateConstraintsForCells(const set<unsigned> &cellIndices) {
       }
     }
   }
+}
+
+Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {
+  return _transformationFunction;
 }
