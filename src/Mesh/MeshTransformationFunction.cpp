@@ -243,11 +243,13 @@ public:
 
 typedef Teuchos::RCP<CellTransformationFunction> CellTransformationFunctionPtr;
 
+// protected method; used for dx(), dy(), dz():
 MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< int, FunctionPtr> cellTransforms, EOperatorExtended op) : Function(1) {
   _mesh = mesh;
   _cellTransforms = cellTransforms;
   _op = op;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
+
 }
 
 MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<int> cellIDsToTransform) : Function(1) { // vector-valued Function
@@ -391,3 +393,27 @@ FunctionPtr MeshTransformationFunction::dz() {
   EOperatorExtended op = OP_DZ;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
+
+void MeshTransformationFunction::didHRefine(const set<int> &cellIDs) {
+  set<int> childrenWithCurvedEdges;
+  
+  MeshTopologyPtr topology = _mesh->getTopology();
+  
+  for (set<int>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    int parentCellID = *cellIDIt;
+    vector<unsigned> childCells = topology->getCell(parentCellID)->getChildIndices();
+    for (vector<unsigned>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++) {
+      unsigned childCellID = *childCellIt;
+      if (topology->cellHasCurvedEdges(childCellID)) {
+        childrenWithCurvedEdges.insert(childCellID);
+      }
+    }
+  }
+  updateCells(childrenWithCurvedEdges);
+}
+
+void MeshTransformationFunction::didPRefine(const set<int> &cellIDs) {
+  updateCells(cellIDs);
+}
+
+MeshTransformationFunction::~MeshTransformationFunction() {}

@@ -243,6 +243,26 @@ unsigned MeshTopology::cellCount() {
   return _cells.size();
 }
 
+bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
+  CellPtr cell = getCell(cellIndex);
+  unsigned edgeCount = cell->topology()->getEdgeCount();
+  unsigned edgeDim = 1;
+  for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++) {
+    unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+    unsigned v0 = _canonicalEntityOrdering[edgeDim][edgeIndex][0];
+    unsigned v1 = _canonicalEntityOrdering[edgeDim][edgeIndex][1];
+    pair<unsigned, unsigned> edge = make_pair(v0, v1);
+    pair<unsigned, unsigned> edgeReversed = make_pair(v1, v0);
+    if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end()) {
+      return true;
+    }
+    if (_edgeToCurveMap.find(edgeReversed) != _edgeToCurveMap.end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void MeshTopology::deactivateCell(CellPtr cell) {
   CellTopoPtr cellTopo = cell->topology();
   for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
@@ -563,6 +583,42 @@ unsigned MeshTopology::getConstrainingEntityIndex(unsigned int d, unsigned int e
   }
 }
 
+vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellIndex, bool neglectCurves) {
+  vector< ParametricCurvePtr > edges;
+  CellPtr cell = getCell(cellIndex);
+  int numNodes = cell->vertices().size();
+  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
+  vector<unsigned> vertices = cell->vertices();
+  for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++) {
+    int v0_index = vertices[nodeIndex];
+    int v1_index = vertices[(nodeIndex+1)%numNodes];
+    vector<double> v0 = getVertex(v0_index);
+    vector<double> v1 = getVertex(v1_index);
+    
+    pair<int, int> edge = make_pair(v0_index, v1_index);
+    pair<int, int> reverse_edge = make_pair(v1_index, v0_index);
+    ParametricCurvePtr edgeFxn;
+    
+    double x0 = v0[0], y0 = v0[1];
+    double x1 = v1[0], y1 = v1[1];
+    
+    ParametricCurvePtr straightEdgeFxn = ParametricCurve::line(x0, y0, x1, y1);
+    
+    if (neglectCurves) {
+      edgeFxn = straightEdgeFxn;
+    } if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() ) {
+      edgeFxn = _edgeToCurveMap[edge];
+    } else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() ) {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
+      // TODO: make ParametricCurves reversible (swap t=0 and t=1)
+    } else {
+      edgeFxn = straightEdgeFxn;
+    }
+    edges.push_back(edgeFxn);
+  }
+  return edges;
+}
+
 void MeshTopology::printVertex(unsigned int vertexIndex) {
   cout << "vertex " << vertexIndex << ": (";
   for (unsigned d=0; d<_spaceDim; d++) {
@@ -634,7 +690,7 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   if (_edgeToCurveMap.size() > 0) {
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
     // handle any broken curved edges
-    set<int> childrenWithCurvedEdges;
+//    set<int> childrenWithCurvedEdges;
     vector<unsigned> parentVertices = cell->vertices();
     int numVertices = parentVertices.size();
     for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++) {
@@ -656,18 +712,16 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
           ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
           ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
           vector<unsigned> childVertices = child->vertices();
-          pair<int, int> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)% childVertices.size()] );
+          pair<unsigned, unsigned> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)% childVertices.size()] );
           addEdgeCurve(childEdge, childCurve);
-          childrenWithCurvedEdges.insert(childCellIndex);
+//          childrenWithCurvedEdges.insert(childCellIndex);
           child_t0 += increment;
         }
       }
     }
-    // TODO: once the mesh relies fully on MeshTopology for curvilinear geometry, enable this code (not safe now, because updateCells() talks to mesh, and we get called here
-    //                                                                                              before mesh has completed its updates).
-    //  if (_transformationFunction.get()) {
-    //    _transformationFunction->updateCells(childrenWithCurvedEdges);
-    //  }
+//    if (_transformationFunction.get()) {
+//      _transformationFunction->updateCells(childrenWithCurvedEdges);
+//    }
   }
 
   set<unsigned> cellsAffected;

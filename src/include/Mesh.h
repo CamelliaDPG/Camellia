@@ -86,8 +86,6 @@ class Mesh : public RefinementObserver {
 
   int _activeCellOffset; // among active cells, an offset to allow the current partition to identify unique cell indices
 
-  set< int > _cellIDsWithCurves;
-
   DofOrderingFactory _dofOrderingFactory;
   ElementTypeFactory _elementTypeFactory;
   Teuchos::RCP< BilinearForm > _bilinearForm;
@@ -97,7 +95,6 @@ class Mesh : public RefinementObserver {
   vector< ElementPtr > _elements;
   vector< ElementPtr > _activeElements;
   vector< vector< ElementPtr > > _partitions;
-  vector< vector<unsigned> > _verticesForCellID;
 
   //set< pair<int,int> > _edges;
   map< pair<int,int>, vector< pair<int, int> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
@@ -135,10 +132,6 @@ class Mesh : public RefinementObserver {
 
   map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
 
-  // the following is only supported in 2D right now:
-  map< pair<int, int>, ParametricCurvePtr > _edgeToCurveMap;
-  Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
-
   map<unsigned, unsigned> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   void buildTypeLookups();
@@ -150,7 +143,6 @@ class Mesh : public RefinementObserver {
   int _numGlobalDofs;
   ElementPtr _nullPtr;
 
-  void addEdgeCurve(pair<int,int> edge, ParametricCurvePtr curve);
   ElementPtr addElement(const vector<unsigned> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<unsigned> > &children,
                    vector< vector< pair< unsigned, unsigned> > > &childrenForSide);
@@ -334,6 +326,8 @@ public:
   void setUsePatchBasis( bool value );
   bool usePatchBasis();
 
+  MeshTopologyPtr getTopology();
+  
   vector<unsigned> vertexIndicesForCell(int cellID);
   FieldContainer<double> vertexCoordinates(int vertexIndex);
 
@@ -341,6 +335,7 @@ public:
   void verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
   void verticesForSide(FieldContainer<double>& vertices, int cellID, int sideIndex);
 
+  void unregisterObserver(RefinementObserver* observer);
   void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
   void unregisterSolution(Teuchos::RCP<Solution> solution);
 

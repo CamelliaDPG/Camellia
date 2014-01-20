@@ -33,6 +33,11 @@ public:
   FunctionPtr dx();
   FunctionPtr dy();
   FunctionPtr dz();
+  
+  void didHRefine(const set<int> &parentCellIDs);
+  void didPRefine(const set<int> &cellIDs);
+
+  ~MeshTransformationFunction();
 };
 
 #endif
