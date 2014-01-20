@@ -26,12 +26,13 @@
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 #include "BilinearForm.h"
 #include "BasisCache.h"
 #include "ElementType.h"
 #include "BilinearFormUtility.h"
+#include "VarFactory.h"
 
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseSolver.h"
@@ -902,4 +903,56 @@ void BilinearForm::setUseExtendedPrecisionSolveForOptimalTestFunctions(bool valu
 
 void BilinearForm::setWarnAboutZeroRowsAndColumns(bool value) {
   _warnAboutZeroRowsAndColumns = value;
+}
+
+VarFactory BilinearForm::varFactory() {
+  // this is not meant to cover every possible subclass, but the known legacy subclasses.
+  // (just here to allow compatibility with subclasses in DPGTests, e.g.; new implementations should use BF)
+  VarFactory vf;
+  vector<int> trialIDs = this->trialIDs();
+  for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++) {
+    int trialID = trialIDs[trialIndex];
+    string name = this->trialName(trialID);
+    VarPtr trialVar;
+    if (isFluxOrTrace(trialID)) {
+      bool isFlux = this->functionSpaceForTrial(trialID) == IntrepidExtendedTypes::FUNCTION_SPACE_HVOL;
+      if (isFlux) {
+        trialVar = vf.fluxVar(name);
+      } else {
+        trialVar = vf.traceVar(name);
+      }
+    } else {
+      trialVar = vf.fieldVar(name);
+    }
+  }
+  
+  vector<int> testIDs = this->testIDs();
+  for (int testIndex=0; testIndex<testIDs.size(); testIndex++) {
+    int testID = testIDs[testIndex];
+    string name = this->testName(testID);
+    VarPtr testVar;
+    IntrepidExtendedTypes::EFunctionSpaceExtended fs = this->functionSpaceForTest(testID);
+    Space space;
+    switch (fs) {
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD:
+        space = HGRAD;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HCURL:
+        space = HCURL;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HDIV:
+        space = HDIV;
+        break;
+      case IntrepidExtendedTypes::FUNCTION_SPACE_HVOL:
+        space = L2;
+        break;
+        
+      default:
+        cout << "BilinearForm::varFactory(): unhandled function space.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BilinearForm::varFactory(): unhandled function space.");
+        break;
+    }
+    testVar = vf.testVar(name, space);
+  }
+  return vf;
 }

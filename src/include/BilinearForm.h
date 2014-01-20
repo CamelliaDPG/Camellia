@@ -40,6 +40,7 @@
 
 class BasisCache;
 class ElementType;
+class VarFactory;
 typedef Teuchos::RCP< BasisCache > BasisCachePtr;
 typedef Teuchos::RCP< ElementType > ElementTypePtr;
 
@@ -116,6 +117,8 @@ public:
   void setUseIterativeRefinementsWithSPDSolve(bool value);
   void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
   void setWarnAboutZeroRowsAndColumns(bool value);
+  
+  virtual VarFactory varFactory();
   
   virtual ~BilinearForm() {}
 protected:

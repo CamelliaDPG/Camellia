@@ -231,3 +231,7 @@ LinearTermPtr BF::testFunctional(SolutionPtr trialSolution, bool excludeBoundary
   }
   return functional;
 }
+
+VarFactory BF::varFactory() {
+  return _varFactory;
+}

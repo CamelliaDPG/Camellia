@@ -54,6 +54,8 @@ public:
 		       FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   
   LinearTermPtr testFunctional(SolutionPtr trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false);
+  
+  virtual VarFactory varFactory();
 };
 
 typedef Teuchos::RCP<BF> BFPtr;
