@@ -39,8 +39,8 @@ public:
   virtual unsigned globalDofCount() = 0;
   virtual unsigned localDofCount() = 0; // local to the MPI node
   
-  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactory dofOrderingFactory, MeshPartitionPolicy partitionPolicy);
-  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactory dofOrderingFactory, MeshPartitionPolicy partitionPolicy);
+  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
+  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
 };
 
 #endif /* defined(__Camellia_debug__GlobalDofAssignment__) */

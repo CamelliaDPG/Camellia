@@ -7,3 +7,9 @@
 //
 
 #include "GDAMinimumRule.h"
+
+GDAMinimumRule::GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy)
+: GlobalDofAssignment(meshTopology,varFactory,dofOrderingFactory,partitionPolicy)
+{
+  
+}

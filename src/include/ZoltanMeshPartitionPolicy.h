@@ -42,7 +42,7 @@ class ZoltanMeshPartitionPolicy : public MeshPartitionPolicy {
  public:  
   ZoltanMeshPartitionPolicy();
   ZoltanMeshPartitionPolicy(string partitionerName);
-  virtual void partitionMesh(Mesh *mesh, int numPartitions, FieldContainer<int> &partitionedActiveCells);  
+  virtual void partitionMesh(MeshTopology *meshTopology, int numPartitions, FieldContainer<int> &partitionedActiveCells);
 
 };
 

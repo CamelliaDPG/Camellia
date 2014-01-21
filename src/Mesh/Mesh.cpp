@@ -1000,15 +1000,6 @@ int Mesh::cellPolyOrder(int cellID) {
   return _dofOrderingFactory.trialPolyOrder(_elements[cellID]->elementType()->trialOrderPtr);
 }
 
-bool Mesh::colinear(double x0, double y0, double x1, double y1, double x2, double y2) {
-  double tol = 1e-14;
-  double d1 = distance(x0,y0,x1,y1);
-  double d2 = distance(x1,y1,x2,y2);
-  double d3 = distance(x2,y2,x0,y0);
-  
-  return (abs(d1 + d2 - d3) < tol) || (abs(d1 + d3 - d2) < tol) || (abs(d2 + d3 - d1) < tol);
-}
-
 void Mesh::determineDofPairings() {
   _dofPairingIndex.clear();
   vector<ElementPtr>::iterator elemIterator;
@@ -1130,10 +1121,6 @@ void Mesh::determineDofPairings() {
       }
     }
   }  
-}
-
-double Mesh::distance(double x0, double y0, double x1, double y1) {
-  return sqrt( (x1-x0)*(x1-x0) + (y1-y0)*(y1-y0));
 }
 
 vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints) {
@@ -1356,7 +1343,7 @@ void Mesh::determineActiveElements() {
   _partitions.clear();
   _partitionForCellID.clear();
   FieldContainer<int> partitionedMesh(_numPartitions,_activeElements.size());
-  _partitionPolicy->partitionMesh(this,_numPartitions,partitionedMesh);
+  _partitionPolicy->partitionMesh(_meshTopology.get(),_numPartitions,partitionedMesh);
   _activeCellOffset = 0;
   for (int i=0; i<_numPartitions; i++) {
     vector<ElementPtr> partition;

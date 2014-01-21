@@ -155,9 +155,6 @@ class Mesh : public RefinementObserver {
   
   void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
 
-  // simple utility functions:
-  static bool colinear(double x0, double y0, double x1, double y1, double x2, double y2);
-  static double distance(double x0, double y0, double x1, double y1);
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
 //  Mesh(const vector<FieldContainer<double> > &vertices, vector< vector<unsigned> > &elementVertices,

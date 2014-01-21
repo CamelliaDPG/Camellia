@@ -105,6 +105,7 @@ class MeshTopology {
   
   vector< CellPtr > _cells;
   set< unsigned > _activeCells;
+  set< unsigned > _rootCells; // cells without parents
 
   // these guys presently only support 2D:
   set< int > _cellIDsWithCurves;
@@ -159,6 +160,11 @@ public:
   void refineCell(unsigned cellIndex, RefinementPatternPtr refPattern);
   unsigned cellCount();
   unsigned activeCellCount();
+  
+  const set<unsigned> &getActiveCellIndices();
+  vector<double> getCellCentroid(unsigned cellIndex);
+  
+  const set<unsigned> &getRootCellIndices();
   
   // 2D only:
   vector< ParametricCurvePtr > parametricEdgesForCell(unsigned cellID, bool neglectCurves);

@@ -58,6 +58,10 @@ unsigned MeshTopology::activeCellCount() {
   return _activeCells.size();
 }
 
+const set<unsigned> & MeshTopology::getActiveCellIndices() {
+  return _activeCells;
+}
+
 set<unsigned> MeshTopology::activeDescendants(unsigned d, unsigned entityIndex) {
   set<unsigned> allDescendants = descendants(d,entityIndex);
   set<unsigned> filteredDescendants;
@@ -141,6 +145,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, cellEntityIndices) );
   _cells.push_back(cell);
   _activeCells.insert(cellIndex);
+  _rootCells.insert(cellIndex); // will remove if a parent relationship is established
   return cellIndex;
 }
 
@@ -235,6 +240,7 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
   for (int childIndex=0; childIndex<numChildren; childIndex++) {
     unsigned cellIndex = addCell(childTopos[childIndex], childVertices[childIndex]);
     children.push_back(_cells[cellIndex]);
+    _rootCells.erase(cellIndex);
   }
   parentCell->setChildren(children);
 }
@@ -261,6 +267,23 @@ bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
     }
   }
   return false;
+}
+
+vector<double> MeshTopology::getCellCentroid(unsigned cellIndex) {
+  // average of the cell vertices
+  vector<double> centroid(_spaceDim);
+  CellPtr cell = getCell(cellIndex);
+  unsigned vertexCount = cell->vertices().size();
+  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+    unsigned vertexIndex = cell->vertices()[vertexOrdinal];
+    for (unsigned d=0; d<_spaceDim; d++) {
+      centroid[d] += _vertices[vertexIndex][d];
+    }
+  }
+  for (unsigned d=0; d<_spaceDim; d++) {
+    centroid[d] /= vertexCount;
+  }
+  return centroid;
 }
 
 void MeshTopology::deactivateCell(CellPtr cell) {
@@ -811,6 +834,10 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
       }
     }
   }
+}
+
+const set<unsigned> &MeshTopology::getRootCellIndices() {
+  return _rootCells;
 }
 
 void MeshTopology::setEdgeToCurveMap(const map< pair<int, int>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh) {
