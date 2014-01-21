@@ -11,9 +11,7 @@
 #include "MeshTopology.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
-#ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
-#endif
 
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(){
   string partitionerName = "BLOCK";
@@ -29,13 +27,8 @@ ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName){
 }
 
 void ZoltanMeshPartitionPolicy::partitionMesh(MeshTopology *meshTopology, int numPartitions, FieldContainer<int> &partitionedActiveCells) {
-  
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif  
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
   
   TEUCHOS_TEST_FOR_EXCEPTION(numPartitions != partitionedActiveCells.dimension(0), std::invalid_argument,"numPartitions must match the first dimension of partitionedActiveCells");
   int maxPartitionSize = partitionedActiveCells.dimension(1);
@@ -239,12 +232,8 @@ int ZoltanMeshPartitionPolicy::getIndexOfGID(int myNode,FieldContainer<int> &par
 
 // get number of active elements
 int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
   
@@ -264,12 +253,9 @@ int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
 }
 
 void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int sizeLID,ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,int wgt_dim, float *obj_wgts, int *ierr){
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
@@ -294,12 +280,9 @@ void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int siz
 }
 
 int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr){
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
@@ -314,12 +297,9 @@ int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr){
 
 // get a single coordinate identifying an element
 void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr){  
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
@@ -342,12 +322,9 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
 
 // num elems in initial meshTopology
 int ZoltanMeshPartitionPolicy::get_num_coarse_elem(void *data, int *ierr){   
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedCells = *(myData->second);
@@ -368,12 +345,9 @@ int ZoltanMeshPartitionPolicy::get_num_coarse_elem(void *data, int *ierr){
 
 void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, int *in_order, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
   //  cout << "in get_coarse_elem_list" << endl;
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedCells = *(myData->second);  
@@ -419,12 +393,9 @@ void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_ent
 
 int ZoltanMeshPartitionPolicy::get_num_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr){
   //  cout << "in get_num_children" << endl;
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
@@ -441,12 +412,9 @@ int ZoltanMeshPartitionPolicy::get_num_children(void *data, int num_gid_entries,
 void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR parent_gid, ZOLTAN_ID_PTR parent_lid, ZOLTAN_ID_PTR child_gids, ZOLTAN_ID_PTR child_lids, int *assigned, int *num_vert, ZOLTAN_ID_PTR vertices, ZOLTAN_REF_TYPE *ref_type, ZOLTAN_ID_PTR in_vertex, ZOLTAN_ID_PTR out_vertex, int *ierr){
   //  cout << "in get_children" << endl;
   
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
@@ -485,12 +453,9 @@ void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, in
 
 void ZoltanMeshPartitionPolicy::get_child_weight(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int wgt_dim, float *obj_wgt, int *ierr){
   //  cout << "in get_child_weight" << endl;
-  int myNode = 0;
-  int numNodes = 1;
-#ifdef HAVE_MPI
-  myNode   = Teuchos::GlobalMPISession::getRank();
-  numNodes = Teuchos::GlobalMPISession::getNProc();
-#endif 
+  int myNode = Teuchos::GlobalMPISession::getRank();
+  int numNodes = Teuchos::GlobalMPISession::getNProc();
+  
   pair< MeshTopology *, FieldContainer<int> * > *myData = (pair< MeshTopology *, FieldContainer<int> * > *)data;
   MeshTopology *meshTopology = myData->first;
   FieldContainer<int> partitionedActiveCells = *(myData->second);
