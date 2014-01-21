@@ -153,4 +153,6 @@ public:
 //                                          bool conformingVertices = true);
 };
 
+typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
+
 #endif

@@ -17,24 +17,30 @@
 #include "MeshPartitionPolicy.h"
 #include "ElementType.h"
 
+class GlobalDofAssignment;
+typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
+
 class GlobalDofAssignment {
+protected:
   MeshTopologyPtr _meshTopology;
   VarFactory _varFactory;
-  DofOrderingFactory _dofOrderingFactory;
-  Teuchos::RCP< MeshPartitionPolicy > _partitionPolicy;
+  DofOrderingFactoryPtr _dofOrderingFactory;
+  MeshPartitionPolicyPtr _partitionPolicy;
 public:
-  GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactory dofOrderingFactory, MeshPartitionPolicy partitionPolicy);
+  GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
   
-  void didHRefine(set<int> &parentCellIDs);
-  void didPRefine(set<int> &cellIDs);
-  void didHUnrefine(set<int> &parentCellIDs);
-  void didPUnrefine(set<int> &cellIDs);
+  virtual void didHRefine(set<int> &parentCellIDs) = 0;
+  virtual void didPRefine(set<int> &cellIDs) = 0;
+  virtual void didHUnrefine(set<int> &parentCellIDs) = 0;
+  virtual void didPUnrefine(set<int> &cellIDs) = 0;
   
-  virtual ElementTypePtr elementType(unsigned cellID);
+  virtual ElementTypePtr elementType(unsigned cellID) = 0;
   
-  virtual unsigned globalDofCount();
-  virtual unsigned localDofCount(); // local to the MPI node
+  virtual unsigned globalDofCount() = 0;
+  virtual unsigned localDofCount() = 0; // local to the MPI node
   
+  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactory dofOrderingFactory, MeshPartitionPolicy partitionPolicy);
+  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactory dofOrderingFactory, MeshPartitionPolicy partitionPolicy);
 };
 
 #endif /* defined(__Camellia_debug__GlobalDofAssignment__) */
