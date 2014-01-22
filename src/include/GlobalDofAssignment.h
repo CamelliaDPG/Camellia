@@ -26,21 +26,34 @@ protected:
   VarFactory _varFactory;
   DofOrderingFactoryPtr _dofOrderingFactory;
   MeshPartitionPolicyPtr _partitionPolicy;
+  unsigned _initialH1OrderTrial;
+  unsigned _testOrderEnhancement;
+  
+  map<unsigned, unsigned> _cellH1Orders;
+  
+  unsigned _numPartitions;
 public:
-  GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
+  GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+                      MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
   virtual void didHRefine(set<int> &parentCellIDs) = 0;
-  virtual void didPRefine(set<int> &cellIDs) = 0;
+  virtual void didPRefine(set<int> &cellIDs, int deltaP) = 0;
   virtual void didHUnrefine(set<int> &parentCellIDs) = 0;
-  virtual void didPUnrefine(set<int> &cellIDs) = 0;
+  
+  virtual void didChangePartitionPolicy() = 0;
   
   virtual ElementTypePtr elementType(unsigned cellID) = 0;
   
   virtual unsigned globalDofCount() = 0;
   virtual unsigned localDofCount() = 0; // local to the MPI node
   
-  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
-  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
+  void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
+  
+  static GlobalDofAssignmentPtr maximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
+                                              MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
+  static GlobalDofAssignmentPtr minumumRule(MeshTopologyPtr meshTopology, VarFactory varFactory,
+                                            DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+                                            unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
 };
 
 #endif /* defined(__Camellia_debug__GlobalDofAssignment__) */

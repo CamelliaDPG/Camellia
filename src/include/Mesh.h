@@ -74,8 +74,12 @@ class Solution;
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
 
+#include "GDAMaximumRule2D.h"
+
 class Mesh : public RefinementObserver {
   MeshTopologyPtr _meshTopology;
+  
+  Teuchos::RCP<GDAMaximumRule2D> _maximumRule2D;
   
   int _pToAddToTest;
   bool _enforceMBFluxContinuity; // default to false (the historical value)

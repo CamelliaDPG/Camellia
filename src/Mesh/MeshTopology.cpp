@@ -442,6 +442,78 @@ unsigned MeshTopology::getEntityCount(unsigned int d) {
   return _entities[d].size();
 }
 
+vector< pair< unsigned, unsigned > > MeshTopology::getCellNeighbors(unsigned cellIndex, unsigned sideIndex) {
+  // return is (neighborCellIndex, neighborSideIndex)--note that in context of h-refinements, neighborSideIndex might not refer to exactly the same side...
+  vector< pair< unsigned, unsigned > > neighbors;
+  
+  CellPtr cell = getCell(cellIndex);
+  unsigned sideDim = _spaceDim - 1;
+  unsigned sideEntityIndex = cell->entityIndex(sideDim, sideIndex);
+  unsigned sideAncestor = eldestActiveAncestor(sideDim, sideEntityIndex);
+  set<unsigned> sideCousins = activeDescendants(sideDim, sideAncestor); // cousins: active descendants of the eldest active ancestor
+  for (set<unsigned>::iterator sideCousinIt = sideCousins.begin(); sideCousinIt != sideCousins.end(); sideCousinIt++) {
+    unsigned sideCousinEntityIndex = *sideCousinIt;
+    set< pair<unsigned, unsigned> > activeCells = _activeCellsForEntities[sideDim][sideCousinEntityIndex];
+    for (set< pair<unsigned, unsigned> >::iterator cellEntryIt = activeCells.begin(); cellEntryIt != activeCells.end(); cellEntryIt++) {
+      unsigned neighborCellIndex = cellEntryIt->first;
+      if (neighborCellIndex != cellIndex) {
+        neighbors.push_back(*cellEntryIt);
+      }
+    }
+  }
+  return neighbors;
+}
+
+pair< CellPtr, unsigned > MeshTopology::getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex) {
+  pair< CellPtr, unsigned > neighbor;
+  
+  vector< pair< unsigned, unsigned > > neighbors = getCellNeighbors(cellIndex, sideIndex);
+  if (neighbors.size() == 1) {
+    neighbor.first = getCell(neighbors[0].first);
+    neighbor.second = neighbors[0].second;
+  } else if (neighbors.size() == 0) {
+    neighbor.first = Teuchos::rcp( (Cell*) NULL );
+    neighbor.second = 0;
+  } else {
+    // multiple neighbors: we want to look for their common ancestor
+    pair<unsigned, unsigned> candidateAncestor = neighbors[0];
+    set<unsigned> neighborsUnaccountedFor; // cellIndices
+    for (vector< pair< unsigned, unsigned > >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++) {
+      neighborsUnaccountedFor.insert(neighborIt->first);
+    }
+    neighborsUnaccountedFor.erase(neighbors[0].first);
+    while ( neighborsUnaccountedFor.size() > 0) {
+      CellPtr oldCandidate = getCell(candidateAncestor.first);
+      CellPtr newCandidate = oldCandidate->getParent();
+      if (newCandidate.get() == NULL) {
+        cout << "getCellAncestralNeighbor: neighbors do not have common ancestor!\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getCellAncestralNeighbor: neighbors do not have common ancestor!");
+      }
+      int numChildren = newCandidate->getChildIndices().size();
+      for (int childIndex=0; childIndex < numChildren; childIndex++) {
+        if (newCandidate->getChildIndices()[childIndex] == oldCandidate->cellIndex()) {
+          candidateAncestor.first = newCandidate->cellIndex();
+          // determine shared side index
+          candidateAncestor.second = newCandidate->refinementPattern()->parentSideLookupForChild(childIndex)[candidateAncestor.second];
+        }
+      }
+      if (candidateAncestor.first == oldCandidate->cellIndex()) {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "oldCandidate not found among newCandidate's children!");
+      }
+      // otherwise, update the neighbors accounted for:
+      vector< pair< unsigned, unsigned> > sideChildEntries = newCandidate->refinementPattern()->childrenForSides()[candidateAncestor.second];
+      for (vector< pair< unsigned, unsigned> >::iterator sideChildIt = sideChildEntries.begin(); sideChildIt != sideChildEntries.end(); sideChildIt++) {
+        unsigned childIndex = sideChildIt->first;
+        unsigned childCellIndex = newCandidate->children()[childIndex]->cellIndex();
+        neighborsUnaccountedFor.erase(childCellIndex);
+      }
+    }
+    neighbor.first = getCell(candidateAncestor.first);
+    neighbor.second = candidateAncestor.second;
+  }
+  return neighbor;
+}
+
 unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal) {
   TEUCHOS_TEST_FOR_EXCEPTION(! entityHasParent(d, entityIndex), std::invalid_argument, "entity does not have parent");
   return _parentEntities[d][entityIndex][parentOrdinal].first;
@@ -829,6 +901,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
           childEntityIndices[childIndex] = childEntityIndex;
           set< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
+          // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
         }
         _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
       }

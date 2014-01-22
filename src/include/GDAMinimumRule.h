@@ -15,12 +15,15 @@
 
 class GDAMinimumRule : public GlobalDofAssignment {
 public:
-  GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy);
+  GDAMinimumRule(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
+                 unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
   void didHRefine(set<int> &parentCellIDs);
-  void didPRefine(set<int> &cellIDs);
+  void didPRefine(set<int> &cellIDs, int deltaP);
   void didHUnrefine(set<int> &parentCellIDs);
-  void didPUnrefine(set<int> &cellIDs);
+  
+  void didChangePartitionPolicy();
+  
   ElementTypePtr elementType(unsigned cellID);
   unsigned globalDofCount();
   unsigned localDofCount(); // local to the MPI node

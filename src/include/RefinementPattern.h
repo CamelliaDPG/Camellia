@@ -85,7 +85,7 @@ public:
   const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
   Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
   
-  unsigned mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex);
+  unsigned mapSideChildIndex(unsigned sideIndex, unsigned sideRefinementChildIndex); // map from index of child in side refinement to the index in volume refinement pattern
   
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);

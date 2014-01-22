@@ -16,73 +16,17 @@
 
 #include "RefinementPattern.h"
 
+#include "Cell.h"
+
 using namespace std;
 
-// "cells" are geometric entities -- they do not define any kind of basis
-// "elements" are cells endowed with a (local) functional discretization
-class Cell {
-  unsigned _cellIndex;
-  CellTopoPtr _cellTopo;
-  vector< unsigned > _vertices;
-  vector< vector<unsigned> > _entityIndices;  // indices: [subcdim][subcord]
-  vector< map< unsigned, unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
-  
-  // for parents:
-  vector< Teuchos::RCP< Cell > > _children;
-  RefinementPatternPtr _refPattern;
-public:
-  Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
-              unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
-    _cellTopo = cellTopo;
-    _vertices = vertices;
-    _subcellPermutations = subcellPermutations;
-    _cellIndex = cellIndex;
-    _entityIndices = entityIndices;
-  }
-  unsigned cellIndex() {
-    return _cellIndex;
-  }
-
-  const vector< Teuchos::RCP< Cell > > &children() {
-    return _children;
-  }
-  void setChildren(vector< Teuchos::RCP< Cell > > children) {
-    _children = children;
-  }
-  vector<unsigned> getChildIndices() {
-    vector<unsigned> indices(_children.size());
-    for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++) {
-      indices[childOrdinal] = _children[childOrdinal]->cellIndex();
-    }
-    return indices;
-  }
-  
-  unsigned entityIndex(unsigned subcdim, unsigned subcord) {
-    return _entityIndices[subcdim][subcord];
-  }
-  
-  bool isParent() { return _children.size() > 0; }
-  
-  RefinementPatternPtr refinementPattern() {
-    return _refPattern;
-  }
-  void setRefinementPattern(RefinementPatternPtr refPattern) {
-    _refPattern = refPattern;
-  }
-  
-  CellTopoPtr topology() {
-    return _cellTopo;
-  }
-  
-  const vector< unsigned > &vertices() {return _vertices;}
-};
-
-typedef Teuchos::RCP<Cell> CellPtr;
-
 class MeshTransformationFunction;
-class Mesh;
 
+class Mesh;
 typedef Teuchos::RCP<Mesh> MeshPtr;
+
+class Cell;
+typedef Teuchos::RCP<Cell> CellPtr;
 
 class MeshTopology {
   unsigned _spaceDim; // dimension of the mesh
@@ -143,6 +87,8 @@ public:
   unsigned getActiveCellCount(unsigned d, unsigned entityIndex);
   const set< pair<unsigned,unsigned> > &getActiveCellIndices(unsigned d, unsigned entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(unsigned cellIndex);
+  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
+  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
   bool cellHasCurvedEdges(unsigned cellIndex);
   vector<unsigned> getChildEntities(unsigned d, unsigned entityIndex);
   set<unsigned> getChildEntitiesSet(unsigned d, unsigned entityIndex);

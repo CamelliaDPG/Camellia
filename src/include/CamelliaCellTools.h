@@ -12,6 +12,7 @@
 #include "Shards_CellTopology.hpp"
 
 #include "Mesh.h"
+#include "MeshTopology.h"
 
 class CamelliaCellTools {
 public:
@@ -215,8 +216,8 @@ public:
   
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
   static void mapToReferenceFrameInitGuess(       FieldContainer<double>  &        refPoints,
-                                     const FieldContainer<double>  &        initGuess,
-                                     const FieldContainer<double>  &        physPoints,
+                                           const FieldContainer<double>  &        initGuess,
+                                           const FieldContainer<double>  &        physPoints,
                                            MeshPtr mesh, int cellID)
   {
     ElementPtr elem = mesh->getElement(cellID);
@@ -249,12 +250,12 @@ public:
     // Newton method to solve the equation F(refPoints) - physPoints = 0:
     // refPoints = xOld - DF^{-1}(xOld)*(F(xOld) - physPoints) = xOld + DF^{-1}(xOld)*(physPoints - F(xOld))
     for(int iter = 0; iter < INTREPID_MAX_NEWTON; ++iter) {
-
+      
       // compute Jacobians at the old iterates and their inverses.
       xOld.resize(numPoints,spaceDim); // BasisCache expects (P,D) sizing...
       basisCache->setRefCellPoints(xOld);
       xOld.resize(numCells,numPoints,spaceDim);
-
+      
       // The Newton step.
       xTem = basisCache->getPhysicalCubaturePoints();                    // xTem <- F(xOld)
       RealSpaceTools<double>::subtract( xTem, physPoints, xTem );        // xTem <- physPoints - F(xOld)
@@ -275,9 +276,9 @@ public:
       // Stopping criterion:
       if (totalError < INTREPID_TOL) {
         break;
-      } 
+      }
       else if ( iter > INTREPID_MAX_NEWTON) {
-        INTREPID_VALIDATE(std::cout << " CamelliaCellTools::mapToReferenceFrameInitGuess failed to converge to desired tolerance within " 
+        INTREPID_VALIDATE(std::cout << " CamelliaCellTools::mapToReferenceFrameInitGuess failed to converge to desired tolerance within "
                           << INTREPID_MAX_NEWTON  << " iterations\n" );
         break;
       }
@@ -286,11 +287,11 @@ public:
       xOld = refPoints;
     } // for(iter)
   }
-
+  
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
   static void mapToReferenceFrame(          FieldContainer<double>      &        refPoints,
-                               const FieldContainer<double>      &        physPoints,
-                               MeshPtr mesh, int cellID)
+                                  const FieldContainer<double>      &        physPoints,
+                                  MeshPtr mesh, int cellID)
   {
     ElementPtr elem = mesh->getElement(cellID);
     shards::CellTopology cellTopo = *(elem->elementType()->cellTopoPtr);

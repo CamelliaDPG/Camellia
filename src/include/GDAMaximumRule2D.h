@@ -13,21 +13,15 @@
 
 #include "GlobalDofAssignment.h"
 #include "ElementTypeFactory.h"
-#include "Element.h"
 
 class GDAMaximumRule2D : public GlobalDofAssignment {
   // much of this code copied from Mesh
   
-  vector< vector<int> > _cellSideParitiesForCellID;
+  map< unsigned, vector<int> > _cellSideParitiesForCellID;
   
   ElementTypeFactory _elementTypeFactory;
-  Teuchos::RCP< BilinearForm > _bilinearForm;
-  Teuchos::RCP< MeshPartitionPolicy > _partitionPolicy;
-  int _numPartitions;
-  int _numInitialElements;
-  vector< ElementPtr > _elements;
-  vector< ElementPtr > _activeElements;
-  vector< vector< ElementPtr > > _partitions;
+  
+  vector< vector< unsigned > > _partitions; // unsigned: cellIDs
   
   // keep track of upgrades to the sides of cells since the last rebuild:
   // (used to remap solution coefficients)
@@ -44,6 +38,9 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   map< ElementType*, map<int, int> > _globalCellIndexToCellID;
   vector< vector< ElementTypePtr > > _elementTypesForPartition;
   vector< ElementTypePtr > _elementTypes;
+  
+  map<unsigned, ElementTypePtr> _elementTypeForCell; // keys are cellIDs
+  
   map<int, int> _partitionForCellID;
   map<int, int> _partitionForGlobalDofIndex;
   map<int, int> _partitionLocalIndexForGlobalDofIndex;
@@ -51,8 +48,10 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   vector< map< ElementType*, FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
   map< ElementType*, FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   vector< set<int> > _partitionedGlobalDofIndices;
+  map<unsigned, unsigned> _partitionLocalCellIndices; // keys are cellIDs; index is relative to both MPI node and ElementType
+  map<unsigned, unsigned> _globalCellIndices; // keys are cellIDs; index is relative to ElementType
   
-  map< pair<int,int> , int> _localToGlobalMap; // pair<cellID, localDofIndex>
+  map< pair<unsigned,unsigned>, unsigned> _localToGlobalMap; // pair<cellID, localDofIndex>
   
   map<unsigned, unsigned> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
@@ -62,6 +61,13 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   void determineActiveElements();
   void determineDofPairings();
   void determinePartitionDofIndices();
+
+  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering, CellPtr parent, unsigned sideIndex, unsigned parentSideIndexInNeighbor, CellPtr nonParent);
+  void matchNeighbor(unsigned cellID, int sideIndex);
+  map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideIndex, unsigned bigNeighborPolyOrder);
+  
+  void rebuildLookups();
+  void setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly);
   
   void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
   void verticesForCell(FieldContainer<double>& vertices, int cellID);
@@ -69,19 +75,21 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   bool _enforceMBFluxContinuity;
   
   int _numGlobalDofs;
-  ElementPtr _nullPtr;
-  
+
   static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   static int neighborDofPermutation(int dofIndex, int numDofsForSide);
 public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
-                   bool enforceMBFluxContinuity = false);
+                   unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
   
   void didHRefine(set<int> &parentCellIDs);
-  void didPRefine(set<int> &cellIDs);
+  void didPRefine(set<int> &cellIDs, int deltaP);
   void didHUnrefine(set<int> &parentCellIDs);
-  void didPUnrefine(set<int> &cellIDs);
+  
+  void didChangePartitionPolicy();
+  
   ElementTypePtr elementType(unsigned cellID);
+
   unsigned globalDofCount();
   unsigned localDofCount(); // local to the MPI node
 };

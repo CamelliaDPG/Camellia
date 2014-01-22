@@ -66,11 +66,17 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices,elementVertices) );
   _meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
   
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( &_dofOrderingFactory, false);
+  
+  
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = false;
   _enforceMBFluxContinuity = false;  
   _partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
 
+  _maximumRule2D = Teuchos::rcp( new GDAMaximumRule2D(_meshTopology, bilinearForm->varFactory(), dofOrderingFactoryPtr,
+                                                      _partitionPolicy, H1Order, pToAddTest, _enforceMBFluxContinuity) );
+  
 #ifdef HAVE_MPI
   _numPartitions = Teuchos::GlobalMPISession::getNProc();
 #else
@@ -110,17 +116,6 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
   Teuchos::RCP<DofOrdering> quadTrialOrderPtr = _dofOrderingFactory.trialOrdering(H1Order, *(quadTopoPtr.get()), _useConformingTraces);
   ElementTypePtr quadElemTypePtr = _elementTypeFactory.getElementType(quadTrialOrderPtr, quadTestOrderPtr, quadTopoPtr );
   _nullPtr = Teuchos::rcp( new Element(-1,quadElemTypePtr,-1) );
-
-  // 1-4-13 have just changed the API for this method, but keeping the commented-out code below in case I think better of it.
-//  // want to change elementVertices argument to be unsigned, but I'm not quite ready to change the API for this method
-//  // so we do a manual copy to convert...
-//  vector< vector<unsigned> > elementVertices(elementVerticesInt.size());
-//  for (unsigned i=0; i<elementVerticesInt.size(); i++) {
-//    unsigned numVertices = elementVerticesInt[i].size();
-//    for (unsigned j=0; j<numVertices; j++) {
-//      elementVertices[i].push_back(elementVerticesInt[i][j]);
-//    }
-//  }
   
   vector< vector<unsigned> >::iterator elemIt;
   for (elemIt = elementVertices.begin(); elemIt != elementVertices.end(); elemIt++) {
@@ -2522,6 +2517,7 @@ void Mesh::setNeighbor(ElementPtr elemPtr, int elemSide, ElementPtr neighborPtr,
 
 void Mesh::setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy ) {
   _partitionPolicy = partitionPolicy;
+  _maximumRule2D->setPartitionPolicy(partitionPolicy);
   rebuildLookups();
 }
 

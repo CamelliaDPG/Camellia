@@ -168,6 +168,30 @@ public:
     return _trialVarsByID;
   }
   
+  vector< VarPtr > fluxVars() {
+    vector< VarPtr > vars;
+    
+    for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+         trialIt != _trialVarsByID.end(); trialIt++) {
+      if (trialIt->second->varType() == FLUX) {
+        vars.push_back(trialIt->second);
+      }
+    }
+    return vars;
+  }
+  
+  vector< VarPtr > traceVars() {
+    vector< VarPtr > vars;
+    
+    for ( map< int, VarPtr >::iterator trialIt = _trialVarsByID.begin();
+         trialIt != _trialVarsByID.end(); trialIt++) {
+      if (trialIt->second->varType() == TRACE) {
+        vars.push_back(trialIt->second);
+      }
+    }
+    return vars;
+  }
+  
   VarFactory trialSubFactory(vector< VarPtr > &trialVars) {
     // returns a new VarFactory with the same test space, and a subspace of the trial space
     VarFactory subFactory;
