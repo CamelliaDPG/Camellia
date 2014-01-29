@@ -311,11 +311,13 @@ int main(int argc, char *argv[]) {
   ////////////////////   SOLVE & REFINE   ///////////////////////
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  VTKExporter backgroundExporter(backgroundFlow, mesh, varFactory);
-  // VTKExporter updateExporter(solution, mesh, varFactory);
+  VTKExporter exporter(backgroundFlow, mesh, varFactory);
   stringstream outfile;
   outfile << "kovasznay" << "_" << 0;
-  backgroundExporter.exportSolution(outfile.str());
+  exporter.exportSolution(outfile.str());
+  set<int> nonlinearVars;
+  nonlinearVars.insert(u1->ID());
+  nonlinearVars.insert(u2->ID());
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -344,18 +346,15 @@ int main(int argc, char *argv[]) {
 
       // line search algorithm
       double alpha = 1.0;
-      backgroundFlow->addSolution(solution, alpha);
+      backgroundFlow->addSolution(solution, alpha, nonlinearVars);
       iterCount++;
     }
 
     if (commRank == 0)
     {
-      stringstream bOutfile;
-      stringstream uOutfile;
-      bOutfile << "kovasznay" << "_" << refIndex+1;
-      // uOutfile << "update_kovasznay" << "_" << refIndex+1;
-      backgroundExporter.exportSolution(bOutfile.str());
-      // updateExporter.exportSolution(uOutfile.str());
+      stringstream outfile;
+      outfile << "kovasznay" << "_" << refIndex+1;
+      exporter.exportSolution(outfile.str());
     }
 
     if (refIndex < numRefs)
