@@ -56,6 +56,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   map<unsigned, unsigned> getGlobalVertexIDs(const FieldContainer<double> &vertexCoordinates);
 
   void addDofPairing(int cellID1, int dofIndex1, int cellID2, int dofIndex2);
+  void assignInitialElementType( unsigned cellID );
   void buildTypeLookups();
   void buildLocalToGlobalMap();
   void determineActiveElements();
@@ -66,7 +67,6 @@ class GDAMaximumRule2D : public GlobalDofAssignment {
   void matchNeighbor(unsigned cellID, int sideIndex);
   map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideIndex, unsigned bigNeighborPolyOrder);
   
-  void rebuildLookups();
   void setElementType(unsigned cellID, ElementTypePtr newType, bool sideUpgradeOnly);
   
   void verticesForCells(FieldContainer<double>& vertices, vector<int> &cellIDs);
@@ -82,9 +82,9 @@ public:
   GDAMaximumRule2D(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement, bool enforceMBFluxContinuity = false);
   
-  void didHRefine(set<int> &parentCellIDs);
-  void didPRefine(set<int> &cellIDs, int deltaP);
-  void didHUnrefine(set<int> &parentCellIDs);
+  void didHRefine(const set<int> &parentCellIDs);
+  void didPRefine(const set<int> &cellIDs, int deltaP);
+  void didHUnrefine(const set<int> &parentCellIDs);
   
   void didChangePartitionPolicy();
   
@@ -92,6 +92,8 @@ public:
 
   unsigned globalDofCount();
   unsigned localDofCount(); // local to the MPI node
+  
+  void rebuildLookups();
 };
 
 #endif /* defined(__Camellia_debug__GDAMaximumRule2D__) */

@@ -54,6 +54,8 @@ int main(int argc, char *argv[]) {
   
   bool useConformingTraces = true;
   
+  bool useGraphNorm = false; // as opposed to naive
+  
   if (rank == 0) {
     cout << "polyOrder = " << polyOrder << endl;
     cout << "pToAdd = " << pToAdd << endl;
@@ -124,6 +126,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm(t2, v2);
   
   FunctionPtr x = Function::xn(1);
+  FunctionPtr y = Function::yn(1);
   FunctionPtr zero = Function::zero();
   
   FunctionPtr u1_exact = zero;
@@ -174,11 +177,17 @@ int main(int argc, char *argv[]) {
     mySolution->setSolutionFunction(p, p_exact);
   }
   
-  double beta = 0.1; // weight for L2 terms in graph norm
-  IPPtr graphNorm = bf->graphNorm(beta);
+  IPPtr ip;
+  
+  if (useGraphNorm) {
+    double beta = 0.1; // weight for L2 terms in graph norm
+    ip = bf->graphNorm(beta);
+  } else {
+    ip = bf->naiveNorm();
+  }
   
   if (rank==0)
-    graphNorm->printInteractions();
+    ip->printInteractions();
 
   
   FieldContainer<double> quadPoints(4,2); // NOTE: quadPoints unused for HDGSingular (there, we set the mesh more manually)
@@ -195,7 +204,7 @@ int main(int argc, char *argv[]) {
   HConvergenceStudy study(mySolution,
                           mySolution->bilinearForm(),
                           mySolution->ExactSolution::rhs(),
-                          bc, graphNorm,
+                          bc, ip,
                           minLogElements, maxLogElements,
                           polyOrder+1, pToAdd, false, useTriangles, false);
   study.setUseCondensedSolve(false);

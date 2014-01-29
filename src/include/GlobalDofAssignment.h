@@ -36,9 +36,10 @@ public:
   GlobalDofAssignment(MeshTopologyPtr meshTopology, VarFactory varFactory, DofOrderingFactoryPtr dofOrderingFactory,
                       MeshPartitionPolicyPtr partitionPolicy, unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
   
-  virtual void didHRefine(set<int> &parentCellIDs) = 0;
-  virtual void didPRefine(set<int> &cellIDs, int deltaP) = 0;
-  virtual void didHUnrefine(set<int> &parentCellIDs) = 0;
+  // after calling any of these, must call rebuildLookups
+  virtual void didHRefine(const set<int> &parentCellIDs) = 0;
+  virtual void didPRefine(const set<int> &cellIDs, int deltaP) = 0;
+  virtual void didHUnrefine(const set<int> &parentCellIDs) = 0;
   
   virtual void didChangePartitionPolicy() = 0;
   
@@ -46,6 +47,8 @@ public:
   
   virtual unsigned globalDofCount() = 0;
   virtual unsigned localDofCount() = 0; // local to the MPI node
+  
+  virtual void rebuildLookups() = 0;
   
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy );
   

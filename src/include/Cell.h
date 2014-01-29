@@ -33,67 +33,37 @@ class Cell {
   
   // for children:
   Teuchos::RCP<Cell> _parent; // doesn't own memory (avoid circular reference issues)
+  
+  //neighbors:
+  vector< pair<unsigned, unsigned> > _neighbors; // cellIndex, neighborSideIndex (which may not refer to the same side)
+  /* rules for neighbors:
+     - hanging node sides point to the constraining neighbor (which may not be active)
+     - cells with broken neighbors point to their peer, the ancestor of the active neighbors
+   */
 public:
   Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< map< unsigned, unsigned > > &subcellPermutations,
-       unsigned cellIndex, const vector< vector<unsigned> > &entityIndices) {
-    _cellTopo = cellTopo;
-    _vertices = vertices;
-    _subcellPermutations = subcellPermutations;
-    _cellIndex = cellIndex;
-    _entityIndices = entityIndices;
-  }
-  unsigned cellIndex() {
-    return _cellIndex;
-  }
-  
-  const vector< Teuchos::RCP< Cell > > &children() {
-    return _children;
-  }
-  void setChildren(vector< Teuchos::RCP< Cell > > children) {
-    _children = children;
-    Teuchos::RCP< Cell > thisPtr = Teuchos::rcp( this, false ); // doesn't own memory
-    for (vector< Teuchos::RCP< Cell > >::iterator childIt = children.begin(); childIt != children.end(); childIt++) {
-      (*childIt)->setParent(thisPtr);
-    }
-  }
-  vector<unsigned> getChildIndices() {
-    vector<unsigned> indices(_children.size());
-    for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++) {
-      indices[childOrdinal] = _children[childOrdinal]->cellIndex();
-    }
-    return indices;
-  }
-  
+       unsigned cellIndex, const vector< vector<unsigned> > &entityIndices);
+  unsigned cellIndex();
+  const vector< Teuchos::RCP< Cell > > &children();
+  void setChildren(vector< Teuchos::RCP< Cell > > children);
+  vector<unsigned> getChildIndices();
   vector< pair<unsigned, unsigned> > childrenForSide(unsigned sideIndex);
-  
   vector< pair< unsigned, unsigned> > getDescendantsForSide(int sideIndex, bool leafNodesOnly = true);
+  unsigned entityIndex(unsigned subcdim, unsigned subcord);
+  const vector<unsigned>& getEntityIndices(unsigned subcdim);
+  Teuchos::RCP<Cell> getParent();
+  void setParent(Teuchos::RCP<Cell> parent);
+  bool isParent();
   
-  unsigned entityIndex(unsigned subcdim, unsigned subcord) {
-    return _entityIndices[subcdim][subcord];
-  }
+  RefinementPatternPtr refinementPattern();
+  void setRefinementPattern(RefinementPatternPtr refPattern);
   
-  Teuchos::RCP<Cell> getParent() {
-    return _parent;
-  }
+  CellTopoPtr topology();
   
-  void setParent(Teuchos::RCP<Cell> parent) {
-    _parent = parent;
-  }
+  pair<unsigned, unsigned> getNeighbor(unsigned sideIndex);
+  void setNeighbor(unsigned sideIndex, unsigned neighborCellIndex, unsigned neighborSideIndex);
   
-  bool isParent() { return _children.size() > 0; }
-  
-  RefinementPatternPtr refinementPattern() {
-    return _refPattern;
-  }
-  void setRefinementPattern(RefinementPatternPtr refPattern) {
-    _refPattern = refPattern;
-  }
-  
-  CellTopoPtr topology() {
-    return _cellTopo;
-  }
-  
-  const vector< unsigned > &vertices() {return _vertices;}
+  const vector< unsigned > &vertices();
 };
 
 typedef Teuchos::RCP<Cell> CellPtr;

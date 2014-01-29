@@ -15,6 +15,13 @@ void MeshTopologyTests::runTests(int &numTestsRun, int &numTestsPassed) {
   teardown();
   
   setup();
+  if (testConstraintRelaxation()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (test1DMesh()) {
     numTestsPassed++;
   }
@@ -385,34 +392,51 @@ void printMeshInfo(MeshTopologyPtr mesh) {
 
 bool checkConstraints( MeshTopologyPtr mesh, unsigned entityDim, map<unsigned,unsigned> &expectedConstraints, string meshName = "mesh") {
   bool success = true;
-  unsigned entityCount = mesh->getEntityCount(entityDim);
-  for (unsigned entityIndex=0; entityIndex<entityCount; entityIndex++) {
-    unsigned constrainingEntityIndex = mesh->getConstrainingEntityIndex(entityDim, entityIndex);
-    if (constrainingEntityIndex==entityIndex) {
-      // then we should expect not to have an entry in expectedConstraints:
-      if (expectedConstraints.find(entityIndex) != expectedConstraints.end()) {
-        cout << "Expected entity constraint is not imposed in " << meshName << ".\n";
-        cout << "Expected entity " << entityIndex << " to be constrained by entity " << expectedConstraints[entityIndex] << endl;
-        cout << "Entity " << entityIndex << " vertices:\n";
-        mesh->printEntityVertices(entityDim, entityIndex);
-        cout << "Entity " << expectedConstraints[entityIndex] << " vertices:\n";
-        mesh->printEntityVertices(entityDim, expectedConstraints[entityIndex]);
-        success = false;
-      }
-    } else {
-      if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
-        cout << "Unexpected entity constraint is imposed in " << meshName << ".\n";
-        cout << "Entity " << entityIndex << " unexpectedly constrained by entity " << constrainingEntityIndex << endl;
-        cout << "Entity " << entityIndex << " vertices:\n";
-        mesh->printEntityVertices(entityDim, entityIndex);
-        cout << "Entity " << constrainingEntityIndex << " vertices:\n";
-        mesh->printEntityVertices(entityDim, constrainingEntityIndex);
-        success = false;
-      } else {
-        unsigned expectedConstrainingEntity = expectedConstraints[entityIndex];
-        if (expectedConstrainingEntity != constrainingEntityIndex) {
-          cout << "The constraining entity is not the expected one in " << meshName << ".\n";
+  
+  // check constraints for entities belonging to active cells
+  set<unsigned> activeCells = mesh->getActiveCellIndices();
+  
+  for (set<unsigned>::iterator cellIt = activeCells.begin(); cellIt != activeCells.end(); cellIt++) {
+    unsigned cellIndex = *cellIt;
+    CellPtr cell = mesh->getCell(cellIndex);
+    vector<unsigned> entitiesForCell = cell->getEntityIndices(entityDim);
+    for (vector<unsigned>::iterator entityIt = entitiesForCell.begin(); entityIt != entitiesForCell.end(); entityIt++) {
+      unsigned entityIndex = *entityIt;
+      unsigned constrainingEntityIndex = mesh->getConstrainingEntityIndex(entityDim, entityIndex);
+      if (constrainingEntityIndex==entityIndex) {
+        // then we should expect not to have an entry in expectedConstraints:
+        if (expectedConstraints.find(entityIndex) != expectedConstraints.end()) {
+          cout << "Expected entity constraint is not imposed in " << meshName << ".\n";
+          cout << "Expected entity " << entityIndex << " to be constrained by entity " << expectedConstraints[entityIndex] << endl;
+          cout << "Entity " << entityIndex << " vertices:\n";
+          mesh->printEntityVertices(entityDim, entityIndex);
+          cout << "Entity " << expectedConstraints[entityIndex] << " vertices:\n";
+          mesh->printEntityVertices(entityDim, expectedConstraints[entityIndex]);
           success = false;
+        }
+      } else {
+        if (expectedConstraints.find(entityIndex) == expectedConstraints.end()) {
+          cout << "Unexpected entity constraint is imposed in " << meshName << ".\n";
+          cout << "Entity " << entityIndex << " unexpectedly constrained by entity " << constrainingEntityIndex << endl;
+          cout << "Entity " << entityIndex << " vertices:\n";
+          mesh->printEntityVertices(entityDim, entityIndex);
+          cout << "Entity " << constrainingEntityIndex << " vertices:\n";
+          mesh->printEntityVertices(entityDim, constrainingEntityIndex);
+          success = false;
+        } else {
+          unsigned expectedConstrainingEntity = expectedConstraints[entityIndex];
+          if (expectedConstrainingEntity != constrainingEntityIndex) {
+            cout << "The constraining entity is not the expected one in " << meshName << ".\n";
+            cout << "Expected entity " << entityIndex << " to be constrained by " << expectedConstrainingEntity;
+            cout << "; was constrained by " << constrainingEntityIndex << endl;
+            cout << "Entity " << entityIndex << " vertices:\n";
+            mesh->printEntityVertices(entityDim, entityIndex);
+            cout << "Entity " << expectedConstrainingEntity << " vertices:\n";
+            mesh->printEntityVertices(entityDim, expectedConstrainingEntity);
+            cout << "Entity " << constrainingEntityIndex << " vertices:\n";
+            mesh->printEntityVertices(entityDim, constrainingEntityIndex);
+            success = false;
+          }
         }
       }
     }
@@ -824,5 +848,49 @@ bool MeshTopologyTests::testEntityConstraints() {
   
   
 
+  return success;
+}
+
+bool MeshTopologyTests::testConstraintRelaxation() {
+  bool success = true;
+  
+  // tests to confirm that constraints are appropriately relaxed when refinements render neighbors compatible.
+  
+  // make two simple meshes
+  MeshTopologyPtr mesh2D = makeRectMesh(0.0, 0.0, 2.0, 1.0,
+                                        2, 1); // 2 initial elements
+  MeshTopologyPtr mesh3D = makeHexMesh(0.0, 0.0, 0.0, 2.0, 4.0, 3.0,
+                                       2, 2, 1); // 4 initial elements
+  
+  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad());
+  
+  mesh3D->refineCell(0, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh3D->refineCell(1, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh3D->refineCell(2, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh3D->refineCell(3, RefinementPattern::regularRefinementPatternHexahedron());
+
+  // empty containers:
+  map<unsigned,unsigned> expectedEdgeConstraints2D;
+  map<unsigned,unsigned> expectedFaceConstraints3D;
+  map<unsigned,unsigned> expectedEdgeConstraints3D;
+
+  int edgeDim = 1, faceDim = 2;
+  
+  if (! checkConstraints(mesh2D, edgeDim, expectedEdgeConstraints2D, "compatible 2D mesh") ) {
+    cout << "Failed edge constraint check for compatible 2D mesh." << endl;
+    success = false;
+  }
+  
+  if (! checkConstraints(mesh3D, edgeDim, expectedEdgeConstraints3D, "compatible 3D mesh") ) {
+    cout << "Failed edge constraint check for compatible 3D mesh." << endl;
+    success = false;
+  }
+  
+  if (! checkConstraints(mesh3D, faceDim, expectedFaceConstraints3D, "compatible 3D mesh") ) {
+    cout << "Failed face constraint check for compatible 3D mesh." << endl;
+    success = false;
+  }
+  
   return success;
 }

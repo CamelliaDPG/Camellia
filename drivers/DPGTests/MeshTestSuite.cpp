@@ -81,19 +81,6 @@ using namespace Intrepid;
 void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   int rank = Teuchos::GlobalMPISession::getRank();
   
-  // next three added by Jesse
-  numTestsRun++;
-  if (testPRefinementAdjacentCells() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testMultiBasisCrash() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testAnisotropicCrash() ) {
-    numTestsPassed++;
-  }
   if (rank==0)
     cout << "WARNING: skipping unrefinement test.\n";
   /*
@@ -103,11 +90,7 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   }
    */
   numTestsRun++;
-  if ( testPRefinement() ) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  if (testMeshSolvePointwise() ) {
+  if (testHRefinementForConfusion() ) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -115,7 +98,11 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
     numTestsPassed++;
   }
   numTestsRun++;
-  if (testHRefinementForConfusion() ) {
+  if ( testPRefinement() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testMeshSolvePointwise() ) {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -175,7 +162,20 @@ void MeshTestSuite::runTests(int &numTestsRun, int &numTestsPassed) {
   if (testBuildMesh() ) {
     numTestsPassed++;
   }
-
+  
+  // next three added by Jesse
+  numTestsRun++;
+  if (testPRefinementAdjacentCells() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testMultiBasisCrash() ) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  if (testAnisotropicCrash() ) {
+    numTestsPassed++;
+  }
 }
 
 bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const FieldContainer<double> &testPointsRefCoords,
@@ -1255,7 +1255,7 @@ bool MeshTestSuite::testHRefinementForConfusion() {
   cellsToRefine.clear();
   
   // start with a fresh 2x1 mesh:
-  horizontalCells = 4; verticalCells = 4;
+  horizontalCells = 2; verticalCells = 2;
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(quadPoints, horizontalCells, verticalCells, exactSolution.bilinearForm(), H1Order, H1Order+2);
   
   // repeatedly refine the first element along the side shared with cellID 1
